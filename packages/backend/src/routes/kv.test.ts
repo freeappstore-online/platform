@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import app from '../index.js';
+import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
 

@@ -32,6 +32,12 @@ tag = "v1"
 # legacy KV-backed one.
 new_sqlite_classes = ["Room"]
 
+# Cron triggers. */15 = every 15 minutes (uptime checks).
+# Each trigger fires the Worker's `scheduled` handler with `event.cron`
+# matching the schedule string below.
+[triggers]
+crons = ["*/15 * * * *"]
+
 # Secrets (set interactively via `wrangler secret put <name>`):
 #   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
 #   SESSION_SIGNING_KEY      # 32+ bytes, e.g. `openssl rand -hex 32`
