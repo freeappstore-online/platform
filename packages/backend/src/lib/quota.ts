@@ -3,8 +3,15 @@ export interface KvUsage {
   totalBytes: number;
   /** Number of keys for this (app, user). */
   keyCount: number;
-  /** Bytes currently held by the key being written (0 if it's a new key). */
+  /** Bytes currently held by the key being written (0 if the key doesn't exist). */
   existingKeyBytes: number;
+  /**
+   * Whether the key being written already exists. We track this explicitly
+   * rather than inferring from existingKeyBytes — a 0-byte existing value
+   * would otherwise be misclassified as a new key, breaking the key-count
+   * limit accounting.
+   */
+  keyExists: boolean;
 }
 
 export interface KvLimits {
@@ -31,8 +38,7 @@ export function checkKvWrite(
   if (projectedTotal > limits.maxTotalBytesPerUser) {
     return { ok: false, reason: 'per-user kv quota exceeded' };
   }
-  const isNewKey = usage.existingKeyBytes === 0;
-  if (isNewKey && usage.keyCount >= limits.maxKeysPerUser) {
+  if (!usage.keyExists && usage.keyCount >= limits.maxKeysPerUser) {
     return {
       ok: false,
       reason: `per-user key count limit (${limits.maxKeysPerUser}) exceeded`,

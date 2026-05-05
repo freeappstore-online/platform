@@ -1,6 +1,4 @@
 import { Command } from 'commander';
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { openUrl } from '../lib/open.js';
 
@@ -24,23 +22,14 @@ export const publishCommand = new Command('publish')
     }
   });
 
-/** Try to detect the current GitHub repo as `owner/name`. */
-async function detectGitRepo(): Promise<string | null> {
-  // Prefer reading the `origin` URL out of git config rather than running git,
-  // so this works even if git is missing.
-  try {
-    const config = await readFile(join(process.cwd(), '.git', 'config'), 'utf8');
-    const match = /url\s*=\s*([^\n]+)/.exec(config);
-    if (!match || !match[1]) return null;
-    return parseGitHubRepo(match[1].trim());
-  } catch {
-    return spawnGitRemote();
-  }
-}
-
-function spawnGitRemote(): Promise<string | null> {
+/** Returns the GitHub repo of the current dir as `owner/name`, or null. */
+function detectGitRepo(): Promise<string | null> {
   return new Promise((resolveFn) => {
-    const child = spawn('git', ['remote', 'get-url', 'origin'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    // We could parse .git/config ourselves, but it has multiple [remote "..."]
+    // sections and naive regex matching picks the wrong one. Trust git.
+    const child = spawn('git', ['remote', 'get-url', 'origin'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
     let buf = '';
     child.stdout.on('data', (chunk: Buffer) => (buf += chunk.toString()));
     child.on('close', (code) => {
@@ -51,9 +40,11 @@ function spawnGitRemote(): Promise<string | null> {
   });
 }
 
-function parseGitHubRepo(url: string): string | null {
-  // matches both git@github.com:owner/name.git and https://github.com/owner/name(.git)
-  const m = /github\.com[:/]([^/]+)\/([^/.\s]+?)(?:\.git)?$/.exec(url);
+export function parseGitHubRepo(url: string): string | null {
+  // Handles SSH (git@github.com:owner/name.git) and HTTPS, with optional
+  // .git suffix and optional trailing slash. Allows dots in the repo name
+  // (e.g. `node.js`).
+  const m = /github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url);
   if (!m || !m[1] || !m[2]) return null;
   return `${m[1]}/${m[2]}`;
 }

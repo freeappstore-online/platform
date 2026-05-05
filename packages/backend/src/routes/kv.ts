@@ -29,22 +29,30 @@ kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
     const user = await requireUser(c);
     const { appId, key } = c.req.param();
     const body = await c.req.arrayBuffer();
+    if (body.byteLength === 0) {
+      // An empty body would store 0 bytes; subsequent kv.get() on the SDK
+      // side calls res.json() which throws on an empty response. Reject
+      // here so we never end up in that state.
+      return c.text('empty values are not allowed; use DELETE to remove a key', 400);
+    }
 
     const row = await c.env.DB.prepare(
       `SELECT
          COALESCE(SUM(value_size_bytes), 0) AS total,
          COUNT(*) AS keys,
+         COALESCE(SUM(CASE WHEN key = ? THEN 1 ELSE 0 END), 0) AS key_exists,
          COALESCE(SUM(CASE WHEN key = ? THEN value_size_bytes ELSE 0 END), 0) AS existing
        FROM kv WHERE app_id = ? AND user_id = ?`,
     )
-      .bind(key, appId, user.id)
-      .first<{ total: number; keys: number; existing: number }>();
+      .bind(key, key, appId, user.id)
+      .first<{ total: number; keys: number; key_exists: number; existing: number }>();
 
     const check = checkKvWrite(
       {
         totalBytes: row?.total ?? 0,
         keyCount: row?.keys ?? 0,
         existingKeyBytes: row?.existing ?? 0,
+        keyExists: (row?.key_exists ?? 0) > 0,
       },
       body.byteLength,
       KV_LIMITS,
