@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { rm, access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { assertValidAppId } from '../lib/app-id.js';
 
 const TEMPLATES = {
   standalone: 'freeappstore-online/template-standalone',
@@ -15,9 +16,7 @@ export const initCommand = new Command('init')
   .argument('<app-id>', 'Short app id (lowercase, single word). e.g. "calendar"')
   .option('-t, --template <name>', 'Template: standalone | connected', 'standalone')
   .action(async (appId: string, opts: { template: string }) => {
-    if (!/^[a-z][a-z0-9-]{1,30}$/.test(appId)) {
-      throw new Error('app-id must be lowercase letters, digits, or hyphens (2-31 chars).');
-    }
+    assertValidAppId(appId);
     const template = opts.template as TemplateName;
     if (!(template in TEMPLATES)) {
       throw new Error(`Unknown template "${opts.template}". Choose: standalone, connected.`);

@@ -1,4 +1,5 @@
 import type { Env } from '../types.js';
+import { consume, newRateLimitState, type RateLimitState } from '../lib/rate-limit.js';
 
 const MAX_PEERS = 32;
 const MAX_MESSAGE_BYTES = 4 * 1024;
@@ -8,8 +9,7 @@ const IDLE_EVICT_MS = 24 * 60 * 60 * 1000;
 interface Peer {
   socket: WebSocket;
   uid: string;
-  windowStart: number;
-  windowCount: number;
+  rateLimit: RateLimitState;
 }
 
 export class Room {
@@ -49,8 +49,7 @@ export class Room {
     const peer: Peer = {
       socket: server,
       uid,
-      windowStart: Math.floor(Date.now() / 1000),
-      windowCount: 0,
+      rateLimit: newRateLimitState(Date.now()),
     };
     this.peers.set(server, peer);
     this.broadcastPeers();
@@ -59,13 +58,7 @@ export class Room {
       this.lastActivity = Date.now();
       void this.state.storage.put('lastActivity', this.lastActivity);
 
-      const now = Math.floor(Date.now() / 1000);
-      if (now !== peer.windowStart) {
-        peer.windowStart = now;
-        peer.windowCount = 0;
-      }
-      peer.windowCount++;
-      if (peer.windowCount > MAX_MSGS_PER_SEC) {
+      if (!consume(peer.rateLimit, Date.now(), MAX_MSGS_PER_SEC)) {
         server.send(JSON.stringify({ kind: 'error', error: 'rate_limited' }));
         return;
       }
