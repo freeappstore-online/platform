@@ -14,7 +14,7 @@ GITHUB_CLIENT_ID = "Ov23liuUpYPXc1ikEFm2"
 [[d1_databases]]
 binding = "DB"
 database_name = "fas"
-database_id = "<set-via-wrangler-d1-create>"
+database_id = "a32701c0-5a56-4a12-810d-485166202e39"
 migrations_dir = "migrations"
 
 [[durable_objects.bindings]]
@@ -23,7 +23,10 @@ class_name = "Room"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["Room"]
+# new_sqlite_classes (vs new_classes) is required on the free plan — it
+# uses the SQLite-backed Durable Object storage backend instead of the
+# legacy KV-backed one.
+new_sqlite_classes = ["Room"]
 
 # Secrets (set interactively via `wrangler secret put <name>`):
 #   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
