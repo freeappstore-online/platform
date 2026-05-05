@@ -7,7 +7,22 @@ import type { Auth } from './auth.js';
  * - max 1MB total per user
  * - max 100 keys per user
  * - max 64KB per value
+ *
+ * Keys are non-empty strings ≤ 128 chars. We validate client-side so the
+ * server doesn't have to deal with edge-case URLs like `/kv/` or absurdly
+ * long path segments.
  */
+const MAX_KEY_LENGTH = 128;
+
+function assertValidKey(key: string): void {
+  if (typeof key !== 'string' || key.length === 0) {
+    throw new Error('kv key must be a non-empty string.');
+  }
+  if (key.length > MAX_KEY_LENGTH) {
+    throw new Error(`kv key exceeds ${MAX_KEY_LENGTH} chars.`);
+  }
+}
+
 export class Kv {
   constructor(
     private readonly appId: string,
@@ -16,6 +31,7 @@ export class Kv {
   ) {}
 
   async get<T = unknown>(key: string): Promise<T | null> {
+    assertValidKey(key);
     const res = await this.request('GET', key);
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`kv.get failed: ${res.status}`);
@@ -23,6 +39,7 @@ export class Kv {
   }
 
   async set<T = unknown>(key: string, value: T): Promise<void> {
+    assertValidKey(key);
     // JSON.stringify(undefined) returns undefined, which would store an empty
     // body and break later get() calls. Reject up front instead.
     if (value === undefined) {
@@ -36,6 +53,7 @@ export class Kv {
   }
 
   async delete(key: string): Promise<void> {
+    assertValidKey(key);
     const res = await this.request('DELETE', key);
     if (!res.ok && res.status !== 404) {
       throw new Error(`kv.delete failed: ${res.status}`);

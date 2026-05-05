@@ -34,12 +34,17 @@ export class Auth {
   /**
    * Redirect-based GitHub OAuth. Opens the platform's hosted OAuth start URL,
    * which redirects back to the current page with a session token in the hash.
+   *
+   * The current page's `location.hash` is dropped from `return_to` because
+   * the OAuth callback writes its own `#fas_session=…` and would clobber any
+   * hash-based router state otherwise.
    */
   signIn(): void {
-    const returnTo = window.location.href;
+    const here = new URL(window.location.href);
+    here.hash = '';
     const url = new URL('/v1/auth/github/start', this.apiBase);
     url.searchParams.set('app_id', this.appId);
-    url.searchParams.set('return_to', returnTo);
+    url.searchParams.set('return_to', here.toString());
     window.location.assign(url.toString());
   }
 
@@ -66,11 +71,24 @@ export class Auth {
     if (typeof window === 'undefined') return;
     const hash = window.location.hash;
     if (!hash.startsWith('#fas_session=')) return;
-    const token = decodeURIComponent(hash.slice('#fas_session='.length));
+
+    // Always clear the hash before doing anything else — even on failure.
+    // Otherwise a bad token gets re-tried on every reload and the user is
+    // permanently stuck on a "broken" URL.
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+
+    let token: string;
+    try {
+      token = decodeURIComponent(hash.slice('#fas_session='.length));
+    } catch {
+      // Malformed hash (% with nothing after, etc.). Hash already cleared.
+      return;
+    }
+    if (!token) return;
+
     const user = await this.fetchUser(token);
     this.session = { token, user };
     this.writeStorage(this.session);
-    history.replaceState(null, '', window.location.pathname + window.location.search);
     this.emit();
   }
 

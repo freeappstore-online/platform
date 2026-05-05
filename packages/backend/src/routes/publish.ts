@@ -115,6 +115,22 @@ publishRoutes.post('/publish', async (c) => {
     // admin returned non-JSON (e.g. plain text); pass it through as-is.
   }
 
+  // Admin's /api/provision returns 200 even when individual steps fail —
+  // the response shape is { steps: [{ name, status: 'ok'|'skip'|'fail',
+  // detail }] }. A 200 with any step failed is a partial provisioning;
+  // surface that as 502 so the CLI can fall back to the Issue form.
+  const failedSteps = extractFailedSteps(adminBody);
+  if (failedSteps.length > 0) {
+    return c.json(
+      {
+        error: 'admin_provision_partial_failure',
+        failedSteps,
+        admin: adminBody,
+      },
+      502,
+    );
+  }
+
   return c.json({
     appId: body.name,
     appUrl: `https://${body.name}.freeappstore.online`,
@@ -122,3 +138,22 @@ publishRoutes.post('/publish', async (c) => {
     admin: adminBody,
   });
 });
+
+interface AdminStep {
+  name: string;
+  status: 'ok' | 'skip' | 'fail';
+  detail?: string;
+}
+
+export function extractFailedSteps(body: unknown): AdminStep[] {
+  if (!body || typeof body !== 'object') return [];
+  const steps = (body as { steps?: unknown }).steps;
+  if (!Array.isArray(steps)) return [];
+  const failed: AdminStep[] = [];
+  for (const s of steps) {
+    if (s && typeof s === 'object' && (s as { status?: unknown }).status === 'fail') {
+      failed.push(s as AdminStep);
+    }
+  }
+  return failed;
+}

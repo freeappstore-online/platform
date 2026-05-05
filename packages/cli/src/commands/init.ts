@@ -36,45 +36,60 @@ const TEXT_EXTENSIONS = new Set([
 
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', '.cache']);
 
+/**
+ * Scaffolds a new app from a template. Exported so the wizard can call it
+ * inline. Returns the absolute path to the new directory.
+ */
+export async function runInit(opts: {
+  appId: string;
+  template?: 'standalone' | 'connected';
+}): Promise<{ path: string; substitutionCount: number }> {
+  assertValidAppId(opts.appId);
+  const template = opts.template ?? 'standalone';
+  if (!(template in TEMPLATES)) {
+    throw new Error(`Unknown template "${template}". Choose: standalone, connected.`);
+  }
+
+  const target = resolve(process.cwd(), opts.appId);
+  if (await exists(target)) {
+    throw new Error(`Directory "${opts.appId}" already exists.`);
+  }
+
+  const repo = TEMPLATES[template];
+  process.stdout.write(`Cloning ${repo} → ${opts.appId}/\n`);
+  await run('git', ['clone', '--depth=1', `https://github.com/${repo}.git`, target]);
+  await rm(join(target, '.git'), { recursive: true, force: true });
+
+  // Replace APPNAME placeholder throughout. The template documents this
+  // step in its README, but a CLI scaffold should never punt that on the
+  // user — the result has to be runnable as-is.
+  const substitutionCount = await substituteAppName(target, opts.appId);
+  await run('git', ['init', '-q', '-b', 'main'], target);
+
+  // Stage and commit the template so the new repo has a real first commit.
+  // Without this, `git push` after fas publish fails with "src refspec
+  // main does not match any" because main points at nothing.
+  await run('git', ['add', '-A'], target);
+  await run(
+    'git',
+    ['commit', '-q', '-m', `Initial commit from ${template} template`],
+    target,
+  );
+
+  return { path: target, substitutionCount };
+}
+
 export const initCommand = new Command('init')
   .description('Scaffold a new free app from a template.')
   .argument('<app-id>', 'Short app id (lowercase, single word). e.g. "calendar"')
   .option('-t, --template <name>', 'Template: standalone | connected', 'standalone')
   .action(async (appId: string, opts: { template: string }) => {
-    assertValidAppId(appId);
-    const template = opts.template as TemplateName;
-    if (!(template in TEMPLATES)) {
-      throw new Error(`Unknown template "${opts.template}". Choose: standalone, connected.`);
-    }
-
-    const target = resolve(process.cwd(), appId);
-    if (await exists(target)) {
-      throw new Error(`Directory "${appId}" already exists.`);
-    }
-
-    const repo = TEMPLATES[template];
-    process.stdout.write(`Cloning ${repo} → ${appId}/\n`);
-    await run('git', ['clone', '--depth=1', `https://github.com/${repo}.git`, target]);
-    await rm(join(target, '.git'), { recursive: true, force: true });
-
-    // Replace APPNAME placeholder throughout. The template documents this
-    // step in its README, but a CLI scaffold should never punt that on the
-    // user — the result has to be runnable as-is.
-    const replaced = await substituteAppName(target, appId);
-    await run('git', ['init', '-q', '-b', 'main'], target);
-
-    // Stage and commit the template so the new repo has a real first commit.
-    // Without this, `git push` after fas publish fails with "src refspec
-    // main does not match any" because main points at nothing.
-    await run('git', ['add', '-A'], target);
-    await run(
-      'git',
-      ['commit', '-q', '-m', `Initial commit from ${template} template`],
-      target,
-    );
-
-    process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${template} template.\n`);
-    process.stdout.write(`  Replaced APPNAME → ${appId} in ${replaced} file(s).\n`);
+    const result = await runInit({
+      appId,
+      template: opts.template as 'standalone' | 'connected',
+    });
+    process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${opts.template} template.\n`);
+    process.stdout.write(`  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n`);
     process.stdout.write(`  Next: cd ${appId} && pnpm install && pnpm dev\n`);
   });
 
