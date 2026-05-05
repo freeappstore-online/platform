@@ -1,5 +1,12 @@
 # @freeappstore/sdk
 
+## 0.1.2
+
+- **Fix:** `auth.init()` no longer leaves the `#fas_session=…` hash on the URL when the auth fetch fails. Previously a bad/expired token meant every reload retried it and the user was stuck.
+- **Fix:** `auth.signIn()` strips the page's `location.hash` from `return_to` so apps using hash-based routers don't lose their route across the OAuth bounce.
+- **Fix:** `kv.get/set/delete('')` and other invalid keys now throw clearly instead of producing a `404` with no useful message. Keys must be non-empty strings ≤ 128 chars.
+- First unit tests for the SDK (auth + kv).
+
 ## 0.1.1
 
 - Docs: clearer JSDoc on `auth.init()` with usage example.

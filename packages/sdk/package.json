@@ -1,6 +1,6 @@
 {
   "name": "@freeappstore/sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Browser SDK for free apps on freeappstore.online — auth, per-user KV, light realtime rooms.",
   "license": "MIT",
   "type": "module",
