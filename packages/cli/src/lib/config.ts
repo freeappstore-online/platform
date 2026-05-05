@@ -12,6 +12,15 @@ export interface FasConfig {
     login: string;
     obtainedAt: number;
   };
+  /**
+   * fas session token, minted by /v1/auth/exchange. Used as a Bearer for
+   * authenticated calls to the platform API. Lives 30 days; if expired,
+   * `fas login` mints a new one.
+   */
+  session?: {
+    token: string;
+    obtainedAt: number;
+  };
 }
 
 const DEFAULT_CONFIG: FasConfig = {

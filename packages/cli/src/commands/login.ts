@@ -24,9 +24,25 @@ export const loginCommand = new Command('login')
 
     const { accessToken, login } = await flow.poll();
     const config = await readConfig();
+
+    // Swap the GitHub user-access-token for a fas session token. Subsequent
+    // CLI commands authenticate via the fas session, not the GitHub token.
+    const exchangeRes = await fetch(`${config.apiBase}/v1/auth/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ githubToken: accessToken }),
+    });
+    if (!exchangeRes.ok) {
+      throw new Error(
+        `Auth exchange failed (${exchangeRes.status}): ${await exchangeRes.text()}`,
+      );
+    }
+    const { sessionToken } = (await exchangeRes.json()) as { sessionToken: string };
+
     await writeConfig({
       ...config,
       github: { accessToken, login, obtainedAt: Date.now() },
+      session: { token: sessionToken, obtainedAt: Date.now() },
     });
     process.stdout.write(`\n✓ Signed in as @${login}\n`);
   });

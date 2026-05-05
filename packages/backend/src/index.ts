@@ -5,6 +5,8 @@ import { authRoutes } from './routes/auth.js';
 import { kvRoutes } from './routes/kv.js';
 import { roomRoutes } from './routes/rooms.js';
 import { uptimeRoutes } from './routes/uptime.js';
+import { exchangeRoutes } from './routes/exchange.js';
+import { publishRoutes } from './routes/publish.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { isAllowedOrigin } from './lib/origins.js';
@@ -33,9 +35,11 @@ app.get('/health', (c) => c.json({ ok: true }));
 
 const v1 = new Hono<{ Bindings: Env }>();
 v1.route('/', authRoutes);
+v1.route('/', exchangeRoutes);
 v1.route('/', kvRoutes);
 v1.route('/', roomRoutes);
 v1.route('/', uptimeRoutes);
+v1.route('/', publishRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;

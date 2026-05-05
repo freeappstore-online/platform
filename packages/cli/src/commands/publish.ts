@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import prompts from 'prompts';
 import { openUrl } from '../lib/open.js';
 import { assertValidAppId } from '../lib/app-id.js';
+import { readConfig } from '../lib/config.js';
 
 const SUBMISSION_URL = 'https://github.com/freeappstore-online/submissions/issues/new';
 
@@ -41,16 +42,17 @@ interface SubmissionInput {
 
 export const publishCommand = new Command('publish')
   .description(
-    'Submit this app to FreeAppStore. Opens a GitHub Issue prefilled with everything you provide; a maintainer reviews and provisions hosting + DNS within ~48h.',
+    'Publish this app to FreeAppStore. Provisions repo + hosting + DNS automatically. If auto-provision is unavailable, falls back to opening a prefilled submission Issue for admin review.',
   )
-  .option('--no-open', 'Print the URL instead of opening a browser.')
-  .action(async (opts: { open: boolean }) => {
+  .option('--no-open', 'Print the fallback Issue URL instead of opening a browser.')
+  .option('--issue', 'Skip auto-provision; always open the GitHub Issue form.')
+  .action(async (opts: { open: boolean; issue?: boolean }) => {
     const repo = await detectGitRepo();
     const appName = await detectAppName();
     const description = await detectDescription();
 
-    process.stdout.write('\nLet\'s submit your app to FreeAppStore.\n');
-    if (!repo) {
+    process.stdout.write('\nLet\'s publish your app to FreeAppStore.\n');
+    if (!repo && opts.issue) {
       process.stdout.write(
         '⚠  No GitHub origin detected. Push your repo to GitHub first, then run again.\n',
       );
@@ -121,8 +123,30 @@ export const publishCommand = new Command('publish')
       demo: answers.demo?.trim() ? answers.demo : null,
     };
 
-    const url = buildSubmissionUrl(input);
+    // Try auto-provision first unless the user explicitly asked for the
+    // Issue-form fallback.
+    if (!opts.issue) {
+      const autoResult = await tryAutoProvision(input);
+      if (autoResult.kind === 'success') {
+        process.stdout.write(`\n✓ Provisioned!\n`);
+        process.stdout.write(`  Live at: ${autoResult.appUrl}\n`);
+        process.stdout.write(`  Repo:    ${autoResult.repoUrl}\n\n`);
+        process.stdout.write(`Push your code:\n`);
+        process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
+        process.stdout.write(`  git push upstream main\n`);
+        return;
+      }
+      if (autoResult.kind === 'unauthorized') {
+        process.stdout.write(`\n⚠  Not signed in. Run: fas login\n`);
+        return;
+      }
+      process.stdout.write(
+        `\n⚠  Auto-provision unavailable (${autoResult.reason}); falling back to Issue form.\n`,
+      );
+    }
 
+    // Fallback: prefilled GitHub Issue form for admin review.
+    const url = buildSubmissionUrl(input);
     if (opts.open) {
       process.stdout.write('\nOpening submission form on GitHub...\n');
       process.stdout.write('Review the prefilled fields and click "Submit new issue".\n');
@@ -132,6 +156,52 @@ export const publishCommand = new Command('publish')
       process.stdout.write(`\n${url}\n`);
     }
   });
+
+interface AutoProvisionSuccess {
+  kind: 'success';
+  appUrl: string;
+  repoUrl: string;
+}
+interface AutoProvisionFailure {
+  kind: 'unconfigured' | 'failed' | 'unauthorized';
+  reason: string;
+}
+type AutoProvisionResult = AutoProvisionSuccess | AutoProvisionFailure;
+
+async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionResult> {
+  const config = await readConfig();
+  const sessionToken = config.session?.token;
+  if (!sessionToken) return { kind: 'unauthorized', reason: 'no fas session' };
+
+  const typeShort = input.type.startsWith('Standalone') ? 'standalone' : 'connected';
+  const res = await fetch(`${config.apiBase}/v1/publish`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name: input.name,
+      category: input.category,
+      type: typeShort,
+      oneliner: input.oneliner,
+      description: input.description,
+      repo: input.repo,
+      demo: input.demo,
+    }),
+  });
+  if (res.status === 401) return { kind: 'unauthorized', reason: 'session expired' };
+  if (res.status === 503) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    return { kind: 'unconfigured', reason: body.error ?? '503' };
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    return { kind: 'failed', reason: `${res.status}: ${body}` };
+  }
+  const result = (await res.json()) as { appUrl: string; repoUrl: string };
+  return { kind: 'success', appUrl: result.appUrl, repoUrl: result.repoUrl };
+}
 
 export function buildSubmissionUrl(input: SubmissionInput): string {
   const url = new URL(SUBMISSION_URL);

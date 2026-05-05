@@ -10,6 +10,14 @@ export interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   SESSION_SIGNING_KEY: string;
+  /**
+   * Admin Worker base URL (e.g. https://admin.freeappstore.online) and the
+   * CF Access service token credentials it accepts. Optional: when not set,
+   * /v1/publish returns 503 with a setup hint instead of a runtime error.
+   */
+  ADMIN_API_BASE?: string;
+  ADMIN_CF_ACCESS_CLIENT_ID?: string;
+  ADMIN_CF_ACCESS_CLIENT_SECRET?: string;
 }
 
 export interface SessionPayload {
