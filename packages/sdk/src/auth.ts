@@ -50,8 +50,17 @@ export class Auth {
   }
 
   /**
-   * Call this once at app start. If the page was loaded via an auth callback,
-   * captures the session from the URL hash and persists it.
+   * Call this once at app start, before rendering anything that depends on
+   * auth state. If the page was loaded via an auth callback (e.g. after
+   * `signIn()` returned from GitHub), this captures the session from the
+   * URL hash, persists it to localStorage, and clears the hash. On a normal
+   * page load it's a no-op — the constructor already restored any cached
+   * session from localStorage.
+   *
+   * @example
+   *   const fas = initApp({ appId: 'my-app' });
+   *   await fas.auth.init();
+   *   render();
    */
   async init(): Promise<void> {
     if (typeof window === 'undefined') return;
