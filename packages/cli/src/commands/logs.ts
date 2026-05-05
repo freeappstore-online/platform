@@ -1,17 +1,15 @@
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { assertValidAppId } from '../lib/app-id.js';
+import { cfProjectFor } from '../lib/apps.js';
 
 export const logsCommand = new Command('logs')
   .description("Tail live logs for one of your apps' Cloudflare Pages project.")
   .argument('<app-id>', 'Short app id (e.g. "calculator")')
-  .option(
-    '--cf-project <name>',
-    'Override the Cloudflare Pages project name. Default: free<app-id>app, but several existing projects use legacy names (e.g. freemusic, freepuzzle, freeappstore).',
-  )
+  .option('--cf-project <name>', 'Override the Cloudflare Pages project name.')
   .action(async (appId: string, opts: { cfProject?: string }) => {
     assertValidAppId(appId);
-    const cfProject = opts.cfProject ?? `free${appId}app`;
+    const cfProject = opts.cfProject ?? cfProjectFor(appId);
 
     process.stdout.write(`Tailing logs for ${cfProject} (Ctrl+C to stop)...\n`);
 
