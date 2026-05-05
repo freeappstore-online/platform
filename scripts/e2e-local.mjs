@@ -180,11 +180,18 @@ async function testWebSocket(token) {
   assert(aSawPeers && bSawPeers, 'both clients received a peers message');
 
   // a sends — b should receive (a should NOT, since broadcast skips sender)
-  a.send(JSON.stringify({ kind: 'msg', data: { from: 'a' } }));
+  a.send(JSON.stringify({ kind: 'msg', data: { tag: 'from-a' } }));
   await sleep(200);
 
-  const bGotMsg = bMsgs.find((m) => m.kind === 'msg' && m.data?.from === 'a');
+  const bGotMsg = bMsgs.find((m) => m.kind === 'msg' && m.data?.tag === 'from-a');
   assert(!!bGotMsg, "client b received a's message", `bMsgs=${JSON.stringify(bMsgs)}`);
+  if (bGotMsg) {
+    assert(
+      typeof bGotMsg.from === 'object' && typeof bGotMsg.from.uid === 'string' && typeof bGotMsg.from.login === 'string',
+      'msg.from is { uid, login }',
+      `from=${JSON.stringify(bGotMsg.from)}`,
+    );
+  }
 
   const aGotOwnMsg = aMsgs.find(
     (m) => m.kind === 'msg' && m.data?.from === 'a' && !aMsgs.indexOf(m) === false,

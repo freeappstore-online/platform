@@ -52,11 +52,11 @@ function joinRoom(): void {
     peersEl.textContent =
       peers.length === 0
         ? 'no peers yet'
-        : `peers (${peers.length}): ${peers.join(', ')}`;
+        : `peers (${peers.length}): ${peers.map((p) => `@${p.login}`).join(', ')}`;
   });
 
   r.onMessage<{ text: string }>((msg) => {
-    appendLine(`${msg.from}: ${msg.data.text}`);
+    appendLine(`@${msg.from.login}: ${msg.data.text}`);
   });
 }
 

@@ -9,7 +9,13 @@ const IDLE_EVICT_MS = 24 * 60 * 60 * 1000;
 interface Peer {
   socket: WebSocket;
   uid: string;
+  login: string;
   rateLimit: RateLimitState;
+}
+
+interface PublicPeer {
+  uid: string;
+  login: string;
 }
 
 export class Room {
@@ -38,6 +44,7 @@ export class Room {
 
     const url = new URL(request.url);
     const uid = url.searchParams.get('uid') ?? 'anon';
+    const login = url.searchParams.get('login') ?? uid;
 
     // Per the Cloudflare WebSocketPair spec, pair[0] is the client side
     // and pair[1] is the server side. Don't rely on Object.values order.
@@ -49,6 +56,7 @@ export class Room {
     const peer: Peer = {
       socket: server,
       uid,
+      login,
       rateLimit: newRateLimitState(Date.now()),
     };
     this.peers.set(server, peer);
@@ -78,7 +86,8 @@ export class Room {
       }
       if (parsed.kind !== 'msg') return;
 
-      const out = JSON.stringify({ kind: 'msg', from: uid, data: parsed.data, at: Date.now() });
+      const from: PublicPeer = { uid, login };
+      const out = JSON.stringify({ kind: 'msg', from, data: parsed.data, at: Date.now() });
       this.broadcast(out, server);
     });
 
@@ -102,7 +111,14 @@ export class Room {
   }
 
   private broadcastPeers(): void {
-    const peers = Array.from(this.peers.values()).map((p) => p.uid);
+    // Dedupe by uid: one entry per unique user, even if they have multiple
+    // connections (multiple tabs). Keeps the peer list a "who's here" list,
+    // not a "how many sockets are open" list.
+    const byUid = new Map<string, PublicPeer>();
+    for (const p of this.peers.values()) {
+      byUid.set(p.uid, { uid: p.uid, login: p.login });
+    }
+    const peers = Array.from(byUid.values());
     const msg = JSON.stringify({ kind: 'peers', peers });
     for (const peer of this.peers.values()) {
       try {

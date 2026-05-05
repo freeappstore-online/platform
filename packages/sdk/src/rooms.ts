@@ -14,8 +14,13 @@ import type { Unsubscribe } from './types.js';
  * - max 64 active rooms per app (LRU evicts the oldest)
  * - rooms idle for 24h are auto-evicted
  */
+export interface RoomPeer {
+  uid: string;
+  login: string;
+}
+
 export interface RoomMessage<T = unknown> {
-  from: string;
+  from: RoomPeer;
   data: T;
   at: number;
 }
@@ -40,9 +45,9 @@ const RECONNECT_MAX_MS = 30_000;
 export class Room {
   private socket: WebSocket | null = null;
   private listeners = new Set<(msg: RoomMessage) => void>();
-  private peerListeners = new Set<(peers: string[]) => void>();
+  private peerListeners = new Set<(peers: RoomPeer[]) => void>();
   private stateListeners = new Set<(state: ConnectionState) => void>();
-  private peers: string[] = [];
+  private peers: RoomPeer[] = [];
   private connectionState: ConnectionState = 'connecting';
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -72,7 +77,7 @@ export class Room {
     return () => this.listeners.delete(listener as (msg: RoomMessage) => void);
   }
 
-  onPeers(listener: (peers: string[]) => void): Unsubscribe {
+  onPeers(listener: (peers: RoomPeer[]) => void): Unsubscribe {
     this.peerListeners.add(listener);
     listener(this.peers);
     return () => this.peerListeners.delete(listener);
@@ -125,8 +130,8 @@ export class Room {
     socket.addEventListener('message', (ev) => {
       try {
         const parsed = JSON.parse(ev.data as string) as
-          | { kind: 'msg'; from: string; data: unknown; at: number }
-          | { kind: 'peers'; peers: string[] };
+          | { kind: 'msg'; from: RoomPeer; data: unknown; at: number }
+          | { kind: 'peers'; peers: RoomPeer[] };
         if (parsed.kind === 'msg') {
           for (const l of this.listeners) {
             l({ from: parsed.from, data: parsed.data, at: parsed.at });
