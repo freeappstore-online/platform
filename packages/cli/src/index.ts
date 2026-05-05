@@ -9,6 +9,7 @@ import { initCommand } from './commands/init.js';
 import { publishCommand } from './commands/publish.js';
 import { logsCommand } from './commands/logs.js';
 import { whoamiCommand } from './commands/whoami.js';
+import { doctorCommand } from './commands/doctor.js';
 
 // Read version from the package's own package.json so `fas --version` always
 // matches the installed package. dist/index.js sits one level under the
@@ -31,8 +32,25 @@ program.addCommand(whoamiCommand);
 program.addCommand(initCommand);
 program.addCommand(publishCommand);
 program.addCommand(logsCommand);
+program.addCommand(doctorCommand);
 
-program.parseAsync().catch((err: unknown) => {
+// `fas` with no subcommand → launch the TUI when stdout is a TTY.
+// Subcommands keep their normal one-shot behavior, scriptable for CI / agents.
+async function main(): Promise<void> {
+  if (process.argv.length === 2) {
+    if (!process.stdout.isTTY) {
+      // Piped output (CI, redirects). Show help instead of TUI.
+      program.outputHelp();
+      return;
+    }
+    const { startTui } = await import('./tui/start.js');
+    await startTui();
+    return;
+  }
+  await program.parseAsync();
+}
+
+main().catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err);
   process.stderr.write(`fas: ${msg}\n`);
   process.exit(1);
