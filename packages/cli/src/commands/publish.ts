@@ -47,6 +47,20 @@ export const publishCommand = new Command('publish')
   .option('--no-open', 'Print the fallback Issue URL instead of opening a browser.')
   .option('--issue', 'Skip auto-provision; always open the GitHub Issue form.')
   .action(async (opts: { open: boolean; issue?: boolean }) => {
+    // Check auth BEFORE prompting — there's no point asking the user for
+    // 5 fields just to bail at the end with "not signed in". --issue
+    // skips this since the GitHub Issue form path doesn't need a session.
+    if (!opts.issue) {
+      const config = await readConfig();
+      if (!config.session?.token) {
+        process.stdout.write(
+          '\n⚠  Not signed in. Run: fas login\n' +
+            '   (or run `fas publish --issue` to submit via the GitHub Issue form instead.)\n',
+        );
+        process.exit(1);
+      }
+    }
+
     const repo = await detectGitRepo();
     const appName = await detectAppName();
     const description = await detectDescription();
@@ -89,14 +103,8 @@ export const publishCommand = new Command('publish')
         {
           type: 'text',
           name: 'oneliner',
-          message: 'One-line description',
+          message: 'One-line description (shown on the storefront)',
           initial: description ?? '',
-          validate: (v: string) => v.trim().length > 0 || 'required',
-        },
-        {
-          type: 'text',
-          name: 'description',
-          message: 'Full description (what it does, who it\'s for)',
           validate: (v: string) => v.trim().length > 0 || 'required',
         },
         {
@@ -118,7 +126,10 @@ export const publishCommand = new Command('publish')
       category: answers.category!,
       type: answers.type!,
       oneliner: answers.oneliner!,
-      description: answers.description!,
+      // Reuse the oneliner as the body description for the Issue-form
+      // fallback. Auto-provision flow doesn't use it (admin's storefront
+      // uses oneliner directly).
+      description: answers.oneliner!,
       repo: repo ? `https://github.com/${repo}` : null,
       demo: answers.demo?.trim() ? answers.demo : null,
     };
