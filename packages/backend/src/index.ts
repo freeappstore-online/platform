@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import type { Env } from './types.js';
 import { authRoutes } from './routes/auth.js';
 import { kvRoutes } from './routes/kv.js';
@@ -6,10 +7,26 @@ import { roomRoutes } from './routes/rooms.js';
 import { uptimeRoutes } from './routes/uptime.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
 import { backupD1ToR2 } from './lib/backup.js';
+import { isAllowedOrigin } from './lib/origins.js';
 
 export { Room } from './do/room.js';
 
 export const app = new Hono<{ Bindings: Env }>();
+
+// CORS for cross-origin browser fetches into the API. Without this, any
+// route called via fetch() with an Authorization header (auth/me, kv) fails
+// the preflight from a non-API origin. WebSockets are exempt from CORS so
+// rooms aren't affected, but the SDK calls /v1/auth/me first during init()
+// and a CORS failure there breaks the rest of the SDK.
+app.use(
+  '*',
+  cors({
+    origin: (origin) => (isAllowedOrigin(origin) ? origin : null),
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Authorization', 'Content-Type'],
+    maxAge: 600,
+  }),
+);
 
 app.get('/', (c) => c.text('FreeAppStore API'));
 app.get('/health', (c) => c.json({ ok: true }));

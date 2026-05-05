@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isAllowedReturnTo } from './origins.js';
+import { isAllowedReturnTo, isAllowedOrigin } from './origins.js';
 
 describe('isAllowedReturnTo', () => {
   it('allows the apex domain over https', () => {
@@ -40,5 +40,33 @@ describe('isAllowedReturnTo', () => {
   it('rejects non-http(s) schemes', () => {
     expect(isAllowedReturnTo('file:///etc/passwd')).toBe(false);
     expect(isAllowedReturnTo('ftp://freeappstore.online/')).toBe(false);
+  });
+});
+
+describe('isAllowedOrigin (CORS allowlist)', () => {
+  it('allows the apex over https', () => {
+    expect(isAllowedOrigin('https://freeappstore.online')).toBe(true);
+  });
+
+  it('allows arbitrary subdomains over https', () => {
+    expect(isAllowedOrigin('https://chess.freeappstore.online')).toBe(true);
+  });
+
+  it('allows localhost / 127.0.0.1 dev origins', () => {
+    expect(isAllowedOrigin('http://localhost:5173')).toBe(true);
+    expect(isAllowedOrigin('http://127.0.0.1:8787')).toBe(true);
+  });
+
+  it('rejects look-alike origins (suffix without dot)', () => {
+    expect(isAllowedOrigin('https://evilfreeappstore.online')).toBe(false);
+  });
+
+  it('rejects unrelated origins', () => {
+    expect(isAllowedOrigin('https://evil.com')).toBe(false);
+  });
+
+  it('rejects malformed origins', () => {
+    expect(isAllowedOrigin('not a url')).toBe(false);
+    expect(isAllowedOrigin('')).toBe(false);
   });
 });

@@ -1,26 +1,34 @@
 /**
- * Returns true if `returnTo` points at an origin we'll redirect back to with
- * a session token. Anything else is rejected to prevent token-leak via
- * attacker-controlled `return_to` values.
- *
  * Allowed:
  *  - any HTTPS host on freeappstore.online (apex or subdomain)
  *  - localhost / 127.0.0.1 on http or https (dev only)
+ *
+ * Used for both:
+ *  - the `return_to` allowlist on /v1/auth/github/start, to prevent
+ *    token-leak via attacker-controlled redirect targets
+ *  - the CORS origin allowlist for cross-origin fetches into the API
  */
+function isAllowedHost(url: URL): boolean {
+  const host = url.hostname.toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  }
+  if (url.protocol !== 'https:') return false;
+  return host === 'freeappstore.online' || host.endsWith('.freeappstore.online');
+}
+
 export function isAllowedReturnTo(returnTo: string): boolean {
-  let url: URL;
   try {
-    url = new URL(returnTo);
+    return isAllowedHost(new URL(returnTo));
   } catch {
     return false;
   }
+}
 
-  const host = url.hostname.toLowerCase();
-  const isDevHost = host === 'localhost' || host === '127.0.0.1';
-  if (isDevHost) {
-    return url.protocol === 'http:' || url.protocol === 'https:';
+export function isAllowedOrigin(origin: string): boolean {
+  try {
+    return isAllowedHost(new URL(origin));
+  } catch {
+    return false;
   }
-
-  if (url.protocol !== 'https:') return false;
-  return host === 'freeappstore.online' || host.endsWith('.freeappstore.online');
 }
