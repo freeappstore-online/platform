@@ -1,0 +1,72 @@
+name: Deploy Worker
+
+# Auto-deploys the freeappstore-api Worker on every push to main that
+# touches the backend package. wrangler deploy is idempotent (it
+# fingerprints the bundle), so re-runs without changes are no-ops.
+#
+# Migrations are applied first; if they fail, the deploy doesn't run,
+# preventing a Worker from talking to a schema it doesn't expect.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/backend/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Don't let a slow deploy block a newer commit. Latest push wins.
+  group: deploy-backend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Apply D1 migrations
+        working-directory: packages/backend
+        run: pnpm exec wrangler d1 migrations apply fas --remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Deploy Worker
+        working-directory: packages/backend
+        run: pnpm exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Smoke test
+        run: |
+          for i in 1 2 3 4 5; do
+            CODE=$(curl -sS -o /dev/null -w "%{http_code}" https://api.freeappstore.online/health)
+            if [ "$CODE" = "200" ]; then
+              echo "✓ /health returned 200"
+              exit 0
+            fi
+            echo "attempt $i: $CODE, retrying..."
+            sleep 5
+          done
+          echo "✗ /health never returned 200 after deploy"
+          exit 1
