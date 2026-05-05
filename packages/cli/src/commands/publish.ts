@@ -1,26 +1,47 @@
 import { Command } from 'commander';
 import { spawn } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { openUrl } from '../lib/open.js';
 
-const PORTAL_URL = 'https://publish.freeappstore.online';
+const SUBMISSION_URL = 'https://github.com/freeappstore-online/submissions/issues/new';
 
 export const publishCommand = new Command('publish')
-  .description('Open the FreeAppStore publisher portal for the current repo.')
+  .description(
+    'Open the FreeAppStore submission form for this app. A maintainer reviews and provisions hosting + DNS within ~48h.',
+  )
   .option('--no-open', 'Print the URL instead of opening a browser.')
   .action(async (opts: { open: boolean }) => {
     const repo = await detectGitRepo();
+    const appName = await detectAppName();
 
-    const url = new URL(PORTAL_URL);
-    if (repo) url.searchParams.set('repo', repo);
-    url.searchParams.set('source', 'cli');
+    const url = new URL(SUBMISSION_URL);
+    url.searchParams.set('template', 'app-submission.yml');
+    if (appName) {
+      url.searchParams.set('name', appName);
+      url.searchParams.set('title', `[Submission] ${appName}`);
+    }
+    if (repo) url.searchParams.set('repo', `https://github.com/${repo}`);
 
     if (opts.open) {
-      process.stdout.write(`Opening ${url.origin}${url.pathname}...\n`);
+      process.stdout.write('Opening submission form on GitHub...\n');
+      process.stdout.write('A maintainer will review and provision your app (~48h).\n');
       await openUrl(url.toString());
     } else {
       process.stdout.write(`${url.toString()}\n`);
     }
   });
+
+/** Reads the app name from the local package.json — `fas init` sets this. */
+async function detectAppName(): Promise<string | null> {
+  try {
+    const raw = await readFile(join(process.cwd(), 'package.json'), 'utf8');
+    const pkg = JSON.parse(raw) as { name?: string };
+    return pkg.name ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /** Returns the GitHub repo of the current dir as `owner/name`, or null. */
 function detectGitRepo(): Promise<string | null> {
