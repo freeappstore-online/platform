@@ -1,0 +1,75 @@
+name: Publish to npm
+
+# Triggers on any push to main that touches the publishable packages.
+# Each package self-checks: if its package.json version is unchanged
+# vs what's already on npm, the publish is a no-op. So the practical
+# release flow becomes:
+#
+#   1. cd packages/cli (or sdk)
+#   2. npm version patch    # bumps + commits + tags
+#   3. git push --follow-tags
+#
+# CI sees the version differs from what's on npm and publishes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/cli/**'
+      - 'packages/sdk/**'
+      - '.github/workflows/publish.yml'
+  workflow_dispatch: # manual trigger from the Actions UI
+
+permissions:
+  contents: read
+  id-token: write # for npm provenance attestation
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [cli, sdk]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the package
+        run: pnpm --filter @freeappstore/${{ matrix.package }} build
+
+      - name: Decide whether to publish
+        id: decide
+        working-directory: packages/${{ matrix.package }}
+        run: |
+          LOCAL_VER=$(node -p "require('./package.json').version")
+          # `npm view` is allowed to fail (e.g. package is brand-new).
+          NPM_VER=$(npm view @freeappstore/${{ matrix.package }} version 2>/dev/null || echo "0.0.0")
+          echo "local=$LOCAL_VER  npm=$NPM_VER"
+          if [ "$LOCAL_VER" = "$NPM_VER" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Version unchanged ($LOCAL_VER) — skipping publish."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "Version bumped ($NPM_VER → $LOCAL_VER) — will publish."
+          fi
+
+      - name: Publish to npm
+        if: steps.decide.outputs.publish == 'true'
+        working-directory: packages/${{ matrix.package }}
+        # --provenance attaches a signed attestation linking this tarball
+        # to this GitHub Actions run. Free, recommended, requires
+        # id-token: write permission (set above).
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
