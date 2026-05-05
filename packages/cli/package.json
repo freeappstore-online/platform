@@ -1,0 +1,29 @@
+{
+  "name": "@freeappstore/cli",
+  "version": "0.0.0",
+  "description": "fas — CLI for publishing free apps to freeappstore.online",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "fas": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

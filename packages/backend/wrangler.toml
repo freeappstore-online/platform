@@ -1,0 +1,26 @@
+name = "freeappstore-api"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain wired up out-of-band via the Cloudflare dashboard:
+# api.freeappstore.online -> this Worker
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fas"
+database_id = "<set-via-wrangler-d1-create>"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["Room"]
+
+# Secrets (set via `wrangler secret put`):
+#   GITHUB_CLIENT_ID
+#   GITHUB_CLIENT_SECRET
+#   SESSION_SIGNING_KEY      # 32+ bytes, used to sign session tokens
