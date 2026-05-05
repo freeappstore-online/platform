@@ -40,10 +40,14 @@ export async function checkUrl(url: string, now: () => number = Date.now): Promi
  * list lives in `packages/cli/src/lib/apps.ts` but the Worker can't easily
  * import from a sibling package without bundling, so we duplicate here.
  *
+ * Notably absent: `api.freeappstore.online` itself. A Worker fetching its
+ * own custom domain hits a CF edge loop and returns 522. That's not a real
+ * outage — it's a hosting-platform property — so we drop it. Health of the
+ * API is implicit: if this cron runs and inserts rows, the API is up.
+ *
  * Worth deduplicating once the registry is fetched from a remote URL.
  */
 export const TARGETS: Array<{ id: string; url: string }> = [
-  { id: 'api', url: 'https://api.freeappstore.online/health' },
   { id: 'freeappstore', url: 'https://freeappstore.online' },
   { id: 'chess', url: 'https://chess.freeappstore.online' },
   { id: 'language', url: 'https://language.freeappstore.online' },
