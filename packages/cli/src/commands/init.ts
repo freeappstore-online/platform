@@ -63,6 +63,16 @@ export const initCommand = new Command('init')
     const replaced = await substituteAppName(target, appId);
     await run('git', ['init', '-q', '-b', 'main'], target);
 
+    // Stage and commit the template so the new repo has a real first commit.
+    // Without this, `git push` after fas publish fails with "src refspec
+    // main does not match any" because main points at nothing.
+    await run('git', ['add', '-A'], target);
+    await run(
+      'git',
+      ['commit', '-q', '-m', `Initial commit from ${template} template`],
+      target,
+    );
+
     process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${template} template.\n`);
     process.stdout.write(`  Replaced APPNAME → ${appId} in ${replaced} file(s).\n`);
     process.stdout.write(`  Next: cd ${appId} && pnpm install && pnpm dev\n`);

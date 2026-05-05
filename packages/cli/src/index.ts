@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { loginCommand } from './commands/login.js';
+import { logoutCommand } from './commands/logout.js';
 import { initCommand } from './commands/init.js';
 import { publishCommand } from './commands/publish.js';
 import { logsCommand } from './commands/logs.js';
@@ -14,6 +15,7 @@ program
   .version('0.0.0');
 
 program.addCommand(loginCommand);
+program.addCommand(logoutCommand);
 program.addCommand(whoamiCommand);
 program.addCommand(initCommand);
 program.addCommand(publishCommand);
