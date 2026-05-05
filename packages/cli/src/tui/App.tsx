@@ -1,4 +1,4 @@
-import { Box, Text, useApp, useInput } from 'ink';
+import { Box, Text, useApp } from 'ink';
 import { useEffect, useState } from 'react';
 import { Doctor } from './screens/Doctor.js';
 import { Menu, type MenuChoice } from './screens/Menu.js';
@@ -18,18 +18,28 @@ export function App(): React.ReactElement {
   const [session, setSession] = useState<SessionState>({ loaded: false, login: null });
 
   useEffect(() => {
+    let active = true;
     void (async () => {
-      const config = await readConfig();
-      const login = config.github?.login ?? null;
+      let login: string | null = null;
+      try {
+        const config = await readConfig();
+        login = config.github?.login ?? null;
+      } catch {
+        // Corrupt or unreadable config — degrade to "not signed in" rather
+        // than getting stuck on the loading spinner forever.
+      }
+      if (!active) return;
       setSession({ loaded: true, login });
       setScreen(login ? 'menu' : 'welcome');
     })();
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Global keys: q to quit, except while typing into an input.
-  useInput((input, key) => {
-    if (input === 'q' && !key.shift) exit();
-  });
+  // No global 'q'-to-quit handler at the App level — child screens with
+  // text inputs (NewApp wizard) need to receive 'q' as input. Each screen
+  // owns its own keyboard shortcuts. Ctrl-C still exits via ink's default.
 
   if (!session.loaded) {
     return (

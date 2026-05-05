@@ -1,4 +1,4 @@
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 
 export type MenuChoice = 'doctor' | 'quit';
@@ -18,6 +18,12 @@ export function Menu({ login, onSelect }: Props): React.ReactElement {
     { label: 'Doctor — run health checks', value: 'doctor' },
     { label: 'Quit', value: 'quit' },
   ];
+
+  // Menu-scoped keyboard shortcut. Lives here (not at App level) so it
+  // doesn't fire when a child screen has a text input.
+  useInput((input) => {
+    if (input === 'q') onSelect('quit');
+  });
 
   return (
     <Box flexDirection="column">

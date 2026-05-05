@@ -1,5 +1,12 @@
 # @freeappstore/cli
 
+## 0.1.3
+
+- **Fix:** TUI App stuck on `Loading…` if `~/.fas/config.json` was unreadable. Now degrades to "not signed in".
+- **Fix:** Doctor screen no longer warns/leaks if user navigates away (Esc/b) before checks finish — tracks mount state.
+- **Fix:** Removed global `q`-to-quit handler at App level; moved to Menu screen so future text inputs (NewApp wizard) can receive `q` as input.
+- **Fix:** `apiBase` config values with trailing slashes no longer produce `//`-style URLs. Normalised on read.
+
 ## 0.1.2
 
 - New: `fas doctor` — local health checks (Node version, git/pnpm installed, config readable, signed in, API reachable). One-shot prints results with ✓/!/✗; same data drives the Doctor screen in TUI mode.

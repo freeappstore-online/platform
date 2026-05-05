@@ -11,9 +11,16 @@ export function Doctor({ onBack }: Props): React.ReactElement {
   const [results, setResults] = useState<CheckResult[] | null>(null);
 
   useEffect(() => {
+    // Track mount so we don't call setResults on an unmounted component
+    // if the user navigates away while checks are still running.
+    let active = true;
     void (async () => {
-      setResults(await runDoctor());
+      const r = await runDoctor();
+      if (active) setResults(r);
     })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   useInput((input, key) => {

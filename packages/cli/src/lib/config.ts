@@ -27,13 +27,23 @@ const DEFAULT_CONFIG: FasConfig = {
   apiBase: process.env['FAS_API_BASE'] ?? 'https://api.freeappstore.online',
 };
 
+/**
+ * Strips trailing slashes so callers can do `${apiBase}/v1/foo` without
+ * worrying about producing `https://host//v1/foo`. Defensive: a stored or
+ * env-supplied value with a trailing slash is normalised on read.
+ */
+export function normalizeApiBase(s: string): string {
+  return s.replace(/\/+$/, '');
+}
+
 export async function readConfig(): Promise<FasConfig> {
   try {
     const raw = await readFile(CONFIG_FILE, 'utf8');
     const parsed = JSON.parse(raw) as Partial<FasConfig>;
-    return { ...DEFAULT_CONFIG, ...parsed };
+    const merged = { ...DEFAULT_CONFIG, ...parsed };
+    return { ...merged, apiBase: normalizeApiBase(merged.apiBase) };
   } catch {
-    return { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_CONFIG, apiBase: normalizeApiBase(DEFAULT_CONFIG.apiBase) };
   }
 }
 
