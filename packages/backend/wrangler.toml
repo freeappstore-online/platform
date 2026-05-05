@@ -3,8 +3,12 @@ main = "src/index.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Custom domain wired up out-of-band via the Cloudflare dashboard:
-# api.freeappstore.online -> this Worker
+# Attach api.freeappstore.online to this Worker. With custom_domain = true,
+# wrangler creates the DNS record and provisions TLS as part of deploy.
+[[routes]]
+pattern = "api.freeappstore.online"
+zone_name = "freeappstore.online"
+custom_domain = true
 
 # Public, non-secret config. The OAuth App lives at:
 # https://github.com/organizations/freeappstore-online/settings/applications/3576238
