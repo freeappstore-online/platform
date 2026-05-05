@@ -39,12 +39,11 @@ new_sqlite_classes = ["Room"]
 [triggers]
 crons = ["*/15 * * * *", "0 4 * * *"]
 
-# R2 bucket for daily D1 backups. Uncomment once R2 is enabled on the
-# Cloudflare account (Dashboard → R2 → Enable). Until then the daily
-# backup cron logs "skipping daily backup" and exits cleanly.
-# [[r2_buckets]]
-# binding = "BACKUPS"
-# bucket_name = "fas-backups"
+# R2 bucket for daily D1 backups. The 0 4 * * * cron writes a JSON
+# dump of D1 here. See src/lib/backup.ts.
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "fas-backups"
 
 # Secrets (set interactively via `wrangler secret put <name>`):
 #   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
