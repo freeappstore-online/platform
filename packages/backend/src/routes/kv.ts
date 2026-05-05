@@ -13,9 +13,9 @@ kvRoutes.get('/apps/:appId/kv/:key', async (c) => {
       'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
     )
       .bind(appId, user.id, key)
-      .first<{ value: ArrayBuffer }>();
+      .first<{ value: unknown }>();
     if (!row) return c.text('not found', 404);
-    return new Response(row.value as ArrayBuffer, {
+    return new Response(toBytes(row.value), {
       headers: { 'content-type': 'application/json' },
     });
   } catch (err) {
@@ -23,6 +23,19 @@ kvRoutes.get('/apps/:appId/kv/:key', async (c) => {
     throw err;
   }
 });
+
+/**
+ * D1 BLOB columns come back differently across runtimes: production returns
+ * ArrayBuffer, miniflare (wrangler dev) returns plain `number[]`. Coerce to
+ * Uint8Array so `new Response(...)` sends raw bytes either way. Without this,
+ * an Array<number> ends up stringified ("123,34,104,...") in the response.
+ */
+export function toBytes(value: unknown): Uint8Array {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (Array.isArray(value)) return Uint8Array.from(value as number[]);
+  return new Uint8Array(0);
+}
 
 kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
   try {
