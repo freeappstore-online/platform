@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fas rooms demo</title>
+    <style>
+      :root {
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          sans-serif;
+        color-scheme: light dark;
+      }
+      body {
+        max-width: 42rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+      }
+      h1 {
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+      }
+      .muted {
+        color: #888;
+        font-size: 0.875rem;
+      }
+      .row {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        margin: 1rem 0;
+      }
+      input,
+      button {
+        font: inherit;
+        padding: 0.4rem 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid #888;
+        background: transparent;
+        color: inherit;
+      }
+      input {
+        flex: 1;
+      }
+      button {
+        cursor: pointer;
+      }
+      #messages {
+        border: 1px solid #888;
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        height: 16rem;
+        overflow-y: auto;
+        font-family: ui-monospace, SF Mono, Menlo, monospace;
+        font-size: 0.875rem;
+      }
+      #messages > div {
+        margin: 0.125rem 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>fas rooms demo</h1>
+    <p class="muted">
+      Sign in with GitHub, join the <code>lobby</code> room, broadcast messages, see other peers in real time.
+    </p>
+
+    <div class="row">
+      <span id="status">…</span>
+      <button id="signin" hidden>Sign in with GitHub</button>
+      <button id="signout" hidden>Sign out</button>
+    </div>
+
+    <div class="row muted" id="peers">no peers yet</div>
+
+    <div class="row">
+      <input id="input" placeholder="type a message and press Enter" disabled autocomplete="off" />
+    </div>
+
+    <div id="messages"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

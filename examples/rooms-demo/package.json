@@ -1,0 +1,19 @@
+{
+  "name": "@freeappstore-examples/rooms-demo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Minimal example: sign in with GitHub, join a room, broadcast messages, see live peers.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@freeappstore/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
+  }
+}

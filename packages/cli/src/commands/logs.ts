@@ -1,22 +1,31 @@
 import { Command } from 'commander';
-import { readConfig } from '../lib/config.js';
+import { spawn } from 'node:child_process';
 
 export const logsCommand = new Command('logs')
-  .description('Tail recent logs for one of your apps.')
-  .argument('<app-id>')
-  .option('-n, --lines <n>', 'Number of lines to fetch', '100')
-  .action(async (appId: string, opts: { lines: string }) => {
-    const config = await readConfig();
-    if (!config.github?.accessToken) {
-      throw new Error('Not signed in. Run: fas login');
+  .description("Tail live logs for one of your apps' Cloudflare Pages project.")
+  .argument('<app-id>', 'Short app id (e.g. "calculator")')
+  .action(async (appId: string) => {
+    if (!/^[a-z][a-z0-9-]{1,30}$/.test(appId)) {
+      throw new Error('app-id must be lowercase letters, digits, or hyphens (2-31 chars).');
     }
-    const res = await fetch(
-      `${config.apiBase}/v1/apps/${encodeURIComponent(appId)}/logs?lines=${encodeURIComponent(opts.lines)}`,
-      { headers: { Authorization: `Bearer ${config.github.accessToken}` } },
-    );
-    if (!res.ok) {
-      throw new Error(`Logs request failed: ${res.status}`);
-    }
-    const text = await res.text();
-    process.stdout.write(text + (text.endsWith('\n') ? '' : '\n'));
+    const cfProject = `free${appId}app`;
+
+    process.stdout.write(`Tailing logs for ${cfProject} (Ctrl+C to stop)...\n`);
+
+    await new Promise<void>((resolveFn, rejectFn) => {
+      const child = spawn('wrangler', ['pages', 'deployment', 'tail', '--project-name', cfProject], {
+        stdio: 'inherit',
+      });
+      child.on('error', (err) => {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+          rejectFn(new Error('wrangler is not installed. Install it: npm i -g wrangler'));
+        } else {
+          rejectFn(err);
+        }
+      });
+      child.on('exit', (code) => {
+        if (code === 0 || code === null) resolveFn();
+        else rejectFn(new Error(`wrangler exited with code ${code}`));
+      });
+    });
   });

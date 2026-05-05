@@ -4,7 +4,7 @@ import { Rooms } from './rooms.js';
 import type { FasInitOptions } from './types.js';
 
 export type { User, FasInitOptions, Unsubscribe } from './types.js';
-export type { RoomMessage } from './rooms.js';
+export type { Room, RoomMessage } from './rooms.js';
 
 export class FreeAppStore {
   readonly auth: Auth;

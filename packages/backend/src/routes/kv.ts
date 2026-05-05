@@ -1,10 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types.js';
 import { requireUser, HttpError } from '../lib/auth.js';
-
-const MAX_VALUE_BYTES = 64 * 1024;
-const MAX_TOTAL_BYTES_PER_USER = 1024 * 1024;
-const MAX_KEYS_PER_USER = 100;
+import { checkKvWrite, KV_LIMITS } from '../lib/quota.js';
 
 export const kvRoutes = new Hono<{ Bindings: Env }>();
 
@@ -32,11 +29,8 @@ kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
     const user = await requireUser(c);
     const { appId, key } = c.req.param();
     const body = await c.req.arrayBuffer();
-    if (body.byteLength > MAX_VALUE_BYTES) {
-      return c.text(`value exceeds ${MAX_VALUE_BYTES} bytes`, 413);
-    }
 
-    const usage = await c.env.DB.prepare(
+    const row = await c.env.DB.prepare(
       `SELECT
          COALESCE(SUM(value_size_bytes), 0) AS total,
          COUNT(*) AS keys,
@@ -46,14 +40,16 @@ kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
       .bind(key, appId, user.id)
       .first<{ total: number; keys: number; existing: number }>();
 
-    const projectedTotal = (usage?.total ?? 0) - (usage?.existing ?? 0) + body.byteLength;
-    if (projectedTotal > MAX_TOTAL_BYTES_PER_USER) {
-      return c.text(`per-user kv quota exceeded`, 413);
-    }
-    const isNewKey = (usage?.existing ?? 0) === 0;
-    if (isNewKey && (usage?.keys ?? 0) >= MAX_KEYS_PER_USER) {
-      return c.text(`per-user key count limit (${MAX_KEYS_PER_USER}) exceeded`, 413);
-    }
+    const check = checkKvWrite(
+      {
+        totalBytes: row?.total ?? 0,
+        keyCount: row?.keys ?? 0,
+        existingKeyBytes: row?.existing ?? 0,
+      },
+      body.byteLength,
+      KV_LIMITS,
+    );
+    if (!check.ok) return c.text(check.reason, 413);
 
     await c.env.DB.prepare(
       `INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at)

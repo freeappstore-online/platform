@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@freeappstore/sdk": ["../../packages/sdk/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*"]
+}
