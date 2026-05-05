@@ -6,6 +6,11 @@ compatibility_flags = ["nodejs_compat"]
 # Custom domain wired up out-of-band via the Cloudflare dashboard:
 # api.freeappstore.online -> this Worker
 
+# Public, non-secret config. The OAuth App lives at:
+# https://github.com/organizations/freeappstore-online/settings/applications/3576238
+[vars]
+GITHUB_CLIENT_ID = "Ov23liuUpYPXc1ikEFm2"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "fas"
@@ -20,7 +25,6 @@ class_name = "Room"
 tag = "v1"
 new_classes = ["Room"]
 
-# Secrets (set via `wrangler secret put`):
-#   GITHUB_CLIENT_ID
-#   GITHUB_CLIENT_SECRET
-#   SESSION_SIGNING_KEY      # 32+ bytes, used to sign session tokens
+# Secrets (set interactively via `wrangler secret put <name>`):
+#   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
+#   SESSION_SIGNING_KEY      # 32+ bytes, e.g. `openssl rand -hex 32`
