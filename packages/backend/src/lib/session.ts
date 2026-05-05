@@ -33,6 +33,30 @@ export async function verifySession(
   return payload;
 }
 
+/**
+ * Sign an opaque payload with the same HMAC key. Used for OAuth state so we
+ * can detect tampering when GitHub redirects back with the state we set.
+ */
+export async function signPayload<T>(payload: T, signingKey: string): Promise<string> {
+  const body = b64url(JSON.stringify(payload));
+  const sig = await hmac(body, signingKey);
+  return `${body}.${sig}`;
+}
+
+export async function verifyPayload<T>(token: string, signingKey: string): Promise<T | null> {
+  const dot = token.lastIndexOf('.');
+  if (dot < 0) return null;
+  const body = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = await hmac(body, signingKey);
+  if (!timingSafeEqual(sig, expected)) return null;
+  try {
+    return JSON.parse(b64urlDecode(body)) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function hmac(data: string, keyMaterial: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',

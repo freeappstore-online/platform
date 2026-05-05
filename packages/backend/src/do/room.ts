@@ -39,8 +39,11 @@ export class Room {
     const url = new URL(request.url);
     const uid = url.searchParams.get('uid') ?? 'anon';
 
+    // Per the Cloudflare WebSocketPair spec, pair[0] is the client side
+    // and pair[1] is the server side. Don't rely on Object.values order.
     const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair) as [WebSocket, WebSocket];
+    const client = pair[0];
+    const server = pair[1];
     server.accept();
 
     const peer: Peer = {

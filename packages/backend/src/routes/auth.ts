@@ -1,16 +1,29 @@
 import { Hono } from 'hono';
 import type { Env } from '../types.js';
 import { requireUser, HttpError } from '../lib/auth.js';
-import { signSession } from '../lib/session.js';
+import { signSession, signPayload, verifyPayload } from '../lib/session.js';
+import { isAllowedReturnTo } from '../lib/origins.js';
+
+interface OAuthState {
+  appId: string;
+  returnTo: string;
+  exp: number;
+}
+
+const STATE_TTL_SECONDS = 10 * 60;
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
-authRoutes.get('/auth/github/start', (c) => {
+authRoutes.get('/auth/github/start', async (c) => {
   const appId = c.req.query('app_id') ?? '';
   const returnTo = c.req.query('return_to') ?? '';
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
+  if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
 
-  const state = btoa(JSON.stringify({ appId, returnTo }));
+  const state = await signPayload<OAuthState>(
+    { appId, returnTo, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    c.env.SESSION_SIGNING_KEY,
+  );
   const url = new URL('https://github.com/login/oauth/authorize');
   url.searchParams.set('client_id', c.env.GITHUB_CLIENT_ID);
   url.searchParams.set('scope', 'read:user');
@@ -24,12 +37,10 @@ authRoutes.get('/auth/github/callback', async (c) => {
   const stateRaw = c.req.query('state');
   if (!code || !stateRaw) return c.text('missing code or state', 400);
 
-  let state: { appId: string; returnTo: string };
-  try {
-    state = JSON.parse(atob(stateRaw)) as { appId: string; returnTo: string };
-  } catch {
-    return c.text('invalid state', 400);
-  }
+  const state = await verifyPayload<OAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
+  if (!state) return c.text('invalid state', 400);
+  if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
+  if (!isAllowedReturnTo(state.returnTo)) return c.text('return_to not allowed', 400);
 
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',

@@ -57,8 +57,10 @@ export async function startDeviceFlow(clientId: string): Promise<DeviceFlowStart
           const login = await fetchLogin(token.access_token);
           return { accessToken: token.access_token, login };
         }
-        if (token.error === 'slow_down' && token.interval) {
-          interval = token.interval;
+        if (token.error === 'slow_down') {
+          // Per RFC 8628 §3.5, client MUST increase interval by at least 5s on slow_down,
+          // even if the response omits a new `interval` value.
+          interval = token.interval ?? interval + 5;
           continue;
         }
         if (token.error === 'authorization_pending') continue;

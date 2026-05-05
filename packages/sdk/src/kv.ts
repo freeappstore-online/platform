@@ -23,6 +23,11 @@ export class Kv {
   }
 
   async set<T = unknown>(key: string, value: T): Promise<void> {
+    // JSON.stringify(undefined) returns undefined, which would store an empty
+    // body and break later get() calls. Reject up front instead.
+    if (value === undefined) {
+      throw new Error('kv.set: value is undefined. Use kv.delete(key) to remove a key.');
+    }
     const res = await this.request('PUT', key, JSON.stringify(value));
     if (!res.ok) {
       const text = await res.text();
@@ -44,13 +49,10 @@ export class Kv {
       `/v1/apps/${encodeURIComponent(this.appId)}/kv/${encodeURIComponent(key)}`,
       this.apiBase,
     );
-    return fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-      },
-      body,
-    });
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const init: RequestInit = { method, headers };
+    if (body !== undefined) init.body = body;
+    return fetch(url, init);
   }
 }
