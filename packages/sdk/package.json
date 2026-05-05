@@ -1,6 +1,6 @@
 {
   "name": "@freeappstore/sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Browser SDK for free apps on freeappstore.online — auth, per-user KV, light realtime rooms.",
   "license": "MIT",
   "type": "module",
@@ -12,6 +12,25 @@
       "import": "./dist/index.js"
     }
   },
+  "homepage": "https://github.com/freeappstore-online/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freeappstore-online/sdk.git",
+    "directory": "packages/sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/freeappstore-online/sdk/issues"
+  },
+  "keywords": [
+    "freeappstore",
+    "sdk",
+    "auth",
+    "kv",
+    "rooms",
+    "websocket",
+    "github-oauth",
+    "cloudflare-workers"
+  ],
   "files": [
     "dist",
     "README.md"
