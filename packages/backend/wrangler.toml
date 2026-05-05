@@ -32,11 +32,19 @@ tag = "v1"
 # legacy KV-backed one.
 new_sqlite_classes = ["Room"]
 
-# Cron triggers. */15 = every 15 minutes (uptime checks).
-# Each trigger fires the Worker's `scheduled` handler with `event.cron`
-# matching the schedule string below.
+# Cron triggers. The Worker's `scheduled` handler dispatches on the
+# `event.cron` value, so each schedule below corresponds to one task:
+#   */15 * * * *  uptime checks against every published app
+#   0 4 * * *     daily D1 → R2 backup at 04:00 UTC
 [triggers]
-crons = ["*/15 * * * *"]
+crons = ["*/15 * * * *", "0 4 * * *"]
+
+# R2 bucket for daily D1 backups. Uncomment once R2 is enabled on the
+# Cloudflare account (Dashboard → R2 → Enable). Until then the daily
+# backup cron logs "skipping daily backup" and exits cleanly.
+# [[r2_buckets]]
+# binding = "BACKUPS"
+# bucket_name = "fas-backups"
 
 # Secrets (set interactively via `wrangler secret put <name>`):
 #   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
