@@ -1,0 +1,40 @@
+{
+  "name": "@freeappstore/quality",
+  "version": "0.1.0",
+  "description": "Quality reporter — apps post viewport metrics to a parent dashboard via postMessage so /quality can audit fit / scroll / clipping at every reference viewport without driving a headless browser per app.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "homepage": "https://github.com/freeappstore-online/sdk#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freeappstore-online/sdk.git",
+    "directory": "packages/quality"
+  },
+  "bugs": {
+    "url": "https://github.com/freeappstore-online/sdk/issues"
+  },
+  "keywords": ["freeappstore", "freegamestore", "quality", "audit", "viewport"],
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "jsdom": "^25.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
+  },
+  "sideEffects": false
+}

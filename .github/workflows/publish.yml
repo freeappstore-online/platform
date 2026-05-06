@@ -20,6 +20,7 @@ on:
       - 'packages/compliance/**'
       - 'packages/fgs-cli/**'
       - 'packages/games-sdk/**'
+      - 'packages/quality/**'
       - '.github/workflows/publish.yml'
   workflow_dispatch: # manual trigger from the Actions UI
 
@@ -33,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [cli, sdk, compliance, fgs-cli, games-sdk]
+        package: [cli, sdk, compliance, fgs-cli, games-sdk, quality]
     steps:
       - uses: actions/checkout@v4
 
