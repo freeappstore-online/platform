@@ -179,8 +179,11 @@ export async function checkManifestLive(html: string, liveUrl: string): Promise<
 
 export async function checkBundleSizeLive(html: string, liveUrl: string): Promise<CheckResult> {
   // Find the largest-looking bundled JS reference. Vite output looks like
-  // /assets/index-XYZ.js. Grab the first match (usually main entry).
-  const m = /<script[^>]+src=["']([^"']+\/assets\/[^"']+\.js)["']/i.exec(html);
+  // src="/assets/index-XYZ.js" — starts with `/`, no chars before. Use
+  // `[^"']*` (zero or more) instead of `[^"']+` (one or more) so the
+  // root-relative path matches; with `+` every Vite app was misreported
+  // as "non-Vite layout" and the audit silently skipped bundle-size.
+  const m = /<script[^>]+src=["']([^"']*\/assets\/[^"']+\.js)["']/i.exec(html);
   if (!m) {
     // Plausible miss for non-Vite apps — not a fail, just skip.
     return {
