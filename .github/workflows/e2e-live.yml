@@ -1,0 +1,54 @@
+name: E2E (live)
+
+# Playwright tests against live freeappstore.online + freegamestore.online
+# + a few key apps. Catches regressions that unit tests can't see —
+# real fullscreen API behavior, real fonts loading, real iframe timing,
+# storefront-template drift after registry edits.
+#
+# Schedule: every 6h, matches the storefront's own cache-refresh cron
+# so a stale build can fail loudly instead of being noticed by a user.
+# Also fires on push to main when packages/e2e/ changes (so test edits
+# get exercised before the next scheduled run).
+
+on:
+  schedule:
+    - cron: '15 */6 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/e2e/**'
+      - '.github/workflows/e2e-live.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        working-directory: packages/e2e
+        run: pnpm exec playwright install --with-deps chromium webkit
+
+      - name: Run e2e tests
+        working-directory: packages/e2e
+        run: pnpm test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: packages/e2e/playwright-report/
+          retention-days: 7

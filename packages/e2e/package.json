@@ -1,0 +1,16 @@
+{
+  "name": "@freeappstore/e2e",
+  "version": "0.0.0",
+  "description": "Playwright e2e tests against live FreeAppStore + FreeGameStore deployments.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}
