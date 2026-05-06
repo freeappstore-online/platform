@@ -49,7 +49,30 @@ export const publishCommand = new Command('publish')
   .option('--no-open', 'Print the fallback Issue URL instead of opening a browser.')
   .option('--issue', 'Skip auto-provision; always open the GitHub Issue form.')
   .option('--skip-checks', 'Skip compliance checks (not recommended — your submission may be rejected).')
-  .action(async (opts: { open: boolean; issue?: boolean; skipChecks?: boolean }) => {
+  .option('--name <id>', 'App id (lowercase, used as subdomain). Skips the prompt.')
+  .option(
+    '--category <name>',
+    'Category. Use exact label or its lowercased form (e.g. "utilities", "brain training"). Skips the prompt.',
+  )
+  .option('--type <kind>', 'App type: "standalone" or "connected". Skips the prompt.')
+  .option('--oneliner <text>', 'One-line description shown on the storefront. Skips the prompt.')
+  .option('--demo <url>', 'Optional demo URL. Skips the prompt.')
+  .option(
+    '--yes, -y',
+    'Non-interactive: fail rather than prompt for any missing fields. Pair with --name/--category/--type/--oneliner.',
+  )
+  .action(
+    async (opts: {
+      open: boolean;
+      issue?: boolean;
+      skipChecks?: boolean;
+      name?: string;
+      category?: string;
+      type?: string;
+      oneliner?: string;
+      demo?: string;
+      yes?: boolean;
+    }) => {
     // Check auth BEFORE prompting — there's no point asking the user for
     // 5 fields just to bail at the end with "not signed in". --issue
     // skips this since the GitHub Issue form path doesn't need a session.
@@ -92,66 +115,43 @@ export const publishCommand = new Command('publish')
       );
     }
 
-    const answers = (await prompts(
-      [
-        {
-          type: 'text',
-          name: 'name',
-          message: 'App id (lowercase, used as subdomain)',
-          initial: appName ?? '',
-          validate: (value: string) => {
-            try {
-              assertValidAppId(value);
-              return true;
-            } catch (e) {
-              return e instanceof Error ? e.message : 'invalid';
-            }
-          },
-        },
-        {
-          type: 'select',
-          name: 'category',
-          message: 'Category (one app per category — check freeappstore.online for what\'s taken)',
-          choices: CATEGORIES.map((c) => ({ title: c, value: c })),
-        },
-        {
-          type: 'select',
-          name: 'type',
-          message: 'App type',
-          choices: TYPES.map((t) => ({ title: t, value: t })),
-        },
-        {
-          type: 'text',
-          name: 'oneliner',
-          message: 'One-line description (shown on the storefront)',
-          initial: description ?? '',
-          validate: (v: string) => v.trim().length > 0 || 'required',
-        },
-        {
-          type: 'text',
-          name: 'demo',
-          message: 'Demo URL (optional, leave blank if none)',
-        },
-      ],
-      {
-        onCancel: () => {
-          process.stdout.write('\nCanceled.\n');
-          process.exit(1);
-        },
-      },
-    )) as Partial<SubmissionInput>;
+    // Resolve flag values up-front. Whatever's missing falls through to a
+    // prompt — unless --yes is set, in which case missing values abort.
+    const resolved = resolveFromFlags(opts);
+    if (resolved.errors.length > 0) {
+      for (const e of resolved.errors) process.stdout.write(`✗ ${e}\n`);
+      process.exit(1);
+    }
 
+    const promptList = buildPromptList(resolved.values, { appName, description });
+    const answers =
+      promptList.length === 0
+        ? {}
+        : opts.yes
+          ? (() => {
+              const missing = promptList.map((p) => p.name).join(', ');
+              process.stdout.write(`✗ --yes set but missing required field(s): ${missing}\n`);
+              process.exit(1);
+            })()
+          : ((await prompts(promptList, {
+              onCancel: () => {
+                process.stdout.write('\nCanceled.\n');
+                process.exit(1);
+              },
+            })) as Partial<SubmissionInput>);
+
+    const merged: Partial<SubmissionInput> = { ...resolved.values, ...answers };
     const input: SubmissionInput = {
-      name: answers.name!,
-      category: answers.category!,
-      type: answers.type!,
-      oneliner: answers.oneliner!,
+      name: merged.name!,
+      category: merged.category!,
+      type: merged.type!,
+      oneliner: merged.oneliner!,
       // Reuse the oneliner as the body description for the Issue-form
       // fallback. Auto-provision flow doesn't use it (admin's storefront
       // uses oneliner directly).
-      description: answers.oneliner!,
+      description: merged.oneliner!,
       repo: repo ? `https://github.com/${repo}` : null,
-      demo: answers.demo?.trim() ? answers.demo : null,
+      demo: merged.demo?.trim() ? merged.demo : null,
     };
 
     // Try auto-provision first unless the user explicitly asked for the
@@ -232,6 +232,130 @@ async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionRe
   }
   const result = (await res.json()) as { appUrl: string; repoUrl: string };
   return { kind: 'success', appUrl: result.appUrl, repoUrl: result.repoUrl };
+}
+
+/**
+ * Match a user-supplied --category value (case-insensitive, ignores
+ * trailing/leading whitespace) against the canonical labels.
+ * Returns the canonical form or null if no match.
+ */
+export function resolveCategory(value: string): (typeof CATEGORIES)[number] | null {
+  const normalized = value.trim().toLowerCase();
+  for (const c of CATEGORIES) {
+    if (c.toLowerCase() === normalized) return c;
+  }
+  // Allow short forms like "other" → "Other (specify in description)".
+  if (normalized === 'other') return 'Other (specify in description)';
+  return null;
+}
+
+/** Resolve --type short form ("standalone"|"connected") to the full label. */
+export function resolveType(value: string): (typeof TYPES)[number] | null {
+  const v = value.trim().toLowerCase();
+  if (v === 'standalone' || v === TYPES[0].toLowerCase()) return TYPES[0];
+  if (v === 'connected' || v === TYPES[1].toLowerCase()) return TYPES[1];
+  return null;
+}
+
+interface ResolvedFlags {
+  values: Partial<SubmissionInput>;
+  errors: string[];
+}
+
+export function resolveFromFlags(opts: {
+  name?: string;
+  category?: string;
+  type?: string;
+  oneliner?: string;
+  demo?: string;
+}): ResolvedFlags {
+  const values: Partial<SubmissionInput> = {};
+  const errors: string[] = [];
+
+  if (opts.name !== undefined) {
+    try {
+      assertValidAppId(opts.name);
+      values.name = opts.name;
+    } catch (e) {
+      errors.push(e instanceof Error ? `--name: ${e.message}` : '--name invalid');
+    }
+  }
+  if (opts.category !== undefined) {
+    const c = resolveCategory(opts.category);
+    if (c) values.category = c;
+    else errors.push(`--category: not a known category. One of: ${CATEGORIES.join(', ')}`);
+  }
+  if (opts.type !== undefined) {
+    const t = resolveType(opts.type);
+    if (t) values.type = t;
+    else errors.push('--type must be "standalone" or "connected"');
+  }
+  if (opts.oneliner !== undefined) {
+    if (opts.oneliner.trim().length === 0) errors.push('--oneliner cannot be empty');
+    else values.oneliner = opts.oneliner;
+  }
+  if (opts.demo !== undefined) {
+    values.demo = opts.demo.trim() || null;
+  }
+  return { values, errors };
+}
+
+type PromptDef = prompts.PromptObject<string>;
+
+export function buildPromptList(
+  resolved: Partial<SubmissionInput>,
+  defaults: { appName: string | null; description: string | null },
+): PromptDef[] {
+  const list: PromptDef[] = [];
+  if (resolved.name === undefined) {
+    list.push({
+      type: 'text',
+      name: 'name',
+      message: 'App id (lowercase, used as subdomain)',
+      initial: defaults.appName ?? '',
+      validate: (value: string) => {
+        try {
+          assertValidAppId(value);
+          return true;
+        } catch (e) {
+          return e instanceof Error ? e.message : 'invalid';
+        }
+      },
+    });
+  }
+  if (resolved.category === undefined) {
+    list.push({
+      type: 'select',
+      name: 'category',
+      message: 'Category (one app per category — check freeappstore.online for what\'s taken)',
+      choices: CATEGORIES.map((c) => ({ title: c, value: c })),
+    });
+  }
+  if (resolved.type === undefined) {
+    list.push({
+      type: 'select',
+      name: 'type',
+      message: 'App type',
+      choices: TYPES.map((t) => ({ title: t, value: t })),
+    });
+  }
+  if (resolved.oneliner === undefined) {
+    list.push({
+      type: 'text',
+      name: 'oneliner',
+      message: 'One-line description (shown on the storefront)',
+      initial: defaults.description ?? '',
+      validate: (v: string) => v.trim().length > 0 || 'required',
+    });
+  }
+  if (resolved.demo === undefined) {
+    list.push({
+      type: 'text',
+      name: 'demo',
+      message: 'Demo URL (optional, leave blank if none)',
+    });
+  }
+  return list;
 }
 
 export function buildSubmissionUrl(input: SubmissionInput): string {

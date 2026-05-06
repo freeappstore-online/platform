@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { parseGitHubRepo, buildSubmissionUrl } from './publish.js';
+import {
+  parseGitHubRepo,
+  buildSubmissionUrl,
+  resolveCategory,
+  resolveType,
+  resolveFromFlags,
+  buildPromptList,
+} from './publish.js';
 
 describe('parseGitHubRepo', () => {
   it('parses HTTPS clone URLs', () => {
@@ -81,5 +88,110 @@ describe('buildSubmissionUrl', () => {
       }),
     );
     expect(url.searchParams.get('description')).toBe('A "quoted" thing & more (with parens)');
+  });
+});
+
+describe('resolveCategory', () => {
+  it('matches exact label', () => {
+    expect(resolveCategory('Productivity')).toBe('Productivity');
+  });
+  it('matches case-insensitive', () => {
+    expect(resolveCategory('utilities')).toBe('Utilities');
+    expect(resolveCategory('UTILITIES')).toBe('Utilities');
+    expect(resolveCategory('  Brain Training  ')).toBe('Brain Training');
+  });
+  it('matches "other" short form', () => {
+    expect(resolveCategory('other')).toBe('Other (specify in description)');
+  });
+  it('returns null for unknown', () => {
+    expect(resolveCategory('nope')).toBeNull();
+    expect(resolveCategory('')).toBeNull();
+  });
+});
+
+describe('resolveType', () => {
+  it('matches short forms', () => {
+    expect(resolveType('standalone')).toBe('Standalone (no backend, localStorage only)');
+    expect(resolveType('connected')).toBe('Connected (Firebase/Supabase backend, shared with Pro version)');
+  });
+  it('matches case-insensitive full label', () => {
+    expect(resolveType('STANDALONE')).toBe('Standalone (no backend, localStorage only)');
+  });
+  it('returns null for unknown', () => {
+    expect(resolveType('something')).toBeNull();
+  });
+});
+
+describe('resolveFromFlags', () => {
+  it('returns empty values when no flags supplied', () => {
+    const r = resolveFromFlags({});
+    expect(r.values).toEqual({});
+    expect(r.errors).toEqual([]);
+  });
+  it('resolves valid combinations', () => {
+    const r = resolveFromFlags({
+      name: 'my-app',
+      category: 'utilities',
+      type: 'standalone',
+      oneliner: 'Does a thing',
+      demo: 'https://demo.example',
+    });
+    expect(r.errors).toEqual([]);
+    expect(r.values.name).toBe('my-app');
+    expect(r.values.category).toBe('Utilities');
+    expect(r.values.type).toBe('Standalone (no backend, localStorage only)');
+    expect(r.values.oneliner).toBe('Does a thing');
+    expect(r.values.demo).toBe('https://demo.example');
+  });
+  it('treats blank --demo as null', () => {
+    const r = resolveFromFlags({ demo: '   ' });
+    expect(r.values.demo).toBeNull();
+  });
+  it('rejects invalid app id', () => {
+    const r = resolveFromFlags({ name: 'BadName' });
+    expect(r.errors[0]).toMatch(/--name/);
+    expect(r.values.name).toBeUndefined();
+  });
+  it('rejects unknown category and type', () => {
+    const r = resolveFromFlags({ category: 'nope', type: 'foo' });
+    expect(r.errors).toHaveLength(2);
+  });
+  it('rejects empty oneliner', () => {
+    const r = resolveFromFlags({ oneliner: '   ' });
+    expect(r.errors[0]).toMatch(/oneliner/);
+  });
+});
+
+describe('buildPromptList', () => {
+  const defaults = { appName: null, description: null };
+  it('returns all 5 prompts when nothing resolved', () => {
+    expect(buildPromptList({}, defaults).map((p) => p.name)).toEqual([
+      'name',
+      'category',
+      'type',
+      'oneliner',
+      'demo',
+    ]);
+  });
+  it('skips a prompt when its value is already resolved', () => {
+    const list = buildPromptList(
+      { name: 'my-app', category: 'Utilities', type: 'Standalone (no backend, localStorage only)' },
+      defaults,
+    );
+    expect(list.map((p) => p.name)).toEqual(['oneliner', 'demo']);
+  });
+  it('returns empty list when everything resolved', () => {
+    expect(
+      buildPromptList(
+        {
+          name: 'x',
+          category: 'Utilities',
+          type: 'Standalone (no backend, localStorage only)',
+          oneliner: 'y',
+          demo: null,
+        },
+        defaults,
+      ),
+    ).toEqual([]);
   });
 });
