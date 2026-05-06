@@ -89,8 +89,14 @@ export const initCommand = new Command('init')
       template: opts.template as 'standalone' | 'connected',
     });
     process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${opts.template} template.\n`);
-    process.stdout.write(`  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n`);
-    process.stdout.write(`  Next: cd ${appId} && pnpm install && pnpm dev\n`);
+    process.stdout.write(`  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`);
+    process.stdout.write('Next steps:\n');
+    process.stdout.write(`  cd ${appId}\n`);
+    process.stdout.write('  pnpm install            # one-time setup\n');
+    process.stdout.write('  pnpm dev                # local dev server\n');
+    process.stdout.write('  fas check               # compliance — run before publishing\n');
+    process.stdout.write('  fas publish             # provisions repo + hosting + DNS\n\n');
+    process.stdout.write('Docs: https://freeappstore.online/contribute.html\n');
   });
 
 async function substituteAppName(dir: string, appId: string): Promise<number> {

@@ -160,11 +160,14 @@ export const publishCommand = new Command('publish')
       const autoResult = await tryAutoProvision(input);
       if (autoResult.kind === 'success') {
         process.stdout.write(`\n✓ Provisioned!\n`);
-        process.stdout.write(`  Live at: ${autoResult.appUrl}\n`);
-        process.stdout.write(`  Repo:    ${autoResult.repoUrl}\n\n`);
-        process.stdout.write(`Push your code:\n`);
+        process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
+        process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
+        process.stdout.write(`  Listing:  https://freeappstore.online/apps/${input.name}\n\n`);
+        process.stdout.write(`Push your code so the live URL serves it:\n\n`);
         process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
-        process.stdout.write(`  git push upstream main\n`);
+        process.stdout.write(`  git push upstream main\n\n`);
+        process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
+        process.stdout.write(`Run \`fas list\` any time to see your apps.\n`);
         return;
       }
       if (autoResult.kind === 'unauthorized') {
