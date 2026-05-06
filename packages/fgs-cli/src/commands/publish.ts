@@ -42,7 +42,7 @@ interface SubmissionInput {
   demo: string | null;
 }
 
-// gas always targets games. Identity is shared with fas (one ~/.fas/config.json).
+// fgs always targets games. Identity is shared with fas (one ~/.fas/config.json).
 const STORE = 'games' as const;
 const META = {
   label: 'FreeGameStore',
@@ -88,8 +88,8 @@ export const publishCommand = new Command('publish')
       const config = await readConfig();
       if (!config.session?.token) {
         process.stdout.write(
-          '\n⚠  Not signed in. Run: gas login (shared identity with fas).\n' +
-            '   (or run `gas publish --issue` to submit via the GitHub Issue form instead.)\n',
+          '\n⚠  Not signed in. Run: fgs login (shared identity with fas).\n' +
+            '   (or run `fgs publish --issue` to submit via the GitHub Issue form instead.)\n',
         );
         process.exit(1);
       }
@@ -181,11 +181,11 @@ export const publishCommand = new Command('publish')
         process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
         process.stdout.write(`  git push upstream main\n\n`);
         process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
-        process.stdout.write(`Run \`gas list\` any time to see your games.\n`);
+        process.stdout.write(`Run \`fgs list\` any time to see your games.\n`);
         return;
       }
       if (autoResult.kind === 'unauthorized') {
-        process.stdout.write(`\n⚠  Not signed in. Run: gas login\n`);
+        process.stdout.write(`\n⚠  Not signed in. Run: fgs login\n`);
         return;
       }
       process.stdout.write(

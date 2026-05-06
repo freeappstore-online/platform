@@ -18,7 +18,7 @@ on:
       - 'packages/cli/**'
       - 'packages/sdk/**'
       - 'packages/compliance/**'
-      - 'packages/gas-cli/**'
+      - 'packages/fgs-cli/**'
       - '.github/workflows/publish.yml'
   workflow_dispatch: # manual trigger from the Actions UI
 
@@ -32,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [cli, sdk, compliance, gas-cli]
+        package: [cli, sdk, compliance, fgs-cli]
     steps:
       - uses: actions/checkout@v4
 
@@ -57,7 +57,7 @@ jobs:
         id: decide
         working-directory: packages/${{ matrix.package }}
         # Read the actual npm name from package.json instead of assuming
-        # @freeappstore/<dir>. Some packages (like gas-cli) live under
+        # @freeappstore/<dir>. Some packages (like fgs-cli) live under
         # different scopes (@freegamestore/cli) so dir name ≠ npm name.
         run: |
           PKG_NAME=$(node -p "require('./package.json').name")

@@ -1,17 +1,17 @@
 {
   "name": "@freegamestore/cli",
   "version": "0.1.0",
-  "description": "gas — CLI for publishing free games to freegamestore.online",
+  "description": "fgs — CLI for publishing free games to freegamestore.online",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "gas": "./dist/index.js"
+    "fgs": "./dist/index.js"
   },
   "homepage": "https://github.com/freeappstore-online/sdk#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/freeappstore-online/sdk.git",
-    "directory": "packages/gas-cli"
+    "directory": "packages/fgs-cli"
   },
   "bugs": {
     "url": "https://github.com/freeappstore-online/sdk/issues"

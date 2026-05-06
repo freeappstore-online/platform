@@ -4,8 +4,8 @@ import { rm, access, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve, extname } from 'node:path';
 import { assertValidAppId } from '../lib/app-id.js';
 
-// gas only knows about game templates. Apps belong to fas; if a creator
-// runs `gas init --template standalone` they should be sent to fas.
+// fgs only knows about game templates. Apps belong to fas; if a creator
+// runs `fgs init --template standalone` they should be sent to fas.
 const TEMPLATES = {
   canvas: 'freegamestore-online/template-game-canvas',
   grid: 'freegamestore-online/template-game-grid',
@@ -107,8 +107,8 @@ export const initCommand = new Command('init')
     process.stdout.write(`  cd ${appId}\n`);
     process.stdout.write('  pnpm install   # one-time setup\n');
     process.stdout.write('  pnpm dev       # local dev server\n');
-    process.stdout.write('  gas check      # compliance — run before publishing\n');
-    process.stdout.write('  gas publish    # provisions repo + hosting + DNS\n\n');
+    process.stdout.write('  fgs check      # compliance — run before publishing\n');
+    process.stdout.write('  fgs publish    # provisions repo + hosting + DNS\n\n');
     process.stdout.write('Docs: https://freegamestore.online/contribute.html\n');
   });
 

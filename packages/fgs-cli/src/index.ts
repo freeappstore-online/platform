@@ -13,7 +13,7 @@ import { doctorCommand } from './commands/doctor.js';
 import { checkCommand } from './commands/check.js';
 import { listCommand } from './commands/list.js';
 
-// Read version from the package's own package.json so `gas --version` always
+// Read version from the package's own package.json so `fgs --version` always
 // matches the installed package.
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) as {
@@ -23,7 +23,7 @@ const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) a
 const program = new Command();
 
 program
-  .name('gas')
+  .name('fgs')
   .description('FreeGameStore CLI — sign in, scaffold, and publish free games.')
   .version(pkg.version);
 
@@ -47,6 +47,6 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   const msg = err instanceof Error ? err.message : String(err);
-  process.stderr.write(`gas: ${msg}\n`);
+  process.stderr.write(`fgs: ${msg}\n`);
   process.exit(1);
 });

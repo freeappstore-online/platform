@@ -111,7 +111,6 @@ export const initCommand = new Command('init')
       template: opts.template as TemplateName,
     });
     const isGame = GAME_TEMPLATES.has(opts.template as TemplateName);
-    const publishCmd = isGame ? 'fas publish --store games' : 'fas publish';
     const docsUrl = isGame
       ? 'https://freegamestore.online/contribute.html'
       : 'https://freeappstore.online/contribute.html';
@@ -119,15 +118,23 @@ export const initCommand = new Command('init')
     process.stdout.write(`  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`);
     process.stdout.write('Next steps:\n');
     process.stdout.write(`  cd ${appId}\n`);
-    process.stdout.write('  pnpm install            # one-time setup\n');
-    process.stdout.write('  pnpm dev                # local dev server\n');
-    process.stdout.write('  fas check               # compliance — run before publishing\n');
-    // Pad the publish line to ~24 cols so the "#" comment aligns with
-    // the other rows. Length matters because the command differs by
-    // store: `fas publish` (12) vs `fas publish --store games` (25).
-    const padded = publishCmd.padEnd(23);
-    process.stdout.write(`  ${padded} # provisions repo + hosting + DNS\n\n`);
-    process.stdout.write(`Docs: ${docsUrl}\n`);
+    if (isGame) {
+      // Game templates: recommend fgs (FreeGameStore CLI) for the
+      // games-first surface, but `fas publish --store games` is
+      // equivalent — same backend, same identity.
+      process.stdout.write('  pnpm install   # one-time setup\n');
+      process.stdout.write('  pnpm dev       # local dev server\n\n');
+      process.stdout.write('Then with the FreeGameStore CLI:\n');
+      process.stdout.write('  npm i -g @freegamestore/cli\n');
+      process.stdout.write('  fgs check      # compliance\n');
+      process.stdout.write('  fgs publish    # provisions repo + hosting + DNS\n');
+    } else {
+      process.stdout.write('  pnpm install   # one-time setup\n');
+      process.stdout.write('  pnpm dev       # local dev server\n');
+      process.stdout.write('  fas check      # compliance — run before publishing\n');
+      process.stdout.write('  fas publish    # provisions repo + hosting + DNS\n');
+    }
+    process.stdout.write(`\nDocs: ${docsUrl}\n`);
   });
 
 async function substituteAppName(dir: string, appId: string): Promise<number> {
