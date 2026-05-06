@@ -22,14 +22,16 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Build first so cross-package type imports resolve (cli imports
+      # @freeappstore/compliance types from its dist/index.d.ts).
+      - name: Build
+        run: pnpm -r --filter './packages/*' build
+
       - name: Typecheck
         run: pnpm -r typecheck
 
       - name: Test
         run: pnpm test
-
-      - name: Build
-        run: pnpm -r --filter './packages/*' build
 
   # Live e2e against `wrangler dev --local` (miniflare). Catches integration
   # regressions that unit tests miss: real D1, real Hono routing through the
