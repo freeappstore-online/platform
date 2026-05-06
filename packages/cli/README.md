@@ -74,6 +74,21 @@ fas publish \
 
 `~/.fas/config.json` (mode `0600`) holds the GitHub OAuth token + the platform session token. `fas logout` deletes both.
 
+## Brand and UI rules (mandated)
+
+Every app and game on the platform shares the same visual language — colors, fonts, spacing — so the storefront and detail pages stay predictable. `fas check` enforces:
+
+| Check | Rule |
+|---|---|
+| `No template placeholders` | Every `APPNAME` placeholder substituted before publish. |
+| `No tracking SDKs` | None of 8 known trackers (Google Analytics, Plausible, Mixpanel, …). |
+| `Brand fonts present` | Manrope (body) + Fraunces (display) both referenced in CSS / HTML. |
+| `No brand overrides` | No app redefines a platform CSS token (`--paper`, `--ink`, `--accent`, `--line`, `--line-strong`, `--panel`, `--muted`) outside the canonical theme file; no non-brand `font-family` declarations. |
+| `PWA manifest` | `web/public/manifest.json` with `name`, `display`, `start_url`. |
+| `Bundle size` | Main bundle under 300 KB gzipped. |
+
+`fas publish` auto-runs `fas check` and aborts on hard failures (override with `--skip-checks`, admin review will still catch issues).
+
 ## How `fas publish` works
 
 1. **Compliance gate**: runs the same checks as `fas check`. Hard failures abort.

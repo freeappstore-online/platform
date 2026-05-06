@@ -1,6 +1,7 @@
 import { checkNoPlaceholders } from './checks/no-placeholders.js';
 import { checkNoTracking } from './checks/no-tracking.js';
 import { checkBrandFonts } from './checks/brand-fonts.js';
+import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
 import { checkManifest } from './checks/manifest.js';
 import { checkBundleSize } from './checks/bundle-size.js';
 import type { CheckResult } from './types.js';
@@ -10,6 +11,7 @@ export {
   checkNoPlaceholders,
   checkNoTracking,
   checkBrandFonts,
+  checkNoBrandOverrides,
   checkManifest,
   checkBundleSize,
 };
@@ -24,6 +26,7 @@ export async function runChecks(repoDir: string): Promise<CheckResult[]> {
     checkNoPlaceholders(repoDir),
     checkNoTracking(repoDir),
     checkBrandFonts(repoDir),
+    checkNoBrandOverrides(repoDir),
     checkManifest(repoDir),
     checkBundleSize(repoDir),
   ]);
