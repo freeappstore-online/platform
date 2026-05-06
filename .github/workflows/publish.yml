@@ -18,6 +18,7 @@ on:
       - 'packages/cli/**'
       - 'packages/sdk/**'
       - 'packages/compliance/**'
+      - 'packages/gas-cli/**'
       - '.github/workflows/publish.yml'
   workflow_dispatch: # manual trigger from the Actions UI
 
@@ -31,7 +32,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [cli, sdk, compliance]
+        package: [cli, sdk, compliance, gas-cli]
     steps:
       - uses: actions/checkout@v4
 
@@ -55,14 +56,17 @@ jobs:
       - name: Decide whether to publish
         id: decide
         working-directory: packages/${{ matrix.package }}
+        # Read the actual npm name from package.json instead of assuming
+        # @freeappstore/<dir>. Some packages (like gas-cli) live under
+        # different scopes (@freegamestore/cli) so dir name ≠ npm name.
         run: |
+          PKG_NAME=$(node -p "require('./package.json').name")
           LOCAL_VER=$(node -p "require('./package.json').version")
-          # `npm view` is allowed to fail (e.g. package is brand-new).
-          NPM_VER=$(npm view @freeappstore/${{ matrix.package }} version 2>/dev/null || echo "0.0.0")
-          echo "local=$LOCAL_VER  npm=$NPM_VER"
+          NPM_VER=$(npm view "$PKG_NAME" version 2>/dev/null || echo "0.0.0")
+          echo "$PKG_NAME — local=$LOCAL_VER  npm=$NPM_VER"
           if [ "$LOCAL_VER" = "$NPM_VER" ]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version unchanged ($LOCAL_VER) — skipping publish."
+            echo "Version unchanged — skipping publish."
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "Version bumped ($NPM_VER → $LOCAL_VER) — will publish."
