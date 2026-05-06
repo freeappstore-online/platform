@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../types.js';
+import { runAudit } from '../lib/audit.js';
+import { requireUser, HttpError } from '../lib/auth.js';
 
 export const auditRoutes = new Hono<{ Bindings: Env }>();
 
@@ -77,4 +79,24 @@ auditRoutes.get('/audit', async (c) => {
   }
 
   return c.json({ summary: Array.from(byApp.values()), checks });
+});
+
+/**
+ * Manually trigger an audit run. Authenticated — any signed-in user
+ * can fire this, since the audit is a public read anyway. Mirrors the
+ * weekly cron (`0 6 * * SUN` in wrangler.toml) but lets us populate
+ * the table immediately on first deploy or after a registry change
+ * without waiting up to a week.
+ *
+ * Use sparingly — each invocation makes ~50 outgoing fetches.
+ */
+auditRoutes.post('/audit/run', async (c) => {
+  try {
+    await requireUser(c);
+  } catch (err) {
+    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    throw err;
+  }
+  const r = await runAudit(c.env.DB);
+  return c.json({ scanned: r.scanned, failed: r.failed });
 });
