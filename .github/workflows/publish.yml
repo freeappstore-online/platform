@@ -46,8 +46,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Build the package
-        run: pnpm --filter @freeappstore/${{ matrix.package }} build
+      # Build ALL packages, not just the one being published. cli depends on
+      # compliance + sdk, so it can't typecheck until those packages have a
+      # built dist/. Trade ~10s of redundant work for build-order correctness.
+      - name: Build all packages
+        run: pnpm -r --filter './packages/*' build
 
       - name: Decide whether to publish
         id: decide
