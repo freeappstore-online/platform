@@ -81,7 +81,7 @@ export const publishCommand = new Command('publish')
   .option('--oneliner <text>', 'One-line description shown on the storefront. Skips the prompt.')
   .option('--demo <url>', 'Optional demo URL. Skips the prompt.')
   .option(
-    '--yes, -y',
+    '-y, --yes',
     'Non-interactive: fail rather than prompt for any missing fields. Pair with --name/--category/--type/--oneliner.',
   )
   .action(
