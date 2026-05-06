@@ -56,7 +56,7 @@ export default {
       await runUptimeChecks(env);
     } else if (event.cron === '0 4 * * *') {
       await runDailyBackup(env);
-    } else if (event.cron === '0 6 * * 0') {
+    } else if (event.cron === '0 6 * * SUN') {
       // Weekly compliance audit — Sunday 06:00 UTC. Logs the totals
       // so a missed audit is obvious in `wrangler tail`.
       const r = await runAudit(env.DB);
