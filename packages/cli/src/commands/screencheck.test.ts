@@ -31,7 +31,7 @@ describe('pickMatrix', () => {
     const widths = m.map((t) => t.width);
     expect(widths).toEqual([320, 360, 414, 600, 768, 1024]);
     // 320 should have the highest share (almost everyone)
-    expect(m[0].share).toBeGreaterThan(m[m.length - 1].share);
+    expect(m[0]!.share).toBeGreaterThan(m[m.length - 1]!.share);
   });
 });
 

@@ -27,6 +27,25 @@ interface ScreenCheckOptions {
   port: number;
   /** Skip `pnpm build` — assume dist/ is already current. */
   skipBuild: boolean;
+  /** Save a PNG of every viewport to ./screencheck-out/. */
+  screenshots: boolean;
+  /**
+   * Hit a target URL or live deployment instead of the local dist.
+   * Useful for checking what visitors actually see in production.
+   */
+  url: string | null;
+}
+
+interface ClippingElement {
+  tag: string;
+  cls: string;
+  id: string | null;
+  scrollW: number;
+  scrollH: number;
+  clientW: number;
+  clientH: number;
+  clipsX: boolean;
+  clipsY: boolean;
 }
 
 interface ViewportTest {
@@ -43,6 +62,13 @@ interface MeasureResult {
   scrollHeight: number;
   scrollsX: boolean;
   scrollsY: boolean;
+  /**
+   * Inner-clipping elements: any element with overflow:hidden|clip
+   * whose content overflows. Document scroll = false but pixels are
+   * still being cut off (e.g., a sidebar / control panel half off-screen
+   * inside a `100vw` flex container).
+   */
+  clippingElements: ClippingElement[];
 }
 
 const DEFAULT_PORT = 4571;
@@ -69,11 +95,15 @@ export const screencheckCommand = new Command('screencheck')
   .option('--dir <path>', 'Repo dir to check (defaults to cwd).', process.cwd())
   .option('--port <n>', `Static-server port (default ${DEFAULT_PORT}).`, String(DEFAULT_PORT))
   .option('--skip-build', 'Skip `pnpm build` — assume web/dist is current.', false)
-  .action(async (raw: { dir: string; port: string; skipBuild?: boolean }) => {
+  .option('--screenshots', 'Save a PNG per viewport to ./screencheck-out/ for visual review.', false)
+  .option('--url <url>', 'Check a live URL instead of the local build.')
+  .action(async (raw: { dir: string; port: string; skipBuild?: boolean; screenshots?: boolean; url?: string }) => {
     const opts: ScreenCheckOptions = {
       dir: raw.dir,
       port: Number(raw.port),
       skipBuild: Boolean(raw.skipBuild),
+      screenshots: Boolean(raw.screenshots),
+      url: raw.url ?? null,
     };
 
     const playwright = await loadPlaywright(opts.dir);
@@ -86,14 +116,23 @@ export const screencheckCommand = new Command('screencheck')
       process.exit(1);
     }
 
-    const manifest = await readManifest(opts.dir);
-    if (!manifest) {
-      process.stdout.write('\n✗ web/public/manifest.json not found or unparseable.\n');
-      process.exit(1);
+    // For --url, skip the manifest read and use safe defaults.
+    let minWidth: number;
+    let orientation: string;
+    if (opts.url) {
+      minWidth = 320;
+      orientation = 'any';
+      process.stdout.write(`\nChecking ${opts.url} (live URL — manifest not consulted).\n`);
+    } else {
+      const manifest = await readManifest(opts.dir);
+      if (!manifest) {
+        process.stdout.write('\n✗ web/public/manifest.json not found or unparseable.\n');
+        process.exit(1);
+      }
+      minWidth = typeof manifest['min_viewport_width'] === 'number' ? manifest['min_viewport_width'] : 320;
+      orientation = typeof manifest['orientation'] === 'string' ? manifest['orientation'] : 'any';
+      process.stdout.write(`\nManifest: orientation=${orientation} · min ${minWidth}px wide\n`);
     }
-    const minWidth = typeof manifest['min_viewport_width'] === 'number' ? manifest['min_viewport_width'] : 320;
-    const orientation = typeof manifest['orientation'] === 'string' ? manifest['orientation'] : 'any';
-    process.stdout.write(`\nManifest: orientation=${orientation} · min ${minWidth}px wide\n`);
 
     const matrix = pickMatrix(minWidth, orientation);
     if (matrix.length === 0) {
@@ -102,20 +141,31 @@ export const screencheckCommand = new Command('screencheck')
     }
     process.stdout.write(`Testing ${matrix.length} reference viewports across the device matrix.\n`);
 
-    if (!opts.skipBuild) {
-      process.stdout.write('\nBuilding web/dist…\n');
-      await runShell('pnpm', ['build'], opts.dir);
+    let url: string;
+    let server: { close: () => void } | null = null;
+    if (opts.url) {
+      url = opts.url;
+    } else {
+      if (!opts.skipBuild) {
+        process.stdout.write('\nBuilding web/dist…\n');
+        await runShell('pnpm', ['build'], opts.dir);
+      }
+      const distDir = resolve(opts.dir, 'web', 'dist');
+      if (!existsSync(distDir)) {
+        process.stdout.write(`\n✗ ${distDir} doesn't exist. Run \`pnpm build\` first.\n`);
+        process.exit(1);
+      }
+      server = await startServer(distDir, opts.port);
+      url = `http://localhost:${opts.port}/`;
+      process.stdout.write(`Serving ${distDir} at ${url}\n\n`);
     }
 
-    const distDir = resolve(opts.dir, 'web', 'dist');
-    if (!existsSync(distDir)) {
-      process.stdout.write(`\n✗ ${distDir} doesn't exist. Run \`pnpm build\` first.\n`);
-      process.exit(1);
+    const shotsDir = resolve(opts.dir, 'screencheck-out');
+    if (opts.screenshots) {
+      const { mkdirSync } = await import('node:fs');
+      mkdirSync(shotsDir, { recursive: true });
+      process.stdout.write(`Saving screenshots to ${shotsDir}\n\n`);
     }
-
-    const server = await startServer(distDir, opts.port);
-    const url = `http://localhost:${opts.port}/`;
-    process.stdout.write(`Serving ${distDir} at ${url}\n\n`);
 
     let exitCode = 0;
     try {
@@ -123,20 +173,25 @@ export const screencheckCommand = new Command('screencheck')
       const results: MeasureResult[] = [];
       const passing = new Set<string>();
       for (const t of matrix) {
-        const r = await measure(browser, url, t);
+        const r = await measure(browser, url, t, opts.screenshots ? shotsDir : null);
         results.push(r);
         renderResult(r);
-        if (!r.scrollsX && !r.scrollsY) passing.add(t.label);
+        // Pass = no document scroll AND no inner clipping.
+        if (!r.scrollsX && !r.scrollsY && r.clippingElements.length === 0) {
+          passing.add(t.label);
+        }
       }
       await browser.close();
 
       const cov = computeCoverage(matrix, passing);
-      const failed = results.filter((r) => r.scrollsX || r.scrollsY).length;
+      const failed = results.filter(
+        (r) => r.scrollsX || r.scrollsY || r.clippingElements.length > 0,
+      ).length;
       process.stdout.write('\n');
       renderCoverage(cov, matrix);
       process.stdout.write('\n');
       if (failed > 0) {
-        process.stdout.write(`✗ ${failed}/${results.length} reference viewports scroll.\n`);
+        process.stdout.write(`✗ ${failed}/${results.length} reference viewports have layout issues.\n`);
         // Coverage failure is a fail. But: failing only at the very
         // top end of the matrix (1024+ desktop) above what the manifest
         // claims doesn't necessarily warrant a non-zero exit; the
@@ -167,7 +222,7 @@ export const screencheckCommand = new Command('screencheck')
         }
       }
     } finally {
-      server.close();
+      server?.close();
     }
     process.exit(exitCode);
   });
@@ -291,32 +346,72 @@ async function measure(
   browser: { newPage: (opts: unknown) => Promise<unknown> },
   url: string,
   t: ViewportTest,
+  shotsDir: string | null,
 ): Promise<MeasureResult> {
   // Cast through unknown — we only call a tiny subset of the Page API
   // and don't want to take a Playwright type dep at module load time.
   const page = (await browser.newPage({ viewport: { width: t.width, height: t.height } })) as {
     goto: (u: string, o?: unknown) => Promise<unknown>;
     evaluate: <T>(fn: () => T) => Promise<T>;
+    screenshot: (opts: { path: string; fullPage?: boolean }) => Promise<unknown>;
     close: () => Promise<void>;
   };
   await page.goto(url, { waitUntil: 'networkidle' });
   // Small settle delay — fonts, images, late-load JS.
   await page.evaluate(() => new Promise<void>((r) => setTimeout(r, 250)));
-  // The function below runs in the browser context, where `document`
-  // is defined. TS sees it as Node here; the cast suppresses the
-  // resulting "document not found" error without weakening type
-  // safety in the rest of this file.
+  // Bundle the document-level metrics + inner-clipping scan into one
+  // page.evaluate, written as a string so TS doesn't try to type-check
+  // browser globals like `document` and `getComputedStyle`. This catches
+  // the common case where a layout uses `overflow:hidden` on a parent
+  // to mask an oversized child — visually content is cropped, but the
+  // document doesn't scroll, so a naive scrollWidth check passes.
   const dim = await page.evaluate(
-    /* eslint-disable @typescript-eslint/no-unused-vars */
-    new Function(
-      'return { scrollWidth: document.documentElement.scrollWidth, scrollHeight: document.documentElement.scrollHeight, clientWidth: document.documentElement.clientWidth, clientHeight: document.documentElement.clientHeight };',
-    ) as () => {
+    new Function(`
+      const root = document.documentElement;
+      const TOL = 1;
+      const clipping = [];
+      const elements = document.querySelectorAll('*');
+      for (let i = 0; i < elements.length; i++) {
+        const el = elements[i];
+        const cs = getComputedStyle(el);
+        const ovx = cs.overflowX;
+        const ovy = cs.overflowY;
+        const xClipped = (ovx === 'hidden' || ovx === 'clip') && el.scrollWidth > el.clientWidth + TOL;
+        const yClipped = (ovy === 'hidden' || ovy === 'clip') && el.scrollHeight > el.clientHeight + TOL;
+        if (xClipped || yClipped) {
+          clipping.push({
+            tag: el.tagName.toLowerCase(),
+            cls: (el.className || '').toString().slice(0, 50),
+            id: el.id || null,
+            scrollW: el.scrollWidth,
+            scrollH: el.scrollHeight,
+            clientW: el.clientWidth,
+            clientH: el.clientHeight,
+            clipsX: xClipped,
+            clipsY: yClipped,
+          });
+        }
+      }
+      return {
+        scrollWidth: root.scrollWidth,
+        scrollHeight: root.scrollHeight,
+        clientWidth: root.clientWidth,
+        clientHeight: root.clientHeight,
+        clipping: clipping,
+      };
+    `) as () => {
       scrollWidth: number;
       scrollHeight: number;
       clientWidth: number;
       clientHeight: number;
+      clipping: ClippingElement[];
     },
   );
+
+  if (shotsDir) {
+    const safe = t.label.replace(/[^a-z0-9-]+/gi, '-').toLowerCase();
+    await page.screenshot({ path: join(shotsDir, `${safe}.png`) });
+  }
   await page.close();
   // Use a 1px tolerance — sub-pixel rounding and CSS-zoom quirks can
   // make scrollWidth = clientWidth + 1 even when nothing visibly
@@ -330,6 +425,7 @@ async function measure(
     scrollHeight: dim.scrollHeight,
     scrollsX: dim.scrollWidth > dim.clientWidth + TOLERANCE,
     scrollsY: dim.scrollHeight > dim.clientHeight + TOLERANCE,
+    clippingElements: dim.clipping,
   };
 }
 
@@ -366,14 +462,27 @@ function renderResult(r: MeasureResult): void {
   const bad = c('31');
   const dim = (s: string) => (isTTY ? `\x1b[2m${s}\x1b[22m` : s);
 
-  if (!r.scrollsX && !r.scrollsY) {
-    process.stdout.write(`  ${ok('✓')} ${r.label.padEnd(28)} ${dim(`fits cleanly`)}\n`);
+  const hasIssue = r.scrollsX || r.scrollsY || r.clippingElements.length > 0;
+  if (!hasIssue) {
+    process.stdout.write(`  ${ok('✓')} ${r.label.padEnd(40)} ${dim(`fits cleanly`)}\n`);
     return;
   }
   const issues: string[] = [];
   if (r.scrollsX) issues.push(`scrolls horizontally (${r.scrollWidth}px > ${r.width}px)`);
   if (r.scrollsY) issues.push(`scrolls vertically (${r.scrollHeight}px > ${r.height}px)`);
-  process.stdout.write(`  ${bad('✗')} ${r.label.padEnd(28)} ${dim(issues.join(' · '))}\n`);
+  if (r.clippingElements.length > 0) {
+    issues.push(`${r.clippingElements.length} element(s) clip content`);
+  }
+  process.stdout.write(`  ${bad('✗')} ${r.label.padEnd(40)} ${dim(issues.join(' · '))}\n`);
+  // Show the worst clipping offenders. Cap at 3 per viewport to keep
+  // output readable; the screenshot is the receipt for the rest.
+  for (const el of r.clippingElements.slice(0, 3)) {
+    const sel = el.id ? `#${el.id}` : el.cls ? `.${el.cls.split(/\s+/)[0]}` : '';
+    const detail: string[] = [];
+    if (el.clipsX) detail.push(`x:${el.scrollW}>${el.clientW}`);
+    if (el.clipsY) detail.push(`y:${el.scrollH}>${el.clientH}`);
+    process.stdout.write(`      ${dim(`<${el.tag}${sel}>`)} ${dim(detail.join(' '))}\n`);
+  }
 }
 
 async function readManifest(dir: string): Promise<Record<string, unknown> | null> {
