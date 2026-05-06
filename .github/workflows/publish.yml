@@ -71,9 +71,14 @@ jobs:
       - name: Publish to npm
         if: steps.decide.outputs.publish == 'true'
         working-directory: packages/${{ matrix.package }}
+        # `pnpm publish` (vs `npm publish`) rewrites workspace:* deps to
+        # the actual published version of the linked workspace package.
+        # Without this, consumers got `EUNSUPPORTEDPROTOCOL workspace:`
+        # on install. --no-git-checks skips the working-tree-clean
+        # check that pnpm runs by default (a no-op in fresh CI).
         # --provenance attaches a signed attestation linking this tarball
-        # to this GitHub Actions run. Free, recommended, requires
-        # id-token: write permission (set above).
-        run: npm publish --access public --provenance
+        # to this GitHub Actions run.
+        run: pnpm publish --access public --provenance --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
