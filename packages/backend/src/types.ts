@@ -11,13 +11,14 @@ export interface Env {
   GITHUB_CLIENT_SECRET: string;
   SESSION_SIGNING_KEY: string;
   /**
-   * Admin Worker base URL (e.g. https://admin.freeappstore.online) and the
-   * CF Access service token credentials it accepts. Optional: when not set,
-   * /v1/publish returns 503 with a setup hint instead of a runtime error.
+   * Service binding to the admin Worker. When present (production), /v1/publish
+   * calls admin's /api/provision via env.ADMIN.fetch — direct worker-to-worker,
+   * no CF edge round-trip, no CF Access gate (intentional: both are trusted
+   * internal). Replaced the earlier ADMIN_API_BASE + service-token approach
+   * which was hitting 522 due to edge loop detection between two CF Workers
+   * on the same custom-domain zone.
    */
-  ADMIN_API_BASE?: string;
-  ADMIN_CF_ACCESS_CLIENT_ID?: string;
-  ADMIN_CF_ACCESS_CLIENT_SECRET?: string;
+  ADMIN?: Fetcher;
 }
 
 export interface SessionPayload {

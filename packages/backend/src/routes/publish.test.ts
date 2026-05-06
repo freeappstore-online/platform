@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
-function userLookupDB(user: { id: string; github_login: string; avatar_url: string | null } | null): D1Database {
+function userLookupDB(
+  user: { id: string; github_login: string; avatar_url: string | null } | null,
+): D1Database {
   const prepare = (sql: string): D1PreparedStatement => {
     const trimmed = sql.replace(/\s+/g, ' ').trim();
     const stmt: Partial<D1PreparedStatement> = {
@@ -20,6 +22,27 @@ function userLookupDB(user: { id: string; github_login: string; avatar_url: stri
     return stmt as D1PreparedStatement;
   };
   return { prepare } as unknown as D1Database;
+}
+
+interface AdminCall {
+  url: string;
+  init: RequestInit;
+}
+
+/** Fake service-binding Fetcher — captures the call + returns a canned response. */
+function fakeAdmin(opts: {
+  response: Response;
+  capture?: AdminCall[];
+}): Fetcher {
+  return {
+    fetch: async (input: string | URL | Request, init?: RequestInit) => {
+      opts.capture?.push({
+        url: typeof input === 'string' ? input : input.toString(),
+        init: init ?? {},
+      });
+      return opts.response;
+    },
+  } as unknown as Fetcher;
 }
 
 const baseEnv = (db: D1Database, overrides: Partial<Env> = {}): Env => ({
@@ -42,14 +65,6 @@ const validBody = {
 };
 
 describe('POST /v1/publish', () => {
-  let originalFetch: typeof fetch;
-  beforeEach(() => {
-    originalFetch = globalThis.fetch;
-  });
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-  });
-
   it('returns 401 with no auth', async () => {
     const res = await app.request(
       '/v1/publish',
@@ -87,7 +102,7 @@ describe('POST /v1/publish', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 503 with a setup hint when ADMIN_* env vars are missing', async () => {
+  it('returns 503 with a setup hint when ADMIN binding is missing', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
     const res = await app.request(
       '/v1/publish',
@@ -100,19 +115,20 @@ describe('POST /v1/publish', () => {
     );
     expect(res.status).toBe(503);
     const body = (await res.json()) as { error: string; hint: string };
-    expect(body.error).toBe('admin_provision_not_configured');
-    expect(body.hint).toMatch(/CF dashboard/);
+    expect(body.error).toBe('admin_binding_not_configured');
+    expect(body.hint).toMatch(/wrangler\.toml/);
   });
 
-  it('proxies to admin /api/provision with the requester github login', async () => {
+  it('proxies to admin via service binding with the requester github login', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
-    const fetchSpy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ steps: [] }), {
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
-    );
-    globalThis.fetch = fetchSpy;
+      capture: calls,
+    });
     const res = await app.request(
       '/v1/publish',
       {
@@ -120,25 +136,22 @@ describe('POST /v1/publish', () => {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(validBody),
       },
-      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), {
-        ADMIN_API_BASE: 'https://admin.example',
-        ADMIN_CF_ACCESS_CLIENT_ID: 'access-id',
-        ADMIN_CF_ACCESS_CLIENT_SECRET: 'access-secret',
-      }),
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
     );
     expect(res.status).toBe(200);
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://admin.example/api/provision');
-    const headers = init.headers as Record<string, string>;
-    expect(headers['CF-Access-Client-Id']).toBe('access-id');
-    expect(headers['CF-Access-Client-Secret']).toBe('access-secret');
-    const sentBody = JSON.parse(init.body as string);
+    expect(calls).toHaveLength(1);
+    const call = calls[0]!;
+    expect(call.url).toMatch(/\/api\/provision$/);
+    const sentBody = JSON.parse(call.init.body as string);
     expect(sentBody.id).toBe('my-app');
     expect(sentBody.githubLogin).toBe('me');
     expect(sentBody.store).toBe('apps');
     expect(sentBody.type).toBe('standalone');
+    // No CF-Access-* headers — service binding bypasses the gate.
+    const headers = call.init.headers as Record<string, string>;
+    expect(headers['CF-Access-Client-Id']).toBeUndefined();
+    expect(headers['CF-Access-Client-Secret']).toBeUndefined();
 
     const respBody = (await res.json()) as { appId: string; appUrl: string; repoUrl: string };
     expect(respBody.appId).toBe('my-app');
@@ -146,9 +159,9 @@ describe('POST /v1/publish', () => {
     expect(respBody.repoUrl).toBe('https://github.com/freeappstore-online/my-app');
   });
 
-  it('returns 502 when admin /api/provision returns 5xx', async () => {
+  it('returns 502 when admin returns 5xx', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
-    globalThis.fetch = vi.fn().mockResolvedValue(new Response('upstream boom', { status: 500 }));
+    const admin = fakeAdmin({ response: new Response('upstream boom', { status: 500 }) });
     const res = await app.request(
       '/v1/publish',
       {
@@ -156,11 +169,7 @@ describe('POST /v1/publish', () => {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(validBody),
       },
-      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), {
-        ADMIN_API_BASE: 'https://admin.example',
-        ADMIN_CF_ACCESS_CLIENT_ID: 'access-id',
-        ADMIN_CF_ACCESS_CLIENT_SECRET: 'access-secret',
-      }),
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
     );
     expect(res.status).toBe(502);
     const body = (await res.json()) as { error: string };
