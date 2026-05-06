@@ -138,7 +138,7 @@ export const publishCommand = new Command('publish')
     const appName = await detectAppName();
     const description = await detectDescription();
 
-    process.stdout.write('\nLet\'s publish your app to FreeAppStore.\n');
+    process.stdout.write(`\nLet's publish your ${store === 'games' ? 'game' : 'app'} to ${meta.label}.\n`);
     if (!repo && opts.issue) {
       process.stdout.write(
         '⚠  No GitHub origin detected. Push your repo to GitHub first, then run again.\n',
@@ -151,6 +151,12 @@ export const publishCommand = new Command('publish')
     if (resolved.errors.length > 0) {
       for (const e of resolved.errors) process.stdout.write(`✗ ${e}\n`);
       process.exit(1);
+    }
+
+    // --yes: optional fields default rather than abort. demo is the only
+    // optional field today; new optional fields go here too.
+    if (opts.yes && resolved.values.demo === undefined) {
+      resolved.values.demo = null;
     }
 
     const promptList = buildPromptList(resolved.values, { appName, description });
