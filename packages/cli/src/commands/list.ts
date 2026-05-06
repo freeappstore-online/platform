@@ -5,6 +5,7 @@ interface ListedApp {
   id: string;
   ownerLogin: string;
   createdAt: number;
+  store?: 'apps' | 'games';
   category: string | null;
   type: string | null;
   oneliner: string | null;
@@ -56,11 +57,20 @@ export const listCommand = new Command('list')
 
     process.stdout.write('\n');
     for (const a of apps) {
-      process.stdout.write(`${bold(a.id.padEnd(20))} ${dim(a.category ?? '—')}\n`);
-      if (a.oneliner) process.stdout.write(`  ${a.oneliner}\n`);
-      process.stdout.write(`  ${dim('live:')} ${a.appUrl}\n`);
-      process.stdout.write(`  ${dim('repo:')} ${a.repoUrl}\n`);
+      const storeBadge = a.store === 'games' ? dim('[game] ') : dim('[app]  ');
+      process.stdout.write(`${storeBadge}${bold(a.id.padEnd(20))} ${dim(a.category ?? '—')}\n`);
+      if (a.oneliner) process.stdout.write(`         ${a.oneliner}\n`);
+      process.stdout.write(`         ${dim('live:')} ${a.appUrl}\n`);
+      process.stdout.write(`         ${dim('repo:')} ${a.repoUrl}\n`);
       process.stdout.write('\n');
     }
-    process.stdout.write(dim(`${apps.length} app${apps.length === 1 ? '' : 's'}\n`));
+    const gameCount = apps.filter((a) => a.store === 'games').length;
+    const appCount = apps.length - gameCount;
+    const summary =
+      gameCount === 0
+        ? `${appCount} app${appCount === 1 ? '' : 's'}`
+        : appCount === 0
+          ? `${gameCount} game${gameCount === 1 ? '' : 's'}`
+          : `${appCount} app${appCount === 1 ? '' : 's'}, ${gameCount} game${gameCount === 1 ? '' : 's'}`;
+    process.stdout.write(dim(`${summary}\n`));
   });

@@ -32,6 +32,8 @@ const TYPES = [
   'Connected (Firebase/Supabase backend, shared with Pro version)',
 ] as const;
 
+export type Store = 'apps' | 'games';
+
 interface SubmissionInput {
   name: string;
   category: (typeof CATEGORIES)[number];
@@ -42,9 +44,30 @@ interface SubmissionInput {
   demo: string | null;
 }
 
+/** Per-store branding the publish flow needs to keep the two stores parallel. */
+export const STORE_META = {
+  apps: {
+    label: 'FreeAppStore',
+    domain: 'freeappstore.online',
+    org: 'freeappstore-online',
+    submissionRepo: 'freeappstore-online/submissions',
+  },
+  games: {
+    label: 'FreeGameStore',
+    domain: 'freegamestore.online',
+    org: 'freegamestore-online',
+    submissionRepo: 'freegamestore-online/submissions',
+  },
+} as const;
+
 export const publishCommand = new Command('publish')
   .description(
-    'Publish this app to FreeAppStore. Provisions repo + hosting + DNS automatically. If auto-provision is unavailable, falls back to opening a prefilled submission Issue for admin review.',
+    'Publish this app or game. Provisions repo + hosting + DNS automatically. If auto-provision is unavailable, falls back to opening a prefilled submission Issue for admin review.',
+  )
+  .option(
+    '--store <name>',
+    'Target store: "apps" (FreeAppStore) or "games" (FreeGameStore). Defaults to "apps".',
+    'apps',
   )
   .option('--no-open', 'Print the fallback Issue URL instead of opening a browser.')
   .option('--issue', 'Skip auto-provision; always open the GitHub Issue form.')
@@ -63,6 +86,7 @@ export const publishCommand = new Command('publish')
   )
   .action(
     async (opts: {
+      store?: string;
       open: boolean;
       issue?: boolean;
       skipChecks?: boolean;
@@ -73,6 +97,12 @@ export const publishCommand = new Command('publish')
       demo?: string;
       yes?: boolean;
     }) => {
+    const store: Store = opts.store === 'games' ? 'games' : 'apps';
+    if (opts.store && opts.store !== 'apps' && opts.store !== 'games') {
+      process.stdout.write(`✗ --store must be "apps" or "games", got "${opts.store}"\n`);
+      process.exit(1);
+    }
+    const meta = STORE_META[store];
     // Check auth BEFORE prompting — there's no point asking the user for
     // 5 fields just to bail at the end with "not signed in". --issue
     // skips this since the GitHub Issue form path doesn't need a session.
@@ -157,17 +187,19 @@ export const publishCommand = new Command('publish')
     // Try auto-provision first unless the user explicitly asked for the
     // Issue-form fallback.
     if (!opts.issue) {
-      const autoResult = await tryAutoProvision(input);
+      const autoResult = await tryAutoProvision(input, store);
       if (autoResult.kind === 'success') {
+        const noun = store === 'games' ? 'game' : 'app';
+        const listingPath = store === 'games' ? 'games' : 'apps';
         process.stdout.write(`\n✓ Provisioned!\n`);
         process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
         process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
-        process.stdout.write(`  Listing:  https://freeappstore.online/apps/${input.name}\n\n`);
+        process.stdout.write(`  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`);
         process.stdout.write(`Push your code so the live URL serves it:\n\n`);
         process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
         process.stdout.write(`  git push upstream main\n\n`);
         process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
-        process.stdout.write(`Run \`fas list\` any time to see your apps.\n`);
+        process.stdout.write(`Run \`fas list\` any time to see your ${noun}s.\n`);
         return;
       }
       if (autoResult.kind === 'unauthorized') {
@@ -202,7 +234,10 @@ interface AutoProvisionFailure {
 }
 type AutoProvisionResult = AutoProvisionSuccess | AutoProvisionFailure;
 
-async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionResult> {
+async function tryAutoProvision(
+  input: SubmissionInput,
+  store: Store,
+): Promise<AutoProvisionResult> {
   const config = await readConfig();
   const sessionToken = config.session?.token;
   if (!sessionToken) return { kind: 'unauthorized', reason: 'no fas session' };
@@ -216,6 +251,7 @@ async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionRe
     },
     body: JSON.stringify({
       name: input.name,
+      store,
       category: input.category,
       type: typeShort,
       oneliner: input.oneliner,

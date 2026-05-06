@@ -5,11 +5,25 @@ import { join, resolve, extname } from 'node:path';
 import { assertValidAppId } from '../lib/app-id.js';
 
 const TEMPLATES = {
+  // FreeAppStore templates
   standalone: 'freeappstore-online/template-standalone',
   connected: 'freeappstore-online/template-connected',
+  // FreeGameStore templates
+  'game-canvas': 'freegamestore-online/template-game-canvas',
+  'game-grid': 'freegamestore-online/template-game-grid',
+  'game-3d': 'freegamestore-online/template-game-3d',
 } as const;
 
 type TemplateName = keyof typeof TEMPLATES;
+
+/**
+ * Templates that target FreeGameStore (vs FreeAppStore). Used by the
+ * publish flow to default --store correctly when the user scaffolds
+ * from a game template.
+ */
+export const GAME_TEMPLATES = new Set<TemplateName>(['game-canvas', 'game-grid', 'game-3d']);
+
+export const ALL_TEMPLATES = Object.keys(TEMPLATES) as TemplateName[];
 
 // File extensions we'll text-substitute through. Anything else (images,
 // fonts, etc.) is left as-is. Conservative — better to miss a substitution
@@ -42,12 +56,12 @@ const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', '.cache']);
  */
 export async function runInit(opts: {
   appId: string;
-  template?: 'standalone' | 'connected';
+  template?: TemplateName;
 }): Promise<{ path: string; substitutionCount: number }> {
   assertValidAppId(opts.appId);
   const template = opts.template ?? 'standalone';
   if (!(template in TEMPLATES)) {
-    throw new Error(`Unknown template "${template}". Choose: standalone, connected.`);
+    throw new Error(`Unknown template "${template}". Choose: ${ALL_TEMPLATES.join(', ')}.`);
   }
 
   const target = resolve(process.cwd(), opts.appId);
@@ -80,14 +94,27 @@ export async function runInit(opts: {
 }
 
 export const initCommand = new Command('init')
-  .description('Scaffold a new free app from a template.')
-  .argument('<app-id>', 'Short app id (lowercase, single word). e.g. "calendar"')
-  .option('-t, --template <name>', 'Template: standalone | connected', 'standalone')
+  .description('Scaffold a new free app or game from a template.')
+  .argument('<app-id>', 'Short id (lowercase, single word). e.g. "calendar" or "asteroids"')
+  .option(
+    '-t, --template <name>',
+    `Template: ${ALL_TEMPLATES.join(' | ')}`,
+    'standalone',
+  )
   .action(async (appId: string, opts: { template: string }) => {
+    if (!(opts.template in TEMPLATES)) {
+      process.stderr.write(`Unknown template "${opts.template}". Choose: ${ALL_TEMPLATES.join(', ')}.\n`);
+      process.exit(1);
+    }
     const result = await runInit({
       appId,
-      template: opts.template as 'standalone' | 'connected',
+      template: opts.template as TemplateName,
     });
+    const isGame = GAME_TEMPLATES.has(opts.template as TemplateName);
+    const storeFlag = isGame ? '--store games ' : '';
+    const docsUrl = isGame
+      ? 'https://freegamestore.online/contribute.html'
+      : 'https://freeappstore.online/contribute.html';
     process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${opts.template} template.\n`);
     process.stdout.write(`  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`);
     process.stdout.write('Next steps:\n');
@@ -95,8 +122,8 @@ export const initCommand = new Command('init')
     process.stdout.write('  pnpm install            # one-time setup\n');
     process.stdout.write('  pnpm dev                # local dev server\n');
     process.stdout.write('  fas check               # compliance — run before publishing\n');
-    process.stdout.write('  fas publish             # provisions repo + hosting + DNS\n\n');
-    process.stdout.write('Docs: https://freeappstore.online/contribute.html\n');
+    process.stdout.write(`  fas publish ${storeFlag}    # provisions repo + hosting + DNS\n\n`);
+    process.stdout.write(`Docs: ${docsUrl}\n`);
   });
 
 async function substituteAppName(dir: string, appId: string): Promise<number> {

@@ -6,6 +6,8 @@ export const publishRoutes = new Hono<{ Bindings: Env }>();
 
 interface PublishBody {
   name: string;
+  /** "apps" (FreeAppStore) | "games" (FreeGameStore). Defaults to "apps" if omitted. */
+  store?: 'apps' | 'games';
   category: string;
   /** "standalone" | "connected" — already mapped from the CLI's verbose option strings */
   type: string;
@@ -16,6 +18,11 @@ interface PublishBody {
 }
 
 const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
+
+const STORE_DOMAIN = {
+  apps: { domain: 'freeappstore.online', org: 'freeappstore-online' },
+  games: { domain: 'freegamestore.online', org: 'freegamestore-online' },
+} as const;
 
 /**
  * Provisioning endpoint. Validates the request, then proxies to the admin
@@ -48,12 +55,18 @@ publishRoutes.post('/publish', async (c) => {
   if (!APP_ID_RE.test(body.name)) {
     return c.text('app name must be lowercase letters, digits, or hyphens (2-31 chars)', 400);
   }
+  // Backwards-compat: omitted store means "apps". Anything else is a 400.
+  const store: 'apps' | 'games' = body.store ?? 'apps';
+  if (store !== 'apps' && store !== 'games') {
+    return c.text('store must be "apps" or "games"', 400);
+  }
   if (!body.category?.trim()) return c.text('category is required', 400);
   if (!body.oneliner?.trim()) return c.text('oneliner is required', 400);
   if (!body.description?.trim()) return c.text('description is required', 400);
   if (body.type !== 'standalone' && body.type !== 'connected') {
     return c.text('type must be "standalone" or "connected"', 400);
   }
+  const meta = STORE_DOMAIN[store];
 
   if (!c.env.ADMIN) {
     return c.json(
@@ -76,10 +89,10 @@ publishRoutes.post('/publish', async (c) => {
       id: body.name,
       name: body.name,
       category: body.category,
-      icon: '🚀',
+      icon: store === 'games' ? '🎮' : '🚀',
       iconBg: '#f3f4f6',
       description: body.oneliner,
-      store: 'apps',
+      store,
       type: body.type,
       githubLogin: user.login,
       repo: body.repo,
@@ -122,14 +135,15 @@ publishRoutes.post('/publish', async (c) => {
     );
   }
 
-  // Record this app as owned by the user so `fas list` / GET /v1/apps/mine
+  // Record this app/game as owned by the user so `fas list` / GET /v1/apps/mine
   // can return it. INSERT OR IGNORE because retries of a successful publish
   // shouldn't fail — the admin worker is idempotent on the registry side.
+  // The store column lets us tell apps and games apart in `fas list`.
   try {
     await c.env.DB.prepare(
       `INSERT OR IGNORE INTO apps
-       (id, owner_login, created_at, category, type, oneliner, repo, demo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_login, created_at, category, type, oneliner, repo, demo, store)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         body.name,
@@ -140,6 +154,7 @@ publishRoutes.post('/publish', async (c) => {
         body.oneliner,
         body.repo,
         body.demo,
+        store,
       )
       .run();
   } catch (err) {
@@ -150,8 +165,9 @@ publishRoutes.post('/publish', async (c) => {
 
   return c.json({
     appId: body.name,
-    appUrl: `https://${body.name}.freeappstore.online`,
-    repoUrl: `https://github.com/freeappstore-online/${body.name}`,
+    store,
+    appUrl: `https://${body.name}.${meta.domain}`,
+    repoUrl: `https://github.com/${meta.org}/${body.name}`,
     admin: adminBody,
   });
 });
