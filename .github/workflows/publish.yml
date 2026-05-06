@@ -17,6 +17,7 @@ on:
     paths:
       - 'packages/cli/**'
       - 'packages/sdk/**'
+      - 'packages/compliance/**'
       - '.github/workflows/publish.yml'
   workflow_dispatch: # manual trigger from the Actions UI
 
@@ -30,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [cli, sdk]
+        package: [cli, sdk, compliance]
     steps:
       - uses: actions/checkout@v4
 

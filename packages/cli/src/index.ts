@@ -10,6 +10,7 @@ import { publishCommand } from './commands/publish.js';
 import { logsCommand } from './commands/logs.js';
 import { whoamiCommand } from './commands/whoami.js';
 import { doctorCommand } from './commands/doctor.js';
+import { checkCommand } from './commands/check.js';
 
 // Read version from the package's own package.json so `fas --version` always
 // matches the installed package. dist/index.js sits one level under the
@@ -33,6 +34,7 @@ program.addCommand(initCommand);
 program.addCommand(publishCommand);
 program.addCommand(logsCommand);
 program.addCommand(doctorCommand);
+program.addCommand(checkCommand);
 
 // `fas` with no subcommand → launch the TUI when stdout is a TTY.
 // Subcommands keep their normal one-shot behavior, scriptable for CI / agents.
