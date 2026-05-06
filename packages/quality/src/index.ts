@@ -184,6 +184,106 @@ interface ReporterHandle {
 }
 
 /**
+ * The reference device matrix. Each entry pairs a viewport size with the
+ * cumulative device share at that width (percent of devices whose viewport
+ * is ≥ this wide). Used for both the CLI screencheck and the dashboard so
+ * scores are computed identically. Numbers blend StatCounter + caniuse.
+ */
+export const REFERENCE_VIEWPORTS: ReadonlyArray<{
+  width: number;
+  height: number;
+  label: string;
+  orientation: 'portrait' | 'landscape';
+  /** Cumulative share: % of devices with viewport width ≥ this size. */
+  share: number;
+  kind: 'phone' | 'tablet';
+}> = [
+  { width: 320, height: 568, label: 'iPhone SE', orientation: 'portrait', share: 99, kind: 'phone' },
+  { width: 360, height: 800, label: 'Android', orientation: 'portrait', share: 96, kind: 'phone' },
+  { width: 393, height: 852, label: 'iPhone 15', orientation: 'portrait', share: 92, kind: 'phone' },
+  { width: 414, height: 896, label: 'iPhone 11 PM', orientation: 'portrait', share: 88, kind: 'phone' },
+  { width: 600, height: 800, label: 'Tablet', orientation: 'portrait', share: 60, kind: 'tablet' },
+  { width: 768, height: 1024, label: 'iPad', orientation: 'portrait', share: 35, kind: 'tablet' },
+  { width: 1024, height: 1366, label: 'iPad Pro', orientation: 'portrait', share: 20, kind: 'tablet' },
+  { width: 568, height: 320, label: 'iPhone SE land.', orientation: 'landscape', share: 99, kind: 'phone' },
+  { width: 667, height: 375, label: 'iPhone 8 land.', orientation: 'landscape', share: 96, kind: 'phone' },
+  { width: 736, height: 414, label: 'iPhone+ land.', orientation: 'landscape', share: 88, kind: 'phone' },
+  { width: 800, height: 600, label: 'Tablet land.', orientation: 'landscape', share: 60, kind: 'tablet' },
+  { width: 1024, height: 768, label: 'iPad land.', orientation: 'landscape', share: 35, kind: 'tablet' },
+  { width: 1366, height: 1024, label: 'iPad Pro land.', orientation: 'landscape', share: 20, kind: 'tablet' },
+];
+
+/**
+ * Compute Quality Index from a per-viewport pass/fail map.
+ *
+ * Cumulative share is the percentage of devices with viewport WIDTH ≥
+ * this size. So consecutive widths form non-overlapping buckets:
+ *
+ *   bucket[i] share = share[i] − share[i+1]   for i < N-1
+ *   bucket[N-1]      = share[N-1]              (everything ≥ widest)
+ *
+ * The Index sums the bucket-shares of every PASSING viewport. This
+ * correctly handles the "gap in the middle" case our naive max-share
+ * formula got wrong: e.g. layout that passes at 568 but fails at 667/736
+ * and passes again at 1024+ should NOT score 99% — it scores roughly
+ * (99-96) + (60-35) + (35-20) + 20 = 63%.
+ *
+ * For multi-orientation apps the score is the LOWER of the two
+ * orientations (worst-case across orientations), since real users
+ * encounter both.
+ *
+ * @param matrix viewports the audit considered (typically REFERENCE_VIEWPORTS, but callers can scope to a subset)
+ * @param passingKeys set of `${orientation}:${width}x${height}` keys that passed
+ */
+export function computeQualityIndex(
+  matrix: ReadonlyArray<{ width: number; height: number; orientation: 'portrait' | 'landscape'; share: number }>,
+  passingKeys: ReadonlySet<string>,
+): { portrait: number; landscape: number; overall: number } {
+  const score = (orientation: 'portrait' | 'landscape'): number => {
+    // Sort by width ASCENDING (shares descending). Buckets are then:
+    //   [W0, W1): share[W0] − share[W1]   (devices in the narrowest range)
+    //   [W1, W2): share[W1] − share[W2]
+    //   ...
+    //   [Wn, ∞):  share[Wn]               (everything ≥ widest test point)
+    const inOrientation = matrix
+      .filter((v) => v.orientation === orientation)
+      .slice()
+      .sort((a, b) => a.width - b.width);
+    if (inOrientation.length === 0) return -1;
+    let total = 0;
+    for (let i = 0; i < inOrientation.length; i++) {
+      const v = inOrientation[i]!;
+      const next = inOrientation[i + 1];
+      // Next viewport has SMALLER share (it's wider). Bucket =
+      // current.share − next.share, except for the last (widest)
+      // which is just current.share.
+      const bucketShare = next ? v.share - next.share : v.share;
+      const key = `${orientation}:${v.width}x${v.height}`;
+      if (passingKeys.has(key)) total += bucketShare;
+    }
+    return Math.round(total);
+  };
+  const portrait = score('portrait');
+  const landscape = score('landscape');
+  const haveP = portrait >= 0;
+  const haveL = landscape >= 0;
+  let overall: number;
+  if (haveP && haveL) overall = Math.min(portrait, landscape);
+  else if (haveP) overall = portrait;
+  else overall = Math.max(0, landscape);
+  return {
+    portrait: haveP ? portrait : 0,
+    landscape: haveL ? landscape : 0,
+    overall,
+  };
+}
+
+/** Build the canonical key used by computeQualityIndex's passingKeys set. */
+export function viewportKey(v: { width: number; height: number; orientation: 'portrait' | 'landscape' }): string {
+  return `${v.orientation}:${v.width}x${v.height}`;
+}
+
+/**
  * Start the reporter. Idempotent — calling twice returns the existing
  * handle. Designed for one-line use: `initQualityReporter()` from your
  * app's main.tsx / entry. The reporter is a no-op when not iframed,
