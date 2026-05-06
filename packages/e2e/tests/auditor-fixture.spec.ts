@@ -1,6 +1,10 @@
 import { test, expect, Page } from '@playwright/test';
 import type { ViewportReport } from '../../quality/src/index.js';
 
+// Provided by Node at runtime; declared inline because @playwright/test
+// doesn't pull in @types/node and we don't want to add it just for one ref.
+declare const process: { env: Record<string, string | undefined> };
+
 /**
  * Live mirror of the auditor fixture (auditor-fixture.freegamestore.online).
  *
@@ -16,9 +20,28 @@ import type { ViewportReport } from '../../quality/src/index.js';
  * fixture index — fail loudly otherwise.
  */
 
-const FIXTURE_BASE = 'https://auditor-fixture.freegamestore.online';
+/**
+ * Production host. Override via FAS_FIXTURE_BASE for local dev or
+ * a staging URL — useful before the fixture is actually deployed,
+ * or to point at a `wrangler pages dev` server.
+ */
+const FIXTURE_BASE = (process.env.FAS_FIXTURE_BASE ?? 'https://auditor-fixture.freegamestore.online')
+  .replace(/\/+$/, '');
 /** Pinned to the version the fixture HTML imports. Bump together. */
 const REPORTER_ESM = 'https://esm.sh/@freeappstore/quality@0.1.0';
+
+/**
+ * If the fixture host has the production *.freegamestore.online shape,
+ * snapshot()'s appId regex extracts the leftmost label. For other
+ * hosts (local dev, staging on a different domain) the regex returns
+ * '' and we don't assert any specific id. Mirrors the source-of-truth
+ * regex in packages/quality/src/index.ts.
+ */
+const EXPECTED_APP_ID = (() => {
+  const host = new URL(FIXTURE_BASE).hostname;
+  const m = /^([^.]+)\.(?:freeappstore|freegamestore)\.online$/.exec(host);
+  return m?.[1] ?? '';
+})();
 
 /**
  * Mirror of CANONICAL_SCENARIOS in packages/quality/src/fixture.test.ts.
@@ -75,16 +98,39 @@ async function snapshotAt(
   // networkidle waits for the fixture's `await import(esm.sh/...)` to
   // settle; without it snapshot() can race the reporter's own load.
   await page.goto(`${FIXTURE_BASE}/?scenario=${id}`, { waitUntil: 'networkidle' });
-  // Give the reporter's late-layout post (1500ms) a chance to settle
-  // — the fixture's CSS sets some scenarios via @media queries that
-  // resolve only after layout. Half the late-post window is enough
-  // since we drive snapshot() ourselves below.
-  await page.waitForTimeout(800);
+  // Layout depends on font metrics; document.fonts.ready is the
+  // browser's own "fonts settled" signal — deterministic and faster
+  // than a fixed timeout.
+  await page.evaluate(() => document.fonts?.ready ?? Promise.resolve());
   return await page.evaluate(async (esmUrl) => {
     const m = await import(/* @vite-ignore */ esmUrl);
     return m.snapshot() as ViewportReport;
   }, REPORTER_ESM);
 }
+
+/**
+ * One-shot reachability probe. With this, an unreachable fixture
+ * fails ONCE with a clear message instead of producing N×projects
+ * timeouts that bury the actual cause.
+ */
+test.beforeAll(async () => {
+  let res: Response;
+  try {
+    res = await fetch(`${FIXTURE_BASE}/`, { method: 'GET' });
+  } catch (err) {
+    throw new Error(
+      `Auditor fixture unreachable at ${FIXTURE_BASE}\n` +
+        `Cause: ${(err as Error).message}\n` +
+        `Override the host with FAS_FIXTURE_BASE=https://your-host (e.g. a wrangler pages dev URL).`,
+    );
+  }
+  if (!res.ok) {
+    throw new Error(
+      `Auditor fixture at ${FIXTURE_BASE}/ returned HTTP ${res.status}\n` +
+        `Override the host with FAS_FIXTURE_BASE=https://your-host (e.g. a wrangler pages dev URL).`,
+    );
+  }
+});
 
 scenario('fits', () => {
   test('iPhone 15 portrait: no scroll, no clipping', async ({ page }) => {
@@ -92,7 +138,7 @@ scenario('fits', () => {
     expect(s.document.scrollsX).toBe(false);
     expect(s.document.scrollsY).toBe(false);
     expect(s.clipping).toEqual([]);
-    expect(s.appId).toBe('auditor-fixture');
+    expect(s.appId).toBe(EXPECTED_APP_ID);
   });
 });
 
