@@ -31,10 +31,19 @@ const REGISTRY_URLS = {
   games: 'https://raw.githubusercontent.com/freegamestore-online/freegamestore/main/registry.json',
 } as const;
 
-// 14 apps × 3 fetches = 42 + 2 registry fetches = 44, comfortably
-// under the 50-subrequest free-tier cap. Drop to 12 if you want a
-// safety margin for redirects.
-const BATCH_SIZE = 14;
+// CF free-tier cap is 50 subrequests per invocation, and redirects
+// count as separate subrequests. In practice each app runs 3 fetches
+// (HTML, manifest, bundle), but custom-subdomain apps often redirect
+// 2-3 hops (apex → www → cf-pages → final), pushing real subrequest
+// count to 6-9 per app. With 14 apps that blew past 50 — every batch
+// reported "Too many subrequests" against the manifest/bundle checks,
+// poisoning the storefront audit badge with false fails.
+//
+// 8 apps × 9 worst-case = 72... still risky on free, but with median
+// ~5 subrequests per app it stays comfortably under 50. The bigger
+// fix is moving the audit Worker to a paid plan; until then 8 is the
+// honest batch size.
+const BATCH_SIZE = 8;
 
 async function fetchRegistry(store: 'apps' | 'games'): Promise<RegistryItem[]> {
   const res = await fetch(REGISTRY_URLS[store]);

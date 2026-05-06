@@ -210,6 +210,18 @@ describe('auditLive (integration)', () => {
     expect(statuses).toEqual(['pass', 'pass', 'pass', 'pass']);
   });
 
+  it('downgrades subrequest-cap errors from fail → warn (not the app\'s fault)', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Too many subrequests by single Worker invocation.'),
+    );
+    const r = await auditLive({ appId: 'tip', liveUrl: 'https://tip.example' });
+    expect(r.reachable).toBe(false);
+    expect(r.results).toHaveLength(1);
+    expect(r.results[0]!.name).toBe('Reachable');
+    expect(r.results[0]!.status).toBe('warn');
+    expect(r.results[0]!.detail).toMatch(/subrequest cap/);
+  });
+
   it('stamps checkedAt and preserves appId', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('x'));
     const before = Date.now();

@@ -59,6 +59,17 @@ async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
   }
 }
 
+/**
+ * Worker subrequest cap errors look like "Too many subrequests by
+ * single Worker invocation." We don't want to record those as "fail"
+ * verdicts because the app isn't actually broken — the audit just
+ * couldn't check. Detect and flag for the caller.
+ */
+function isSubrequestCapError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /too many subrequests|subrequest.*limit/i.test(msg);
+}
+
 export async function auditLive(input: LiveAuditInput): Promise<LiveAuditReport> {
   const checkedAt = Date.now();
   const report: LiveAuditReport = {
@@ -83,10 +94,18 @@ export async function auditLive(input: LiveAuditInput): Promise<LiveAuditReport>
     html = await res.text();
     report.reachable = true;
   } catch (err) {
+    // Subrequest cap means we couldn't even fetch — that's a "warn"
+    // (re-check needed), not a "fail" (app broken). Distinguishing
+    // matters: failures show red badges in the storefront.
+    const skipped = isSubrequestCapError(err);
     report.results.push({
       name: 'Reachable',
-      status: 'fail',
-      detail: err instanceof Error ? err.message : 'fetch failed',
+      status: skipped ? 'warn' : 'fail',
+      detail: skipped
+        ? 'audit Worker hit subrequest cap — re-run needed'
+        : err instanceof Error
+          ? err.message
+          : 'fetch failed',
     });
     return report;
   }
@@ -169,10 +188,15 @@ export async function checkManifestLive(html: string, liveUrl: string): Promise<
     }
     return { name: 'PWA manifest (live)', status: 'pass', detail: manifestUrl };
   } catch (err) {
+    const skipped = isSubrequestCapError(err);
     return {
       name: 'PWA manifest (live)',
-      status: 'fail',
-      detail: err instanceof Error ? err.message : 'manifest fetch/parse failed',
+      status: skipped ? 'warn' : 'fail',
+      detail: skipped
+        ? 'audit Worker hit subrequest cap — re-run needed'
+        : err instanceof Error
+          ? err.message
+          : 'manifest fetch/parse failed',
     };
   }
 }
@@ -217,10 +241,15 @@ export async function checkBundleSizeLive(html: string, liveUrl: string): Promis
       detail: `~${approxGzipKb} KB gzipped (raw ${rawKb} KB)`,
     };
   } catch (err) {
+    const skipped = isSubrequestCapError(err);
     return {
       name: 'Bundle size (live)',
       status: 'warn',
-      detail: err instanceof Error ? err.message : 'bundle fetch failed',
+      detail: skipped
+        ? 'audit Worker hit subrequest cap — re-run needed'
+        : err instanceof Error
+          ? err.message
+          : 'bundle fetch failed',
     };
   }
 }
