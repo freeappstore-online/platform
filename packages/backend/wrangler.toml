@@ -45,6 +45,14 @@ crons = ["*/15 * * * *", "0 4 * * *"]
 binding = "BACKUPS"
 bucket_name = "fas-backups"
 
+# Service binding to the admin Worker for /v1/publish → /api/provision.
+# Worker-to-worker direct: bypasses CF Access (both are trusted internal),
+# bypasses edge loop detection (the cause of the earlier 522s), and removes
+# the need to manage a service token in our secret store.
+[[services]]
+binding = "ADMIN"
+service = "freeappstore-admin"
+
 # Secrets (set interactively via `wrangler secret put <name>`):
 #   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
 #   SESSION_SIGNING_KEY      # 32+ bytes, e.g. `openssl rand -hex 32`
