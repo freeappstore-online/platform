@@ -23,7 +23,7 @@ const bold = (s: string) => (isTTY ? `\x1b[1m${s}\x1b[22m` : s);
 export const listCommand = new Command('list')
   .alias('ls')
   .description('List apps and games you have published.')
-  .option('--json', 'Output JSON instead of a table (includes commit history when -v).')
+  .option('--json', 'Output JSON instead of a table (includes per-app commit history).')
   .option(
     '-v, --verbose',
     'Show recent commits per app. Fetches the last 3 commits from each app repo via the GitHub API.',
@@ -116,8 +116,12 @@ function printApp(a: ListedApp, h: AppHistory, verbose: boolean) {
   process.stdout.write('\n');
 }
 
-/** Convert "https://github.com/owner/name" → "owner/name". */
-function repoSlug(url: string): string {
-  const m = /github\.com\/([^/]+)\/([^/.]+)/.exec(url);
+/**
+ * Convert "https://github.com/owner/name[.git]" → "owner/name".
+ * Allows dots in the repo name (e.g. nodejs/node.js); strips a
+ * trailing `.git` suffix and any trailing slash.
+ */
+export function repoSlug(url: string): string {
+  const m = /github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url);
   return m ? `${m[1]}/${m[2]}` : '';
 }

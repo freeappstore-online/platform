@@ -111,7 +111,7 @@ export const initCommand = new Command('init')
       template: opts.template as TemplateName,
     });
     const isGame = GAME_TEMPLATES.has(opts.template as TemplateName);
-    const storeFlag = isGame ? '--store games ' : '';
+    const publishCmd = isGame ? 'fas publish --store games' : 'fas publish';
     const docsUrl = isGame
       ? 'https://freegamestore.online/contribute.html'
       : 'https://freeappstore.online/contribute.html';
@@ -122,7 +122,11 @@ export const initCommand = new Command('init')
     process.stdout.write('  pnpm install            # one-time setup\n');
     process.stdout.write('  pnpm dev                # local dev server\n');
     process.stdout.write('  fas check               # compliance — run before publishing\n');
-    process.stdout.write(`  fas publish ${storeFlag}    # provisions repo + hosting + DNS\n\n`);
+    // Pad the publish line to ~24 cols so the "#" comment aligns with
+    // the other rows. Length matters because the command differs by
+    // store: `fas publish` (12) vs `fas publish --store games` (25).
+    const padded = publishCmd.padEnd(23);
+    process.stdout.write(`  ${padded} # provisions repo + hosting + DNS\n\n`);
     process.stdout.write(`Docs: ${docsUrl}\n`);
   });
 
