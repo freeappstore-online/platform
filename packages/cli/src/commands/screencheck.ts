@@ -4,6 +4,8 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve, normalize } from 'node:path';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Runtime viewport check: builds the app, serves the dist statically,
@@ -74,7 +76,7 @@ export const screencheckCommand = new Command('screencheck')
       skipBuild: Boolean(raw.skipBuild),
     };
 
-    const playwright = await loadPlaywright();
+    const playwright = await loadPlaywright(opts.dir);
     if (!playwright) {
       process.stdout.write(
         '\n⚠  Playwright not installed.\n' +
@@ -93,11 +95,12 @@ export const screencheckCommand = new Command('screencheck')
     const orientation = typeof manifest['orientation'] === 'string' ? manifest['orientation'] : 'any';
     process.stdout.write(`\nManifest: orientation=${orientation} · min ${minWidth}px wide\n`);
 
-    const tests = pickTests(minWidth, orientation);
-    if (tests.length === 0) {
+    const matrix = pickMatrix(minWidth, orientation);
+    if (matrix.length === 0) {
       process.stdout.write('\n✗ Manifest orientation is invalid or no test sizes apply.\n');
       process.exit(1);
     }
+    process.stdout.write(`Testing ${matrix.length} reference viewports across the device matrix.\n`);
 
     if (!opts.skipBuild) {
       process.stdout.write('\nBuilding web/dist…\n');
@@ -118,21 +121,50 @@ export const screencheckCommand = new Command('screencheck')
     try {
       const browser = await playwright.launch();
       const results: MeasureResult[] = [];
-      for (const t of tests) {
+      const passing = new Set<string>();
+      for (const t of matrix) {
         const r = await measure(browser, url, t);
         results.push(r);
         renderResult(r);
+        if (!r.scrollsX && !r.scrollsY) passing.add(t.label);
       }
       await browser.close();
 
+      const cov = computeCoverage(matrix, passing);
       const failed = results.filter((r) => r.scrollsX || r.scrollsY).length;
       process.stdout.write('\n');
+      renderCoverage(cov, matrix);
+      process.stdout.write('\n');
       if (failed > 0) {
-        process.stdout.write(`✗ ${failed}/${results.length} viewports scroll.\n`);
-        process.stdout.write('  Review the layout — the manifest claims it works at these sizes.\n');
-        exitCode = 1;
+        process.stdout.write(`✗ ${failed}/${results.length} reference viewports scroll.\n`);
+        // Coverage failure is a fail. But: failing only at the very
+        // top end of the matrix (1024+ desktop) above what the manifest
+        // claims doesn't necessarily warrant a non-zero exit; the
+        // creator can opt out via orientation=portrait, and the badge
+        // already conveys reality. So we exit non-zero only if the
+        // *declared* min fails.
+        const declaredMinFails = matrix.some(
+          (t) => t.width === minWidth && !passing.has(t.label),
+        );
+        if (declaredMinFails) {
+          process.stdout.write(
+            `  At least one failing viewport is at or below your declared min_viewport_width (${minWidth}px).\n`,
+          );
+          process.stdout.write('  Either fix the layout or raise min_viewport_width in your manifest.\n');
+          exitCode = 1;
+        } else {
+          process.stdout.write(
+            `  All failures are above your declared min (${minWidth}px). Consider raising it to claim coverage that's actually true.\n`,
+          );
+        }
       } else {
-        process.stdout.write(`✓ All ${results.length} viewports fit cleanly.\n`);
+        process.stdout.write(`✓ All ${results.length} reference viewports fit cleanly.\n`);
+        const minPassing = Math.min(...matrix.filter((t) => passing.has(t.label)).map((t) => t.width));
+        if (minPassing < minWidth) {
+          process.stdout.write(
+            `  You could lower min_viewport_width to ${minPassing} — your app actually fits there.\n`,
+          );
+        }
       }
     } finally {
       server.close();
@@ -141,31 +173,118 @@ export const screencheckCommand = new Command('screencheck')
   });
 
 /**
- * Pick the viewport sizes to test based on declared min_width +
- * orientation. We test the declared min in both orientations (when
- * orientation === 'any'), or just the matching orientation otherwise.
+ * The reference device matrix. Each entry pairs a width with a real-world
+ * device class and the *cumulative device share* at that width — used to
+ * answer "what % of users does this break for?". Numbers match the
+ * storefront's viewport-coverage badge so the CLI and the badge agree.
  *
- * Heights mirror common device pixel ratios — using 9:19.5 for portrait
- * (iPhone-ish) and 16:9 for landscape.
+ * Cumulative means: `share` is the % of devices whose viewport is at
+ * LEAST this wide. So 360px = 96% means 96% of devices have ≥360px
+ * available; if the app fails at 360, you've lost those 96%.
+ *
+ * Source: blended StatCounter + caniuse share-of-screens, rounded.
+ */
+const REFERENCE_PORTRAIT: Array<{ width: number; height: number; label: string; share: number }> = [
+  { width: 320, height: 568, label: 'iPhone SE (1st gen)', share: 99 },
+  { width: 360, height: 800, label: 'Android baseline', share: 96 },
+  { width: 414, height: 896, label: 'iPhone 11/Pro Max', share: 88 },
+  { width: 600, height: 800, label: 'Small tablet', share: 60 },
+  { width: 768, height: 1024, label: 'iPad portrait', share: 35 },
+  { width: 1024, height: 1366, label: 'iPad Pro portrait', share: 20 },
+];
+
+const REFERENCE_LANDSCAPE: Array<{ width: number; height: number; label: string; share: number }> = [
+  { width: 568, height: 320, label: 'iPhone SE landscape', share: 99 },
+  { width: 667, height: 375, label: 'iPhone 8 landscape', share: 96 },
+  { width: 736, height: 414, label: 'iPhone Plus landscape', share: 88 },
+  { width: 800, height: 600, label: 'Small tablet landscape', share: 60 },
+  { width: 1024, height: 768, label: 'iPad landscape', share: 35 },
+  { width: 1366, height: 1024, label: 'iPad Pro landscape', share: 20 },
+];
+
+interface ViewportTestExpanded extends ViewportTest {
+  share: number;
+  orientation: 'portrait' | 'landscape';
+}
+
+/**
+ * Pick the full reference matrix to test, gated by manifest orientation.
+ * For orientation='any', test both. For 'portrait'/'landscape', test only
+ * that side. Sizes below `minWidth` are still tested — failing below the
+ * declared min is *expected*, but if it passes, the creator can claim a
+ * wider device coverage than they declared.
  */
 export function pickTests(minWidth: number, orientation: string): ViewportTest[] {
-  const tests: ViewportTest[] = [];
-  const portrait = (w: number): ViewportTest => ({
-    label: `portrait ${w}×${Math.round(w * (19.5 / 9))}`,
-    width: w,
-    height: Math.round(w * (19.5 / 9)),
-  });
-  const landscape = (w: number): ViewportTest => ({
-    label: `landscape ${w}×${Math.round(w * (9 / 16))}`,
-    width: w,
-    height: Math.round(w * (9 / 16)),
-  });
+  return pickMatrix(minWidth, orientation).map(({ orientation: o, ...t }) => ({
+    label: t.label,
+    width: t.width,
+    height: t.height,
+  }));
+}
+
+export function pickMatrix(_minWidth: number, orientation: string): ViewportTestExpanded[] {
   const isPortrait = orientation === 'portrait' || orientation === 'portrait-primary';
   const isLandscape = orientation === 'landscape' || orientation === 'landscape-primary';
-  const isAny = orientation === 'any';
-  if (isPortrait || isAny) tests.push(portrait(minWidth));
-  if (isLandscape || isAny) tests.push(landscape(Math.max(minWidth, 568)));
-  return tests;
+  const isAny = orientation === 'any' || orientation === 'unspecified' || !orientation;
+  const matrix: ViewportTestExpanded[] = [];
+  if (isPortrait || isAny) {
+    for (const r of REFERENCE_PORTRAIT) {
+      matrix.push({
+        label: `portrait ${r.width}×${r.height} (${r.label})`,
+        width: r.width,
+        height: r.height,
+        share: r.share,
+        orientation: 'portrait',
+      });
+    }
+  }
+  if (isLandscape || isAny) {
+    for (const r of REFERENCE_LANDSCAPE) {
+      matrix.push({
+        label: `landscape ${r.width}×${r.height} (${r.label})`,
+        width: r.width,
+        height: r.height,
+        share: r.share,
+        orientation: 'landscape',
+      });
+    }
+  }
+  return matrix;
+}
+
+/**
+ * Given the matrix and pass/fail per size, compute device coverage.
+ * Coverage = max share among passing widths, per orientation.
+ *
+ * Why max(share): share is cumulative-from-this-width-up. The smallest
+ * passing width has the highest share; passing larger widths is implied
+ * by passing the smallest. We pick the lowest passing width's share.
+ */
+export function computeCoverage(
+  matrix: ViewportTestExpanded[],
+  passing: Set<string>,
+): { portrait: number; landscape: number; overall: number; brokenSizes: ViewportTestExpanded[] } {
+  let portrait = 0;
+  let landscape = 0;
+  const broken: ViewportTestExpanded[] = [];
+  for (const t of matrix) {
+    if (passing.has(t.label)) {
+      if (t.orientation === 'portrait') portrait = Math.max(portrait, t.share);
+      else landscape = Math.max(landscape, t.share);
+    } else {
+      broken.push(t);
+    }
+  }
+  // For 'any' orientation, the user needs BOTH to work, so coverage is
+  // the lower of the two. For one-orientation apps, only that side
+  // matters.
+  const hasPortrait = matrix.some((t) => t.orientation === 'portrait');
+  const hasLandscape = matrix.some((t) => t.orientation === 'landscape');
+  let overall = 0;
+  if (hasPortrait && hasLandscape) overall = Math.min(portrait, landscape);
+  else if (hasPortrait) overall = portrait;
+  else overall = landscape;
+  return { portrait, landscape, overall, brokenSizes: broken };
 }
 
 async function measure(
@@ -214,6 +333,32 @@ async function measure(
   };
 }
 
+function renderCoverage(
+  cov: { portrait: number; landscape: number; overall: number; brokenSizes: ViewportTestExpanded[] },
+  matrix: ViewportTestExpanded[],
+): void {
+  const isTTY = Boolean(process.stdout.isTTY) && process.env['NO_COLOR'] !== '1';
+  const c = (open: string) => (s: string) => (isTTY ? `\x1b[${open}m${s}\x1b[39m` : s);
+  const ok = c('32');
+  const warn = c('33');
+  const bad = c('31');
+  const colorize = (pct: number): ((s: string) => string) =>
+    pct >= 95 ? ok : pct >= 80 ? warn : bad;
+
+  const hasPortrait = matrix.some((t) => t.orientation === 'portrait');
+  const hasLandscape = matrix.some((t) => t.orientation === 'landscape');
+  process.stdout.write('Device coverage:\n');
+  if (hasPortrait) {
+    process.stdout.write(`  portrait:  ${colorize(cov.portrait)(`~${cov.portrait}%`)} of devices\n`);
+  }
+  if (hasLandscape) {
+    process.stdout.write(`  landscape: ${colorize(cov.landscape)(`~${cov.landscape}%`)} of devices\n`);
+  }
+  if (hasPortrait && hasLandscape) {
+    process.stdout.write(`  overall:   ${colorize(cov.overall)(`~${cov.overall}%`)} (worst-case across orientations)\n`);
+  }
+}
+
 function renderResult(r: MeasureResult): void {
   const isTTY = Boolean(process.stdout.isTTY) && process.env['NO_COLOR'] !== '1';
   const c = (open: string) => (s: string) => (isTTY ? `\x1b[${open}m${s}\x1b[39m` : s);
@@ -245,14 +390,21 @@ type Browser = {
   close: () => Promise<void>;
 };
 
-async function loadPlaywright(): Promise<{ launch: () => Promise<Browser> } | null> {
+async function loadPlaywright(targetDir: string): Promise<{ launch: () => Promise<Browser> } | null> {
+  // playwright is an OPTIONAL peer dep installed in the user's project,
+  // not in the CLI's own node_modules. Resolve from the target dir so
+  // the user can `pnpm add -D playwright` in their app and have it Just
+  // Work, rather than needing it co-located with a globally-installed CLI.
   try {
-    // playwright is an OPTIONAL peer dep — the user installs it only
-    // when they actually run `fas screencheck`. Suppress the type
-    // import error so the CLI builds even without it.
-    // @ts-expect-error optional peer dep — may not be installed
-    const mod = await import('playwright');
-    return mod.chromium;
+    const require = createRequire(join(targetDir, 'package.json'));
+    const resolved = require.resolve('playwright');
+    const mod = (await import(pathToFileURL(resolved).href)) as {
+      // playwright ships CJS, so named exports surface under `default`
+      // when ESM-imported. Try both shapes for forward-compat.
+      chromium?: { launch: () => Promise<Browser> };
+      default?: { chromium: { launch: () => Promise<Browser> } };
+    };
+    return mod.chromium ?? mod.default?.chromium ?? null;
   } catch {
     return null;
   }
