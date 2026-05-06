@@ -12,6 +12,11 @@ on:
     branches: [main]
     paths:
       - 'packages/backend/**'
+      # The backend imports @freeappstore/compliance via workspace, so
+      # compliance source changes alter the deployed Worker even when
+      # backend itself doesn't change. Skipping these previously left
+      # the deployed audit silently behind the source-of-truth fixes.
+      - 'packages/compliance/**'
       - '.github/workflows/deploy-backend.yml'
   workflow_dispatch:
 
