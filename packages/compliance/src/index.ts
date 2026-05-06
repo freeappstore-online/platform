@@ -3,6 +3,7 @@ import { checkNoTracking } from './checks/no-tracking.js';
 import { checkBrandFonts } from './checks/brand-fonts.js';
 import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
 import { checkNoScroll } from './checks/no-scroll.js';
+import { checkViewportSupport } from './checks/viewport-support.js';
 import { checkManifest } from './checks/manifest.js';
 import { checkBundleSize } from './checks/bundle-size.js';
 import type { CheckResult } from './types.js';
@@ -14,6 +15,7 @@ export {
   checkBrandFonts,
   checkNoBrandOverrides,
   checkNoScroll,
+  checkViewportSupport,
   checkManifest,
   checkBundleSize,
 };
@@ -42,6 +44,7 @@ export async function runChecks(repoDir: string): Promise<CheckResult[]> {
     checkBrandFonts(repoDir),
     checkNoBrandOverrides(repoDir),
     checkNoScroll(repoDir),
+    checkViewportSupport(repoDir),
     checkManifest(repoDir),
     checkBundleSize(repoDir),
   ]);
