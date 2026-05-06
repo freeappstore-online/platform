@@ -1,0 +1,42 @@
+name: Deprecate npm versions
+
+# One-shot maintenance workflow. Trigger from the Actions UI when you
+# need to mark a published version as broken/deprecated.
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package name (e.g. @freeappstore/cli)
+        required: true
+        type: choice
+        options:
+          - '@freeappstore/cli'
+          - '@freeappstore/sdk'
+          - '@freeappstore/compliance'
+      version:
+        description: Version to deprecate (e.g. 0.1.5)
+        required: true
+        type: string
+      message:
+        description: Deprecation message shown to users on install
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deprecate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Deprecate
+        run: |
+          npm deprecate "${{ inputs.package }}@${{ inputs.version }}" \
+            "${{ inputs.message }}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
