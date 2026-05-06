@@ -37,6 +37,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Build first so cli can resolve @freeappstore/compliance types via
+      # its dist/index.d.ts. Same fix as ci.yml + publish.yml.
+      - name: Build
+        run: pnpm -r --filter './packages/*' build
+
       - name: Typecheck
         run: pnpm -r typecheck
 
