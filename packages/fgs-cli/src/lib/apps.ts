@@ -1,15 +1,22 @@
 /**
- * Canonical mapping for apps published on freeappstore.online.
+ * Canonical mapping for games published on freegamestore.online.
  *
- * Most apps follow the convention `app_id` → CF Pages project `free<id>app`,
- * which is what we infer when an entry isn't here. But several legacy
- * projects use ad-hoc names (music, puzzle, freeappstore itself) and CF
- * Pages project names cannot be renamed after creation, so we have to keep
- * a hand-maintained override list.
+ * Most games follow the convention `app_id` → CF Pages project `free<id>app`,
+ * which is what we infer when an entry isn't here. The CF Pages project name
+ * is NOT renameable after creation, so non-conventional projects need an
+ * override entry below.
  *
- * This is the registry the audit recommended (P2 in the original review),
- * scoped to just the dev tooling for now. Long-term it should live in the
- * storefront repo and be fetched at runtime so it never goes stale.
+ * Same naming convention as fas-cli's APPS map (intentional — both stores
+ * deploy through the same Cloudflare account, so project namespaces overlap
+ * and most projects follow `free<id>app`). The DIFFERENCE is the subdomain
+ * — games live under `*.freegamestore.online`. Previously this file was a
+ * verbatim copy of fas-cli/src/lib/apps.ts and silently routed `fgs logs` /
+ * `fgs publish` / `fgs list` at the wrong store.
+ *
+ * Long-term this should fetch the storefront's registry.json at runtime so
+ * adding a new non-conventional game doesn't require a CLI bump. For now,
+ * keep the override list small — convention-following games don't need
+ * entries.
  */
 export interface AppRecord {
   cfProject: string;
@@ -17,33 +24,24 @@ export interface AppRecord {
 }
 
 export const APPS: Record<string, AppRecord> = {
-  // Convention-following entries (cfProject === `free${id}app`) are listed
-  // for documentation / completeness; the cfProject() helper would derive
-  // them anyway. Add new apps here when they don't follow the convention.
-  chess: { cfProject: 'freechessapp', subdomain: 'chess.freeappstore.online' },
-  language: { cfProject: 'freelanguageapp', subdomain: 'language.freeappstore.online' },
-  math: { cfProject: 'freemathapp', subdomain: 'math.freeappstore.online' },
-  quiz: { cfProject: 'freequizapp', subdomain: 'quiz.freeappstore.online' },
-  books: { cfProject: 'freebooksapp', subdomain: 'books.freeappstore.online' },
-
-  // Legacy / non-conventional names — cannot be renamed.
-  music: { cfProject: 'freemusic', subdomain: 'music.freeappstore.online' },
-  puzzle: { cfProject: 'freepuzzle', subdomain: 'puzzle.freeappstore.online' },
-  freeappstore: { cfProject: 'freeappstore', subdomain: 'freeappstore.online' },
+  // Non-conventional CF project names. Add an entry only when the project
+  // can't be renamed and doesn't follow `free<id>app`.
+  puzzle: { cfProject: 'freepuzzle', subdomain: 'puzzle.freegamestore.online' },
 };
 
 /**
- * Returns the CF Pages project name for an app id. Prefers the registry,
- * falls back to the `free<id>app` convention.
+ * Returns the CF Pages project name for a game id. Prefers the registry,
+ * falls back to the `free<id>app` convention used by every game except
+ * the legacy entries above.
  */
 export function cfProjectFor(appId: string): string {
   return APPS[appId]?.cfProject ?? `free${appId}app`;
 }
 
 /**
- * Returns the public URL for an app id.
+ * Returns the public URL for a game id.
  */
 export function urlFor(appId: string): string {
-  const subdomain = APPS[appId]?.subdomain ?? `${appId}.freeappstore.online`;
+  const subdomain = APPS[appId]?.subdomain ?? `${appId}.freegamestore.online`;
   return `https://${subdomain}`;
 }

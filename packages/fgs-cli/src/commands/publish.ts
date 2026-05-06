@@ -9,6 +9,13 @@ import { assertValidAppId } from '../lib/app-id.js';
 import { readConfig } from '../lib/config.js';
 import { renderCheckResults } from './check.js';
 
+// TEMPORARY: games are routed through the FreeAppStore submissions repo
+// because no `freegamestore-online/submissions` repo exists yet. This works
+// (issues file fine), but the categories below are app-flavored and a few
+// don't fit games well (Finance, News & Weather, Productivity). When the
+// games submissions repo + game-submission.yml template ship, swap this URL
+// and the CATEGORIES list to game-specific ones (Arcade / Puzzle / Strategy
+// / Action / Word / Card / Casual / Educational / Other).
 const SUBMISSION_URL = 'https://github.com/freeappstore-online/submissions/issues/new';
 
 // Must match the dropdown options in
