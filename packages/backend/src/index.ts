@@ -7,6 +7,7 @@ import { roomRoutes } from './routes/rooms.js';
 import { uptimeRoutes } from './routes/uptime.js';
 import { exchangeRoutes } from './routes/exchange.js';
 import { publishRoutes } from './routes/publish.js';
+import { appsRoutes } from './routes/apps.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { isAllowedOrigin } from './lib/origins.js';
@@ -40,6 +41,7 @@ v1.route('/', kvRoutes);
 v1.route('/', roomRoutes);
 v1.route('/', uptimeRoutes);
 v1.route('/', publishRoutes);
+v1.route('/', appsRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;

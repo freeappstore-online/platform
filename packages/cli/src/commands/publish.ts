@@ -3,9 +3,11 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import prompts from 'prompts';
+import { runChecks } from '@freeappstore/compliance';
 import { openUrl } from '../lib/open.js';
 import { assertValidAppId } from '../lib/app-id.js';
 import { readConfig } from '../lib/config.js';
+import { renderCheckResults } from './check.js';
 
 const SUBMISSION_URL = 'https://github.com/freeappstore-online/submissions/issues/new';
 
@@ -46,7 +48,8 @@ export const publishCommand = new Command('publish')
   )
   .option('--no-open', 'Print the fallback Issue URL instead of opening a browser.')
   .option('--issue', 'Skip auto-provision; always open the GitHub Issue form.')
-  .action(async (opts: { open: boolean; issue?: boolean }) => {
+  .option('--skip-checks', 'Skip compliance checks (not recommended — your submission may be rejected).')
+  .action(async (opts: { open: boolean; issue?: boolean; skipChecks?: boolean }) => {
     // Check auth BEFORE prompting — there's no point asking the user for
     // 5 fields just to bail at the end with "not signed in". --issue
     // skips this since the GitHub Issue form path doesn't need a session.
@@ -59,6 +62,23 @@ export const publishCommand = new Command('publish')
         );
         process.exit(1);
       }
+    }
+
+    // Run compliance checks BEFORE prompts so a doomed submission fails
+    // fast. Hard fails block; warnings allow through. Bypass with
+    // --skip-checks if you really need to (admin review will still
+    // catch issues).
+    if (!opts.skipChecks) {
+      process.stdout.write('Running compliance checks...\n\n');
+      const results = await runChecks(process.cwd());
+      const { failed } = renderCheckResults(results);
+      if (failed > 0) {
+        process.stdout.write(
+          '\n⚠  Fix the failures above before publishing, or pass --skip-checks to bypass.\n',
+        );
+        process.exit(1);
+      }
+      process.stdout.write('\n');
     }
 
     const repo = await detectGitRepo();

@@ -122,6 +122,32 @@ publishRoutes.post('/publish', async (c) => {
     );
   }
 
+  // Record this app as owned by the user so `fas list` / GET /v1/apps/mine
+  // can return it. INSERT OR IGNORE because retries of a successful publish
+  // shouldn't fail — the admin worker is idempotent on the registry side.
+  try {
+    await c.env.DB.prepare(
+      `INSERT OR IGNORE INTO apps
+       (id, owner_login, created_at, category, type, oneliner, repo, demo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        body.name,
+        user.login,
+        Date.now(),
+        body.category,
+        body.type,
+        body.oneliner,
+        body.repo,
+        body.demo,
+      )
+      .run();
+  } catch (err) {
+    // Ownership-record failure should not undo a successful provision —
+    // the storefront registry is the canonical record. Log + continue.
+    console.error('failed to record app ownership', err);
+  }
+
   return c.json({
     appId: body.name,
     appUrl: `https://${body.name}.freeappstore.online`,

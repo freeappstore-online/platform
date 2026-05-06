@@ -5,18 +5,32 @@ import type { Env } from '../types.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
+interface InsertCapture {
+  sql: string;
+  binds: unknown[];
+}
+
 function userLookupDB(
   user: { id: string; github_login: string; avatar_url: string | null } | null,
+  inserts?: InsertCapture[],
 ): D1Database {
   const prepare = (sql: string): D1PreparedStatement => {
     const trimmed = sql.replace(/\s+/g, ' ').trim();
+    let bound: unknown[] = [];
     const stmt: Partial<D1PreparedStatement> = {
-      bind: () => stmt as D1PreparedStatement,
+      bind: (...args: unknown[]) => {
+        bound = args;
+        return stmt as D1PreparedStatement;
+      },
       first: async <T>() => {
         if (trimmed.startsWith('SELECT id, github_login')) {
           return (user ?? null) as T | null;
         }
         return null;
+      },
+      run: async <T>() => {
+        inserts?.push({ sql: trimmed, binds: bound });
+        return { meta: { changes: 1 } } as unknown as D1Result<T>;
       },
     };
     return stmt as D1PreparedStatement;
@@ -157,6 +171,41 @@ describe('POST /v1/publish', () => {
     expect(respBody.appId).toBe('my-app');
     expect(respBody.appUrl).toBe('https://my-app.freeappstore.online');
     expect(respBody.repoUrl).toBe('https://github.com/freeappstore-online/my-app');
+  });
+
+  it('records ownership in the apps table after successful provision', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const inserts: InsertCapture[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(validBody),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, inserts), {
+        ADMIN: admin,
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    const appInsert = inserts.find((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'));
+    expect(appInsert).toBeDefined();
+    // Order matches the SQL: id, owner_login, created_at, category, type, oneliner, repo, demo
+    expect(appInsert!.binds[0]).toBe('my-app');
+    expect(appInsert!.binds[1]).toBe('me');
+    expect(typeof appInsert!.binds[2]).toBe('number');
+    expect(appInsert!.binds[3]).toBe('Productivity');
+    expect(appInsert!.binds[4]).toBe('standalone');
+    expect(appInsert!.binds[5]).toBe('A simple test');
+    expect(appInsert!.binds[6]).toBe('https://github.com/me/my-app');
+    expect(appInsert!.binds[7]).toBeNull();
   });
 
   it('returns 502 when admin returns 5xx', async () => {
