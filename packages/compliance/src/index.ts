@@ -16,6 +16,18 @@ export {
   checkBundleSize,
 };
 
+// Live-URL audit (used by the compliance audit Worker; runs in
+// browser/Workers env, no filesystem). Separate export path so callers
+// don't accidentally pull node:fs in via the file-walking checks.
+export {
+  auditLive,
+  checkNoTrackingLive,
+  checkBrandFontsLive,
+  checkManifestLive,
+  checkBundleSizeLive,
+} from './live/index.js';
+export type { LiveAuditInput, LiveAuditReport } from './live/index.js';
+
 /**
  * Runs every compliance check against `repoDir` (the root of an app, the
  * directory containing package.json + web/). Returns results in a stable

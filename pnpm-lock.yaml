@@ -30,6 +30,9 @@ importers:
 
   packages/backend:
     dependencies:
+      '@freeappstore/compliance':
+        specifier: workspace:*
+        version: link:../compliance
       hono:
         specifier: ^4.6.0
         version: 4.12.16

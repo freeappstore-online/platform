@@ -36,8 +36,9 @@ new_sqlite_classes = ["Room"]
 # `event.cron` value, so each schedule below corresponds to one task:
 #   */15 * * * *  uptime checks against every published app
 #   0 4 * * *     daily D1 → R2 backup at 04:00 UTC
+#   0 6 * * 0     weekly compliance audit — Sunday 06:00 UTC
 [triggers]
-crons = ["*/15 * * * *", "0 4 * * *"]
+crons = ["*/15 * * * *", "0 4 * * *", "0 6 * * 0"]
 
 # R2 bucket for daily D1 backups. The 0 4 * * * cron writes a JSON
 # dump of D1 here. See src/lib/backup.ts.

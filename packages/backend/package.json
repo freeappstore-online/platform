@@ -15,6 +15,7 @@
     "db:migrate:prod": "wrangler d1 migrations apply fas --remote"
   },
   "dependencies": {
+    "@freeappstore/compliance": "workspace:*",
     "hono": "^4.6.0"
   },
   "devDependencies": {

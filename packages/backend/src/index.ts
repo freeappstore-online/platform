@@ -8,8 +8,10 @@ import { uptimeRoutes } from './routes/uptime.js';
 import { exchangeRoutes } from './routes/exchange.js';
 import { publishRoutes } from './routes/publish.js';
 import { appsRoutes } from './routes/apps.js';
+import { auditRoutes } from './routes/audit.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
 import { backupD1ToR2 } from './lib/backup.js';
+import { runAudit } from './lib/audit.js';
 import { isAllowedOrigin } from './lib/origins.js';
 
 export { Room } from './do/room.js';
@@ -42,6 +44,7 @@ v1.route('/', roomRoutes);
 v1.route('/', uptimeRoutes);
 v1.route('/', publishRoutes);
 v1.route('/', appsRoutes);
+v1.route('/', auditRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;
@@ -53,6 +56,11 @@ export default {
       await runUptimeChecks(env);
     } else if (event.cron === '0 4 * * *') {
       await runDailyBackup(env);
+    } else if (event.cron === '0 6 * * 0') {
+      // Weekly compliance audit — Sunday 06:00 UTC. Logs the totals
+      // so a missed audit is obvious in `wrangler tail`.
+      const r = await runAudit(env.DB);
+      console.log(`audit: scanned=${r.scanned} failures=${r.failed}`);
     }
   },
 };
