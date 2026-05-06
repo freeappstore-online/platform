@@ -205,9 +205,14 @@ describe('auditLive (integration)', () => {
     });
     const r = await auditLive({ appId: 'tip', liveUrl: 'https://tip.example' });
     expect(r.reachable).toBe(true);
-    expect(r.results).toHaveLength(4);
-    const statuses = r.results.map((c) => c.status);
-    expect(statuses).toEqual(['pass', 'pass', 'pass', 'pass']);
+    // 5 checks: Reachable + tracking + fonts + manifest + bundle.
+    // Reachable is recorded on success too so stale fail rows from
+    // earlier runs get overwritten on the next clean pass.
+    expect(r.results).toHaveLength(5);
+    const reachable = r.results.find((c) => c.name === 'Reachable');
+    expect(reachable?.status).toBe('pass');
+    const otherStatuses = r.results.filter((c) => c.name !== 'Reachable').map((c) => c.status);
+    expect(otherStatuses).toEqual(['pass', 'pass', 'pass', 'pass']);
   });
 
   it('downgrades subrequest-cap errors from fail → warn (not the app\'s fault)', async () => {

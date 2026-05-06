@@ -93,6 +93,15 @@ export async function auditLive(input: LiveAuditInput): Promise<LiveAuditReport>
     }
     html = await res.text();
     report.reachable = true;
+    // Always record a Reachable row on success — otherwise stale
+    // "Reachable: fail" rows from previous failed runs (e.g.
+    // subrequest-cap noise) never get overwritten, because the
+    // upsert is keyed on (app_id, check_name).
+    report.results.push({
+      name: 'Reachable',
+      status: 'pass',
+      detail: `${input.liveUrl} → HTTP ${res.status}`,
+    });
   } catch (err) {
     // Subrequest cap means we couldn't even fetch — that's a "warn"
     // (re-check needed), not a "fail" (app broken). Distinguishing
