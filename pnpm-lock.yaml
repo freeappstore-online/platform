@@ -124,6 +124,18 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/games-sdk:
+    devDependencies:
+      '@types/react':
+        specifier: ^19.2.14
+        version: 19.2.14
+      react:
+        specifier: ^19.2.5
+        version: 19.2.5
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/sdk:
     devDependencies:
       typescript:

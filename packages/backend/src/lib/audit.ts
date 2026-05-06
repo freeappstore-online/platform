@@ -1,12 +1,22 @@
 /**
- * Compliance audit job: re-scans every published app + game post-publish
+ * Compliance audit job: re-scans published apps + games post-publish
  * for compliance drift. Triggered by the Sunday-morning cron in
  * src/index.ts; results land in the `audit_results` D1 table for the
  * /v1/audit endpoint to expose.
  *
  * Why this exists: `fas check` only runs at publish-time. Apps drift
  * after — someone adds a tracker, removes the brand fonts, etc. This
- * weekly sweep catches that within ~7 days.
+ * weekly sweep catches that.
+ *
+ * Worker subrequest cap: each `fetch()` counts as one subrequest, and
+ * Workers cap outgoing subrequests per invocation (50 on the free
+ * plan, 1000 on paid). One audit per app does up to 3 fetches (HTML +
+ * manifest + bundle) plus 2 registry fetches. With ~60 apps the total
+ * is ~180 — over the free-plan limit. So we batch: each call audits
+ * the BATCH_SIZE stalest entries, leaving stale-but-audited rows to
+ * the next call. The Sunday cron runs once; for first-deploy
+ * back-fill, hit POST /v1/audit/run multiple times until coverage
+ * stabilises.
  */
 
 import { auditLive, type LiveAuditReport } from '@freeappstore/compliance';
@@ -21,6 +31,11 @@ const REGISTRY_URLS = {
   games: 'https://raw.githubusercontent.com/freegamestore-online/freegamestore/main/registry.json',
 } as const;
 
+// 14 apps × 3 fetches = 42 + 2 registry fetches = 44, comfortably
+// under the 50-subrequest free-tier cap. Drop to 12 if you want a
+// safety margin for redirects.
+const BATCH_SIZE = 14;
+
 async function fetchRegistry(store: 'apps' | 'games'): Promise<RegistryItem[]> {
   const res = await fetch(REGISTRY_URLS[store]);
   if (!res.ok) return [];
@@ -28,18 +43,40 @@ async function fetchRegistry(store: 'apps' | 'games'): Promise<RegistryItem[]> {
   return store === 'apps' ? body.apps ?? [] : body.games ?? [];
 }
 
+/**
+ * Pull the most-recent checked_at per app from D1 so we can sort
+ * stalest-first. Apps never audited yet appear with checkedAt = 0
+ * and sort to the front.
+ */
+async function fetchLastCheckedMap(db: D1Database): Promise<Map<string, number>> {
+  const result = await db
+    .prepare('SELECT app_id, MAX(checked_at) AS max_at FROM audit_results GROUP BY app_id')
+    .all<{ app_id: string; max_at: number }>();
+  const map = new Map<string, number>();
+  for (const row of result.results ?? []) map.set(row.app_id, row.max_at ?? 0);
+  return map;
+}
+
 export async function runAudit(db: D1Database): Promise<{ scanned: number; failed: number }> {
-  const [apps, games] = await Promise.all([fetchRegistry('apps'), fetchRegistry('games')]);
-  const items: Array<{ store: 'apps' | 'games'; item: RegistryItem }> = [
+  const [apps, games, lastChecked] = await Promise.all([
+    fetchRegistry('apps'),
+    fetchRegistry('games'),
+    fetchLastCheckedMap(db),
+  ]);
+  const all: Array<{ store: 'apps' | 'games'; item: RegistryItem }> = [
     ...apps.map((item) => ({ store: 'apps' as const, item })),
     ...games.map((item) => ({ store: 'games' as const, item })),
   ];
 
-  // Audit in parallel — each app is an independent fetch chain that
-  // respects its own 8s timeout in auditLive. With ~50 apps total we
-  // finish well under the 30s Workers cron CPU budget.
+  // Stalest first: never-audited (no row) → 0; audited long ago → small;
+  // recently audited → large. Slice to BATCH_SIZE.
+  all.sort((a, b) => (lastChecked.get(a.item.id) ?? 0) - (lastChecked.get(b.item.id) ?? 0));
+  const batch = all.slice(0, BATCH_SIZE);
+
+  // Audit in parallel — each app is an independent fetch chain with
+  // its own 8s timeout in auditLive.
   const reports = await Promise.all(
-    items.map(({ store, item }) =>
+    batch.map(({ store, item }) =>
       auditLive({ appId: item.id, liveUrl: item.appUrl }).then((r) => ({ store, report: r })),
     ),
   );

@@ -14,14 +14,16 @@ function fakeDB(captures: Captured[]): D1Database {
       const stmt: Partial<D1PreparedStatement> = {
         bind: (...args: unknown[]) => {
           bound = args;
-          // Return a NEW stmt object each bind so the batch capture
-          // sees distinct binds. Mirrors D1's API.
           return { ...stmt, bound: [...bound] } as unknown as D1PreparedStatement;
         },
         run: async <T>() => ({ meta: { changes: 1 } } as unknown as D1Result<T>),
+        // fetchLastCheckedMap calls .all() to read MAX(checked_at) per app.
+        // Tests don't seed any rows; returning empty matches "no prior
+        // audits" which is the typical scaffold path.
+        all: async <T>() =>
+          ({ results: [] as unknown as T[], success: true, meta: {} }) as unknown as D1Result<T>,
       };
       return Object.assign(stmt, {
-        // Capture-on-bind so the test sees what was bound at batch-build time.
         _captureSql: trimmed,
       }) as unknown as D1PreparedStatement;
     },
