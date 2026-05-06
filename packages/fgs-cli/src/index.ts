@@ -11,6 +11,7 @@ import { logsCommand } from './commands/logs.js';
 import { whoamiCommand } from './commands/whoami.js';
 import { doctorCommand } from './commands/doctor.js';
 import { checkCommand } from './commands/check.js';
+import { screencheckCommand } from './commands/screencheck.js';
 import { listCommand } from './commands/list.js';
 
 // Read version from the package's own package.json so `fgs --version` always
@@ -35,6 +36,7 @@ program.addCommand(publishCommand);
 program.addCommand(logsCommand);
 program.addCommand(doctorCommand);
 program.addCommand(checkCommand);
+program.addCommand(screencheckCommand);
 program.addCommand(listCommand);
 
 async function main(): Promise<void> {
