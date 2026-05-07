@@ -61,12 +61,21 @@ jobs:
         # Read the actual npm name from package.json instead of assuming
         # @freeappstore/<dir>. Some packages (like fgs-cli) live under
         # different scopes (@freegamestore/cli) so dir name ≠ npm name.
+        #
+        # `npm view` returns "" for packages that have never been
+        # published (404). We treat that as "skip" — first publish must
+        # be manual to confirm the npm scope is reserved correctly.
+        # Previously this fell back to "0.0.0", which made every push
+        # try to publish unregistered packages and 404 on PUT.
         run: |
           PKG_NAME=$(node -p "require('./package.json').name")
           LOCAL_VER=$(node -p "require('./package.json').version")
-          NPM_VER=$(npm view "$PKG_NAME" version 2>/dev/null || echo "0.0.0")
-          echo "$PKG_NAME — local=$LOCAL_VER  npm=$NPM_VER"
-          if [ "$LOCAL_VER" = "$NPM_VER" ]; then
+          NPM_VER=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
+          echo "$PKG_NAME — local=$LOCAL_VER  npm=${NPM_VER:-<not published>}"
+          if [ -z "$NPM_VER" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Package not yet on npm — skipping (first publish must be manual)."
+          elif [ "$LOCAL_VER" = "$NPM_VER" ]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "Version unchanged — skipping publish."
           else
