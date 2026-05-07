@@ -62,25 +62,27 @@ jobs:
         # @freeappstore/<dir>. Some packages (like fgs-cli) live under
         # different scopes (@freegamestore/cli) so dir name ≠ npm name.
         #
-        # `npm view` returns "" for packages that have never been
-        # published (404). We treat that as "skip" — first publish must
-        # be manual to confirm the npm scope is reserved correctly.
-        # Previously this fell back to "0.0.0", which made every push
-        # try to publish unregistered packages and 404 on PUT.
+        # When a package isn't on npm yet (`npm view` 404s and we fall
+        # back to "0.0.0"), we still attempt to publish — first-publish
+        # is automated by design. If the publish 404s on PUT it almost
+        # always means the npm scope (e.g. @freegamestore) isn't an org
+        # on npmjs.com or NPM_TOKEN's account isn't a member of it.
+        # Fix once on npmjs.com → next push auto-publishes.
         run: |
           PKG_NAME=$(node -p "require('./package.json').name")
           LOCAL_VER=$(node -p "require('./package.json').version")
-          NPM_VER=$(npm view "$PKG_NAME" version 2>/dev/null || echo "")
-          echo "$PKG_NAME — local=$LOCAL_VER  npm=${NPM_VER:-<not published>}"
-          if [ -z "$NPM_VER" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Package not yet on npm — skipping (first publish must be manual)."
-          elif [ "$LOCAL_VER" = "$NPM_VER" ]; then
+          NPM_VER=$(npm view "$PKG_NAME" version 2>/dev/null || echo "0.0.0")
+          echo "$PKG_NAME — local=$LOCAL_VER  npm=$NPM_VER"
+          if [ "$LOCAL_VER" = "$NPM_VER" ]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"
             echo "Version unchanged — skipping publish."
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version bumped ($NPM_VER → $LOCAL_VER) — will publish."
+            if [ "$NPM_VER" = "0.0.0" ]; then
+              echo "First publish — package not yet on npm. If this fails with 404 PUT, the npm scope likely needs to be created on npmjs.com (npmjs.com/org/create) and NPM_TOKEN's account added as a member."
+            else
+              echo "Version bumped ($NPM_VER → $LOCAL_VER) — will publish."
+            fi
           fi
 
       - name: Publish to npm
