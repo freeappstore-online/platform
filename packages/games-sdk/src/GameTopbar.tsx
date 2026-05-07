@@ -61,9 +61,9 @@ export function GameTopbar({ title, score, stats, actions }: GameTopbarProps): R
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        gap: '1rem',
-        padding: '0.6rem 1rem',
-        height: '3.25rem',
+        gap: '0.75rem',
+        padding: '0.25rem 0.75rem',
+        height: '2rem',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', minWidth: 0 }}>
@@ -72,7 +72,7 @@ export function GameTopbar({ title, score, stats, actions }: GameTopbarProps): R
             style={{
               fontFamily: '"Fraunces", Georgia, serif',
               fontWeight: 700,
-              fontSize: '1.05rem',
+              fontSize: '0.8rem',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -83,7 +83,7 @@ export function GameTopbar({ title, score, stats, actions }: GameTopbarProps): R
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         {resolvedStats.map((s) => (
           <Stat key={s.label} stat={s} />
         ))}
@@ -102,21 +102,22 @@ function Stat({ stat }: { stat: GameTopbarStat }): React.JSX.Element {
         style={{
           fontFamily: '"Fraunces", Georgia, serif',
           fontWeight: 700,
-          fontSize: '1.15rem',
+          fontSize: '0.85rem',
           color: stat.accent === true ? 'var(--accent)' : 'var(--ink)',
           fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1,
         }}
       >
         {stat.value}
       </div>
       <div
         style={{
-          fontSize: '0.65rem',
+          fontSize: '0.5rem',
           fontWeight: 700,
           textTransform: 'uppercase',
-          letterSpacing: '0.08em',
+          letterSpacing: '0.06em',
           color: 'var(--muted)',
-          marginTop: '0.1rem',
+          lineHeight: 1,
         }}
       >
         {stat.label}
