@@ -19,3 +19,9 @@ export {
   type GameTopbarProps,
   type GameTopbarStat,
 } from './GameTopbar.js';
+export {
+  GameButton,
+  type GameButtonProps,
+  type GameButtonVariant,
+  type GameButtonSize,
+} from './GameButton.js';

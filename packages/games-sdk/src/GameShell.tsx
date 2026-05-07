@@ -38,6 +38,12 @@ export function GameShell({ topbar, children }: GameShellProps): React.JSX.Eleme
         // 100svh handles iOS URL-bar height changes correctly.
         height: '100svh',
         width: '100vw',
+        // Games are touch-first — prevent text selection, long-press menus,
+        // and the 300ms tap delay that makes games feel sluggish.
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        touchAction: 'manipulation',
       }}
     >
       {topbar !== undefined && (
