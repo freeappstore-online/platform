@@ -21,11 +21,16 @@ declare const process: { env: Record<string, string | undefined> };
  */
 
 /**
- * Production host. Override via FAS_FIXTURE_BASE for local dev or
- * a staging URL — useful before the fixture is actually deployed,
- * or to point at a `wrangler pages dev` server.
+ * Production URL. The fixture deploys path-based under the storefront
+ * (build.js in the freegamestore repo copies audit-fixture/ into
+ * dist/audit-fixture/). A subdomain deploy would also work — and
+ * snapshot()'s appId regex is biased toward subdomains — but path is
+ * simpler since CF Pages auto-deploys the storefront on every push.
+ *
+ * Override via FAS_FIXTURE_BASE for local dev (e.g. point at a
+ * Python http.server hosting audit-fixture/) or a staging URL.
  */
-const FIXTURE_BASE = (process.env.FAS_FIXTURE_BASE ?? 'https://auditor-fixture.freegamestore.online')
+const FIXTURE_BASE = (process.env.FAS_FIXTURE_BASE ?? 'https://freegamestore.online/audit-fixture')
   .replace(/\/+$/, '');
 /** Pinned to the version the fixture HTML imports. Bump together. */
 const REPORTER_ESM = 'https://esm.sh/@freeappstore/quality@0.1.0';
