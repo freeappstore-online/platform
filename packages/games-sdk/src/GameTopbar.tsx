@@ -14,7 +14,7 @@ export interface GameTopbarStat {
 }
 
 export interface GameTopbarProps {
-  /** The game's display name. Shows on the left in Fraunces. */
+  /** The game's display name. Shows on the left in Manrope. */
   title?: string;
 
   /**
@@ -70,9 +70,10 @@ export function GameTopbar({ title, score, stats, actions }: GameTopbarProps): R
         {title !== undefined && (
           <span
             style={{
-              fontFamily: '"Fraunces", Georgia, serif',
-              fontWeight: 700,
+              fontFamily: '"Manrope", system-ui, sans-serif',
+              fontWeight: 600,
               fontSize: '0.8rem',
+              letterSpacing: '-0.01em',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -100,8 +101,8 @@ function Stat({ stat }: { stat: GameTopbarStat }): React.JSX.Element {
     <div style={{ textAlign: 'right', lineHeight: 1.05 }}>
       <div
         style={{
-          fontFamily: '"Fraunces", Georgia, serif',
-          fontWeight: 700,
+          fontFamily: '"Manrope", system-ui, sans-serif',
+          fontWeight: 800,
           fontSize: '0.85rem',
           color: stat.accent === true ? 'var(--accent)' : 'var(--ink)',
           fontVariantNumeric: 'tabular-nums',
