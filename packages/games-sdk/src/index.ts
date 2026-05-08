@@ -32,3 +32,4 @@ export {
   type LeaderboardEntry,
 } from './useLeaderboard.js';
 export { useSound } from './SoundContext.js';
+export { useGameSounds } from './useGameSounds.js';
