@@ -75,7 +75,33 @@ export function GameTopbar({ title, score, stats, actions, rules }: GameTopbarPr
           height: '2rem',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', minWidth: 0 }}>
+          {/* Home — back to store listing */}
+          <a
+            href="https://freegamestore.online"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              minWidth: '2rem',
+              minHeight: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--muted, #999)',
+              WebkitTapHighlightColor: 'transparent',
+              textDecoration: 'none',
+            }}
+            aria-label="Browse all games"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 6l6-4 6 4v7a1 1 0 01-1 1H3a1 1 0 01-1-1V6z" />
+              <path d="M6 14V9h4v5" />
+            </svg>
+          </a>
           {rules !== undefined && (
             <button
               onClick={() => setShowRules(true)}
@@ -84,19 +110,18 @@ export function GameTopbar({ title, score, stats, actions, rules }: GameTopbarPr
                 border: 'none',
                 cursor: 'pointer',
                 padding: 0,
-                minWidth: '2.75rem',
-                minHeight: '2.75rem',
+                minWidth: '2rem',
+                minHeight: '2rem',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: 'var(--muted, #999)',
-                fontSize: '1rem',
                 lineHeight: 1,
                 WebkitTapHighlightColor: 'transparent',
               }}
               aria-label="Game rules"
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="8" cy="8" r="6.5" />
                 <path d="M8 11.5v0M8 5v4" />
               </svg>
