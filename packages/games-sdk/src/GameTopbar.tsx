@@ -1,6 +1,7 @@
 import type * as React from 'react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { useSound } from './SoundContext.js';
 
 export interface GameTopbarStat {
   /** Short uppercase label, e.g. "Score", "Lives", "Level". */
@@ -55,6 +56,7 @@ export interface GameTopbarProps {
  */
 export function GameTopbar({ title, score, stats, actions, rules }: GameTopbarProps): React.JSX.Element {
   const [showRules, setShowRules] = useState(false);
+  const sound = useSound();
 
   const resolvedStats: GameTopbarStat[] =
     stats && stats.length > 0
@@ -148,6 +150,37 @@ export function GameTopbar({ title, score, stats, actions, rules }: GameTopbarPr
           {resolvedStats.map((s) => (
             <Stat key={s.label} stat={s} />
           ))}
+          {/* Sound toggle — always present, muted by default */}
+          <button
+            onClick={sound.toggle}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              minWidth: '2rem',
+              minHeight: '2rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: sound.muted ? 'var(--muted, #999)' : 'var(--accent, #10b981)',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+            aria-label={sound.muted ? 'Unmute' : 'Mute'}
+          >
+            {sound.muted ? (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 2L4 5.5H1.5v5H4L8 14V2z" />
+                <path d="M12 5.5l4 5M16 5.5l-4 5" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 2L4 5.5H1.5v5H4L8 14V2z" />
+                <path d="M11.5 5a4.5 4.5 0 010 6" />
+                <path d="M13.5 3a7.5 7.5 0 010 10" />
+              </svg>
+            )}
+          </button>
           {actions !== undefined && (
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>{actions}</div>
           )}

@@ -1,5 +1,6 @@
 import type * as React from 'react';
 import type { ReactNode } from 'react';
+import { SoundProvider } from './SoundContext.js';
 
 export interface GameShellProps {
   /**
@@ -26,6 +27,7 @@ export interface GameShellProps {
  */
 export function GameShell({ topbar, children }: GameShellProps): React.JSX.Element {
   return (
+    <SoundProvider>
     <div
       style={{
         position: 'fixed',
@@ -100,5 +102,6 @@ export function GameShell({ topbar, children }: GameShellProps): React.JSX.Eleme
         </a>
       </div>
     </div>
+    </SoundProvider>
   );
 }
