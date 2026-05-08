@@ -25,3 +25,9 @@ export {
   type GameButtonVariant,
   type GameButtonSize,
 } from './GameButton.js';
+export { GameAuth } from './GameAuth.js';
+export { useAuth, type User } from './useAuth.js';
+export {
+  useLeaderboard,
+  type LeaderboardEntry,
+} from './useLeaderboard.js';
