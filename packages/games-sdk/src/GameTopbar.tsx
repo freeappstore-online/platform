@@ -33,18 +33,34 @@ export interface GameTopbarProps {
   stats?: GameTopbarStat[];
 
   /**
-   * Optional right-side action slot. Common: <button>Pause</button>,
-   * <button>Reset</button>. Keep to ≤2 buttons — the topbar is brand
-   * surface, not a settings menu.
+   * Optional right-side action slot for game-specific controls.
+   * Keep to ≤2 buttons — the topbar is brand surface, not a settings menu.
    */
   actions?: ReactNode;
 
   /**
    * Game rules/instructions. When provided, an ℹ info icon appears in the
    * topbar. Tapping it opens a fullscreen overlay with the rules content.
-   * Every game should populate this so players know how to play.
    */
   rules?: ReactNode;
+
+  /**
+   * For interactive/real-time games (Tetris, Snake, etc.). When provided,
+   * the SDK renders standard play/pause + restart icon buttons in the topbar.
+   * `paused` controls the icon state (play vs pause).
+   */
+  onPlayPause?: () => void;
+
+  /**
+   * Whether the game is currently paused. Controls the play/pause icon.
+   * Only used when `onPlayPause` is provided.
+   */
+  paused?: boolean;
+
+  /**
+   * Restart/stop callback. When provided, renders a restart icon button.
+   */
+  onRestart?: () => void;
 }
 
 /**
@@ -54,7 +70,7 @@ export interface GameTopbarProps {
  *
  * Use inside <GameShell topbar={<GameTopbar … />}>.
  */
-export function GameTopbar({ title, score, stats, actions, rules }: GameTopbarProps): React.JSX.Element {
+export function GameTopbar({ title, score, stats, actions, rules, onPlayPause, paused, onRestart }: GameTopbarProps): React.JSX.Element {
   const [showRules, setShowRules] = useState(false);
   const sound = useSound();
 
@@ -150,6 +166,63 @@ export function GameTopbar({ title, score, stats, actions, rules }: GameTopbarPr
           {resolvedStats.map((s) => (
             <Stat key={s.label} stat={s} />
           ))}
+          {/* Play/Pause + Restart — opt-in for interactive games */}
+          {onPlayPause !== undefined && (
+            <button
+              onClick={onPlayPause}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                minWidth: '2rem',
+                minHeight: '2rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--ink, #f0f0f0)',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+              aria-label={paused ? 'Play' : 'Pause'}
+            >
+              {paused ? (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M4 2l10 6-10 6V2z" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                  <rect x="2" y="2" width="4" height="12" rx="1" />
+                  <rect x="10" y="2" width="4" height="12" rx="1" />
+                </svg>
+              )}
+            </button>
+          )}
+          {onRestart !== undefined && (
+            <button
+              onClick={onRestart}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                minWidth: '2rem',
+                minHeight: '2rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--muted, #999)',
+                WebkitTapHighlightColor: 'transparent',
+              }}
+              aria-label="Restart"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M2 8a6 6 0 0111.5-2.5" />
+                <path d="M14 8a6 6 0 01-11.5 2.5" />
+                <path d="M14 2v3.5h-3.5" />
+                <path d="M2 14v-3.5h3.5" />
+              </svg>
+            </button>
+          )}
           {/* Sound toggle — always present, muted by default */}
           <button
             onClick={sound.toggle}
