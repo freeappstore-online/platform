@@ -30,13 +30,21 @@ export async function runLogin(): Promise<{ login: string }> {
 
   // Swap the GitHub user-access-token for a fas session token. Subsequent
   // CLI commands authenticate via the fas session, not the GitHub token.
-  const exchangeRes = await fetch(`${config.apiBase}/v1/auth/exchange`, {
+  const exchangeUrl = `${config.apiBase}/v1/auth/exchange`;
+  const exchangeRes = await fetch(exchangeUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ githubToken: accessToken }),
   });
   if (!exchangeRes.ok) {
-    throw new Error(`Auth exchange failed (${exchangeRes.status}): ${await exchangeRes.text()}`);
+    // Include the URL we tried so misconfigured-apiBase failures are
+    // self-diagnosing. The default apiBase is https://api.freeappstore.online;
+    // a 404 from anywhere else almost always means a stale value in
+    // ~/.fas/config.json or the FAS_API_BASE env var.
+    throw new Error(
+      `Auth exchange failed (${exchangeRes.status} from ${exchangeUrl}): ${await exchangeRes.text()}\n` +
+        `If the URL above isn't https://api.freeappstore.online/v1/auth/exchange, check ~/.fas/config.json's apiBase and any FAS_API_BASE env var.`,
+    );
   }
   const { sessionToken } = (await exchangeRes.json()) as { sessionToken: string };
 

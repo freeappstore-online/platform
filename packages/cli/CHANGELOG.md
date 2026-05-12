@@ -1,5 +1,9 @@
 # @freeappstore/cli
 
+## 0.4.5
+
+- **Fix:** `fas login` now includes the resolved exchange URL in the error message when the auth-exchange step fails. A common support pattern is creators with a stale `apiBase` in `~/.fas/config.json` or a leftover `FAS_API_BASE` env var pointing at a host that returns a 404 — the previous error was hard to attribute. Now: `Auth exchange failed (404 from https://wrong-host/v1/auth/exchange): ...` with a one-line hint about where to fix it.
+
 ## 0.1.4
 
 - New: `fas check` — runs the 5 [@freeappstore/compliance](https://www.npmjs.com/package/@freeappstore/compliance) checks against the current directory and prints results with actionable suggestions on each fail. Same checks the template's CI runs, so creators get instant local feedback instead of waiting for a push.
