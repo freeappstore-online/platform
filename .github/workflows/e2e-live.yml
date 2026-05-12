@@ -41,9 +41,20 @@ jobs:
         working-directory: packages/e2e
         run: pnpm exec playwright install --with-deps chromium webkit
 
-      - name: Run e2e tests
+      - name: Run e2e tests (default — fixture host = freegamestore.online)
         working-directory: packages/e2e
         run: pnpm test
+
+      # The auditor-fixture spec is parameterised by FAS_FIXTURE_BASE.
+      # Run it a second time against the freeappstore deploy so both
+      # storefronts' fixtures are exercised by the same cron. The full
+      # suite ran above; this re-runs only the fixture spec, ~30s.
+      - name: Run auditor-fixture against freeappstore.online
+        if: success() || failure()  # run even if step above failed — independent signal
+        working-directory: packages/e2e
+        env:
+          FAS_FIXTURE_BASE: https://freeappstore.online/audit-fixture
+        run: pnpm exec playwright test tests/auditor-fixture.spec.ts
 
       - name: Upload Playwright report on failure
         if: failure()
