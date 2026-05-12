@@ -119,14 +119,15 @@ export async function auditLive(input: LiveAuditInput): Promise<LiveAuditReport>
     return report;
   }
 
-  // Run the four checks in parallel — each is independent.
-  const [tracking, fonts, manifest, bundle] = await Promise.all([
+  // Run all checks in parallel — each is independent.
+  const [tracking, fonts, manifest, bundle, vh] = await Promise.all([
     checkNoTrackingLive(html),
     checkBrandFontsLive(html),
     checkManifestLive(html, input.liveUrl),
     checkBundleSizeLive(html, input.liveUrl),
+    checkUnsafeVhLive(html, input.liveUrl),
   ]);
-  report.results.push(tracking, fonts, manifest, bundle);
+  report.results.push(tracking, fonts, manifest, bundle, vh);
   return report;
 }
 
@@ -262,3 +263,66 @@ export async function checkBundleSizeLive(html: string, liveUrl: string): Promis
     };
   }
 }
+
+/**
+ * Live counterpart to checkUnsafeVh. Fetches the first bundled
+ * stylesheet linked from the HTML and scans it for `100vh` (the
+ * unit, not the Tailwind class — by build time those have been
+ * compiled to CSS). Catches whiteboard-class iOS Safari URL-bar
+ * scroll bugs in apps that have already shipped.
+ *
+ * Cost: one extra subrequest per app. The audit Worker runs near the
+ * free-plan subrequest cap; on cap errors we degrade to `warn`
+ * (re-run needed) rather than `fail` (app broken) — the app isn't
+ * actually broken, the audit just couldn't check.
+ */
+export async function checkUnsafeVhLive(html: string, liveUrl: string): Promise<CheckResult> {
+  // Find the first bundled stylesheet. Vite output looks like
+  // <link rel="stylesheet" href="/assets/index-XYZ.css">. Be
+  // tolerant of attribute order — rel and href can appear either way.
+  const m =
+    /<link[^>]+rel=["']stylesheet["'][^>]*href=["']([^"']+\.css[^"']*)["']/i.exec(html) ??
+    /<link[^>]+href=["']([^"']+\.css[^"']*)["'][^>]*rel=["']stylesheet["']/i.exec(html);
+  if (!m) {
+    // No stylesheet link — could be inline-only styles, or styles
+    // injected at runtime. Not a fail; just nothing to check.
+    return {
+      name: 'No unsafe 100vh (live)',
+      status: 'warn',
+      detail: 'no <link rel="stylesheet"> found in HTML — skipped',
+    };
+  }
+  const cssUrl = new URL(m[1]!, liveUrl).toString();
+  try {
+    const res = await fetchWithTimeout(cssUrl);
+    if (!res.ok) {
+      return { name: 'No unsafe 100vh (live)', status: 'warn', detail: `${cssUrl} → HTTP ${res.status}` };
+    }
+    const css = await res.text();
+    const matches = css.match(/\b100vh\b/g) ?? [];
+    if (matches.length === 0) {
+      return { name: 'No unsafe 100vh (live)', status: 'pass', detail: `scanned ${cssUrl}` };
+    }
+    return {
+      name: 'No unsafe 100vh (live)',
+      status: 'warn',
+      detail: `${matches.length} occurrence(s) of 100vh in ${cssUrl}`,
+      suggestions: [
+        '100vh resolves to the layout viewport on iOS Safari — when the URL bar is visible the page scrolls.',
+        'Replace with 100svh (small viewport — accounts for visible browser UI) or 100dvh (dynamic — recomputes as URL bar moves).',
+      ],
+    };
+  } catch (err) {
+    const skipped = isSubrequestCapError(err);
+    return {
+      name: 'No unsafe 100vh (live)',
+      status: 'warn',
+      detail: skipped
+        ? 'audit Worker hit subrequest cap — re-run needed'
+        : err instanceof Error
+          ? err.message
+          : 'CSS fetch failed',
+    };
+  }
+}
+

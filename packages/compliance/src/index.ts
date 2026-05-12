@@ -6,6 +6,7 @@ import { checkNoScroll } from './checks/no-scroll.js';
 import { checkViewportSupport } from './checks/viewport-support.js';
 import { checkManifest } from './checks/manifest.js';
 import { checkBundleSize } from './checks/bundle-size.js';
+import { checkUnsafeVh } from './checks/unsafe-vh.js';
 import type { CheckResult } from './types.js';
 
 export type { CheckStatus, CheckResult } from './types.js';
@@ -18,6 +19,7 @@ export {
   checkViewportSupport,
   checkManifest,
   checkBundleSize,
+  checkUnsafeVh,
 };
 
 // Live-URL audit (used by the compliance audit Worker; runs in
@@ -29,6 +31,7 @@ export {
   checkBrandFontsLive,
   checkManifestLive,
   checkBundleSizeLive,
+  checkUnsafeVhLive,
 } from './live/index.js';
 export type { LiveAuditInput, LiveAuditReport } from './live/index.js';
 
@@ -45,6 +48,7 @@ export async function runChecks(repoDir: string): Promise<CheckResult[]> {
     checkNoBrandOverrides(repoDir),
     checkNoScroll(repoDir),
     checkViewportSupport(repoDir),
+    checkUnsafeVh(repoDir),
     checkManifest(repoDir),
     checkBundleSize(repoDir),
   ]);
