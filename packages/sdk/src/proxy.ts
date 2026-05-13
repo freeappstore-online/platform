@@ -1,0 +1,56 @@
+import type { Auth } from './auth.js';
+
+/**
+ * Browser-side wrapper around the platform's per-app secret-injecting proxy.
+ *
+ * Pattern:
+ *   const fas = initApp({ appId: 'weather' });
+ *   const res = await fas.proxy.fetch(
+ *     'api.openweathermap.org/data/2.5/weather?q=London',
+ *   );
+ *
+ * The first segment is the upstream host; the rest is path + query. The
+ * platform Worker authenticates the call with the user's session token,
+ * matches the URL against the app's allowlist, decrypts the developer's
+ * stored API key, and forwards the request server-side.
+ *
+ * The developer's secret never touches the browser.
+ */
+export class Proxy {
+  constructor(
+    private readonly appId: string,
+    private readonly apiBase: string,
+    private readonly auth: Auth,
+  ) {}
+
+  /**
+   * Fetch via the proxy. Accepts either:
+   *   - "host/path?query"  (preferred, matches the SDK's CLI register form)
+   *   - a full "https://host/path?query" URL (we strip the scheme)
+   */
+  async fetch(target: string, init?: RequestInit): Promise<Response> {
+    if (!this.auth.token) {
+      throw new Error('proxy.fetch: not signed in. Call fas.auth.login() first.');
+    }
+    const url = `${this.apiBase}/v1/apps/${this.appId}/proxy/${normalizeTarget(target)}`;
+    const headers = new Headers(init?.headers);
+    headers.set('Authorization', `Bearer ${this.auth.token}`);
+    return fetch(url, { ...init, headers });
+  }
+}
+
+/**
+ * Strip a leading scheme (`https://`, `http://`) so callers can paste either
+ * form and get the same result. Throws on schemes other than http(s) — the
+ * proxy only ever forwards over https upstream and we want a loud error
+ * rather than a silent rewrite.
+ */
+export function normalizeTarget(target: string): string {
+  if (target.startsWith('https://')) return target.slice('https://'.length);
+  if (target.startsWith('http://')) return target.slice('http://'.length);
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) {
+    throw new Error('proxy.fetch: only http(s) targets are supported');
+  }
+  // Already in "host/path" form.
+  return target.replace(/^\/+/, '');
+}

@@ -9,6 +9,7 @@ import { exchangeRoutes } from './routes/exchange.js';
 import { publishRoutes } from './routes/publish.js';
 import { appsRoutes } from './routes/apps.js';
 import { auditRoutes } from './routes/audit.js';
+import { secretsRoutes } from './routes/secrets.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { runAudit } from './lib/audit.js';
@@ -45,6 +46,7 @@ v1.route('/', uptimeRoutes);
 v1.route('/', publishRoutes);
 v1.route('/', appsRoutes);
 v1.route('/', auditRoutes);
+v1.route('/', secretsRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;

@@ -13,6 +13,8 @@ import { doctorCommand } from './commands/doctor.js';
 import { checkCommand } from './commands/check.js';
 import { screencheckCommand } from './commands/screencheck.js';
 import { listCommand } from './commands/list.js';
+import { secretCommand } from './commands/secret.js';
+import { proxyCommand } from './commands/proxy.js';
 
 // Read version from the package's own package.json so `fas --version` always
 // matches the installed package. dist/index.js sits one level under the
@@ -39,6 +41,8 @@ program.addCommand(doctorCommand);
 program.addCommand(checkCommand);
 program.addCommand(screencheckCommand);
 program.addCommand(listCommand);
+program.addCommand(secretCommand);
+program.addCommand(proxyCommand);
 
 // `fas` with no subcommand → launch the TUI when stdout is a TTY.
 // Subcommands keep their normal one-shot behavior, scriptable for CI / agents.

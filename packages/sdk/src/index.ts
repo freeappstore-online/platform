@@ -1,6 +1,7 @@
 import { Auth } from './auth.js';
 import { Kv } from './kv.js';
 import { Rooms } from './rooms.js';
+import { Proxy } from './proxy.js';
 import type { FasInitOptions } from './types.js';
 
 export type { User, FasInitOptions, Unsubscribe } from './types.js';
@@ -10,12 +11,14 @@ export class FreeAppStore {
   readonly auth: Auth;
   readonly kv: Kv;
   readonly rooms: Rooms;
+  readonly proxy: Proxy;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
     this.auth = new Auth(opts.appId, apiBase);
     this.kv = new Kv(opts.appId, apiBase, this.auth);
     this.rooms = new Rooms(opts.appId, apiBase, this.auth);
+    this.proxy = new Proxy(opts.appId, apiBase, this.auth);
   }
 }
 
