@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource } from '../lib/file-source.js';
 import { checkNoBrandOverrides, scanContent } from './no-brand-overrides.js';
 
 async function fixture(files: Record<string, string>): Promise<string> {
@@ -77,7 +78,7 @@ describe('checkNoBrandOverrides (integration)', () => {
         h1 { font-family: Fraunces, serif; color: var(--accent); }
       `,
     });
-    const r = await checkNoBrandOverrides(dir);
+    const r = await checkNoBrandOverrides(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -87,7 +88,7 @@ describe('checkNoBrandOverrides (integration)', () => {
     const dir = await fixture({
       'web/src/components/Branding.css': `:root { --accent: deeppink; }`,
     });
-    const r = await checkNoBrandOverrides(dir);
+    const r = await checkNoBrandOverrides(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/override/);
     expect(r.suggestions?.join(' ')).toMatch(/var\(--accent\)/);
@@ -97,7 +98,7 @@ describe('checkNoBrandOverrides (integration)', () => {
     const dir = await fixture({
       'web/src/index.css': `:root { --paper: #ffffff; --ink: #1a1a1a; --accent: #2563eb; }`,
     });
-    const r = await checkNoBrandOverrides(dir);
+    const r = await checkNoBrandOverrides(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -107,7 +108,7 @@ describe('checkNoBrandOverrides (integration)', () => {
         const h1 = <h1 style={{ fontFamily: "Cormorant Garamond, serif" }} />;
       `,
     });
-    const r = await checkNoBrandOverrides(dir);
+    const r = await checkNoBrandOverrides(fsFileSource(dir));
     expect(r.status).toBe('fail');
   });
 });

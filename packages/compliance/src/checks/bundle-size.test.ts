@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource } from '../lib/file-source.js';
 import { checkBundleSize } from './bundle-size.js';
 
 let dir: string;
@@ -21,7 +22,7 @@ async function writeAsset(name: string, content: string | Buffer): Promise<void>
 
 describe('checkBundleSize', () => {
   it('warns when web/dist not built', async () => {
-    const r = await checkBundleSize(dir);
+    const r = await checkBundleSize(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/pnpm build/);
   });
@@ -30,7 +31,7 @@ describe('checkBundleSize', () => {
     const p = join(dir, 'web', 'dist', 'assets');
     await mkdir(p, { recursive: true });
     await writeFile(join(p, 'styles.css'), 'body{color:red}');
-    const r = await checkBundleSize(dir);
+    const r = await checkBundleSize(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/no JS/);
   });
@@ -38,7 +39,7 @@ describe('checkBundleSize', () => {
   it('passes when largest JS is under 300KB gzipped', async () => {
     // ~100KB of repetitive content gzips to a few KB
     await writeAsset('index-abc.js', 'a'.repeat(100_000));
-    const r = await checkBundleSize(dir);
+    const r = await checkBundleSize(fsFileSource(dir));
     expect(r.status).toBe('pass');
     expect(r.detail).toMatch(/index-abc\.js/);
     expect(r.detail).toMatch(/limit 300 KB/);
@@ -47,7 +48,7 @@ describe('checkBundleSize', () => {
   it('picks the largest JS file for measurement', async () => {
     await writeAsset('small.js', 'tiny');
     await writeAsset('big.js', 'a'.repeat(200_000));
-    const r = await checkBundleSize(dir);
+    const r = await checkBundleSize(fsFileSource(dir));
     expect(r.detail).toMatch(/big\.js/);
   });
 
@@ -56,7 +57,7 @@ describe('checkBundleSize', () => {
     const random = Buffer.alloc(400 * 1024);
     for (let i = 0; i < random.length; i++) random[i] = Math.floor(Math.random() * 256);
     await writeAsset('huge.js', random);
-    const r = await checkBundleSize(dir);
+    const r = await checkBundleSize(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.suggestions?.length ?? 0).toBeGreaterThan(0);
   });

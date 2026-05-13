@@ -1,7 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { extname, relative } from 'node:path';
+import type { FileSource } from '../lib/file-source.js';
 import type { CheckResult } from '../types.js';
-import { walk } from '../lib/walk.js';
 
 /**
  * Apps and games on the platform must look consistent with the storefront
@@ -21,22 +19,21 @@ import { walk } from '../lib/walk.js';
  *     red, etc.). We don't try to gate every hex literal — too noisy and
  *     too many false positives.
  */
-export async function checkNoBrandOverrides(repoDir: string): Promise<CheckResult> {
+export async function checkNoBrandOverrides(source: FileSource): Promise<CheckResult> {
   const issues: string[] = [];
 
-  for await (const file of walk(repoDir)) {
-    const ext = extname(file).toLowerCase();
+  for await (const path of source.list()) {
+    const ext = extOf(path);
     if (!SCANNED_EXTS.has(ext)) continue;
-    const content = await readFile(file, 'utf8').catch(() => '');
+    const content = await source.read(path);
     if (!content) continue;
-    const rel = relative(repoDir, file);
     // Canonical theme file: the platform's CSS variables ARE defined here.
     // Apps own this file post-scaffold (they can technically modify token
     // values, and we accept the imperfection — the loud places where a
     // brand override actually causes inconsistency are inline styles +
     // per-component CSS, which this check still covers).
-    const isThemeFile = rel === 'web/src/index.css' || rel === 'web/src/main.css';
-    const fileIssues = scanContent(rel, content, { skipVarRedefs: isThemeFile });
+    const isThemeFile = path === 'web/src/index.css' || path === 'web/src/main.css';
+    const fileIssues = scanContent(path, content, { skipVarRedefs: isThemeFile });
     issues.push(...fileIssues);
     // Cap at 10 — beyond that the user has bigger problems and we don't
     // want a 200-line failure report.
@@ -128,10 +125,6 @@ export function scanContent(
   const out: string[] = [];
 
   // 1. CSS variable overrides for protected tokens.
-  // Match `--accent: <something>;` outside of var() invocations.
-  // The regex looks for "<two dashes><name>:" near the start of a line,
-  // which is how CSS declarations look. var(--accent) won't match because
-  // there's a `(` not a `:`.
   if (!opts.skipVarRedefs) {
     const varDeclRe = /(?:^|[\s;{,])(--[a-z-]+)\s*:/gim;
     let m: RegExpExecArray | null;
@@ -144,9 +137,7 @@ export function scanContent(
     }
   }
 
-  // 2. font-family overrides. Pull every string after `font-family:` (in
-  // CSS) or `fontFamily:` (in JSX/TS), parse the comma-separated list,
-  // and flag any quoted token not in ALLOWED_FONT_TOKENS.
+  // 2. font-family overrides.
   const fontRe = /(?:font-family|fontFamily)\s*[:=]\s*["'`]?([^;"'`}\n]+)["'`]?/g;
   let m: RegExpExecArray | null;
   while ((m = fontRe.exec(content)) !== null) {
@@ -159,12 +150,18 @@ export function scanContent(
       if (!ALLOWED_FONT_TOKENS.has(t)) {
         const line = lineNumberAt(content, m.index);
         out.push(`${filename}:${line} non-brand font "${t}"`);
-        break; // one warning per declaration is plenty
+        break;
       }
     }
   }
 
   return out;
+}
+
+function extOf(path: string): string {
+  const dot = path.lastIndexOf('.');
+  const slash = path.lastIndexOf('/');
+  return dot > slash ? path.slice(dot).toLowerCase() : '';
 }
 
 function lineNumberAt(content: string, index: number): number {

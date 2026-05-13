@@ -1,7 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { extname, relative } from 'node:path';
+import type { FileSource } from '../lib/file-source.js';
 import type { CheckResult } from '../types.js';
-import { walk } from '../lib/walk.js';
 
 /**
  * Flag `100vh` (and Tailwind shortcuts that compile to it) in source.
@@ -24,15 +22,13 @@ import { walk } from '../lib/walk.js';
  * sections that should stay constant as URL bar moves). Creators can
  * acknowledge by leaving an `// allow-100vh` comment on the same line.
  */
-export async function checkUnsafeVh(repoDir: string): Promise<CheckResult> {
+export async function checkUnsafeVh(source: FileSource): Promise<CheckResult> {
   const issues: string[] = [];
 
-  for await (const file of walk(repoDir)) {
-    const ext = extname(file).toLowerCase();
-    if (!SCAN_EXTS.has(ext)) continue;
-    const content = await readFile(file, 'utf8').catch(() => '');
+  for await (const path of source.list()) {
+    if (!SCAN_EXTS.has(extOf(path))) continue;
+    const content = await source.read(path);
     if (!content) continue;
-    const rel = relative(repoDir, file);
 
     for (const { re, label } of PATTERNS) {
       // Reset lastIndex defensively; we use `g` to find all matches.
@@ -42,7 +38,7 @@ export async function checkUnsafeVh(repoDir: string): Promise<CheckResult> {
         const line = lineNumberAt(content, m.index);
         // Allow opt-out via an inline `allow-100vh` comment on the same line.
         if (lineHasAllowComment(content, m.index)) continue;
-        issues.push(`${rel}:${line} ${label} — use 100svh or 100dvh`);
+        issues.push(`${path}:${line} ${label} — use 100svh or 100dvh`);
       }
     }
   }
@@ -90,6 +86,12 @@ const PATTERNS: Array<{ re: RegExp; label: string }> = [
   { re: /(?<![\w-])max-h-screen(?![\w-])/g, label: 'max-h-screen (Tailwind: → max-height: 100vh)' },
 ];
 
+function extOf(path: string): string {
+  const dot = path.lastIndexOf('.');
+  const slash = path.lastIndexOf('/');
+  return dot > slash ? path.slice(dot).toLowerCase() : '';
+}
+
 function lineNumberAt(content: string, index: number): number {
   let n = 1;
   for (let i = 0; i < index; i++) if (content.charCodeAt(i) === 10) n++;
@@ -102,10 +104,8 @@ function lineNumberAt(content: string, index: number): number {
  * — doesn't validate comment syntax, just trusts the marker.
  */
 function lineHasAllowComment(content: string, index: number): boolean {
-  // Find end of the current line.
   let end = content.indexOf('\n', index);
   if (end === -1) end = content.length;
-  // Walk back to the start of the line for full context.
   let start = content.lastIndexOf('\n', index);
   if (start === -1) start = 0;
   return content.slice(start, end).includes('allow-100vh');

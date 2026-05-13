@@ -1,6 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { FileSource } from '../lib/file-source.js';
 import type { CheckResult } from '../types.js';
+
+const MANIFEST_PATH = 'web/public/manifest.json';
 
 /**
  * Apps and games must declare which screens and orientations they
@@ -22,17 +23,23 @@ import type { CheckResult } from '../types.js';
  * If you genuinely don't care about orientation, set `"any"`. Don't
  * leave it off — that's the only value that returns a fail.
  */
-export async function checkViewportSupport(repoDir: string): Promise<CheckResult> {
-  const manifestPath = join(repoDir, 'web', 'public', 'manifest.json');
+export async function checkViewportSupport(source: FileSource): Promise<CheckResult> {
+  const raw = await source.read(MANIFEST_PATH);
+  if (raw === null) {
+    return {
+      name: 'Viewport support',
+      status: 'fail',
+      detail: `${MANIFEST_PATH} not found`,
+    };
+  }
   let manifest: Record<string, unknown>;
   try {
-    const raw = await readFile(manifestPath, 'utf8');
     manifest = JSON.parse(raw) as Record<string, unknown>;
   } catch {
     return {
       name: 'Viewport support',
       status: 'fail',
-      detail: 'web/public/manifest.json not found or unparseable',
+      detail: `${MANIFEST_PATH} unparseable`,
     };
   }
 

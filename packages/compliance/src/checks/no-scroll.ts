@@ -1,7 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { extname, relative } from 'node:path';
+import type { FileSource } from '../lib/file-source.js';
+import { isGameProject } from '../lib/project-type.js';
 import type { CheckResult } from '../types.js';
-import { walk } from '../lib/walk.js';
 
 /**
  * Games on FreeGameStore must fit the viewport — no horizontal or
@@ -24,9 +23,9 @@ import { walk } from '../lib/walk.js';
  * detect "is this a game project" by looking for the @freeappstore/games
  * dep, the canonical signal that the app uses GameShell.
  */
-export async function checkNoScroll(repoDir: string): Promise<CheckResult> {
+export async function checkNoScroll(source: FileSource): Promise<CheckResult> {
   // Skip apps — only games are subject to no-scroll.
-  if (!(await isGame(repoDir))) {
+  if (!(await isGameProject(source))) {
     return {
       name: 'No scroll (games only)',
       status: 'pass',
@@ -37,34 +36,28 @@ export async function checkNoScroll(repoDir: string): Promise<CheckResult> {
   const issues: string[] = [];
   let sawViewportLock = false;
 
-  for await (const file of walk(repoDir)) {
-    const ext = extname(file).toLowerCase();
+  for await (const path of source.list()) {
+    const ext = extOf(path);
     if (!SCAN_EXTS.has(ext)) continue;
-    const content = await readFile(file, 'utf8').catch(() => '');
+    const content = await source.read(path);
     if (!content) continue;
-    const rel = relative(repoDir, file);
 
-    // 1. Forbidden overflow declarations on root elements.
     for (const re of FORBIDDEN_OVERFLOW) {
       const m = re.exec(content);
       if (m) {
         const line = lineNumberAt(content, m.index);
-        issues.push(`${rel}:${line} ${m[0]} — root scrolling not allowed in games`);
+        issues.push(`${path}:${line} ${m[0]} — root scrolling not allowed in games`);
       }
     }
 
-    // 2. min-height on root elements (creates pages taller than viewport).
     for (const re of FORBIDDEN_MIN_HEIGHT) {
       const m = re.exec(content);
       if (m) {
         const line = lineNumberAt(content, m.index);
-        issues.push(`${rel}:${line} ${m[0]} — use exact viewport height (100svh) instead`);
+        issues.push(`${path}:${line} ${m[0]} — use exact viewport height (100svh) instead`);
       }
     }
 
-    // 3. Look for at least one viewport-lock pattern. GameShell sets
-    // `height: 100svh` on a fixed wrapper; we accept any 100svh / 100vh
-    // declaration as evidence the game considered viewport sizing.
     if (VIEWPORT_LOCK.test(content)) sawViewportLock = true;
 
     if (issues.length >= 8) break;
@@ -105,13 +98,6 @@ export async function checkNoScroll(repoDir: string): Promise<CheckResult> {
 
 const SCAN_EXTS = new Set(['.css', '.scss', '.tsx', '.ts', '.jsx', '.js', '.html']);
 
-// Match `overflow: scroll` and `overflow: auto` on html/body selectors,
-// or as bare global rules in CSS. Conservative: only flags when paired
-// with html/body — avoids false positives for component-scoped overflow.
-//
-// IMPORTANT: no `g` flag. Module-scoped regexes with `g` share lastIndex
-// across parallel test runs and produce flaky matches; we only need
-// first-match-per-file anyway.
 const FORBIDDEN_OVERFLOW = [
   /(?:^|[\s,{])(?:html|body)\s*\{[^}]*overflow\s*:\s*(?:scroll|auto)/im,
   /(?:^|[\s,{])(?:html|body)\s*\{[^}]*overflow-(?:x|y)\s*:\s*(?:scroll|auto)/im,
@@ -123,23 +109,10 @@ const FORBIDDEN_MIN_HEIGHT = [
 
 const VIEWPORT_LOCK = /(?:height|max-height)\s*:\s*100(?:s?vh)|GameShell|@freeappstore\/games/i;
 
-async function isGame(repoDir: string): Promise<boolean> {
-  // Fast path: look for the explicit games-sdk dep in any package.json.
-  // Falls back to scanning JSX for GameShell import — catches cases
-  // where the dep is hoisted to a workspace root.
-  for await (const file of walk(repoDir)) {
-    const base = file.split('/').pop() ?? '';
-    if (base !== 'package.json') continue;
-    const content = await readFile(file, 'utf8').catch(() => '');
-    if (/@freeappstore\/games/.test(content)) return true;
-  }
-  for await (const file of walk(repoDir)) {
-    const ext = extname(file).toLowerCase();
-    if (ext !== '.tsx' && ext !== '.ts') continue;
-    const content = await readFile(file, 'utf8').catch(() => '');
-    if (/from\s+['"]@freeappstore\/games['"]/.test(content)) return true;
-  }
-  return false;
+function extOf(path: string): string {
+  const dot = path.lastIndexOf('.');
+  const slash = path.lastIndexOf('/');
+  return dot > slash ? path.slice(dot).toLowerCase() : '';
 }
 
 function lineNumberAt(content: string, index: number): number {

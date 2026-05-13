@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource } from '../lib/file-source.js';
 import { checkUnsafeVh } from './unsafe-vh.js';
 
 async function fixture(files: Record<string, string>): Promise<string> {
@@ -20,7 +21,7 @@ describe('checkUnsafeVh', () => {
       'web/src/index.css': 'body { height: 100svh; }',
       'web/src/App.tsx': 'export default () => <div className="h-screen-not-really" />;',
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('pass');
     expect(r.detail).toMatch(/no 100vh/);
   });
@@ -29,7 +30,7 @@ describe('checkUnsafeVh', () => {
     const dir = await fixture({
       'web/src/index.css': '.full { height: 100vh; }',
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/1 occurrence/);
     expect(r.suggestions?.join('\n')).toMatch(/web\/src\/index\.css:1.*100vh/);
@@ -47,7 +48,7 @@ describe('checkUnsafeVh', () => {
         );
       `,
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/3 occurrences/);
     const suggestionText = r.suggestions?.join('\n') ?? '';
@@ -62,7 +63,7 @@ describe('checkUnsafeVh', () => {
         .hero { height: 100vh; /* allow-100vh — intentional, hero stays constant under URL bar */ }
       `,
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -72,7 +73,7 @@ describe('checkUnsafeVh', () => {
 .b { height: 100vh; }
 `,
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/1 occurrence/); // only the un-opt-out line
   });
@@ -84,7 +85,7 @@ describe('checkUnsafeVh', () => {
         .b { height: 100dvh; }
       `,
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -94,14 +95,14 @@ describe('checkUnsafeVh', () => {
       // boundaries must keep us from flagging them.
       'web/src/foo.ts': 'const var100vh = 1; const x = "--my100vhvar";',
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
   it('caps reported issues at 5 and notes the rest', async () => {
     const lines = Array.from({ length: 8 }, (_, i) => `.x${i} { height: 100vh; }`).join('\n');
     const dir = await fixture({ 'web/src/index.css': lines });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/8 occurrences/);
     // 5 file:line entries + 1 "...and N more" + 1 final "Replace with..." advice = 7
@@ -116,7 +117,7 @@ describe('checkUnsafeVh', () => {
       'docs/notes.md': 'Use 100vh somewhere',     // Markdown — should NOT be scanned
       'web/src/foo.scss': '$h: 100vh;',
     });
-    const r = await checkUnsafeVh(dir);
+    const r = await checkUnsafeVh(fsFileSource(dir));
     expect(r.status).toBe('warn');
     // 3 hits: index.css, App.jsx, foo.scss. notes.md ignored.
     expect(r.detail).toMatch(/3 occurrences/);

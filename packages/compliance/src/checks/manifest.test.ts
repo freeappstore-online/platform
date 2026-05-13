@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource } from '../lib/file-source.js';
 import { checkManifest } from './manifest.js';
 
 let dir: string;
@@ -20,21 +21,21 @@ async function withManifest(content: string): Promise<void> {
 
 describe('checkManifest', () => {
   it('fails when manifest.json missing', async () => {
-    const r = await checkManifest(dir);
+    const r = await checkManifest(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/missing/);
   });
 
   it('fails when manifest.json is not valid JSON', async () => {
     await withManifest('{ not json');
-    const r = await checkManifest(dir);
+    const r = await checkManifest(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/JSON/i);
   });
 
   it('warns when required fields are missing', async () => {
     await withManifest(JSON.stringify({ name: 'My App' }));
-    const r = await checkManifest(dir);
+    const r = await checkManifest(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/short_name/);
     expect(r.detail).toMatch(/start_url/);
@@ -49,7 +50,7 @@ describe('checkManifest', () => {
         display: 'standalone',
       }),
     );
-    const r = await checkManifest(dir);
+    const r = await checkManifest(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -57,7 +58,7 @@ describe('checkManifest', () => {
     await withManifest(
       JSON.stringify({ name: '', short_name: 'X', start_url: '/', display: 'standalone' }),
     );
-    const r = await checkManifest(dir);
+    const r = await checkManifest(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/name/);
   });

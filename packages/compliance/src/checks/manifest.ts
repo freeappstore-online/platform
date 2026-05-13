@@ -1,22 +1,20 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import type { FileSource } from '../lib/file-source.js';
 import type { CheckResult } from '../types.js';
+
+const MANIFEST_PATH = 'web/public/manifest.json';
 
 /**
  * Verifies the PWA manifest exists at the expected location and parses
  * to JSON. Apps without a manifest can't be "Add to Home Screen"-d on
  * mobile; required by the platform.
  */
-export async function checkManifest(repoDir: string): Promise<CheckResult> {
-  const path = join(repoDir, 'web', 'public', 'manifest.json');
-  let raw: string;
-  try {
-    raw = await readFile(path, 'utf8');
-  } catch {
+export async function checkManifest(source: FileSource): Promise<CheckResult> {
+  const raw = await source.read(MANIFEST_PATH);
+  if (raw === null) {
     return {
       name: 'PWA manifest',
       status: 'fail',
-      detail: 'web/public/manifest.json missing',
+      detail: `${MANIFEST_PATH} missing`,
       suggestions: [
         'Add a manifest.json with at least name, short_name, start_url, display, icons.',
         'See template-standalone for a working example.',
@@ -31,7 +29,7 @@ export async function checkManifest(repoDir: string): Promise<CheckResult> {
     return {
       name: 'PWA manifest',
       status: 'fail',
-      detail: `web/public/manifest.json is not valid JSON`,
+      detail: `${MANIFEST_PATH} is not valid JSON`,
     };
   }
 
@@ -45,5 +43,5 @@ export async function checkManifest(repoDir: string): Promise<CheckResult> {
       suggestions: [`Add the ${missing.join(', ')} field(s) to manifest.json so installs work.`],
     };
   }
-  return { name: 'PWA manifest', status: 'pass', detail: 'web/public/manifest.json' };
+  return { name: 'PWA manifest', status: 'pass', detail: MANIFEST_PATH };
 }

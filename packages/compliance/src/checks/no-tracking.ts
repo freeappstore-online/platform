@@ -1,7 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { extname } from 'node:path';
+import type { FileSource } from '../lib/file-source.js';
 import type { CheckResult } from '../types.js';
-import { walk } from '../lib/walk.js';
 
 // Same forbidden list the template's compliance.yml enforces — kept in
 // sync because both are downstream consumers of this package long-term.
@@ -18,15 +16,16 @@ const FORBIDDEN = [
 
 const SCAN_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.html', '.json']);
 
-export async function checkNoTracking(repoDir: string): Promise<CheckResult> {
+export async function checkNoTracking(source: FileSource): Promise<CheckResult> {
   const hits: { file: string; matches: string[] }[] = [];
 
-  for await (const file of walk(repoDir)) {
-    if (!SCAN_EXTS.has(extname(file).toLowerCase())) continue;
-    const content = await readFile(file, 'utf8').catch(() => '');
+  for await (const path of source.list()) {
+    if (!SCAN_EXTS.has(extOf(path))) continue;
+    const content = await source.read(path);
+    if (!content) continue;
     const matches = FORBIDDEN.filter((sdk) => content.includes(sdk));
     if (matches.length > 0) {
-      hits.push({ file: file.replace(repoDir + '/', ''), matches });
+      hits.push({ file: path, matches });
     }
   }
 
@@ -50,4 +49,10 @@ export async function checkNoTracking(repoDir: string): Promise<CheckResult> {
       'For private-by-design metrics, CF edge analytics already counts requests anonymously.',
     ],
   };
+}
+
+function extOf(path: string): string {
+  const dot = path.lastIndexOf('.');
+  const slash = path.lastIndexOf('/');
+  return dot > slash ? path.slice(dot).toLowerCase() : '';
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource } from '../lib/file-source.js';
 import { checkNoScroll } from './no-scroll.js';
 
 async function fixture(files: Record<string, string>): Promise<string> {
@@ -25,7 +26,7 @@ describe('checkNoScroll', () => {
       'package.json': JSON.stringify({ name: 'my-app' }),
       'web/src/index.css': 'body { overflow: scroll; }',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('pass');
     expect(r.detail).toMatch(/not a game/);
   });
@@ -36,7 +37,7 @@ describe('checkNoScroll', () => {
       'web/src/index.css': 'body { height: 100svh; }',
       'web/src/App.tsx': 'import { GameShell } from "@freeappstore/games";',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     // Should at least run the check, not skip.
     expect(r.detail).not.toMatch(/not a game/);
   });
@@ -46,7 +47,7 @@ describe('checkNoScroll', () => {
       'package.json': GAME_DEPS,
       'web/src/index.css': 'html { overflow: scroll; }',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.suggestions?.join(' ')).toMatch(/GameShell/);
   });
@@ -56,7 +57,7 @@ describe('checkNoScroll', () => {
       'package.json': GAME_DEPS,
       'web/src/index.css': 'body { overflow: auto; }',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('fail');
   });
 
@@ -65,7 +66,7 @@ describe('checkNoScroll', () => {
       'package.json': GAME_DEPS,
       'web/src/index.css': 'body { overflow-y: scroll; padding: 0; }',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('fail');
   });
 
@@ -74,7 +75,7 @@ describe('checkNoScroll', () => {
       'package.json': GAME_DEPS,
       'web/src/index.css': 'body { min-height: 100vh; }',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.suggestions?.join(' ')).toMatch(/100svh/);
   });
@@ -85,7 +86,7 @@ describe('checkNoScroll', () => {
       'web/src/index.css': 'body { padding: 0; }',
       'web/src/App.tsx': 'export default function App() { return <div>game</div>; }',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/viewport lock/);
   });
@@ -100,7 +101,7 @@ describe('checkNoScroll', () => {
         }
       `,
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -109,7 +110,7 @@ describe('checkNoScroll', () => {
       'package.json': GAME_DEPS,
       'web/src/index.css': '.game-root { height: 100svh; overflow: hidden; }',
     });
-    const r = await checkNoScroll(dir);
+    const r = await checkNoScroll(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 });

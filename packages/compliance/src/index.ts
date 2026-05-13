@@ -1,25 +1,43 @@
-import { checkNoPlaceholders } from './checks/no-placeholders.js';
-import { checkNoTracking } from './checks/no-tracking.js';
 import { checkBrandFonts } from './checks/brand-fonts.js';
-import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
-import { checkNoScroll } from './checks/no-scroll.js';
-import { checkViewportSupport } from './checks/viewport-support.js';
-import { checkManifest } from './checks/manifest.js';
+import { checkBrandTokens } from './checks/brand-tokens.js';
 import { checkBundleSize } from './checks/bundle-size.js';
+import { checkDarkMode } from './checks/dark-mode.js';
+import { checkHtmlMeta } from './checks/html-meta.js';
+import { checkLicenseMit } from './checks/license-mit.js';
+import { checkManifest } from './checks/manifest.js';
+import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
+import { checkNoEnvProduction } from './checks/no-env-production.js';
+import { checkNoPlaceholders } from './checks/no-placeholders.js';
+import { checkNoScroll } from './checks/no-scroll.js';
+import { checkNoTracking } from './checks/no-tracking.js';
+import { checkPwaMeta } from './checks/pwa-meta.js';
+import { checkStoreLink } from './checks/store-link.js';
 import { checkUnsafeVh } from './checks/unsafe-vh.js';
+import { checkViewportSupport } from './checks/viewport-support.js';
+import { type FileSource, fsFileSource, mapFileSource } from './lib/file-source.js';
+import { isGameProject } from './lib/project-type.js';
 import type { CheckResult } from './types.js';
 
 export type { CheckStatus, CheckResult } from './types.js';
+export type { FileSource } from './lib/file-source.js';
+export { fsFileSource, mapFileSource, isGameProject };
 export {
-  checkNoPlaceholders,
-  checkNoTracking,
   checkBrandFonts,
-  checkNoBrandOverrides,
-  checkNoScroll,
-  checkViewportSupport,
-  checkManifest,
+  checkBrandTokens,
   checkBundleSize,
+  checkDarkMode,
+  checkHtmlMeta,
+  checkLicenseMit,
+  checkManifest,
+  checkNoBrandOverrides,
+  checkNoEnvProduction,
+  checkNoPlaceholders,
+  checkNoScroll,
+  checkNoTracking,
+  checkPwaMeta,
+  checkStoreLink,
   checkUnsafeVh,
+  checkViewportSupport,
 };
 
 // Live-URL audit (used by the compliance audit Worker; runs in
@@ -36,20 +54,39 @@ export {
 export type { LiveAuditInput, LiveAuditReport } from './live/index.js';
 
 /**
- * Runs every compliance check against `repoDir` (the root of an app, the
- * directory containing package.json + web/). Returns results in a stable
- * order so callers can render predictable output.
+ * Runs every compliance check against the source. Two front doors:
+ *   - `runChecks(repoDir)`        — CLI / CI; reads from disk.
+ *   - `runChecksFromFiles(map)`   — VibeCode agent; reads from a Map.
+ *
+ * Both call the same underlying check functions via the FileSource
+ * abstraction, so rules stay in one place. Results are returned in a
+ * stable order so callers can render predictable output.
  */
 export async function runChecks(repoDir: string): Promise<CheckResult[]> {
+  return runChecksOn(fsFileSource(repoDir));
+}
+
+export async function runChecksFromFiles(files: Map<string, string>): Promise<CheckResult[]> {
+  return runChecksOn(mapFileSource(files));
+}
+
+async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
   return Promise.all([
-    checkNoPlaceholders(repoDir),
-    checkNoTracking(repoDir),
-    checkBrandFonts(repoDir),
-    checkNoBrandOverrides(repoDir),
-    checkNoScroll(repoDir),
-    checkViewportSupport(repoDir),
-    checkUnsafeVh(repoDir),
-    checkManifest(repoDir),
-    checkBundleSize(repoDir),
+    checkLicenseMit(source),
+    checkNoEnvProduction(source),
+    checkNoPlaceholders(source),
+    checkNoTracking(source),
+    checkBrandFonts(source),
+    checkBrandTokens(source),
+    checkNoBrandOverrides(source),
+    checkNoScroll(source),
+    checkViewportSupport(source),
+    checkUnsafeVh(source),
+    checkHtmlMeta(source),
+    checkPwaMeta(source),
+    checkManifest(source),
+    checkStoreLink(source),
+    checkDarkMode(source),
+    checkBundleSize(source),
   ]);
 }

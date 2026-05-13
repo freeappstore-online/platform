@@ -1,3 +1,4 @@
+import { randomBytes as nodeRandomBytes } from 'node:crypto';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   checkNoTrackingLive,
@@ -7,6 +8,12 @@ import {
   checkUnsafeVhLive,
   auditLive,
 } from './index.js';
+
+/** Incompressible random bytes — gzipping these yields ≈ same size,
+ *  unlike all-zero buffers which compress to a few bytes. */
+function randomBytes(n: number): Uint8Array {
+  return new Uint8Array(nodeRandomBytes(n));
+}
 
 describe('checkNoTrackingLive', () => {
   it('passes when HTML is clean of tracker patterns', () => {
@@ -135,10 +142,10 @@ describe('checkBundleSizeLive', () => {
   });
 
   it('passes when bundle is comfortably under 300 KB gzipped', async () => {
-    // 200KB raw → ~57KB approx gzipped — well under.
-    const small = new ArrayBuffer(200_000);
+    // 200 KB of incompressible random bytes → gzip ≈ 200 KB, well under.
+    const small = randomBytes(200_000);
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      new Response(small, { status: 200 }),
+      new Response(small.buffer as ArrayBuffer, { status: 200 }),
     );
     const html = '<script src="/assets/index-abc.js"></script>';
     const r = await checkBundleSizeLive(html, 'https://x.example');
@@ -146,11 +153,14 @@ describe('checkBundleSizeLive', () => {
     expect(r.detail).toMatch(/KB gzipped/);
   });
 
-  it('fails when bundle approximation exceeds 300 KB gzipped', async () => {
-    // 1.5MB raw → ~430KB approx gzipped — over limit.
-    const large = new ArrayBuffer(1_500_000);
+  it('fails when real gzipped bundle exceeds 300 KB', async () => {
+    // 500 KB of incompressible random bytes → gzip ≈ 500 KB, over the
+    // 300 KB limit. Earlier this test used an all-zeros buffer that
+    // gzipped to ~1.5 KB but was assumed to fail via the old divide-
+    // by-3.5 approximation. With real gzip, content matters.
+    const large = randomBytes(500_000);
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      new Response(large, { status: 200 }),
+      new Response(large.buffer as ArrayBuffer, { status: 200 }),
     );
     const html = '<script src="/assets/index-big.js"></script>';
     const r = await checkBundleSizeLive(html, 'https://x.example');

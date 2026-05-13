@@ -1,21 +1,30 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { gzipSync } from 'node:zlib';
+import type { FileSource } from '../lib/file-source.js';
+import { gzipByteLength } from '../lib/gzip.js';
 import type { CheckResult } from '../types.js';
 
 const MAX_GZIP_BYTES = 300 * 1024; // 300 KB — matches the template's compliance.yml
+const ASSETS_DIR = 'web/dist/assets';
 
 /**
  * Checks the largest JS asset under web/dist/assets/ against the 300KB-gzip
  * limit. Returns 'warn' if dist hasn't been built yet (we don't want to
  * silently pass when there's nothing to measure).
+ *
+ * Uses the Web `CompressionStream('gzip')` API rather than `node:zlib` so
+ * the same module loads in Cloudflare Workers (the VibeCode agent
+ * bundles this package). The agent will always hit the "not built yet"
+ * branch since the virtual filesystem holds source, not artefacts.
  */
-export async function checkBundleSize(repoDir: string): Promise<CheckResult> {
-  const assetsDir = join(repoDir, 'web', 'dist', 'assets');
-  let entries;
-  try {
-    entries = await readdir(assetsDir);
-  } catch {
+export async function checkBundleSize(source: FileSource): Promise<CheckResult> {
+  if (!source.listDir) {
+    return {
+      name: 'Bundle size',
+      status: 'warn',
+      detail: 'file source does not support directory listing',
+    };
+  }
+  const entries = await source.listDir(ASSETS_DIR);
+  if (entries === null) {
     return {
       name: 'Bundle size',
       status: 'warn',
@@ -28,7 +37,15 @@ export async function checkBundleSize(repoDir: string): Promise<CheckResult> {
     return {
       name: 'Bundle size',
       status: 'warn',
-      detail: `no JS files in ${assetsDir}`,
+      detail: `no JS files in ${ASSETS_DIR}`,
+    };
+  }
+
+  if (!source.readBytes) {
+    return {
+      name: 'Bundle size',
+      status: 'warn',
+      detail: 'file source does not support binary reads',
     };
   }
 
@@ -37,15 +54,21 @@ export async function checkBundleSize(repoDir: string): Promise<CheckResult> {
   let largest = '';
   let largestSize = 0;
   for (const f of jsFiles) {
-    const s = await stat(join(assetsDir, f));
-    if (s.size > largestSize) {
+    const bytes = await source.readBytes(`${ASSETS_DIR}/${f}`);
+    if (bytes && bytes.byteLength > largestSize) {
       largest = f;
-      largestSize = s.size;
+      largestSize = bytes.byteLength;
     }
   }
+  if (!largest) {
+    return { name: 'Bundle size', status: 'warn', detail: `no readable JS in ${ASSETS_DIR}` };
+  }
 
-  const content = await readFile(join(assetsDir, largest));
-  const gzipped = gzipSync(content).byteLength;
+  const content = await source.readBytes(`${ASSETS_DIR}/${largest}`);
+  if (!content) {
+    return { name: 'Bundle size', status: 'warn', detail: `could not read ${largest}` };
+  }
+  const gzipped = await gzipByteLength(content);
   const kb = (gzipped / 1024).toFixed(1);
   const limitKb = (MAX_GZIP_BYTES / 1024).toFixed(0);
 
@@ -68,3 +91,4 @@ export async function checkBundleSize(repoDir: string): Promise<CheckResult> {
     detail: `${largest}: ${kb} KB gzipped (limit ${limitKb} KB)`,
   };
 }
+

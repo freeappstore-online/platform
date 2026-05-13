@@ -8,5 +8,9 @@
     "lib": ["ES2022"],
     "types": ["node"]
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*"],
+  // Exclude test sources from the published `dist/`. Vitest reads
+  // src/**/*.test.ts directly via the root vitest.config — the
+  // emitted JS is dead weight for npm consumers.
+  "exclude": ["src/**/*.test.ts", "src/**/__snapshots__/**"]
 }

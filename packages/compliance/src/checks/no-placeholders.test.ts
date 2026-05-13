@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource } from '../lib/file-source.js';
 import { checkNoPlaceholders } from './no-placeholders.js';
 
 let dir: string;
@@ -17,7 +18,7 @@ describe('checkNoPlaceholders', () => {
   it('passes when no APPNAME anywhere', async () => {
     await writeFile(join(dir, 'README.md'), '# my-app\nNo placeholders here.');
     await writeFile(join(dir, 'package.json'), '{"name":"my-app"}');
-    const r = await checkNoPlaceholders(dir);
+    const r = await checkNoPlaceholders(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -25,7 +26,7 @@ describe('checkNoPlaceholders', () => {
     await writeFile(join(dir, 'README.md'), '# APPNAME\n');
     await mkdir(join(dir, 'web'));
     await writeFile(join(dir, 'web', 'index.html'), '<title>APPNAME — FreeAppStore</title>');
-    const r = await checkNoPlaceholders(dir);
+    const r = await checkNoPlaceholders(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/README\.md/);
     expect(r.detail).toMatch(/index\.html/);
@@ -35,7 +36,7 @@ describe('checkNoPlaceholders', () => {
   it('skips binary-ish extensions (no false positives on icons etc.)', async () => {
     // .png file with bytes that happen to spell APPNAME — should be skipped
     await writeFile(join(dir, 'icon.png'), Buffer.from('APPNAME'));
-    const r = await checkNoPlaceholders(dir);
+    const r = await checkNoPlaceholders(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -44,7 +45,7 @@ describe('checkNoPlaceholders', () => {
     for (let i = 0; i < 10; i++) {
       await writeFile(join(dir, 'web', `file${i}.ts`), 'const x = "APPNAME";');
     }
-    const r = await checkNoPlaceholders(dir);
+    const r = await checkNoPlaceholders(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/5\+/);
   });

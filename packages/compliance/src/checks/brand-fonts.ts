@@ -1,7 +1,5 @@
-import { readFile } from 'node:fs/promises';
-import { extname } from 'node:path';
+import type { FileSource } from '../lib/file-source.js';
 import type { CheckResult } from '../types.js';
-import { walk } from '../lib/walk.js';
 
 const REQUIRED_FONTS = ['Manrope', 'Fraunces'];
 
@@ -11,12 +9,13 @@ const REQUIRED_FONTS = ['Manrope', 'Fraunces'];
  * CSS file referencing both font names — the actual font-loading mechanism
  * (Google Fonts, self-hosted, etc.) is the app's choice.
  */
-export async function checkBrandFonts(repoDir: string): Promise<CheckResult> {
+export async function checkBrandFonts(source: FileSource): Promise<CheckResult> {
   const found = new Set<string>();
-  for await (const file of walk(repoDir)) {
-    const ext = extname(file).toLowerCase();
+  for await (const path of source.list()) {
+    const ext = extOf(path);
     if (ext !== '.css' && ext !== '.scss' && ext !== '.html') continue;
-    const content = await readFile(file, 'utf8').catch(() => '');
+    const content = await source.read(path);
+    if (!content) continue;
     for (const font of REQUIRED_FONTS) {
       if (content.includes(font)) found.add(font);
     }
@@ -40,4 +39,10 @@ export async function checkBrandFonts(repoDir: string): Promise<CheckResult> {
       'Use them as your body / display fonts in CSS so storefront and apps feel consistent.',
     ],
   };
+}
+
+function extOf(path: string): string {
+  const dot = path.lastIndexOf('.');
+  const slash = path.lastIndexOf('/');
+  return dot > slash ? path.slice(dot).toLowerCase() : '';
 }

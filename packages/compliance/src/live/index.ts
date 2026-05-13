@@ -18,6 +18,7 @@
  * time without leaving the storefront.
  */
 
+import { gzipByteLength } from '../lib/gzip.js';
 import type { CheckResult } from '../types.js';
 
 const TRACKER_PATTERNS = [
@@ -233,22 +234,23 @@ export async function checkBundleSizeLive(html: string, liveUrl: string): Promis
       return { name: 'Bundle size (live)', status: 'fail', detail: `${jsUrl} → ${res.status}` };
     }
     const body = await res.arrayBuffer();
-    // Approximate gzipped size as raw / 3.5. CompressionStream is in
-    // Workers but adding a real gzip pass is more code; the
-    // approximation is conservative enough for the 300 KB threshold.
+    // Real gzip via the shared helper — same math the source-side
+    // check uses, so live and source verdicts can never disagree on
+    // a borderline app.
     const rawKb = Math.round(body.byteLength / 1024);
-    const approxGzipKb = Math.round(rawKb / 3.5);
-    if (approxGzipKb > 300) {
+    const gzippedBytes = await gzipByteLength(new Uint8Array(body));
+    const gzipKb = Math.round(gzippedBytes / 1024);
+    if (gzipKb > 300) {
       return {
         name: 'Bundle size (live)',
         status: 'fail',
-        detail: `~${approxGzipKb} KB gzipped (raw ${rawKb} KB) — over 300 KB limit`,
+        detail: `${gzipKb} KB gzipped (raw ${rawKb} KB) — over 300 KB limit`,
       };
     }
     return {
       name: 'Bundle size (live)',
       status: 'pass',
-      detail: `~${approxGzipKb} KB gzipped (raw ${rawKb} KB)`,
+      detail: `${gzipKb} KB gzipped (raw ${rawKb} KB)`,
     };
   } catch (err) {
     const skipped = isSubrequestCapError(err);

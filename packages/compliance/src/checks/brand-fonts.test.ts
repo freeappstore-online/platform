@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource } from '../lib/file-source.js';
 import { checkBrandFonts } from './brand-fonts.js';
 
 let dir: string;
@@ -20,14 +21,14 @@ describe('checkBrandFonts', () => {
       join(dir, 'web', 'src', 'index.css'),
       'body { font-family: Manrope, sans-serif; } h1 { font-family: Fraunces; }',
     );
-    const r = await checkBrandFonts(dir);
+    const r = await checkBrandFonts(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
   it('passes with fonts split across files', async () => {
     await writeFile(join(dir, 'web', 'src', 'a.css'), '@import "Manrope";');
     await writeFile(join(dir, 'web', 'src', 'b.css'), '@import "Fraunces";');
-    const r = await checkBrandFonts(dir);
+    const r = await checkBrandFonts(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
@@ -36,20 +37,20 @@ describe('checkBrandFonts', () => {
       join(dir, 'web', 'index.html'),
       '<link href="https://fonts.googleapis.com/css2?family=Manrope&family=Fraunces" rel="stylesheet">',
     );
-    const r = await checkBrandFonts(dir);
+    const r = await checkBrandFonts(fsFileSource(dir));
     expect(r.status).toBe('pass');
   });
 
   it('fails when only one of the two is present', async () => {
     await writeFile(join(dir, 'web', 'src', 'a.css'), '@import "Manrope";');
-    const r = await checkBrandFonts(dir);
+    const r = await checkBrandFonts(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/Fraunces/);
   });
 
   it('fails when neither is present', async () => {
     await writeFile(join(dir, 'web', 'src', 'a.css'), 'body { font: Helvetica; }');
-    const r = await checkBrandFonts(dir);
+    const r = await checkBrandFonts(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/Manrope/);
     expect(r.detail).toMatch(/Fraunces/);
