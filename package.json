@@ -1,5 +1,5 @@
 {
-  "name": "freeappstore-sdk-monorepo",
+  "name": "freeappstore-platform-monorepo",
   "private": true,
   "version": "0.0.0",
   "description": "Free SDK + CLI + backend for apps published on freeappstore.online",

@@ -7,14 +7,14 @@
   "bin": {
     "fgs": "./dist/index.js"
   },
-  "homepage": "https://github.com/freeappstore-online/sdk#readme",
+  "homepage": "https://github.com/freeappstore-online/platform#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/freeappstore-online/sdk.git",
+    "url": "git+https://github.com/freeappstore-online/platform.git",
     "directory": "packages/fgs-cli"
   },
   "bugs": {
-    "url": "https://github.com/freeappstore-online/sdk/issues"
+    "url": "https://github.com/freeappstore-online/platform/issues"
   },
   "keywords": [
     "freegamestore",
