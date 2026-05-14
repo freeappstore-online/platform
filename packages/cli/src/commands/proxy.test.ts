@@ -1,5 +1,40 @@
 import { describe, it, expect } from 'vitest';
-import { proxyCommand } from './proxy.js';
+import { proxyCommand, parseInject } from './proxy.js';
+
+describe('parseInject', () => {
+  it('recognizes bearer (no name)', () => {
+    expect(parseInject('bearer')).toEqual({ kind: 'bearer', name: '' });
+  });
+
+  it('parses query:<name>', () => {
+    expect(parseInject('query:appid')).toEqual({ kind: 'query', name: 'appid' });
+  });
+
+  it('parses header:<name> with hyphens preserved', () => {
+    expect(parseInject('header:X-API-Key')).toEqual({ kind: 'header', name: 'X-API-Key' });
+  });
+
+  it('rejects empty string', () => {
+    expect(() => parseInject('')).toThrow(/--inject/);
+  });
+
+  it('rejects unknown kinds', () => {
+    expect(() => parseInject('cookie:session')).toThrow(/--inject/);
+    expect(() => parseInject('basic:user:pass')).toThrow(/--inject/);
+  });
+
+  it('rejects "query" without a name', () => {
+    expect(() => parseInject('query')).toThrow(/--inject/);
+    expect(() => parseInject('query:')).toThrow(/--inject/);
+  });
+
+  it('keeps colons inside the name (for headers like X-Forwarded-For)', () => {
+    expect(parseInject('header:X-Some:Weird-Name')).toEqual({
+      kind: 'header',
+      name: 'X-Some:Weird-Name',
+    });
+  });
+});
 
 /**
  * The Inject parser is a private function inside proxy.ts. Rather than

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveAppIdOrExit } from './secret.js';
+import { resolveAppIdOrExit, bearer, dieFromHttp } from './secret.js';
 
 function chdir(d: string): () => void {
   const prev = process.cwd();
@@ -71,6 +71,82 @@ describe('resolveAppIdOrExit', () => {
       }
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('bearer', () => {
+  it('sets the Authorization and Content-Type headers from the session token', () => {
+    const headers = bearer({
+      apiBase: 'https://x',
+      session: { token: 'tok-1', obtainedAt: 0 },
+    });
+    expect(headers).toEqual({
+      Authorization: 'Bearer tok-1',
+      'Content-Type': 'application/json',
+    });
+  });
+});
+
+describe('dieFromHttp', () => {
+  it('extracts `error` from a JSON body and exits 1', async () => {
+    const exitSpy = mockExit();
+    let captured = '';
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stderr as any).write = (s: string) => {
+      captured += s;
+      return true;
+    };
+    try {
+      const res = new Response(JSON.stringify({ error: 'no allowlist match for X' }), {
+        status: 403,
+      });
+      await expect(dieFromHttp(res, 'do thing')).rejects.toThrow('exit:1');
+      expect(captured).toContain('do thing failed (403)');
+      expect(captured).toContain('no allowlist match for X');
+    } finally {
+      process.stderr.write = origWrite;
+      exitSpy.restore();
+    }
+  });
+
+  it('falls back to the raw body when not JSON', async () => {
+    const exitSpy = mockExit();
+    let captured = '';
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stderr as any).write = (s: string) => {
+      captured += s;
+      return true;
+    };
+    try {
+      const res = new Response('plain text error', { status: 500 });
+      await expect(dieFromHttp(res, 'do thing')).rejects.toThrow('exit:1');
+      expect(captured).toContain('plain text error');
+    } finally {
+      process.stderr.write = origWrite;
+      exitSpy.restore();
+    }
+  });
+
+  it('uses raw body when the JSON has no `error` field', async () => {
+    const exitSpy = mockExit();
+    let captured = '';
+    const origWrite = process.stderr.write.bind(process.stderr);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stderr as any).write = (s: string) => {
+      captured += s;
+      return true;
+    };
+    try {
+      const res = new Response('{"unrelated":"field"}', { status: 400 });
+      await expect(dieFromHttp(res, 'do thing')).rejects.toThrow('exit:1');
+      // Falls back to the raw JSON body since `error` is absent.
+      expect(captured).toContain('"unrelated":"field"');
+    } finally {
+      process.stderr.write = origWrite;
+      exitSpy.restore();
     }
   });
 });

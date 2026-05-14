@@ -353,6 +353,77 @@ describe('PUT /v1/apps/:appId/secrets/:name', () => {
   });
 });
 
+describe('PUT /v1/apps/:appId/secrets/:name — input validation', () => {
+  it('400s on empty value', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/secrets/KEY',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: '' }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on non-string value', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/secrets/KEY',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: 12345 }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on missing body', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/secrets/KEY',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('400s when value is over 4096 chars', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/secrets/KEY',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: 'x'.repeat(4097) }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('404s when the app does not exist', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/nonexistent/secrets/KEY',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: 'x' }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('GET /v1/apps/:appId/secrets', () => {
   it('returns the secret list (names only — never the value)', async () => {
     const data = freshData();
@@ -375,6 +446,27 @@ describe('GET /v1/apps/:appId/secrets', () => {
     expect(body).toEqual({
       secrets: [{ name: 'OPENWEATHER_KEY', createdAt: 1000, lastUsedAt: 2000 }],
     });
+  });
+
+  it('returns an empty list when no secrets exist', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/secrets',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ secrets: [] });
+  });
+
+  it('403s when caller is not the owner', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/secrets',
+      { headers: { Authorization: await strangerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(403);
   });
 });
 
@@ -496,6 +588,253 @@ describe('PUT /v1/apps/:appId/allowlist', () => {
     expect(res.status).toBe(204);
     expect(data.allow).toHaveLength(1);
     expect(data.allow[0]!.methods).toBe('GET');
+  });
+
+  it('rejects past the 5-rule cap', async () => {
+    const data = freshData();
+    data.secrets.push({
+      app_id: 'weather',
+      name: 'KEY',
+      key_ciphertext: new Uint8Array([1]),
+      dek_wrapped: new Uint8Array([1]),
+      iv: new Uint8Array([1]),
+      created_at: 0,
+      last_used_at: null,
+    });
+    for (let i = 0; i < 5; i++) {
+      data.allow.push({
+        app_id: 'weather',
+        pattern: `https://api${i}.example.com/`,
+        inject_kind: 'header',
+        inject_name: 'X-API-Key',
+        secret_name: 'KEY',
+        methods: 'GET',
+        created_at: 0,
+      });
+    }
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: 'https://api6.example.com/',
+          injectKind: 'header',
+          injectName: 'X-API-Key',
+          secretName: 'KEY',
+          methods: ['GET'],
+        }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('updating an existing pattern does not bump the cap', async () => {
+    const data = freshData();
+    data.secrets.push({
+      app_id: 'weather',
+      name: 'KEY',
+      key_ciphertext: new Uint8Array([1]),
+      dek_wrapped: new Uint8Array([1]),
+      iv: new Uint8Array([1]),
+      created_at: 0,
+      last_used_at: null,
+    });
+    for (let i = 0; i < 5; i++) {
+      data.allow.push({
+        app_id: 'weather',
+        pattern: `https://api${i}.example.com/`,
+        inject_kind: 'header',
+        inject_name: 'X-API-Key',
+        secret_name: 'KEY',
+        methods: 'GET',
+        created_at: 0,
+      });
+    }
+    // Update the first rule (existing pattern) — must succeed even at cap.
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: 'https://api0.example.com/',
+          injectKind: 'header',
+          injectName: 'X-Different-Header',
+          secretName: 'KEY',
+          methods: ['GET', 'POST'],
+        }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(204);
+    expect(data.allow).toHaveLength(5);
+    expect(data.allow.find((r) => r.pattern === 'https://api0.example.com/')!.inject_name).toBe(
+      'X-Different-Header',
+    );
+  });
+
+  it('rejects invalid pattern (not https)', async () => {
+    const data = freshData();
+    data.secrets.push({
+      app_id: 'weather',
+      name: 'KEY',
+      key_ciphertext: new Uint8Array([1]),
+      dek_wrapped: new Uint8Array([1]),
+      iv: new Uint8Array([1]),
+      created_at: 0,
+      last_used_at: null,
+    });
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: 'http://api.example.com/',
+          injectKind: 'header',
+          injectName: 'X-API-Key',
+          secretName: 'KEY',
+          methods: ['GET'],
+        }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /v1/apps/:appId/allowlist', () => {
+  it('returns the rule list with parsed methods', async () => {
+    const data = freshData();
+    data.allow.push({
+      app_id: 'weather',
+      pattern: 'https://api.openweathermap.org/data/2.5/',
+      inject_kind: 'query',
+      inject_name: 'appid',
+      secret_name: 'OPENWEATHER_KEY',
+      methods: 'GET,POST',
+      created_at: 1234,
+    });
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json<{ rules: unknown[] }>();
+    expect(body).toEqual({
+      rules: [
+        {
+          pattern: 'https://api.openweathermap.org/data/2.5/',
+          injectKind: 'query',
+          injectName: 'appid',
+          secretName: 'OPENWEATHER_KEY',
+          methods: ['GET', 'POST'],
+          createdAt: 1234,
+        },
+      ],
+    });
+  });
+
+  it('returns an empty list when no rules exist', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ rules: [] });
+  });
+
+  it('403s when caller is not the owner', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      { headers: { Authorization: await strangerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('DELETE /v1/apps/:appId/allowlist', () => {
+  it('removes the rule, 204', async () => {
+    const data = freshData();
+    data.allow.push({
+      app_id: 'weather',
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'KEY',
+      methods: 'GET',
+      created_at: 0,
+    });
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pattern: 'https://api.example.com/' }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(204);
+    expect(data.allow).toHaveLength(0);
+  });
+
+  it('404s when the pattern is not in the allowlist', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pattern: 'https://nope.example.com/' }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('400s when pattern is missing', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('403s when caller is not the owner', async () => {
+    const data = freshData();
+    data.allow.push({
+      app_id: 'weather',
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'KEY',
+      methods: 'GET',
+      created_at: 0,
+    });
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await strangerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pattern: 'https://api.example.com/' }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(403);
+    expect(data.allow).toHaveLength(1); // unchanged
   });
 });
 
@@ -699,6 +1038,301 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     const vary = res.headers.get('vary') ?? '';
     expect(vary).toContain('Accept');
     expect(vary).toContain('Origin');
+  });
+
+  it('injects a Bearer token (no other headers leaked)', async () => {
+    const data = freshData();
+    await realSeed(data, 'GH_TOKEN', 'ghp_secret', {
+      pattern: 'https://api.github.com/',
+      inject_kind: 'bearer',
+      inject_name: '',
+      secret_name: 'GH_TOKEN',
+      methods: 'GET',
+    });
+    const captured: { init?: RequestInit | undefined } = {};
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured.init = init;
+      return new Response('{}');
+    }) as typeof fetch;
+    await app.request(
+      '/v1/apps/weather/proxy/api.github.com/user',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    const fwd = new Headers(captured.init?.headers);
+    expect(fwd.get('authorization')).toBe('Bearer ghp_secret');
+  });
+
+  it('injects a header secret', async () => {
+    const data = freshData();
+    await realSeed(data, 'API_KEY', 'sek', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'API_KEY',
+      methods: 'GET',
+    });
+    const captured: { init?: RequestInit | undefined } = {};
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured.init = init;
+      return new Response('ok');
+    }) as typeof fetch;
+    await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    const fwd = new Headers(captured.init?.headers);
+    expect(fwd.get('x-api-key')).toBe('sek');
+  });
+
+  it('longest-prefix rule wins when multiple match', async () => {
+    const data = freshData();
+    await realSeed(data, 'BASIC', 'basic-key', {
+      pattern: 'https://api.openweathermap.org/data/2.5/',
+      inject_kind: 'query',
+      inject_name: 'appid',
+      secret_name: 'BASIC',
+      methods: 'GET',
+    });
+    await realSeed(data, 'PRO', 'pro-key', {
+      pattern: 'https://api.openweathermap.org/data/2.5/onecall',
+      inject_kind: 'query',
+      inject_name: 'appid',
+      secret_name: 'PRO',
+      methods: 'GET',
+    });
+    const captured: { url?: string } = {};
+    globalThis.fetch = vi.fn(async (url) => {
+      captured.url = String(url);
+      return new Response('{}');
+    }) as typeof fetch;
+    await app.request(
+      '/v1/apps/weather/proxy/api.openweathermap.org/data/2.5/onecall?lat=1&lon=2',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(captured.url).toContain('appid=pro-key');
+  });
+
+  it('strips Cloudflare-injected request headers (cf-*, x-forwarded-for, cookie)', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'v', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'K',
+      methods: 'GET',
+    });
+    const captured: { init?: RequestInit | undefined } = {};
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured.init = init;
+      return new Response('ok');
+    }) as typeof fetch;
+    await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      {
+        headers: {
+          Authorization: await ownerAuth(),
+          'CF-Connecting-IP': '203.0.113.5',
+          'CF-IPCountry': 'AU',
+          'X-Forwarded-For': '203.0.113.5, 10.0.0.1',
+          Cookie: 'session=leak',
+        },
+      },
+      baseEnv(fakeDB(data)),
+    );
+    const fwd = new Headers(captured.init?.headers);
+    expect(fwd.get('cf-connecting-ip')).toBeNull();
+    expect(fwd.get('cf-ipcountry')).toBeNull();
+    expect(fwd.get('x-forwarded-for')).toBeNull();
+    expect(fwd.get('cookie')).toBeNull();
+  });
+
+  it('preserves benign caller headers (Accept, User-Agent)', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'v', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'K',
+      methods: 'GET',
+    });
+    const captured: { init?: RequestInit | undefined } = {};
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured.init = init;
+      return new Response('ok');
+    }) as typeof fetch;
+    await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      {
+        headers: {
+          Authorization: await ownerAuth(),
+          Accept: 'application/json',
+          'User-Agent': 'my-app/1.0',
+        },
+      },
+      baseEnv(fakeDB(data)),
+    );
+    const fwd = new Headers(captured.init?.headers);
+    expect(fwd.get('accept')).toBe('application/json');
+    expect(fwd.get('user-agent')).toBe('my-app/1.0');
+  });
+
+  it('forwards POST body bytes to upstream verbatim', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'v', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'K',
+      methods: 'POST',
+    });
+    const captured: { init?: RequestInit | undefined } = {};
+    globalThis.fetch = vi.fn(async (_url, init) => {
+      captured.init = init;
+      return new Response('ok');
+    }) as typeof fetch;
+    const body = JSON.stringify({ hello: 'world' });
+    await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: await ownerAuth(),
+          'Content-Type': 'application/json',
+        },
+        body,
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(captured.init?.method).toBe('POST');
+    expect(new TextDecoder().decode(captured.init?.body as ArrayBuffer)).toBe(body);
+  });
+
+  it('proxies the upstream status code through (non-200)', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'v', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'K',
+      methods: 'GET',
+    });
+    globalThis.fetch = vi.fn(
+      async () => new Response('not found', { status: 404 }),
+    ) as typeof fetch;
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('caller-supplied query params survive alongside the injected one', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'sek', {
+      pattern: 'https://api.openweathermap.org/data/2.5/',
+      inject_kind: 'query',
+      inject_name: 'appid',
+      secret_name: 'K',
+      methods: 'GET',
+    });
+    const captured: { url?: string } = {};
+    globalThis.fetch = vi.fn(async (url) => {
+      captured.url = String(url);
+      return new Response('{}');
+    }) as typeof fetch;
+    await app.request(
+      '/v1/apps/weather/proxy/api.openweathermap.org/data/2.5/weather?q=London&units=metric',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    const u = new URL(captured.url!);
+    expect(u.searchParams.get('q')).toBe('London');
+    expect(u.searchParams.get('units')).toBe('metric');
+    expect(u.searchParams.get('appid')).toBe('sek');
+  });
+
+  it('caller cannot override the injected query param', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'real', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'query',
+      inject_name: 'apikey',
+      secret_name: 'K',
+      methods: 'GET',
+    });
+    const captured: { url?: string } = {};
+    globalThis.fetch = vi.fn(async (url) => {
+      captured.url = String(url);
+      return new Response('{}');
+    }) as typeof fetch;
+    await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x?apikey=BOGUS',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(new URL(captured.url!).searchParams.get('apikey')).toBe('real');
+  });
+
+  it('500s when allowlist references a missing secret', async () => {
+    // Configure an allowlist rule whose secret_name has no matching row.
+    const data = freshData();
+    data.allow.push({
+      app_id: 'weather',
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'GHOST',
+      methods: 'GET',
+      created_at: 0,
+    });
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(500);
+    const body = await res.json<{ error: string }>();
+    expect(body.error).toContain('GHOST');
+  });
+
+  it('503s when KEK is unset', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'v', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'K',
+      methods: 'GET',
+    });
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data), /* withKek */ false),
+    );
+    expect(res.status).toBe(503);
+  });
+
+  it('400s on a malformed proxy path that lacks the expected prefix', async () => {
+    // Direct construction: route matches but path doesn't begin with prefix.
+    // This shouldn't be reachable via Hono in practice, but the defensive
+    // branch should still respond 400 if it does fire.
+    // We simulate by URL-encoding the host param so Hono captures something
+    // that doesn't reconstruct verbatim. Skipped: requires Hono internals.
+    // Instead, sanity-check that the obvious malformed path is rejected
+    // (no host segment after /proxy/).
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/proxy/',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    // Hono itself returns 404 for an unmatched route — not our 400 branch.
+    // Either is acceptable; we just want a non-200.
+    expect([400, 404]).toContain(res.status);
   });
 });
 

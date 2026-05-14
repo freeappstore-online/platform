@@ -14,7 +14,10 @@ interface AllowlistRule {
  * Parse the --inject flag's "kind:name" form. `query:appid` → query param,
  * `header:X-API-Key` → custom header, `bearer` → Authorization: Bearer <secret>.
  */
-function parseInject(s: string): { kind: 'query' | 'header' | 'bearer'; name: string } {
+export function parseInject(s: string): {
+  kind: 'query' | 'header' | 'bearer';
+  name: string;
+} {
   if (s === 'bearer') return { kind: 'bearer', name: '' };
   const m = /^(query|header):(.+)$/.exec(s);
   if (!m) {
