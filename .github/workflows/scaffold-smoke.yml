@@ -83,6 +83,15 @@ jobs:
           pnpm --filter @freeappstore/compliance build
           pnpm --filter "./packages/${{ matrix.cli }}" build
 
+      - name: Configure git identity (init runs a git commit on the scaffold)
+        # The CLI's `init` does `git init` + `git commit -m ...` after
+        # substituting APPNAME, which fails with "empty ident name not
+        # allowed" on a fresh runner. A real user typically has a global
+        # identity from their normal git use, but CI doesn't.
+        run: |
+          git config --global user.email "scaffold-smoke@freeappstore.online"
+          git config --global user.name "Scaffold Smoke"
+
       - name: Scaffold via the CLI
         # Run the CLI in a clean tmp dir to isolate from the platform workspace.
         # Use a deterministic app id like `smoke3d` so it's a valid id and so
