@@ -1,0 +1,137 @@
+name: Scaffold smoke
+
+# For every (cli, template) pair: clone the template via the CLI, install,
+# build, and run the CLI's own `check`. Asserts that a fresh user running
+# `fas init` / `fgs init` ends up with a runnable, compliance-passing app.
+#
+# Why this exists: in a single afternoon we found six template bugs that
+# each made the corresponding `init` flow ship a non-buildable / non-passing
+# scaffold (wrong @freegamestore/games pin, missing dep declaration, missing
+# manifest.json, dead local Shell.tsx using h-screen, false-positive
+# tracker-list literal, missing orientation/min_viewport_width). Unit tests
+# all passed throughout. This workflow catches that whole class — anything
+# that breaks the *new contributor's first 90 seconds*.
+#
+# Schedule daily so template-side drift (someone pushes a regression to a
+# template repo, or the published @freegamestore/games SDK changes shape)
+# is surfaced even when nothing in this repo changes.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'packages/cli/**'
+      - 'packages/fgs-cli/**'
+      - 'packages/compliance/**'
+      - '.github/workflows/scaffold-smoke.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/cli/**'
+      - 'packages/fgs-cli/**'
+      - 'packages/compliance/**'
+      - '.github/workflows/scaffold-smoke.yml'
+  schedule:
+    # 04:30 UTC daily — independent of CLI changes, so template-side drift
+    # surfaces here on its own schedule.
+    - cron: '30 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scaffold:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cli: cli
+            cli_bin: fas
+            template: standalone
+          - cli: cli
+            cli_bin: fas
+            template: connected
+          - cli: fgs-cli
+            cli_bin: fgs
+            template: canvas
+          - cli: fgs-cli
+            cli_bin: fgs
+            template: grid
+          - cli: fgs-cli
+            cli_bin: fgs
+            template: 3d
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install platform deps + build CLIs
+        run: |
+          pnpm install --frozen-lockfile
+          # Build the CLI we're about to exercise (and its compliance dep).
+          # The CLI clones the template repo from GitHub via plain `git clone`,
+          # so we don't need to set up the templates locally — just need a
+          # runnable CLI binary with compliance available on disk.
+          pnpm --filter @freeappstore/compliance build
+          pnpm --filter "./packages/${{ matrix.cli }}" build
+
+      - name: Scaffold via the CLI
+        # Run the CLI in a clean tmp dir to isolate from the platform workspace.
+        # Use a deterministic app id like `smoke3d` so it's a valid id and so
+        # the matrix shows which template ran on each row.
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/scaffold-smoke
+          cd /tmp/scaffold-smoke
+          APP_ID="smk-${{ matrix.template }}"
+          # Sanitize: app ids must start with a letter, lowercase, hyphens ok.
+          APP_ID="${APP_ID//[^a-z0-9-]/}"
+          echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
+          node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" \
+            init "$APP_ID" --template="${{ matrix.template }}"
+
+      - name: Install scaffold deps
+        working-directory: /tmp/scaffold-smoke
+        run: |
+          cd "$APP_ID"
+          # Use plain `pnpm install` (not --frozen-lockfile) because the
+          # template's lockfile may be hash-locked to "@APPNAME" while we
+          # just substituted to a real id. This matches what a new user
+          # actually runs.
+          pnpm install
+
+      - name: Build scaffold
+        working-directory: /tmp/scaffold-smoke
+        run: |
+          cd "$APP_ID"
+          pnpm build
+
+      - name: Run CLI compliance check on the scaffold
+        working-directory: /tmp/scaffold-smoke
+        run: |
+          cd "$APP_ID"
+          # `fas check` and `fgs check` exit non-zero on any hard fail.
+          # Warnings are tolerated (they're informational by design).
+          node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" check
+
+      - name: Show scaffold tree on failure
+        if: failure()
+        working-directory: /tmp/scaffold-smoke
+        run: |
+          echo "::group::scaffolded files"
+          find "$APP_ID" -type f -not -path "*/node_modules/*" | head -40
+          echo "::endgroup::"
+          echo "::group::root package.json"
+          cat "$APP_ID/package.json" || true
+          echo "::endgroup::"
+          echo "::group::web/package.json"
+          cat "$APP_ID/web/package.json" || true
+          echo "::endgroup::"
