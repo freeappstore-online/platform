@@ -1,7 +1,7 @@
 {
   "name": "@freeappstore/sdk",
-  "version": "0.1.2",
-  "description": "Browser SDK for free apps on freeappstore.online — auth, per-user KV, light realtime rooms.",
+  "version": "0.2.0",
+  "description": "Browser SDK for free apps on freeappstore.online — auth, per-user KV, light realtime rooms, secret-injecting proxy for third-party APIs.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,7 +29,9 @@
     "rooms",
     "websocket",
     "github-oauth",
-    "cloudflare-workers"
+    "cloudflare-workers",
+    "proxy",
+    "api-key"
   ],
   "files": [
     "dist",
