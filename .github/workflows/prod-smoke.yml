@@ -189,6 +189,8 @@ jobs:
             await new Promise(r => setTimeout(r, 400))
             if (room.state !== 'closed') { console.error('did not close cleanly'); process.exit(1) }
             console.log('  ✓ closed cleanly')
+            // ws keeps the event loop alive even after close; exit explicitly.
+            process.exit(0)
           "
 
       - name: Open / update issue on failure
