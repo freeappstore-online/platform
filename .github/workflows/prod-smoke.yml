@@ -153,6 +153,44 @@ jobs:
             "$API_BASE/v1/apps/$TEST_APP_ID/secrets/$NAME" > /dev/null || true
           echo "  ✓ cleanup done"
 
+      - name: 6. Rooms WebSocket round-trip via published SDK
+        env:
+          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
+        if: env.SESSION_TOKEN != ''
+        run: |
+          set -euo pipefail
+          cd /tmp/smoke-sdk   # already has @freeappstore/sdk@latest from step 2
+          npm install ws --silent
+          # The SDK's Auth class reads from browser localStorage; in Node we
+          # inject the token directly. Same trick as our local SDK smoke.
+          SESSION_TOKEN="$SESSION_TOKEN" API_BASE="$API_BASE" TEST_APP_ID="$TEST_APP_ID" \
+          node --input-type=module -e "
+            import { initApp } from '@freeappstore/sdk'
+            import { WebSocket } from 'ws'
+            globalThis.WebSocket ||= WebSocket
+            const fas = initApp({ appId: process.env.TEST_APP_ID, apiBase: process.env.API_BASE })
+            Object.defineProperty(fas.auth, 'token', { get() { return process.env.SESSION_TOKEN } })
+
+            const room = fas.rooms.join('prod-smoke-room-' + Date.now())
+            await new Promise((res, rej) => {
+              const t = setTimeout(() => rej(new Error('timeout, last state: ' + room.state)), 12000)
+              if (room.state === 'open') { clearTimeout(t); return res() }
+              const off = room.onConnectionState(s => {
+                if (s === 'open') { clearTimeout(t); off(); res() }
+                if (s === 'closed' || s === 'error') { clearTimeout(t); off(); rej(new Error('unexpected state ' + s)) }
+              })
+            })
+            console.log('  ✓ room open')
+            room.send({ ping: 'prod-smoke' })
+            await new Promise(r => setTimeout(r, 600))
+            if (room.state !== 'open') { console.error('connection dropped'); process.exit(1) }
+            console.log('  ✓ send did not throw, still open')
+            room.close()
+            await new Promise(r => setTimeout(r, 400))
+            if (room.state !== 'closed') { console.error('did not close cleanly'); process.exit(1) }
+            console.log('  ✓ closed cleanly')
+          "
+
       - name: Open / update issue on failure
         if: failure() && github.event_name == 'schedule'
         uses: actions/github-script@v7
