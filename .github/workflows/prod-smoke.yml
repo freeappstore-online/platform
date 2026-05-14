@@ -78,13 +78,13 @@ jobs:
           # apps/mine returns the session-owner's app list; we just check it's a 200 + JSON object
           body=$(curl -sS -H "Authorization: Bearer $SESSION_TOKEN" "$API_BASE/v1/apps/mine")
           echo "  /apps/mine returned $(echo "$body" | wc -c) bytes"
-          echo "$body" | python3 -c "
-            import sys, json
-            d = json.load(sys.stdin)
-            if not isinstance(d.get('apps'), list):
+          BODY="$body" python3 <<'PY'
+          import os, json, sys
+          d = json.loads(os.environ['BODY'])
+          if not isinstance(d.get('apps'), list):
               print('apps key missing or not a list:', d); sys.exit(1)
-            print(f'  {len(d[\"apps\"])} apps owned by session user')
-          "
+          print(f'  {len(d["apps"])} apps owned by session user')
+          PY
 
       - name: 4. KV round-trip
         env:
@@ -103,11 +103,11 @@ jobs:
           # GET
           body=$(curl -sS -H "Authorization: Bearer $SESSION_TOKEN" "$API_BASE/v1/apps/$TEST_APP_ID/kv/$KEY")
           echo "  GET $KEY → $body"
-          echo "$body" | python3 -c "
-            import sys, json
-            d = json.load(sys.stdin)
-            assert d.get('hello') == 'smoke', f'expected hello=smoke, got {d}'
-          "
+          BODY="$body" python3 <<'PY'
+          import os, json
+          d = json.loads(os.environ['BODY'])
+          assert d.get('hello') == 'smoke', f'expected hello=smoke, got {d}'
+          PY
           # DELETE (cleanup)
           code=$(curl -sS -X DELETE -o /dev/null -w "%{http_code}" \
             -H "Authorization: Bearer $SESSION_TOKEN" \
@@ -137,14 +137,14 @@ jobs:
           # Call via proxy
           body=$(curl -sS --fail -H "Authorization: Bearer $SESSION_TOKEN" \
             "$API_BASE/v1/apps/$TEST_APP_ID/proxy/httpbin.org/headers")
-          echo "$body" | python3 -c "
-            import sys, json
-            d = json.load(sys.stdin)
-            v = d.get('headers', {}).get('X-Smoke-Key')
-            if v != 'smoke-value-12345':
+          BODY="$body" python3 <<'PY'
+          import os, json, sys
+          d = json.loads(os.environ['BODY'])
+          v = d.get('headers', {}).get('X-Smoke-Key')
+          if v != 'smoke-value-12345':
               print(f'expected X-Smoke-Key=smoke-value-12345, got {v}'); sys.exit(1)
-            print('  ✓ proxy injected secret correctly')
-          "
+          print('  ✓ proxy injected secret correctly')
+          PY
           # Cleanup (best-effort — failure here is logged, not fatal)
           curl -sS -X DELETE -H "Authorization: Bearer $SESSION_TOKEN" -H "Content-Type: application/json" \
             --data '{"pattern":"https://httpbin.org/"}' \
