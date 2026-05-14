@@ -11,6 +11,11 @@ describe('normalizeTarget', () => {
     expect(normalizeTarget('http://api.example.com/v1/x')).toBe('api.example.com/v1/x');
   });
 
+  it('matches the scheme case-insensitively', () => {
+    expect(normalizeTarget('HTTPS://api.example.com/v1/x')).toBe('api.example.com/v1/x');
+    expect(normalizeTarget('Http://api.example.com/v1/x')).toBe('api.example.com/v1/x');
+  });
+
   it('strips leading slashes from bare form', () => {
     expect(normalizeTarget('//api.example.com/v1')).toBe('api.example.com/v1');
   });

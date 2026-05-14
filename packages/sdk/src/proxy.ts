@@ -44,11 +44,17 @@ export class Proxy {
  * form and get the same result. Throws on schemes other than http(s) — the
  * proxy only ever forwards over https upstream and we want a loud error
  * rather than a silent rewrite.
+ *
+ * Scheme detection is case-insensitive: `HTTPS://api.example.com/x` should
+ * normalize the same as `https://api.example.com/x`.
  */
 export function normalizeTarget(target: string): string {
-  if (target.startsWith('https://')) return target.slice('https://'.length);
-  if (target.startsWith('http://')) return target.slice('http://'.length);
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(target)) {
+  const schemeMatch = /^([a-z][a-z0-9+.-]*):\/\//i.exec(target);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1]!.toLowerCase();
+    if (scheme === 'http' || scheme === 'https') {
+      return target.slice(schemeMatch[0].length);
+    }
     throw new Error('proxy.fetch: only http(s) targets are supported');
   }
   // Already in "host/path" form.

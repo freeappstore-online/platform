@@ -344,6 +344,12 @@ const PROXY_RESPONSE_SKIP_HEADERS = new Set([
   'connection',
   'keep-alive',
   'transfer-encoding',
+  // The Workers runtime auto-decompresses gzip/br responses before
+  // arrayBuffer() returns. If we passed the original content-encoding header
+  // through, the browser would try to decode already-decoded bytes and get
+  // garbage. content-length goes too — auto-decompression also changes it.
+  'content-encoding',
+  'content-length',
 ]);
 
 secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
@@ -358,10 +364,13 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
     // Reconstruct upstream URL: /v1/apps/:appId/proxy/<host>/<rest...>
     // Hono captures the path-info after the wildcard in c.req.path; we strip
     // the prefix manually because Hono's '*' param key isn't always exposed.
+    // startsWith (not indexOf): the prefix should always be at offset 0;
+    // anything else is a sign the request was rewritten in transit.
     const prefix = `/v1/apps/${appId}/proxy/${host}/`;
-    const idx = c.req.path.indexOf(prefix);
-    if (idx < 0) return c.json({ error: 'malformed proxy path' }, 400);
-    const restPath = c.req.path.slice(idx + prefix.length);
+    if (!c.req.path.startsWith(prefix)) {
+      return c.json({ error: 'malformed proxy path' }, 400);
+    }
+    const restPath = c.req.path.slice(prefix.length);
     const incomingUrl = new URL(c.req.url);
     const upstreamUrl = `https://${host}/${restPath}${incomingUrl.search}`;
 
@@ -467,7 +476,10 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
     const respHeaders = new Headers();
     for (const [k, v] of upstreamRes.headers.entries()) {
       if (!PROXY_RESPONSE_SKIP_HEADERS.has(k.toLowerCase())) {
-        respHeaders.set(k, v);
+        // append, not set: preserves multi-value headers like Vary and Link.
+        // entries() yields one entry per occurrence, so set() would only keep
+        // the last.
+        respHeaders.append(k, v);
       }
     }
     return new Response(respBuf, {

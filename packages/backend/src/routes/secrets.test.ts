@@ -661,5 +661,44 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     );
     expect(res.status).toBe(200);
   });
+
+  it('strips content-encoding/length and preserves multi-value headers', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'v', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'K',
+      methods: 'GET',
+    });
+    // Upstream returns gzip-tagged + multi-value Vary. Workers fetch would
+    // auto-decompress in prod; we must NOT forward content-encoding/length,
+    // and Vary must keep both values.
+    const upstreamHeaders = new Headers();
+    upstreamHeaders.set('content-type', 'application/json');
+    upstreamHeaders.set('content-encoding', 'gzip');
+    upstreamHeaders.set('content-length', '999');
+    upstreamHeaders.append('Vary', 'Accept');
+    upstreamHeaders.append('Vary', 'Origin');
+    upstreamHeaders.append('Set-Cookie', 'session=leak; Path=/');
+    globalThis.fetch = vi.fn(
+      async () => new Response('{"ok":true}', { headers: upstreamHeaders }),
+    ) as typeof fetch;
+
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-encoding')).toBeNull();
+    expect(res.headers.get('content-length')).toBeNull();
+    expect(res.headers.get('set-cookie')).toBeNull();
+    // Both Vary values should be preserved (Headers.getSetCookie isn't right
+    // for Vary, but get() returns them comma-joined per spec).
+    const vary = res.headers.get('vary') ?? '';
+    expect(vary).toContain('Accept');
+    expect(vary).toContain('Origin');
+  });
 });
 
