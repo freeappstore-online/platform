@@ -1,0 +1,193 @@
+name: Prod smoke
+
+# Periodic end-to-end smoke against live prod. Catches the bug class that
+# unit + scaffold-smoke can't see:
+# - Worker died / D1 unreachable / Durable Object misconfigured
+# - publish.yml shipped a regressed @freeappstore/sdk where Proxy is missing
+# - Auth flow broke (long-lived test session no longer accepted)
+# - Compliance check started failing on a known-good fixture (proxy 5xx, etc.)
+# - APP_SECRET_KEK rotation / unset
+#
+# Counterpart to scaffold-smoke (which guards the *new contributor* path)
+# and e2e-live (which guards the *visual storefront* path). This guards
+# the *runtime backend + SDK consumer* path.
+#
+# Frequency: every 30 minutes. Cheap (~30s per run, GH minutes free for
+# public repos). Failures open a GitHub issue; subsequent failures comment
+# on the existing issue instead of spamming.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prod-smoke.yml'
+
+permissions:
+  contents: read
+  issues: write   # so we can open / comment on a failure issue
+
+env:
+  API_BASE: https://api.freeappstore.online
+  TEST_APP_ID: mandarin-english   # serge-ivo's app — used as smoke-test sandbox
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 1. API health
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 "$API_BASE/health")
+          echo "GET /health → $code"
+          test "$code" = "200"
+
+      - name: 2. published SDK has all 4 modules
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/smoke-sdk && cd /tmp/smoke-sdk
+          npm init -y > /dev/null
+          npm install @freeappstore/sdk@latest --silent
+          # Assert all 4 modules wire up via initApp()
+          node --input-type=module -e "
+            import { initApp } from '@freeappstore/sdk'
+            const fas = initApp({ appId: 'smoke', apiBase: 'https://api.freeappstore.online' })
+            const required = ['auth', 'kv', 'rooms', 'proxy']
+            const missing = required.filter(k => !fas[k])
+            if (missing.length) { console.error('missing modules:', missing); process.exit(1) }
+            console.log('  modules:', Object.keys(fas).join(', '))
+          "
+
+      - name: 3. authenticated round-trip — apps/mine
+        env:
+          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SESSION_TOKEN:-}" ]; then
+            echo "::warning::PROD_SMOKE_SESSION_TOKEN secret not set — skipping auth-required steps"
+            exit 0
+          fi
+          # apps/mine returns the session-owner's app list; we just check it's a 200 + JSON object
+          body=$(curl -sS -H "Authorization: Bearer $SESSION_TOKEN" "$API_BASE/v1/apps/mine")
+          echo "  /apps/mine returned $(echo "$body" | wc -c) bytes"
+          echo "$body" | python3 -c "
+            import sys, json
+            d = json.load(sys.stdin)
+            if not isinstance(d.get('apps'), list):
+              print('apps key missing or not a list:', d); sys.exit(1)
+            print(f'  {len(d[\"apps\"])} apps owned by session user')
+          "
+
+      - name: 4. KV round-trip
+        env:
+          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
+        if: env.SESSION_TOKEN != ''
+        run: |
+          set -euo pipefail
+          KEY="prod-smoke-$(date +%s)"
+          # PUT
+          code=$(curl -sS -X PUT -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $SESSION_TOKEN" -H "Content-Type: application/json" \
+            --data '{"hello":"smoke","ts":'"$(date +%s)"'}' \
+            "$API_BASE/v1/apps/$TEST_APP_ID/kv/$KEY")
+          echo "  PUT $KEY → $code"
+          test "$code" = "204"
+          # GET
+          body=$(curl -sS -H "Authorization: Bearer $SESSION_TOKEN" "$API_BASE/v1/apps/$TEST_APP_ID/kv/$KEY")
+          echo "  GET $KEY → $body"
+          echo "$body" | python3 -c "
+            import sys, json
+            d = json.load(sys.stdin)
+            assert d.get('hello') == 'smoke', f'expected hello=smoke, got {d}'
+          "
+          # DELETE (cleanup)
+          code=$(curl -sS -X DELETE -o /dev/null -w "%{http_code}" \
+            -H "Authorization: Bearer $SESSION_TOKEN" \
+            "$API_BASE/v1/apps/$TEST_APP_ID/kv/$KEY")
+          echo "  DELETE $KEY → $code"
+          test "$code" = "204"
+
+      - name: 5. Proxy register + fetch + cleanup
+        env:
+          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
+        if: env.SESSION_TOKEN != ''
+        run: |
+          set -euo pipefail
+          NAME="PROD_SMOKE_KEY"
+          # Register secret
+          curl -sS --fail -X PUT \
+            -H "Authorization: Bearer $SESSION_TOKEN" -H "Content-Type: application/json" \
+            --data '{"value":"smoke-value-12345"}' \
+            "$API_BASE/v1/apps/$TEST_APP_ID/secrets/$NAME" > /dev/null
+          echo "  ✓ secret registered"
+          # Register allowlist (httpbin echoes injected secret back to us)
+          curl -sS --fail -X PUT \
+            -H "Authorization: Bearer $SESSION_TOKEN" -H "Content-Type: application/json" \
+            --data '{"pattern":"https://httpbin.org/","injectKind":"header","injectName":"X-Smoke-Key","secretName":"'"$NAME"'","methods":["GET"]}' \
+            "$API_BASE/v1/apps/$TEST_APP_ID/allowlist" > /dev/null
+          echo "  ✓ allowlist registered"
+          # Call via proxy
+          body=$(curl -sS --fail -H "Authorization: Bearer $SESSION_TOKEN" \
+            "$API_BASE/v1/apps/$TEST_APP_ID/proxy/httpbin.org/headers")
+          echo "$body" | python3 -c "
+            import sys, json
+            d = json.load(sys.stdin)
+            v = d.get('headers', {}).get('X-Smoke-Key')
+            if v != 'smoke-value-12345':
+              print(f'expected X-Smoke-Key=smoke-value-12345, got {v}'); sys.exit(1)
+            print('  ✓ proxy injected secret correctly')
+          "
+          # Cleanup (best-effort — failure here is logged, not fatal)
+          curl -sS -X DELETE -H "Authorization: Bearer $SESSION_TOKEN" -H "Content-Type: application/json" \
+            --data '{"pattern":"https://httpbin.org/"}' \
+            "$API_BASE/v1/apps/$TEST_APP_ID/allowlist" > /dev/null || true
+          curl -sS -X DELETE -H "Authorization: Bearer $SESSION_TOKEN" \
+            "$API_BASE/v1/apps/$TEST_APP_ID/secrets/$NAME" > /dev/null || true
+          echo "  ✓ cleanup done"
+
+      - name: Open / update issue on failure
+        if: failure() && github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issueLabel = 'prod-smoke-failure'
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const body = `Prod smoke failed at ${new Date().toISOString()}.
+
+            See run: ${runUrl}
+
+            Re-run the workflow manually after fixing to verify, or comment \`/close\` once recovered.`
+
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: issueLabel,
+              state: 'open',
+            })
+
+            if (existing.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing[0].number,
+                body,
+              })
+              console.log(`commented on existing issue #${existing[0].number}`)
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '🔥 prod-smoke failing',
+                labels: [issueLabel],
+                body,
+              })
+              console.log('opened new issue')
+            }
