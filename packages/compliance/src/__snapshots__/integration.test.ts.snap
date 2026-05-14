@@ -26,6 +26,16 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     "status": "warn",
   },
   {
+    "detail": "platform-boilerplate sections: Platform: FreeAppStore, Tech Stack, Brand Guidelines, Rules; missing SKILLS.md pointer",
+    "name": "CLAUDE.md is slim (no platform boilerplate)",
+    "status": "warn",
+    "suggestions": [
+      "Per-repo CLAUDE.md should hold only what is unique to this repo (description, dev/build/deploy, repo-specific setup).",
+      "Anything platform-wide (tech stack, brand, mobile rules, deploy flow) belongs in SKILLS.md instead.",
+      "See the "Per-repo CLAUDE.md convention" section of SKILLS.md: https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/SKILLS.md",
+    ],
+  },
+  {
     "detail": "no prefers-color-scheme / data-theme / color-scheme signal in web/src/",
     "name": "Dark mode support",
     "status": "warn",

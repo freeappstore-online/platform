@@ -1,6 +1,7 @@
 import { checkBrandFonts } from './checks/brand-fonts.js';
 import { checkBrandTokens } from './checks/brand-tokens.js';
 import { checkBundleSize } from './checks/bundle-size.js';
+import { checkClaudeMdSlim } from './checks/claude-md-slim.js';
 import { checkDarkMode } from './checks/dark-mode.js';
 import { checkHtmlMeta } from './checks/html-meta.js';
 import { checkLicenseMit } from './checks/license-mit.js';
@@ -25,6 +26,7 @@ export {
   checkBrandFonts,
   checkBrandTokens,
   checkBundleSize,
+  checkClaudeMdSlim,
   checkDarkMode,
   checkHtmlMeta,
   checkLicenseMit,
@@ -88,5 +90,6 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkStoreLink(source),
     checkDarkMode(source),
     checkBundleSize(source),
+    checkClaudeMdSlim(source),
   ]);
 }

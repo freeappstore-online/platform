@@ -77,6 +77,7 @@ describe('failing-app fixture', () => {
     ]);
     expect(summary.warn.sort()).toEqual([
       'Bundle size',
+      'CLAUDE.md is slim (no platform boilerplate)',
       'Dark mode support',
       'No unsafe 100vh',
       'PWA meta tags',

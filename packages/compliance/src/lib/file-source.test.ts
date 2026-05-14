@@ -106,7 +106,7 @@ describe('mapFileSource', () => {
     expect(r.detail).toMatch(/2 occurrences/);
   });
 
-  it('runChecksFromFiles returns all 9 checks', async () => {
+  it('runChecksFromFiles returns all checks', async () => {
     // Minimal "passing" virtual project — enough to not crash any check.
     const files = new Map<string, string>([
       ['package.json', '{"name":"x","packageManager":"pnpm@10"}'],
@@ -118,12 +118,13 @@ describe('mapFileSource', () => {
       ['web/src/index.css', '/* Manrope Fraunces */'],
     ]);
     const results = await runChecksFromFiles(files);
-    expect(results).toHaveLength(16);
+    expect(results).toHaveLength(17);
     const names = results.map((r) => r.name);
     expect(names).toContain('No unsafe 100vh');
     expect(names).toContain('Bundle size');
     expect(names).toContain('MIT License');
     expect(names).toContain('HTML meta tags');
     expect(names).toContain('Brand tokens defined');
+    expect(names).toContain('CLAUDE.md is slim (no platform boilerplate)');
   });
 });
