@@ -32,7 +32,7 @@ export class Proxy {
     if (!this.auth.token) {
       throw new Error('proxy.fetch: not signed in. Call fas.auth.login() first.');
     }
-    const url = `${this.apiBase}/v1/apps/${this.appId}/proxy/${normalizeTarget(target)}`;
+    const url = `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/proxy/${normalizeTarget(target)}`;
     const headers = new Headers(init?.headers);
     headers.set('Authorization', `Bearer ${this.auth.token}`);
     return fetch(url, { ...init, headers });
