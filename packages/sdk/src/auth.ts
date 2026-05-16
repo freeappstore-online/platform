@@ -60,6 +60,15 @@ export class Auth {
   }
 
   /**
+   * Called internally by Kv and ApiProxy when an API response returns 401.
+   * Clears the stale session so the UI reacts (shows sign-in) instead of
+   * every subsequent call throwing "Not signed in" from a cached dead token.
+   */
+  handleUnauthorized(): void {
+    if (this.session) this.signOut();
+  }
+
+  /**
    * Call this once at app start, before rendering anything that depends on
    * auth state. If the page was loaded via an auth callback (e.g. after
    * `signIn()` returned from GitHub), this captures the session from the

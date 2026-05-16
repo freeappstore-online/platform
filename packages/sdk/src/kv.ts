@@ -30,15 +30,20 @@ export class Kv {
     private readonly auth: Auth,
   ) {}
 
-  async list(): Promise<string[]> {
+  async list(opts?: { prefix?: string }): Promise<string[]> {
     const token = this.auth.token;
     if (!token) throw new Error("Not signed in.");
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/kv`, this.apiBase);
+    if (opts?.prefix) url.searchParams.set("prefix", opts.prefix);
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
+    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error("Not signed in."); }
     if (!res.ok) throw new Error(`kv.list failed: ${res.status}`);
-    return (await res.json()) as string[];
+    let keys = (await res.json()) as string[];
+    // Client-side prefix filter as fallback if server doesn't support it yet
+    if (opts?.prefix) keys = keys.filter(k => k.startsWith(opts.prefix!));
+    return keys;
   }
 
   async getMany<T = unknown>(keys: string[]): Promise<Map<string, T>> {
@@ -82,7 +87,7 @@ export class Kv {
     }
   }
 
-  private request(method: string, key: string, body?: string): Promise<Response> {
+  private async request(method: string, key: string, body?: string): Promise<Response> {
     const token = this.auth.token;
     if (!token) throw new Error("Not signed in.");
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/kv/${encodeURIComponent(key)}`, this.apiBase);
@@ -90,6 +95,8 @@ export class Kv {
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const init: RequestInit = { method, headers };
     if (body !== undefined) init.body = body;
-    return fetch(url, init);
+    const res = await fetch(url, init);
+    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error("Not signed in."); }
+    return res;
   }
 }

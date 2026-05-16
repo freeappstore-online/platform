@@ -35,7 +35,9 @@ export class ApiProxy {
     const url = `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/proxy/${normalizeTarget(target)}`;
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${this.auth.token}`);
-    return fetch(url, { ...init, headers });
+    const res = await fetch(url, { ...init, headers });
+    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error("proxy.fetch: session expired. User has been signed out."); }
+    return res;
   }
 }
 
