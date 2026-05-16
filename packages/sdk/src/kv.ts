@@ -38,7 +38,7 @@ export class Kv {
     if (opts?.prefix) url.searchParams.set("prefix", opts.prefix);
     const listResponse = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
-      signal: opts?.signal,
+      ...(opts?.signal && { signal: opts.signal }),
     });
     if (listResponse.status === 401) {
       this.auth.handleUnauthorized();
@@ -108,7 +108,7 @@ export class Kv {
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/kv/${encodeURIComponent(key)}`, this.apiBase);
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    const init: RequestInit = { method, headers, signal };
+    const init: RequestInit = { method, headers, ...(signal && { signal }) };
     if (body !== undefined) init.body = body;
     const kvResponse = await fetch(url, init);
     if (kvResponse.status === 401) {
