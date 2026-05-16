@@ -52,12 +52,12 @@ export class Kv {
   }
 
   /** Fetch multiple keys in parallel. Returns a Map of found key-value pairs (skips failures and missing keys). */
-  async getMany<T = unknown>(keys: string[]): Promise<Map<string, T>> {
+  async getMany<T = unknown>(keys: string[], opts?: { signal?: AbortSignal }): Promise<Map<string, T>> {
     for (const key of keys) assertValidKey(key);
     const results = new Map<string, T>();
     const settled = await Promise.allSettled(
       keys.map(async (key) => {
-        const stored = await this.get<T>(key);
+        const stored = await this.get<T>(key, opts);
         if (stored !== null) results.set(key, stored);
       }),
     );
