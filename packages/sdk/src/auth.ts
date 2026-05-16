@@ -1,6 +1,10 @@
-import type { User, Unsubscribe } from './types.js';
+import type { Unsubscribe, User } from "./types.js";
 
-const STORAGE_KEY = 'fas:session';
+/**
+ * Shared across all FAS apps on the same origin — this is intentional SSO.
+ * A user signed in on one FAS app is signed in on all of them.
+ */
+const STORAGE_KEY = "fas:session";
 
 interface Session {
   token: string;
@@ -28,6 +32,7 @@ export class Auth {
 
   onChange(listener: (user: User | null) => void): Unsubscribe {
     this.listeners.add(listener);
+    listener(this.user);
     return () => this.listeners.delete(listener);
   }
 
@@ -41,10 +46,10 @@ export class Auth {
    */
   signIn(): void {
     const here = new URL(window.location.href);
-    here.hash = '';
-    const url = new URL('/v1/auth/github/start', this.apiBase);
-    url.searchParams.set('app_id', this.appId);
-    url.searchParams.set('return_to', here.toString());
+    here.hash = "";
+    const url = new URL("/v1/auth/github/start", this.apiBase);
+    url.searchParams.set("app_id", this.appId);
+    url.searchParams.set("return_to", here.toString());
     window.location.assign(url.toString());
   }
 
@@ -68,32 +73,37 @@ export class Auth {
    *   render();
    */
   async init(): Promise<void> {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     const hash = window.location.hash;
-    if (!hash.startsWith('#fas_session=')) return;
+    if (!hash.startsWith("#fas_session=")) return;
 
     // Always clear the hash before doing anything else — even on failure.
     // Otherwise a bad token gets re-tried on every reload and the user is
     // permanently stuck on a "broken" URL.
-    history.replaceState(null, '', window.location.pathname + window.location.search);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
 
     let token: string;
     try {
-      token = decodeURIComponent(hash.slice('#fas_session='.length));
+      token = decodeURIComponent(hash.slice("#fas_session=".length));
     } catch {
       // Malformed hash (% with nothing after, etc.). Hash already cleared.
       return;
     }
     if (!token) return;
 
-    const user = await this.fetchUser(token);
-    this.session = { token, user };
-    this.writeStorage(this.session);
-    this.emit();
+    try {
+      const user = await this.fetchUser(token);
+      this.session = { token, user };
+      this.writeStorage(this.session);
+      this.emit();
+    } catch {
+      // Token was invalid or network failed. Hash already cleared so the user
+      // won't get stuck in a retry loop. Silently remain signed out.
+    }
   }
 
   private async fetchUser(token: string): Promise<User> {
-    const res = await fetch(new URL('/v1/auth/me', this.apiBase), {
+    const res = await fetch(new URL("/v1/auth/me", this.apiBase), {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error(`Auth failed: ${res.status}`);
@@ -101,7 +111,7 @@ export class Auth {
   }
 
   private readStorage(): Session | null {
-    if (typeof window === 'undefined') return null;
+    if (typeof window === "undefined") return null;
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     try {
