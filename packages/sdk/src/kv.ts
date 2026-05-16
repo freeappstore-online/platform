@@ -31,13 +31,14 @@ export class Kv {
   ) {}
 
   /** List all keys for this user. Optionally filter by prefix. */
-  async list(opts?: { prefix?: string }): Promise<string[]> {
+  async list(opts?: { prefix?: string; signal?: AbortSignal }): Promise<string[]> {
     const token = this.auth.token;
     if (!token) throw new Error("Not signed in.");
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/kv`, this.apiBase);
     if (opts?.prefix) url.searchParams.set("prefix", opts.prefix);
     const listResponse = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: opts?.signal,
     });
     if (listResponse.status === 401) {
       this.auth.handleUnauthorized();
@@ -50,36 +51,42 @@ export class Kv {
     return keys;
   }
 
-  /** Fetch multiple keys in parallel. Returns a Map of found key-value pairs. */
+  /** Fetch multiple keys in parallel. Returns a Map of found key-value pairs (skips failures and missing keys). */
   async getMany<T = unknown>(keys: string[]): Promise<Map<string, T>> {
     for (const key of keys) assertValidKey(key);
     const results = new Map<string, T>();
-    const fetches = keys.map(async (key) => {
-      const stored = await this.get<T>(key);
-      if (stored !== null) results.set(key, stored);
-    });
-    await Promise.all(fetches);
+    const settled = await Promise.allSettled(
+      keys.map(async (key) => {
+        const stored = await this.get<T>(key);
+        if (stored !== null) results.set(key, stored);
+      }),
+    );
+    // If ALL requests failed with auth error, re-throw so callers know
+    const allFailed = settled.every((s) => s.status === "rejected");
+    if (allFailed && settled.length > 0) {
+      throw (settled[0] as PromiseRejectedResult).reason;
+    }
     return results;
   }
 
   /** Get a value by key. Returns null if not found. */
-  async get<T = unknown>(key: string): Promise<T | null> {
+  async get<T = unknown>(key: string, opts?: { signal?: AbortSignal }): Promise<T | null> {
     assertValidKey(key);
-    const getResponse = await this.request("GET", key);
+    const getResponse = await this.request("GET", key, undefined, opts?.signal);
     if (getResponse.status === 404) return null;
     if (!getResponse.ok) throw new Error(`kv.get failed: ${getResponse.status}`);
     return (await getResponse.json()) as T;
   }
 
   /** Store a JSON-serializable value under the given key. */
-  async set<T = unknown>(key: string, value: T): Promise<void> {
+  async set<T = unknown>(key: string, value: T, opts?: { signal?: AbortSignal }): Promise<void> {
     assertValidKey(key);
     // JSON.stringify(undefined) returns undefined, which would store an empty
     // body and break later get() calls. Reject up front instead.
     if (value === undefined) {
       throw new Error("kv.set: value is undefined. Use kv.delete(key) to remove a key.");
     }
-    const setResponse = await this.request("PUT", key, JSON.stringify(value));
+    const setResponse = await this.request("PUT", key, JSON.stringify(value), opts?.signal);
     if (!setResponse.ok) {
       const text = await setResponse.text();
       throw new Error(`kv.set failed (${setResponse.status}): ${text}`);
@@ -87,21 +94,21 @@ export class Kv {
   }
 
   /** Delete a key. No-op if the key doesn't exist. */
-  async delete(key: string): Promise<void> {
+  async delete(key: string, opts?: { signal?: AbortSignal }): Promise<void> {
     assertValidKey(key);
-    const deleteResponse = await this.request("DELETE", key);
+    const deleteResponse = await this.request("DELETE", key, undefined, opts?.signal);
     if (!deleteResponse.ok && deleteResponse.status !== 404) {
       throw new Error(`kv.delete failed: ${deleteResponse.status}`);
     }
   }
 
-  private async request(method: string, key: string, body?: string): Promise<Response> {
+  private async request(method: string, key: string, body?: string, signal?: AbortSignal): Promise<Response> {
     const token = this.auth.token;
     if (!token) throw new Error("Not signed in.");
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/kv/${encodeURIComponent(key)}`, this.apiBase);
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    const init: RequestInit = { method, headers };
+    const init: RequestInit = { method, headers, signal };
     if (body !== undefined) init.body = body;
     const kvResponse = await fetch(url, init);
     if (kvResponse.status === 401) {

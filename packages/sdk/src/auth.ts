@@ -49,6 +49,7 @@ export class Auth {
    * hash-based router state otherwise.
    */
   signIn(): void {
+    if (typeof window === "undefined") return;
     const here = new URL(window.location.href);
     here.hash = "";
     const url = new URL("/v1/auth/github/start", this.apiBase);
@@ -60,14 +61,16 @@ export class Auth {
   /** Clear the session and notify listeners. */
   signOut(): void {
     this.session = null;
-    window.localStorage.removeItem(STORAGE_KEY);
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(STORAGE_KEY);
+    }
     this.emit();
   }
 
   /**
-   * Called internally by Kv and ApiProxy when an API response returns 401.
-   * Clears the stale session so the UI reacts (shows sign-in) instead of
-   * every subsequent call throwing "Not signed in" from a cached dead token.
+   * @internal Called by Kv and ApiProxy on 401 responses.
+   * Clears the stale session so the UI reacts immediately.
+   * Do not call directly — use `signOut()` instead.
    */
   handleUnauthorized(): void {
     if (this.session) this.signOut();
