@@ -5,6 +5,31 @@ import { checkKvWrite, KV_LIMITS } from '../lib/quota.js';
 
 export const kvRoutes = new Hono<{ Bindings: Env }>();
 
+/** List all keys for the current user in this app. Optional ?prefix= filter. */
+kvRoutes.get('/apps/:appId/kv', async (c) => {
+  try {
+    const user = await requireUser(c);
+    const { appId } = c.req.param();
+    const prefix = c.req.query('prefix');
+
+    let query: string;
+    let bindings: unknown[];
+    if (prefix) {
+      query = 'SELECT key FROM kv WHERE app_id = ? AND user_id = ? AND key LIKE ? ORDER BY key';
+      bindings = [appId, user.id, `${prefix}%`];
+    } else {
+      query = 'SELECT key FROM kv WHERE app_id = ? AND user_id = ? ORDER BY key';
+      bindings = [appId, user.id];
+    }
+
+    const { results } = await c.env.DB.prepare(query).bind(...bindings).all<{ key: string }>();
+    return c.json(results.map((r) => r.key));
+  } catch (err) {
+    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    throw err;
+  }
+});
+
 kvRoutes.get('/apps/:appId/kv/:key', async (c) => {
   try {
     const user = await requireUser(c);
