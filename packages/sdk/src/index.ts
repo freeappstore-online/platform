@@ -7,6 +7,7 @@ import type { FasInitOptions } from "./types.js";
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from "./rooms.js";
 export type { FasInitOptions, Unsubscribe, User } from "./types.js";
 
+/** Root SDK instance — provides auth, kv, rooms, and proxy sub-clients. */
 export class FreeAppStore {
   readonly auth: Auth;
   readonly kv: Kv;
@@ -22,6 +23,7 @@ export class FreeAppStore {
   }
 }
 
+/** Create a new FreeAppStore SDK instance for the given app. */
 export function initApp(opts: FasInitOptions): FreeAppStore {
   return new FreeAppStore(opts);
 }

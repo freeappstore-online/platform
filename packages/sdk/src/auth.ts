@@ -11,6 +11,7 @@ interface Session {
   user: User;
 }
 
+/** GitHub OAuth authentication — sign in, sign out, session management. */
 export class Auth {
   private session: Session | null = null;
   private listeners = new Set<(user: User | null) => void>();
@@ -22,14 +23,17 @@ export class Auth {
     this.session = this.readStorage();
   }
 
+  /** Current signed-in user, or null if not authenticated. */
   get user(): User | null {
     return this.session?.user ?? null;
   }
 
+  /** Current session token, or null if not authenticated. */
   get token(): string | null {
     return this.session?.token ?? null;
   }
 
+  /** Subscribe to auth state changes. Fires immediately with current user, then on every change. */
   onChange(listener: (user: User | null) => void): Unsubscribe {
     this.listeners.add(listener);
     listener(this.user);
@@ -53,6 +57,7 @@ export class Auth {
     window.location.assign(url.toString());
   }
 
+  /** Clear the session and notify listeners. */
   signOut(): void {
     this.session = null;
     window.localStorage.removeItem(STORAGE_KEY);
@@ -112,11 +117,11 @@ export class Auth {
   }
 
   private async fetchUser(token: string): Promise<User> {
-    const res = await fetch(new URL("/v1/auth/me", this.apiBase), {
+    const response = await fetch(new URL("/v1/auth/me", this.apiBase), {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (!res.ok) throw new Error(`Auth failed: ${res.status}`);
-    return (await res.json()) as User;
+    if (!response.ok) throw new Error(`Auth failed: ${response.status}`);
+    return (await response.json()) as User;
   }
 
   private readStorage(): Session | null {

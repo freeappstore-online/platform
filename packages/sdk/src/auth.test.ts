@@ -46,15 +46,15 @@ function makeWindow(initial: { href: string; hash?: string }): { window: FakeWin
 
 beforeEach(() => {
   // happy-dom-style globals; we install per-test
-  delete (globalThis as Record<string, unknown>)["window"];
-  delete (globalThis as Record<string, unknown>)["history"];
-  delete (globalThis as Record<string, unknown>)["fetch"];
+  delete (globalThis as Record<string, unknown>).window;
+  delete (globalThis as Record<string, unknown>).history;
+  delete (globalThis as Record<string, unknown>).fetch;
 });
 
 afterEach(() => {
-  delete (globalThis as Record<string, unknown>)["window"];
-  delete (globalThis as Record<string, unknown>)["history"];
-  delete (globalThis as Record<string, unknown>)["fetch"];
+  delete (globalThis as Record<string, unknown>).window;
+  delete (globalThis as Record<string, unknown>).history;
+  delete (globalThis as Record<string, unknown>).fetch;
 });
 
 describe("Auth.signIn", () => {
@@ -62,7 +62,7 @@ describe("Auth.signIn", () => {
     const { window, assigns } = makeWindow({
       href: "https://app.freeappstore.online/dashboard?team=42#/settings/profile",
     });
-    (globalThis as Record<string, unknown>)["window"] = window;
+    (globalThis as Record<string, unknown>).window = window;
     const auth = new Auth("demo", "https://api.freeappstore.online");
 
     auth.signIn();
@@ -77,7 +77,7 @@ describe("Auth.signIn", () => {
 
   it("still preserves pathname + querystring", () => {
     const { window, assigns } = makeWindow({ href: "https://app.example/page?x=1" });
-    (globalThis as Record<string, unknown>)["window"] = window;
+    (globalThis as Record<string, unknown>).window = window;
     const auth = new Auth("demo", "https://api.example");
     auth.signIn();
     const returnTo = new URL(assigns[0]!).searchParams.get("return_to");
@@ -91,8 +91,8 @@ describe("Auth.init — hash handling", () => {
       href: "https://app.example/",
       hash: "#fas_session=bad-token",
     });
-    (globalThis as Record<string, unknown>)["window"] = window;
-    (globalThis as Record<string, unknown>)["history"] = window.history;
+    (globalThis as Record<string, unknown>).window = window;
+    (globalThis as Record<string, unknown>).history = window.history;
     globalThis.fetch = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
 
     const auth = new Auth("demo", "https://api.example");
@@ -110,8 +110,8 @@ describe("Auth.init — hash handling", () => {
       href: "https://app.example/dashboard",
       hash: "#fas_session=good-token",
     });
-    (globalThis as Record<string, unknown>)["window"] = window;
-    (globalThis as Record<string, unknown>)["history"] = window.history;
+    (globalThis as Record<string, unknown>).window = window;
+    (globalThis as Record<string, unknown>).history = window.history;
     globalThis.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ id: "gh:1", login: "alice", avatarUrl: null }), {
         status: 200,
@@ -129,8 +129,8 @@ describe("Auth.init — hash handling", () => {
 
   it("is a no-op when no fas_session hash is present", async () => {
     const { window, replaces } = makeWindow({ href: "https://app.example/" });
-    (globalThis as Record<string, unknown>)["window"] = window;
-    (globalThis as Record<string, unknown>)["history"] = window.history;
+    (globalThis as Record<string, unknown>).window = window;
+    (globalThis as Record<string, unknown>).history = window.history;
     const fetchSpy = vi.fn();
     globalThis.fetch = fetchSpy;
 
@@ -153,7 +153,7 @@ describe("Auth — storage round-trip", () => {
         user: { id: "gh:7", login: "returning-user", avatarUrl: null },
       }),
     );
-    (globalThis as Record<string, unknown>)["window"] = window;
+    (globalThis as Record<string, unknown>).window = window;
 
     const auth = new Auth("demo", "https://api.example");
     expect(auth.user?.login).toBe("returning-user");
@@ -169,7 +169,7 @@ describe("Auth — storage round-trip", () => {
         user: { id: "gh:7", login: "u", avatarUrl: null },
       }),
     );
-    (globalThis as Record<string, unknown>)["window"] = window;
+    (globalThis as Record<string, unknown>).window = window;
 
     const auth = new Auth("demo", "https://api.example");
     const seen: (unknown | null)[] = [];
@@ -186,7 +186,7 @@ describe("Auth — storage round-trip", () => {
   it("returns null when localStorage has corrupt JSON (does not crash)", () => {
     const { window } = makeWindow({ href: "https://app.example/" });
     window.localStorage.store.set("fas:session", "{ not: json");
-    (globalThis as Record<string, unknown>)["window"] = window;
+    (globalThis as Record<string, unknown>).window = window;
 
     const auth = new Auth("demo", "https://api.example");
     expect(auth.user).toBeNull();

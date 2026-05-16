@@ -2,11 +2,13 @@
 
 Browser SDK for free apps published on **freeappstore.online**.
 
+## Installation
+
 ```bash
 npm i @freeappstore/sdk
 ```
 
-## Quick start
+## Usage
 
 ```ts
 import { initApp } from '@freeappstore/sdk';
@@ -51,9 +53,13 @@ Per-user, per-app key-value store. Scoped to `(appId, userId)` server-side, so a
 await fas.kv.set('theme', { color: 'plum' });
 const theme = await fas.kv.get<{ color: string }>('theme');
 await fas.kv.delete('theme');
+
+const allKeys = await fas.kv.list();
+const noteKeys = await fas.kv.list({ prefix: 'note:' });
+const notes = await fas.kv.getMany<Note>(noteKeys);
 ```
 
-Limits (server-enforced): max 1MB per user, max 100 keys per user, max 64KB per value. See [`docs/LIMITS.md`](../../docs/LIMITS.md) for the full list.
+Limits (server-enforced): max 1MB per user, max 100 keys per user, max 64KB per value.
 
 ### Realtime rooms
 
@@ -74,16 +80,14 @@ room.close();
 
 Limits (server-enforced): 32 peers per room, 100 msgs/sec per peer, 4KB per message, 24h idle eviction, 64 active rooms per app.
 
-## What's not in v0
+### Secret-injecting proxy
 
-- File uploads / R2 storage
-- Push notifications
-- Outbound HTTP / AI proxy
-- Scheduled tasks / cron
-- Email / magic links
-- Search
+Call third-party APIs without exposing your keys in the browser. The platform Worker authenticates the call, injects the developer's stored API key server-side, and forwards the request.
 
-These come in v0.1+ once we know what creators actually ask for. Pro-only modules (Stripe, paid quotas) are explicitly out of scope for `@freeappstore/sdk` — they live in `@proappstore/sdk`.
+```ts
+const res = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London');
+const data = await res.json();
+```
 
 ## License
 

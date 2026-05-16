@@ -10,6 +10,9 @@ name: Publish to npm
 #   3. git push --follow-tags
 #
 # CI sees the version differs from what's on npm and publishes.
+#
+# Auth: OIDC trusted publishing — no stored NPM_TOKEN needed.
+# Each @freeappstore/* package is linked to this repo on npmjs.com.
 
 on:
   push:
@@ -18,15 +21,13 @@ on:
       - 'packages/cli/**'
       - 'packages/sdk/**'
       - 'packages/compliance/**'
-      - 'packages/fgs-cli/**'
-      - 'packages/games-sdk/**'
       - 'packages/quality/**'
       - '.github/workflows/publish.yml'
   workflow_dispatch: # manual trigger from the Actions UI
 
 permissions:
   contents: read
-  id-token: write # for npm provenance attestation
+  id-token: write # OIDC token for npm trusted publishing + provenance
 
 jobs:
   publish:
@@ -34,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [cli, sdk, compliance, fgs-cli, games-sdk, quality]
+        package: [cli, sdk, compliance, quality]
     steps:
       - uses: actions/checkout@v4
 
@@ -42,7 +43,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
@@ -58,16 +59,6 @@ jobs:
       - name: Decide whether to publish
         id: decide
         working-directory: packages/${{ matrix.package }}
-        # Read the actual npm name from package.json instead of assuming
-        # @freeappstore/<dir>. Some packages (like fgs-cli) live under
-        # different scopes (@freegamestore/cli) so dir name ≠ npm name.
-        #
-        # When a package isn't on npm yet (`npm view` 404s and we fall
-        # back to "0.0.0"), we still attempt to publish — first-publish
-        # is automated by design. If the publish 404s on PUT it almost
-        # always means the npm scope (e.g. @freegamestore) isn't an org
-        # on npmjs.com or NPM_TOKEN's account isn't a member of it.
-        # Fix once on npmjs.com → next push auto-publishes.
         run: |
           PKG_NAME=$(node -p "require('./package.json').name")
           LOCAL_VER=$(node -p "require('./package.json').version")
@@ -78,24 +69,10 @@ jobs:
             echo "Version unchanged — skipping publish."
           else
             echo "publish=true" >> "$GITHUB_OUTPUT"
-            if [ "$NPM_VER" = "0.0.0" ]; then
-              echo "First publish — package not yet on npm. If this fails with 404 PUT, the npm scope likely needs to be created on npmjs.com (npmjs.com/org/create) and NPM_TOKEN's account added as a member."
-            else
-              echo "Version bumped ($NPM_VER → $LOCAL_VER) — will publish."
-            fi
+            echo "Version bumped ($NPM_VER → $LOCAL_VER) — will publish."
           fi
 
-      - name: Publish to npm
+      - name: Publish via OIDC trusted publishing
         if: steps.decide.outputs.publish == 'true'
         working-directory: packages/${{ matrix.package }}
-        # `pnpm publish` (vs `npm publish`) rewrites workspace:* deps to
-        # the actual published version of the linked workspace package.
-        # Without this, consumers got `EUNSUPPORTEDPROTOCOL workspace:`
-        # on install. --no-git-checks skips the working-tree-clean
-        # check that pnpm runs by default (a no-op in fresh CI).
-        # --provenance attaches a signed attestation linking this tarball
-        # to this GitHub Actions run.
-        run: pnpm publish --access public --provenance --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public --provenance

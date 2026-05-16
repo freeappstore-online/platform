@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeTarget, ApiProxy } from "./proxy.js";
+import { ApiProxy, normalizeTarget } from "./proxy.js";
 
 describe("normalizeTarget", () => {
   it("passes through bare host/path form", () => {

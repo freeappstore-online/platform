@@ -35,9 +35,12 @@ export class ApiProxy {
     const url = `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/proxy/${normalizeTarget(target)}`;
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${this.auth.token}`);
-    const res = await fetch(url, { ...init, headers });
-    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error("proxy.fetch: session expired. User has been signed out."); }
-    return res;
+    const proxyResponse = await fetch(url, { ...init, headers });
+    if (proxyResponse.status === 401) {
+      this.auth.handleUnauthorized();
+      throw new Error("proxy.fetch: session expired. User has been signed out.");
+    }
+    return proxyResponse;
   }
 }
 
@@ -51,7 +54,7 @@ export class ApiProxy {
  * normalize the same as `https://api.example.com/x`.
  */
 export function normalizeTarget(target: string): string {
-  const schemeMatch = /^([a-z][a-z0-9+.-]*):\/\//i.exec(target);
+  const schemeMatch = target.match(/^([a-z][a-z0-9+.-]*):\/\//i);
   if (schemeMatch) {
     const scheme = schemeMatch[1]!.toLowerCase();
     if (scheme === "http" || scheme === "https") {

@@ -30,41 +30,48 @@ export class Kv {
     private readonly auth: Auth,
   ) {}
 
+  /** List all keys for this user. Optionally filter by prefix. */
   async list(opts?: { prefix?: string }): Promise<string[]> {
     const token = this.auth.token;
     if (!token) throw new Error("Not signed in.");
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/kv`, this.apiBase);
     if (opts?.prefix) url.searchParams.set("prefix", opts.prefix);
-    const res = await fetch(url, {
+    const listResponse = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error("Not signed in."); }
-    if (!res.ok) throw new Error(`kv.list failed: ${res.status}`);
-    let keys = (await res.json()) as string[];
+    if (listResponse.status === 401) {
+      this.auth.handleUnauthorized();
+      throw new Error("Not signed in.");
+    }
+    if (!listResponse.ok) throw new Error(`kv.list failed: ${listResponse.status}`);
+    let keys = (await listResponse.json()) as string[];
     // Client-side prefix filter as fallback if server doesn't support it yet
-    if (opts?.prefix) keys = keys.filter(k => k.startsWith(opts.prefix!));
+    if (opts?.prefix) keys = keys.filter((k) => k.startsWith(opts.prefix!));
     return keys;
   }
 
+  /** Fetch multiple keys in parallel. Returns a Map of found key-value pairs. */
   async getMany<T = unknown>(keys: string[]): Promise<Map<string, T>> {
     for (const key of keys) assertValidKey(key);
     const results = new Map<string, T>();
     const fetches = keys.map(async (key) => {
-      const val = await this.get<T>(key);
-      if (val !== null) results.set(key, val);
+      const stored = await this.get<T>(key);
+      if (stored !== null) results.set(key, stored);
     });
     await Promise.all(fetches);
     return results;
   }
 
+  /** Get a value by key. Returns null if not found. */
   async get<T = unknown>(key: string): Promise<T | null> {
     assertValidKey(key);
-    const res = await this.request("GET", key);
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`kv.get failed: ${res.status}`);
-    return (await res.json()) as T;
+    const getResponse = await this.request("GET", key);
+    if (getResponse.status === 404) return null;
+    if (!getResponse.ok) throw new Error(`kv.get failed: ${getResponse.status}`);
+    return (await getResponse.json()) as T;
   }
 
+  /** Store a JSON-serializable value under the given key. */
   async set<T = unknown>(key: string, value: T): Promise<void> {
     assertValidKey(key);
     // JSON.stringify(undefined) returns undefined, which would store an empty
@@ -72,18 +79,19 @@ export class Kv {
     if (value === undefined) {
       throw new Error("kv.set: value is undefined. Use kv.delete(key) to remove a key.");
     }
-    const res = await this.request("PUT", key, JSON.stringify(value));
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`kv.set failed (${res.status}): ${text}`);
+    const setResponse = await this.request("PUT", key, JSON.stringify(value));
+    if (!setResponse.ok) {
+      const text = await setResponse.text();
+      throw new Error(`kv.set failed (${setResponse.status}): ${text}`);
     }
   }
 
+  /** Delete a key. No-op if the key doesn't exist. */
   async delete(key: string): Promise<void> {
     assertValidKey(key);
-    const res = await this.request("DELETE", key);
-    if (!res.ok && res.status !== 404) {
-      throw new Error(`kv.delete failed: ${res.status}`);
+    const deleteResponse = await this.request("DELETE", key);
+    if (!deleteResponse.ok && deleteResponse.status !== 404) {
+      throw new Error(`kv.delete failed: ${deleteResponse.status}`);
     }
   }
 
@@ -95,8 +103,11 @@ export class Kv {
     if (body !== undefined) headers["Content-Type"] = "application/json";
     const init: RequestInit = { method, headers };
     if (body !== undefined) init.body = body;
-    const res = await fetch(url, init);
-    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error("Not signed in."); }
-    return res;
+    const kvResponse = await fetch(url, init);
+    if (kvResponse.status === 401) {
+      this.auth.handleUnauthorized();
+      throw new Error("Not signed in.");
+    }
+    return kvResponse;
   }
 }
