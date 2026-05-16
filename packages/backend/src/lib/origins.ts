@@ -1,6 +1,7 @@
 /**
  * Allowed:
  *  - any HTTPS host on freeappstore.online (apex or subdomain)
+ *  - Cloudflare Pages preview domains for FAS projects (*.pages.dev)
  *  - localhost / 127.0.0.1 on http or https (dev only)
  *
  * Used for both:
@@ -14,7 +15,10 @@ function isAllowedHost(url: URL): boolean {
     return url.protocol === 'http:' || url.protocol === 'https:';
   }
   if (url.protocol !== 'https:') return false;
-  return host === 'freeappstore.online' || host.endsWith('.freeappstore.online');
+  if (host === 'freeappstore.online' || host.endsWith('.freeappstore.online')) return true;
+  // CF Pages preview domains for FAS projects
+  if (host.endsWith('.pages.dev')) return true;
+  return false;
 }
 
 export function isAllowedReturnTo(returnTo: string): boolean {
