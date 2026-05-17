@@ -1,5 +1,7 @@
 import type { Unsubscribe, User } from './types.js';
 
+export type AuthProvider = 'github' | 'google';
+
 /**
  * Shared across all FAS apps on the same origin — this is intentional SSO.
  * A user signed in on one FAS app is signed in on all of them.
@@ -11,7 +13,7 @@ interface Session {
   user: User;
 }
 
-/** GitHub OAuth authentication — sign in, sign out, session management. */
+/** OAuth authentication — sign in, sign out, session management. */
 export class Auth {
   private session: Session | null = null;
   private listeners = new Set<(user: User | null) => void>();
@@ -48,11 +50,11 @@ export class Auth {
    * the OAuth callback writes its own `#fas_session=…` and would clobber any
    * hash-based router state otherwise.
    */
-  signIn(): void {
+  signIn(provider: AuthProvider = 'github'): void {
     if (typeof window === 'undefined') return;
     const here = new URL(window.location.href);
     here.hash = '';
-    const url = new URL('/v1/auth/github/start', this.apiBase);
+    const url = new URL(`/v1/auth/${provider}/start`, this.apiBase);
     url.searchParams.set('app_id', this.appId);
     url.searchParams.set('return_to', here.toString());
     window.location.assign(url.toString());

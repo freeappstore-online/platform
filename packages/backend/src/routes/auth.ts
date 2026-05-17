@@ -1,3 +1,4 @@
+import { Google, generateCodeVerifier, generateState, decodeIdToken } from 'arctic';
 import { Hono } from 'hono';
 import { HttpError, requireUser } from '../lib/auth.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
@@ -7,6 +8,13 @@ import type { Env } from '../types.js';
 interface OAuthState {
   appId: string;
   returnTo: string;
+  exp: number;
+}
+
+interface GoogleOAuthState {
+  appId: string;
+  returnTo: string;
+  codeVerifier: string;
   exp: number;
 }
 
@@ -77,6 +85,77 @@ authRoutes.get('/auth/github/callback', async (c) => {
        avatar_url = excluded.avatar_url`,
   )
     .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url, Date.now())
+    .run();
+
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
+  const redirect = new URL(state.returnTo);
+  redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+  return c.redirect(redirect.toString());
+});
+
+authRoutes.get('/auth/google/start', async (c) => {
+  const appId = c.req.query('app_id') ?? '';
+  const returnTo = c.req.query('return_to') ?? '';
+  if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
+  if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
+
+  if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
+    return c.text('Google OAuth not configured', 503);
+  }
+
+  const redirectUri = new URL('/v1/auth/google/callback', c.req.url).toString();
+  const google = new Google(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, redirectUri);
+
+  const state = generateState();
+  const codeVerifier = generateCodeVerifier();
+
+  const signedState = await signPayload<GoogleOAuthState>(
+    { appId, returnTo, codeVerifier, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    c.env.SESSION_SIGNING_KEY,
+  );
+
+  const url = google.createAuthorizationURL(signedState, codeVerifier, ['openid', 'profile', 'email']);
+  return c.redirect(url.toString());
+});
+
+authRoutes.get('/auth/google/callback', async (c) => {
+  const code = c.req.query('code');
+  const stateRaw = c.req.query('state');
+  if (!code || !stateRaw) return c.text('missing code or state', 400);
+
+  const state = await verifyPayload<GoogleOAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
+  if (!state) return c.text('invalid state', 400);
+  if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
+  if (!isAllowedReturnTo(state.returnTo)) return c.text('return_to not allowed', 400);
+
+  if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
+    return c.text('Google OAuth not configured', 503);
+  }
+
+  const redirectUri = new URL('/v1/auth/google/callback', c.req.url).toString();
+  const google = new Google(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, redirectUri);
+
+  const tokens = await google.validateAuthorizationCode(code, state.codeVerifier);
+  const claims = decodeIdToken(tokens.idToken()) as {
+    sub: string;
+    name?: string;
+    email?: string;
+    picture?: string;
+  };
+
+  const userId = `google:${claims.sub}`;
+  const login = claims.email ? claims.email.split('@')[0] : claims.sub;
+  const displayName = claims.name ?? login;
+
+  await c.env.DB.prepare(
+    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
+     VALUES (?, 0, ?, ?, ?, 'google', ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       avatar_url = excluded.avatar_url,
+       email = excluded.email,
+       display_name = excluded.display_name`,
+  )
+    .bind(userId, login, claims.picture ?? null, Date.now(), claims.sub, claims.email ?? null, displayName)
     .run();
 
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);

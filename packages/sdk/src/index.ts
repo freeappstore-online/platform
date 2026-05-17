@@ -5,6 +5,7 @@ import { ApiProxy } from './proxy.js';
 import { Rooms } from './rooms.js';
 import type { FasInitOptions } from './types.js';
 
+export type { AuthProvider } from './auth.js';
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
 export type { FasInitOptions, Unsubscribe, User } from './types.js';
 

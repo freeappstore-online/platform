@@ -9,6 +9,8 @@ export interface Env {
   BACKUPS?: R2Bucket;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   SESSION_SIGNING_KEY: string;
   /**
    * Master key-encryption-key for the app-secret proxy. 32 random bytes,
