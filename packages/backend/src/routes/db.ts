@@ -144,7 +144,13 @@ dbRoutes.get('/apps/:appId/db/:collection/:id', async (c) => {
     'SELECT id, data, owner_id, created_at, updated_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
   )
     .bind(appId, collection, id)
-    .first<{ id: string; data: string; owner_id: string; created_at: number; updated_at: number }>();
+    .first<{
+      id: string;
+      data: string;
+      owner_id: string;
+      created_at: number;
+      updated_at: number;
+    }>();
 
   if (!row) return c.text('not found', 404);
 
@@ -237,9 +243,7 @@ dbRoutes.delete('/apps/:appId/db/:collection/:id', async (c) => {
     if (!existing) return c.text('not found', 404);
     if (existing.owner_id !== user.id) return c.text('forbidden', 403);
 
-    await c.env.DB.prepare(
-      'DELETE FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
-    )
+    await c.env.DB.prepare('DELETE FROM documents WHERE app_id = ? AND collection = ? AND id = ?')
       .bind(appId, collection, id)
       .run();
 

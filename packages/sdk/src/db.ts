@@ -92,7 +92,10 @@ export class Collection {
   }
 
   /** Update a document by merging the patch into the existing data. Auth required, owner only. */
-  async update<T extends Record<string, unknown>>(id: string, patch: Partial<T>): Promise<T & { id: string }> {
+  async update<T extends Record<string, unknown>>(
+    id: string,
+    patch: Partial<T>,
+  ): Promise<T & { id: string }> {
     const token = this.auth.token;
     if (!token) throw new Error('Not signed in.');
     const url = new URL(
