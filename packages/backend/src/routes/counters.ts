@@ -61,7 +61,7 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
       return c.text(`counter key exceeds ${MAX_KEY_LENGTH} chars`, 400);
     }
 
-    const body = await c.req.json<{ increment?: number }>().catch(() => ({}));
+    const body = await c.req.json<{ increment?: number }>().catch(() => ({ increment: 1 }));
     const increment = body.increment ?? 1;
 
     if (!Number.isInteger(increment) || Math.abs(increment) > MAX_INCREMENT) {
