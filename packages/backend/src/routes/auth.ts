@@ -135,33 +135,38 @@ authRoutes.get('/auth/google/callback', async (c) => {
   const redirectUri = new URL('/v1/auth/google/callback', c.req.url).toString();
   const google = new Google(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, redirectUri);
 
-  const tokens = await google.validateAuthorizationCode(code, state.codeVerifier);
-  const claims = decodeIdToken(tokens.idToken()) as {
-    sub: string;
-    name?: string;
-    email?: string;
-    picture?: string;
-  };
+  try {
+    const tokens = await google.validateAuthorizationCode(code, state.codeVerifier);
+    const claims = decodeIdToken(tokens.idToken()) as {
+      sub: string;
+      name?: string;
+      email?: string;
+      picture?: string;
+    };
 
-  const userId = `google:${claims.sub}`;
-  const login = claims.email ? claims.email.split('@')[0] : claims.sub;
-  const displayName = claims.name ?? login;
+    const userId = `google:${claims.sub}`;
+    const login = claims.email ? claims.email.split('@')[0] : claims.sub;
+    const displayName = claims.name ?? login;
 
-  await c.env.DB.prepare(
-    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-     VALUES (?, 0, ?, ?, ?, 'google', ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       avatar_url = excluded.avatar_url,
-       email = excluded.email,
-       display_name = excluded.display_name`,
-  )
-    .bind(userId, login, claims.picture ?? null, Date.now(), claims.sub, claims.email ?? null, displayName)
-    .run();
+    await c.env.DB.prepare(
+      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
+       VALUES (?, 0, ?, ?, ?, 'google', ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         avatar_url = excluded.avatar_url,
+         email = excluded.email,
+         display_name = excluded.display_name`,
+    )
+      .bind(userId, login, claims.picture ?? null, Date.now(), claims.sub, claims.email ?? null, displayName)
+      .run();
 
-  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
-  const redirect = new URL(state.returnTo);
-  redirect.hash = `fas_session=${encodeURIComponent(session)}`;
-  return c.redirect(redirect.toString());
+    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
+    const redirect = new URL(state.returnTo);
+    redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+    return c.redirect(redirect.toString());
+  } catch (err) {
+    console.error('Google OAuth callback error:', err);
+    return c.text(`Google sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`, 500);
+  }
 });
 
 authRoutes.get('/auth/me', async (c) => {
