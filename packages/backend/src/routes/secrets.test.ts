@@ -112,6 +112,10 @@ function first(sql: string, bound: unknown[], d: FakeData): unknown | null {
     const row = d.usage.find((u) => u.app_id === bound[0] && u.day === bound[1]);
     return row ? { count: row.count } : null;
   }
+  if (sql.startsWith('SELECT id, github_login, avatar_url')) {
+    // Auth query — return a fake user for the bound user ID
+    return { id: bound[0], github_login: 'test-user', avatar_url: null, display_name: null, email: null };
+  }
   throw new Error(`fakeDB.first unmatched: ${sql}`);
 }
 

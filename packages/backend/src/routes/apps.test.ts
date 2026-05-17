@@ -18,6 +18,8 @@ interface UserRow {
   id: string;
   github_login: string;
   avatar_url: string | null;
+  display_name: string | null;
+  email: string | null;
 }
 
 const SIGNING_KEY = 'a'.repeat(64);
@@ -35,7 +37,7 @@ function fakeDB(rows: { apps?: AppRow[]; users?: UserRow[] } = {}): D1Database {
           return stmt as D1PreparedStatement;
         },
         first: async <T>() => {
-          if (trimmed.startsWith('SELECT id, github_login, avatar_url FROM users')) {
+          if (trimmed.startsWith('SELECT id, github_login, avatar_url')) {
             const id = bound[0];
             const u = users.find((x) => x.id === id);
             return (u ?? null) as T | null;
@@ -88,7 +90,7 @@ describe('GET /v1/apps/mine', () => {
   it('returns empty list when the user has no apps', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null }],
+        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
         apps: [],
       }),
     );
@@ -105,7 +107,7 @@ describe('GET /v1/apps/mine', () => {
   it('returns only apps owned by the authenticated user', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null }],
+        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
         apps: [
           {
             id: 'tip',
@@ -155,7 +157,7 @@ describe('GET /v1/apps/mine', () => {
   it('synthesizes appUrl + repoUrl in camelCase output shape', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null }],
+        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
         apps: [
           {
             id: 'chess',
@@ -193,7 +195,7 @@ describe('GET /v1/apps/mine', () => {
   it('falls back to canonical org repoUrl when repo is null', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null }],
+        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
         apps: [
           {
             id: 'tip',
