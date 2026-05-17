@@ -16,7 +16,8 @@ function isAllowedHost(url: URL): boolean {
   }
   if (url.protocol !== 'https:') return false;
   if (host === 'freeappstore.online' || host.endsWith('.freeappstore.online')) return true;
-  // CF Pages preview domains for FAS projects
+  if (host === 'proappstore.online' || host.endsWith('.proappstore.online')) return true;
+  // CF Pages preview domains
   if (host.endsWith('.pages.dev')) return true;
   return false;
 }
