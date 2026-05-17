@@ -8,6 +8,7 @@ import { appsRoutes } from './routes/apps.js';
 import { auditRoutes } from './routes/audit.js';
 import { authRoutes } from './routes/auth.js';
 import { counterRoutes } from './routes/counters.js';
+import { dbRoutes } from './routes/db.js';
 import { exchangeRoutes } from './routes/exchange.js';
 import { kvRoutes } from './routes/kv.js';
 import { publishRoutes } from './routes/publish.js';
@@ -49,6 +50,7 @@ v1.route('/', appsRoutes);
 v1.route('/', auditRoutes);
 v1.route('/', secretsRoutes);
 v1.route('/', counterRoutes);
+v1.route('/', dbRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;
