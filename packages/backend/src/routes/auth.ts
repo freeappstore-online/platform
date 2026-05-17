@@ -1,4 +1,4 @@
-import { Google, generateCodeVerifier, generateState, decodeIdToken } from 'arctic';
+import { decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
 import { HttpError, requireUser } from '../lib/auth.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
@@ -114,7 +114,11 @@ authRoutes.get('/auth/google/start', async (c) => {
     c.env.SESSION_SIGNING_KEY,
   );
 
-  const url = google.createAuthorizationURL(signedState, codeVerifier, ['openid', 'profile', 'email']);
+  const url = google.createAuthorizationURL(signedState, codeVerifier, [
+    'openid',
+    'profile',
+    'email',
+  ]);
   return c.redirect(url.toString());
 });
 
@@ -156,7 +160,15 @@ authRoutes.get('/auth/google/callback', async (c) => {
          email = excluded.email,
          display_name = excluded.display_name`,
     )
-      .bind(userId, login, claims.picture ?? null, Date.now(), claims.sub, claims.email ?? null, displayName)
+      .bind(
+        userId,
+        login,
+        claims.picture ?? null,
+        Date.now(),
+        claims.sub,
+        claims.email ?? null,
+        displayName,
+      )
       .run();
 
     const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
@@ -165,7 +177,10 @@ authRoutes.get('/auth/google/callback', async (c) => {
     return c.redirect(redirect.toString());
   } catch (err) {
     console.error('Google OAuth callback error:', err);
-    return c.text(`Google sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`, 500);
+    return c.text(
+      `Google sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+      500,
+    );
   }
 });
 
