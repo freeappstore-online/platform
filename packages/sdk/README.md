@@ -101,6 +101,36 @@ room.close();
 
 Limits (server-enforced): 32 peers per room, 100 msgs/sec per peer, 4KB per message, 24h idle eviction, 64 active rooms per app.
 
+### Collections (document database)
+
+Simple document store for apps that need public, queryable data. No SQL required — just JSON in, JSON out.
+
+```ts
+const posts = fas.db.collection('posts');
+
+// Create (auth required, you become the owner)
+const post = await posts.create({ title: 'Hello', body: '...' });
+
+// Query (public read)
+const { documents, total } = await posts.query({
+  limit: 20,
+  orderBy: 'created_at',
+  order: 'desc',
+  owner: userId,  // optional: filter by creator
+});
+
+// Get single document
+const doc = await posts.get('doc-id');
+
+// Update (owner only)
+await posts.update('doc-id', { title: 'Updated' });
+
+// Delete (owner only)
+await posts.delete('doc-id');
+```
+
+Limits: 10,000 documents per collection, 64KB per document.
+
 ### Secret-injecting proxy
 
 Call third-party APIs without exposing your keys in the browser. The platform Worker authenticates the call, injects the developer's stored API key server-side, and forwards the request.
