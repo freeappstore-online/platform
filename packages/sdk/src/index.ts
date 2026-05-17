@@ -1,4 +1,5 @@
 import { Auth } from "./auth.js";
+import { Counters } from "./counters.js";
 import { Kv } from "./kv.js";
 import { ApiProxy } from "./proxy.js";
 import { Rooms } from "./rooms.js";
@@ -7,10 +8,11 @@ import type { FasInitOptions } from "./types.js";
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from "./rooms.js";
 export type { FasInitOptions, Unsubscribe, User } from "./types.js";
 
-/** Root SDK instance — provides auth, kv, rooms, and proxy sub-clients. */
+/** Root SDK instance — provides auth, kv, counters, rooms, and proxy sub-clients. */
 export class FreeAppStore {
   readonly auth: Auth;
   readonly kv: Kv;
+  readonly counters: Counters;
   readonly rooms: Rooms;
   readonly proxy: ApiProxy;
 
@@ -18,6 +20,7 @@ export class FreeAppStore {
     const apiBase = opts.apiBase ?? "https://api.freeappstore.online";
     this.auth = new Auth(opts.appId, apiBase);
     this.kv = new Kv(opts.appId, apiBase, this.auth);
+    this.counters = new Counters(opts.appId, apiBase, this.auth);
     this.rooms = new Rooms(opts.appId, apiBase, this.auth);
     this.proxy = new ApiProxy(opts.appId, apiBase, this.auth);
   }
