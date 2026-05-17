@@ -20,14 +20,14 @@ describe("Counters.list", () => {
     const counters = new Counters("poll", "https://api.example", fakeAuth(null));
     const result = await counters.list();
     expect(result).toEqual({ likes: 5, views: 100 });
-    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0].toString()).toContain("/v1/apps/poll/counters");
+    expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0].toString()).toContain("/v1/apps/poll/counters");
   });
 
   it("passes prefix query param", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
     const counters = new Counters("poll", "https://api.example", fakeAuth(null));
     await counters.list({ prefix: "vote:" });
-    const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0][0].toString();
+    const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0].toString();
     expect(url).toContain("prefix=vote%3A");
   });
 });
@@ -46,7 +46,7 @@ describe("Counters.increment", () => {
     const counters = new Counters("poll", "https://api.example", fakeAuth("tok"));
     const result = await counters.increment("likes", 1);
     expect(result).toBe(6);
-    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string, RequestInit];
     expect(call[1].method).toBe("POST");
     expect(call[1].headers.Authorization).toBe("Bearer tok");
   });
