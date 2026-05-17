@@ -82,8 +82,9 @@ function fakeDB(d: FakeData): D1Database {
 }
 
 function first(sql: string, bound: unknown[], d: FakeData): unknown | null {
-  if (sql.startsWith('SELECT id, github_login, avatar_url FROM users')) {
-    return d.users.find((u) => u.id === bound[0]) ?? null;
+  if (sql.startsWith('SELECT id, github_login, avatar_url')) {
+    const user = d.users.find((u) => u.id === bound[0]);
+    return user ? { ...user, display_name: null, email: null } : null;
   }
   if (sql.startsWith('SELECT owner_login FROM apps')) {
     return d.apps.find((a) => a.id === bound[0]) ?? null;
@@ -111,10 +112,6 @@ function first(sql: string, bound: unknown[], d: FakeData): unknown | null {
   if (sql.startsWith('SELECT count FROM app_proxy_usage')) {
     const row = d.usage.find((u) => u.app_id === bound[0] && u.day === bound[1]);
     return row ? { count: row.count } : null;
-  }
-  if (sql.startsWith('SELECT id, github_login, avatar_url')) {
-    // Auth query — return a fake user for the bound user ID
-    return { id: bound[0], github_login: 'test-user', avatar_url: null, display_name: null, email: null };
   }
   throw new Error(`fakeDB.first unmatched: ${sql}`);
 }
