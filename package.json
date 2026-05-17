@@ -4,6 +4,10 @@
   "version": "0.0.0",
   "description": "Free SDK + CLI + backend for apps published on freeappstore.online",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freeappstore-online/platform.git"
+  },
   "engines": {
     "node": ">=22"
   },
