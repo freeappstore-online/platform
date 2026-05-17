@@ -41,7 +41,7 @@ fas.auth.user;             // User | null
 fas.auth.token;            // string | null
 fas.auth.signIn();         // redirects to GitHub
 fas.auth.signOut();        // clears local session
-fas.auth.onChange(cb);     // returns Unsubscribe
+fas.auth.onChange(cb);     // fires immediately + on change, returns Unsubscribe
 await fas.auth.init();     // capture callback, must be called once
 ```
 
@@ -57,9 +57,30 @@ await fas.kv.delete('theme');
 const allKeys = await fas.kv.list();
 const noteKeys = await fas.kv.list({ prefix: 'note:' });
 const notes = await fas.kv.getMany<Note>(noteKeys);
+
+// All methods accept { signal } for AbortController cleanup
+const ctrl = new AbortController();
+await fas.kv.get('key', { signal: ctrl.signal });
 ```
 
 Limits (server-enforced): max 1MB per user, max 100 keys per user, max 64KB per value.
+
+### Shared counters
+
+App-wide atomic counters — not user-scoped. Anyone can read; authenticated users can increment. Use for vote tallies, view counts, leaderboards.
+
+```ts
+// Read (no auth required)
+const all = await fas.counters.list();           // { likes: 5, views: 100 }
+const views = await fas.counters.get('views');   // 100
+
+// Increment (auth required)
+const newVal = await fas.counters.increment('likes');      // +1, returns new value
+const newVal2 = await fas.counters.increment('score', 10); // +10
+await fas.counters.increment('lives', -1);                 // decrement
+```
+
+Limits: max 1000 counters per app, increment range -1000 to +1000 per call.
 
 ### Realtime rooms
 
