@@ -1,15 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runDoctor } from './doctor.js';
 
 beforeEach(() => {
   // Provide a fast, deterministic /health response unless a test overrides.
-  globalThis.fetch = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ ok: true }), { status: 200 }),
-  );
+  globalThis.fetch = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
 });
 
 afterEach(() => {
-  delete (globalThis as Record<string, unknown>)['fetch'];
+  delete (globalThis as Record<string, unknown>).fetch;
   vi.restoreAllMocks();
 });
 

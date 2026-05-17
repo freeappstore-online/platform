@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { resolveAppIdOrExit, bearer, dieFromHttp } from './secret.js';
+import { describe, expect, it } from 'vitest';
+import { bearer, dieFromHttp, resolveAppIdOrExit } from './secret.js';
 
 function chdir(d: string): () => void {
   const prev = process.cwd();

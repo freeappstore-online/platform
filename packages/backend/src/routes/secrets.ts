@@ -1,15 +1,15 @@
-import { Hono, type Context } from 'hono';
-import type { Env } from '../types.js';
-import { requireUser, HttpError, type CurrentUser } from '../lib/auth.js';
-import { sealSecret, openSecret, type SealedSecret } from '../lib/encryption.js';
+import { type Context, Hono } from 'hono';
+import { type CurrentUser, HttpError, requireUser } from '../lib/auth.js';
+import { openSecret, type SealedSecret, sealSecret } from '../lib/encryption.js';
 import {
-  validateRule,
-  pickRule,
-  injectSecret,
   AllowlistError,
   type AllowlistRule,
+  injectSecret,
+  pickRule,
+  validateRule,
 } from '../lib/proxy-allowlist.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
+import type { Env } from '../types.js';
 
 export const secretsRoutes = new Hono<{ Bindings: Env }>();
 
@@ -110,9 +110,7 @@ secretsRoutes.put(
 
     // Cap secrets per app — but allow updating an existing name without
     // bumping the count. SQLite has no upsert-with-count, so check first.
-    const exists = await c.env.DB.prepare(
-      'SELECT 1 FROM app_secrets WHERE app_id = ? AND name = ?',
-    )
+    const exists = await c.env.DB.prepare('SELECT 1 FROM app_secrets WHERE app_id = ? AND name = ?')
       .bind(appId, name)
       .first();
     if (!exists) {
@@ -151,9 +149,7 @@ secretsRoutes.delete(
     const appId = c.req.param('appId')!;
     const name = c.req.param('name')!;
     await requireOwner(c, appId);
-    const result = await c.env.DB.prepare(
-      'DELETE FROM app_secrets WHERE app_id = ? AND name = ?',
-    )
+    const result = await c.env.DB.prepare('DELETE FROM app_secrets WHERE app_id = ? AND name = ?')
       .bind(appId, name)
       .run();
     if (result.meta.changes === 0) throw new HttpError(404, 'secret not found');

@@ -1,7 +1,7 @@
 // Tiny ANSI styling without pulling chalk. Auto-disables when stdout
 // isn't a TTY (CI logs, redirected output) so plain text is captured.
 
-const isTTY = Boolean(process.stdout.isTTY) && process.env['NO_COLOR'] !== '1';
+const isTTY = Boolean(process.stdout.isTTY) && process.env.NO_COLOR !== '1';
 
 const wrap =
   (open: string, close: string) =>
@@ -21,5 +21,5 @@ export function header(s: string): string {
 }
 
 export function step(n: number, total: number, label: string): string {
-  return cyan(`[${n}/${total}]`) + ' ' + bold(label);
+  return `${cyan(`[${n}/${total}]`)} ${bold(label)}`;
 }

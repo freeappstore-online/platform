@@ -1,6 +1,6 @@
 import { initApp, type Room } from '@freeappstore/sdk';
 
-const apiBase = (import.meta.env['VITE_FAS_API'] as string | undefined) ?? 'http://localhost:8787';
+const apiBase = (import.meta.env.VITE_FAS_API as string | undefined) ?? 'http://localhost:8787';
 
 const fas = initApp({ appId: 'rooms-demo', apiBase });
 await fas.auth.init();

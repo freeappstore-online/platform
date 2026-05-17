@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { readConfig } from '../lib/config.js';
-import { fetchAppHistory, formatRelative, type AppHistory } from '../lib/history.js';
+import { type AppHistory, fetchAppHistory, formatRelative } from '../lib/history.js';
 
 interface ListedApp {
   id: string;
@@ -16,7 +16,7 @@ interface ListedApp {
   repoUrl: string;
 }
 
-const isTTY = Boolean(process.stdout.isTTY) && process.env['NO_COLOR'] !== '1';
+const isTTY = Boolean(process.stdout.isTTY) && process.env.NO_COLOR !== '1';
 const dim = (s: string) => (isTTY ? `\x1b[2m${s}\x1b[22m` : s);
 const bold = (s: string) => (isTTY ? `\x1b[1m${s}\x1b[22m` : s);
 
@@ -54,13 +54,14 @@ export const listCommand = new Command('list')
     // capped at 3 commits each, gracefully degrades on rate-limit (the
     // app prints fine without history). GH_TOKEN env var lifts the
     // 60/hr anonymous limit if the user runs into it.
-    const histories = apps.length > 0
-      ? await Promise.all(apps.map((a) => fetchAppHistory(repoSlug(a.repoUrl))))
-      : [];
+    const histories =
+      apps.length > 0
+        ? await Promise.all(apps.map((a) => fetchAppHistory(repoSlug(a.repoUrl))))
+        : [];
 
     if (opts.json) {
       const enriched = apps.map((a, i) => ({ ...a, history: histories[i] }));
-      process.stdout.write(JSON.stringify(enriched, null, 2) + '\n');
+      process.stdout.write(`${JSON.stringify(enriched, null, 2)}\n`);
       return;
     }
 

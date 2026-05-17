@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
 import type { Env } from '../types.js';
 
@@ -98,12 +98,14 @@ describe('POST /v1/auth/exchange', () => {
   });
 
   it('mints a session and upserts the user on a valid GitHub token', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({ id: 12345, login: 'alice', avatar_url: 'https://avatars/alice' }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ id: 12345, login: 'alice', avatar_url: 'https://avatars/alice' }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
     const writes: FakeWrite[] = [];
     const res = await app.request(
       '/v1/auth/exchange',
@@ -115,9 +117,16 @@ describe('POST /v1/auth/exchange', () => {
       baseEnv(fakeDB({ onUserUpsert: (w) => writes.push(w) })),
     );
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { sessionToken: string; user: { id: string; login: string } };
+    const body = (await res.json()) as {
+      sessionToken: string;
+      user: { id: string; login: string };
+    };
     expect(body.sessionToken).toMatch(/\..+/); // base64url.body.signature shape
-    expect(body.user).toEqual({ id: 'gh:12345', login: 'alice', avatarUrl: 'https://avatars/alice' });
+    expect(body.user).toEqual({
+      id: 'gh:12345',
+      login: 'alice',
+      avatarUrl: 'https://avatars/alice',
+    });
     expect(writes).toHaveLength(1);
     expect(writes[0]!.args).toEqual([
       'gh:12345',

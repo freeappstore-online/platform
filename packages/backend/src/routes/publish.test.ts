@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -44,10 +44,7 @@ interface AdminCall {
 }
 
 /** Fake service-binding Fetcher — captures the call + returns a canned response. */
-function fakeAdmin(opts: {
-  response: Response;
-  capture?: AdminCall[];
-}): Fetcher {
+function fakeAdmin(opts: { response: Response; capture?: AdminCall[] }): Fetcher {
   return {
     fetch: async (input: string | URL | Request, init?: RequestInit) => {
       opts.capture?.push({

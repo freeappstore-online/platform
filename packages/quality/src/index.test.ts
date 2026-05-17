@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  snapshot,
-  initQualityReporter,
   computeQualityIndex,
-  viewportKey,
+  initQualityReporter,
   REFERENCE_VIEWPORTS,
+  snapshot,
+  viewportKey,
 } from './index.js';
 
 describe('snapshot', () => {
@@ -64,7 +64,8 @@ describe('snapshot', () => {
     // Mock getComputedStyle so the clipper reports overflow:hidden.
     const origGet = window.getComputedStyle;
     window.getComputedStyle = ((el: Element) => {
-      if (el === clipper) return { overflowX: 'hidden', overflowY: 'visible' } as CSSStyleDeclaration;
+      if (el === clipper)
+        return { overflowX: 'hidden', overflowY: 'visible' } as CSSStyleDeclaration;
       return origGet(el as Element);
     }) as typeof window.getComputedStyle;
     Object.defineProperty(clipper, 'scrollWidth', { get: () => 500 });
@@ -85,7 +86,8 @@ describe('initQualityReporter', () => {
     delete (window as unknown as { __FAS_QUALITY_DISABLE?: unknown }).__FAS_QUALITY_DISABLE;
   });
   afterEach(() => {
-    const h = (window as unknown as { __FAS_QUALITY_REPORTER__?: { stop?: () => void } }).__FAS_QUALITY_REPORTER__;
+    const h = (window as unknown as { __FAS_QUALITY_REPORTER__?: { stop?: () => void } })
+      .__FAS_QUALITY_REPORTER__;
     if (h?.stop) h.stop();
   });
 

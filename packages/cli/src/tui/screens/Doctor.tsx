@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { useEffect, useState } from 'react';
-import { runDoctor, type CheckResult } from '../../one-shot/doctor.js';
+import { type CheckResult, runDoctor } from '../../one-shot/doctor.js';
 
 interface Props {
   onBack: () => void;

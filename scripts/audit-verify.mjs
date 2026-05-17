@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { writeFileSync } from 'node:fs';
 /**
  * Ground-truth verifier for the production audit.
  *
@@ -18,7 +19,6 @@
  *   node scripts/audit-verify.mjs --json    # machine-readable output
  */
 import { chromium } from 'playwright';
-import { writeFileSync } from 'node:fs';
 
 const AUDIT_API = 'https://api.freeappstore.online/v1/audit';
 
@@ -56,7 +56,7 @@ async function fetchRegistry(store) {
   const repo = store === 'apps' ? 'freeappstore' : 'freegamestore';
   const res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/main/registry.json`);
   const body = await res.json();
-  return store === 'apps' ? body.apps ?? [] : body.games ?? [];
+  return store === 'apps' ? (body.apps ?? []) : (body.games ?? []);
 }
 
 async function groundTruth(page, app) {
@@ -94,8 +94,10 @@ async function groundTruth(page, app) {
       return {
         sampleFont: cs.fontFamily,
         bodyFont: bodyCs.fontFamily,
-        hasManropeRef: /manrope/i.test(linkHrefs) || /manrope/i.test(document.documentElement.outerHTML),
-        hasFrauncesRef: /fraunces/i.test(linkHrefs) || /fraunces/i.test(document.documentElement.outerHTML),
+        hasManropeRef:
+          /manrope/i.test(linkHrefs) || /manrope/i.test(document.documentElement.outerHTML),
+        hasFrauncesRef:
+          /fraunces/i.test(linkHrefs) || /fraunces/i.test(document.documentElement.outerHTML),
       };
     });
     result.truth.fontInfo = fontInfo;
@@ -137,22 +139,28 @@ async function groundTruth(page, app) {
       const all = document.querySelectorAll('*');
       for (const el of all) {
         const cs = getComputedStyle(el);
-        const ovx = cs.overflowX, ovy = cs.overflowY;
+        const ovx = cs.overflowX,
+          ovy = cs.overflowY;
         const xClip = (ovx === 'hidden' || ovx === 'clip') && el.scrollWidth > el.clientWidth + 1;
         const yClip = (ovy === 'hidden' || ovy === 'clip') && el.scrollHeight > el.clientHeight + 1;
         if (xClip || yClip) {
           clipping.push({
             tag: el.tagName.toLowerCase(),
             cls: (el.className || '').toString().slice(0, 40),
-            scrollW: el.scrollWidth, scrollH: el.scrollHeight,
-            clientW: el.clientWidth, clientH: el.clientHeight,
-            clipsX: xClip, clipsY: yClip,
+            scrollW: el.scrollWidth,
+            scrollH: el.scrollHeight,
+            clientW: el.clientWidth,
+            clientH: el.clientHeight,
+            clipsX: xClip,
+            clipsY: yClip,
           });
         }
       }
       return {
-        docW: root.scrollWidth, docH: root.scrollHeight,
-        viewW: root.clientWidth, viewH: root.clientHeight,
+        docW: root.scrollWidth,
+        docH: root.scrollHeight,
+        viewW: root.clientWidth,
+        viewH: root.clientHeight,
         scrollsX: root.scrollWidth > root.clientWidth + 1,
         scrollsY: root.scrollHeight > root.clientHeight + 1,
         clippingCount: clipping.length,
@@ -216,7 +224,8 @@ function compareToAudit(truth, auditChecks) {
   // PWA manifest
   const auditMan = auditByName.get('PWA manifest (live)');
   if (auditMan && truth.manifest) {
-    const truthValid = truth.manifest.hasName && truth.manifest.hasDisplay && truth.manifest.hasStartUrl;
+    const truthValid =
+      truth.manifest.hasName && truth.manifest.hasDisplay && truth.manifest.hasStartUrl;
     if (auditMan.status === 'pass' && !truthValid) {
       diffs.push({
         check: 'PWA manifest',
@@ -236,7 +245,12 @@ function compareToAudit(truth, auditChecks) {
   }
 
   // Viewport fit — gap: not part of audit yet
-  if (truth.viewportFit && (truth.viewportFit.scrollsX || truth.viewportFit.scrollsY || truth.viewportFit.clippingCount > 0)) {
+  if (
+    truth.viewportFit &&
+    (truth.viewportFit.scrollsX ||
+      truth.viewportFit.scrollsY ||
+      truth.viewportFit.clippingCount > 0)
+  ) {
     diffs.push({
       check: 'Viewport fit (NOT IN AUDIT)',
       auditSays: 'n/a',
@@ -293,10 +307,19 @@ async function main() {
       (n, r) => n + r.diffs.filter((d) => !d.flag || d.flag === 'audit-error').length,
       0,
     );
-    const totalNoise = all.reduce((n, r) => n + r.diffs.filter((d) => d.flag === 'audit-noise').length, 0);
-    const totalGaps = all.reduce((n, r) => n + r.diffs.filter((d) => d.flag === 'audit-gap').length, 0);
+    const totalNoise = all.reduce(
+      (n, r) => n + r.diffs.filter((d) => d.flag === 'audit-noise').length,
+      0,
+    );
+    const totalGaps = all.reduce(
+      (n, r) => n + r.diffs.filter((d) => d.flag === 'audit-gap').length,
+      0,
+    );
     console.log(`\nDone. ${totalReal} real, ${totalNoise} noise, ${totalGaps} gap.\n`);
-    writeFileSync('/tmp/audit-verify-report.json', JSON.stringify({ verifiedAt: Date.now(), results: all }, null, 2));
+    writeFileSync(
+      '/tmp/audit-verify-report.json',
+      JSON.stringify({ verifiedAt: Date.now(), results: all }, null, 2),
+    );
     console.log('Detailed JSON: /tmp/audit-verify-report.json\n');
   }
 }

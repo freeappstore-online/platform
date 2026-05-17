@@ -1,4 +1,4 @@
-import type { Auth } from "./auth.js";
+import type { Auth } from './auth.js';
 
 /**
  * Browser-side wrapper around the platform's per-app secret-injecting proxy.
@@ -30,15 +30,15 @@ export class ApiProxy {
    */
   async fetch(target: string, init?: RequestInit): Promise<Response> {
     if (!this.auth.token) {
-      throw new Error("proxy.fetch: not signed in. Call fas.auth.signIn() first.");
+      throw new Error('proxy.fetch: not signed in. Call fas.auth.signIn() first.');
     }
     const url = `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/proxy/${normalizeTarget(target)}`;
     const headers = new Headers(init?.headers);
-    headers.set("Authorization", `Bearer ${this.auth.token}`);
+    headers.set('Authorization', `Bearer ${this.auth.token}`);
     const proxyResponse = await fetch(url, { ...init, headers });
     if (proxyResponse.status === 401) {
       this.auth.handleUnauthorized();
-      throw new Error("proxy.fetch: session expired. User has been signed out.");
+      throw new Error('proxy.fetch: session expired. User has been signed out.');
     }
     return proxyResponse;
   }
@@ -57,11 +57,11 @@ export function normalizeTarget(target: string): string {
   const schemeMatch = target.match(/^([a-z][a-z0-9+.-]*):\/\//i);
   if (schemeMatch) {
     const scheme = schemeMatch[1]!.toLowerCase();
-    if (scheme === "http" || scheme === "https") {
+    if (scheme === 'http' || scheme === 'https') {
       return target.slice(schemeMatch[0].length);
     }
-    throw new Error("proxy.fetch: only http(s) targets are supported");
+    throw new Error('proxy.fetch: only http(s) targets are supported');
   }
   // Already in "host/path" form.
-  return target.replace(/^\/+/, "");
+  return target.replace(/^\/+/, '');
 }

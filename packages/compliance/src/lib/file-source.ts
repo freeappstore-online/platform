@@ -30,7 +30,15 @@ export interface FileSource {
   listDir?(dir: string): Promise<string[] | null>;
 }
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', '.cache', '.wrangler', '.turbo']);
+const SKIP_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  '.next',
+  '.cache',
+  '.wrangler',
+  '.turbo',
+]);
 
 /**
  * Filesystem-backed FileSource — used by the CLI and CI. Walks the

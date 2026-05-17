@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -70,7 +70,7 @@ describe('PUT /v1/apps/:appId/kv/:key', () => {
   });
 
   it('returns 401 with a valid-shape but wrong-signature token', async () => {
-    const token = await signSession('gh:42', 'wrong-key-' + 'x'.repeat(50));
+    const token = await signSession('gh:42', `wrong-key-${'x'.repeat(50)}`);
     const res = await app.request(
       '/v1/apps/myapp/kv/foo',
       { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: '"hi"' },

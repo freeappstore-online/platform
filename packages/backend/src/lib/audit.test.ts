@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAudit } from './audit.js';
 
 interface Captured {
@@ -16,7 +16,7 @@ function fakeDB(captures: Captured[]): D1Database {
           bound = args;
           return { ...stmt, bound: [...bound] } as unknown as D1PreparedStatement;
         },
-        run: async <T>() => ({ meta: { changes: 1 } } as unknown as D1Result<T>),
+        run: async <T>() => ({ meta: { changes: 1 } }) as unknown as D1Result<T>,
         // fetchLastCheckedMap calls .all() to read MAX(checked_at) per app.
         // Tests don't seed any rows; returning empty matches "no prior
         // audits" which is the typical scaffold path.
@@ -28,7 +28,9 @@ function fakeDB(captures: Captured[]): D1Database {
       }) as unknown as D1PreparedStatement;
     },
     batch: async <T>(statements: D1PreparedStatement[]) => {
-      for (const s of statements as Array<D1PreparedStatement & { bound?: unknown[]; _captureSql?: string }>) {
+      for (const s of statements as Array<
+        D1PreparedStatement & { bound?: unknown[]; _captureSql?: string }
+      >) {
         captures.push({ sql: s._captureSql ?? '', binds: s.bound ?? [] });
       }
       return Promise.all(
@@ -104,10 +106,14 @@ describe('runAudit', () => {
   it('preserves store column for app vs game', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       if (/freeappstore.*registry/.test(url)) {
-        return new Response(JSON.stringify({ apps: [{ id: 'a', appUrl: 'https://a.example' }] }), { status: 200 });
+        return new Response(JSON.stringify({ apps: [{ id: 'a', appUrl: 'https://a.example' }] }), {
+          status: 200,
+        });
       }
       if (/freegamestore.*registry/.test(url)) {
-        return new Response(JSON.stringify({ games: [{ id: 'g', appUrl: 'https://g.example' }] }), { status: 200 });
+        return new Response(JSON.stringify({ games: [{ id: 'g', appUrl: 'https://g.example' }] }), {
+          status: 200,
+        });
       }
       throw new Error('x');
     });

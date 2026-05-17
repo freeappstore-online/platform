@@ -1,12 +1,12 @@
 import { randomBytes as nodeRandomBytes } from 'node:crypto';
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  checkNoTrackingLive,
-  checkBrandFontsLive,
-  checkManifestLive,
-  checkBundleSizeLive,
-  checkUnsafeVhLive,
   auditLive,
+  checkBrandFontsLive,
+  checkBundleSizeLive,
+  checkManifestLive,
+  checkNoTrackingLive,
+  checkUnsafeVhLive,
 } from './index.js';
 
 /** Incompressible random bytes — gzipping these yields ≈ same size,
@@ -29,12 +29,18 @@ describe('checkNoTrackingLive', () => {
   });
 
   it('flags Plausible, Mixpanel, Hotjar variants', () => {
-    expect(checkNoTrackingLive('<script src="https://plausible.io/script.js">').status).toBe('fail');
+    expect(checkNoTrackingLive('<script src="https://plausible.io/script.js">').status).toBe(
+      'fail',
+    );
     expect(checkNoTrackingLive('<div>amplitude tracker</div>').status).toBe('fail');
     expect(checkNoTrackingLive('<script>gtag("event")</script>').status).toBe('fail');
-    expect(checkNoTrackingLive('<script src="https://www.googletagmanager.com/gtm.js">').status).toBe('fail');
+    expect(
+      checkNoTrackingLive('<script src="https://www.googletagmanager.com/gtm.js">').status,
+    ).toBe('fail');
     expect(checkNoTrackingLive('<script src="//cdn.mixpanel.com/x">').status).toBe('fail');
-    expect(checkNoTrackingLive('<script src="https://static.hotjar.com/c/hotjar.js">').status).toBe('fail');
+    expect(checkNoTrackingLive('<script src="https://static.hotjar.com/c/hotjar.js">').status).toBe(
+      'fail',
+    );
     expect(checkNoTrackingLive('<script src="https://posthog.com/array.js">').status).toBe('fail');
   });
 });
@@ -120,10 +126,7 @@ describe('checkManifestLive', () => {
     const html = '<link rel="manifest" href="manifest.json">';
     await checkManifestLive(html, 'https://app.example/');
     // First arg is the URL — should resolve to absolute.
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://app.example/manifest.json',
-      expect.any(Object),
-    );
+    expect(mockFetch).toHaveBeenCalledWith('https://app.example/manifest.json', expect.any(Object));
   });
 });
 
@@ -210,7 +213,10 @@ describe('auditLive (integration)', () => {
       callCount++;
       if (callCount === 1) return new Response(html, { status: 200 });
       if (url.endsWith('/manifest.json')) {
-        return new Response(JSON.stringify({ name: 'tip', display: 'standalone', start_url: '/' }), { status: 200 });
+        return new Response(
+          JSON.stringify({ name: 'tip', display: 'standalone', start_url: '/' }),
+          { status: 200 },
+        );
       }
       if (url.endsWith('.css')) {
         return new Response('body { height: 100svh; }', { status: 200 });
@@ -230,7 +236,7 @@ describe('auditLive (integration)', () => {
     expect(otherStatuses).toEqual(['pass', 'pass', 'pass', 'pass', 'pass']);
   });
 
-  it('downgrades subrequest-cap errors from fail → warn (not the app\'s fault)', async () => {
+  it("downgrades subrequest-cap errors from fail → warn (not the app's fault)", async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error('Too many subrequests by single Worker invocation.'),
     );

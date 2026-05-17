@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  validateRule,
-  pickRule,
-  injectSecret,
-  isAiProviderHost,
   AllowlistError,
   type AllowlistRule,
+  injectSecret,
+  isAiProviderHost,
+  pickRule,
+  validateRule,
 } from './proxy-allowlist.js';
 
 describe('validateRule', () => {
@@ -58,9 +58,7 @@ describe('validateRule', () => {
     expect(() => validateRule({ ...base, injectKind: 'header', injectName: '' })).toThrow(
       /injectName is required/,
     );
-    expect(() =>
-      validateRule({ ...base, injectKind: 'bearer', injectName: '' }),
-    ).not.toThrow();
+    expect(() => validateRule({ ...base, injectKind: 'bearer', injectName: '' })).not.toThrow();
   });
 
   it('requires non-empty methods', () => {
@@ -120,11 +118,7 @@ describe('pickRule', () => {
   });
 
   it('falls back to less specific prefix when the long one does not apply', () => {
-    const rule = pickRule(
-      rules,
-      'https://api.openweathermap.org/data/2.5/weather?q=London',
-      'GET',
-    );
+    const rule = pickRule(rules, 'https://api.openweathermap.org/data/2.5/weather?q=London', 'GET');
     expect(rule?.secretName).toBe('OPENWEATHER_KEY');
   });
 
@@ -183,12 +177,7 @@ describe('injectSecret', () => {
 
   it('injects a Bearer token', () => {
     const rule: AllowlistRule = { ...baseRule, injectKind: 'bearer', injectName: '' };
-    const { headers } = injectSecret(
-      rule,
-      'https://api.example.com/v1/x',
-      new Headers(),
-      'sekret',
-    );
+    const { headers } = injectSecret(rule, 'https://api.example.com/v1/x', new Headers(), 'sekret');
     expect(headers.get('Authorization')).toBe('Bearer sekret');
   });
 });

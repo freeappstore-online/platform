@@ -1,13 +1,13 @@
 {
   "version": "0.28.2",
-  "timestamp": "2026-05-17T01:38:17.489Z",
-  "score": 80,
-  "grade": "B",
+  "timestamp": "2026-05-17T01:37:57.272Z",
+  "score": 62,
+  "grade": "C",
   "checks": [
     {
       "name": "structure",
-      "score": 100,
-      "grade": "A",
+      "score": 85,
+      "grade": "B",
       "details": {
         "found": [
           "package.json",
@@ -18,68 +18,75 @@
           "lockfile"
         ],
         "missing": [],
-        "srcFiles": 82,
-        "testFiles": 66,
-        "testRatio": "80%",
-        "monorepo": true,
-        "workspaceTool": "pnpm",
-        "packages": 7
+        "srcFiles": 0,
+        "testFiles": 0,
+        "testRatio": "0%"
       },
-      "issues": [],
-      "duration": 21
+      "issues": [
+        {
+          "severity": "error",
+          "message": "No src/ directory found",
+          "rule": "no-src"
+        }
+      ],
+      "duration": 0
     },
     {
       "name": "lint",
       "score": 90,
       "grade": "A",
       "details": {
-        "errors": 0,
-        "warnings": 5,
+        "errors": 1,
+        "warnings": 0,
         "linter": "biome"
       },
       "issues": [
         {
-          "severity": "warning",
-          "message": "Unexpected any. Specify a different type.",
-          "file": "packages/cli/src/commands/secret.test.ts",
-          "rule": "lint/suspicious/noExplicitAny"
-        },
-        {
-          "severity": "warning",
-          "message": "Unexpected any. Specify a different type.",
-          "file": "packages/cli/src/commands/secret.test.ts",
-          "rule": "lint/suspicious/noExplicitAny"
-        },
-        {
-          "severity": "warning",
-          "message": "Unexpected any. Specify a different type.",
-          "file": "packages/cli/src/commands/secret.test.ts",
-          "rule": "lint/suspicious/noExplicitAny"
-        },
-        {
-          "severity": "warning",
-          "message": "Unexpected any. Specify a different type.",
-          "file": "packages/cli/src/commands/secret.test.ts",
-          "rule": "lint/suspicious/noExplicitAny"
-        },
-        {
-          "severity": "warning",
-          "message": "Unexpected any. Specify a different type.",
-          "file": "packages/cli/src/commands/secret.test.ts",
-          "rule": "lint/suspicious/noExplicitAny"
+          "severity": "error",
+          "message": "No such file or directory (os error 2)",
+          "file": "/Users/serge/dev/stores/fas/platform/src",
+          "rule": "internalError/io"
         }
       ],
-      "duration": 928
+      "duration": 576
     },
     {
       "name": "types",
       "score": 0,
       "grade": "F",
       "details": {
-        "errors": 249,
+        "errors": 263,
         "ok": false
       },
       "issues": [
+        {
+          "severity": "error",
+          "file": "examples/rooms-demo/src/main.ts",
+          "line": 1,
+          "rule": "TS2307",
+          "message": "Cannot find module '@freeappstore/sdk' or its corresponding type declarations."
+        },
+        {
+          "severity": "error",
+          "file": "examples/rooms-demo/src/main.ts",
+          "line": 51,
+          "rule": "TS7006",
+          "message": "Parameter 'peers' implicitly has an 'any' type."
+        },
+        {
+          "severity": "error",
+          "file": "examples/rooms-demo/src/main.ts",
+          "line": 55,
+          "rule": "TS7006",
+          "message": "Parameter 'p' implicitly has an 'any' type."
+        },
+        {
+          "severity": "error",
+          "file": "examples/rooms-demo/src/main.ts",
+          "line": 58,
+          "rule": "TS7006",
+          "message": "Parameter 'msg' implicitly has an 'any' type."
+        },
         {
           "severity": "error",
           "file": "packages/backend/src/do/room.ts",
@@ -195,6 +202,13 @@
         {
           "severity": "error",
           "file": "packages/backend/src/lib/audit.ts",
+          "line": 22,
+          "rule": "TS2307",
+          "message": "Cannot find module '@freeappstore/compliance' or its corresponding type declarations."
+        },
+        {
+          "severity": "error",
+          "file": "packages/backend/src/lib/audit.ts",
           "line": 60,
           "rule": "TS2552",
           "message": "Cannot find name 'D1Database'. Did you mean 'IDBDatabase'?"
@@ -205,6 +219,34 @@
           "line": 69,
           "rule": "TS2552",
           "message": "Cannot find name 'D1Database'. Did you mean 'IDBDatabase'?"
+        },
+        {
+          "severity": "error",
+          "file": "packages/backend/src/lib/audit.ts",
+          "line": 89,
+          "rule": "TS7006",
+          "message": "Parameter 'r' implicitly has an 'any' type."
+        },
+        {
+          "severity": "error",
+          "file": "packages/backend/src/lib/audit.ts",
+          "line": 95,
+          "rule": "TS7006",
+          "message": "Parameter 'n' implicitly has an 'any' type."
+        },
+        {
+          "severity": "error",
+          "file": "packages/backend/src/lib/audit.ts",
+          "line": 95,
+          "rule": "TS7031",
+          "message": "Binding element 'report' implicitly has an 'any' type."
+        },
+        {
+          "severity": "error",
+          "file": "packages/backend/src/lib/audit.ts",
+          "line": 95,
+          "rule": "TS7006",
+          "message": "Parameter 'r' implicitly has an 'any' type."
         },
         {
           "severity": "error",
@@ -1244,6 +1286,41 @@
         },
         {
           "severity": "error",
+          "file": "packages/cli/src/commands/check.ts",
+          "line": 1,
+          "rule": "TS2307",
+          "message": "Cannot find module '@freeappstore/compliance' or its corresponding type declarations."
+        },
+        {
+          "severity": "error",
+          "file": "packages/cli/src/commands/check.ts",
+          "line": 39,
+          "rule": "TS2532",
+          "message": "Object is possibly 'undefined'."
+        },
+        {
+          "severity": "error",
+          "file": "packages/cli/src/commands/check.ts",
+          "line": 39,
+          "rule": "TS2722",
+          "message": "Cannot invoke an object which is possibly 'undefined'."
+        },
+        {
+          "severity": "error",
+          "file": "packages/cli/src/commands/check.ts",
+          "line": 39,
+          "rule": "TS2345",
+          "message": "Argument of type 'string | undefined' is not assignable to parameter of type 'string'."
+        },
+        {
+          "severity": "error",
+          "file": "packages/cli/src/commands/publish.ts",
+          "line": 4,
+          "rule": "TS2307",
+          "message": "Cannot find module '@freeappstore/compliance' or its corresponding type declarations."
+        },
+        {
+          "severity": "error",
           "file": "packages/cli/src/index.ts",
           "line": 56,
           "rule": "TS6142",
@@ -1824,7 +1901,7 @@
           "message": "Conversion of type 'Mock<(_url: any, init: any) => Promise<Response>>' to type 'typeof fetch' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."
         }
       ],
-      "duration": 5334
+      "duration": 5548
     },
     {
       "name": "type-safety",
@@ -1862,7 +1939,7 @@
         "functionCount": 0
       },
       "issues": [],
-      "duration": 0
+      "duration": 1
     },
     {
       "name": "duplication",
@@ -1884,7 +1961,7 @@
         "reason": "no source files"
       },
       "issues": [],
-      "duration": 1
+      "duration": 0
     },
     {
       "name": "react",
@@ -1919,7 +1996,7 @@
         "documentedPct": "n/a"
       },
       "issues": [],
-      "duration": 1
+      "duration": 0
     },
     {
       "name": "best-practices",
@@ -1975,68 +2052,31 @@
           "rule": "conventional-commits"
         }
       ],
-      "duration": 2
+      "duration": 5
     },
     {
       "name": "testing",
-      "score": 66,
-      "grade": "C",
+      "score": 0,
+      "grade": "F",
       "details": {
+        "reason": "No test files found",
+        "srcFiles": 0,
+        "testFiles": 0,
         "pyramid": {
-          "unit": 59,
-          "integration": 2,
-          "component": 2,
-          "e2e": 3
-        },
-        "layersPresent": "2/2",
-        "e2eTool": "none",
-        "testFiles": 66,
-        "srcFiles": 82,
-        "pairing": "76%",
-        "quality": {
-          "assertionsPerTest": 1.9,
-          "mockRatio": 0.06,
-          "snapshotRatio": 0
+          "unit": 0,
+          "integration": 0,
+          "component": 0,
+          "e2e": 0
         }
       },
       "issues": [
         {
-          "severity": "info",
-          "message": "No test file for packages/backend/src/do/room.ts",
-          "file": "packages/backend/src/do/room.ts",
-          "rule": "untested-file"
-        },
-        {
-          "severity": "info",
-          "message": "No test file for packages/cli/src/commands/check.ts",
-          "file": "packages/cli/src/commands/check.ts",
-          "rule": "untested-file"
-        },
-        {
-          "severity": "info",
-          "message": "No test file for packages/cli/src/commands/init.ts",
-          "file": "packages/cli/src/commands/init.ts",
-          "rule": "untested-file"
-        },
-        {
-          "severity": "info",
-          "message": "No test file for packages/cli/src/commands/login.ts",
-          "file": "packages/cli/src/commands/login.ts",
-          "rule": "untested-file"
-        },
-        {
-          "severity": "info",
-          "message": "No test file for packages/cli/src/commands/logout.ts",
-          "file": "packages/cli/src/commands/logout.ts",
-          "rule": "untested-file"
-        },
-        {
-          "severity": "info",
-          "message": "...and 12 more untested files",
-          "rule": "untested-file"
+          "severity": "error",
+          "message": "0 source files with zero tests",
+          "rule": "no-tests"
         }
       ],
-      "duration": 30
+      "duration": 0
     },
     {
       "name": "secrets",
@@ -2046,7 +2086,7 @@
         "secretsFound": 0
       },
       "issues": [],
-      "duration": 31
+      "duration": 39
     },
     {
       "name": "security",
@@ -2079,7 +2119,7 @@
           "message": "2 packages behind by a major version"
         }
       ],
-      "duration": 1651
+      "duration": 1710
     },
     {
       "name": "architecture",
@@ -2090,7 +2130,7 @@
         "reason": "fewer than 2 source files"
       },
       "issues": [],
-      "duration": 0
+      "duration": 1
     },
     {
       "name": "performance",
@@ -2140,7 +2180,7 @@
         "description": "Detects contradictions between documentation and code. Finds stale README claims, incorrect JSDoc, outdated API docs, and misleading comments."
       },
       "issues": [],
-      "duration": 1
+      "duration": 0
     },
     {
       "name": "code-coherence",
@@ -2162,7 +2202,7 @@
   "meta": {
     "cwd": "/Users/serge/dev/stores/fas/platform",
     "node": "v22.21.1",
-    "duration": 8007,
+    "duration": 7884,
     "stack": {
       "language": "typescript",
       "framework": "none",
@@ -2170,71 +2210,6 @@
       "testRunner": "vitest",
       "linter": "biome",
       "packageManager": "pnpm"
-    },
-    "workspace": {
-      "isMonorepo": true,
-      "tool": "pnpm",
-      "packages": [
-        {
-          "name": "@freeappstore/backend",
-          "path": "packages/backend",
-          "hasSrc": true,
-          "hasTests": true,
-          "hasLinter": false
-        },
-        {
-          "name": "@freeappstore/cli",
-          "path": "packages/cli",
-          "hasSrc": true,
-          "hasTests": true,
-          "hasLinter": false
-        },
-        {
-          "name": "@freeappstore/compliance",
-          "path": "packages/compliance",
-          "hasSrc": true,
-          "hasTests": true,
-          "hasLinter": false
-        },
-        {
-          "name": "@freeappstore/e2e",
-          "path": "packages/e2e",
-          "hasSrc": false,
-          "hasTests": true,
-          "hasLinter": false
-        },
-        {
-          "name": "@freeappstore/quality",
-          "path": "packages/quality",
-          "hasSrc": true,
-          "hasTests": true,
-          "hasLinter": false
-        },
-        {
-          "name": "@freeappstore/sdk",
-          "path": "packages/sdk",
-          "hasSrc": true,
-          "hasTests": true,
-          "hasLinter": false
-        },
-        {
-          "name": "@freeappstore-examples/rooms-demo",
-          "path": "examples/rooms-demo",
-          "hasSrc": true,
-          "hasTests": true,
-          "hasLinter": false
-        }
-      ],
-      "srcRoots": [
-        "packages/backend/src",
-        "packages/cli/src",
-        "packages/compliance/src",
-        "packages/compliance/test",
-        "packages/e2e/tests",
-        "packages/quality/src",
-        "packages/sdk/src",
-        "examples/rooms-demo/src"
-      ]
     },
     "repoUrl": "https://github.com/freeappstore-online/platform",
     "branch": "main"

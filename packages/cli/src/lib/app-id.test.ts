@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { isValidAppId, assertValidAppId } from './app-id.js';
+import { describe, expect, it } from 'vitest';
+import { assertValidAppId, isValidAppId } from './app-id.js';
 
 describe('isValidAppId', () => {
   it('accepts typical short app ids', () => {
@@ -19,8 +19,8 @@ describe('isValidAppId', () => {
   });
 
   it('accepts 31-char ids and rejects 32+', () => {
-    expect(isValidAppId('a' + 'b'.repeat(30))).toBe(true); // 31 total
-    expect(isValidAppId('a' + 'b'.repeat(31))).toBe(false); // 32 total
+    expect(isValidAppId(`a${'b'.repeat(30)}`)).toBe(true); // 31 total
+    expect(isValidAppId(`a${'b'.repeat(31)}`)).toBe(false); // 32 total
   });
 
   it('rejects ids that start with a digit, hyphen, or uppercase', () => {

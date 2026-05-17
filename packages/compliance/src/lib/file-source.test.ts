@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fsFileSource, mapFileSource } from './file-source.js';
-import { checkNoTracking } from '../checks/no-tracking.js';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { checkBrandFonts } from '../checks/brand-fonts.js';
+import { checkNoTracking } from '../checks/no-tracking.js';
 import { checkUnsafeVh } from '../checks/unsafe-vh.js';
 import { runChecksFromFiles } from '../index.js';
+import { fsFileSource, mapFileSource } from './file-source.js';
 
 describe('fsFileSource', () => {
   let dir: string;
@@ -87,7 +87,7 @@ describe('mapFileSource', () => {
   it('parity: source-only checks return same result as fsFileSource', async () => {
     const files = new Map<string, string>([
       ['web/src/main.tsx', 'import "google-analytics";'],
-      ['web/src/index.css', '/* no fonts here */',],
+      ['web/src/index.css', '/* no fonts here */'],
     ]);
     const tracking = await checkNoTracking(mapFileSource(files));
     expect(tracking.status).toBe('fail');
@@ -111,10 +111,17 @@ describe('mapFileSource', () => {
     const files = new Map<string, string>([
       ['package.json', '{"name":"x","packageManager":"pnpm@10"}'],
       ['web/index.html', '<!doctype html><link href="Manrope|Fraunces"/>'],
-      ['web/public/manifest.json', JSON.stringify({
-        name: 'x', short_name: 'x', start_url: '/', display: 'standalone',
-        orientation: 'any', min_viewport_width: 360,
-      })],
+      [
+        'web/public/manifest.json',
+        JSON.stringify({
+          name: 'x',
+          short_name: 'x',
+          start_url: '/',
+          display: 'standalone',
+          orientation: 'any',
+          min_viewport_width: 360,
+        }),
+      ],
       ['web/src/index.css', '/* Manrope Fraunces */'],
     ]);
     const results = await runChecksFromFiles(files);

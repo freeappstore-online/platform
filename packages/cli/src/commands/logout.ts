@@ -1,7 +1,7 @@
-import { Command } from 'commander';
 import { rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { Command } from 'commander';
 
 export const logoutCommand = new Command('logout')
   .description('Clear the local fas session and GitHub access token.')

@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  parseGitHubRepo,
-  buildSubmissionUrl,
-  resolveCategory,
-  resolveType,
-  resolveFromFlags,
   buildPromptList,
+  buildSubmissionUrl,
+  parseGitHubRepo,
+  resolveCategory,
+  resolveFromFlags,
+  resolveType,
 } from './publish.js';
 
 describe('parseGitHubRepo', () => {
@@ -112,7 +112,9 @@ describe('resolveCategory', () => {
 describe('resolveType', () => {
   it('matches short forms', () => {
     expect(resolveType('standalone')).toBe('Standalone (no backend, localStorage only)');
-    expect(resolveType('connected')).toBe('Connected (Firebase/Supabase backend, shared with Pro version)');
+    expect(resolveType('connected')).toBe(
+      'Connected (Firebase/Supabase backend, shared with Pro version)',
+    );
   });
   it('matches case-insensitive full label', () => {
     expect(resolveType('STANDALONE')).toBe('Standalone (no backend, localStorage only)');

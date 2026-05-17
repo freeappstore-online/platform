@@ -54,7 +54,7 @@ export async function checkClaudeMdSlim(source: FileSource): Promise<CheckResult
     if (!m) continue;
     const text = m[1]!.toLowerCase().replace(/:$/, '');
     for (const banned of BOILERPLATE_HEADERS) {
-      if (text === banned || text.startsWith(banned + ' ') || text.startsWith(banned + ':')) {
+      if (text === banned || text.startsWith(`${banned} `) || text.startsWith(`${banned}:`)) {
         if (!seen.has(banned)) {
           offendingHeaders.push(m[1]!);
           seen.add(banned);

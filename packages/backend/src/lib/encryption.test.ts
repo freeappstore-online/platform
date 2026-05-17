@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { sealSecret, openSecret, type SealedSecret } from './encryption.js';
+import { describe, expect, it } from 'vitest';
+import { openSecret, type SealedSecret, sealSecret } from './encryption.js';
 
 function freshKek(): string {
   const raw = crypto.getRandomValues(new Uint8Array(32));
@@ -80,13 +80,9 @@ describe('envelope encryption', () => {
 
     // Unwrap DEK under old KEK.
     const oldKekRaw = Uint8Array.from(atob(kekOld), (c) => c.charCodeAt(0));
-    const oldKek = await crypto.subtle.importKey(
-      'raw',
-      oldKekRaw,
-      { name: 'AES-GCM' },
-      false,
-      ['decrypt'],
-    );
+    const oldKek = await crypto.subtle.importKey('raw', oldKekRaw, { name: 'AES-GCM' }, false, [
+      'decrypt',
+    ]);
     const ivKekOld = sealed.dekWrapped.slice(0, 12);
     const wrappedBody = sealed.dekWrapped.slice(12);
     const dekRaw = new Uint8Array(
@@ -95,13 +91,9 @@ describe('envelope encryption', () => {
 
     // Re-wrap under new KEK with a fresh IV.
     const newKekRaw = Uint8Array.from(atob(kekNew), (c) => c.charCodeAt(0));
-    const newKek = await crypto.subtle.importKey(
-      'raw',
-      newKekRaw,
-      { name: 'AES-GCM' },
-      false,
-      ['encrypt'],
-    );
+    const newKek = await crypto.subtle.importKey('raw', newKekRaw, { name: 'AES-GCM' }, false, [
+      'encrypt',
+    ]);
     const ivKekNew = crypto.getRandomValues(new Uint8Array(12));
     const reWrapped = new Uint8Array(
       await crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivKekNew }, newKek, dekRaw),

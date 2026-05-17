@@ -26,11 +26,7 @@ export type QuotaCheck = { ok: true } | { ok: false; reason: string };
  * Projects the quota state after a hypothetical write of `newValueBytes` to
  * an existing or new key, and returns whether it would breach any limit.
  */
-export function checkKvWrite(
-  usage: KvUsage,
-  newValueBytes: number,
-  limits: KvLimits,
-): QuotaCheck {
+export function checkKvWrite(usage: KvUsage, newValueBytes: number, limits: KvLimits): QuotaCheck {
   if (newValueBytes > limits.maxValueBytes) {
     return { ok: false, reason: `value exceeds ${limits.maxValueBytes} bytes` };
   }

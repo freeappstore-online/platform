@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
-import type { Env } from '../types.js';
 import { signSession } from '../lib/session.js';
+import type { Env } from '../types.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 const KEK = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
@@ -161,8 +161,15 @@ function run(sql: string, bound: unknown[], d: FakeData): number {
     return before - d.secrets.length;
   }
   if (sql.startsWith('INSERT INTO app_proxy_allowlist')) {
-    const [app_id, pattern, inject_kind, inject_name, secret_name, methods, created_at] =
-      bound as [string, string, string, string, string, string, number];
+    const [app_id, pattern, inject_kind, inject_name, secret_name, methods, created_at] = bound as [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string,
+      number,
+    ];
     const idx = d.allow.findIndex((r) => r.app_id === app_id && r.pattern === pattern);
     const row: AllowRow = {
       app_id,
@@ -207,7 +214,6 @@ function baseEnv(db: D1Database, withKek = true): Env {
     ...(withKek ? { APP_SECRET_KEK: KEK } : {}),
   };
 }
-
 
 const owner: UserRow = { id: 'gh:1', github_login: 'alice', avatar_url: null };
 const stranger: UserRow = { id: 'gh:2', github_login: 'mallory', avatar_url: null };
@@ -1335,4 +1341,3 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect([400, 404]).toContain(res.status);
   });
 });
-

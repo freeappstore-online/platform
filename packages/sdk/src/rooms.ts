@@ -1,5 +1,5 @@
-import type { Auth } from "./auth.js";
-import type { Unsubscribe } from "./types.js";
+import type { Auth } from './auth.js';
+import type { Unsubscribe } from './types.js';
 
 /**
  * Light realtime room — Durable-Object-backed WebSocket fan-out.
@@ -25,7 +25,7 @@ export interface RoomMessage<T = unknown> {
   at: number;
 }
 
-export type ConnectionState = "connecting" | "open" | "closed" | "error";
+export type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';
 
 export class Rooms {
   constructor(
@@ -48,7 +48,7 @@ export class Room {
   private peerListeners = new Set<(peers: RoomPeer[]) => void>();
   private stateListeners = new Set<(state: ConnectionState) => void>();
   private peers: RoomPeer[] = [];
-  private connectionState: ConnectionState = "connecting";
+  private connectionState: ConnectionState = 'connecting';
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private explicitlyClosed = false;
@@ -69,7 +69,7 @@ export class Room {
 
   send<T>(data: T): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify({ kind: "msg", data }));
+    this.socket.send(JSON.stringify({ kind: 'msg', data }));
   }
 
   onMessage<T = unknown>(listener: (msg: RoomMessage<T>) => void): Unsubscribe {
@@ -98,7 +98,7 @@ export class Room {
     }
     this.socket?.close();
     this.socket = null;
-    this.setState("closed");
+    this.setState('closed');
     this.listeners.clear();
     this.peerListeners.clear();
     this.stateListeners.clear();
@@ -108,32 +108,35 @@ export class Room {
     const token = this.auth.token;
     if (!token) {
       // Auth state may have changed (sign-out). Stop trying.
-      this.setState("closed");
+      this.setState('closed');
       return;
     }
-    this.setState("connecting");
+    this.setState('connecting');
 
-    const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/rooms/${encodeURIComponent(this.roomId)}`, this.apiBase);
-    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-    url.searchParams.set("token", token);
+    const url = new URL(
+      `/v1/apps/${encodeURIComponent(this.appId)}/rooms/${encodeURIComponent(this.roomId)}`,
+      this.apiBase,
+    );
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    url.searchParams.set('token', token);
     const socket = new WebSocket(url.toString());
     this.socket = socket;
 
-    socket.addEventListener("open", () => {
+    socket.addEventListener('open', () => {
       this.reconnectAttempt = 0;
-      this.setState("open");
+      this.setState('open');
     });
 
-    socket.addEventListener("message", (ev) => {
+    socket.addEventListener('message', (ev) => {
       try {
         const parsed = JSON.parse(ev.data as string) as
-          | { kind: "msg"; from: RoomPeer; data: unknown; at: number }
-          | { kind: "peers"; peers: RoomPeer[] };
-        if (parsed.kind === "msg") {
+          | { kind: 'msg'; from: RoomPeer; data: unknown; at: number }
+          | { kind: 'peers'; peers: RoomPeer[] };
+        if (parsed.kind === 'msg') {
           for (const l of this.listeners) {
             l({ from: parsed.from, data: parsed.data, at: parsed.at });
           }
-        } else if (parsed.kind === "peers") {
+        } else if (parsed.kind === 'peers') {
           this.peers = parsed.peers;
           for (const l of this.peerListeners) l(this.peers);
         }
@@ -144,20 +147,20 @@ export class Room {
       }
     });
 
-    socket.addEventListener("close", () => {
+    socket.addEventListener('close', () => {
       // Only one of close/error fires the reconnect; we use close because
       // it always fires, even after an error, and is the canonical signal.
       if (this.socket === socket) this.socket = null;
       if (this.explicitlyClosed) return;
-      this.setState("closed");
+      this.setState('closed');
       this.scheduleReconnect();
     });
 
-    socket.addEventListener("error", () => {
+    socket.addEventListener('error', () => {
       // We let the close handler do the actual reconnect logic. error is
       // informational and may or may not be followed by close (it always is
       // in browsers per spec).
-      this.setState("error");
+      this.setState('error');
     });
   }
 

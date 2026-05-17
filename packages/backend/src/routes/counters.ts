@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
+import { HttpError, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
-import { requireUser, HttpError } from '../lib/auth.js';
 
 /**
  * Shared (not user-scoped) atomic counters per app.
@@ -35,16 +35,16 @@ counterRoutes.get('/apps/:appId/counters', async (c) => {
     bindings = [appId];
   }
 
-  const { results } = await c.env.DB.prepare(query).bind(...bindings).all<{ key: string; value: number }>();
+  const { results } = await c.env.DB.prepare(query)
+    .bind(...bindings)
+    .all<{ key: string; value: number }>();
   return c.json(Object.fromEntries(results.map((r) => [r.key, r.value])));
 });
 
 /** Get a single counter value (public read). */
 counterRoutes.get('/apps/:appId/counters/:key', async (c) => {
   const { appId, key } = c.req.param();
-  const row = await c.env.DB.prepare(
-    'SELECT value FROM counters WHERE app_id = ? AND key = ?',
-  )
+  const row = await c.env.DB.prepare('SELECT value FROM counters WHERE app_id = ? AND key = ?')
     .bind(appId, key)
     .first<{ value: number }>();
   if (!row) return c.json({ value: 0 });
@@ -65,20 +65,19 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
     const increment = body.increment ?? 1;
 
     if (!Number.isInteger(increment) || Math.abs(increment) > MAX_INCREMENT) {
-      return c.text(`increment must be integer between -${MAX_INCREMENT} and +${MAX_INCREMENT}`, 400);
+      return c.text(
+        `increment must be integer between -${MAX_INCREMENT} and +${MAX_INCREMENT}`,
+        400,
+      );
     }
 
     // Check counter limit
-    const count = await c.env.DB.prepare(
-      'SELECT COUNT(*) AS cnt FROM counters WHERE app_id = ?',
-    )
+    const count = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM counters WHERE app_id = ?')
       .bind(appId)
       .first<{ cnt: number }>();
     if ((count?.cnt ?? 0) >= MAX_COUNTERS_PER_APP) {
       // Only enforce if this is a new key
-      const exists = await c.env.DB.prepare(
-        'SELECT 1 FROM counters WHERE app_id = ? AND key = ?',
-      )
+      const exists = await c.env.DB.prepare('SELECT 1 FROM counters WHERE app_id = ? AND key = ?')
         .bind(appId, key)
         .first();
       if (!exists) {
@@ -97,9 +96,7 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
       .run();
 
     // Return new value
-    const row = await c.env.DB.prepare(
-      'SELECT value FROM counters WHERE app_id = ? AND key = ?',
-    )
+    const row = await c.env.DB.prepare('SELECT value FROM counters WHERE app_id = ? AND key = ?')
       .bind(appId, key)
       .first<{ value: number }>();
 

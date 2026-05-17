@@ -75,7 +75,8 @@ const MAX_CLIPPING_HITS = 20;
 function shouldReport(): boolean {
   if (typeof window === 'undefined') return false;
   if (window.parent === window) return false;
-  if ((window as unknown as { __FAS_QUALITY_DISABLE?: boolean }).__FAS_QUALITY_DISABLE) return false;
+  if ((window as unknown as { __FAS_QUALITY_DISABLE?: boolean }).__FAS_QUALITY_DISABLE)
+    return false;
   return true;
 }
 
@@ -121,13 +122,16 @@ export function snapshot(): ViewportReport {
     const cs = getComputedStyle(el);
     const ovx = cs.overflowX;
     const ovy = cs.overflowY;
-    const xClipped = (ovx === 'hidden' || ovx === 'clip') && el.scrollWidth > el.clientWidth + TOLERANCE_PX;
-    const yClipped = (ovy === 'hidden' || ovy === 'clip') && el.scrollHeight > el.clientHeight + TOLERANCE_PX;
+    const xClipped =
+      (ovx === 'hidden' || ovx === 'clip') && el.scrollWidth > el.clientWidth + TOLERANCE_PX;
+    const yClipped =
+      (ovy === 'hidden' || ovy === 'clip') && el.scrollHeight > el.clientHeight + TOLERANCE_PX;
     if (!xClipped && !yClipped) continue;
     const idPart = el.id ? `#${el.id}` : '';
-    const classPart = el.className && typeof el.className === 'string'
-      ? `.${el.className.split(/\s+/).filter(Boolean)[0] ?? ''}`
-      : '';
+    const classPart =
+      el.className && typeof el.className === 'string'
+        ? `.${el.className.split(/\s+/).filter(Boolean)[0] ?? ''}`
+        : '';
     clipping.push({
       selector: `${el.tagName.toLowerCase()}${idPart}${classPart}`,
       scrollWidth: el.scrollWidth,
@@ -146,7 +150,9 @@ export function snapshot(): ViewportReport {
         : 'light'
       : 'unknown';
   const reducedMotion =
-    typeof matchMedia === 'function' ? matchMedia('(prefers-reduced-motion: reduce)').matches : false;
+    typeof matchMedia === 'function'
+      ? matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false;
 
   // App ID is the leftmost subdomain on a *.freeappstore.online or
   // *.freegamestore.online host; bare domains (local dev, custom domains)
@@ -198,19 +204,89 @@ export const REFERENCE_VIEWPORTS: ReadonlyArray<{
   share: number;
   kind: 'phone' | 'tablet';
 }> = [
-  { width: 320, height: 568, label: 'iPhone SE', orientation: 'portrait', share: 99, kind: 'phone' },
+  {
+    width: 320,
+    height: 568,
+    label: 'iPhone SE',
+    orientation: 'portrait',
+    share: 99,
+    kind: 'phone',
+  },
   { width: 360, height: 800, label: 'Android', orientation: 'portrait', share: 96, kind: 'phone' },
-  { width: 393, height: 852, label: 'iPhone 15', orientation: 'portrait', share: 92, kind: 'phone' },
-  { width: 414, height: 896, label: 'iPhone 11 PM', orientation: 'portrait', share: 88, kind: 'phone' },
+  {
+    width: 393,
+    height: 852,
+    label: 'iPhone 15',
+    orientation: 'portrait',
+    share: 92,
+    kind: 'phone',
+  },
+  {
+    width: 414,
+    height: 896,
+    label: 'iPhone 11 PM',
+    orientation: 'portrait',
+    share: 88,
+    kind: 'phone',
+  },
   { width: 600, height: 800, label: 'Tablet', orientation: 'portrait', share: 60, kind: 'tablet' },
   { width: 768, height: 1024, label: 'iPad', orientation: 'portrait', share: 35, kind: 'tablet' },
-  { width: 1024, height: 1366, label: 'iPad Pro', orientation: 'portrait', share: 20, kind: 'tablet' },
-  { width: 568, height: 320, label: 'iPhone SE land.', orientation: 'landscape', share: 99, kind: 'phone' },
-  { width: 667, height: 375, label: 'iPhone 8 land.', orientation: 'landscape', share: 96, kind: 'phone' },
-  { width: 736, height: 414, label: 'iPhone+ land.', orientation: 'landscape', share: 88, kind: 'phone' },
-  { width: 800, height: 600, label: 'Tablet land.', orientation: 'landscape', share: 60, kind: 'tablet' },
-  { width: 1024, height: 768, label: 'iPad land.', orientation: 'landscape', share: 35, kind: 'tablet' },
-  { width: 1366, height: 1024, label: 'iPad Pro land.', orientation: 'landscape', share: 20, kind: 'tablet' },
+  {
+    width: 1024,
+    height: 1366,
+    label: 'iPad Pro',
+    orientation: 'portrait',
+    share: 20,
+    kind: 'tablet',
+  },
+  {
+    width: 568,
+    height: 320,
+    label: 'iPhone SE land.',
+    orientation: 'landscape',
+    share: 99,
+    kind: 'phone',
+  },
+  {
+    width: 667,
+    height: 375,
+    label: 'iPhone 8 land.',
+    orientation: 'landscape',
+    share: 96,
+    kind: 'phone',
+  },
+  {
+    width: 736,
+    height: 414,
+    label: 'iPhone+ land.',
+    orientation: 'landscape',
+    share: 88,
+    kind: 'phone',
+  },
+  {
+    width: 800,
+    height: 600,
+    label: 'Tablet land.',
+    orientation: 'landscape',
+    share: 60,
+    kind: 'tablet',
+  },
+  {
+    width: 1024,
+    height: 768,
+    label: 'iPad land.',
+    orientation: 'landscape',
+    share: 35,
+    kind: 'tablet',
+  },
+  {
+    width: 1366,
+    height: 1024,
+    label: 'iPad Pro land.',
+    orientation: 'landscape',
+    share: 20,
+    kind: 'tablet',
+  },
 ];
 
 /**
@@ -236,7 +312,12 @@ export const REFERENCE_VIEWPORTS: ReadonlyArray<{
  * @param passingKeys set of `${orientation}:${width}x${height}` keys that passed
  */
 export function computeQualityIndex(
-  matrix: ReadonlyArray<{ width: number; height: number; orientation: 'portrait' | 'landscape'; share: number }>,
+  matrix: ReadonlyArray<{
+    width: number;
+    height: number;
+    orientation: 'portrait' | 'landscape';
+    share: number;
+  }>,
   passingKeys: ReadonlySet<string>,
 ): { portrait: number; landscape: number; overall: number } {
   const score = (orientation: 'portrait' | 'landscape'): number => {
@@ -279,7 +360,11 @@ export function computeQualityIndex(
 }
 
 /** Build the canonical key used by computeQualityIndex's passingKeys set. */
-export function viewportKey(v: { width: number; height: number; orientation: 'portrait' | 'landscape' }): string {
+export function viewportKey(v: {
+  width: number;
+  height: number;
+  orientation: 'portrait' | 'landscape';
+}): string {
   return `${v.orientation}:${v.width}x${v.height}`;
 }
 
@@ -299,7 +384,8 @@ export function initQualityReporter(): ReporterHandle {
   // call this; we only want one reporter per page.
   const w = typeof window !== 'undefined' ? window : null;
   if (!w) return { stop: () => undefined, reportNow: () => undefined };
-  const existing = (w as unknown as { __FAS_QUALITY_REPORTER__?: ReporterHandle }).__FAS_QUALITY_REPORTER__;
+  const existing = (w as unknown as { __FAS_QUALITY_REPORTER__?: ReporterHandle })
+    .__FAS_QUALITY_REPORTER__;
   if (existing) return existing;
 
   if (!shouldReport()) {
@@ -344,7 +430,8 @@ export function initQualityReporter(): ReporterHandle {
     stop: () => {
       w.removeEventListener('resize', onResize);
       w.removeEventListener('message', onMessage);
-      delete (w as unknown as { __FAS_QUALITY_REPORTER__?: ReporterHandle }).__FAS_QUALITY_REPORTER__;
+      delete (w as unknown as { __FAS_QUALITY_REPORTER__?: ReporterHandle })
+        .__FAS_QUALITY_REPORTER__;
     },
     reportNow: post,
   };

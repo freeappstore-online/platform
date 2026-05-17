@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { toBytes } from './kv.js';
 
 describe('toBytes (D1 BLOB normalization)', () => {

@@ -1,5 +1,5 @@
-import { Command } from 'commander';
 import { spawn } from 'node:child_process';
+import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
 import { cfProjectFor } from '../lib/apps.js';
 
@@ -14,9 +14,13 @@ export const logsCommand = new Command('logs')
     process.stdout.write(`Tailing logs for ${cfProject} (Ctrl+C to stop)...\n`);
 
     await new Promise<void>((resolveFn, rejectFn) => {
-      const child = spawn('wrangler', ['pages', 'deployment', 'tail', '--project-name', cfProject], {
-        stdio: 'inherit',
-      });
+      const child = spawn(
+        'wrangler',
+        ['pages', 'deployment', 'tail', '--project-name', cfProject],
+        {
+          stdio: 'inherit',
+        },
+      );
       child.on('error', (err) => {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
           rejectFn(new Error('wrangler is not installed. Install it: npm i -g wrangler'));

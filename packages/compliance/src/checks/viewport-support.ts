@@ -43,8 +43,8 @@ export async function checkViewportSupport(source: FileSource): Promise<CheckRes
     };
   }
 
-  const orientation = manifest['orientation'];
-  const minWidth = manifest['min_viewport_width'];
+  const orientation = manifest.orientation;
+  const minWidth = manifest.min_viewport_width;
 
   const issues: string[] = [];
   const warnings: string[] = [];

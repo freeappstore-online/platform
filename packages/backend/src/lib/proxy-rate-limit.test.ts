@@ -1,9 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import {
-  checkAndBump,
-  dayKey,
-  type ProxyUsageStore,
-} from './proxy-rate-limit.js';
+import { describe, expect, it } from 'vitest';
+import { checkAndBump, dayKey, type ProxyUsageStore } from './proxy-rate-limit.js';
 
 function fakeStore(initial: Record<string, number> = {}): ProxyUsageStore & {
   data: Record<string, number>;

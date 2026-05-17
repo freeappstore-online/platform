@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { pickMatrix, computeCoverage } from './screencheck.js';
+import { describe, expect, it } from 'vitest';
+import { computeCoverage, pickMatrix } from './screencheck.js';
 
 describe('pickMatrix', () => {
   it('returns 6 portrait + 6 landscape sizes for orientation=any', () => {
@@ -66,9 +66,7 @@ describe('computeCoverage', () => {
 
   it('overall is min of orientation coverages for any-orientation apps', () => {
     const m = pickMatrix(320, 'any');
-    const passing = new Set(
-      m.filter((t) => t.orientation === 'landscape').map((t) => t.label),
-    );
+    const passing = new Set(m.filter((t) => t.orientation === 'landscape').map((t) => t.label));
     const c = computeCoverage(m, passing);
     expect(c.portrait).toBe(0);
     expect(c.landscape).toBe(99);

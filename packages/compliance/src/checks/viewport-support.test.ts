@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 import { fsFileSource } from '../lib/file-source.js';
 import { checkViewportSupport } from './viewport-support.js';
 
@@ -66,7 +66,11 @@ describe('checkViewportSupport', () => {
   it('passes for portrait-only landscape-only too', async () => {
     const dir = await fixture({ name: 'x', orientation: 'portrait', min_viewport_width: 414 });
     expect((await checkViewportSupport(fsFileSource(dir))).status).toBe('pass');
-    const dir2 = await fixture({ name: 'x', orientation: 'landscape-primary', min_viewport_width: 768 });
+    const dir2 = await fixture({
+      name: 'x',
+      orientation: 'landscape-primary',
+      min_viewport_width: 768,
+    });
     expect((await checkViewportSupport(fsFileSource(dir2))).status).toBe('pass');
   });
 });

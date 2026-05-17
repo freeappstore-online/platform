@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 /**
  * Smoke tests for the public storefronts. Catches: storefront down,
@@ -22,7 +22,9 @@ test('freegamestore.online homepage renders the games grid', async ({ page }) =>
   expect(await cards.count()).toBeGreaterThan(5);
 });
 
-test('an app detail page has the modern layout: split + phone-frame + history', async ({ page }) => {
+test('an app detail page has the modern layout: split + phone-frame + history', async ({
+  page,
+}) => {
   await page.goto('https://freeappstore.online/apps/tip');
   // The split container exists with both halves.
   await expect(page.locator('.app-split')).toBeVisible();

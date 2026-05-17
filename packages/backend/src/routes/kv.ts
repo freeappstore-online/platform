@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import type { Env } from '../types.js';
-import { requireUser, HttpError } from '../lib/auth.js';
+import { HttpError, requireUser } from '../lib/auth.js';
 import { checkKvWrite, KV_LIMITS } from '../lib/quota.js';
+import type { Env } from '../types.js';
 
 export const kvRoutes = new Hono<{ Bindings: Env }>();
 
@@ -22,7 +22,9 @@ kvRoutes.get('/apps/:appId/kv', async (c) => {
       bindings = [appId, user.id];
     }
 
-    const { results } = await c.env.DB.prepare(query).bind(...bindings).all<{ key: string }>();
+    const { results } = await c.env.DB.prepare(query)
+      .bind(...bindings)
+      .all<{ key: string }>();
     return c.json(results.map((r) => r.key));
   } catch (err) {
     if (err instanceof HttpError) return c.text(err.message, err.status as 401);

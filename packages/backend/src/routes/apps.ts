@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
+import { HttpError, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
-import { requireUser, HttpError } from '../lib/auth.js';
 
 export const appsRoutes = new Hono<{ Bindings: Env }>();
 

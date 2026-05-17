@@ -22,7 +22,7 @@ export async function checkStoreLink(source: FileSource): Promise<CheckResult> {
   for await (const path of source.list()) {
     if (!path.startsWith('web/src/')) continue;
     const content = await source.read(path);
-    if (content && content.includes(domain)) {
+    if (content?.includes(domain)) {
       return { name: 'Store link', status: 'pass', detail: `${domain} referenced in ${path}` };
     }
   }

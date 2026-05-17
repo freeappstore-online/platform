@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { consume, newRateLimitState } from './rate-limit.js';
 
 describe('rate-limit window', () => {

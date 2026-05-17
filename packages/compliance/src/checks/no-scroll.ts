@@ -103,9 +103,7 @@ const FORBIDDEN_OVERFLOW = [
   /(?:^|[\s,{])(?:html|body)\s*\{[^}]*overflow-(?:x|y)\s*:\s*(?:scroll|auto)/im,
 ];
 
-const FORBIDDEN_MIN_HEIGHT = [
-  /(?:^|[\s,{])(?:html|body)\s*\{[^}]*min-height\s*:\s*100vh/im,
-];
+const FORBIDDEN_MIN_HEIGHT = [/(?:^|[\s,{])(?:html|body)\s*\{[^}]*min-height\s*:\s*100vh/im];
 
 const VIEWPORT_LOCK = /(?:height|max-height)\s*:\s*100(?:s?vh)|GameShell|@freeappstore\/games/i;
 

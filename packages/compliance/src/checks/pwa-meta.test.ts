@@ -1,28 +1,34 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mapFileSource } from '../lib/file-source.js';
 import { checkPwaMeta } from './pwa-meta.js';
 
 describe('checkPwaMeta', () => {
   it('passes with apple-mobile-web-app-capable', async () => {
-    const files = new Map([[
-      'web/index.html',
-      '<html><head><meta name="apple-mobile-web-app-capable" content="yes" /></head></html>',
-    ]]);
+    const files = new Map([
+      [
+        'web/index.html',
+        '<html><head><meta name="apple-mobile-web-app-capable" content="yes" /></head></html>',
+      ],
+    ]);
     const r = await checkPwaMeta(mapFileSource(files));
     expect(r.status).toBe('pass');
   });
 
   it('passes with mobile-web-app-capable', async () => {
-    const files = new Map([[
-      'web/index.html',
-      '<html><head><meta name="mobile-web-app-capable" content="yes" /></head></html>',
-    ]]);
+    const files = new Map([
+      [
+        'web/index.html',
+        '<html><head><meta name="mobile-web-app-capable" content="yes" /></head></html>',
+      ],
+    ]);
     const r = await checkPwaMeta(mapFileSource(files));
     expect(r.status).toBe('pass');
   });
 
   it('warns when neither meta is present', async () => {
-    const files = new Map([['web/index.html', '<html lang="en"><head><title>x</title></head></html>']]);
+    const files = new Map([
+      ['web/index.html', '<html lang="en"><head><title>x</title></head></html>'],
+    ]);
     const r = await checkPwaMeta(mapFileSource(files));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/apple-mobile-web-app-capable/);

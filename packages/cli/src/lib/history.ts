@@ -32,7 +32,7 @@ export async function fetchAppHistory(slug: string): Promise<AppHistory> {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
   };
-  const token = process.env['GH_TOKEN'] ?? process.env['GITHUB_TOKEN'];
+  const token = process.env.GH_TOKEN ?? process.env.GITHUB_TOKEN;
   if (token) headers.Authorization = `Bearer ${token}`;
 
   let res: Response;

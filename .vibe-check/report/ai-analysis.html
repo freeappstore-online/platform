@@ -13,8 +13,9 @@ code{font-family:"SF Mono",Menlo,monospace;font-size:0.85em}
 
 /* ── Top nav ── */
 .top{position:sticky;top:0;z-index:30;background:#0c0c0fdd;backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 1.5rem;display:flex;align-items:center;height:var(--top-h)}
-.logo{font-weight:800;font-size:1rem;margin-right:1rem;flex-shrink:0;text-decoration:none;color:var(--text)}
+.logo{font-weight:800;font-size:1rem;margin-right:0.5rem;flex-shrink:0;text-decoration:none;color:var(--text)}
 .logo span{color:var(--accent)}
+.nav-project{font-size:0.72rem;color:var(--muted);font-weight:600;margin-right:1rem;padding:0.2rem 0.5rem;background:var(--card);border:1px solid var(--border);border-radius:4px;flex-shrink:0}
 .nav-scroll{display:flex;align-items:center;gap:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;flex:1}
 .nav-scroll::-webkit-scrollbar{display:none}
 .tn{padding:0 0.7rem;font-size:0.78rem;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent;transition:all 0.15s;white-space:nowrap;line-height:var(--top-h)}
@@ -87,6 +88,16 @@ h3{font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:
 .bv{width:36px;font-weight:700;font-size:0.68rem}
 .stack{display:flex;gap:0.35rem;flex-wrap:wrap;margin-top:1rem}
 .stack span{background:var(--card);border:1px solid var(--border);padding:0.1rem 0.45rem;border-radius:9999px;font-size:0.62rem;color:var(--muted)}
+
+/* ── Workspace / Repo structure ── */
+.ws-info{display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem;font-size:0.72rem;color:var(--muted)}
+.ws-badge{background:var(--accent);color:#fff;padding:0.15rem 0.5rem;border-radius:4px;font-size:0.65rem;font-weight:700}
+.ws-pkgs{display:flex;flex-direction:column;gap:0.15rem}
+.ws-pkg{display:flex;gap:0.6rem;align-items:center;font-size:0.68rem;padding:0.15rem 0.4rem;background:var(--card);border-radius:4px}
+.ws-path{font-family:monospace;color:var(--text);min-width:140px}
+.ws-name{color:var(--muted);flex:1}
+.ws-flags{color:var(--muted);font-size:0.6rem}
+.ws-more{font-size:0.62rem;color:var(--muted);padding:0.2rem 0.4rem}
 
 /* ── Category pages ── */
 .cat-head{margin-bottom:0.3rem}
@@ -224,11 +235,12 @@ h3{font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:
 
 <nav class="top">
   <a class="logo" href="index.html"><span>VibeCode</span> QA</a>
+  <span class="nav-project">platform</span>
   <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">&#9776;</button>
-  <div class="nav-scroll"><a class="tn" href="index.html">Overview</a><a class="tn active" href="foundations.html">Checks</a><a class="tn" href="trends.html">Trends</a><a class="tn" href="issues.html">Issues (15)</a><a class="tn" href="files.html">Files</a></div>
+  <div class="nav-scroll"><a class="tn" href="index.html">Overview</a><a class="tn active" href="foundations.html">Checks</a><a class="tn" href="trends.html">Trends</a><a class="tn" href="issues.html">Issues (269)</a><a class="tn" href="files.html">Files</a></div>
 </nav>
 
-<aside class="side" id="sidebar"><div class="side-section"><div class="side-label">Score</div><div class="side-score" style="color:#eab308">C 70</div></div><div class="side-section"><a class="side-cat" href="foundations.html">Foundations <span style="color:#22c55e">95</span></a><a class="side-cat" href="quality.html">Quality <span style="color:#84cc16">89</span></a><a class="side-cat" href="testing.html">Testing <span style="color:#ef4444">0</span></a><a class="side-cat" href="architecture.html">Architecture <span style="color:#ef4444">0</span></a><a class="side-cat" href="security.html">Security <span style="color:#22c55e">100</span></a><a class="side-cat" href="ai-readiness.html">AI Readiness <span style="color:#ef4444">0</span></a><a class="side-cat side-cat-active" href="ai-analysis.html">AI Analysis <span class="pro-badge" style="font-size:0.5rem;padding:0.08rem 0.35rem">PRO</span></a><a class="side-check" href="ai-analysis.html#doc-coherence" title="Doc Coherence"><span style="color:#6366f1">PRO</span> Doc Coherence</a><a class="side-check" href="ai-analysis.html#code-coherence" title="Code Coherence"><span style="color:#6366f1">PRO</span> Code Coherence</a></div><div class="side-section side-views"><div class="side-label" style="margin-top:0.3rem">Views</div><a class="side-check" href="issues.html">Issues <span style="color:var(--muted)">15</span></a><a class="side-check" href="files.html">Files <span style="color:var(--muted)">3</span></a></div></aside>
+<aside class="side" id="sidebar"><div class="side-section"><div class="side-label">Score</div><div class="side-score" style="color:#84cc16">B 80</div></div><div class="side-section"><a class="side-cat" href="foundations.html">Foundations <span style="color:#eab308">73</span></a><a class="side-cat" href="quality.html">Quality <span style="color:#22c55e">92</span></a><a class="side-cat" href="testing.html">Testing <span style="color:#eab308">66</span></a><a class="side-cat" href="architecture.html">Architecture <span style="color:#ef4444">0</span></a><a class="side-cat" href="security.html">Security <span style="color:#22c55e">99</span></a><a class="side-cat" href="ai-readiness.html">AI Readiness <span style="color:#ef4444">0</span></a><a class="side-cat side-cat-active" href="ai-analysis.html">AI Analysis <span class="pro-badge" style="font-size:0.5rem;padding:0.08rem 0.35rem">PRO</span></a><a class="side-check" href="ai-analysis.html#doc-coherence" title="Doc Coherence"><span style="color:#6366f1">PRO</span> Doc Coherence</a><a class="side-check" href="ai-analysis.html#code-coherence" title="Code Coherence"><span style="color:#6366f1">PRO</span> Code Coherence</a></div><div class="side-section side-views"><div class="side-label" style="margin-top:0.3rem">Views</div><a class="side-check" href="issues.html">Issues <span style="color:var(--muted)">269</span></a><a class="side-check" href="files.html">Files <span style="color:var(--muted)">48</span></a></div></aside>
 
 <div class="content">
   
@@ -251,7 +263,7 @@ h3{font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:
 <p class="pro-cta">Coming soon with VibeCode QA Pro</p>
 </div>
 </section>
-  <div class="footer">Generated by <a href="https://vibecodeqa.online">VibeCode QA</a> v0.28.0 &mdash; <code>npx @vibecodeqa/cli</code></div>
+  <div class="footer">Generated by <a href="https://vibecodeqa.online">VibeCode QA</a> v0.28.2 &mdash; <code>npx @vibecodeqa/cli</code></div>
 </div>
 
 <script>

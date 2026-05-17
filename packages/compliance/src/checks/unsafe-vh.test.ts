@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 import { fsFileSource } from '../lib/file-source.js';
 import { checkUnsafeVh } from './unsafe-vh.js';
 
@@ -114,7 +114,7 @@ describe('checkUnsafeVh', () => {
     const dir = await fixture({
       'web/src/index.css': '.a { height: 100vh; }',
       'web/src/App.jsx': 'const x = "h-screen";', // string with the class — still flagged (we can't know intent)
-      'docs/notes.md': 'Use 100vh somewhere',     // Markdown — should NOT be scanned
+      'docs/notes.md': 'Use 100vh somewhere', // Markdown — should NOT be scanned
       'web/src/foo.scss': '$h: 100vh;',
     });
     const r = await checkUnsafeVh(fsFileSource(dir));

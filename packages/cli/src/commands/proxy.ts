@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { requireSession, resolveAppIdOrExit, bearer, dieFromHttp } from './secret.js';
+import { bearer, dieFromHttp, requireSession, resolveAppIdOrExit } from './secret.js';
 
 interface AllowlistRule {
   pattern: string;
@@ -61,7 +61,10 @@ export const proxyCommand = new Command('proxy')
               injectKind: inject.kind,
               injectName: inject.name,
               secretName: opts.secret,
-              methods: opts.methods.split(',').map((m) => m.trim()).filter(Boolean),
+              methods: opts.methods
+                .split(',')
+                .map((m) => m.trim())
+                .filter(Boolean),
             }),
           });
           if (!res.ok) await dieFromHttp(res, 'add allowlist rule');
@@ -84,7 +87,7 @@ export const proxyCommand = new Command('proxy')
         if (!res.ok) await dieFromHttp(res, 'list allowlist');
         const { rules } = (await res.json()) as { rules: AllowlistRule[] };
         if (opts.json) {
-          process.stdout.write(JSON.stringify(rules, null, 2) + '\n');
+          process.stdout.write(`${JSON.stringify(rules, null, 2)}\n`);
           return;
         }
         if (rules.length === 0) {
@@ -92,8 +95,7 @@ export const proxyCommand = new Command('proxy')
           return;
         }
         for (const r of rules) {
-          const inject =
-            r.injectKind === 'bearer' ? 'bearer' : `${r.injectKind}:${r.injectName}`;
+          const inject = r.injectKind === 'bearer' ? 'bearer' : `${r.injectKind}:${r.injectName}`;
           process.stdout.write(
             `${r.pattern}\n  secret=${r.secretName}  inject=${inject}  methods=${r.methods.join(',')}\n`,
           );

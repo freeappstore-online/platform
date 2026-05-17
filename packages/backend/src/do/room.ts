@@ -1,5 +1,5 @@
-import type { Env } from '../types.js';
 import { consume, newRateLimitState, type RateLimitState } from '../lib/rate-limit.js';
+import type { Env } from '../types.js';
 
 const MAX_PEERS = 32;
 const MAX_MESSAGE_BYTES = 4 * 1024;

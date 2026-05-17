@@ -21,7 +21,7 @@
  * to NOT_UNIT_TESTABLE with the reason. The "fixture coverage guard"
  * test at the bottom fails loudly otherwise.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { snapshot } from './index.js';
 
 /**
@@ -107,7 +107,13 @@ function withComputedStyles(map: Map<Element, Partial<CSSStyleDeclaration>>) {
  * Stub element layout dimensions. jsdom returns 0 for everything, so
  * tests must set what they expect.
  */
-function setElSize(el: Element, scrollW: number, scrollH: number, clientW: number, clientH: number) {
+function setElSize(
+  el: Element,
+  scrollW: number,
+  scrollH: number,
+  clientW: number,
+  clientH: number,
+) {
   Object.defineProperty(el, 'scrollWidth', { get: () => scrollW, configurable: true });
   Object.defineProperty(el, 'scrollHeight', { get: () => scrollH, configurable: true });
   Object.defineProperty(el, 'clientWidth', { get: () => clientW, configurable: true });
@@ -157,7 +163,9 @@ scenario('clip-inner', () => {
     setElSize(clipper, 9999, 100, 100, 100);
     setElSize(child, 9999, 100, 9999, 100);
     withComputedStyles(
-      new Map([[clipper, { overflowX: 'hidden', overflowY: 'visible' } as Partial<CSSStyleDeclaration>]]),
+      new Map([
+        [clipper, { overflowX: 'hidden', overflowY: 'visible' } as Partial<CSSStyleDeclaration>],
+      ]),
     );
     const s = snapshot();
     // Document doesn't scroll — the clipper masks the overflow.
@@ -180,7 +188,9 @@ scenario('clip-inner-y', () => {
     const clipper = document.querySelector('.clipper') as HTMLElement;
     setElSize(clipper, 393, 999, 393, 50);
     withComputedStyles(
-      new Map([[clipper, { overflowX: 'visible', overflowY: 'hidden' } as Partial<CSSStyleDeclaration>]]),
+      new Map([
+        [clipper, { overflowX: 'visible', overflowY: 'hidden' } as Partial<CSSStyleDeclaration>],
+      ]),
     );
     const s = snapshot();
     const hit = s.clipping[0];
@@ -258,7 +268,9 @@ scenario('large-scrollwidth-fp', () => {
     // Sub-pixel rounding: scrollWidth = 394 in a 393-wide container.
     setElSize(grid, 394, 100, 393, 100);
     withComputedStyles(
-      new Map([[grid, { overflowX: 'hidden', overflowY: 'visible' } as Partial<CSSStyleDeclaration>]]),
+      new Map([
+        [grid, { overflowX: 'hidden', overflowY: 'visible' } as Partial<CSSStyleDeclaration>],
+      ]),
     );
     const s = snapshot();
     expect(s.clipping).toEqual([]);
@@ -270,7 +282,9 @@ scenario('large-scrollwidth-fp', () => {
     const grid = document.querySelector('.grid') as HTMLElement;
     setElSize(grid, 395, 100, 393, 100); // 2px overflow
     withComputedStyles(
-      new Map([[grid, { overflowX: 'hidden', overflowY: 'visible' } as Partial<CSSStyleDeclaration>]]),
+      new Map([
+        [grid, { overflowX: 'hidden', overflowY: 'visible' } as Partial<CSSStyleDeclaration>],
+      ]),
     );
     const s = snapshot();
     expect(s.clipping.length).toBe(1);
@@ -290,7 +304,9 @@ describe('extra: overflow:clip parity with overflow:hidden', () => {
     const clipper = document.querySelector('.clipper') as HTMLElement;
     setElSize(clipper, 500, 100, 100, 100);
     withComputedStyles(
-      new Map([[clipper, { overflowX: 'clip', overflowY: 'visible' } as Partial<CSSStyleDeclaration>]]),
+      new Map([
+        [clipper, { overflowX: 'clip', overflowY: 'visible' } as Partial<CSSStyleDeclaration>],
+      ]),
     );
     const s = snapshot();
     expect(s.clipping.length).toBe(1);

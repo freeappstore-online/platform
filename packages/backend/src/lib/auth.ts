@@ -17,9 +17,7 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
   const payload = await verifySession(token, c.env.SESSION_SIGNING_KEY);
   if (!payload) throw new HttpError(401, 'invalid or expired session');
 
-  const row = await c.env.DB.prepare(
-    'SELECT id, github_login, avatar_url FROM users WHERE id = ?',
-  )
+  const row = await c.env.DB.prepare('SELECT id, github_login, avatar_url FROM users WHERE id = ?')
     .bind(payload.uid)
     .first<{ id: string; github_login: string; avatar_url: string | null }>();
   if (!row) throw new HttpError(401, 'user not found');

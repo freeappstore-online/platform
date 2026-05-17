@@ -298,7 +298,11 @@ export async function checkUnsafeVhLive(html: string, liveUrl: string): Promise<
   try {
     const res = await fetchWithTimeout(cssUrl);
     if (!res.ok) {
-      return { name: 'No unsafe 100vh (live)', status: 'warn', detail: `${cssUrl} → HTTP ${res.status}` };
+      return {
+        name: 'No unsafe 100vh (live)',
+        status: 'warn',
+        detail: `${cssUrl} → HTTP ${res.status}`,
+      };
     }
     const css = await res.text();
     const matches = css.match(/\b100vh\b/g) ?? [];
@@ -327,4 +331,3 @@ export async function checkUnsafeVhLive(html: string, liveUrl: string): Promise<
     };
   }
 }
-

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from './index.js';
 import type { Env } from './types.js';
 
@@ -49,7 +49,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete (globalThis as Record<string, unknown>)['fetch'];
+  delete (globalThis as Record<string, unknown>).fetch;
 });
 
 describe('scheduled() — */15 cron (uptime checks)', () => {
@@ -122,7 +122,8 @@ describe('scheduled() — 0 4 cron (daily backup)', () => {
       prepare: () => {
         const stmt: Partial<D1PreparedStatement> = {
           bind: () => stmt as D1PreparedStatement,
-          all: async <T>() => ({ results: [] as unknown as T[], success: true, meta: {} }) as unknown as D1Result<T>,
+          all: async <T>() =>
+            ({ results: [] as unknown as T[], success: true, meta: {} }) as unknown as D1Result<T>,
         };
         return stmt as D1PreparedStatement;
       },

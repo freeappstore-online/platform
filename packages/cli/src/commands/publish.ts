@@ -1,12 +1,12 @@
-import { Command } from 'commander';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import prompts from 'prompts';
 import { runChecks } from '@freeappstore/compliance';
-import { openUrl } from '../lib/open.js';
+import { Command } from 'commander';
+import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
 import { readConfig } from '../lib/config.js';
+import { openUrl } from '../lib/open.js';
 import { renderCheckResults } from './check.js';
 
 const SUBMISSION_URL = 'https://github.com/freeappstore-online/submissions/issues/new';
@@ -71,7 +71,10 @@ export const publishCommand = new Command('publish')
   )
   .option('--no-open', 'Print the fallback Issue URL instead of opening a browser.')
   .option('--issue', 'Skip auto-provision; always open the GitHub Issue form.')
-  .option('--skip-checks', 'Skip compliance checks (not recommended — your submission may be rejected).')
+  .option(
+    '--skip-checks',
+    'Skip compliance checks (not recommended — your submission may be rejected).',
+  )
   .option('--name <id>', 'App id (lowercase, used as subdomain). Skips the prompt.')
   .option(
     '--category <name>',
@@ -97,137 +100,142 @@ export const publishCommand = new Command('publish')
       demo?: string;
       yes?: boolean;
     }) => {
-    const store: Store = opts.store === 'games' ? 'games' : 'apps';
-    if (opts.store && opts.store !== 'apps' && opts.store !== 'games') {
-      process.stdout.write(`✗ --store must be "apps" or "games", got "${opts.store}"\n`);
-      process.exit(1);
-    }
-    const meta = STORE_META[store];
-    // Check auth BEFORE prompting — there's no point asking the user for
-    // 5 fields just to bail at the end with "not signed in". --issue
-    // skips this since the GitHub Issue form path doesn't need a session.
-    if (!opts.issue) {
-      const config = await readConfig();
-      if (!config.session?.token) {
-        process.stdout.write(
-          '\n⚠  Not signed in. Run: fas login\n' +
-            '   (or run `fas publish --issue` to submit via the GitHub Issue form instead.)\n',
-        );
+      const store: Store = opts.store === 'games' ? 'games' : 'apps';
+      if (opts.store && opts.store !== 'apps' && opts.store !== 'games') {
+        process.stdout.write(`✗ --store must be "apps" or "games", got "${opts.store}"\n`);
         process.exit(1);
       }
-    }
-
-    // Run compliance checks BEFORE prompts so a doomed submission fails
-    // fast. Hard fails block; warnings allow through. Bypass with
-    // --skip-checks if you really need to (admin review will still
-    // catch issues).
-    if (!opts.skipChecks) {
-      process.stdout.write('Running compliance checks...\n\n');
-      const results = await runChecks(process.cwd());
-      const { failed } = renderCheckResults(results);
-      if (failed > 0) {
-        process.stdout.write(
-          '\n⚠  Fix the failures above before publishing, or pass --skip-checks to bypass.\n',
-        );
-        process.exit(1);
+      const meta = STORE_META[store];
+      // Check auth BEFORE prompting — there's no point asking the user for
+      // 5 fields just to bail at the end with "not signed in". --issue
+      // skips this since the GitHub Issue form path doesn't need a session.
+      if (!opts.issue) {
+        const config = await readConfig();
+        if (!config.session?.token) {
+          process.stdout.write(
+            '\n⚠  Not signed in. Run: fas login\n' +
+              '   (or run `fas publish --issue` to submit via the GitHub Issue form instead.)\n',
+          );
+          process.exit(1);
+        }
       }
-      process.stdout.write('\n');
-    }
 
-    const repo = await detectGitRepo();
-    const appName = await detectAppName();
-    const description = await detectDescription();
+      // Run compliance checks BEFORE prompts so a doomed submission fails
+      // fast. Hard fails block; warnings allow through. Bypass with
+      // --skip-checks if you really need to (admin review will still
+      // catch issues).
+      if (!opts.skipChecks) {
+        process.stdout.write('Running compliance checks...\n\n');
+        const results = await runChecks(process.cwd());
+        const { failed } = renderCheckResults(results);
+        if (failed > 0) {
+          process.stdout.write(
+            '\n⚠  Fix the failures above before publishing, or pass --skip-checks to bypass.\n',
+          );
+          process.exit(1);
+        }
+        process.stdout.write('\n');
+      }
 
-    process.stdout.write(`\nLet's publish your ${store === 'games' ? 'game' : 'app'} to ${meta.label}.\n`);
-    if (!repo && opts.issue) {
+      const repo = await detectGitRepo();
+      const appName = await detectAppName();
+      const description = await detectDescription();
+
       process.stdout.write(
-        '⚠  No GitHub origin detected. Push your repo to GitHub first, then run again.\n',
+        `\nLet's publish your ${store === 'games' ? 'game' : 'app'} to ${meta.label}.\n`,
       );
-    }
+      if (!repo && opts.issue) {
+        process.stdout.write(
+          '⚠  No GitHub origin detected. Push your repo to GitHub first, then run again.\n',
+        );
+      }
 
-    // Resolve flag values up-front. Whatever's missing falls through to a
-    // prompt — unless --yes is set, in which case missing values abort.
-    const resolved = resolveFromFlags(opts);
-    if (resolved.errors.length > 0) {
-      for (const e of resolved.errors) process.stdout.write(`✗ ${e}\n`);
-      process.exit(1);
-    }
+      // Resolve flag values up-front. Whatever's missing falls through to a
+      // prompt — unless --yes is set, in which case missing values abort.
+      const resolved = resolveFromFlags(opts);
+      if (resolved.errors.length > 0) {
+        for (const e of resolved.errors) process.stdout.write(`✗ ${e}\n`);
+        process.exit(1);
+      }
 
-    // --yes: optional fields default rather than abort. demo is the only
-    // optional field today; new optional fields go here too.
-    if (opts.yes && resolved.values.demo === undefined) {
-      resolved.values.demo = null;
-    }
+      // --yes: optional fields default rather than abort. demo is the only
+      // optional field today; new optional fields go here too.
+      if (opts.yes && resolved.values.demo === undefined) {
+        resolved.values.demo = null;
+      }
 
-    const promptList = buildPromptList(resolved.values, { appName, description });
-    const answers =
-      promptList.length === 0
-        ? {}
-        : opts.yes
-          ? (() => {
-              const missing = promptList.map((p) => p.name).join(', ');
-              process.stdout.write(`✗ --yes set but missing required field(s): ${missing}\n`);
-              process.exit(1);
-            })()
-          : ((await prompts(promptList, {
-              onCancel: () => {
-                process.stdout.write('\nCanceled.\n');
+      const promptList = buildPromptList(resolved.values, { appName, description });
+      const answers =
+        promptList.length === 0
+          ? {}
+          : opts.yes
+            ? (() => {
+                const missing = promptList.map((p) => p.name).join(', ');
+                process.stdout.write(`✗ --yes set but missing required field(s): ${missing}\n`);
                 process.exit(1);
-              },
-            })) as Partial<SubmissionInput>);
+              })()
+            : ((await prompts(promptList, {
+                onCancel: () => {
+                  process.stdout.write('\nCanceled.\n');
+                  process.exit(1);
+                },
+              })) as Partial<SubmissionInput>);
 
-    const merged: Partial<SubmissionInput> = { ...resolved.values, ...answers };
-    const input: SubmissionInput = {
-      name: merged.name!,
-      category: merged.category!,
-      type: merged.type!,
-      oneliner: merged.oneliner!,
-      // Reuse the oneliner as the body description for the Issue-form
-      // fallback. Auto-provision flow doesn't use it (admin's storefront
-      // uses oneliner directly).
-      description: merged.oneliner!,
-      repo: repo ? `https://github.com/${repo}` : null,
-      demo: merged.demo?.trim() ? merged.demo : null,
-    };
+      const merged: Partial<SubmissionInput> = { ...resolved.values, ...answers };
+      const input: SubmissionInput = {
+        name: merged.name!,
+        category: merged.category!,
+        type: merged.type!,
+        oneliner: merged.oneliner!,
+        // Reuse the oneliner as the body description for the Issue-form
+        // fallback. Auto-provision flow doesn't use it (admin's storefront
+        // uses oneliner directly).
+        description: merged.oneliner!,
+        repo: repo ? `https://github.com/${repo}` : null,
+        demo: merged.demo?.trim() ? merged.demo : null,
+      };
 
-    // Try auto-provision first unless the user explicitly asked for the
-    // Issue-form fallback.
-    if (!opts.issue) {
-      const autoResult = await tryAutoProvision(input, store);
-      if (autoResult.kind === 'success') {
-        const noun = store === 'games' ? 'game' : 'app';
-        const listingPath = store === 'games' ? 'games' : 'apps';
-        process.stdout.write(`\n✓ Provisioned!\n`);
-        process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
-        process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
-        process.stdout.write(`  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`);
-        process.stdout.write(`Push your code so the live URL serves it:\n\n`);
-        process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
-        process.stdout.write(`  git push upstream main\n\n`);
-        process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
-        process.stdout.write(`Run \`fas list\` any time to see your ${noun}s.\n`);
-        return;
+      // Try auto-provision first unless the user explicitly asked for the
+      // Issue-form fallback.
+      if (!opts.issue) {
+        const autoResult = await tryAutoProvision(input, store);
+        if (autoResult.kind === 'success') {
+          const noun = store === 'games' ? 'game' : 'app';
+          const listingPath = store === 'games' ? 'games' : 'apps';
+          process.stdout.write(`\n✓ Provisioned!\n`);
+          process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
+          process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
+          process.stdout.write(
+            `  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`,
+          );
+          process.stdout.write(`Push your code so the live URL serves it:\n\n`);
+          process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
+          process.stdout.write(`  git push upstream main\n\n`);
+          process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
+          process.stdout.write(`Run \`fas list\` any time to see your ${noun}s.\n`);
+          return;
+        }
+        if (autoResult.kind === 'unauthorized') {
+          process.stdout.write(`\n⚠  Not signed in. Run: fas login\n`);
+          return;
+        }
+        process.stdout.write(
+          `\n⚠  Auto-provision unavailable (${autoResult.reason}); falling back to Issue form.\n`,
+        );
       }
-      if (autoResult.kind === 'unauthorized') {
-        process.stdout.write(`\n⚠  Not signed in. Run: fas login\n`);
-        return;
-      }
-      process.stdout.write(
-        `\n⚠  Auto-provision unavailable (${autoResult.reason}); falling back to Issue form.\n`,
-      );
-    }
 
-    // Fallback: prefilled GitHub Issue form for admin review.
-    const url = buildSubmissionUrl(input);
-    if (opts.open) {
-      process.stdout.write('\nOpening submission form on GitHub...\n');
-      process.stdout.write('Review the prefilled fields and click "Submit new issue".\n');
-      process.stdout.write('A maintainer will provision your app within ~48h.\n');
-      await openUrl(url);
-    } else {
-      process.stdout.write(`\n${url}\n`);
-    }
-  });
+      // Fallback: prefilled GitHub Issue form for admin review.
+      const url = buildSubmissionUrl(input);
+      if (opts.open) {
+        process.stdout.write('\nOpening submission form on GitHub...\n');
+        process.stdout.write('Review the prefilled fields and click "Submit new issue".\n');
+        process.stdout.write('A maintainer will provision your app within ~48h.\n');
+        await openUrl(url);
+      } else {
+        process.stdout.write(`\n${url}\n`);
+      }
+    },
+  );
 
 interface AutoProvisionSuccess {
   kind: 'success';
@@ -372,7 +380,7 @@ export function buildPromptList(
     list.push({
       type: 'select',
       name: 'category',
-      message: 'Category (one app per category — check freeappstore.online for what\'s taken)',
+      message: "Category (one app per category — check freeappstore.online for what's taken)",
       choices: CATEGORIES.map((c) => ({ title: c, value: c })),
     });
   }
@@ -454,6 +462,6 @@ function detectGitRepo(): Promise<string | null> {
 
 export function parseGitHubRepo(url: string): string | null {
   const m = /github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url);
-  if (!m || !m[1] || !m[2]) return null;
+  if (!m?.[1] || !m[2]) return null;
   return `${m[1]}/${m[2]}`;
 }

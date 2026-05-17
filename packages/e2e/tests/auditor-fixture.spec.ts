@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test';
+import { expect, type Page, test } from '@playwright/test';
 import type { ViewportReport } from '../../quality/src/index.js';
 
 // Provided by Node at runtime; declared inline because @playwright/test
@@ -30,8 +30,9 @@ declare const process: { env: Record<string, string | undefined> };
  * Override via FAS_FIXTURE_BASE for local dev (e.g. point at a
  * Python http.server hosting audit-fixture/) or a staging URL.
  */
-const FIXTURE_BASE = (process.env.FAS_FIXTURE_BASE ?? 'https://freegamestore.online/audit-fixture')
-  .replace(/\/+$/, '');
+const FIXTURE_BASE = (
+  process.env.FAS_FIXTURE_BASE ?? 'https://freegamestore.online/audit-fixture'
+).replace(/\/+$/, '');
 /** Pinned to the version the fixture HTML imports. Bump together. */
 const REPORTER_ESM = 'https://esm.sh/@freeappstore/quality@0.1.0';
 
@@ -284,11 +285,13 @@ test('no-reporter: page never posts a fas:quality message', async ({ page }) => 
 test('fixture index lists exactly CANONICAL_SCENARIOS', async ({ page }) => {
   await page.goto(`${FIXTURE_BASE}/`, { waitUntil: 'networkidle' });
   const liveIds = await page.$$eval('a[href*="scenario="]', (anchors) =>
-    anchors.map((a) => {
-      const href = (a as HTMLAnchorElement).href;
-      const m = /[?&]scenario=([^&]+)/.exec(href);
-      return m ? decodeURIComponent(m[1]!) : '';
-    }).filter(Boolean),
+    anchors
+      .map((a) => {
+        const href = (a as HTMLAnchorElement).href;
+        const m = /[?&]scenario=([^&]+)/.exec(href);
+        return m ? decodeURIComponent(m[1]!) : '';
+      })
+      .filter(Boolean),
   );
   // Sort for stable diff messaging.
   expect(new Set(liveIds), 'fixture page exposes a different scenario set than this spec').toEqual(

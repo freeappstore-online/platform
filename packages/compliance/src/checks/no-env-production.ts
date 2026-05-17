@@ -20,7 +20,11 @@ export async function checkNoEnvProduction(source: FileSource): Promise<CheckRes
     if (base === '.env.production') offenders.push(path);
   }
   if (offenders.length === 0) {
-    return { name: 'No .env.production', status: 'pass', detail: 'no production env files committed' };
+    return {
+      name: 'No .env.production',
+      status: 'pass',
+      detail: 'no production env files committed',
+    };
   }
   return {
     name: 'No .env.production',

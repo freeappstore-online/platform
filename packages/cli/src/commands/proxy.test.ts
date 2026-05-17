@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { proxyCommand, parseInject } from './proxy.js';
+import { describe, expect, it } from 'vitest';
+import { parseInject, proxyCommand } from './proxy.js';
 
 describe('parseInject', () => {
   it('recognizes bearer (no name)', () => {

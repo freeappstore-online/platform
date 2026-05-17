@@ -19,9 +19,20 @@ import { type FileSource, fsFileSource, mapFileSource } from './lib/file-source.
 import { isGameProject } from './lib/project-type.js';
 import type { CheckResult } from './types.js';
 
-export type { CheckStatus, CheckResult } from './types.js';
 export type { FileSource } from './lib/file-source.js';
-export { fsFileSource, mapFileSource, isGameProject };
+export type { LiveAuditInput, LiveAuditReport } from './live/index.js';
+// Live-URL audit (used by the compliance audit Worker; runs in
+// browser/Workers env, no filesystem). Separate export path so callers
+// don't accidentally pull node:fs in via the file-walking checks.
+export {
+  auditLive,
+  checkBrandFontsLive,
+  checkBundleSizeLive,
+  checkManifestLive,
+  checkNoTrackingLive,
+  checkUnsafeVhLive,
+} from './live/index.js';
+export type { CheckResult, CheckStatus } from './types.js';
 export {
   checkBrandFonts,
   checkBrandTokens,
@@ -40,20 +51,10 @@ export {
   checkStoreLink,
   checkUnsafeVh,
   checkViewportSupport,
+  fsFileSource,
+  isGameProject,
+  mapFileSource,
 };
-
-// Live-URL audit (used by the compliance audit Worker; runs in
-// browser/Workers env, no filesystem). Separate export path so callers
-// don't accidentally pull node:fs in via the file-walking checks.
-export {
-  auditLive,
-  checkNoTrackingLive,
-  checkBrandFontsLive,
-  checkManifestLive,
-  checkBundleSizeLive,
-  checkUnsafeVhLive,
-} from './live/index.js';
-export type { LiveAuditInput, LiveAuditReport } from './live/index.js';
 
 /**
  * Runs every compliance check against the source. Two front doors:

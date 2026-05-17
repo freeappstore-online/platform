@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fsFileSource } from '../lib/file-source.js';
 import { checkClaudeMdSlim } from './claude-md-slim.js';
 
@@ -83,7 +83,7 @@ describe('checkClaudeMdSlim', () => {
 
   it('warns when over the soft line limit', async () => {
     const padding = Array.from({ length: 80 }, (_, i) => `Line ${i}`).join('\n');
-    await writeFile(join(dir, 'CLAUDE.md'), SLIM_CLAUDE_MD + '\n' + padding);
+    await writeFile(join(dir, 'CLAUDE.md'), `${SLIM_CLAUDE_MD}\n${padding}`);
     const r = await checkClaudeMdSlim(fsFileSource(dir));
     expect(r.status).toBe('warn');
     expect(r.detail).toMatch(/non-blank lines/);

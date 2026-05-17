@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { signSession, verifySession, signPayload, verifyPayload } from './session.js';
+import { describe, expect, it } from 'vitest';
+import { signPayload, signSession, verifyPayload, verifySession } from './session.js';
 
 const KEY = 'a'.repeat(64);
 
@@ -21,7 +21,7 @@ describe('session HMAC roundtrip', () => {
     const token = await signSession('gh:42', KEY);
     // Flip one byte of the body half (before the dot).
     const dot = token.lastIndexOf('.');
-    const tampered = 'X' + token.slice(1, dot) + token.slice(dot);
+    const tampered = `X${token.slice(1, dot)}${token.slice(dot)}`;
     const payload = await verifySession(tampered, KEY);
     expect(payload).toBeNull();
   });
@@ -52,7 +52,7 @@ describe('signPayload / verifyPayload (used for OAuth state)', () => {
     // a thrown error or short-circuit.
     const real = await signPayload({ a: 1 }, KEY);
     const dot = real.lastIndexOf('.');
-    const truncatedSig = real.slice(0, dot + 1) + 'A';
+    const truncatedSig = `${real.slice(0, dot + 1)}A`;
     expect(await verifyPayload(truncatedSig, KEY)).toBeNull();
   });
 });

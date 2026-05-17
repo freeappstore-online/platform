@@ -11,7 +11,14 @@ import type { CheckResult } from '../types.js';
  * MIT text starts with "MIT License" but variations exist.
  */
 export async function checkLicenseMit(source: FileSource): Promise<CheckResult> {
-  const candidates = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'license', 'license.md', 'license.txt'];
+  const candidates = [
+    'LICENSE',
+    'LICENSE.md',
+    'LICENSE.txt',
+    'license',
+    'license.md',
+    'license.txt',
+  ];
   for (const path of candidates) {
     const content = await source.read(path);
     if (content === null) continue;

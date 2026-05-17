@@ -1,9 +1,9 @@
 import { Box, Text, useApp } from 'ink';
 import { useEffect, useState } from 'react';
+import { readConfig } from '../lib/config.js';
 import { Doctor } from './screens/Doctor.js';
 import { Menu, type MenuChoice } from './screens/Menu.js';
 import { Welcome } from './screens/Welcome.js';
-import { readConfig } from '../lib/config.js';
 
 type Screen = 'welcome' | 'menu' | 'doctor';
 
@@ -64,11 +64,7 @@ export function App(): React.ReactElement {
   );
 }
 
-function handleMenu(
-  choice: MenuChoice,
-  setScreen: (s: Screen) => void,
-  exit: () => void,
-): void {
+function handleMenu(choice: MenuChoice, setScreen: (s: Screen) => void, exit: () => void): void {
   switch (choice) {
     case 'doctor':
       setScreen('doctor');
@@ -85,10 +81,10 @@ function Header({ login }: { login: string | null }): React.ReactElement {
       <Text bold color="cyan">
         fas
       </Text>
-      <Text color="gray">  ·  FreeAppStore CLI</Text>
+      <Text color="gray"> · FreeAppStore CLI</Text>
       {login && (
         <>
-          <Text color="gray">  ·  </Text>
+          <Text color="gray"> · </Text>
           <Text color="green">@{login}</Text>
         </>
       )}

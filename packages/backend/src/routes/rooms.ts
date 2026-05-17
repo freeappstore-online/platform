@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import type { Env } from '../types.js';
 import { verifySession } from '../lib/session.js';
+import type { Env } from '../types.js';
 
 export const roomRoutes = new Hono<{ Bindings: Env }>();
 
@@ -16,9 +16,7 @@ roomRoutes.get('/apps/:appId/rooms/:roomId', async (c) => {
 
   // Look up the user's GitHub login so the DO can broadcast human-readable
   // peer info instead of opaque uids.
-  const user = await c.env.DB.prepare(
-    'SELECT github_login FROM users WHERE id = ?',
-  )
+  const user = await c.env.DB.prepare('SELECT github_login FROM users WHERE id = ?')
     .bind(session.uid)
     .first<{ github_login: string }>();
   if (!user) return c.text('user not found', 401);

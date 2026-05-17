@@ -2,8 +2,21 @@ import type { FileSource } from '../lib/file-source.js';
 import type { CheckResult } from '../types.js';
 
 const TEXT_EXTS = new Set([
-  '.md', '.txt', '.json', '.ts', '.tsx', '.js', '.jsx',
-  '.html', '.htm', '.css', '.scss', '.yaml', '.yml', '.toml', '.svg',
+  '.md',
+  '.txt',
+  '.json',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.html',
+  '.htm',
+  '.css',
+  '.scss',
+  '.yaml',
+  '.yml',
+  '.toml',
+  '.svg',
 ]);
 
 /**
@@ -17,7 +30,7 @@ export async function checkNoPlaceholders(source: FileSource): Promise<CheckResu
   for await (const path of source.list()) {
     if (!TEXT_EXTS.has(extOf(path))) continue;
     const content = await source.read(path);
-    if (content && content.includes('APPNAME')) {
+    if (content?.includes('APPNAME')) {
       offenders.push(path);
       if (offenders.length >= 5) break; // don't spam, summarize
     }

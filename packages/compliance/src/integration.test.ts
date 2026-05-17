@@ -25,11 +25,11 @@
  * shifted and downstream consumers (CLI, agent, CI workflows) need to
  * be aware.
  */
-import { readFile, readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import * as compliance from './index.js';
-import { fsFileSource, mapFileSource, runChecks, runChecksFromFiles } from './index.js';
+import { runChecks, runChecksFromFiles } from './index.js';
 import type { CheckResult, CheckStatus } from './types.js';
 
 const FIXTURES = join(import.meta.dirname, '..', 'test', 'fixtures');
@@ -186,7 +186,15 @@ async function readFixtureIntoMap(dir: string): Promise<Map<string, string>> {
   return out;
 }
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', '.cache', '.wrangler', '.turbo']);
+const SKIP_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  '.next',
+  '.cache',
+  '.wrangler',
+  '.turbo',
+]);
 
 async function* walk(dir: string, root: string): AsyncGenerator<string> {
   const entries = await readdir(dir, { withFileTypes: true });

@@ -1,7 +1,7 @@
-import { Command } from 'commander';
 import { spawn } from 'node:child_process';
-import { rm, access, readdir, readFile, writeFile } from 'node:fs/promises';
-import { join, resolve, extname } from 'node:path';
+import { access, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { extname, join, resolve } from 'node:path';
+import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
 
 const TEMPLATES = {
@@ -84,11 +84,7 @@ export async function runInit(opts: {
   // Without this, `git push` after fas publish fails with "src refspec
   // main does not match any" because main points at nothing.
   await run('git', ['add', '-A'], target);
-  await run(
-    'git',
-    ['commit', '-q', '-m', `Initial commit from ${template} template`],
-    target,
-  );
+  await run('git', ['commit', '-q', '-m', `Initial commit from ${template} template`], target);
 
   return { path: target, substitutionCount };
 }
@@ -96,14 +92,12 @@ export async function runInit(opts: {
 export const initCommand = new Command('init')
   .description('Scaffold a new free app or game from a template.')
   .argument('<app-id>', 'Short id (lowercase, single word). e.g. "calendar" or "asteroids"')
-  .option(
-    '-t, --template <name>',
-    `Template: ${ALL_TEMPLATES.join(' | ')}`,
-    'standalone',
-  )
+  .option('-t, --template <name>', `Template: ${ALL_TEMPLATES.join(' | ')}`, 'standalone')
   .action(async (appId: string, opts: { template: string }) => {
     if (!(opts.template in TEMPLATES)) {
-      process.stderr.write(`Unknown template "${opts.template}". Choose: ${ALL_TEMPLATES.join(', ')}.\n`);
+      process.stderr.write(
+        `Unknown template "${opts.template}". Choose: ${ALL_TEMPLATES.join(', ')}.\n`,
+      );
       process.exit(1);
     }
     const result = await runInit({
@@ -116,7 +110,9 @@ export const initCommand = new Command('init')
       ? 'https://freegamestore.online/contribute.html'
       : 'https://freeappstore.online/contribute.html';
     process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${opts.template} template.\n`);
-    process.stdout.write(`  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`);
+    process.stdout.write(
+      `  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`,
+    );
     process.stdout.write('Next steps:\n');
     process.stdout.write(`  cd ${appId}\n`);
     process.stdout.write('  pnpm install            # one-time setup\n');

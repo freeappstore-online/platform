@@ -2,7 +2,9 @@
   "name": "passing-game-fixture",
   "private": true,
   "packageManager": "pnpm@10.30.3",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@freeappstore/games": "^0.1.0"
   }

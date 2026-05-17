@@ -1,11 +1,11 @@
-import { Command } from 'commander';
 import { spawn } from 'node:child_process';
-import { createServer } from 'node:http';
-import { readFile, stat } from 'node:fs/promises';
-import { extname, join, resolve, normalize } from 'node:path';
 import { existsSync } from 'node:fs';
+import { readFile, stat } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
+import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { Command } from 'commander';
 
 /**
  * Runtime viewport check: builds the app, serves the dist statically,
@@ -95,137 +95,158 @@ export const screencheckCommand = new Command('screencheck')
   .option('--dir <path>', 'Repo dir to check (defaults to cwd).', process.cwd())
   .option('--port <n>', `Static-server port (default ${DEFAULT_PORT}).`, String(DEFAULT_PORT))
   .option('--skip-build', 'Skip `pnpm build` — assume web/dist is current.', false)
-  .option('--screenshots', 'Save a PNG per viewport to ./screencheck-out/ for visual review.', false)
+  .option(
+    '--screenshots',
+    'Save a PNG per viewport to ./screencheck-out/ for visual review.',
+    false,
+  )
   .option('--url <url>', 'Check a live URL instead of the local build.')
-  .action(async (raw: { dir: string; port: string; skipBuild?: boolean; screenshots?: boolean; url?: string }) => {
-    const opts: ScreenCheckOptions = {
-      dir: raw.dir,
-      port: Number(raw.port),
-      skipBuild: Boolean(raw.skipBuild),
-      screenshots: Boolean(raw.screenshots),
-      url: raw.url ?? null,
-    };
+  .action(
+    async (raw: {
+      dir: string;
+      port: string;
+      skipBuild?: boolean;
+      screenshots?: boolean;
+      url?: string;
+    }) => {
+      const opts: ScreenCheckOptions = {
+        dir: raw.dir,
+        port: Number(raw.port),
+        skipBuild: Boolean(raw.skipBuild),
+        screenshots: Boolean(raw.screenshots),
+        url: raw.url ?? null,
+      };
 
-    const playwright = await loadPlaywright(opts.dir);
-    if (!playwright) {
-      process.stdout.write(
-        '\n⚠  Playwright not installed.\n' +
-          '   Run: pnpm add -D playwright && npx playwright install chromium\n' +
-          '   Then re-run: fas screencheck\n',
-      );
-      process.exit(1);
-    }
-
-    // For --url, skip the manifest read and use safe defaults.
-    let minWidth: number;
-    let orientation: string;
-    if (opts.url) {
-      minWidth = 320;
-      orientation = 'any';
-      process.stdout.write(`\nChecking ${opts.url} (live URL — manifest not consulted).\n`);
-    } else {
-      const manifest = await readManifest(opts.dir);
-      if (!manifest) {
-        process.stdout.write('\n✗ web/public/manifest.json not found or unparseable.\n');
-        process.exit(1);
-      }
-      minWidth = typeof manifest['min_viewport_width'] === 'number' ? manifest['min_viewport_width'] : 320;
-      orientation = typeof manifest['orientation'] === 'string' ? manifest['orientation'] : 'any';
-      process.stdout.write(`\nManifest: orientation=${orientation} · min ${minWidth}px wide\n`);
-    }
-
-    const matrix = pickMatrix(minWidth, orientation);
-    if (matrix.length === 0) {
-      process.stdout.write('\n✗ Manifest orientation is invalid or no test sizes apply.\n');
-      process.exit(1);
-    }
-    process.stdout.write(`Testing ${matrix.length} reference viewports across the device matrix.\n`);
-
-    let url: string;
-    let server: { close: () => void } | null = null;
-    if (opts.url) {
-      url = opts.url;
-    } else {
-      if (!opts.skipBuild) {
-        process.stdout.write('\nBuilding web/dist…\n');
-        await runShell('pnpm', ['build'], opts.dir);
-      }
-      const distDir = resolve(opts.dir, 'web', 'dist');
-      if (!existsSync(distDir)) {
-        process.stdout.write(`\n✗ ${distDir} doesn't exist. Run \`pnpm build\` first.\n`);
-        process.exit(1);
-      }
-      server = await startServer(distDir, opts.port);
-      url = `http://localhost:${opts.port}/`;
-      process.stdout.write(`Serving ${distDir} at ${url}\n\n`);
-    }
-
-    const shotsDir = resolve(opts.dir, 'screencheck-out');
-    if (opts.screenshots) {
-      const { mkdirSync } = await import('node:fs');
-      mkdirSync(shotsDir, { recursive: true });
-      process.stdout.write(`Saving screenshots to ${shotsDir}\n\n`);
-    }
-
-    let exitCode = 0;
-    try {
-      const browser = await playwright.launch();
-      const results: MeasureResult[] = [];
-      const passing = new Set<string>();
-      for (const t of matrix) {
-        const r = await measure(browser, url, t, opts.screenshots ? shotsDir : null);
-        results.push(r);
-        renderResult(r);
-        // Pass = no document scroll AND no inner clipping.
-        if (!r.scrollsX && !r.scrollsY && r.clippingElements.length === 0) {
-          passing.add(t.label);
-        }
-      }
-      await browser.close();
-
-      const cov = computeCoverage(matrix, passing);
-      const failed = results.filter(
-        (r) => r.scrollsX || r.scrollsY || r.clippingElements.length > 0,
-      ).length;
-      process.stdout.write('\n');
-      renderCoverage(cov, matrix);
-      process.stdout.write('\n');
-      if (failed > 0) {
-        process.stdout.write(`✗ ${failed}/${results.length} reference viewports have layout issues.\n`);
-        // Coverage failure is a fail. But: failing only at the very
-        // top end of the matrix (1024+ desktop) above what the manifest
-        // claims doesn't necessarily warrant a non-zero exit; the
-        // creator can opt out via orientation=portrait, and the badge
-        // already conveys reality. So we exit non-zero only if the
-        // *declared* min fails.
-        const declaredMinFails = matrix.some(
-          (t) => t.width === minWidth && !passing.has(t.label),
+      const playwright = await loadPlaywright(opts.dir);
+      if (!playwright) {
+        process.stdout.write(
+          '\n⚠  Playwright not installed.\n' +
+            '   Run: pnpm add -D playwright && npx playwright install chromium\n' +
+            '   Then re-run: fas screencheck\n',
         );
-        if (declaredMinFails) {
-          process.stdout.write(
-            `  At least one failing viewport is at or below your declared min_viewport_width (${minWidth}px).\n`,
-          );
-          process.stdout.write('  Either fix the layout or raise min_viewport_width in your manifest.\n');
-          exitCode = 1;
-        } else {
-          process.stdout.write(
-            `  All failures are above your declared min (${minWidth}px). Consider raising it to claim coverage that's actually true.\n`,
-          );
-        }
-      } else {
-        process.stdout.write(`✓ All ${results.length} reference viewports fit cleanly.\n`);
-        const minPassing = Math.min(...matrix.filter((t) => passing.has(t.label)).map((t) => t.width));
-        if (minPassing < minWidth) {
-          process.stdout.write(
-            `  You could lower min_viewport_width to ${minPassing} — your app actually fits there.\n`,
-          );
-        }
+        process.exit(1);
       }
-    } finally {
-      server?.close();
-    }
-    process.exit(exitCode);
-  });
+
+      // For --url, skip the manifest read and use safe defaults.
+      let minWidth: number;
+      let orientation: string;
+      if (opts.url) {
+        minWidth = 320;
+        orientation = 'any';
+        process.stdout.write(`\nChecking ${opts.url} (live URL — manifest not consulted).\n`);
+      } else {
+        const manifest = await readManifest(opts.dir);
+        if (!manifest) {
+          process.stdout.write('\n✗ web/public/manifest.json not found or unparseable.\n');
+          process.exit(1);
+        }
+        minWidth =
+          typeof manifest.min_viewport_width === 'number' ? manifest.min_viewport_width : 320;
+        orientation = typeof manifest.orientation === 'string' ? manifest.orientation : 'any';
+        process.stdout.write(`\nManifest: orientation=${orientation} · min ${minWidth}px wide\n`);
+      }
+
+      const matrix = pickMatrix(minWidth, orientation);
+      if (matrix.length === 0) {
+        process.stdout.write('\n✗ Manifest orientation is invalid or no test sizes apply.\n');
+        process.exit(1);
+      }
+      process.stdout.write(
+        `Testing ${matrix.length} reference viewports across the device matrix.\n`,
+      );
+
+      let url: string;
+      let server: { close: () => void } | null = null;
+      if (opts.url) {
+        url = opts.url;
+      } else {
+        if (!opts.skipBuild) {
+          process.stdout.write('\nBuilding web/dist…\n');
+          await runShell('pnpm', ['build'], opts.dir);
+        }
+        const distDir = resolve(opts.dir, 'web', 'dist');
+        if (!existsSync(distDir)) {
+          process.stdout.write(`\n✗ ${distDir} doesn't exist. Run \`pnpm build\` first.\n`);
+          process.exit(1);
+        }
+        server = await startServer(distDir, opts.port);
+        url = `http://localhost:${opts.port}/`;
+        process.stdout.write(`Serving ${distDir} at ${url}\n\n`);
+      }
+
+      const shotsDir = resolve(opts.dir, 'screencheck-out');
+      if (opts.screenshots) {
+        const { mkdirSync } = await import('node:fs');
+        mkdirSync(shotsDir, { recursive: true });
+        process.stdout.write(`Saving screenshots to ${shotsDir}\n\n`);
+      }
+
+      let exitCode = 0;
+      try {
+        const browser = await playwright.launch();
+        const results: MeasureResult[] = [];
+        const passing = new Set<string>();
+        for (const t of matrix) {
+          const r = await measure(browser, url, t, opts.screenshots ? shotsDir : null);
+          results.push(r);
+          renderResult(r);
+          // Pass = no document scroll AND no inner clipping.
+          if (!r.scrollsX && !r.scrollsY && r.clippingElements.length === 0) {
+            passing.add(t.label);
+          }
+        }
+        await browser.close();
+
+        const cov = computeCoverage(matrix, passing);
+        const failed = results.filter(
+          (r) => r.scrollsX || r.scrollsY || r.clippingElements.length > 0,
+        ).length;
+        process.stdout.write('\n');
+        renderCoverage(cov, matrix);
+        process.stdout.write('\n');
+        if (failed > 0) {
+          process.stdout.write(
+            `✗ ${failed}/${results.length} reference viewports have layout issues.\n`,
+          );
+          // Coverage failure is a fail. But: failing only at the very
+          // top end of the matrix (1024+ desktop) above what the manifest
+          // claims doesn't necessarily warrant a non-zero exit; the
+          // creator can opt out via orientation=portrait, and the badge
+          // already conveys reality. So we exit non-zero only if the
+          // *declared* min fails.
+          const declaredMinFails = matrix.some(
+            (t) => t.width === minWidth && !passing.has(t.label),
+          );
+          if (declaredMinFails) {
+            process.stdout.write(
+              `  At least one failing viewport is at or below your declared min_viewport_width (${minWidth}px).\n`,
+            );
+            process.stdout.write(
+              '  Either fix the layout or raise min_viewport_width in your manifest.\n',
+            );
+            exitCode = 1;
+          } else {
+            process.stdout.write(
+              `  All failures are above your declared min (${minWidth}px). Consider raising it to claim coverage that's actually true.\n`,
+            );
+          }
+        } else {
+          process.stdout.write(`✓ All ${results.length} reference viewports fit cleanly.\n`);
+          const minPassing = Math.min(
+            ...matrix.filter((t) => passing.has(t.label)).map((t) => t.width),
+          );
+          if (minPassing < minWidth) {
+            process.stdout.write(
+              `  You could lower min_viewport_width to ${minPassing} — your app actually fits there.\n`,
+            );
+          }
+        }
+      } finally {
+        server?.close();
+      }
+      process.exit(exitCode);
+    },
+  );
 
 /**
  * The reference device matrix. Each entry pairs a width with a real-world
@@ -248,14 +269,15 @@ const REFERENCE_PORTRAIT: Array<{ width: number; height: number; label: string; 
   { width: 1024, height: 1366, label: 'iPad Pro portrait', share: 20 },
 ];
 
-const REFERENCE_LANDSCAPE: Array<{ width: number; height: number; label: string; share: number }> = [
-  { width: 568, height: 320, label: 'iPhone SE landscape', share: 99 },
-  { width: 667, height: 375, label: 'iPhone 8 landscape', share: 96 },
-  { width: 736, height: 414, label: 'iPhone Plus landscape', share: 88 },
-  { width: 800, height: 600, label: 'Small tablet landscape', share: 60 },
-  { width: 1024, height: 768, label: 'iPad landscape', share: 35 },
-  { width: 1366, height: 1024, label: 'iPad Pro landscape', share: 20 },
-];
+const REFERENCE_LANDSCAPE: Array<{ width: number; height: number; label: string; share: number }> =
+  [
+    { width: 568, height: 320, label: 'iPhone SE landscape', share: 99 },
+    { width: 667, height: 375, label: 'iPhone 8 landscape', share: 96 },
+    { width: 736, height: 414, label: 'iPhone Plus landscape', share: 88 },
+    { width: 800, height: 600, label: 'Small tablet landscape', share: 60 },
+    { width: 1024, height: 768, label: 'iPad landscape', share: 35 },
+    { width: 1366, height: 1024, label: 'iPad Pro landscape', share: 20 },
+  ];
 
 interface ViewportTestExpanded extends ViewportTest {
   share: number;
@@ -430,10 +452,15 @@ async function measure(
 }
 
 function renderCoverage(
-  cov: { portrait: number; landscape: number; overall: number; brokenSizes: ViewportTestExpanded[] },
+  cov: {
+    portrait: number;
+    landscape: number;
+    overall: number;
+    brokenSizes: ViewportTestExpanded[];
+  },
   matrix: ViewportTestExpanded[],
 ): void {
-  const isTTY = Boolean(process.stdout.isTTY) && process.env['NO_COLOR'] !== '1';
+  const isTTY = Boolean(process.stdout.isTTY) && process.env.NO_COLOR !== '1';
   const c = (open: string) => (s: string) => (isTTY ? `\x1b[${open}m${s}\x1b[39m` : s);
   const ok = c('32');
   const warn = c('33');
@@ -445,18 +472,24 @@ function renderCoverage(
   const hasLandscape = matrix.some((t) => t.orientation === 'landscape');
   process.stdout.write('Device coverage:\n');
   if (hasPortrait) {
-    process.stdout.write(`  portrait:  ${colorize(cov.portrait)(`~${cov.portrait}%`)} of devices\n`);
+    process.stdout.write(
+      `  portrait:  ${colorize(cov.portrait)(`~${cov.portrait}%`)} of devices\n`,
+    );
   }
   if (hasLandscape) {
-    process.stdout.write(`  landscape: ${colorize(cov.landscape)(`~${cov.landscape}%`)} of devices\n`);
+    process.stdout.write(
+      `  landscape: ${colorize(cov.landscape)(`~${cov.landscape}%`)} of devices\n`,
+    );
   }
   if (hasPortrait && hasLandscape) {
-    process.stdout.write(`  overall:   ${colorize(cov.overall)(`~${cov.overall}%`)} (worst-case across orientations)\n`);
+    process.stdout.write(
+      `  overall:   ${colorize(cov.overall)(`~${cov.overall}%`)} (worst-case across orientations)\n`,
+    );
   }
 }
 
 function renderResult(r: MeasureResult): void {
-  const isTTY = Boolean(process.stdout.isTTY) && process.env['NO_COLOR'] !== '1';
+  const isTTY = Boolean(process.stdout.isTTY) && process.env.NO_COLOR !== '1';
   const c = (open: string) => (s: string) => (isTTY ? `\x1b[${open}m${s}\x1b[39m` : s);
   const ok = c('32');
   const bad = c('31');
@@ -499,7 +532,9 @@ type Browser = {
   close: () => Promise<void>;
 };
 
-async function loadPlaywright(targetDir: string): Promise<{ launch: () => Promise<Browser> } | null> {
+async function loadPlaywright(
+  targetDir: string,
+): Promise<{ launch: () => Promise<Browser> } | null> {
   // playwright is an OPTIONAL peer dep installed in the user's project,
   // not in the CLI's own node_modules. Resolve from the target dir so
   // the user can `pnpm add -D playwright` in their app and have it Just
@@ -538,7 +573,9 @@ async function startServer(rootDir: string, port: number): Promise<{ close: () =
       const s = await stat(filePath);
       if (s.isDirectory()) throw new Error('is dir');
       const body = await readFile(filePath);
-      res.writeHead(200, { 'Content-Type': MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream' });
+      res.writeHead(200, {
+        'Content-Type': MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream',
+      });
       res.end(body);
     } catch {
       res.writeHead(404);

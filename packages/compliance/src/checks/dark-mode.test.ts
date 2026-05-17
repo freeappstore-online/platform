@@ -1,22 +1,20 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mapFileSource } from '../lib/file-source.js';
 import { checkDarkMode } from './dark-mode.js';
 
 describe('checkDarkMode', () => {
   it('passes when CSS has @media (prefers-color-scheme: dark)', async () => {
-    const files = new Map([[
-      'web/src/index.css',
-      '@media (prefers-color-scheme: dark) { :root { --paper: #111; } }',
-    ]]);
+    const files = new Map([
+      ['web/src/index.css', '@media (prefers-color-scheme: dark) { :root { --paper: #111; } }'],
+    ]);
     const r = await checkDarkMode(mapFileSource(files));
     expect(r.status).toBe('pass');
   });
 
   it('passes when JSX uses data-theme', async () => {
-    const files = new Map([[
-      'web/src/App.tsx',
-      'export default () => <html data-theme="dark"><body /></html>;',
-    ]]);
+    const files = new Map([
+      ['web/src/App.tsx', 'export default () => <html data-theme="dark"><body /></html>;'],
+    ]);
     const r = await checkDarkMode(mapFileSource(files));
     expect(r.status).toBe('pass');
   });

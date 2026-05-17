@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { checkKvWrite, type KvLimits } from './quota.js';
 
 const limits: KvLimits = {
@@ -15,9 +15,9 @@ const overwrite = (existingBytes: number): { keyExists: true; existingKeyBytes: 
 
 describe('checkKvWrite', () => {
   it('accepts a write that fits all limits', () => {
-    expect(
-      checkKvWrite({ totalBytes: 0, keyCount: 0, ...newKey }, 500, limits),
-    ).toEqual({ ok: true });
+    expect(checkKvWrite({ totalBytes: 0, keyCount: 0, ...newKey }, 500, limits)).toEqual({
+      ok: true,
+    });
   });
 
   it('rejects a value larger than maxValueBytes', () => {
@@ -48,11 +48,7 @@ describe('checkKvWrite', () => {
   it('allows OVERWRITE of an existing key even when keyCount is at limit', () => {
     // Critical: hitting the key-count limit must not block updates to keys
     // that already exist, otherwise the user is locked out of their own data.
-    const result = checkKvWrite(
-      { totalBytes: 100, keyCount: 5, ...overwrite(50) },
-      30,
-      limits,
-    );
+    const result = checkKvWrite({ totalBytes: 100, keyCount: 5, ...overwrite(50) }, 30, limits);
     expect(result).toEqual({ ok: true });
   });
 

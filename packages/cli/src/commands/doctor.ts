@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { runDoctor, type CheckResult } from '../one-shot/doctor.js';
+import { type CheckResult, runDoctor } from '../one-shot/doctor.js';
 
 const ICON: Record<CheckResult['status'], string> = {
   pass: '✓',
@@ -8,7 +8,7 @@ const ICON: Record<CheckResult['status'], string> = {
 };
 
 // ANSI color codes — same approach as lib/style.ts but inlined for simplicity
-const isTTY = Boolean(process.stdout.isTTY) && process.env['NO_COLOR'] !== '1';
+const isTTY = Boolean(process.stdout.isTTY) && process.env.NO_COLOR !== '1';
 const c = (open: string) => (s: string) => (isTTY ? `\x1b[${open}m${s}\x1b[39m` : s);
 const green = c('32');
 const yellow = c('33');

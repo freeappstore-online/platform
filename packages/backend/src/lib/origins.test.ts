@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { isAllowedReturnTo, isAllowedOrigin } from './origins.js';
+import { describe, expect, it } from 'vitest';
+import { isAllowedOrigin, isAllowedReturnTo } from './origins.js';
 
 describe('isAllowedReturnTo', () => {
   it('allows the apex domain over https', () => {

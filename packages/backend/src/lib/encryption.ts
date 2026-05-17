@@ -79,9 +79,7 @@ export async function openSecret(sealed: SealedSecret, kekBase64: string): Promi
     await crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivKek }, kek, wrappedBody),
   );
 
-  const dek = await crypto.subtle.importKey('raw', dekRaw, { name: 'AES-GCM' }, false, [
-    'decrypt',
-  ]);
+  const dek = await crypto.subtle.importKey('raw', dekRaw, { name: 'AES-GCM' }, false, ['decrypt']);
 
   const plaintextBytes = new Uint8Array(
     await crypto.subtle.decrypt({ name: 'AES-GCM', iv: sealed.iv }, dek, sealed.keyCiphertext),

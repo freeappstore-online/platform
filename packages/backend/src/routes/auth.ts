@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import type { Env } from '../types.js';
-import { requireUser, HttpError } from '../lib/auth.js';
-import { signSession, signPayload, verifyPayload } from '../lib/session.js';
+import { HttpError, requireUser } from '../lib/auth.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
+import { signPayload, signSession, verifyPayload } from '../lib/session.js';
+import type { Env } from '../types.js';
 
 interface OAuthState {
   appId: string;

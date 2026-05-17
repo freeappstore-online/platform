@@ -1,8 +1,8 @@
-import { Command } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { readConfig, type FasConfig } from '../lib/config.js';
+import { Command } from 'commander';
 import { isValidAppId } from '../lib/app-id.js';
+import { type FasConfig, readConfig } from '../lib/config.js';
 
 interface SecretSummary {
   name: string;
@@ -45,7 +45,7 @@ export const secretCommand = new Command('secret')
         if (!res.ok) await dieFromHttp(res, 'list secrets');
         const { secrets } = (await res.json()) as { secrets: SecretSummary[] };
         if (opts.json) {
-          process.stdout.write(JSON.stringify(secrets, null, 2) + '\n');
+          process.stdout.write(`${JSON.stringify(secrets, null, 2)}\n`);
           return;
         }
         if (secrets.length === 0) {

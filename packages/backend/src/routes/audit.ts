@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import type { Env } from '../types.js';
 import { runAudit } from '../lib/audit.js';
-import { requireUser, HttpError } from '../lib/auth.js';
+import { HttpError, requireUser } from '../lib/auth.js';
+import type { Env } from '../types.js';
 
 export const auditRoutes = new Hono<{ Bindings: Env }>();
 
@@ -43,7 +43,9 @@ auditRoutes.get('/audit', async (c) => {
     'SELECT app_id, store, check_name, status, detail, checked_at FROM audit_results' +
     (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
     ' ORDER BY checked_at DESC, app_id ASC, check_name ASC';
-  const result = await c.env.DB.prepare(sql).bind(...binds).all<AuditRow>();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...binds)
+    .all<AuditRow>();
 
   // camelCase output to match the rest of the v1 API.
   const checks = (result.results ?? []).map((r) => ({

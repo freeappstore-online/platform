@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import type { Env } from '../types.js';
 
@@ -17,7 +17,8 @@ function fakeDB(rows: HealthCheckRow[]): D1Database {
     prepare: () => {
       const stmt: Partial<D1PreparedStatement> = {
         bind: () => stmt as D1PreparedStatement,
-        all: async <T>() => ({ results: rows as unknown as T[], success: true, meta: {} }) as unknown as D1Result<T>,
+        all: async <T>() =>
+          ({ results: rows as unknown as T[], success: true, meta: {} }) as unknown as D1Result<T>,
       };
       return stmt as D1PreparedStatement;
     },
@@ -132,10 +133,10 @@ describe('GET /v1/uptime', () => {
       targets: Array<Record<string, unknown>>;
     };
     const t = body.targets[0]!;
-    expect(t['durationMs']).toBe(80);
-    expect(t['checkedAt']).toBe(1700000000000);
+    expect(t.durationMs).toBe(80);
+    expect(t.checkedAt).toBe(1700000000000);
     // Snake_case fields must NOT leak through.
-    expect(t['duration_ms']).toBeUndefined();
-    expect(t['checked_at']).toBeUndefined();
+    expect(t.duration_ms).toBeUndefined();
+    expect(t.checked_at).toBeUndefined();
   });
 });

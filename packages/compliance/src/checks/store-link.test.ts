@@ -1,13 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { mapFileSource } from '../lib/file-source.js';
 import { checkStoreLink } from './store-link.js';
 
 describe('checkStoreLink', () => {
   it('passes for an app referencing freeappstore.online in src', async () => {
-    const files = new Map([[
-      'web/src/Footer.tsx',
-      'export default () => <a href="https://freeappstore.online">Catalog</a>;',
-    ]]);
+    const files = new Map([
+      [
+        'web/src/Footer.tsx',
+        'export default () => <a href="https://freeappstore.online">Catalog</a>;',
+      ],
+    ]);
     const r = await checkStoreLink(mapFileSource(files));
     expect(r.status).toBe('pass');
     expect(r.detail).toMatch(/freeappstore\.online/);

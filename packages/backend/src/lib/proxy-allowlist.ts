@@ -11,11 +11,11 @@
  *      rules at *call* time, and return the rule that wins (or null).
  */
 export interface AllowlistRule {
-  pattern: string;          // URL prefix, no globs
+  pattern: string; // URL prefix, no globs
   injectKind: 'query' | 'header' | 'bearer';
-  injectName: string;       // ignored for 'bearer'
-  secretName: string;       // FK to app_secrets.name
-  methods: string[];        // upper-case HTTP verbs
+  injectName: string; // ignored for 'bearer'
+  secretName: string; // FK to app_secrets.name
+  methods: string[]; // upper-case HTTP verbs
 }
 
 /**

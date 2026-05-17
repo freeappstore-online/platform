@@ -1,6 +1,6 @@
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { mkdir, readFile, writeFile, chmod } from 'node:fs/promises';
 
 const CONFIG_DIR = join(homedir(), '.fas');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -24,7 +24,7 @@ export interface FasConfig {
 }
 
 const DEFAULT_CONFIG: FasConfig = {
-  apiBase: process.env['FAS_API_BASE'] ?? 'https://api.freeappstore.online',
+  apiBase: process.env.FAS_API_BASE ?? 'https://api.freeappstore.online',
 };
 
 /**

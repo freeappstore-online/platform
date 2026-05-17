@@ -6,7 +6,7 @@ import { startDeviceFlow } from '../lib/github.js';
 // (https://github.com/organizations/freeappstore-online/settings/applications/3576238).
 // Device-flow client_ids are not secret — the user_code/device_code is
 // what authenticates the session. Override at runtime via FAS_GITHUB_CLIENT_ID.
-const DEFAULT_CLIENT_ID = process.env['FAS_GITHUB_CLIENT_ID'] ?? 'Ov23liuUpYPXc1ikEFm2';
+const DEFAULT_CLIENT_ID = process.env.FAS_GITHUB_CLIENT_ID ?? 'Ov23liuUpYPXc1ikEFm2';
 
 /**
  * Runs the full login flow: GitHub device-authorization, then exchanges the

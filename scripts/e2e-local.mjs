@@ -102,7 +102,11 @@ async function main() {
 
   res = await req(`/v1/apps/${APP_ID}/kv/foo`, {}, token);
   const got = res.status === 200 ? await res.json() : null;
-  assert(res.status === 200 && got?.hello === 'world', 'KV GET returns the value we set', JSON.stringify(got));
+  assert(
+    res.status === 200 && got?.hello === 'world',
+    'KV GET returns the value we set',
+    JSON.stringify(got),
+  );
 
   // KV overwrite
   res = await req(
@@ -187,19 +191,25 @@ async function testWebSocket(token) {
   assert(!!bGotMsg, "client b received a's message", `bMsgs=${JSON.stringify(bMsgs)}`);
   if (bGotMsg) {
     assert(
-      typeof bGotMsg.from === 'object' && typeof bGotMsg.from.uid === 'string' && typeof bGotMsg.from.login === 'string',
+      typeof bGotMsg.from === 'object' &&
+        typeof bGotMsg.from.uid === 'string' &&
+        typeof bGotMsg.from.login === 'string',
       'msg.from is { uid, login }',
       `from=${JSON.stringify(bGotMsg.from)}`,
     );
   }
 
-  const aGotOwnMsg = aMsgs.find(
+  const _aGotOwnMsg = aMsgs.find(
     (m) => m.kind === 'msg' && m.data?.from === 'a' && !aMsgs.indexOf(m) === false,
   );
   // Sender should NOT receive their own broadcast (that's by design in room.ts).
   // We assert the count of msg-kind frames received by `a` is 0.
   const aMsgCount = aMsgs.filter((m) => m.kind === 'msg').length;
-  assert(aMsgCount === 0, 'sender does not receive their own broadcast', `aMsgs=${JSON.stringify(aMsgs)}`);
+  assert(
+    aMsgCount === 0,
+    'sender does not receive their own broadcast',
+    `aMsgs=${JSON.stringify(aMsgs)}`,
+  );
 
   // Oversize message — should be dropped + warned (not crash the connection).
   const huge = 'x'.repeat(5000);

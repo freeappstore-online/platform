@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import type { Env } from '../types.js';
 import { signSession } from '../lib/session.js';
+import type { Env } from '../types.js';
 
 export const exchangeRoutes = new Hono<{ Bindings: Env }>();
 

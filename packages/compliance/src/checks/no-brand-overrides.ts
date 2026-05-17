@@ -144,7 +144,12 @@ export function scanContent(
     const list = m[1]!;
     const tokens = list
       .split(',')
-      .map((t) => t.trim().replace(/^["']|["']$/g, '').toLowerCase())
+      .map((t) =>
+        t
+          .trim()
+          .replace(/^["']|["']$/g, '')
+          .toLowerCase(),
+      )
       .filter(Boolean);
     for (const t of tokens) {
       if (!ALLOWED_FONT_TOKENS.has(t)) {

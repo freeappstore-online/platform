@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 import { fsFileSource } from '../lib/file-source.js';
 import { checkNoBrandOverrides, scanContent } from './no-brand-overrides.js';
 
@@ -17,49 +17,67 @@ async function fixture(files: Record<string, string>): Promise<string> {
 
 describe('scanContent (unit)', () => {
   it('flags an override of a protected CSS variable', () => {
-    const issues = scanContent('web/src/index.css', `
+    const issues = scanContent(
+      'web/src/index.css',
+      `
       :root { --accent: hotpink; }
-    `);
+    `,
+    );
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatch(/--accent/);
   });
 
   it('does NOT flag using the variable via var()', () => {
-    const issues = scanContent('web/src/App.tsx', `
+    const issues = scanContent(
+      'web/src/App.tsx',
+      `
       <div style={{ color: 'var(--accent)' }} />
-    `);
+    `,
+    );
     expect(issues).toEqual([]);
   });
 
   it('does not flag a non-protected custom variable (apps can have their own)', () => {
-    const issues = scanContent('web/src/index.css', `
+    const issues = scanContent(
+      'web/src/index.css',
+      `
       :root { --my-shadow: 0 0 4px black; }
-    `);
+    `,
+    );
     expect(issues).toEqual([]);
   });
 
   it('flags a non-brand font-family in CSS', () => {
-    const issues = scanContent('web/src/index.css', `
+    const issues = scanContent(
+      'web/src/index.css',
+      `
       h1 { font-family: "Cormorant Garamond", serif; }
-    `);
+    `,
+    );
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatch(/cormorant garamond/);
   });
 
   it('flags a non-brand font in inline JSX styles', () => {
-    const issues = scanContent('web/src/App.tsx', `
+    const issues = scanContent(
+      'web/src/App.tsx',
+      `
       <h1 style={{ fontFamily: "Sora, sans-serif" }} />
-    `);
+    `,
+    );
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatch(/sora/);
   });
 
   it('accepts brand fonts and system fallbacks', () => {
-    const issues = scanContent('web/src/index.css', `
+    const issues = scanContent(
+      'web/src/index.css',
+      `
       body { font-family: "Manrope", system-ui, sans-serif; }
       h1 { font-family: Fraunces, Georgia, serif; }
       code { font-family: "SF Mono", Menlo, monospace; }
-    `);
+    `,
+    );
     expect(issues).toEqual([]);
   });
 

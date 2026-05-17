@@ -47,8 +47,8 @@ export async function backupD1ToR2(
        FROM kv`,
     )
     .all();
-  tables['kv'] = kvRows;
-  rowsByTable['kv'] = kvRows.length;
+  tables.kv = kvRows;
+  rowsByTable.kv = kvRows.length;
 
   const body = JSON.stringify({
     version: 1,

@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
-import type { Env } from '../types.js';
 import { signSession } from '../lib/session.js';
+import type { Env } from '../types.js';
 
 interface AppRow {
   id: string;
@@ -52,7 +52,11 @@ function fakeDB(rows: { apps?: AppRow[]; users?: UserRow[] } = {}): D1Database {
               meta: {},
             } as unknown as D1Result<T>;
           }
-          return { results: [] as unknown as T[], success: true, meta: {} } as unknown as D1Result<T>;
+          return {
+            results: [] as unknown as T[],
+            success: true,
+            meta: {},
+          } as unknown as D1Result<T>;
         },
       };
       return stmt as D1PreparedStatement;
@@ -175,15 +179,15 @@ describe('GET /v1/apps/mine', () => {
       apps: Array<Record<string, unknown>>;
     };
     const a = body.apps[0]!;
-    expect(a['id']).toBe('chess');
-    expect(a['appUrl']).toBe('https://chess.freeappstore.online');
-    expect(a['repoUrl']).toBe('https://github.com/alice/chess');
+    expect(a.id).toBe('chess');
+    expect(a.appUrl).toBe('https://chess.freeappstore.online');
+    expect(a.repoUrl).toBe('https://github.com/alice/chess');
     // Snake_case fields must NOT leak through.
-    expect(a['owner_login']).toBeUndefined();
-    expect(a['created_at']).toBeUndefined();
+    expect(a.owner_login).toBeUndefined();
+    expect(a.created_at).toBeUndefined();
     // Aliased fields ARE present.
-    expect(a['ownerLogin']).toBe('alice');
-    expect(a['createdAt']).toBe(1700000000000);
+    expect(a.ownerLogin).toBe('alice');
+    expect(a.createdAt).toBe(1700000000000);
   });
 
   it('falls back to canonical org repoUrl when repo is null', async () => {
@@ -213,4 +217,3 @@ describe('GET /v1/apps/mine', () => {
     expect(body.apps[0]!.repoUrl).toBe('https://github.com/freeappstore-online/tip');
   });
 });
-

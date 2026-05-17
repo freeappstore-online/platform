@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
 /**
  * Tests the mandarin-english phrase prep app's user-visible flows.
@@ -75,7 +75,10 @@ test('Full screen button exists and opens the modal', async ({ page }) => {
   // the modal must be reachable from a real user click, and once
   // open the tap zones must be present.
   await page.getByRole('button', { name: 'Practice' }).first().click();
-  await page.getByRole('button', { name: /Full screen/ }).first().click();
+  await page
+    .getByRole('button', { name: /Full screen/ })
+    .first()
+    .click();
   // Modal is a single dialog, not duplicated by Shell — appended at
   // the body root via React's z-index modal.
   const dialog = page.getByRole('dialog', { name: 'Phrase fullscreen' });

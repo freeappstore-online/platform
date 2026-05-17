@@ -91,4 +91,3 @@ export async function checkBundleSize(source: FileSource): Promise<CheckResult> 
     detail: `${largest}: ${kb} KB gzipped (limit ${limitKb} KB)`,
   };
 }
-

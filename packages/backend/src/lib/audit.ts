@@ -49,7 +49,7 @@ async function fetchRegistry(store: 'apps' | 'games'): Promise<RegistryItem[]> {
   const res = await fetch(REGISTRY_URLS[store]);
   if (!res.ok) return [];
   const body = (await res.json()) as { apps?: RegistryItem[]; games?: RegistryItem[] };
-  return store === 'apps' ? body.apps ?? [] : body.games ?? [];
+  return store === 'apps' ? (body.apps ?? []) : (body.games ?? []);
 }
 
 /**

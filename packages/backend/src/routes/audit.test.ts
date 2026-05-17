@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import type { Env } from '../types.js';
 
@@ -59,11 +59,46 @@ const baseEnv = (db: D1Database): Env =>
   }) as Env;
 
 const sample: AuditRow[] = [
-  { app_id: 'tip', store: 'apps', check_name: 'Reachable', status: 'pass', detail: null, checked_at: 100 },
-  { app_id: 'tip', store: 'apps', check_name: 'Brand fonts (live)', status: 'pass', detail: null, checked_at: 100 },
-  { app_id: 'tip', store: 'apps', check_name: 'No tracking SDKs (live)', status: 'fail', detail: '1 matched', checked_at: 100 },
-  { app_id: 'asteroids', store: 'games', check_name: 'Reachable', status: 'pass', detail: null, checked_at: 200 },
-  { app_id: 'asteroids', store: 'games', check_name: 'PWA manifest (live)', status: 'warn', detail: 'soft', checked_at: 200 },
+  {
+    app_id: 'tip',
+    store: 'apps',
+    check_name: 'Reachable',
+    status: 'pass',
+    detail: null,
+    checked_at: 100,
+  },
+  {
+    app_id: 'tip',
+    store: 'apps',
+    check_name: 'Brand fonts (live)',
+    status: 'pass',
+    detail: null,
+    checked_at: 100,
+  },
+  {
+    app_id: 'tip',
+    store: 'apps',
+    check_name: 'No tracking SDKs (live)',
+    status: 'fail',
+    detail: '1 matched',
+    checked_at: 100,
+  },
+  {
+    app_id: 'asteroids',
+    store: 'games',
+    check_name: 'Reachable',
+    status: 'pass',
+    detail: null,
+    checked_at: 200,
+  },
+  {
+    app_id: 'asteroids',
+    store: 'games',
+    check_name: 'PWA manifest (live)',
+    status: 'warn',
+    detail: 'soft',
+    checked_at: 200,
+  },
 ];
 
 describe('GET /v1/audit', () => {
@@ -79,24 +114,37 @@ describe('GET /v1/audit', () => {
     const res = await app.request('/v1/audit', {}, baseEnv(fakeDB(sample)));
     const body = (await res.json()) as { checks: Array<Record<string, unknown>> };
     const c = body.checks[0]!;
-    expect(c['appId']).toBeDefined();
-    expect(c['checkName']).toBeDefined();
-    expect(c['checkedAt']).toBeDefined();
+    expect(c.appId).toBeDefined();
+    expect(c.checkName).toBeDefined();
+    expect(c.checkedAt).toBeDefined();
     // Snake_case fields must NOT leak through.
-    expect(c['app_id']).toBeUndefined();
-    expect(c['check_name']).toBeUndefined();
+    expect(c.app_id).toBeUndefined();
+    expect(c.check_name).toBeUndefined();
   });
 
   it('rolls up per-app summary with pass/warn/fail counts', async () => {
     const res = await app.request('/v1/audit', {}, baseEnv(fakeDB(sample)));
     const body = (await res.json()) as {
-      summary: Array<{ appId: string; pass: number; warn: number; fail: number; checkedAt: number }>;
+      summary: Array<{
+        appId: string;
+        pass: number;
+        warn: number;
+        fail: number;
+        checkedAt: number;
+      }>;
     };
     expect(body.summary).toHaveLength(2);
     const tip = body.summary.find((s) => s.appId === 'tip')!;
     const ast = body.summary.find((s) => s.appId === 'asteroids')!;
     expect(tip).toEqual({ appId: 'tip', store: 'apps', pass: 2, warn: 0, fail: 1, checkedAt: 100 });
-    expect(ast).toEqual({ appId: 'asteroids', store: 'games', pass: 1, warn: 1, fail: 0, checkedAt: 200 });
+    expect(ast).toEqual({
+      appId: 'asteroids',
+      store: 'games',
+      pass: 1,
+      warn: 1,
+      fail: 0,
+      checkedAt: 200,
+    });
   });
 
   it('filters by ?store=games', async () => {
