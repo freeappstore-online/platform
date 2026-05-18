@@ -95,6 +95,7 @@ publishRoutes.post('/publish', async (c) => {
       store,
       type: body.type,
       githubLogin: user.login,
+      creatorGithub: user.login,
       repo: body.repo,
       demo: body.demo,
     }),
