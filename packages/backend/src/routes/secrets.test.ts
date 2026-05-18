@@ -10,6 +10,8 @@ interface UserRow {
   id: string;
   github_login: string;
   avatar_url: string | null;
+  display_name: string | null;
+  email: string | null;
 }
 interface AppRow {
   id: string;
@@ -83,8 +85,7 @@ function fakeDB(d: FakeData): D1Database {
 
 function first(sql: string, bound: unknown[], d: FakeData): unknown | null {
   if (sql.startsWith('SELECT id, github_login, avatar_url')) {
-    const user = d.users.find((u) => u.id === bound[0]);
-    return user ? { ...user, display_name: null, email: null } : null;
+    return d.users.find((u) => u.id === bound[0]) ?? null;
   }
   if (sql.startsWith('SELECT owner_login FROM apps')) {
     return d.apps.find((a) => a.id === bound[0]) ?? null;
@@ -216,8 +217,8 @@ function baseEnv(db: D1Database, withKek = true): Env {
   };
 }
 
-const owner: UserRow = { id: 'gh:1', github_login: 'alice', avatar_url: null };
-const stranger: UserRow = { id: 'gh:2', github_login: 'mallory', avatar_url: null };
+const owner: UserRow = { id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null };
+const stranger: UserRow = { id: 'gh:2', github_login: 'mallory', avatar_url: null, display_name: null, email: null };
 const weatherApp: AppRow = { id: 'weather', owner_login: 'alice' };
 
 function freshData(): FakeData {
