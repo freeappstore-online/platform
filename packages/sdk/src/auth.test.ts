@@ -95,6 +95,49 @@ describe('Auth.signIn', () => {
   });
 });
 
+describe('Auth.signInWithEmail', () => {
+  it('POSTs to /v1/auth/email/start with email, appId, and hash-stripped returnTo', async () => {
+    const { window } = makeWindow({
+      href: 'https://app.freeappstore.online/?x=1#/route/state',
+    });
+    (globalThis as Record<string, unknown>).window = window;
+    const mockFetch = vi.fn().mockResolvedValue(new Response('{"ok":true}', { status: 200 }));
+    globalThis.fetch = mockFetch;
+
+    const auth = new Auth('demo', 'https://api.freeappstore.online');
+    await auth.signInWithEmail('alice@example.com');
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url.toString()).toBe('https://api.freeappstore.online/v1/auth/email/start');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body);
+    expect(body.email).toBe('alice@example.com');
+    expect(body.appId).toBe('demo');
+    // Hash stripped so it doesn't get clobbered by the #fas_session= callback
+    expect(body.returnTo).toBe('https://app.freeappstore.online/?x=1');
+    expect(body.returnTo).not.toContain('#');
+  });
+
+  it('throws when the server returns non-ok', async () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response('returnTo not allowed', { status: 400 }));
+
+    const auth = new Auth('demo', 'https://api.example');
+    await expect(auth.signInWithEmail('a@b.com')).rejects.toThrow(/Magic-link request failed: 400/);
+  });
+});
+
+describe('Auth.signIn provider gate', () => {
+  it("throws when called with provider='email' (use signInWithEmail)", () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    const auth = new Auth('demo', 'https://api.example');
+    expect(() => auth.signIn('email')).toThrow(/signInWithEmail/);
+  });
+});
+
 describe('Auth.init — hash handling', () => {
   it('clears the hash and stays signed out when the auth fetch fails (no crash, no stuck state)', async () => {
     const { window, replaces } = makeWindow({

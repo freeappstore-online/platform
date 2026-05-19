@@ -11,6 +11,17 @@ export interface Env {
   GITHUB_CLIENT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * Resend API key for transactional email (magic-link auth).
+   * Optional so the Worker boots without it in dev; the /auth/email/*
+   * routes return 503 when unset.
+   */
+  RESEND_API_KEY?: string;
+  /**
+   * From address for transactional email, e.g.
+   * "FreeAppStore <auth@freeappstore.online>". Required for email auth.
+   */
+  EMAIL_FROM?: string;
   SESSION_SIGNING_KEY: string;
   /**
    * Master key-encryption-key for the app-secret proxy. 32 random bytes,

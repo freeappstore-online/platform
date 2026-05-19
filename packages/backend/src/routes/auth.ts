@@ -1,6 +1,7 @@
 import { decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
 import { signPayload, signSession, verifyPayload } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -18,7 +19,15 @@ interface GoogleOAuthState {
   exp: number;
 }
 
+interface EmailMagicState {
+  email: string;
+  appId: string;
+  returnTo: string;
+  exp: number;
+}
+
 const STATE_TTL_SECONDS = 10 * 60;
+const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
@@ -182,6 +191,86 @@ authRoutes.get('/auth/google/callback', async (c) => {
       500,
     );
   }
+});
+
+authRoutes.post('/auth/email/start', async (c) => {
+  if (!c.env.RESEND_API_KEY || !c.env.EMAIL_FROM) {
+    return c.text('Email auth not configured', 503);
+  }
+
+  const { email: rawEmail, appId, returnTo } = await c.req.json<{
+    email?: string;
+    appId?: string;
+    returnTo?: string;
+  }>();
+
+  if (!rawEmail || !appId || !returnTo) {
+    return c.text('missing email, appId, or returnTo', 400);
+  }
+  // Normalize first (trim + lowercase) so UI-side whitespace doesn't reject
+  // valid addresses; then validate the canonical form.
+  const email = normalizeEmail(rawEmail);
+  if (!isLikelyEmail(email)) return c.text('invalid email', 400);
+  if (!isAllowedReturnTo(returnTo)) return c.text('returnTo not allowed', 400);
+
+  const token = await signPayload<EmailMagicState>(
+    { email, appId, returnTo, exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS },
+    c.env.SESSION_SIGNING_KEY,
+  );
+
+  const callbackUrl = new URL('/v1/auth/email/callback', c.req.url);
+  callbackUrl.searchParams.set('token', token);
+
+  // The sign-in destination, displayed in the email body so the recipient
+  // can sanity-check where this is taking them before they click.
+  const dest = new URL(returnTo).origin;
+
+  await sendEmail(
+    { apiKey: c.env.RESEND_API_KEY, from: c.env.EMAIL_FROM },
+    {
+      to: email,
+      subject: `Sign in to ${dest}`,
+      text: `Click the link below to sign in to ${dest}.
+
+${callbackUrl.toString()}
+
+This link expires in 15 minutes. If you didn't request it, ignore this email.`,
+      html: `<p>Click the link below to sign in to <strong>${dest}</strong>.</p>
+<p><a href="${callbackUrl.toString()}">Sign in</a></p>
+<p style="color:#888;font-size:12px">This link expires in 15 minutes. If you didn't request it, ignore this email.</p>`,
+    },
+  );
+
+  // 200 regardless of whether the email exists — don't leak account presence.
+  return c.json({ ok: true });
+});
+
+authRoutes.get('/auth/email/callback', async (c) => {
+  const tokenRaw = c.req.query('token');
+  if (!tokenRaw) return c.text('missing token', 400);
+
+  const state = await verifyPayload<EmailMagicState>(tokenRaw, c.env.SESSION_SIGNING_KEY);
+  if (!state) return c.text('invalid token', 400);
+  if (state.exp < Math.floor(Date.now() / 1000)) return c.text('link expired', 400);
+  if (!isAllowedReturnTo(state.returnTo)) return c.text('returnTo not allowed', 400);
+
+  const userId = `email:${state.email}`;
+  const login = state.email.split('@')[0];
+
+  await c.env.DB.prepare(
+    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
+     VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       email = excluded.email,
+       display_name = excluded.display_name`,
+  )
+    .bind(userId, login, Date.now(), state.email, state.email, login)
+    .run();
+
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
+  const redirect = new URL(state.returnTo);
+  redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+  return c.redirect(redirect.toString());
 });
 
 authRoutes.get('/auth/me', async (c) => {

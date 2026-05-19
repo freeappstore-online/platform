@@ -1,6 +1,6 @@
 import type { Unsubscribe, User } from './types.js';
 
-export type AuthProvider = 'github' | 'google';
+export type AuthProvider = 'github' | 'google' | 'email';
 
 /**
  * Shared across all FAS apps on the same origin — this is intentional SSO.
@@ -52,12 +52,42 @@ export class Auth {
    */
   signIn(provider: AuthProvider = 'github'): void {
     if (typeof window === 'undefined') return;
+    if (provider === 'email') {
+      throw new Error('Use signInWithEmail(email) for email magic-link sign-in.');
+    }
     const here = new URL(window.location.href);
     here.hash = '';
     const url = new URL(`/v1/auth/${provider}/start`, this.apiBase);
     url.searchParams.set('app_id', this.appId);
     url.searchParams.set('return_to', here.toString());
     window.location.assign(url.toString());
+  }
+
+  /**
+   * Email magic-link sign-in. Sends the user an email with a one-time link
+   * that completes auth and redirects back here with `#fas_session=…`.
+   *
+   * Resolves once the email has been queued. The caller should show a
+   * "check your inbox" message — the actual sign-in happens later when
+   * the user clicks the link.
+   *
+   * Throws on validation or server errors. Resolves with `{ ok: true }`
+   * regardless of whether the email is already registered (no account-
+   * enumeration leak).
+   */
+  async signInWithEmail(email: string): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const here = new URL(window.location.href);
+    here.hash = '';
+    const res = await fetch(new URL('/v1/auth/email/start', this.apiBase), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, appId: this.appId, returnTo: here.toString() }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`Magic-link request failed: ${res.status} ${body}`);
+    }
   }
 
   /** Clear the session and notify listeners. */
