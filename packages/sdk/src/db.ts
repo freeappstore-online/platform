@@ -14,7 +14,7 @@ export interface QueryResult<T> {
 }
 
 /** Document database — organize data into named collections. */
-export class Db {
+export class Collections {
   constructor(
     private readonly appId: string,
     private readonly apiBase: string,
