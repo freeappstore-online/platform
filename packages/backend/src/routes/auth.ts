@@ -198,7 +198,11 @@ authRoutes.post('/auth/email/start', async (c) => {
     return c.text('Email auth not configured', 503);
   }
 
-  const { email: rawEmail, appId, returnTo } = await c.req.json<{
+  const {
+    email: rawEmail,
+    appId,
+    returnTo,
+  } = await c.req.json<{
     email?: string;
     appId?: string;
     returnTo?: string;

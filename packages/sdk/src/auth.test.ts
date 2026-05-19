@@ -122,7 +122,9 @@ describe('Auth.signInWithEmail', () => {
   it('throws when the server returns non-ok', async () => {
     const { window } = makeWindow({ href: 'https://app.example/' });
     (globalThis as Record<string, unknown>).window = window;
-    globalThis.fetch = vi.fn().mockResolvedValue(new Response('returnTo not allowed', { status: 400 }));
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response('returnTo not allowed', { status: 400 }));
 
     const auth = new Auth('demo', 'https://api.example');
     await expect(auth.signInWithEmail('a@b.com')).rejects.toThrow(/Magic-link request failed: 400/);

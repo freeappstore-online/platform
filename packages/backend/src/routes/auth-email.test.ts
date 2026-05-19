@@ -151,7 +151,10 @@ describe('POST /v1/auth/email/start', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     const call = fetchMock.mock.calls[0]!;
-    const [url, init] = call as [string, RequestInit & { body: string; headers: Record<string, string> }];
+    const [url, init] = call as [
+      string,
+      RequestInit & { body: string; headers: Record<string, string> },
+    ];
     expect(url).toBe('https://api.resend.com/emails');
     expect(init.headers.Authorization).toBe('Bearer resend-test-key');
     const body = JSON.parse(init.body);
@@ -185,12 +188,14 @@ describe('POST /v1/auth/email/start', () => {
 describe('GET /v1/auth/email/callback', () => {
   const now = Math.floor(Date.now() / 1000);
 
-  async function makeToken(overrides: Partial<{
-    email: string;
-    appId: string;
-    returnTo: string;
-    exp: number;
-  }> = {}) {
+  async function makeToken(
+    overrides: Partial<{
+      email: string;
+      appId: string;
+      returnTo: string;
+      exp: number;
+    }> = {},
+  ) {
     return await signPayload(
       {
         email: 'alice@example.com',
@@ -209,11 +214,7 @@ describe('GET /v1/auth/email/callback', () => {
   });
 
   it('returns 400 when token is malformed', async () => {
-    const res = await app.request(
-      '/v1/auth/email/callback?token=not.a.valid.token',
-      {},
-      makeEnv(),
-    );
+    const res = await app.request('/v1/auth/email/callback?token=not.a.valid.token', {}, makeEnv());
     expect(res.status).toBe(400);
   });
 
