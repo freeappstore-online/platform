@@ -90,7 +90,9 @@ describe('GET /v1/apps/mine', () => {
   it('returns empty list when the user has no apps', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
+        users: [
+          { id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null },
+        ],
         apps: [],
       }),
     );
@@ -107,7 +109,9 @@ describe('GET /v1/apps/mine', () => {
   it('returns only apps owned by the authenticated user', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
+        users: [
+          { id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null },
+        ],
         apps: [
           {
             id: 'tip',
@@ -157,7 +161,9 @@ describe('GET /v1/apps/mine', () => {
   it('synthesizes appUrl + repoUrl in camelCase output shape', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
+        users: [
+          { id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null },
+        ],
         apps: [
           {
             id: 'chess',
@@ -195,7 +201,9 @@ describe('GET /v1/apps/mine', () => {
   it('falls back to canonical org repoUrl when repo is null', async () => {
     const env = baseEnv(
       fakeDB({
-        users: [{ id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null }],
+        users: [
+          { id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null },
+        ],
         apps: [
           {
             id: 'tip',

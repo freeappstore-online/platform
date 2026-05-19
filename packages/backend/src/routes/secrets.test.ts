@@ -217,8 +217,20 @@ function baseEnv(db: D1Database, withKek = true): Env {
   };
 }
 
-const owner: UserRow = { id: 'gh:1', github_login: 'alice', avatar_url: null, display_name: null, email: null };
-const stranger: UserRow = { id: 'gh:2', github_login: 'mallory', avatar_url: null, display_name: null, email: null };
+const owner: UserRow = {
+  id: 'gh:1',
+  github_login: 'alice',
+  avatar_url: null,
+  display_name: null,
+  email: null,
+};
+const stranger: UserRow = {
+  id: 'gh:2',
+  github_login: 'mallory',
+  avatar_url: null,
+  display_name: null,
+  email: null,
+};
 const weatherApp: AppRow = { id: 'weather', owner_login: 'alice' };
 
 function freshData(): FakeData {
