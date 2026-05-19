@@ -1,5 +1,6 @@
 import type { FileSource } from '../lib/file-source.js';
 import { isGameProject } from '../lib/project-type.js';
+import { stripCommentsOnly, stripCssComments } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
 
 /**
@@ -16,7 +17,7 @@ import type { CheckResult } from '../types.js';
  *
  * Games are exempt — game UIs are full-bleed and pick their own
  * palette, so the system preference rarely applies. Skipped if
- * `@freeappstore/games` is detected.
+ * `@freegamestore/games` is detected.
  */
 export async function checkDarkMode(source: FileSource): Promise<CheckResult> {
   if (await isGameProject(source)) {
@@ -30,8 +31,16 @@ export async function checkDarkMode(source: FileSource): Promise<CheckResult> {
   for await (const path of source.list()) {
     if (!path.startsWith('web/src/')) continue;
     if (!/\.(?:css|scss|tsx?|jsx?|html)$/i.test(path)) continue;
-    const content = await source.read(path);
-    if (!content) continue;
+    const raw = await source.read(path);
+    if (!raw) continue;
+    // Strip comments so a `// We could use prefers-color-scheme` note
+    // doesn't false-pass the check. Preserve string contents — the
+    // signal might be in a template literal that injects CSS.
+    const lower = path.toLowerCase();
+    const content =
+      lower.endsWith('.css') || lower.endsWith('.scss')
+        ? stripCssComments(raw)
+        : stripCommentsOnly(raw);
     if (/prefers-color-scheme|data-theme|color-scheme\s*:/i.test(content)) {
       return { name: 'Dark mode support', status: 'pass', detail: `signal in ${path}` };
     }

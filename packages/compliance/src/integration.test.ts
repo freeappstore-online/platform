@@ -73,6 +73,7 @@ describe('failing-app fixture', () => {
       'No template placeholders',
       'No tracking SDKs',
       'PWA manifest',
+      'PWA offline correctness',
       'Viewport support',
     ]);
     expect(summary.warn.sort()).toEqual([

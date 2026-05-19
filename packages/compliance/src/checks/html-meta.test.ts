@@ -60,6 +60,31 @@ describe('checkHtmlMeta', () => {
     expect(r.status).toBe('pass');
   });
 
+  it('does NOT count meta tags inside <!-- HTML comments --> as live', async () => {
+    // Commented-out viewport meta isn't real — should fail with viewport missing.
+    const files = new Map([
+      [
+        'web/index.html',
+        '<html lang="en"><head><!-- <meta name="viewport" content="x" /> --><title>t</title></head></html>',
+      ],
+    ]);
+    const r = await checkHtmlMeta(mapFileSource(files));
+    expect(r.status).toBe('fail');
+    expect(r.detail).toMatch(/viewport meta/);
+  });
+
+  it('does NOT count <title> inside an HTML comment when the real title is empty', async () => {
+    const files = new Map([
+      [
+        'web/index.html',
+        '<html lang="en"><head><meta name="viewport" content="x"/><!-- <title>commented</title> --><title></title></head></html>',
+      ],
+    ]);
+    const r = await checkHtmlMeta(mapFileSource(files));
+    expect(r.status).toBe('fail');
+    expect(r.detail).toMatch(/<title>/);
+  });
+
   it('accepts a multi-line title body', async () => {
     const files = new Map([
       [

@@ -31,6 +31,25 @@ describe('checkDarkMode', () => {
     expect(r.status).toBe('warn');
   });
 
+  it('does NOT pass when the signal only appears in a // comment', async () => {
+    // The check used to false-pass when the only mention was in a doc
+    // comment ("// could use prefers-color-scheme here") with no real
+    // implementation.
+    const files = new Map([
+      ['web/src/App.tsx', '// We could use prefers-color-scheme here.\nexport default () => <div/>;'],
+    ]);
+    const r = await checkDarkMode(mapFileSource(files));
+    expect(r.status).toBe('warn');
+  });
+
+  it('does NOT pass when the signal only appears in a /* CSS comment */', async () => {
+    const files = new Map([
+      ['web/src/index.css', '/* TODO: add prefers-color-scheme block later */ body {}'],
+    ]);
+    const r = await checkDarkMode(mapFileSource(files));
+    expect(r.status).toBe('warn');
+  });
+
   it('skips for game projects', async () => {
     const files = new Map([
       ['package.json', '{"dependencies":{"@freeappstore/games":"^0.1"}}'],

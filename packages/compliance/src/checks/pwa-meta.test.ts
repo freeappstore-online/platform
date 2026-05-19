@@ -38,4 +38,17 @@ describe('checkPwaMeta', () => {
     const r = await checkPwaMeta(mapFileSource(new Map()));
     expect(r.status).toBe('fail');
   });
+
+  it('does NOT count a meta tag inside an HTML comment as live', async () => {
+    // A commented-out apple-mobile-web-app-capable tag isn't real and
+    // shouldn't satisfy the check.
+    const files = new Map([
+      [
+        'web/index.html',
+        '<html><head><!-- <meta name="apple-mobile-web-app-capable" content="yes" /> --></head></html>',
+      ],
+    ]);
+    const r = await checkPwaMeta(mapFileSource(files));
+    expect(r.status).toBe('warn');
+  });
 });

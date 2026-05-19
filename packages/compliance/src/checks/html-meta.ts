@@ -1,4 +1,5 @@
 import type { FileSource } from '../lib/file-source.js';
+import { stripHtmlComments } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
 
 const HTML_PATH = 'web/index.html';
@@ -16,14 +17,18 @@ const HTML_PATH = 'web/index.html';
  * something they needed.
  */
 export async function checkHtmlMeta(source: FileSource): Promise<CheckResult> {
-  const html = await source.read(HTML_PATH);
-  if (html === null) {
+  const rawHtml = await source.read(HTML_PATH);
+  if (rawHtml === null) {
     return {
       name: 'HTML meta tags',
       status: 'fail',
       detail: `${HTML_PATH} not found`,
     };
   }
+  // Strip HTML comment bodies before matching — `<!-- <meta name=
+  // "viewport" ...> -->` is not a real viewport meta, and a commented-
+  // out `<title>` shouldn't count either.
+  const html = stripHtmlComments(rawHtml);
 
   const missing: string[] = [];
   if (!/<html[^>]*\blang\s*=/i.test(html)) missing.push('lang attribute on <html>');

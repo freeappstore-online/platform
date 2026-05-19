@@ -113,7 +113,7 @@ describe('checkUnsafeVh', () => {
   it('scans CSS, JS, TS, JSX, TSX, HTML — but skips other extensions', async () => {
     const dir = await fixture({
       'web/src/index.css': '.a { height: 100vh; }',
-      'web/src/App.jsx': 'const x = "h-screen";', // string with the class — still flagged (we can't know intent)
+      'web/src/App.jsx': 'const x = "h-screen";', // string with the class — flagged (real Tailwind usage looks identical)
       'docs/notes.md': 'Use 100vh somewhere', // Markdown — should NOT be scanned
       'web/src/foo.scss': '$h: 100vh;',
     });
@@ -121,5 +121,34 @@ describe('checkUnsafeVh', () => {
     expect(r.status).toBe('warn');
     // 3 hits: index.css, App.jsx, foo.scss. notes.md ignored.
     expect(r.detail).toMatch(/3 occurrences/);
+  });
+
+  // --- comment + string stripping regression guards ---
+
+  it('does NOT flag 100vh inside a // line comment', async () => {
+    const dir = await fixture({
+      'web/src/note.ts': '// avoid 100vh on iOS Safari\nexport {};',
+    });
+    const r = await checkUnsafeVh(fsFileSource(dir));
+    expect(r.status).toBe('pass');
+  });
+
+  it('does NOT flag 100vh inside a /* CSS block comment */', async () => {
+    const dir = await fixture({
+      'web/src/note.css': "/* DON'T use 100vh — use 100svh */ body { height: 100svh; }",
+    });
+    const r = await checkUnsafeVh(fsFileSource(dir));
+    expect(r.status).toBe('pass');
+  });
+
+  it('still flags 100vh inside a JSX string-literal className (real Tailwind usage)', async () => {
+    // Trade-off: string contents are preserved so JSX classNames like
+    // `className="h-screen"` are caught. A doc-example string with
+    // `"100vh"` would also fire; reviewer can opt out per-line.
+    const dir = await fixture({
+      'web/src/Hero.tsx': 'export default () => <div className="min-h-screen" />;',
+    });
+    const r = await checkUnsafeVh(fsFileSource(dir));
+    expect(r.status).toBe('warn');
   });
 });

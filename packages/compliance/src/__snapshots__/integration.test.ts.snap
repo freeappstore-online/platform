@@ -96,7 +96,7 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     ],
   },
   {
-    "detail": "1 file(s) reference trackers: web/src/tracking.ts (google-analytics, gtag)",
+    "detail": "1 file(s) reference trackers: web/src/tracking.ts (amplitude)",
     "name": "No tracking SDKs",
     "status": "fail",
     "suggestions": [
@@ -105,11 +105,10 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     ],
   },
   {
-    "detail": "3 occurrences of 100vh / h-screen — breaks on iOS Safari with URL bar visible",
+    "detail": "2 occurrences of 100vh / h-screen — breaks on iOS Safari with URL bar visible",
     "name": "No unsafe 100vh",
     "status": "warn",
     "suggestions": [
-      "web/src/index.css:2 100vh — use 100svh or 100dvh",
       "web/src/index.css:4 100vh — use 100svh or 100dvh",
       "web/src/index.css:9 100vh — use 100svh or 100dvh",
       "Replace with 100svh (preferred) or 100dvh. Add \`// allow-100vh\` on the line if intentional.",
@@ -130,6 +129,15 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     "status": "warn",
     "suggestions": [
       "Add \`<meta name="apple-mobile-web-app-capable" content="yes" />\` to <head> so iOS installs launch standalone.",
+    ],
+  },
+  {
+    "detail": "platform mandate: every app on freeappstore.online must be an installable PWA, but no service worker is registered",
+    "name": "PWA offline correctness",
+    "status": "fail",
+    "suggestions": [
+      "Add \`vite-plugin-pwa\` to web/devDependencies, then wire \`VitePWA({...})\` into vite.config.ts plugins. Mirror the canonical config used in the canonical scaffolds, etc.",
+      "Or, if you prefer to manage your own SW, register it from web/src/main.tsx with \`navigator.serviceWorker.register("/sw.js")\` and ship the SW yourself.",
     ],
   },
   {

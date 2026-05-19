@@ -1,4 +1,5 @@
 import type { FileSource } from '../lib/file-source.js';
+import { stripHtmlComments } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
 
 const HTML_PATH = 'web/index.html';
@@ -19,14 +20,17 @@ const HTML_PATH = 'web/index.html';
  * is specifically the iOS install hint that lives in the HTML head.
  */
 export async function checkPwaMeta(source: FileSource): Promise<CheckResult> {
-  const html = await source.read(HTML_PATH);
-  if (html === null) {
+  const rawHtml = await source.read(HTML_PATH);
+  if (rawHtml === null) {
     return {
       name: 'PWA meta tags',
       status: 'fail',
       detail: `${HTML_PATH} not found`,
     };
   }
+  // Strip HTML comments — `<!-- <meta name="apple-mobile-web-app-capable"> -->`
+  // doesn't tell iOS anything.
+  const html = stripHtmlComments(rawHtml);
   if (/<meta[^>]*\bname\s*=\s*["'](?:apple-)?mobile-web-app-capable["']/i.test(html)) {
     return { name: 'PWA meta tags', status: 'pass', detail: 'iOS install hint present' };
   }

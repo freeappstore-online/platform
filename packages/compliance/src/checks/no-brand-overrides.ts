@@ -1,4 +1,5 @@
 import type { FileSource } from '../lib/file-source.js';
+import { stripCommentsOnly, stripCssComments } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
 
 /**
@@ -25,8 +26,17 @@ export async function checkNoBrandOverrides(source: FileSource): Promise<CheckRe
   for await (const path of source.list()) {
     const ext = extOf(path);
     if (!SCANNED_EXTS.has(ext)) continue;
-    const content = await source.read(path);
-    if (!content) continue;
+    const raw = await source.read(path);
+    if (!raw) continue;
+    // Strip comment bodies so a `// font-family: "Comic Sans"` note
+    // doesn't fire. Preserve string-literal contents — the JSX value
+    // `fontFamily: "Comic Sans"` IS a string literal and is the thing
+    // we're auditing. For .css/.scss use the css-only stripper (no `//`
+    // syntax at the language level).
+    const content =
+      ext === '.css' || ext === '.scss'
+        ? stripCssComments(raw)
+        : stripCommentsOnly(raw);
     // Canonical theme file: the platform's CSS variables ARE defined here.
     // Apps own this file post-scaffold (they can technically modify token
     // values, and we accept the imperfection — the loud places where a
@@ -138,29 +148,80 @@ export function scanContent(
   }
 
   // 2. font-family overrides.
-  const fontRe = /(?:font-family|fontFamily)\s*[:=]\s*["'`]?([^;"'`}\n]+)["'`]?/g;
+  // Capture the value of every font-family / fontFamily declaration, then
+  // extract candidate font names. JSX values can be ternaries
+  // (`fontFamily: isFoo ? "Fraunces" : "Manrope"`), so we pull out every
+  // quoted string in the value and check each one separately. If there are
+  // no quoted strings, the value is treated as a CSS-style comma list
+  // (`font-family: Comic Sans, serif`).
+  const fontHeadRe = /(font-family|fontFamily)\s*[:=]/g;
+  const quotedRe = /(['"`])([^'"`\n]+)\1/g;
   let m: RegExpExecArray | null;
-  while ((m = fontRe.exec(content)) !== null) {
-    const list = m[1]!;
-    const tokens = list
-      .split(',')
-      .map((t) =>
-        t
-          .trim()
-          .replace(/^["']|["']$/g, '')
-          .toLowerCase(),
-      )
-      .filter(Boolean);
-    for (const t of tokens) {
-      if (!ALLOWED_FONT_TOKENS.has(t)) {
-        const line = lineNumberAt(content, m.index);
-        out.push(`${filename}:${line} non-brand font "${t}"`);
-        break;
+  while ((m = fontHeadRe.exec(content)) !== null) {
+    const isJsx = m[1] === 'fontFamily';
+    const start = m.index + m[0].length;
+    const value = sliceFontValue(content, start, isJsx);
+    const quotedStrings = [...value.matchAll(quotedRe)].map((x) => x[2]!);
+    const candidates = quotedStrings.length > 0 ? quotedStrings : [value];
+    let flagged = false;
+    for (const cand of candidates) {
+      const tokens = cand
+        .split(',')
+        .map((t) => t.trim().replace(/^["']|["']$/g, '').toLowerCase())
+        .filter(Boolean);
+      for (const t of tokens) {
+        if (!ALLOWED_FONT_TOKENS.has(t)) {
+          const line = lineNumberAt(content, m.index);
+          out.push(`${filename}:${line} non-brand font "${t}"`);
+          flagged = true;
+          break;
+        }
       }
+      if (flagged) break;
     }
   }
 
   return out;
+}
+
+/**
+ * Walk forward from `start` until we hit the end of the font-family value.
+ *
+ * CSS values end at `;` or `}` or newline.
+ * JSX values end at `}` or at a `,` followed by another identifier+colon
+ * (the next style property). Commas inside quoted strings or before
+ * non-identifiers (e.g. font fallbacks) are part of the value.
+ */
+function sliceFontValue(content: string, start: number, isJsx: boolean): string {
+  let i = start;
+  let quote: string | null = null;
+  while (i < content.length) {
+    const c = content[i]!;
+    if (quote) {
+      if (c === '\\') {
+        i += 2;
+        continue;
+      }
+      if (c === quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      quote = c;
+      i++;
+      continue;
+    }
+    if (c === '\n' || c === ';' || c === '}') break;
+    if (isJsx && c === ',') {
+      // Lookahead: is this `,` followed by `identifier:`? If yes, end of value.
+      let j = i + 1;
+      while (j < content.length && (content[j] === ' ' || content[j] === '\t')) j++;
+      const rest = content.slice(j, j + 64);
+      if (/^[A-Za-z_$][\w$]*\s*:/.test(rest)) break;
+    }
+    i++;
+  }
+  return content.slice(start, i);
 }
 
 function extOf(path: string): string {

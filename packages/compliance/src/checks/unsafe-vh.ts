@@ -1,4 +1,5 @@
 import type { FileSource } from '../lib/file-source.js';
+import { stripCommentsForExt } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
 
 /**
@@ -26,18 +27,29 @@ export async function checkUnsafeVh(source: FileSource): Promise<CheckResult> {
   const issues: string[] = [];
 
   for await (const path of source.list()) {
-    if (!SCAN_EXTS.has(extOf(path))) continue;
-    const content = await source.read(path);
-    if (!content) continue;
+    const ext = extOf(path);
+    if (!SCAN_EXTS.has(ext)) continue;
+    const raw = await source.read(path);
+    if (!raw) continue;
+    // Strip comments only, NOT string contents. JSX className values
+    // are string literals (`<div className="h-screen">`) and IS the
+    // live class assignment — erasing string contents would silently
+    // miss the most common Tailwind usage. Accept the rare trade-off:
+    // a `const docs = "100vh"` string-literal documentation example
+    // still false-positive-warns; reviewer can add `// allow-100vh`.
+    const content = stripCommentsForExt(raw, ext);
 
     for (const { re, label } of PATTERNS) {
       // Reset lastIndex defensively; we use `g` to find all matches.
       re.lastIndex = 0;
       let m: RegExpExecArray | null;
       while ((m = re.exec(content)) !== null) {
-        const line = lineNumberAt(content, m.index);
-        // Allow opt-out via an inline `allow-100vh` comment on the same line.
-        if (lineHasAllowComment(content, m.index)) continue;
+        const line = lineNumberAt(raw, m.index);
+        // Allow opt-out via an inline `allow-100vh` comment on the same
+        // line. Read the raw source for the opt-out — the marker
+        // necessarily lives in a comment that was just blanked from
+        // `content`.
+        if (lineHasAllowComment(raw, m.index)) continue;
         issues.push(`${path}:${line} ${label} — use 100svh or 100dvh`);
       }
     }
