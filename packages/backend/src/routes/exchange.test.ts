@@ -24,6 +24,12 @@ function fakeDB(opts: { onUserUpsert?: (row: FakeWrite) => void } = {}): D1Datab
         }
         return { meta: { changes: 1 } } as unknown as D1Result<T>;
       },
+      first: async <T = unknown>() => {
+        if (trimmed.startsWith('SELECT date_of_birth FROM users')) {
+          return { date_of_birth: null } as T;
+        }
+        return null as T;
+      },
     };
     return stmt as D1PreparedStatement;
   };
@@ -126,6 +132,7 @@ describe('POST /v1/auth/exchange', () => {
       id: 'gh:12345',
       login: 'alice',
       avatarUrl: 'https://avatars/alice',
+      dateOfBirth: null,
     });
     expect(writes).toHaveLength(1);
     expect(writes[0]!.args).toEqual([

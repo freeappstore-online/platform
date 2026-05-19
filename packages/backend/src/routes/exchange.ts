@@ -56,10 +56,19 @@ exchangeRoutes.post('/auth/exchange', async (c) => {
     .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url, Date.now())
     .run();
 
+  const dobRow = await c.env.DB.prepare('SELECT date_of_birth FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ date_of_birth: string | null }>();
+
   const sessionToken = await signSession(userId, c.env.SESSION_SIGNING_KEY);
 
   return c.json({
     sessionToken,
-    user: { id: userId, login: ghUser.login, avatarUrl: ghUser.avatar_url },
+    user: {
+      id: userId,
+      login: ghUser.login,
+      avatarUrl: ghUser.avatar_url,
+      dateOfBirth: dobRow?.date_of_birth ?? null,
+    },
   });
 });

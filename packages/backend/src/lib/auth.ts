@@ -6,6 +6,8 @@ export interface CurrentUser {
   id: string;
   login: string;
   avatarUrl: string | null;
+  /** ISO 'YYYY-MM-DD'. Null until the user has set it through any app. */
+  dateOfBirth: string | null;
 }
 
 export async function requireUser(c: Context<{ Bindings: Env }>): Promise<CurrentUser> {
@@ -18,7 +20,7 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
   if (!payload) throw new HttpError(401, 'invalid or expired session');
 
   const row = await c.env.DB.prepare(
-    'SELECT id, github_login, avatar_url, display_name, email FROM users WHERE id = ?',
+    'SELECT id, github_login, avatar_url, display_name, email, date_of_birth FROM users WHERE id = ?',
   )
     .bind(payload.uid)
     .first<{
@@ -27,10 +29,16 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
       avatar_url: string | null;
       display_name: string | null;
       email: string | null;
+      date_of_birth: string | null;
     }>();
   if (!row) throw new HttpError(401, 'user not found');
 
-  return { id: row.id, login: row.display_name || row.github_login, avatarUrl: row.avatar_url };
+  return {
+    id: row.id,
+    login: row.display_name || row.github_login,
+    avatarUrl: row.avatar_url,
+    dateOfBirth: row.date_of_birth,
+  };
 }
 
 export class HttpError extends Error {

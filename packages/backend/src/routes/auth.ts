@@ -286,3 +286,50 @@ authRoutes.get('/auth/me', async (c) => {
     throw err;
   }
 });
+
+/**
+ * Set the user's date of birth — once, irrevocably. Apps prompt for this when
+ * they need an age check; once set, every other app on the platform reads it
+ * from `GET /v1/auth/me`. 13+ is the platform floor (apps with stricter age
+ * requirements check the returned DOB themselves).
+ */
+authRoutes.patch('/auth/me/date-of-birth', async (c) => {
+  try {
+    const user = await requireUser(c);
+    if (user.dateOfBirth) {
+      return c.json({ error: 'date of birth already set' }, 409);
+    }
+    const body = (await c.req.json().catch(() => null)) as { dateOfBirth?: unknown } | null;
+    const dob = typeof body?.dateOfBirth === 'string' ? body.dateOfBirth : '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+      return c.json({ error: 'dateOfBirth must be YYYY-MM-DD' }, 400);
+    }
+    const age = ageFromDob(dob);
+    if (age == null) {
+      return c.json({ error: 'invalid date' }, 400);
+    }
+    if (age < 13) {
+      return c.json({ error: 'must be at least 13' }, 400);
+    }
+    if (age > 120) {
+      return c.json({ error: 'invalid date' }, 400);
+    }
+    await c.env.DB.prepare('UPDATE users SET date_of_birth = ? WHERE id = ?')
+      .bind(dob, user.id)
+      .run();
+    return c.json({ ...user, dateOfBirth: dob });
+  } catch (err) {
+    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    throw err;
+  }
+});
+
+function ageFromDob(dob: string): number | null {
+  const d = new Date(dob + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  let age = now.getUTCFullYear() - d.getUTCFullYear();
+  const m = now.getUTCMonth() - d.getUTCMonth();
+  if (m < 0 || (m === 0 && now.getUTCDate() < d.getUTCDate())) age--;
+  return age;
+}

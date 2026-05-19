@@ -151,6 +151,41 @@ export class Auth {
     }
   }
 
+  /**
+   * Set the user's platform-level date of birth. Set-once: throws if it's
+   * already set (status 409 from the backend) or if age < 13. After success
+   * the cached user is updated and listeners are notified.
+   *
+   * @param dateOfBirth ISO 'YYYY-MM-DD' string.
+   */
+  async setDateOfBirth(dateOfBirth: string): Promise<User> {
+    if (!this.session) throw new Error('Not signed in.');
+    const response = await fetch(new URL('/v1/auth/me/date-of-birth', this.apiBase), {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${this.session.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ dateOfBirth }),
+    });
+    if (response.status === 401) {
+      this.handleUnauthorized();
+      throw new Error('Not signed in.');
+    }
+    if (response.status === 409) {
+      throw new Error('Date of birth already set.');
+    }
+    if (!response.ok) {
+      const body = await response.text();
+      throw new Error(`setDateOfBirth failed (${response.status}): ${body}`);
+    }
+    const user = (await response.json()) as User;
+    this.session = { ...this.session, user };
+    this.writeStorage(this.session);
+    this.emit();
+    return user;
+  }
+
   private async fetchUser(token: string): Promise<User> {
     const response = await fetch(new URL('/v1/auth/me', this.apiBase), {
       headers: { Authorization: `Bearer ${token}` },

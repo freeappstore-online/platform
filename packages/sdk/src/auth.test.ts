@@ -168,7 +168,7 @@ describe('Auth.init — hash handling', () => {
     (globalThis as Record<string, unknown>).window = window;
     (globalThis as Record<string, unknown>).history = window.history;
     globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: 'gh:1', login: 'alice', avatarUrl: null }), {
+      new Response(JSON.stringify({ id: 'gh:1', login: 'alice', avatarUrl: null, dateOfBirth: null }), {
         status: 200,
       }),
     );
@@ -205,7 +205,7 @@ describe('Auth — storage round-trip', () => {
       'fas:session',
       JSON.stringify({
         token: 'cached',
-        user: { id: 'gh:7', login: 'returning-user', avatarUrl: null },
+        user: { id: 'gh:7', login: 'returning-user', avatarUrl: null, dateOfBirth: null },
       }),
     );
     (globalThis as Record<string, unknown>).window = window;
@@ -221,7 +221,7 @@ describe('Auth — storage round-trip', () => {
       'fas:session',
       JSON.stringify({
         token: 'cached',
-        user: { id: 'gh:7', login: 'u', avatarUrl: null },
+        user: { id: 'gh:7', login: 'u', avatarUrl: null, dateOfBirth: null },
       }),
     );
     (globalThis as Record<string, unknown>).window = window;
@@ -235,7 +235,7 @@ describe('Auth — storage round-trip', () => {
     expect(auth.user).toBeNull();
     expect(window.localStorage.store.has('fas:session')).toBe(false);
     // onChange fires immediately with current user on subscribe, then null on signOut
-    expect(seen).toEqual([{ id: 'gh:7', login: 'u', avatarUrl: null }, null]);
+    expect(seen).toEqual([{ id: 'gh:7', login: 'u', avatarUrl: null, dateOfBirth: null }, null]);
   });
 
   it('returns null when localStorage has corrupt JSON (does not crash)', () => {
