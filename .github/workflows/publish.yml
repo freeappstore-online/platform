@@ -75,4 +75,8 @@ jobs:
       - name: Publish via OIDC trusted publishing
         if: steps.decide.outputs.publish == 'true'
         working-directory: packages/${{ matrix.package }}
-        run: npm publish --access public --provenance
+        # `pnpm publish` rewrites `workspace:*` deps to real versions at
+        # pack time. `npm publish` leaves them as the literal
+        # `workspace:*` and consumers' installs fail with
+        # `EUNSUPPORTEDPROTOCOL`. Same fix already in FGS + PAS.
+        run: pnpm publish --access public --provenance --no-git-checks
