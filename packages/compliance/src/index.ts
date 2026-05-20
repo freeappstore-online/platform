@@ -6,6 +6,7 @@ import { checkDarkMode } from './checks/dark-mode.js';
 import { checkHtmlMeta } from './checks/html-meta.js';
 import { checkLicenseMit } from './checks/license-mit.js';
 import { checkManifest } from './checks/manifest.js';
+import { checkMaskableIcon } from './checks/pwa-maskable-icon.js';
 import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
 import { checkNoEnvProduction } from './checks/no-env-production.js';
 import { checkNoPlaceholders } from './checks/no-placeholders.js';
@@ -43,6 +44,7 @@ export {
   checkHtmlMeta,
   checkLicenseMit,
   checkManifest,
+  checkMaskableIcon,
   checkNoBrandOverrides,
   checkNoEnvProduction,
   checkNoPlaceholders,
@@ -91,6 +93,7 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkPwaMeta(source),
     checkPwaOffline(source),
     checkManifest(source),
+    checkMaskableIcon(source),
     checkStoreLink(source),
     checkDarkMode(source),
     checkBundleSize(source),

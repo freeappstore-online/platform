@@ -28,6 +28,9 @@ export interface InlineManifest {
   orientation?: string | undefined;
   min_viewport_width?: number | undefined;
   icons?: unknown;
+  /** Literal source of the icons array, if present. Used by checks that
+   * need to inspect per-icon fields (e.g. maskable `purpose`). */
+  iconsRaw?: string | undefined;
 }
 
 export function extractInlineManifest(viteConfig: string): InlineManifest | null {
@@ -103,6 +106,7 @@ export function extractInlineManifest(viteConfig: string): InlineManifest | null
     return m ? Number(m[1]) : undefined;
   };
   const hasIcons = /(?:^|[\s,])icons\s*:\s*\[/.test(block);
+  const iconsRaw = extractIconsArray(block);
 
   return {
     name: readString('name'),
@@ -112,5 +116,62 @@ export function extractInlineManifest(viteConfig: string): InlineManifest | null
     orientation: readString('orientation'),
     min_viewport_width: readNumber('min_viewport_width'),
     icons: hasIcons || undefined,
+    iconsRaw,
   };
+}
+
+/** Returns the literal source of the `icons: [ ... ]` array including
+ * surrounding brackets, or undefined if no such array is found. Balances
+ * brackets and respects strings so a `]` inside a value isn't counted. */
+function extractIconsArray(block: string): string | undefined {
+  const m = block.match(/(?:^|[\s,])icons\s*:\s*\[/);
+  if (!m || m.index === undefined) return undefined;
+  const openIdx = block.indexOf('[', m.index);
+  if (openIdx < 0) return undefined;
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let inBacktick = false;
+  let escaped = false;
+  for (let i = openIdx; i < block.length; i++) {
+    const ch = block[i]!;
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (inSingle) {
+      if (ch === "'") inSingle = false;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '"') inDouble = false;
+      continue;
+    }
+    if (inBacktick) {
+      if (ch === '`') inBacktick = false;
+      continue;
+    }
+    if (ch === "'") {
+      inSingle = true;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      continue;
+    }
+    if (ch === '`') {
+      inBacktick = true;
+      continue;
+    }
+    if (ch === '[') depth++;
+    else if (ch === ']') {
+      depth--;
+      if (depth === 0) return block.slice(openIdx, i + 1);
+    }
+  }
+  return undefined;
 }

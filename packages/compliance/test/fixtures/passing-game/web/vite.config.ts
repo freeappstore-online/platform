@@ -39,7 +39,7 @@ export default defineConfig({
         short_name: 'Passing Game',
         start_url: '/',
         display: 'standalone',
-        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+        icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' }],
       },
     }),
   ],
