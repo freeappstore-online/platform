@@ -120,6 +120,21 @@ describe('scanContent (unit)', () => {
     const issues = scanContent('web/src/index.css', `\n\n:root { --paper: red; }\n`);
     expect(issues[0]).toMatch(/:3 /);
   });
+
+  it('does NOT false-positive on SVG-in-template-literal `font-family="..."`', () => {
+    // Regression: a JS template literal generating SVG markup uses
+    // `font-family="Georgia,serif"` as an SVG attribute. Earlier the
+    // CSS-style slicer would read past the value into adjacent
+    // attributes (`font-size="280"`, `fill="rgba(...)"`) and flag those
+    // numeric / color strings as "fonts". The fix: only kebab-case
+    // `font-family:` (with colon) matches; the equals form is skipped
+    // since it almost always appears inside string templates.
+    const issues = scanContent(
+      'web/src/lib/seed.ts',
+      'export const svg = `<text font-family="Georgia,serif" font-size="280" fill="rgba(0,0,0,0.5)">x</text>`;',
+    );
+    expect(issues).toEqual([]);
+  });
 });
 
 describe('checkNoBrandOverrides (integration)', () => {

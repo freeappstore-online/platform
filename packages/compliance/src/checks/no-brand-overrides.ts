@@ -34,9 +34,7 @@ export async function checkNoBrandOverrides(source: FileSource): Promise<CheckRe
     // we're auditing. For .css/.scss use the css-only stripper (no `//`
     // syntax at the language level).
     const content =
-      ext === '.css' || ext === '.scss'
-        ? stripCssComments(raw)
-        : stripCommentsOnly(raw);
+      ext === '.css' || ext === '.scss' ? stripCssComments(raw) : stripCommentsOnly(raw);
     // Canonical theme file: the platform's CSS variables ARE defined here.
     // Apps own this file post-scaffold (they can technically modify token
     // values, and we accept the imperfection — the loud places where a
@@ -154,11 +152,22 @@ export function scanContent(
   // quoted string in the value and check each one separately. If there are
   // no quoted strings, the value is treated as a CSS-style comma list
   // (`font-family: Comic Sans, serif`).
-  const fontHeadRe = /(font-family|fontFamily)\s*[:=]/g;
+  // Patterns:
+  //   - `font-family:` (kebab-case + colon) — real CSS rule
+  //   - `fontFamily:` (camelCase + colon) — JSX inline style object property
+  //   - `fontFamily=` (camelCase + equals) — JSX attribute on a styled component
+  // Deliberately NOT matched: `font-family=` (kebab + equals). That form
+  // only legitimately appears as an SVG/HTML attribute, and in practice
+  // shows up most often inside JS template-literal SVG generators —
+  // greedily slicing those values picks up adjacent SVG attributes
+  // (`font-size="280"`, `fill="rgba(...)"`) as fake "font candidates"
+  // and false-positives. Real SVG-in-JSX with kebab fontFamily is rare
+  // enough to skip.
+  const fontHeadRe = /(font-family\s*:|fontFamily\s*[:=])/g;
   const quotedRe = /(['"`])([^'"`\n]+)\1/g;
   let m: RegExpExecArray | null;
   while ((m = fontHeadRe.exec(content)) !== null) {
-    const isJsx = m[1] === 'fontFamily';
+    const isJsx = m[1]!.startsWith('fontFamily');
     const start = m.index + m[0].length;
     const value = sliceFontValue(content, start, isJsx);
     const quotedStrings = [...value.matchAll(quotedRe)].map((x) => x[2]!);
@@ -167,7 +176,12 @@ export function scanContent(
     for (const cand of candidates) {
       const tokens = cand
         .split(',')
-        .map((t) => t.trim().replace(/^["']|["']$/g, '').toLowerCase())
+        .map((t) =>
+          t
+            .trim()
+            .replace(/^["']|["']$/g, '')
+            .toLowerCase(),
+        )
         .filter(Boolean);
       for (const t of tokens) {
         if (!ALLOWED_FONT_TOKENS.has(t)) {
