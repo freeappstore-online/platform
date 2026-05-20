@@ -36,7 +36,10 @@ describe('checkDarkMode', () => {
     // comment ("// could use prefers-color-scheme here") with no real
     // implementation.
     const files = new Map([
-      ['web/src/App.tsx', '// We could use prefers-color-scheme here.\nexport default () => <div/>;'],
+      [
+        'web/src/App.tsx',
+        '// We could use prefers-color-scheme here.\nexport default () => <div/>;',
+      ],
     ]);
     const r = await checkDarkMode(mapFileSource(files));
     expect(r.status).toBe('warn');

@@ -29,4 +29,3 @@ export async function isGameProject(source: FileSource): Promise<boolean> {
   }
   return false;
 }
-

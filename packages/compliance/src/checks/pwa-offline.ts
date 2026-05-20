@@ -50,10 +50,8 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
   // is not a live install claim, and a commented-out fonts <link> is
   // not loading anything.
   const htmlCode = html === null ? null : stripHtmlComments(html);
-  const linksManifest =
-    htmlCode !== null && /<link[^>]+rel\s*=\s*["']manifest["']/i.test(htmlCode);
-  const linksGoogleFonts =
-    htmlCode !== null && /fonts\.(googleapis|gstatic)\.com/i.test(htmlCode);
+  const linksManifest = htmlCode !== null && /<link[^>]+rel\s*=\s*["']manifest["']/i.test(htmlCode);
+  const linksGoogleFonts = htmlCode !== null && /fonts\.(googleapis|gstatic)\.com/i.test(htmlCode);
 
   // Strip comments and string-literal contents before any regex matching
   // against the config text — otherwise `VitePWA(` in a comment or
@@ -89,7 +87,8 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
     return {
       name: 'PWA offline correctness',
       status: 'fail',
-      detail: 'platform mandate: every app on freeappstore.online must be an installable PWA, but no service worker is registered',
+      detail:
+        'platform mandate: every app on freeappstore.online must be an installable PWA, but no service worker is registered',
       suggestions: [
         'Add `vite-plugin-pwa` to web/devDependencies, then wire `VitePWA({...})` into vite.config.ts plugins. Mirror the canonical config used in the canonical scaffolds, etc.',
         'Or, if you prefer to manage your own SW, register it from web/src/main.tsx with `navigator.serviceWorker.register("/sw.js")` and ship the SW yourself.',
@@ -104,7 +103,8 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
     return {
       name: 'PWA offline correctness',
       status: 'fail',
-      detail: 'index.html links a manifest but no service worker is registered → installable PWA that cannot load offline from home screen',
+      detail:
+        'index.html links a manifest but no service worker is registered → installable PWA that cannot load offline from home screen',
       suggestions: [
         'Install vite-plugin-pwa and add VitePWA({...}) to vite.config.ts plugins.',
         'Or register a service worker manually (`navigator.serviceWorker.register("/sw.js")`).',
@@ -175,10 +175,16 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
   const capValue = parseBundleCap(workbox);
   const DEFAULT_CAP = 2 * 1024 * 1024;
   if (capValue === null) {
-    issues.push('no maximumFileSizeToCacheInBytes (defaults to 2 MB — bigger chunks silently skipped from precache)');
-    suggestions.push('Set `maximumFileSizeToCacheInBytes: 10 * 1024 * 1024` so the main bundle is precached.');
+    issues.push(
+      'no maximumFileSizeToCacheInBytes (defaults to 2 MB — bigger chunks silently skipped from precache)',
+    );
+    suggestions.push(
+      'Set `maximumFileSizeToCacheInBytes: 10 * 1024 * 1024` so the main bundle is precached.',
+    );
   } else if (capValue < DEFAULT_CAP) {
-    issues.push(`maximumFileSizeToCacheInBytes is ${capValue} bytes — smaller than the workbox default (2 MB); any chunk above this is dropped from precache`);
+    issues.push(
+      `maximumFileSizeToCacheInBytes is ${capValue} bytes — smaller than the workbox default (2 MB); any chunk above this is dropped from precache`,
+    );
     suggestions.push('Raise to at least `10 * 1024 * 1024` (10 MB) so real bundles fit.');
   }
 
@@ -200,12 +206,12 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
     // like `({request}) => request.destination === "font"` catches
     // every font request including Google Fonts. Accept that as
     // covering both endpoints rather than emitting a false warn.
-    const hasDestinationFontRule =
-      /\bdestination\b/.test(workbox) && /["']font["']/.test(workbox);
-    const fontsCovered =
-      (hasGoogleApisRule && hasGstaticRule) || hasDestinationFontRule;
+    const hasDestinationFontRule = /\bdestination\b/.test(workbox) && /["']font["']/.test(workbox);
+    const fontsCovered = (hasGoogleApisRule && hasGstaticRule) || hasDestinationFontRule;
     if (!fontsCovered) {
-      issues.push('index.html loads Google Fonts but workbox has no runtimeCaching for fonts.googleapis.com / fonts.gstatic.com');
+      issues.push(
+        'index.html loads Google Fonts but workbox has no runtimeCaching for fonts.googleapis.com / fonts.gstatic.com',
+      );
       suggestions.push(
         'Add runtimeCaching CacheFirst rules for /^https:\\/\\/fonts\\.googleapis\\.com/ and /^https:\\/\\/fonts\\.gstatic\\.com/.',
       );
@@ -222,7 +228,9 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
     const uncovered = await findUncoveredAssets(source, PUBLIC_DIR, covered);
     if (uncovered.length > 0) {
       const sample = uncovered.slice(0, 3).join(', ');
-      issues.push(`web/public/ has files in extensions not in globPatterns: ${sample}${uncovered.length > 3 ? ` (+${uncovered.length - 3} more)` : ''}`);
+      issues.push(
+        `web/public/ has files in extensions not in globPatterns: ${sample}${uncovered.length > 3 ? ` (+${uncovered.length - 3} more)` : ''}`,
+      );
       const newExts = [...new Set([...covered, ...uncovered.map(extOf)])].filter(Boolean).join(',');
       suggestions.push(`Extend globPatterns to cover them, e.g. \`**/*.{${newExts}}\`.`);
     }
@@ -276,11 +284,7 @@ function parseBundleCap(workbox: string): number | null {
  * Regex alone can't handle this because workbox blocks contain nested
  * objects (`options: { expiration: {...} }`) and regex doesn't balance.
  */
-function extractBalancedBlock(
-  src: string,
-  code: string,
-  opener: RegExp,
-): string | null {
+function extractBalancedBlock(src: string, code: string, opener: RegExp): string | null {
   const m = code.match(opener);
   if (!m || m.index === undefined) return null;
   let i = m.index + m[0].length; // start just after the `{`

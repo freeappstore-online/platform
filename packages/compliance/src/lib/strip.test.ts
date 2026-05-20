@@ -51,15 +51,11 @@ describe('stripCommentsAndStrings', () => {
 
 describe('stripCommentsOnly', () => {
   it('blanks comments but PRESERVES string contents', () => {
-    expect(stripCommentsOnly('const x = "hello" // comment')).toBe(
-      'const x = "hello"           ',
-    );
+    expect(stripCommentsOnly('const x = "hello" // comment')).toBe('const x = "hello"           ');
   });
 
   it('preserves template literal contents', () => {
-    expect(stripCommentsOnly('const x = `font-family: foo`')).toBe(
-      'const x = `font-family: foo`',
-    );
+    expect(stripCommentsOnly('const x = `font-family: foo`')).toBe('const x = `font-family: foo`');
   });
 });
 
@@ -94,9 +90,7 @@ describe('stripForExt / stripCommentsForExt', () => {
   });
 
   it('stripCommentsForExt preserves strings on JS files', () => {
-    expect(stripCommentsForExt('const x = "@amp/y" // c', '.ts')).toBe(
-      'const x = "@amp/y"     ',
-    );
+    expect(stripCommentsForExt('const x = "@amp/y" // c', '.ts')).toBe('const x = "@amp/y"     ');
   });
 
   it('falls back to JS-style for unknown extensions', () => {

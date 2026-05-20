@@ -43,16 +43,16 @@ export function extractInlineManifest(viteConfig: string): InlineManifest | null
   let inSingle = false;
   let inDouble = false;
   let inBacktick = false;
-  let escape = false;
+  let escaped = false;
   let endIdx = -1;
   for (let i = openIdx; i < viteConfig.length; i++) {
     const ch = viteConfig[i]!;
-    if (escape) {
-      escape = false;
+    if (escaped) {
+      escaped = false;
       continue;
     }
     if (ch === '\\') {
-      escape = true;
+      escaped = true;
       continue;
     }
     if (inSingle) {

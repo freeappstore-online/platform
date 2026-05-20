@@ -22,19 +22,10 @@ export function stripHtmlComments(src: string): string {
   const out = src.split('');
   let i = 0;
   while (i < src.length) {
-    if (
-      src[i] === '<' &&
-      src[i + 1] === '!' &&
-      src[i + 2] === '-' &&
-      src[i + 3] === '-'
-    ) {
+    if (src[i] === '<' && src[i + 1] === '!' && src[i + 2] === '-' && src[i + 3] === '-') {
       const start = i;
       i += 4;
-      while (
-        i < src.length &&
-        !(src[i] === '-' && src[i + 1] === '-' && src[i + 2] === '>')
-      )
-        i++;
+      while (i < src.length && !(src[i] === '-' && src[i + 1] === '-' && src[i + 2] === '>')) i++;
       i = Math.min(src.length, i + 3);
       blank(out, start, i);
       continue;

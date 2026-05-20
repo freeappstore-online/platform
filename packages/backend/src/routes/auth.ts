@@ -115,7 +115,7 @@ authRoutes.get('/auth/google/start', async (c) => {
   const redirectUri = new URL('/v1/auth/google/callback', c.req.url).toString();
   const google = new Google(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, redirectUri);
 
-  const state = generateState();
+  const _state = generateState();
   const codeVerifier = generateCodeVerifier();
 
   const signedState = await signPayload<GoogleOAuthState>(
@@ -325,7 +325,7 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
 });
 
 function ageFromDob(dob: string): number | null {
-  const d = new Date(dob + 'T00:00:00Z');
+  const d = new Date(`${dob}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return null;
   const now = new Date();
   let age = now.getUTCFullYear() - d.getUTCFullYear();

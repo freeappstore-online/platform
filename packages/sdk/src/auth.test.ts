@@ -168,9 +168,12 @@ describe('Auth.init — hash handling', () => {
     (globalThis as Record<string, unknown>).window = window;
     (globalThis as Record<string, unknown>).history = window.history;
     globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ id: 'gh:1', login: 'alice', avatarUrl: null, dateOfBirth: null }), {
-        status: 200,
-      }),
+      new Response(
+        JSON.stringify({ id: 'gh:1', login: 'alice', avatarUrl: null, dateOfBirth: null }),
+        {
+          status: 200,
+        },
+      ),
     );
 
     const auth = new Auth('demo', 'https://api.example');

@@ -128,10 +128,7 @@ describe('checkNoTracking', () => {
   });
 
   it('flags gtag config call', async () => {
-    await writeFile(
-      join(dir, 'web', 'index.html'),
-      "<script>gtag('config', 'G-XXXX');</script>",
-    );
+    await writeFile(join(dir, 'web', 'index.html'), "<script>gtag('config', 'G-XXXX');</script>");
     const r = await checkNoTracking(fsFileSource(dir));
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/gtag/);
