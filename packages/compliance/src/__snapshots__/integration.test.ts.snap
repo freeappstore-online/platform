@@ -3,6 +3,15 @@
 exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
 [
   {
+    "detail": "1 file(s) install trackers directly: web/src/tracking.ts (amplitude)",
+    "name": "Analytics routed through platform loader",
+    "status": "fail",
+    "suggestions": [
+      "Remove the direct SDK and reference the platform loader instead: <script src="https://api.freeappstore.online/v1/analytics.js?app=<id>" defer></script>.",
+      "Configure providers (GA4, Plausible, custom <head>) via PUT /v1/apps/<id>/analytics — the loader emits the right tags so policy can evolve without redeploying every app.",
+    ],
+  },
+  {
     "detail": "missing: Manrope, Fraunces",
     "name": "Brand fonts present",
     "status": "fail",
@@ -96,15 +105,6 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     ],
   },
   {
-    "detail": "1 file(s) install trackers directly: web/src/tracking.ts (amplitude)",
-    "name": "Analytics routed through platform loader",
-    "status": "fail",
-    "suggestions": [
-      "Remove the direct SDK and reference the platform loader instead: <script src="https://api.freeappstore.online/v1/analytics.js?app=<id>" defer></script>.",
-      "Configure providers (GA4, Plausible, custom <head>) via PUT /v1/apps/<id>/analytics — the loader emits the right tags so policy can evolve without redeploying every app.",
-    ],
-  },
-  {
     "detail": "2 occurrences of 100vh / h-screen — breaks on iOS Safari with URL bar visible",
     "name": "No unsafe 100vh",
     "status": "warn",
@@ -122,6 +122,11 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
       "Add a VitePWA(...) plugin to web/vite.config.ts with an inline manifest:{...} block, OR",
       "Add a static web/public/manifest.json with at least name, short_name, start_url, display, icons.",
     ],
+  },
+  {
+    "detail": "no manifest source (already reported by PWA manifest check)",
+    "name": "PWA maskable icon",
+    "status": "pass",
   },
   {
     "detail": "no apple-mobile-web-app-capable / mobile-web-app-capable meta",

@@ -84,9 +84,12 @@ describe('failing-app fixture', () => {
       'PWA meta tags',
       'Store link',
     ]);
-    // The only passing check on a maximally-broken app: no-scroll
-    // skips because it's not a game project.
-    expect(summary.pass).toEqual(['No scroll (games only)']);
+    // Two passing checks on a maximally-broken app:
+    //  - No scroll (games only) skips because it's not a game project.
+    //  - PWA maskable icon intentionally passes when there's no manifest
+    //    at all; the `PWA manifest` check already fails loudly for that
+    //    and we don't want to double-report the same root cause.
+    expect(summary.pass.sort()).toEqual(['No scroll (games only)', 'PWA maskable icon']);
   });
 });
 
