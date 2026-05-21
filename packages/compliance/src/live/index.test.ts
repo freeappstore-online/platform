@@ -19,13 +19,13 @@ describe('checkNoTrackingLive', () => {
   it('passes when HTML is clean of tracker patterns', () => {
     const r = checkNoTrackingLive('<html><body>hello</body></html>');
     expect(r.status).toBe('pass');
-    expect(r.detail).toMatch(/no known trackers/);
+    expect(r.detail).toMatch(/no direct tracker SDKs/);
   });
 
   it('flags Google Analytics', () => {
     const r = checkNoTrackingLive('<script src="https://google-analytics.com/ga.js"></script>');
     expect(r.status).toBe('fail');
-    expect(r.suggestions?.[0]).toMatch(/Tracking was injected/);
+    expect(r.suggestions?.[0]).toMatch(/platform loader/);
   });
 
   it('flags Plausible, Mixpanel, Hotjar variants', () => {

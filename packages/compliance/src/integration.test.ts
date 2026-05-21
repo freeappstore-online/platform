@@ -64,6 +64,7 @@ describe('failing-app fixture', () => {
     // dropped or renamed checks. Detail/suggestion text is covered by
     // the snapshot test below.
     expect(summary.fail.sort()).toEqual([
+      'Analytics routed through platform loader',
       'Brand fonts present',
       'Brand tokens defined',
       'HTML meta tags',
@@ -71,7 +72,6 @@ describe('failing-app fixture', () => {
       'No .env.production',
       'No brand overrides',
       'No template placeholders',
-      'No tracking SDKs',
       'PWA manifest',
       'PWA offline correctness',
       'Viewport support',

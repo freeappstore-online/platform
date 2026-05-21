@@ -17,6 +17,10 @@ function isAllowedHost(url: URL): boolean {
   if (url.protocol !== 'https:') return false;
   if (host === 'freeappstore.online' || host.endsWith('.freeappstore.online')) return true;
   if (host === 'proappstore.online' || host.endsWith('.proappstore.online')) return true;
+  // FGS games run on freegamestore.online subdomains and share the FAS
+  // backend (analytics, auth, KV). Without this, beacon fetch-fallbacks
+  // and `window.fasAnalytics.event()` calls from game code hit CORS errors.
+  if (host === 'freegamestore.online' || host.endsWith('.freegamestore.online')) return true;
   // CF Pages preview domains
   if (host.endsWith('.pages.dev')) return true;
   return false;

@@ -135,14 +135,19 @@ export async function auditLive(input: LiveAuditInput): Promise<LiveAuditReport>
 export function checkNoTrackingLive(html: string): CheckResult {
   const found = TRACKER_PATTERNS.filter((re) => re.test(html));
   if (found.length === 0) {
-    return { name: 'No tracking SDKs (live)', status: 'pass', detail: 'no known trackers in HTML' };
+    return {
+      name: 'Analytics routed through platform loader (live)',
+      status: 'pass',
+      detail: 'no direct tracker SDKs detected in live HTML',
+    };
   }
   return {
-    name: 'No tracking SDKs (live)',
+    name: 'Analytics routed through platform loader (live)',
     status: 'fail',
-    detail: `${found.length} pattern${found.length === 1 ? '' : 's'} matched`,
+    detail: `${found.length} direct-tracker pattern${found.length === 1 ? '' : 's'} matched`,
     suggestions: [
-      'Tracking was injected after publish — remove the script tag or third-party loader.',
+      'Replace the direct SDK with the platform loader: <script src="https://api.freeappstore.online/v1/analytics.js?app=<id>" defer></script>.',
+      'Configure providers via PUT /v1/apps/<id>/analytics so policy can evolve without a redeploy.',
     ],
   };
 }

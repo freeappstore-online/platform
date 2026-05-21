@@ -98,22 +98,22 @@ export async function checkNoTracking(source: FileSource): Promise<CheckResult> 
 
   if (hits.length === 0) {
     return {
-      name: 'No tracking SDKs',
+      name: 'Analytics routed through platform loader',
       status: 'pass',
-      detail: `scanned for ${TRACKERS.length} known trackers`,
+      detail: `no direct tracker SDKs found; analytics, if any, must flow through the platform loader (api.freeappstore.online/v1/analytics.js?app=<id>)`,
     };
   }
 
   return {
-    name: 'No tracking SDKs',
+    name: 'Analytics routed through platform loader',
     status: 'fail',
-    detail: `${hits.length} file(s) reference trackers: ${hits
+    detail: `${hits.length} file(s) install trackers directly: ${hits
       .slice(0, 3)
       .map((h) => `${h.file} (${h.matches.join(', ')})`)
       .join('; ')}${hits.length > 3 ? '…' : ''}`,
     suggestions: [
-      'FreeAppStore apps must be tracking-free. Remove the SDK + any analytics calls.',
-      'For private-by-design metrics, CF edge analytics already counts requests anonymously.',
+      'Remove the direct SDK and reference the platform loader instead: <script src="https://api.freeappstore.online/v1/analytics.js?app=<id>" defer></script>.',
+      'Configure providers (GA4, Plausible, custom <head>) via PUT /v1/apps/<id>/analytics — the loader emits the right tags so policy can evolve without redeploying every app.',
     ],
   };
 }

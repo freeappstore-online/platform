@@ -39,6 +39,29 @@ export interface Env {
    * on the same custom-domain zone.
    */
   ADMIN?: Fetcher;
+  /**
+   * Shared secret the admin Worker uses to authenticate inbound calls to
+   * `/v1/internal/*` (e.g. PUT analytics/cf-token after minting a CF Web
+   * Analytics site). Set via `wrangler secret put INTERNAL_TOKEN` and the
+   * same value on the admin Worker. Internal routes 403 when the secret is unset.
+   */
+  INTERNAL_TOKEN?: string;
+  /**
+   * Workers Analytics Engine dataset binding. Each page-view from the
+   * `/v1/analytics.js` loader writes one row; per-app rollups + the
+   * `/v1/apps/:id/analytics/stats` dashboard query against this dataset
+   * via CF's SQL API. Optional — analytics still works without it (CF Web
+   * Analytics + BYO tags), but the in-platform dashboard returns "no data".
+   */
+  ANALYTICS?: AnalyticsEngineDataset;
+  /**
+   * CF API token with read access to Workers Analytics Engine ('Workers
+   * Tail Logs:Read' + 'Account Analytics:Read'). Used by the stats endpoint
+   * to query the dataset via the SQL API. Without it, /stats returns 503.
+   */
+  CF_ANALYTICS_API_TOKEN?: string;
+  /** CF account ID; needed for the Analytics Engine SQL API endpoint. */
+  CF_ACCOUNT_ID?: string;
 }
 
 export interface SessionPayload {

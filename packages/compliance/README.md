@@ -17,7 +17,7 @@ for (const r of results) {
 | Name | What it checks | Status on fail |
 |---|---|---|
 | `No template placeholders` | No file still contains `APPNAME` | **fail** |
-| `No tracking SDKs` | No reference to google-analytics / gtag / amplitude / mixpanel / segment / hotjar / plausible / posthog | **fail** |
+| `Analytics routed through platform loader` | No direct install of google-analytics / gtag / amplitude / mixpanel / segment / hotjar / plausible / posthog — analytics must flow through `api.freeappstore.online/v1/analytics.js?app=<id>` | **fail** |
 | `Brand fonts present` | Manrope + Fraunces referenced in CSS or HTML | **fail** |
 | `PWA manifest` | `web/public/manifest.json` exists and has name / short_name / start_url / display | warn |
 | `Bundle size` | Largest JS in `web/dist/assets/` is ≤ 300 KB gzipped | **fail** if too big; warn if not built yet |

@@ -52,6 +52,16 @@ describe('isAllowedOrigin (CORS allowlist)', () => {
     expect(isAllowedOrigin('https://chess.freeappstore.online')).toBe(true);
   });
 
+  it('allows freegamestore.online apex + subdomains (shared FAS backend)', () => {
+    expect(isAllowedOrigin('https://freegamestore.online')).toBe(true);
+    expect(isAllowedOrigin('https://chess.freegamestore.online')).toBe(true);
+  });
+
+  it('allows proappstore.online apex + subdomains (shared session)', () => {
+    expect(isAllowedOrigin('https://proappstore.online')).toBe(true);
+    expect(isAllowedOrigin('https://carsads.proappstore.online')).toBe(true);
+  });
+
   it('allows localhost / 127.0.0.1 dev origins', () => {
     expect(isAllowedOrigin('http://localhost:5173')).toBe(true);
     expect(isAllowedOrigin('http://127.0.0.1:8787')).toBe(true);

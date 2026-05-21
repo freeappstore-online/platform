@@ -96,12 +96,12 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     ],
   },
   {
-    "detail": "1 file(s) reference trackers: web/src/tracking.ts (amplitude)",
-    "name": "No tracking SDKs",
+    "detail": "1 file(s) install trackers directly: web/src/tracking.ts (amplitude)",
+    "name": "Analytics routed through platform loader",
     "status": "fail",
     "suggestions": [
-      "FreeAppStore apps must be tracking-free. Remove the SDK + any analytics calls.",
-      "For private-by-design metrics, CF edge analytics already counts requests anonymously.",
+      "Remove the direct SDK and reference the platform loader instead: <script src="https://api.freeappstore.online/v1/analytics.js?app=<id>" defer></script>.",
+      "Configure providers (GA4, Plausible, custom <head>) via PUT /v1/apps/<id>/analytics — the loader emits the right tags so policy can evolve without redeploying every app.",
     ],
   },
   {
