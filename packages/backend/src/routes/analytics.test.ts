@@ -89,4 +89,23 @@ describe('buildLoaderJs', () => {
     expect(js).toContain('plausible.io');
     expect(js).toContain('/v1/analytics/event');
   });
+
+  it('emits the IndexedDB outbox + drain wiring', () => {
+    const js = buildLoaderJs(null, 'myapp');
+    expect(js).toContain('indexedDB.open');
+    expect(js).toContain('"fasA"');
+    expect(js).toContain('"outbox"');
+    expect(js).toContain('navigator.onLine');
+    expect(js).toContain('addEventListener("online", drain)');
+  });
+
+  it('events include client timestamp `t` for replay accuracy', () => {
+    const js = buildLoaderJs(null, 'myapp');
+    expect(js).toContain('t:Date.now()');
+  });
+
+  it('drain posts a batch (events: [...]) not a single event', () => {
+    const js = buildLoaderJs(null, 'myapp');
+    expect(js).toContain('{events: events}');
+  });
 });

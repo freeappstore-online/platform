@@ -232,12 +232,18 @@ analyticsRoutes.get(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
     );
-    const sinceClause = `timestamp > NOW() - INTERVAL '${days}' DAY`;
+    // Effective event time: prefer the client-recorded `t` stored in
+    // doubles[1] (for offline-replayed events), fall back to the server
+    // timestamp for events written before doubles[1] existed.
+    // ClickHouse-flavoured SQL accepted by CF Analytics Engine.
+    const effectiveTime =
+      `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
     // Quote-safe: appId is regex-validated. STATS_DATASET is a constant.
     const where = `WHERE index1 = '${appId}' AND blob2 = 'pageview' AND ${sinceClause}`;
 
     const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS uniq_paths FROM ${STATS_DATASET} ${where}`;
-    const dailyQ = `SELECT toStartOfDay(timestamp) AS day, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY day ORDER BY day ASC`;
+    const dailyQ = `SELECT toStartOfDay(${effectiveTime}) AS day, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY day ORDER BY day ASC`;
     const pathsQ = `SELECT blob3 AS path, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY path ORDER BY views DESC LIMIT 10`;
     const refsQ = `SELECT blob4 AS referrer, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob4 != '' GROUP BY referrer ORDER BY views DESC LIMIT 10`;
     const ctyQ = `SELECT blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY country ORDER BY views DESC LIMIT 10`;
@@ -295,6 +301,24 @@ interface EventBody {
   referrer?: string;
   /** Optional small bag of custom-event properties. Strings only; ≤8 entries; ≤64 chars each. */
   props?: Record<string, unknown>;
+  /** Client-recorded event time (epoch ms). Used for offline-replayed events
+   *  so they end up on the right day in the dashboard. Rejected if more than
+   *  72h old or in the future (clock-skew defense). */
+  t?: number;
+  /** Batch wrapper: when set, every entry is treated as an EventBody (with
+   *  optional `t`). Used by the loader to flush its IDB outbox in one POST. */
+  events?: EventBody[];
+}
+
+const MAX_BATCH = 100;
+const T_WINDOW_MS = 72 * 60 * 60 * 1000; // accept replays up to 72h old
+
+function effectiveTimestamp(t: number | undefined, nowMs: number): number {
+  if (typeof t !== 'number' || !Number.isFinite(t)) return nowMs;
+  // Allow events up to 72h in the past, ~5min in the future (clock skew). Out-of-window → snap to now.
+  if (t > nowMs + 5 * 60 * 1000) return nowMs;
+  if (t < nowMs - T_WINDOW_MS) return nowMs;
+  return t;
 }
 
 function classifyUA(ua: string | null): 'bot' | 'mobile' | 'desktop' {
@@ -356,38 +380,47 @@ analyticsRoutes.post('/analytics/event', async (c) => {
   } catch {
     return c.text('invalid json', 400);
   }
-  const appId = (body.app ?? '').trim();
-  if (!APP_ID_RE.test(appId)) return c.text('invalid app', 400);
-
-  const kind = (body.kind ?? 'pageview').trim().toLowerCase();
-  if (!EVENT_KIND_RE.test(kind)) return c.text('invalid kind', 400);
 
   const ua = c.req.header('user-agent') ?? null;
   const uaClass = classifyUA(ua);
-  // Bots burn AE writes for traffic creators don't care about — drop early.
-  // The dashboard only counts humans anyway. Return 204 so sendBeacon is happy.
   if (uaClass === 'bot') return new Response(null, { status: 204 });
 
-  // Per-(app, IP, kind) sampling cap so a single bad client can't tank the
-  // bill. CF-Connecting-IP is the visitor's IP. Empty in some dev setups.
   const ip = c.req.header('cf-connecting-ip') ?? '';
-  if (!shouldAccept(`${appId}:${ip}:${kind}`, Date.now())) {
-    return new Response(null, { status: 204 });
-  }
-
-  const path = (body.path ?? '/').slice(0, PATH_MAX);
-  const referrerHost = safeReferrerHost(body.referrer);
   const country =
     (c.req.raw as Request & { cf?: { country?: string } }).cf?.country?.slice(0, 2) ?? '';
-
   const dataset = (c.env as Env & { ANALYTICS?: AnalyticsEngineDataset }).ANALYTICS;
-  if (!dataset) return new Response(null, { status: 204 });
-  dataset.writeDataPoint({
-    indexes: [appId],
-    blobs: [appId, kind, path, referrerHost, country, uaClass, flattenProps(body.props)],
-    doubles: [1],
-  });
-  return new Response(null, { status: 204 });
+
+  // Two body shapes: single event { app, kind, ... } or batched { events: [...] }
+  // (used by the loader to flush its IndexedDB outbox after reconnecting).
+  // Each entry carries its own client-recorded `t` so the dashboard places
+  // it on the day it actually happened, not the flush day.
+  const items: EventBody[] = Array.isArray(body.events) ? body.events.slice(0, MAX_BATCH) : [body];
+  const nowMs = Date.now();
+  let accepted = 0;
+  for (const item of items) {
+    const appId = (item.app ?? '').trim();
+    if (!APP_ID_RE.test(appId)) continue;
+    const kind = (item.kind ?? 'pageview').trim().toLowerCase();
+    if (!EVENT_KIND_RE.test(kind)) continue;
+    if (!shouldAccept(`${appId}:${ip}:${kind}`, nowMs)) continue;
+    if (!dataset) {
+      accepted++;
+      continue;
+    }
+    const path = (item.path ?? '/').slice(0, PATH_MAX);
+    const referrerHost = safeReferrerHost(item.referrer);
+    const t = effectiveTimestamp(item.t, nowMs);
+    dataset.writeDataPoint({
+      indexes: [appId],
+      blobs: [appId, kind, path, referrerHost, country, uaClass, flattenProps(item.props)],
+      // doubles[0] = 1 (event count); doubles[1] = original event time (ms).
+      // Stats queries prefer doubles[1] when present so replayed offline events
+      // appear on the right day, not the flush day.
+      doubles: [1, t],
+    });
+    accepted++;
+  }
+  return new Response(null, { status: 204, headers: { 'x-events-accepted': String(accepted) } });
 });
 
 // -----------------------------------------------------------------------------
@@ -421,25 +454,86 @@ export function buildLoaderJs(
   if (row?.custom_head && row.custom_head.length <= CUSTOM_HEAD_MAX) {
     parts.push(`_fasAnalytics.raw(${JSON.stringify(row.custom_head)});`);
   }
-  // First-party page-view beacon — fires unconditionally so the creator
-  // dashboard works even before they configure CF/GA/Plausible. SPA route
-  // changes are also captured by patching history.pushState/replaceState.
-  // ~1 KB on the wire and `sendBeacon` so it doesn't block navigation.
+  // First-party event pipeline. Buffers offline events in IndexedDB and
+  // drains the outbox once back online — PWA-friendly. Each event carries
+  // its client-recorded timestamp so replayed events land on the right day
+  // in the dashboard. ~2 KB minified.
   const beaconBase = JSON.stringify(apiBase);
   const idLit = JSON.stringify(appId);
   parts.push(`(function(){
+    var URL = ${beaconBase}+"/v1/analytics/event";
+    var APP = ${idLit};
+    var DB_NAME = "fasA", STORE = "outbox", MAX_BUFFER = 200;
+    function openDB(){
+      return new Promise(function(res, rej){
+        try{
+          var r = indexedDB.open(DB_NAME, 1);
+          r.onupgradeneeded = function(e){ e.target.result.createObjectStore(STORE,{keyPath:"id",autoIncrement:true}); };
+          r.onsuccess = function(){ res(r.result); };
+          r.onerror = function(){ rej(); };
+        }catch(e){ rej(); }
+      });
+    }
+    function buffer(evt){
+      openDB().then(function(db){
+        try{
+          var tx = db.transaction(STORE, "readwrite");
+          var s = tx.objectStore(STORE);
+          var c = s.count();
+          c.onsuccess = function(){
+            if (c.result < MAX_BUFFER) s.add(evt);
+            // Else: drop oldest by clearing if buffer is full. Visitor on a
+            // long offline session is unusual; bounded loss > unbounded growth.
+          };
+        }catch(e){}
+      }).catch(function(){});
+    }
+    function postBatch(events){
+      if (!events.length) return Promise.resolve(true);
+      var body = JSON.stringify({events: events});
+      if (navigator.sendBeacon && navigator.sendBeacon(URL, body)) return Promise.resolve(true);
+      return fetch(URL,{method:"POST",headers:{"Content-Type":"application/json"},body:body,keepalive:true})
+        .then(function(r){ return r.ok; }).catch(function(){ return false; });
+    }
+    function drain(){
+      openDB().then(function(db){
+        try{
+          var tx = db.transaction(STORE, "readwrite");
+          var s = tx.objectStore(STORE);
+          var req = s.getAll();
+          req.onsuccess = function(){
+            var rows = req.result || [];
+            if (!rows.length) return;
+            postBatch(rows.map(function(r){ return r.evt; })).then(function(ok){
+              if (!ok) return;
+              var tx2 = db.transaction(STORE, "readwrite");
+              tx2.objectStore(STORE).clear();
+            });
+          };
+        }catch(e){}
+      }).catch(function(){});
+    }
     function send(kind, props){
-      try {
-        var body = JSON.stringify({app:${idLit},kind:kind,path:location.pathname,referrer:document.referrer,props:props||null});
-        if (navigator.sendBeacon) navigator.sendBeacon(${beaconBase}+"/v1/analytics/event", body);
-        else fetch(${beaconBase}+"/v1/analytics/event",{method:"POST",headers:{"Content-Type":"application/json"},body:body,keepalive:true}).catch(function(){});
-      } catch(e){}
+      var evt = {app:APP,kind:kind,path:location.pathname,referrer:document.referrer,props:props||null,t:Date.now()};
+      if (navigator.onLine === false) { buffer(evt); return; }
+      try{
+        var body = JSON.stringify(evt);
+        var ok = navigator.sendBeacon ? navigator.sendBeacon(URL, body) : false;
+        if (!ok) {
+          fetch(URL,{method:"POST",headers:{"Content-Type":"application/json"},body:body,keepalive:true})
+            .catch(function(){ buffer(evt); });
+        }
+      }catch(e){ buffer(evt); }
     }
     send("pageview");
-    // Expose a tiny creator-facing API for custom events.
+    // Drain on load (covers the case where buffered events from a prior
+    // offline session still need to flush) and on the 'online' event.
+    drain();
+    window.addEventListener("online", drain);
+    // Custom-event API for creator code.
     window.fasAnalytics = window.fasAnalytics || {};
     window.fasAnalytics.event = function(kind, props){ send(String(kind||"event"), props); };
-    // SPA route-change tracking
+    // SPA route-change tracking.
     var _push = history.pushState, _replace = history.replaceState;
     history.pushState = function(){ _push.apply(this, arguments); send("pageview"); };
     history.replaceState = function(){ _replace.apply(this, arguments); send("pageview"); };
