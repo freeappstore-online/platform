@@ -41,6 +41,29 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
   };
 }
 
+/**
+ * Require a platform admin. Subset of authenticated users whose GitHub
+ * login appears in the comma-separated `ADMIN_GITHUB_LOGINS` env var.
+ * Used to gate cross-app analytics aggregation, abuse audits, etc.
+ *
+ * The env var is optional — when unset, no user is admin and this
+ * always 403s. Set on the deployed Worker via `wrangler secret put
+ * ADMIN_GITHUB_LOGINS` with a single name like "serge-ivo" or a
+ * comma-separated list.
+ */
+export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<CurrentUser> {
+  const user = await requireUser(c);
+  const env = c.env as Env & { ADMIN_GITHUB_LOGINS?: string };
+  const admins = (env.ADMIN_GITHUB_LOGINS ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  if (!admins.includes(user.login.toLowerCase())) {
+    throw new HttpError(403, 'admin only');
+  }
+  return user;
+}
+
 export class HttpError extends Error {
   constructor(
     readonly status: number,

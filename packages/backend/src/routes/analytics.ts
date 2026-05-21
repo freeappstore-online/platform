@@ -15,7 +15,7 @@
 //     admin Worker; owners cannot rotate it via this endpoint.
 
 import { type Context, Hono } from 'hono';
-import { type CurrentUser, HttpError, requireUser } from '../lib/auth.js';
+import { type CurrentUser, HttpError, requireAdmin, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const analyticsRoutes = new Hono<{ Bindings: Env }>();
@@ -374,6 +374,76 @@ analyticsRoutes.get(
     } catch (err) {
       if (err instanceof HttpError) throw err;
       throw new HttpError(502, err instanceof Error ? err.message : 'live query failed');
+    }
+  }),
+);
+
+// -----------------------------------------------------------------------------
+// Admin platform aggregate — cross-app totals + top apps + top countries +
+// daily series. Gated on the ADMIN_GITHUB_LOGINS env list (small allowlist of
+// trusted operators). The dataset already has every app's events; the
+// difference vs the per-app stats endpoint is just dropping the `index1 = X`
+// filter so the GROUP BY can roll up across the whole platform.
+// -----------------------------------------------------------------------------
+
+analyticsRoutes.get(
+  '/analytics/admin/platform',
+  wrap(async (c) => {
+    await requireAdmin(c);
+    const days = Math.min(
+      STATS_DAYS_MAX,
+      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+    );
+    const bucketParam = (c.req.query('bucket') ?? '').trim().toLowerCase();
+    const bucket: 'hour' | 'day' =
+      bucketParam === 'hour' || bucketParam === 'day'
+        ? bucketParam
+        : days <= 1
+          ? 'hour'
+          : 'day';
+    const seriesGroup = bucket === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
+    const effectiveTime =
+      `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    // Note: no `index1 = '<appId>'` filter here. We aggregate across every
+    // app on this backend's dataset. blob1 carries the appId so GROUP BY
+    // blob1 surfaces the top apps without an index scan.
+    const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+    const where = `WHERE blob2 = 'pageview' AND ${sinceClause}`;
+
+    const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob1) AS active_apps FROM ${STATS_DATASET} ${where}`;
+    const seriesQ = `SELECT ${seriesGroup}(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY t ORDER BY t ASC`;
+    const topAppsQ = `SELECT blob1 AS app, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY app ORDER BY views DESC LIMIT 20`;
+    const topCtyQ = `SELECT blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY country ORDER BY views DESC LIMIT 10`;
+    const devQ = `SELECT blob6 AS device, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY device`;
+    // Total custom events (all non-pageview kinds) — a small headline number
+    // that says "is anyone actually using the SDK?" without paying for the
+    // full per-kind breakdown.
+    const customQ = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE blob2 != 'pageview' AND ${sinceClause}`;
+
+    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+    try {
+      const [totals, series, topApps, topCtys, devs, custom] = await Promise.all([
+        cfAnalyticsSql<{ views: number; active_apps: number }>(env, totalsQ),
+        cfAnalyticsSql<{ t: string; views: number }>(env, seriesQ),
+        cfAnalyticsSql<{ app: string; views: number }>(env, topAppsQ),
+        cfAnalyticsSql<{ country: string; views: number }>(env, topCtyQ),
+        cfAnalyticsSql<{ device: string; views: number }>(env, devQ),
+        cfAnalyticsSql<{ c: number }>(env, customQ),
+      ]);
+      return c.json({
+        days,
+        bucket,
+        total_views: Number(totals[0]?.views ?? 0),
+        active_apps: Number(totals[0]?.active_apps ?? 0),
+        custom_events: Number(custom[0]?.c ?? 0),
+        series: series.map((r) => ({ t: r.t, views: Number(r.views) })),
+        top_apps: topApps.map((r) => ({ app: r.app, views: Number(r.views) })),
+        top_countries: topCtys.map((r) => ({ country: r.country, views: Number(r.views) })),
+        device_split: devs.map((r) => ({ device: r.device, views: Number(r.views) })),
+      });
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(502, err instanceof Error ? err.message : 'platform stats failed');
     }
   }),
 );

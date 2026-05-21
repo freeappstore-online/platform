@@ -62,6 +62,13 @@ export interface Env {
   CF_ANALYTICS_API_TOKEN?: string;
   /** CF account ID; needed for the Analytics Engine SQL API endpoint. */
   CF_ACCOUNT_ID?: string;
+  /**
+   * Comma-separated GitHub logins (e.g. "serge-ivo,other-admin") allowed to
+   * call admin-only endpoints — currently just /v1/analytics/admin/platform
+   * which aggregates across all apps. Optional; when unset, no user is admin
+   * and admin endpoints 403. Set via `wrangler secret put ADMIN_GITHUB_LOGINS`.
+   */
+  ADMIN_GITHUB_LOGINS?: string;
 }
 
 export interface SessionPayload {
