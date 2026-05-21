@@ -232,6 +232,12 @@ analyticsRoutes.get(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
     );
+    // `?kind=` filters which event kind the stats describe. Defaults to
+    // 'pageview' so existing dashboard consumers keep working. Validated
+    // against the same regex the ingest endpoint uses so we can't be
+    // tricked into SQL-injecting through the WHERE clause.
+    const kindParam = (c.req.query('kind') ?? 'pageview').trim().toLowerCase();
+    if (!EVENT_KIND_RE.test(kindParam)) throw new HttpError(400, 'invalid kind');
     // Effective event time: prefer the client-recorded `t` stored in
     // doubles[1] (for offline-replayed events), fall back to the server
     // timestamp for events written before doubles[1] existed.
@@ -239,8 +245,8 @@ analyticsRoutes.get(
     const effectiveTime =
       `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
     const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
-    // Quote-safe: appId is regex-validated. STATS_DATASET is a constant.
-    const where = `WHERE index1 = '${appId}' AND blob2 = 'pageview' AND ${sinceClause}`;
+    // Quote-safe: appId + kindParam are regex-validated. STATS_DATASET is a constant.
+    const where = `WHERE index1 = '${appId}' AND blob2 = '${kindParam}' AND ${sinceClause}`;
 
     const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS uniq_paths FROM ${STATS_DATASET} ${where}`;
     const dailyQ = `SELECT toStartOfDay(${effectiveTime}) AS day, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY day ORDER BY day ASC`;
@@ -268,10 +274,49 @@ analyticsRoutes.get(
         top_countries: ctys.map((r) => ({ country: r.country, views: Number(r.views) })),
         device_split: devs.map((r) => ({ device: r.device, views: Number(r.views) })),
       };
-      return c.json({ appId, days, stats: body });
+      return c.json({ appId, days, kind: kindParam, stats: body });
     } catch (err) {
       if (err instanceof HttpError) throw err;
       throw new HttpError(502, err instanceof Error ? err.message : 'stats query failed');
+    }
+  }),
+);
+
+// -----------------------------------------------------------------------------
+// Custom events index: lists the distinct event kinds that have fired for
+// this app, with counts. Powers the "Custom events" panel in the creator
+// dashboard. Excludes 'pageview' from the list since pageviews are already
+// the headline metric — separating them prevents pageview from drowning out
+// the actual custom events.
+// -----------------------------------------------------------------------------
+
+analyticsRoutes.get(
+  '/apps/:appId/analytics/events',
+  wrap(async (c) => {
+    const appId = c.req.param('appId')!;
+    await requireOwner(c, appId);
+    const days = Math.min(
+      STATS_DAYS_MAX,
+      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+    );
+    const effectiveTime =
+      `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+    const where = `WHERE index1 = '${appId}' AND blob2 != 'pageview' AND ${sinceClause}`;
+
+    // Top 20 event kinds by count. 20 is plenty for any sensible app —
+    // creators with more than ~5 event kinds are usually over-instrumenting.
+    const kindsQ = `SELECT blob2 AS kind, SUM(_sample_interval) AS count FROM ${STATS_DATASET} ${where} GROUP BY kind ORDER BY count DESC LIMIT 20`;
+
+    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+    try {
+      const rows = await cfAnalyticsSql<{ kind: string; count: number }>(env, kindsQ);
+      const events = rows.map((r) => ({ kind: r.kind, count: Number(r.count) }));
+      const total = events.reduce((sum, e) => sum + e.count, 0);
+      return c.json({ appId, days, total_events: total, events });
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(502, err instanceof Error ? err.message : 'events query failed');
     }
   }),
 );
