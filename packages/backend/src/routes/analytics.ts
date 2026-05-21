@@ -379,6 +379,79 @@ analyticsRoutes.get(
 );
 
 // -----------------------------------------------------------------------------
+// Diagnostics — what's blocking analytics from showing data for this app.
+// Called by the dashboard when total_views=0 so we render a smart empty
+// state instead of "no data yet :)". Each check is best-effort; failures
+// degrade the verdict to "unknown" rather than failing the request.
+// -----------------------------------------------------------------------------
+
+analyticsRoutes.get(
+  '/apps/:appId/analytics/diagnostics',
+  wrap(async (c) => {
+    const appId = c.req.param('appId')!;
+    await requireOwner(c, appId);
+
+    const env = c.env as Env & {
+      ANALYTICS?: AnalyticsEngineDataset;
+      CF_ACCOUNT_ID?: string;
+      CF_ANALYTICS_API_TOKEN?: string;
+    };
+
+    // 1. BYO/auto config wired?
+    const row = await loadRow(c, appId);
+    const cfBeaconConfigured = !!(row?.cf_beacon_token && CF_TOKEN_RE.test(row.cf_beacon_token));
+    const byoConfigured = !!(row?.ga4 || row?.plausible || row?.custom_head);
+
+    // 2. Dataset binding wired in wrangler?
+    const datasetBound = !!env.ANALYTICS;
+
+    // 3. Stats query path works? (CF API token + account id)
+    const statsQueryable = !!(env.CF_ACCOUNT_ID && env.CF_ANALYTICS_API_TOKEN);
+
+    // 4. Any events ever received for this app? Wide window — 90 days —
+    //    so we don't keep saying "no data" if traffic happened weeks ago.
+    let eventsEver = false;
+    let eventsLast24h = 0;
+    if (datasetBound && statsQueryable) {
+      try {
+        const q = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE index1 = '${appId}' AND timestamp > NOW() - INTERVAL '90' DAY`;
+        const rows = await cfAnalyticsSql<{ c: number }>(env, q);
+        eventsEver = Number(rows[0]?.c ?? 0) > 0;
+
+        const q24 = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE index1 = '${appId}' AND blob2 = 'pageview' AND timestamp > NOW() - INTERVAL '1' DAY`;
+        const rows24 = await cfAnalyticsSql<{ c: number }>(env, q24);
+        eventsLast24h = Number(rows24[0]?.c ?? 0);
+      } catch {
+        // Best-effort; treat as unknown.
+      }
+    }
+
+    // 5. Verdict — what should the dashboard tell the creator to do next?
+    // Worst-actionable-thing-first. The UI renders the first non-ok item.
+    let verdict: 'ok' | 'never_seen_event' | 'no_dataset_binding' | 'no_stats_query' | 'silent_24h';
+    if (!datasetBound) verdict = 'no_dataset_binding';
+    else if (!statsQueryable) verdict = 'no_stats_query';
+    else if (!eventsEver) verdict = 'never_seen_event';
+    else if (eventsLast24h === 0) verdict = 'silent_24h';
+    else verdict = 'ok';
+
+    return c.json({
+      appId,
+      verdict,
+      checks: {
+        cf_beacon_configured: cfBeaconConfigured,
+        byo_tag_configured: byoConfigured,
+        dataset_bound: datasetBound,
+        stats_queryable: statsQueryable,
+        events_ever: eventsEver,
+        events_last_24h: eventsLast24h,
+      },
+      loader_url: `https://api.freeappstore.online/v1/analytics.js?app=${appId}`,
+    });
+  }),
+);
+
+// -----------------------------------------------------------------------------
 // Event ingest: every page load from the platform loader script sends a
 // sendBeacon to /v1/analytics/event. We write one row to Workers Analytics
 // Engine per event (app_id, path, referrer host, country, user-agent class).
