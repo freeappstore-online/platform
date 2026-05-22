@@ -1,6 +1,6 @@
 import { decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { HttpError, requireUser, isAdminLogin } from '../lib/auth.js';
 import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
 import { signPayload, signSession, verifyPayload } from '../lib/session.js';
@@ -96,7 +96,8 @@ authRoutes.get('/auth/github/callback', async (c) => {
     .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url, Date.now())
     .run();
 
-  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
+  const roles = await computeRoles(userId, ghUser.login, c.env);
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles });
   const redirect = new URL(state.returnTo);
   redirect.hash = `fas_session=${encodeURIComponent(session)}`;
   return c.redirect(redirect.toString());
@@ -158,7 +159,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
     };
 
     const userId = `google:${claims.sub}`;
-    const login = claims.email ? claims.email.split('@')[0] : claims.sub;
+    const login = claims.email ? (claims.email.split('@')[0] ?? claims.sub) : claims.sub;
     const displayName = claims.name ?? login;
 
     await c.env.DB.prepare(
@@ -180,7 +181,8 @@ authRoutes.get('/auth/google/callback', async (c) => {
       )
       .run();
 
-    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
+    const roles = await computeRoles(userId, login, c.env);
+    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles });
     const redirect = new URL(state.returnTo);
     redirect.hash = `fas_session=${encodeURIComponent(session)}`;
     return c.redirect(redirect.toString());
@@ -259,7 +261,7 @@ authRoutes.get('/auth/email/callback', async (c) => {
   if (!isAllowedReturnTo(state.returnTo)) return c.text('returnTo not allowed', 400);
 
   const userId = `email:${state.email}`;
-  const login = state.email.split('@')[0];
+  const login = state.email.split('@')[0] ?? state.email;
 
   await c.env.DB.prepare(
     `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
@@ -271,7 +273,8 @@ authRoutes.get('/auth/email/callback', async (c) => {
     .bind(userId, login, Date.now(), state.email, state.email, login)
     .run();
 
-  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY);
+  const roles = await computeRoles(userId, login, c.env);
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles });
   const redirect = new URL(state.returnTo);
   redirect.hash = `fas_session=${encodeURIComponent(session)}`;
   return c.redirect(redirect.toString());
@@ -323,6 +326,36 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
     throw err;
   }
 });
+
+/**
+ * Compute platform roles for a user at sign-in time. Roles are baked
+ * into the session token so per-request checks are zero-I/O.
+ *
+ * - 'user' — always (signed in)
+ * - 'creator' — has at least one published app
+ * - 'admin' — login is in ADMIN_GITHUB_LOGINS env var
+ */
+async function computeRoles(userId: string, login: string, env: Env): Promise<string[]> {
+  const roles = ['user'];
+
+  // Check if the user has published any apps (creator role).
+  // The apps table may not exist in test environments — catch gracefully.
+  try {
+    const appRow = await env.DB.prepare(
+      'SELECT 1 FROM apps WHERE creator_id = ? LIMIT 1',
+    )
+      .bind(userId)
+      .first();
+    if (appRow) roles.push('creator');
+  } catch {
+    // Table doesn't exist yet (fresh DB or test env) — skip creator check
+  }
+
+  // Check admin list
+  if (isAdminLogin(login, env)) roles.push('admin');
+
+  return roles;
+}
 
 function ageFromDob(dob: string): number | null {
   const d = new Date(`${dob}T00:00:00Z`);

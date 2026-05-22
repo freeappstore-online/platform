@@ -2,9 +2,15 @@ import type { SessionPayload } from '../types.js';
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
-export async function signSession(uid: string, signingKey: string): Promise<string> {
+export async function signSession(
+  uid: string,
+  signingKey: string,
+  opts?: { roles?: string[]; appRoles?: Record<string, string[]> },
+): Promise<string> {
   const payload: SessionPayload = {
     uid,
+    roles: opts?.roles ?? ['user'],
+    appRoles: opts?.appRoles ?? {},
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };
