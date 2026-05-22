@@ -9,6 +9,7 @@ import {
   validateRule,
 } from '../lib/proxy-allowlist.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
+import { resolveUserKey } from './keys.js';
 import type { Env } from '../types.js';
 
 export const secretsRoutes = new Hono<{ Bindings: Env }>();
@@ -348,20 +349,29 @@ const PROXY_RESPONSE_SKIP_HEADERS = new Set([
   'content-length',
 ]);
 
+// Map upstream hosts to user key vault provider IDs.
+const HOST_TO_PROVIDER: Record<string, string> = {
+  'api.openai.com': 'openai',
+  'api.anthropic.com': 'anthropic',
+  'openrouter.ai': 'openrouter',
+  'api.openrouter.ai': 'openrouter',
+  'generativelanguage.googleapis.com': 'google-ai',
+  'api.replicate.com': 'replicate',
+  'api.stability.ai': 'stability',
+  'api.elevenlabs.io': 'elevenlabs',
+  'api.stripe.com': 'stripe',
+};
+
 secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
   try {
     // Auth: any valid platform session can call the proxy. The app's owner
     // pays the quota, not the caller. (See spec: free tier, per-app quota.)
-    await requireUser(c);
+    const user = await requireUser(c);
     const kek = requireKek(c);
     const appId = c.req.param('appId')!;
     const host = c.req.param('host')!;
 
     // Reconstruct upstream URL: /v1/apps/:appId/proxy/<host>/<rest...>
-    // Hono captures the path-info after the wildcard in c.req.path; we strip
-    // the prefix manually because Hono's '*' param key isn't always exposed.
-    // startsWith (not indexOf): the prefix should always be at offset 0;
-    // anything else is a sign the request was rewritten in transit.
     const prefix = `/v1/apps/${appId}/proxy/${host}/`;
     if (!c.req.path.startsWith(prefix)) {
       return c.json({ error: 'malformed proxy path' }, 400);
@@ -379,49 +389,82 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       .all<AllowlistRow>();
     const rules = (ruleRows.results ?? []).map(rowToRule);
     const rule = pickRule(rules, upstreamUrl, c.req.method);
+
+    // If no app-level rule matches, try the user's key vault.
+    // This is the path for AI providers (OpenAI, Anthropic, etc.) where users
+    // store their own keys on the platform.
+    let plaintext: string;
+    let injectedUrl: string;
+    let injectedHeaders: Headers;
+
     if (!rule) {
-      return c.json({ error: `no allowlist match for ${c.req.method} ${upstreamUrl}` }, 403);
-    }
-
-    // Daily cap.
-    const usage = await checkAndBump(d1UsageStore(c.env.DB), {
-      appId,
-      dailyLimit: DAILY_PROXY_REQUESTS,
-      nowMs: Date.now(),
-    });
-    if (!usage.allowed) {
-      return c.json(
-        { error: `app daily quota exceeded (${DAILY_PROXY_REQUESTS} requests/day)` },
-        429,
-      );
-    }
-
-    // Look up + decrypt the secret.
-    const secretRow = await c.env.DB.prepare(
-      `SELECT key_ciphertext, dek_wrapped, iv FROM app_secrets
-       WHERE app_id = ? AND name = ?`,
-    )
-      .bind(appId, rule.secretName)
-      .first<{ key_ciphertext: unknown; dek_wrapped: unknown; iv: unknown }>();
-    if (!secretRow) {
-      // Allowlist references a missing secret — developer-visible config bug.
-      return c.json({ error: `secret '${rule.secretName}' not found` }, 500);
-    }
-    const sealed: SealedSecret = {
-      keyCiphertext: toUint8(secretRow.key_ciphertext),
-      dekWrapped: toUint8(secretRow.dek_wrapped),
-      iv: toUint8(secretRow.iv),
-    };
-    const plaintext = await openSecret(sealed, kek);
-
-    // Build forward request: filter inbound headers, then inject secret.
-    const forwardHeaders = new Headers();
-    for (const [k, v] of c.req.raw.headers.entries()) {
-      if (!PROXY_FORWARD_SKIP_HEADERS.has(k.toLowerCase())) {
-        forwardHeaders.set(k, v);
+      const provider = HOST_TO_PROVIDER[host.toLowerCase()];
+      if (!provider) {
+        return c.json({ error: `no allowlist match for ${c.req.method} ${upstreamUrl}` }, 403);
       }
+      const userKey = await resolveUserKey(c.env.DB, (user as CurrentUser).id, provider, kek);
+      if (!userKey) {
+        return c.json({
+          error: `no_key`,
+          provider,
+          message: `You need to configure your ${provider} API key. Visit the platform key management page.`,
+          manage_url: `/v1/keys?provider=${provider}&app=${appId}`,
+        }, 403);
+      }
+      plaintext = userKey;
+
+      // User keys always inject as Bearer token.
+      const forwardHeaders = new Headers();
+      for (const [k, v] of c.req.raw.headers.entries()) {
+        if (!PROXY_FORWARD_SKIP_HEADERS.has(k.toLowerCase())) {
+          forwardHeaders.set(k, v);
+        }
+      }
+      forwardHeaders.set('Authorization', `Bearer ${plaintext}`);
+      injectedUrl = upstreamUrl;
+      injectedHeaders = forwardHeaders;
+    } else {
+      // Daily cap (only for app-level secrets, not user keys).
+      const usage = await checkAndBump(d1UsageStore(c.env.DB), {
+        appId,
+        dailyLimit: DAILY_PROXY_REQUESTS,
+        nowMs: Date.now(),
+      });
+      if (!usage.allowed) {
+        return c.json(
+          { error: `app daily quota exceeded (${DAILY_PROXY_REQUESTS} requests/day)` },
+          429,
+        );
+      }
+
+      // Look up + decrypt the app secret.
+      const secretRow = await c.env.DB.prepare(
+        `SELECT key_ciphertext, dek_wrapped, iv FROM app_secrets
+         WHERE app_id = ? AND name = ?`,
+      )
+        .bind(appId, rule.secretName)
+        .first<{ key_ciphertext: unknown; dek_wrapped: unknown; iv: unknown }>();
+      if (!secretRow) {
+        return c.json({ error: `secret '${rule.secretName}' not found` }, 500);
+      }
+      const sealed: SealedSecret = {
+        keyCiphertext: toUint8(secretRow.key_ciphertext),
+        dekWrapped: toUint8(secretRow.dek_wrapped),
+        iv: toUint8(secretRow.iv),
+      };
+      plaintext = await openSecret(sealed, kek);
+
+      // Build forward request: filter inbound headers, then inject secret.
+      const forwardHeaders = new Headers();
+      for (const [k, v] of c.req.raw.headers.entries()) {
+        if (!PROXY_FORWARD_SKIP_HEADERS.has(k.toLowerCase())) {
+          forwardHeaders.set(k, v);
+        }
+      }
+      const injected = injectSecret(rule, upstreamUrl, forwardHeaders, plaintext);
+      injectedUrl = injected.url;
+      injectedHeaders = injected.headers;
     }
-    const injected = injectSecret(rule, upstreamUrl, forwardHeaders, plaintext);
 
     // Body: cap at 100 KB. Pull into memory once so we can both measure
     // and forward without re-streaming a hostile body.
@@ -437,9 +480,9 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       forwardBody = buf;
     }
 
-    const upstreamRes = await fetch(injected.url, {
+    const upstreamRes = await fetch(injectedUrl, {
       method: c.req.method,
-      headers: injected.headers,
+      headers: injectedHeaders,
       body: forwardBody,
     });
 
@@ -450,11 +493,8 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       return c.json({ error: 'upstream response too large' }, 502);
     }
 
-    // Update last_used_at probabilistically — same idea as the daily counter,
-    // saves D1 writes on hot keys. Guarded because Hono's executionCtx is
-    // only present when the Worker runtime supplies one (always in prod,
-    // never in plain `app.request()` unit tests); in tests we just skip.
-    if (Math.random() < 0.1) {
+    // Update last_used_at probabilistically (1 in 10) to save D1 writes.
+    if (rule && Math.random() < 0.1) {
       const update = c.env.DB.prepare(
         'UPDATE app_secrets SET last_used_at = ? WHERE app_id = ? AND name = ?',
       )
@@ -463,8 +503,6 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       try {
         c.executionCtx.waitUntil(update);
       } catch {
-        // No exec ctx (test env). The promise still runs; we just don't
-        // have a host to defer it to. Swallow any failure.
         update.catch(() => {});
       }
     }
