@@ -11,6 +11,12 @@ export interface Env {
   GITHUB_CLIENT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /** Apple Sign In — Service ID (client_id), Team ID, Key ID, and PKCS#8 private key. */
+  APPLE_CLIENT_ID?: string;
+  APPLE_TEAM_ID?: string;
+  APPLE_KEY_ID?: string;
+  /** Base64-encoded PKCS#8 private key (the .p8 file content, base64'd for env var storage). */
+  APPLE_PRIVATE_KEY?: string;
   /**
    * Resend API key for transactional email (magic-link auth).
    * Optional so the Worker boots without it in dev; the /auth/email/*

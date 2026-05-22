@@ -1,6 +1,6 @@
 import type { Unsubscribe, User } from './types.js';
 
-export type AuthProvider = 'github' | 'google' | 'email';
+export type AuthProvider = 'github' | 'google' | 'apple' | 'email';
 
 /**
  * Shared across all FAS apps on the same origin — this is intentional SSO.

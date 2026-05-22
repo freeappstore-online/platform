@@ -1,4 +1,4 @@
-import { decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
+import { Apple, decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
 import { HttpError, requireUser, isAdminLogin } from '../lib/auth.js';
 import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
@@ -16,6 +16,12 @@ interface GoogleOAuthState {
   appId: string;
   returnTo: string;
   codeVerifier: string;
+  exp: number;
+}
+
+interface AppleOAuthState {
+  appId: string;
+  returnTo: string;
   exp: number;
 }
 
@@ -190,6 +196,112 @@ authRoutes.get('/auth/google/callback', async (c) => {
     console.error('Google OAuth callback error:', err);
     return c.text(
       `Google sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+      500,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Apple Sign In
+// ---------------------------------------------------------------------------
+
+authRoutes.get('/auth/apple/start', async (c) => {
+  const appId = c.req.query('app_id') ?? '';
+  const returnTo = c.req.query('return_to') ?? '';
+  if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
+  if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
+
+  if (!c.env.APPLE_CLIENT_ID || !c.env.APPLE_TEAM_ID || !c.env.APPLE_KEY_ID || !c.env.APPLE_PRIVATE_KEY) {
+    return c.text('Apple Sign In not configured', 503);
+  }
+
+  const redirectUri = new URL('/v1/auth/apple/callback', c.req.url).toString();
+  const privateKeyBytes = Uint8Array.from(atob(c.env.APPLE_PRIVATE_KEY), (ch) => ch.charCodeAt(0));
+  const apple = new Apple(c.env.APPLE_CLIENT_ID, c.env.APPLE_TEAM_ID, c.env.APPLE_KEY_ID, privateKeyBytes, redirectUri);
+
+  const signedState = await signPayload<AppleOAuthState>(
+    { appId, returnTo, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    c.env.SESSION_SIGNING_KEY,
+  );
+
+  const url = apple.createAuthorizationURL(signedState, ['name', 'email']);
+  return c.redirect(url.toString());
+});
+
+/**
+ * Apple callback is a POST (form_post response_mode).
+ * Apple sends user info (name, email) in the request body only on first sign-in.
+ */
+authRoutes.post('/auth/apple/callback', async (c) => {
+  const body = await c.req.parseBody();
+  const code = body['code'] as string | undefined;
+  const stateRaw = body['state'] as string | undefined;
+  const userJson = body['user'] as string | undefined; // only on first sign-in
+
+  if (!code || !stateRaw) return c.text('missing code or state', 400);
+
+  const state = await verifyPayload<AppleOAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
+  if (!state) return c.text('invalid state', 400);
+  if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
+  if (!isAllowedReturnTo(state.returnTo)) return c.text('return_to not allowed', 400);
+
+  if (!c.env.APPLE_CLIENT_ID || !c.env.APPLE_TEAM_ID || !c.env.APPLE_KEY_ID || !c.env.APPLE_PRIVATE_KEY) {
+    return c.text('Apple Sign In not configured', 503);
+  }
+
+  const redirectUri = new URL('/v1/auth/apple/callback', c.req.url).toString();
+  const privateKeyBytes = Uint8Array.from(atob(c.env.APPLE_PRIVATE_KEY), (ch) => ch.charCodeAt(0));
+  const apple = new Apple(c.env.APPLE_CLIENT_ID, c.env.APPLE_TEAM_ID, c.env.APPLE_KEY_ID, privateKeyBytes, redirectUri);
+
+  try {
+    const tokens = await apple.validateAuthorizationCode(code);
+    const claims = decodeIdToken(tokens.idToken()) as {
+      sub: string;
+      email?: string;
+    };
+
+    // Apple sends user name only on first sign-in, in the POST body
+    let displayName: string | null = null;
+    if (userJson) {
+      try {
+        const appleUser = JSON.parse(userJson) as { name?: { firstName?: string; lastName?: string } };
+        const first = appleUser.name?.firstName ?? '';
+        const last = appleUser.name?.lastName ?? '';
+        displayName = [first, last].filter(Boolean).join(' ') || null;
+      } catch {
+        // malformed user JSON — ignore, use email/sub
+      }
+    }
+
+    const userId = `apple:${claims.sub}`;
+    const login = claims.email ? (claims.email.split('@')[0] ?? claims.sub) : claims.sub;
+
+    await c.env.DB.prepare(
+      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
+       VALUES (?, 0, ?, NULL, ?, 'apple', ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         email = COALESCE(excluded.email, users.email),
+         display_name = COALESCE(excluded.display_name, users.display_name)`,
+    )
+      .bind(
+        userId,
+        login,
+        Date.now(),
+        claims.sub,
+        claims.email ?? null,
+        displayName ?? login,
+      )
+      .run();
+
+    const { roles, appRoles } = await computeRoles(userId, login, c.env);
+    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
+    const redirect = new URL(state.returnTo);
+    redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+    return c.redirect(redirect.toString());
+  } catch (err) {
+    console.error('Apple OAuth callback error:', err);
+    return c.text(
+      `Apple sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`,
       500,
     );
   }
