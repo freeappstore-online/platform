@@ -32,7 +32,9 @@ export async function checkNoEnvProduction(source: FileSource): Promise<CheckRes
     detail: `${offenders.length} .env.production file(s): ${offenders.join(', ')}`,
     suggestions: [
       'Delete the file and add `.env.production` to .gitignore.',
-      'Use Cloudflare Pages → Settings → Environment Variables for production secrets instead.',
+      'For public config (VITE_*): use GitHub repo Variables (Settings > Variables > Actions).',
+      'For API keys: use the platform proxy (fas.proxy.fetch) or user key vault (fas.keys.manage).',
+      'For local dev: use .env.local (gitignored). See SKILLS.md "App Config & Secrets".',
     ],
   };
 }
