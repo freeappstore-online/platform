@@ -130,10 +130,15 @@ Most AI providers offer free tiers:
 
 Apps should default to the cheapest model that works. A todo app's AI summarizer doesn't need GPT-4o -- GPT-4o-mini at 1/30th the cost is fine.
 
-### 5. OpenRouter as the universal fallback
-OpenRouter aggregates 100+ models from every provider behind a single API key. If the platform recommends OpenRouter as the default provider, users configure one key and get access to every AI model. The app picks the model; the user just needs the one key.
+### 5. Default to what users already have
+Most users already have an OpenAI account. Don't ask them to sign up for a new provider. Pick the one they most likely already have:
 
-**Recommended default in SKILLS.md and KeyPrompt:** "We recommend OpenRouter -- one key gives you access to all AI models."
+- **OpenAI** -- most widely held, best default for most AI apps
+- **Google AI (Gemini)** -- most generous free tier, good for cost-sensitive apps
+- **Anthropic** -- strong for coding/reasoning apps
+- **OpenRouter** -- power-user option, one key for 100+ models. Good for apps that want model flexibility, but don't make it the default since most users don't have an account
+
+**Rule of thumb:** default to OpenAI unless you have a specific reason not to.
 
 ## What the platform provides (summary)
 
