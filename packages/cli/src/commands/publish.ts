@@ -504,6 +504,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # If your app uses VITE_* public config (OAuth client IDs, Firebase
+      # config, etc.), add them as GitHub repo Variables and pass them here.
+      # See https://freeappstore.online/skills.md "App Config & Secrets".
+      # Example:
+      #   env:
+      #     VITE_GOOGLE_CLIENT_ID: \${{ vars.VITE_GOOGLE_CLIENT_ID }}
       - name: Build
         run: pnpm build
 
