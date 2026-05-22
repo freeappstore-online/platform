@@ -30,6 +30,9 @@ jobs:
       - name: Build
         run: pnpm -r --filter './packages/*' build
 
+      - name: Design system lint
+        run: bash scripts/check-design-system.sh .
+
       - name: Lint
         run: pnpm lint
 
