@@ -175,6 +175,27 @@ import { FasShell, Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage }
 
 Full docs: [freeappstore.online/docs/ui](https://freeappstore.online/docs/ui)
 
+## For AI Agents
+
+Building with Claude Code, Cursor, or another AI tool? Two options:
+
+**MCP Server (recommended)** -- your agent gets tools to check deploys, look up SDK docs, and list apps:
+```json
+{
+  "mcpServers": {
+    "freeappstore": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.freeappstore.online/mcp"]
+    }
+  }
+}
+```
+
+**SKILLS.md** -- full platform guide (tech stack, SDK reference, CLI, deploy flow, compliance):
+```
+https://freeappstore.online/skills.md
+```
+
 ## License
 
 MIT.

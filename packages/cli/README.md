@@ -35,7 +35,7 @@ Live in 30 seconds at `https://my-app.freeappstore.online`.
 | `fas doctor` | Health check — Node version, git, pnpm, config, signed-in state, API reachability. |
 | `fas init <app-id> [--template standalone\|connected]` | Scaffold a new free app from a platform template. Replaces `APPNAME` placeholders, runs `git init`, makes the first commit. |
 | `fas check [--dir <path>]` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
-| `fas publish` | Provisions repo + Cloudflare Pages project + DNS + storefront entry, then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
+| `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing, then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
 | `fas list` (alias `fas ls`) | List apps you've published. `--json` for scripting. |
 | `fas logs <app-id>` | Tail the live deployment logs for an app's Cloudflare Pages project. |
 
@@ -93,11 +93,29 @@ Every app and game on the platform shares the same visual language — colors, f
 
 1. **Compliance gate**: runs the same checks as `fas check`. Hard failures abort.
 2. **Auth check**: confirms a valid session token (re-login if expired).
-3. **Provision**: POSTs to the platform API, which calls the admin Worker via service binding. Admin creates an empty GitHub repo, sets up the Cloudflare Pages project, adds a custom domain + DNS record, and appends the app to the storefront registry.
-4. **Ownership**: records the app in the platform DB so `fas list` returns it.
-5. **Output**: prints the live URL, repo URL, storefront listing URL, and the `git remote add` + `git push` commands to populate the new repo.
+3. **Provision**: POSTs to the platform API, which calls the admin Worker via service binding. Admin creates an empty GitHub repo, inserts a D1 hosting route (subdomain → R2 prefix), and appends the app to the storefront registry.
+4. **Deploy workflow**: injects `.github/workflows/deploy.yml` locally if missing, so the first `git push` triggers an R2 deploy.
+5. **Ownership**: records the app in the platform DB so `fas list` returns it.
+6. **Output**: prints the live URL, repo URL, storefront listing URL, and the `git remote add` + `git push` commands to populate the new repo.
 
 If auto-provision is unavailable (503 from the API), `publish` falls back to opening a prefilled GitHub Issue form for maintainer review. Use `--issue` to force this path.
+
+## For AI Agents
+
+Building with Claude Code, Cursor, or another AI tool? Connect the MCP server for tool-based access:
+
+```json
+{
+  "mcpServers": {
+    "freeappstore": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.freeappstore.online/mcp"]
+    }
+  }
+}
+```
+
+Or read the full platform guide: [freeappstore.online/skills.md](https://freeappstore.online/skills.md)
 
 ## License
 
