@@ -122,6 +122,12 @@ importers:
 
   packages/sdk:
     devDependencies:
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

@@ -140,6 +140,41 @@ const res = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=Lon
 const data = await res.json();
 ```
 
+### React Hooks
+
+Import from `@freeappstore/sdk/hooks`. Requires React 18+ as a peer dependency.
+
+```tsx
+import { useAuth, useTheme } from '@freeappstore/sdk/hooks';
+
+function App() {
+  const { user, loading, signIn, signOut, deleteAccount } = useAuth(fas);
+  const { theme, preference, setPreference } = useTheme();
+  // ...
+}
+```
+
+### UI Components
+
+Drop-in React components. Import from `@freeappstore/sdk/ui`. Components use CSS custom properties (`--ink`, `--accent`, etc.) to blend into your app's theme.
+
+```tsx
+import { FasShell, Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage } from '@freeappstore/sdk/ui';
+
+// Zero-config shell
+<FasShell app={fas} appName="My App">
+  <MyApp />
+</FasShell>
+
+// Or use individual components
+<Avatar user={user} size={32} />
+<ThemeToggle />
+<ProfileMenu app={fas} />
+<ProfilePage app={fas} />
+```
+
+Full docs: [freeappstore.online/docs/ui](https://freeappstore.online/docs/ui)
+
 ## License
 
 MIT.
