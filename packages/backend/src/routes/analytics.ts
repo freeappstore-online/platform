@@ -241,6 +241,13 @@ analyticsRoutes.get(
     // tricked into SQL-injecting through the WHERE clause.
     const kindParam = (c.req.query('kind') ?? 'pageview').trim().toLowerCase();
     if (!EVENT_KIND_RE.test(kindParam)) throw new HttpError(400, 'invalid kind');
+    // `?path=` narrows the whole stats response to a single page path —
+    // powers the path-drill-down view. Length-capped at 256 (same as the
+    // ingest endpoint's PATH_MAX); single-quote-escaped before embedding
+    // in SQL. Empty / omitted = no path filter, dashboard shows aggregate.
+    const pathParamRaw = c.req.query('path');
+    const pathParam = pathParamRaw ? pathParamRaw.slice(0, 256) : '';
+    const pathClause = pathParam ? ` AND blob3 = '${pathParam.replace(/'/g, "''")}'` : '';
     // `?bucket=hour|day` controls the series granularity. When omitted, we
     // auto-pick: days=1 → hour (24 points, useful for spike investigation),
     // days≥2 → day (saner for week / month / quarter views). Forcing hour
@@ -260,8 +267,10 @@ analyticsRoutes.get(
     const effectiveTime =
       `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
     const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
-    // Quote-safe: appId + kindParam are regex-validated. STATS_DATASET is a constant.
-    const where = `WHERE index1 = '${appId}' AND blob2 = '${kindParam}' AND ${sinceClause}`;
+    // Quote-safe: appId + kindParam are regex-validated. pathClause has
+    // its embedded single quotes doubled per SQL convention. STATS_DATASET
+    // is a constant.
+    const where = `WHERE index1 = '${appId}' AND blob2 = '${kindParam}'${pathClause} AND ${sinceClause}`;
 
     const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS uniq_paths FROM ${STATS_DATASET} ${where}`;
     const seriesQ = `SELECT ${seriesGroup}(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY t ORDER BY t ASC`;
@@ -289,7 +298,7 @@ analyticsRoutes.get(
         top_countries: ctys.map((r) => ({ country: r.country, views: Number(r.views) })),
         device_split: devs.map((r) => ({ device: r.device, views: Number(r.views) })),
       };
-      return c.json({ appId, days, kind: kindParam, bucket, stats: body });
+      return c.json({ appId, days, kind: kindParam, bucket, path: pathParam || null, stats: body });
     } catch (err) {
       if (err instanceof HttpError) throw err;
       throw new HttpError(502, err instanceof Error ? err.message : 'stats query failed');
