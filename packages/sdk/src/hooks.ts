@@ -124,5 +124,10 @@ export function useAuth(app: FreeAppStore) {
     app.auth.signOut();
   }, [app]);
 
-  return { user, loading, signIn, signOut, deleteAccount };
+  const hasRole = useCallback(
+    (role: string) => app.roles.check(role),
+    [app],
+  );
+
+  return { user, loading, signIn, signOut, deleteAccount, hasRole };
 }

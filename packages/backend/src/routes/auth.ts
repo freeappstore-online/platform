@@ -96,8 +96,8 @@ authRoutes.get('/auth/github/callback', async (c) => {
     .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url, Date.now())
     .run();
 
-  const roles = await computeRoles(userId, ghUser.login, c.env);
-  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles });
+  const { roles, appRoles } = await computeRoles(userId, ghUser.login, c.env);
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
   const redirect = new URL(state.returnTo);
   redirect.hash = `fas_session=${encodeURIComponent(session)}`;
   return c.redirect(redirect.toString());
@@ -181,8 +181,8 @@ authRoutes.get('/auth/google/callback', async (c) => {
       )
       .run();
 
-    const roles = await computeRoles(userId, login, c.env);
-    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles });
+    const { roles, appRoles } = await computeRoles(userId, login, c.env);
+    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
     const redirect = new URL(state.returnTo);
     redirect.hash = `fas_session=${encodeURIComponent(session)}`;
     return c.redirect(redirect.toString());
@@ -273,8 +273,8 @@ authRoutes.get('/auth/email/callback', async (c) => {
     .bind(userId, login, Date.now(), state.email, state.email, login)
     .run();
 
-  const roles = await computeRoles(userId, login, c.env);
-  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles });
+  const { roles, appRoles } = await computeRoles(userId, login, c.env);
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
   const redirect = new URL(state.returnTo);
   redirect.hash = `fas_session=${encodeURIComponent(session)}`;
   return c.redirect(redirect.toString());
@@ -335,26 +335,50 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
  * - 'creator' — has at least one published app
  * - 'admin' — login is in ADMIN_GITHUB_LOGINS env var
  */
-async function computeRoles(userId: string, login: string, env: Env): Promise<string[]> {
+async function computeRoles(
+  userId: string,
+  login: string,
+  env: Env,
+): Promise<{ roles: string[]; appRoles: Record<string, string[]> }> {
   const roles = ['user'];
+  const appRoles: Record<string, string[]> = {};
 
-  // Check if the user has published any apps (creator role).
-  // The apps table may not exist in test environments — catch gracefully.
   try {
+    // Check if the user has published any apps (creator role)
     const appRow = await env.DB.prepare(
       'SELECT 1 FROM apps WHERE creator_id = ? LIMIT 1',
     )
       .bind(userId)
       .first();
     if (appRow) roles.push('creator');
+
+    // Load per-app role assignments
+    const { results } = await env.DB.prepare(
+      'SELECT app_id, role_name FROM app_roles WHERE user_id = ?',
+    )
+      .bind(userId)
+      .all<{ app_id: string; role_name: string }>();
+    for (const r of results ?? []) {
+      (appRoles[r.app_id] ??= []).push(r.role_name);
+    }
+
+    // Auto-assign 'owner' for apps this user created (not stored in DB)
+    const { results: ownedApps } = await env.DB.prepare(
+      'SELECT id FROM apps WHERE creator_id = ?',
+    )
+      .bind(userId)
+      .all<{ id: string }>();
+    for (const a of ownedApps ?? []) {
+      (appRoles[a.id] ??= []).push('owner');
+    }
   } catch {
-    // Table doesn't exist yet (fresh DB or test env) — skip creator check
+    // Tables don't exist yet (fresh DB or test env) — skip
   }
 
   // Check admin list
   if (isAdminLogin(login, env)) roles.push('admin');
 
-  return roles;
+  return { roles, appRoles };
 }
 
 function ageFromDob(dob: string): number | null {

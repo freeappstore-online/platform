@@ -16,6 +16,7 @@ import { publishRoutes } from './routes/publish.js';
 import { roomRoutes } from './routes/rooms.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { uptimeRoutes } from './routes/uptime.js';
+import { rolesRoutes } from './routes/roles.js';
 import type { Env } from './types.js';
 
 export { Room } from './do/room.js';
@@ -53,6 +54,7 @@ v1.route('/', auditRoutes);
 v1.route('/', secretsRoutes);
 v1.route('/', counterRoutes);
 v1.route('/', dbRoutes);
+v1.route('/', rolesRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;
