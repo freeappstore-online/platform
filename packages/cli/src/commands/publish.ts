@@ -531,7 +531,8 @@ jobs:
  * create it so the first `git push` triggers an R2 deploy. Returns true if
  * the file was created.
  */
-async function ensureDeployWorkflow(): Promise<boolean> {
+export { DEPLOY_YML };
+export async function ensureDeployWorkflow(): Promise<boolean> {
   const target = join(process.cwd(), '.github', 'workflows', 'deploy.yml');
   try {
     await access(target);

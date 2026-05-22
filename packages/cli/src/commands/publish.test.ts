@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildPromptList,
   buildSubmissionUrl,
+  DEPLOY_YML,
+  ensureDeployWorkflow,
   parseGitHubRepo,
   resolveCategory,
   resolveFromFlags,
@@ -195,5 +199,74 @@ describe('buildPromptList', () => {
         defaults,
       ),
     ).toEqual([]);
+  });
+});
+
+describe('DEPLOY_YML', () => {
+  it('is valid YAML with expected GitHub Actions structure', () => {
+    expect(DEPLOY_YML).toContain('name: Deploy to R2');
+    expect(DEPLOY_YML).toContain('on:');
+    expect(DEPLOY_YML).toContain('push:');
+    expect(DEPLOY_YML).toContain('branches: [main]');
+    expect(DEPLOY_YML).toContain('workflow_dispatch:');
+    expect(DEPLOY_YML).toContain('jobs:');
+  });
+
+  it('references the three required R2 secrets', () => {
+    expect(DEPLOY_YML).toContain('${{ secrets.R2_ACCESS_KEY_ID }}');
+    expect(DEPLOY_YML).toContain('${{ secrets.R2_SECRET_ACCESS_KEY }}');
+    expect(DEPLOY_YML).toContain('${{ secrets.R2_ACCOUNT_ID }}');
+  });
+
+  it('uploads to the correct R2 bucket path', () => {
+    expect(DEPLOY_YML).toContain('s3://fas-apps/apps/');
+  });
+
+  it('includes build verification step', () => {
+    expect(DEPLOY_YML).toContain('Verify build output');
+    expect(DEPLOY_YML).toContain('web/dist');
+  });
+});
+
+describe('ensureDeployWorkflow', () => {
+  let tmpDir: string;
+  let origCwd: string;
+
+  beforeEach(() => {
+    origCwd = process.cwd();
+    tmpDir = join(import.meta.dirname, '..', '..', 'node_modules', '.cache', `test-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    // Clean up
+    const { rmSync } = require('node:fs');
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('creates deploy.yml when missing and returns true', async () => {
+    const result = await ensureDeployWorkflow();
+    expect(result).toBe(true);
+    const created = readFileSync(join(tmpDir, '.github', 'workflows', 'deploy.yml'), 'utf8');
+    expect(created).toBe(DEPLOY_YML);
+  });
+
+  it('creates .github/workflows/ directories recursively', async () => {
+    await ensureDeployWorkflow();
+    expect(existsSync(join(tmpDir, '.github', 'workflows'))).toBe(true);
+  });
+
+  it('returns false and does not overwrite when deploy.yml already exists', async () => {
+    const dir = join(tmpDir, '.github', 'workflows');
+    mkdirSync(dir, { recursive: true });
+    const existing = 'name: Existing workflow\n';
+    writeFileSync(join(dir, 'deploy.yml'), existing);
+
+    const result = await ensureDeployWorkflow();
+    expect(result).toBe(false);
+    const content = readFileSync(join(dir, 'deploy.yml'), 'utf8');
+    expect(content).toBe(existing);
   });
 });
