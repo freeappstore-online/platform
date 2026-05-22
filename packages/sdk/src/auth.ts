@@ -23,6 +23,7 @@ export class Auth {
     private readonly apiBase: string,
   ) {
     this.session = this.readStorage();
+    if (this.session) this.ensureMember();
   }
 
   /** Current signed-in user, or null if not authenticated. */
@@ -145,6 +146,7 @@ export class Auth {
       this.session = { token, user };
       this.writeStorage(this.session);
       this.emit();
+      this.ensureMember();
     } catch {
       // Token was invalid or network failed. Hash already cleared so the user
       // won't get stuck in a retry loop. Silently remain signed out.
@@ -192,6 +194,17 @@ export class Auth {
     });
     if (!response.ok) throw new Error(`Auth failed: ${response.status}`);
     return (await response.json()) as User;
+  }
+
+  /** Fire-and-forget: ensure the user has at least 'member' role in this app. */
+  private ensureMember(): void {
+    if (typeof fetch === 'undefined') return; // SSR / test env
+    const t = this.session?.token;
+    if (!t) return;
+    fetch(`${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/roles/ensure-member`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${t}` },
+    }).catch(() => {}); // silent — non-blocking
   }
 
   private readStorage(): Session | null {

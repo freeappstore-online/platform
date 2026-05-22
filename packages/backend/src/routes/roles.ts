@@ -143,6 +143,35 @@ rolesRoutes.get('/apps/:appId/roles/check/:role', async (c) => {
 });
 
 /**
+ * Ensure the current user has at least the 'member' role in this app.
+ * Called by the SDK on app.auth.init() — idempotent, no-op if any role exists.
+ * No owner/admin gate: any authenticated user can become a member.
+ */
+rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
+  const user = await requireUser(c);
+  const appId = c.req.param('appId');
+
+  // Skip if user already has any role in this app
+  const existing = await c.env.DB.prepare(
+    'SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? LIMIT 1',
+  )
+    .bind(appId, user.id)
+    .first();
+
+  if (existing) return c.json({ ok: true, assigned: false });
+
+  await c.env.DB.prepare(
+    `INSERT INTO app_roles (app_id, user_id, role_name, granted_by)
+     VALUES (?, ?, 'member', NULL)
+     ON CONFLICT(app_id, user_id, role_name) DO NOTHING`,
+  )
+    .bind(appId, user.id)
+    .run();
+
+  return c.json({ ok: true, assigned: true });
+});
+
+/**
  * Assert the user is the app creator or a platform admin.
  * Reuses the apps table (creator_id) + platform role check.
  */
