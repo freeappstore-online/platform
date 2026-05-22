@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runChecks } from '@freeappstore/compliance';
 import { Command } from 'commander';
@@ -202,12 +202,21 @@ export const publishCommand = new Command('publish')
         if (autoResult.kind === 'success') {
           const noun = store === 'games' ? 'game' : 'app';
           const listingPath = store === 'games' ? 'games' : 'apps';
+
+          // Ensure the deploy workflow exists locally so the first push
+          // triggers an R2 deploy. Safe to call unconditionally — it's a
+          // no-op when the file already exists.
+          const injected = await ensureDeployWorkflow();
+
           process.stdout.write(`\n✓ Provisioned!\n`);
           process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
           process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
           process.stdout.write(
             `  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`,
           );
+          if (injected) {
+            process.stdout.write(`  Added .github/workflows/deploy.yml (R2 deploy workflow)\n\n`);
+          }
           process.stdout.write(`Push your code so the live URL serves it:\n\n`);
           process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
           process.stdout.write(`  git push upstream main\n\n`);
@@ -464,4 +473,72 @@ export function parseGitHubRepo(url: string): string | null {
   const m = /github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url);
   if (!m?.[1] || !m[2]) return null;
   return `${m[1]}/${m[2]}`;
+}
+
+const DEPLOY_YML = `name: Deploy to R2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-\${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Verify build output
+        run: |
+          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
+          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          aws s3 sync ./web/dist "s3://fas-apps/apps/\$\{GITHUB_REPOSITORY##*/}/" \\
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
+            --delete \\
+            --no-progress
+          echo "Deployed apps/\$\{GITHUB_REPOSITORY##*/} from \$\{GITHUB_SHA::7}"
+`;
+
+/**
+ * If `.github/workflows/deploy.yml` doesn't exist in the current directory,
+ * create it so the first `git push` triggers an R2 deploy. Returns true if
+ * the file was created.
+ */
+async function ensureDeployWorkflow(): Promise<boolean> {
+  const target = join(process.cwd(), '.github', 'workflows', 'deploy.yml');
+  try {
+    await access(target);
+    return false;
+  } catch {
+    await mkdir(join(process.cwd(), '.github', 'workflows'), { recursive: true });
+    await writeFile(target, DEPLOY_YML);
+    return true;
+  }
 }
