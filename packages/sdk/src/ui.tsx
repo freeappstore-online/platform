@@ -294,6 +294,9 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
               <ThemeToggle />
             </div>
           )}
+          <button onClick={() => { app.keys.manage(); setOpen(false); }} style={menuItemStyle}>
+            API Keys
+          </button>
           {children}
           <button onClick={handleSignOut} style={menuItemStyle}>Sign out</button>
           <button onClick={handleDelete} style={{ ...menuItemStyle, color: '#dc2626' }}>Delete account</button>
@@ -1012,4 +1015,69 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
     return this.props.children;
   }
+}
+
+// ---------------------------------------------------------------------------
+// KeyPrompt
+// ---------------------------------------------------------------------------
+
+export interface KeyPromptProps {
+  app: FreeAppStore;
+  provider: string;
+  providerName?: string;
+  message?: string;
+}
+
+/**
+ * Drop-in prompt shown when an app needs a user's API key.
+ * Renders a card with a message and a button that redirects to
+ * the platform key management page.
+ *
+ * Usage:
+ *   if (!(await fas.keys.has('openai'))) {
+ *     return <KeyPrompt app={fas} provider="openai" providerName="OpenAI" />;
+ *   }
+ */
+export function KeyPrompt({ app, provider, providerName, message }: KeyPromptProps) {
+  const name = providerName ?? provider;
+  const msg = message ?? `This app uses ${name} and needs your API key. Your key is stored securely on the FreeAppStore platform and is never visible to the app.`;
+  return (
+    <div style={{
+      background: 'var(--surface, var(--panel, #f8fafc))',
+      border: '1px solid var(--border, var(--line, #e2e8f0))',
+      borderRadius: 'var(--radius, 0.75rem)',
+      padding: '1.5rem',
+      maxWidth: 420,
+      margin: '2rem auto',
+      textAlign: 'center',
+    }}>
+      <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--muted, #64748b)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+          <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+        </svg>
+      </div>
+      <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--ink, #1e293b)', marginBottom: '0.5rem' }}>
+        {name} API key required
+      </div>
+      <p style={{ fontSize: '0.85rem', color: 'var(--muted, #64748b)', margin: '0 0 1rem', lineHeight: 1.5 }}>
+        {msg}
+      </p>
+      <button
+        onClick={() => app.keys.manage(provider)}
+        style={{
+          background: 'var(--accent, #2563eb)',
+          color: '#fff',
+          border: 'none',
+          padding: '0.6rem 1.5rem',
+          borderRadius: 'var(--radius, 0.75rem)',
+          fontSize: '0.9rem',
+          fontWeight: 700,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+        }}
+      >
+        Configure {name} key
+      </button>
+    </div>
+  );
 }

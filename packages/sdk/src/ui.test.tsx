@@ -40,6 +40,7 @@ describe('UI component exports', () => {
     expect(typeof mod.SearchInput).toBe('function');
     expect(typeof mod.ListRow).toBe('function');
     expect(typeof mod.ErrorBoundary).toBe('function');
+    expect(typeof mod.KeyPrompt).toBe('function');
   });
 
   it('Avatar renders with user', async () => {
