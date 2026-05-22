@@ -140,6 +140,23 @@ const res = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=Lon
 const data = await res.json();
 ```
 
+### User API Key Vault
+
+Users store their own API keys on the platform (encrypted AES-256-GCM). Apps never see plaintext keys.
+
+```ts
+// Check if user has a key configured
+const hasKey = await fas.keys.has('openai');
+
+// Redirect to platform key management page
+fas.keys.manage('openai');
+
+// Check all configured providers
+const keys = await fas.keys.status();
+```
+
+Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.
+
 ### React Hooks
 
 Import from `@freeappstore/sdk/hooks`. Requires React 18+ as a peer dependency.
@@ -159,21 +176,31 @@ function App() {
 Drop-in React components. Import from `@freeappstore/sdk/ui`. Components use CSS custom properties (`--ink`, `--accent`, etc.) to blend into your app's theme.
 
 ```tsx
-import { FasShell, Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage } from '@freeappstore/sdk/ui';
+import {
+  FasShell, Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage,
+  Spinner, Badge, Card, Tabs, Modal, ConfirmDialog, EmptyState,
+  ProgressBar, SearchInput, ListRow, ErrorBoundary, KeyPrompt,
+} from '@freeappstore/sdk/ui';
 
 // Zero-config shell
-<FasShell app={fas} appName="My App">
-  <MyApp />
-</FasShell>
+<FasShell app={fas} appName="My App"><MyApp /></FasShell>
 
-// Or use individual components
-<Avatar user={user} size={32} />
-<ThemeToggle />
-<ProfileMenu app={fas} />
-<ProfilePage app={fas} />
+// Building blocks
+<Spinner size={24} />
+<Badge variant="success">Live</Badge>
+<Card onClick={fn}>content</Card>
+<Tabs tabs={[{key:'a',label:'A'}]} active="a" onChange={setTab} />
+<Modal open={show} onClose={close} title="Settings">content</Modal>
+<ConfirmDialog open={show} onConfirm={ok} onCancel={cancel} title="Delete?" message="Sure?" variant="danger" />
+<EmptyState message="Nothing here yet" />
+<ProgressBar value={75} label="Progress" />
+<SearchInput value={q} onChange={setQ} />
+<ListRow title="Item" subtitle="details" onClick={fn} />
+<ErrorBoundary>{children}</ErrorBoundary>
+<KeyPrompt app={fas} provider="openai" providerName="OpenAI" />
 ```
 
-Full docs: [freeappstore.online/docs/ui](https://freeappstore.online/docs/ui)
+Full docs: [freeappstore.online/skills.md](https://freeappstore.online/skills.md)
 
 ## For AI Agents
 

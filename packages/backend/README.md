@@ -18,6 +18,11 @@ Not published to npm — deployed as a CF Worker via `wrangler deploy`.
 | `PUT /v1/apps/:appId/kv/:key` | kv | KV write. Enforces per-user quotas (`lib/quota.ts`). |
 | `DELETE /v1/apps/:appId/kv/:key` | kv | KV delete. |
 | `GET /v1/apps/:appId/rooms/:roomId` (WebSocket upgrade, `?token=`) | rooms | Routes to `Room` DO. |
+| `GET /v1/keys` | keys | Key management page (HTML) or JSON list (`Accept: application/json`). |
+| `GET /v1/keys/providers` | keys | List supported API key providers (public). |
+| `GET /v1/keys/status` | keys | Which providers the current user has keys for. |
+| `PUT /v1/keys/:provider` | keys | Store/update an encrypted API key. Body: `{ value, label? }`. |
+| `DELETE /v1/keys/:provider` | keys | Delete a stored API key. |
 
 ## Local dev
 
