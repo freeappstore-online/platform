@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, Component, type ReactNode, type CSSProperties } from 'react';
 import type { FreeAppStore } from './index.js';
 import type { User } from './types.js';
 import { useAuth, useTheme } from './hooks.js';
@@ -553,4 +553,463 @@ export function FasShell({ app, children, appName, requireAuth = false, showThem
       </footer>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Spinner
+// ---------------------------------------------------------------------------
+
+export interface SpinnerProps {
+  size?: number;
+  color?: string;
+}
+
+/** Animated border spinner. */
+export function Spinner({ size = 24, color = 'var(--accent, #2563eb)' }: SpinnerProps) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        border: `2px solid var(--border, #e2e8f0)`,
+        borderTopColor: color,
+        borderRadius: '50%',
+        animation: 'fas-spin 0.6s linear infinite',
+      }}
+    />
+  );
+}
+
+// Inject keyframes once
+if (typeof document !== 'undefined' && !document.getElementById('fas-ui-keyframes')) {
+  const style = document.createElement('style');
+  style.id = 'fas-ui-keyframes';
+  style.textContent = '@keyframes fas-spin{to{transform:rotate(360deg)}}@keyframes fas-fade-in{from{opacity:0}to{opacity:1}}@keyframes fas-slide-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}';
+  document.head.appendChild(style);
+}
+
+// ---------------------------------------------------------------------------
+// Badge
+// ---------------------------------------------------------------------------
+
+export interface BadgeProps {
+  children: ReactNode;
+  variant?: 'default' | 'accent' | 'success' | 'warning' | 'danger';
+  style?: CSSProperties;
+}
+
+const badgeColors: Record<string, { bg: string; color: string; border: string }> = {
+  default: { bg: 'var(--surface, #f8fafc)', color: 'var(--muted, #64748b)', border: 'var(--border, #e2e8f0)' },
+  accent: { bg: 'var(--accent-soft, #eff6ff)', color: 'var(--accent, #2563eb)', border: 'var(--accent, #2563eb)' },
+  success: { bg: '#f0fdf4', color: '#16a34a', border: '#86efac' },
+  warning: { bg: '#fefce8', color: '#ca8a04', border: '#fde047' },
+  danger: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+};
+
+/** Small pill badge for status, tags, counts. */
+export function Badge({ children, variant = 'default', style: extraStyle }: BadgeProps) {
+  const c = badgeColors[variant] ?? badgeColors.default!;
+  return (
+    <span style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '0.25rem',
+      padding: '0.15rem 0.5rem',
+      borderRadius: '9999px',
+      fontSize: '0.75rem',
+      fontWeight: 600,
+      lineHeight: 1.4,
+      background: c.bg,
+      color: c.color,
+      border: `1px solid ${c.border}`,
+      ...extraStyle,
+    }}>
+      {children}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Card
+// ---------------------------------------------------------------------------
+
+export interface CardProps {
+  children: ReactNode;
+  onClick?: () => void;
+  padding?: string;
+  style?: CSSProperties;
+}
+
+/** Bordered surface card. Clickable if onClick is provided. */
+export function Card({ children, onClick, padding = '1rem', style: extraStyle }: CardProps) {
+  const interactive = !!onClick;
+  const Tag = interactive ? 'button' : 'div';
+  return (
+    <Tag
+      onClick={onClick}
+      style={{
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding,
+        borderRadius: 'var(--radius, 0.75rem)',
+        border: '1px solid var(--border, var(--line, #e2e8f0))',
+        background: 'var(--surface, var(--panel, #ffffff))',
+        cursor: interactive ? 'pointer' : undefined,
+        fontFamily: 'inherit',
+        fontSize: 'inherit',
+        color: 'inherit',
+        transition: 'border-color 0.15s',
+        ...(interactive ? { outline: 'none' } : {}),
+        ...extraStyle,
+      }}
+    >
+      {children}
+    </Tag>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tabs
+// ---------------------------------------------------------------------------
+
+export interface TabsProps {
+  tabs: Array<{ key: string; label: string }>;
+  active: string;
+  onChange: (key: string) => void;
+  style?: CSSProperties;
+}
+
+/** Pill-style tab selector. */
+export function Tabs({ tabs, active, onChange, style: extraStyle }: TabsProps) {
+  return (
+    <div style={{
+      display: 'inline-flex',
+      gap: '0.25rem',
+      padding: '0.25rem',
+      borderRadius: '9999px',
+      border: '1px solid var(--border, var(--line, #e2e8f0))',
+      background: 'var(--surface, var(--glass, #f8fafc))',
+      ...extraStyle,
+    }}>
+      {tabs.map((tab) => (
+        <button
+          key={tab.key}
+          onClick={() => onChange(tab.key)}
+          style={{
+            padding: '0.35rem 0.85rem',
+            borderRadius: '9999px',
+            border: 'none',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            transition: 'all 0.15s',
+            background: active === tab.key ? 'var(--ink, #1e293b)' : 'transparent',
+            color: active === tab.key ? 'var(--surface, #ffffff)' : 'var(--muted, #64748b)',
+          }}
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modal
+// ---------------------------------------------------------------------------
+
+export interface ModalProps {
+  open: boolean;
+  onClose: () => void;
+  children: ReactNode;
+  title?: string;
+  maxWidth?: number;
+}
+
+/** Centered modal with backdrop. Closes on backdrop click or Escape. */
+export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 999,
+        background: 'rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(4px)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1rem',
+        animation: 'fas-fade-in 0.15s',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'var(--surface, var(--panel, #ffffff))',
+          border: '1px solid var(--border, var(--line, #e2e8f0))',
+          borderRadius: 'var(--radius-lg, var(--radius, 0.75rem))',
+          maxWidth,
+          width: '100%',
+          maxHeight: '85dvh',
+          overflow: 'auto',
+          animation: 'fas-slide-up 0.2s',
+        }}
+      >
+        {title && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '1rem 1.25rem',
+            borderBottom: '1px solid var(--border, var(--line, #e2e8f0))',
+          }}>
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink, #1e293b)' }}>{title}</h2>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', color: 'var(--muted, #64748b)', fontSize: '1.25rem', lineHeight: 1, fontFamily: 'inherit' }}
+            >
+              &times;
+            </button>
+          </div>
+        )}
+        <div style={{ padding: '1.25rem' }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ConfirmDialog
+// ---------------------------------------------------------------------------
+
+export interface ConfirmDialogProps {
+  open: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  variant?: 'danger' | 'default';
+}
+
+/** Confirm/cancel dialog built on Modal. */
+export function ConfirmDialog({ open, onConfirm, onCancel, title, message, confirmLabel = 'Confirm', variant = 'default' }: ConfirmDialogProps) {
+  const isDanger = variant === 'danger';
+  return (
+    <Modal open={open} onClose={onCancel} title={title} maxWidth={400}>
+      <p style={{ fontSize: '0.9rem', color: 'var(--muted, #64748b)', margin: '0 0 1.25rem' }}>{message}</p>
+      <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+        <button
+          onClick={onCancel}
+          style={{
+            padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm, 0.5rem)',
+            border: '1px solid var(--border, #e2e8f0)', background: 'transparent',
+            color: 'var(--ink, #1e293b)', fontSize: '0.85rem', fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          onClick={onConfirm}
+          style={{
+            padding: '0.5rem 1rem', borderRadius: 'var(--radius-sm, 0.5rem)',
+            border: 'none', fontSize: '0.85rem', fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+            background: isDanger ? '#dc2626' : 'var(--accent, #2563eb)',
+            color: '#fff',
+          }}
+        >
+          {confirmLabel}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EmptyState
+// ---------------------------------------------------------------------------
+
+export interface EmptyStateProps {
+  icon?: ReactNode;
+  title?: string;
+  message: string;
+  action?: ReactNode;
+}
+
+/** Centered empty-state placeholder. */
+export function EmptyState({ icon, title, message, action }: EmptyStateProps) {
+  return (
+    <div style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
+      {icon && <div style={{ marginBottom: '0.75rem', color: 'var(--muted, #94a3b8)', fontSize: '2rem' }}>{icon}</div>}
+      {title && <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--ink, #1e293b)', marginBottom: '0.35rem' }}>{title}</div>}
+      <p style={{ fontSize: '0.85rem', color: 'var(--muted, #64748b)', margin: '0 0 1rem', maxWidth: 320, marginInline: 'auto' }}>{message}</p>
+      {action}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ProgressBar
+// ---------------------------------------------------------------------------
+
+export interface ProgressBarProps {
+  value: number;
+  max?: number;
+  color?: string;
+  height?: number;
+  label?: string;
+}
+
+/** Horizontal progress bar with optional label. */
+export function ProgressBar({ value, max = 100, color = 'var(--accent, #2563eb)', height = 8, label }: ProgressBarProps) {
+  const pct = Math.min(100, Math.max(0, (value / max) * 100));
+  return (
+    <div>
+      {label && <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted, #64748b)', marginBottom: '0.35rem' }}>{label}</div>}
+      <div style={{
+        width: '100%', height, borderRadius: height,
+        background: 'var(--border, var(--line, #e2e8f0))', overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${pct}%`, height: '100%', borderRadius: height,
+          background: color, transition: 'width 0.3s',
+        }} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SearchInput
+// ---------------------------------------------------------------------------
+
+export interface SearchInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  style?: CSSProperties;
+}
+
+/** Search input with magnifying glass icon. */
+export function SearchInput({ value, onChange, placeholder = 'Search...', style: extraStyle }: SearchInputProps) {
+  return (
+    <div style={{ position: 'relative', ...extraStyle }}>
+      <svg
+        width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted, #64748b)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+      >
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        placeholder={placeholder}
+        style={{
+          width: '100%',
+          padding: '0.5rem 0.75rem 0.5rem 2.25rem',
+          borderRadius: '9999px',
+          border: '1px solid var(--border, var(--line, #e2e8f0))',
+          background: 'var(--surface, var(--glass, #ffffff))',
+          color: 'var(--ink, #1e293b)',
+          fontSize: '0.85rem',
+          fontFamily: 'inherit',
+          outline: 'none',
+        }}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ListRow
+// ---------------------------------------------------------------------------
+
+export interface ListRowProps {
+  icon?: ReactNode;
+  title: string;
+  subtitle?: string;
+  trailing?: ReactNode;
+  onClick?: () => void;
+}
+
+/** Clickable list row with icon, title, subtitle, and trailing content. */
+export function ListRow({ icon, title, subtitle, trailing, onClick }: ListRowProps) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      onClick={onClick}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.75rem',
+        width: '100%',
+        padding: '0.65rem 0.75rem',
+        background: 'none',
+        border: 'none',
+        borderBottom: '1px solid var(--border, var(--line, #e2e8f0))',
+        textAlign: 'left',
+        cursor: onClick ? 'pointer' : undefined,
+        fontFamily: 'inherit',
+        color: 'inherit',
+      }}
+    >
+      {icon && <div style={{ flexShrink: 0, color: 'var(--muted, #64748b)' }}>{icon}</div>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--ink, #1e293b)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        {subtitle && <div style={{ fontSize: '0.75rem', color: 'var(--muted, #64748b)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
+      </div>
+      {trailing && <div style={{ flexShrink: 0 }}>{trailing}</div>}
+    </Tag>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ErrorBoundary
+// ---------------------------------------------------------------------------
+
+export interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  error: Error | null;
+}
+
+/** Catches render errors and shows a fallback. */
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  override state: ErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
+  }
+
+  override render() {
+    if (this.state.error) {
+      return this.props.fallback ?? (
+        <div style={{ padding: '2rem', textAlign: 'center' }}>
+          <p style={{ color: '#dc2626', fontWeight: 700, marginBottom: '0.5rem' }}>Something went wrong</p>
+          <p style={{ color: 'var(--muted, #64748b)', fontSize: '0.85rem' }}>{this.state.error.message}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }

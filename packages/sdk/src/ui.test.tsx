@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // Mock React for node environment
-vi.mock('react', () => ({
-  useState: (init: unknown) => [typeof init === 'function' ? (init as () => unknown)() : init, vi.fn()],
-  useEffect: vi.fn(),
-  useCallback: (fn: unknown) => fn,
-  useRef: () => ({ current: null }),
-  useSyncExternalStore: (_sub: unknown, getSnapshot: () => unknown) => getSnapshot(),
-}));
+vi.mock('react', () => {
+  class MockComponent { render() { return null; } }
+  return {
+    useState: (init: unknown) => [typeof init === 'function' ? (init as () => unknown)() : init, vi.fn()],
+    useEffect: vi.fn(),
+    useCallback: (fn: unknown) => fn,
+    useRef: () => ({ current: null }),
+    useSyncExternalStore: (_sub: unknown, getSnapshot: () => unknown) => getSnapshot(),
+    Component: MockComponent,
+  };
+});
 
 // Mock react/jsx-runtime
 vi.mock('react/jsx-runtime', () => ({
@@ -25,6 +29,17 @@ describe('UI component exports', () => {
     expect(typeof mod.ProfileMenu).toBe('function');
     expect(typeof mod.ProfilePage).toBe('function');
     expect(typeof mod.FasShell).toBe('function');
+    expect(typeof mod.Spinner).toBe('function');
+    expect(typeof mod.Badge).toBe('function');
+    expect(typeof mod.Card).toBe('function');
+    expect(typeof mod.Tabs).toBe('function');
+    expect(typeof mod.Modal).toBe('function');
+    expect(typeof mod.ConfirmDialog).toBe('function');
+    expect(typeof mod.EmptyState).toBe('function');
+    expect(typeof mod.ProgressBar).toBe('function');
+    expect(typeof mod.SearchInput).toBe('function');
+    expect(typeof mod.ListRow).toBe('function');
+    expect(typeof mod.ErrorBoundary).toBe('function');
   });
 
   it('Avatar renders with user', async () => {
