@@ -15,22 +15,39 @@ Free apps need external APIs (AI, weather, maps, translation, etc.) but:
 
 Many useful APIs are genuinely free and require no API key at all. Apps should prefer these first.
 
-| Category | Free API | Rate limit | Notes |
-|---|---|---|---|
-| Weather | Open-Meteo | 10k/day | No key, no signup |
-| Geocoding | Nominatim | 1/sec | No key, requires User-Agent |
-| IP geolocation | ip-api.com | 45/min | No key, HTTP only |
-| Exchange rates | ExchangeRate-API | 1.5k/mo | No key (open access) |
-| Random data | randomuser.me | Unlimited | No key |
-| Placeholder images | picsum.photos | Unlimited | No key |
-| Public datasets | data.gov, WHO, World Bank | Varies | No key |
-| Lorem text | loripsum.net | Unlimited | No key |
-| QR codes | goqr.me | Unlimited | No key |
-| Country data | restcountries.com | Unlimited | No key |
-| Hacker News | hn.algolia.com | Unlimited | No key |
-| Wikipedia | en.wikipedia.org/api | Rate-limited | No key, requires User-Agent |
-| Open Library | openlibrary.org/api | Rate-limited | No key |
-| Dictionary | dictionaryapi.dev | Unlimited | No key |
+**Free client-side libraries (install and use, no key needed):**
+
+| Category | Library | Install |
+|---|---|---|
+| Maps | Leaflet + OpenStreetMap | `pnpm add leaflet react-leaflet` |
+| Charts | Recharts | `pnpm add recharts` |
+| Rich text editor | Tiptap | `pnpm add @tiptap/react @tiptap/starter-kit` |
+| Date/time | date-fns | `pnpm add date-fns` |
+| Markdown | react-markdown | `pnpm add react-markdown` |
+| PDF | react-pdf / jsPDF | `pnpm add @react-pdf/renderer` |
+| QR codes | qrcode.react | `pnpm add qrcode.react` |
+| Drag & drop | dnd-kit | `pnpm add @dnd-kit/core @dnd-kit/sortable` |
+| Animations | Framer Motion | `pnpm add framer-motion` |
+| Icons | Lucide React | `pnpm add lucide-react` |
+| Forms | React Hook Form | `pnpm add react-hook-form` |
+| State management | Zustand | `pnpm add zustand` |
+
+**Free APIs (no key, no signup):**
+
+| Category | API | Rate limit |
+|---|---|---|
+| Weather | Open-Meteo (`open-meteo.com`) | 10k/day |
+| Geocoding | Nominatim (`nominatim.openstreetmap.org`) | 1/sec |
+| Routing | OSRM (`router.project-osrm.org`) | Unlimited |
+| Exchange rates | ExchangeRate-API (`open.er-api.com`) | 1.5k/mo |
+| Country data | REST Countries (`restcountries.com`) | Unlimited |
+| Dictionary | Free Dictionary API (`dictionaryapi.dev`) | Unlimited |
+| Hacker News | Algolia HN API (`hn.algolia.com`) | Unlimited |
+| Wikipedia | MediaWiki API (`en.wikipedia.org/w/api.php`) | Rate-limited |
+| Open Library | Open Library API (`openlibrary.org`) | Rate-limited |
+| Random users | randomuser.me | Unlimited |
+| Placeholder images | Lorem Picsum (`picsum.photos`) | Unlimited |
+| Public datasets | data.gov, WHO, World Bank | Varies |
 
 **For AI specifically:**
 - No free-no-key AI API exists at quality sufficient for production use

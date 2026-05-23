@@ -131,9 +131,13 @@ await posts.delete('doc-id');
 
 Limits: 10,000 documents per collection, 64KB per document.
 
+### Free APIs & libraries (no proxy needed)
+
+Many useful tools require no API key. Use them directly: Leaflet (maps), Recharts (charts), Tiptap (rich text), date-fns, react-markdown, qrcode.react, dnd-kit (drag & drop), Framer Motion, Lucide React (icons), React Hook Form, Zustand. Free APIs: Open-Meteo (weather), Nominatim (geocoding), OSRM (routing), REST Countries, and more. See [SKILLS.md](https://freeappstore.online/skills.md) for the full list.
+
 ### Secret-injecting proxy
 
-Call third-party APIs without exposing your keys in the browser. The platform Worker authenticates the call, injects the developer's stored API key server-side, and forwards the request.
+For APIs that DO need a key, the proxy encrypts and injects it server-side.
 
 ```ts
 const res = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London');
