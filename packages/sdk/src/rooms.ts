@@ -47,11 +47,14 @@ export class Room {
   private listeners = new Set<(msg: RoomMessage) => void>();
   private peerListeners = new Set<(peers: RoomPeer[]) => void>();
   private stateListeners = new Set<(state: ConnectionState) => void>();
-  private peers: RoomPeer[] = [];
+  private _peers: RoomPeer[] = [];
   private connectionState: ConnectionState = 'connecting';
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private explicitlyClosed = false;
+
+  /** Enable to log all WebSocket traffic to console. */
+  debug = false;
 
   constructor(
     private readonly appId: string,
@@ -67,9 +70,29 @@ export class Room {
     return this.connectionState;
   }
 
+  /** Underlying WebSocket readyState (or -1 if no socket). */
+  get socketState(): number {
+    return this.socket?.readyState ?? -1;
+  }
+
+  /** Number of registered message listeners. */
+  get listenerCount(): number {
+    return this.listeners.size;
+  }
+
+  /** Current peer list (read-only snapshot). */
+  get peers(): RoomPeer[] {
+    return this._peers;
+  }
+
   send<T>(data: T): void {
-    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
-    this.socket.send(JSON.stringify({ kind: 'msg', data }));
+    if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      if (this.debug) console.warn('[rooms] send dropped — socket not open', this.connectionState);
+      return;
+    }
+    const frame = JSON.stringify({ kind: 'msg', data });
+    if (this.debug) console.log('[rooms] →', frame);
+    this.socket.send(frame);
   }
 
   onMessage<T = unknown>(listener: (msg: RoomMessage<T>) => void): Unsubscribe {
@@ -79,7 +102,7 @@ export class Room {
 
   onPeers(listener: (peers: RoomPeer[]) => void): Unsubscribe {
     this.peerListeners.add(listener);
-    listener(this.peers);
+    listener(this._peers);
     return () => this.peerListeners.delete(listener);
   }
 
@@ -125,31 +148,32 @@ export class Room {
     socket.addEventListener('open', () => {
       this.reconnectAttempt = 0;
       this.setState('open');
+      if (this.debug) console.log(`[rooms] connected to ${this.roomId}`);
     });
 
     socket.addEventListener('message', (ev) => {
+      if (this.debug) console.log('[rooms] ←', ev.data);
       try {
         const parsed = JSON.parse(ev.data as string) as
           | { kind: 'msg'; from: RoomPeer; data: unknown; at: number }
           | { kind: 'peers'; peers: RoomPeer[] };
         if (parsed.kind === 'msg') {
+          if (this.debug) console.log(`[rooms] msg from ${parsed.from.login}, ${this.listeners.size} listeners`);
           for (const l of this.listeners) {
             l({ from: parsed.from, data: parsed.data, at: parsed.at });
           }
         } else if (parsed.kind === 'peers') {
-          this.peers = parsed.peers;
-          for (const l of this.peerListeners) l(this.peers);
+          this._peers = parsed.peers;
+          if (this.debug) console.log(`[rooms] peers: ${this._peers.length}`);
+          for (const l of this.peerListeners) l(this._peers);
         }
-      } catch {
-        // Ignore malformed frames — server should never send them; if it
-        // does, dropping is the right move and an error frame would have
-        // come through `kind: 'error'` instead.
+      } catch (e) {
+        console.warn('[rooms] malformed frame', e);
       }
     });
 
-    socket.addEventListener('close', () => {
-      // Only one of close/error fires the reconnect; we use close because
-      // it always fires, even after an error, and is the canonical signal.
+    socket.addEventListener('close', (ev) => {
+      if (this.debug) console.log(`[rooms] closed (code=${ev.code} reason=${ev.reason || 'none'})`);
       if (this.socket === socket) this.socket = null;
       if (this.explicitlyClosed) return;
       this.setState('closed');
