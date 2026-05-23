@@ -530,6 +530,27 @@ jobs:
             --delete \\
             --no-progress
           echo "Deployed apps/\$\{GITHUB_REPOSITORY##*/} from \$\{GITHUB_SHA::7}"
+
+      - name: Code health scan
+        run: npx @vibecodeqa/cli --json --badge > /dev/null 2>&1 || true
+      - name: Upload code health
+        if: always()
+        env:
+          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          APP_ID="\$\{GITHUB_REPOSITORY##*/}"
+          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          if [ -f .vibe-check/report.json ]; then
+            aws s3 cp .vibe-check/report.json "s3://fas-apps/apps/$APP_ID/.vcqa/report.json" \\
+              --endpoint-url "$EP" --content-type application/json --no-progress
+          fi
+          if [ -f .vibe-check/badge.svg ]; then
+            aws s3 cp .vibe-check/badge.svg "s3://fas-apps/apps/$APP_ID/.vcqa/badge.svg" \\
+              --endpoint-url "$EP" --content-type image/svg+xml --no-progress
+          fi
 `;
 
 /**
