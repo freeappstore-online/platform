@@ -22,7 +22,6 @@ const MAX_BODY_LENGTH = 50_000; // 50KB
 
 emailRoutes.post('/apps/:appId/email/send', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
 
   if (!c.env.RESEND_API_KEY || !c.env.EMAIL_FROM) {
     return c.json({ ok: false, error: 'Email not configured (RESEND_API_KEY or EMAIL_FROM missing).' }, 503);

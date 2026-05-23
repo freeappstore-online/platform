@@ -30,7 +30,6 @@ const MAX_WEBHOOKS_PER_APP = 5;
 
 webhookRoutes.get('/apps/:appId/webhooks', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
   const appId = c.req.param('appId')!;
 
   const { results } = await c.env.DB.prepare(
@@ -42,7 +41,6 @@ webhookRoutes.get('/apps/:appId/webhooks', async (c) => {
 
 webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
   const appId = c.req.param('appId')!;
 
   const body = await c.req.json<{ event: string; url: string }>().catch(() => null);
@@ -82,7 +80,6 @@ webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
 
 webhookRoutes.delete('/apps/:appId/webhooks/:id', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
   const appId = c.req.param('appId')!;
   const webhookId = c.req.param('id')!;
 
@@ -98,7 +95,6 @@ webhookRoutes.delete('/apps/:appId/webhooks/:id', async (c) => {
 
 webhookRoutes.post('/apps/:appId/webhooks/:id/test', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
   const appId = c.req.param('appId')!;
   const webhookId = c.req.param('id')!;
 

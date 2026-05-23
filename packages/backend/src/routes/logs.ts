@@ -28,7 +28,6 @@ interface LogEntry {
 
 logsRoutes.post('/apps/:appId/logs', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
 
   const appId = c.req.param('appId')!;
   const body = await c.req.json<{ entries?: LogEntry[] }>().catch(() => null);
@@ -66,7 +65,6 @@ logsRoutes.post('/apps/:appId/logs', async (c) => {
 logsRoutes.get('/apps/:appId/logs', async (c) => {
   const appId = c.req.param('appId')!;
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
 
   const level = c.req.query('level');
   const category = c.req.query('category');
@@ -117,7 +115,6 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
 logsRoutes.get('/apps/:appId/logs/build', async (c) => {
   const appId = c.req.param('appId')!;
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
 
   const row = await c.env.DB.prepare(
     `SELECT build_meta, ts FROM app_logs

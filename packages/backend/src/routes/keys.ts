@@ -33,7 +33,6 @@ keysRoutes.get('/keys/providers', async (c) => {
 
 keysRoutes.get('/keys/status', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
   const rows = await c.env.DB.prepare(
     'SELECT provider, label, created_at, last_used_at FROM user_api_keys WHERE user_id = ?',
   )
@@ -53,7 +52,6 @@ keysRoutes.get('/keys/status', async (c) => {
 
 keysRoutes.put('/keys/:provider', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
   if (!c.env.APP_SECRET_KEK) {
     return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
   }
@@ -109,7 +107,6 @@ keysRoutes.put('/keys/:provider', async (c) => {
 
 keysRoutes.delete('/keys/:provider', async (c) => {
   const user = await requireUser(c);
-  if (user instanceof Response) return user;
 
   const provider = c.req.param('provider');
   const result = await c.env.DB.prepare('DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?')
@@ -162,7 +159,6 @@ keysRoutes.get('/keys', async (c) => {
   if (accept.includes('application/json')) {
     // API mode: return JSON status
     const user = await requireUser(c);
-    if (user instanceof Response) return user;
     const rows = await c.env.DB.prepare(
       'SELECT provider, label, created_at, last_used_at FROM user_api_keys WHERE user_id = ?',
     )
