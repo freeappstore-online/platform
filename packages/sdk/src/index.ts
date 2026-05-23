@@ -4,6 +4,7 @@ import { Collections } from './db.js';
 import { Email } from './email.js';
 import { Keys } from './keys.js';
 import { Kv } from './kv.js';
+import { Logger } from './logger.js';
 import { ApiProxy } from './proxy.js';
 import { Roles } from './roles.js';
 import { Rooms } from './rooms.js';
@@ -28,6 +29,7 @@ export class FreeAppStore {
   readonly roles: Roles;
   readonly keys: Keys;
   readonly email: Email;
+  readonly log: Logger;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -40,6 +42,7 @@ export class FreeAppStore {
     this.roles = new Roles(opts.appId, apiBase, this.auth);
     this.keys = new Keys(opts.appId, apiBase, this.auth);
     this.email = new Email(opts.appId, apiBase, this.auth);
+    this.log = new Logger(opts.appId, apiBase, this.auth);
   }
 }
 
