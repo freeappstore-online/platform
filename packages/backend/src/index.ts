@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { HttpError } from './lib/auth.js';
 import { runAudit } from './lib/audit.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { isAllowedOrigin } from './lib/origins.js';
@@ -41,6 +42,16 @@ app.use(
     maxAge: 600,
   }),
 );
+
+// Global error handler: convert HttpError to proper HTTP responses
+// instead of letting them become 500s.
+app.onError((err, c) => {
+  if (err instanceof HttpError) {
+    return c.json({ error: err.message }, err.status as 401);
+  }
+  console.error('Unhandled error:', err);
+  return c.json({ error: 'Internal server error' }, 500);
+});
 
 app.get('/', (c) => c.text('FreeAppStore API'));
 app.get('/health', (c) => c.json({ ok: true }));
