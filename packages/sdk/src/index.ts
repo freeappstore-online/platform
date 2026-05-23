@@ -1,6 +1,7 @@
 import { Auth } from './auth.js';
 import { Counters } from './counters.js';
 import { Collections } from './db.js';
+import { Email } from './email.js';
 import { Keys } from './keys.js';
 import { Kv } from './kv.js';
 import { ApiProxy } from './proxy.js';
@@ -26,6 +27,7 @@ export class FreeAppStore {
   readonly proxy: ApiProxy;
   readonly roles: Roles;
   readonly keys: Keys;
+  readonly email: Email;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -37,6 +39,7 @@ export class FreeAppStore {
     this.proxy = new ApiProxy(opts.appId, apiBase, this.auth);
     this.roles = new Roles(opts.appId, apiBase, this.auth);
     this.keys = new Keys(opts.appId, apiBase, this.auth);
+    this.email = new Email(opts.appId, apiBase, this.auth);
   }
 }
 
