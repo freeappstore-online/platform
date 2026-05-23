@@ -532,7 +532,7 @@ jobs:
           echo "Deployed apps/\$\{GITHUB_REPOSITORY##*/} from \$\{GITHUB_SHA::7}"
 
       - name: Code health scan
-        run: npx @vibecodeqa/cli --json --badge > /dev/null 2>&1 || true
+        run: npx @vibecodeqa/cli@0.31 --json --badge > /dev/null 2>&1 || true
       - name: Upload code health
         if: always()
         env:
