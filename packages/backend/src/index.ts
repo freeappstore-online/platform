@@ -20,6 +20,7 @@ import { rolesRoutes } from './routes/roles.js';
 import { keysRoutes } from './routes/keys.js';
 import { emailRoutes } from './routes/email.js';
 import { logsRoutes } from './routes/logs.js';
+import { webhookRoutes } from './routes/webhooks.js';
 import type { Env } from './types.js';
 
 export { Room } from './do/room.js';
@@ -61,6 +62,7 @@ v1.route('/', rolesRoutes);
 v1.route('/', keysRoutes);
 v1.route('/', emailRoutes);
 v1.route('/', logsRoutes);
+v1.route('/', webhookRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;

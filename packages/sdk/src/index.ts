@@ -8,6 +8,7 @@ import { Logger } from './logger.js';
 import { ApiProxy } from './proxy.js';
 import { Roles } from './roles.js';
 import { Rooms } from './rooms.js';
+import { Webhooks } from './webhooks.js';
 import type { FasInitOptions } from './types.js';
 
 export type { AuthProvider } from './auth.js';
@@ -30,6 +31,7 @@ export class FreeAppStore {
   readonly keys: Keys;
   readonly email: Email;
   readonly log: Logger;
+  readonly webhooks: Webhooks;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -43,6 +45,7 @@ export class FreeAppStore {
     this.keys = new Keys(opts.appId, apiBase, this.auth);
     this.email = new Email(opts.appId, apiBase, this.auth);
     this.log = new Logger(opts.appId, apiBase, this.auth);
+    this.webhooks = new Webhooks(opts.appId, apiBase, this.auth);
   }
 }
 
