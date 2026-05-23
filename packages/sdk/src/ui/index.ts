@@ -7,10 +7,11 @@ export type { ProfileMenuProps, ProfilePageProps, FasShellProps } from './layout
 export {
   Spinner, Badge, Card, Tabs, Modal, ConfirmDialog,
   EmptyState, ProgressBar, SearchInput, ListRow,
-  ErrorBoundary, KeyPrompt,
+  ErrorBoundary, KeyPrompt, BuildInfo,
 } from './components.js';
 export type {
   SpinnerProps, BadgeProps, CardProps, TabsProps, ModalProps,
   ConfirmDialogProps, EmptyStateProps, ProgressBarProps,
   SearchInputProps, ListRowProps, ErrorBoundaryProps, KeyPromptProps,
+  BuildInfoProps,
 } from './components.js';

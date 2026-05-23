@@ -1,4 +1,4 @@
-import { useEffect, Component, type ReactNode, type CSSProperties } from 'react';
+import { useState, useEffect, Component, type ReactNode, type CSSProperties } from 'react';
 import type { FreeAppStore } from '../index.js';
 
 // Inject keyframes once
@@ -226,6 +226,95 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 // ---------------------------------------------------------------------------
 
 export interface KeyPromptProps { app: FreeAppStore; provider: string; providerName?: string; message?: string; }
+
+// ---------------------------------------------------------------------------
+// BuildInfo
+// ---------------------------------------------------------------------------
+
+export interface BuildInfoProps {
+  version?: string;
+  commit?: string;
+  buildDate?: string;
+  extra?: Record<string, string>;
+}
+
+/**
+ * Tiny debug badge showing build version, commit SHA, and build date.
+ * Hidden by default, revealed by tapping 5 times (mobile) or clicking
+ * while holding Alt/Option (desktop). Sticks to the bottom-right corner.
+ *
+ * Reads from Vite env vars automatically if no props are passed:
+ *   VITE_APP_VERSION, VITE_COMMIT_SHA, VITE_BUILD_DATE
+ *
+ * Add to deploy.yml:
+ *   env:
+ *     VITE_APP_VERSION: ${{ github.event.repository.name }}@${{ github.run_number }}
+ *     VITE_COMMIT_SHA: ${{ github.sha }}
+ *     VITE_BUILD_DATE: ${{ github.event.head_commit.timestamp }}
+ */
+export function BuildInfo({ version, commit, buildDate, extra }: BuildInfoProps) {
+  const [visible, setVisible] = useState(false);
+  const [tapCount, setTapCount] = useState(0);
+
+  // Auto-read from Vite env vars if props not provided
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const env = typeof import.meta !== 'undefined' ? (import.meta as any).env ?? {} : {};
+  const v = version ?? env.VITE_APP_VERSION ?? '';
+  const sha = commit ?? env.VITE_COMMIT_SHA ?? '';
+  const date = buildDate ?? env.VITE_BUILD_DATE ?? '';
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (e.altKey) {
+      setVisible(!visible);
+      return;
+    }
+    const next = tapCount + 1;
+    if (next >= 5) {
+      setVisible(!visible);
+      setTapCount(0);
+    } else {
+      setTapCount(next);
+      setTimeout(() => setTapCount(0), 2000);
+    }
+  };
+
+  if (!v && !sha && !date) return null;
+
+  return (
+    <>
+      {/* Invisible tap target in bottom-right corner */}
+      <div
+        onClick={handleClick}
+        style={{
+          position: 'fixed', bottom: 8, right: 8, width: 24, height: 24,
+          zIndex: 9999, cursor: 'default', opacity: 0,
+        }}
+        aria-hidden="true"
+      />
+      {visible && (
+        <div
+          onClick={() => setVisible(false)}
+          style={{
+            position: 'fixed', bottom: 8, right: 8, zIndex: 9999,
+            background: 'rgba(0,0,0,0.85)', color: '#e5e5e5',
+            padding: '0.5rem 0.75rem', borderRadius: '0.5rem',
+            fontSize: '0.7rem', fontFamily: 'monospace', lineHeight: 1.6,
+            maxWidth: 280, cursor: 'pointer',
+            animation: 'fas-fade-in 0.15s',
+          }}
+        >
+          {v && <div><span style={{ color: '#94a3b8' }}>version </span>{v}</div>}
+          {sha && <div><span style={{ color: '#94a3b8' }}>commit  </span>{sha.slice(0, 7)}</div>}
+          {date && <div><span style={{ color: '#94a3b8' }}>built   </span>{new Date(date).toLocaleString()}</div>}
+          {extra && Object.entries(extra).map(([k, val]) => (
+            <div key={k}><span style={{ color: '#94a3b8' }}>{k.padEnd(8)}</span>{val}</div>
+          ))}
+          <div style={{ color: '#64748b', marginTop: '0.25rem', fontSize: '0.6rem' }}>tap to dismiss</div>
+        </div>
+      )}
+    </>
+  );
+}
 
 export function KeyPrompt({ app, provider, providerName, message }: KeyPromptProps) {
   const name = providerName ?? provider;
