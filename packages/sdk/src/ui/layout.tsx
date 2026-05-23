@@ -225,10 +225,10 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
 }
 
 // ---------------------------------------------------------------------------
-// FasShell
+// Shell (also exported as FasShell for backwards compatibility)
 // ---------------------------------------------------------------------------
 
-export interface FasShellProps {
+export interface ShellProps {
   app: FreeAppStore;
   children: ReactNode;
   appName?: string;
@@ -237,7 +237,7 @@ export interface FasShellProps {
 }
 
 /** Full wrapper: sticky topbar, main content, footer. Optional auth gate. */
-export function FasShell({ app, children, appName, requireAuth = false, showThemeToggle = true }: FasShellProps) {
+export function Shell({ app, children, appName, requireAuth = false, showThemeToggle = true }: ShellProps) {
   const { user, loading } = useAuth(app);
 
   if (loading) {
