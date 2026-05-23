@@ -72,6 +72,11 @@ export default {
       await runUptimeChecks(env);
     } else if (event.cron === '0 4 * * *') {
       await runDailyBackup(env);
+    } else if (event.cron === '0 3 * * *') {
+      // Daily log cleanup — prune entries older than 7 days.
+      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      const result = await env.DB.prepare('DELETE FROM app_logs WHERE ingested_at < ?').bind(cutoff).run();
+      console.log(`log-prune: deleted=${result.meta?.changes ?? 0} (cutoff=${new Date(cutoff).toISOString()})`);
     } else if (event.cron === '0 6 * * SUN') {
       // Weekly compliance audit — Sunday 06:00 UTC. Logs the totals
       // so a missed audit is obvious in `wrangler tail`.

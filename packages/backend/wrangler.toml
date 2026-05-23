@@ -34,11 +34,12 @@ new_sqlite_classes = ["Room"]
 
 # Cron triggers. The Worker's `scheduled` handler dispatches on the
 # `event.cron` value, so each schedule below corresponds to one task:
-#   */15 * * * *  uptime checks against every published app
-#   0 4 * * *     daily D1 → R2 backup at 04:00 UTC
+#   */15 * * * *    uptime checks against every published app
+#   0 3 * * *       daily log prune (entries > 7 days)
+#   0 4 * * *       daily D1 → R2 backup at 04:00 UTC
 #   0 6 * * SUN     weekly compliance audit — Sunday 06:00 UTC
 [triggers]
-crons = ["*/15 * * * *", "0 4 * * *", "0 6 * * SUN"]
+crons = ["*/15 * * * *", "0 3 * * *", "0 4 * * *", "0 6 * * SUN"]
 
 # R2 bucket for daily D1 backups. The 0 4 * * * cron writes a JSON
 # dump of D1 here. See src/lib/backup.ts.
