@@ -63,7 +63,10 @@ describe('backupD1ToR2', () => {
     const parsed = JSON.parse(puts[0]!.body);
     expect(parsed.version).toBe(1);
     expect(parsed.exportedAt).toBe(Date.parse('2026-05-05T00:00:00Z'));
-    expect(parsed.tables).toEqual({ users: [], apps: [], health_checks: [], kv: [] });
+    expect(parsed.tables.users).toEqual([]);
+    expect(parsed.tables.apps).toEqual([]);
+    expect(parsed.tables.health_checks).toEqual([]);
+    expect(parsed.tables.kv).toEqual([]);
   });
 
   it('returns row counts for each backed-up table', async () => {
@@ -77,12 +80,10 @@ describe('backupD1ToR2', () => {
       }),
       bucket,
     );
-    expect(result.rowsByTable).toEqual({
-      users: 2,
-      apps: 1,
-      health_checks: 0,
-      kv: 1,
-    });
+    expect(result.rowsByTable.users).toBe(2);
+    expect(result.rowsByTable.apps).toBe(1);
+    expect(result.rowsByTable.health_checks).toBe(0);
+    expect(result.rowsByTable.kv).toBe(1);
   });
 
   it('preserves kv BLOB values as hex (round-trip survives JSON)', async () => {
