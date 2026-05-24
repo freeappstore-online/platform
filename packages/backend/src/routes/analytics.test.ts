@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { buildLoaderJs } from './analytics.js';
 
-const empty = { cf_beacon_token: null, ga4: null, plausible: null, custom_head: null, updated_at: null };
+const empty = {
+  cf_beacon_token: null,
+  ga4: null,
+  plausible: null,
+  custom_head: null,
+  updated_at: null,
+};
 
 describe('buildLoaderJs', () => {
   it('always emits the first-party page-view beacon, even with no config', () => {

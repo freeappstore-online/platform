@@ -70,9 +70,7 @@ function validateInline(viteConfig: string): CheckResult {
       name: 'PWA maskable icon',
       status: 'fail',
       detail: `inline manifest in ${VITE_CONFIG_PATH} has no parsable icons array`,
-      suggestions: [
-        'Add an icons array to the manifest:{...} block in VitePWA({...}).',
-      ],
+      suggestions: ['Add an icons array to the manifest:{...} block in VitePWA({...}).'],
     };
   }
   // Lenient string-level check — see the doc-comment on `checkMaskableIcon`.

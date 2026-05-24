@@ -66,11 +66,13 @@ export class Roles {
   async listAll(): Promise<RoleAssignment[]> {
     const token = this.auth.token;
     if (!token) throw new Error('Not signed in.');
-    const res = await fetch(
-      `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/roles`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error('Not signed in.'); }
+    const res = await fetch(`${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/roles`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.status === 401) {
+      this.auth.handleUnauthorized();
+      throw new Error('Not signed in.');
+    }
     if (!res.ok) throw new Error(`roles.listAll failed: ${res.status}`);
     const data = (await res.json()) as { roles: RoleAssignment[] };
     return data.roles;
@@ -86,10 +88,9 @@ export class Roles {
   async myRoles(): Promise<string[]> {
     const token = this.auth.token;
     if (!token) return [];
-    const res = await fetch(
-      `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/roles/me`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
+    const res = await fetch(`${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/roles/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!res.ok) return [];
     const data = (await res.json()) as { roles: string[] };
     return data.roles;
@@ -103,7 +104,10 @@ export class Roles {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error('Not signed in.'); }
+    if (res.status === 401) {
+      this.auth.handleUnauthorized();
+      throw new Error('Not signed in.');
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`${path} failed: ${res.status} ${text}`);
@@ -118,7 +122,10 @@ export class Roles {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (res.status === 401) { this.auth.handleUnauthorized(); throw new Error('Not signed in.'); }
+    if (res.status === 401) {
+      this.auth.handleUnauthorized();
+      throw new Error('Not signed in.');
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`${path} failed: ${res.status} ${text}`);

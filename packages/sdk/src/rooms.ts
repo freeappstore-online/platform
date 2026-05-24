@@ -158,7 +158,8 @@ export class Room {
           | { kind: 'msg'; from: RoomPeer; data: unknown; at: number }
           | { kind: 'peers'; peers: RoomPeer[] };
         if (parsed.kind === 'msg') {
-          if (this.debug) console.log(`[rooms] msg from ${parsed.from.login}, ${this.listeners.size} listeners`);
+          if (this.debug)
+            console.log(`[rooms] msg from ${parsed.from.login}, ${this.listeners.size} listeners`);
           for (const l of this.listeners) {
             l({ from: parsed.from, data: parsed.data, at: parsed.at });
           }

@@ -254,18 +254,13 @@ analyticsRoutes.get(
     // on a 90-day window is allowed but returns 2160 points — UI's call.
     const bucketParam = (c.req.query('bucket') ?? '').trim().toLowerCase();
     const bucket: 'hour' | 'day' =
-      bucketParam === 'hour' || bucketParam === 'day'
-        ? bucketParam
-        : days <= 1
-          ? 'hour'
-          : 'day';
+      bucketParam === 'hour' || bucketParam === 'day' ? bucketParam : days <= 1 ? 'hour' : 'day';
     const seriesGroup = bucket === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
     // Effective event time: prefer the client-recorded `t` stored in
     // doubles[1] (for offline-replayed events), fall back to the server
     // timestamp for events written before doubles[1] existed.
     // ClickHouse-flavoured SQL accepted by CF Analytics Engine.
-    const effectiveTime =
-      `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
     const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
     // Quote-safe: appId + kindParam are regex-validated. pathClause has
     // its embedded single quotes doubled per SQL convention. STATS_DATASET
@@ -323,8 +318,7 @@ analyticsRoutes.get(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
     );
-    const effectiveTime =
-      `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
     const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
     const where = `WHERE index1 = '${appId}' AND blob2 != 'pageview' AND ${sinceClause}`;
 
@@ -405,14 +399,9 @@ analyticsRoutes.get(
     );
     const bucketParam = (c.req.query('bucket') ?? '').trim().toLowerCase();
     const bucket: 'hour' | 'day' =
-      bucketParam === 'hour' || bucketParam === 'day'
-        ? bucketParam
-        : days <= 1
-          ? 'hour'
-          : 'day';
+      bucketParam === 'hour' || bucketParam === 'day' ? bucketParam : days <= 1 ? 'hour' : 'day';
     const seriesGroup = bucket === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
-    const effectiveTime =
-      `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
     // Note: no `index1 = '<appId>'` filter here. We aggregate across every
     // app on this backend's dataset. blob1 carries the appId so GROUP BY
     // blob1 surfaces the top apps without an index scan.

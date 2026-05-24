@@ -63,7 +63,10 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<Curre
 /**
  * Require a specific platform role. Reads from session token claims.
  */
-export async function requireRole(c: Context<{ Bindings: Env }>, role: string): Promise<CurrentUser> {
+export async function requireRole(
+  c: Context<{ Bindings: Env }>,
+  role: string,
+): Promise<CurrentUser> {
   const user = await requireUser(c);
   if (!user.roles.includes(role)) {
     throw new HttpError(403, `requires role: ${role}`);

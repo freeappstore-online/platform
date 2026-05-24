@@ -1,6 +1,6 @@
 import { Apple, decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
-import { HttpError, requireUser, isAdminLogin } from '../lib/auth.js';
+import { HttpError, isAdminLogin, requireUser } from '../lib/auth.js';
 import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
 import { signPayload, signSession, verifyPayload } from '../lib/session.js';
@@ -211,13 +211,24 @@ authRoutes.get('/auth/apple/start', async (c) => {
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
   if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
 
-  if (!c.env.APPLE_CLIENT_ID || !c.env.APPLE_TEAM_ID || !c.env.APPLE_KEY_ID || !c.env.APPLE_PRIVATE_KEY) {
+  if (
+    !c.env.APPLE_CLIENT_ID ||
+    !c.env.APPLE_TEAM_ID ||
+    !c.env.APPLE_KEY_ID ||
+    !c.env.APPLE_PRIVATE_KEY
+  ) {
     return c.text('Apple Sign In not configured', 503);
   }
 
   const redirectUri = new URL('/v1/auth/apple/callback', c.req.url).toString();
   const privateKeyBytes = Uint8Array.from(atob(c.env.APPLE_PRIVATE_KEY), (ch) => ch.charCodeAt(0));
-  const apple = new Apple(c.env.APPLE_CLIENT_ID, c.env.APPLE_TEAM_ID, c.env.APPLE_KEY_ID, privateKeyBytes, redirectUri);
+  const apple = new Apple(
+    c.env.APPLE_CLIENT_ID,
+    c.env.APPLE_TEAM_ID,
+    c.env.APPLE_KEY_ID,
+    privateKeyBytes,
+    redirectUri,
+  );
 
   const signedState = await signPayload<AppleOAuthState>(
     { appId, returnTo, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
@@ -234,9 +245,9 @@ authRoutes.get('/auth/apple/start', async (c) => {
  */
 authRoutes.post('/auth/apple/callback', async (c) => {
   const body = await c.req.parseBody();
-  const code = body['code'] as string | undefined;
-  const stateRaw = body['state'] as string | undefined;
-  const userJson = body['user'] as string | undefined; // only on first sign-in
+  const code = body.code as string | undefined;
+  const stateRaw = body.state as string | undefined;
+  const userJson = body.user as string | undefined; // only on first sign-in
 
   if (!code || !stateRaw) return c.text('missing code or state', 400);
 
@@ -245,13 +256,24 @@ authRoutes.post('/auth/apple/callback', async (c) => {
   if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
   if (!isAllowedReturnTo(state.returnTo)) return c.text('return_to not allowed', 400);
 
-  if (!c.env.APPLE_CLIENT_ID || !c.env.APPLE_TEAM_ID || !c.env.APPLE_KEY_ID || !c.env.APPLE_PRIVATE_KEY) {
+  if (
+    !c.env.APPLE_CLIENT_ID ||
+    !c.env.APPLE_TEAM_ID ||
+    !c.env.APPLE_KEY_ID ||
+    !c.env.APPLE_PRIVATE_KEY
+  ) {
     return c.text('Apple Sign In not configured', 503);
   }
 
   const redirectUri = new URL('/v1/auth/apple/callback', c.req.url).toString();
   const privateKeyBytes = Uint8Array.from(atob(c.env.APPLE_PRIVATE_KEY), (ch) => ch.charCodeAt(0));
-  const apple = new Apple(c.env.APPLE_CLIENT_ID, c.env.APPLE_TEAM_ID, c.env.APPLE_KEY_ID, privateKeyBytes, redirectUri);
+  const apple = new Apple(
+    c.env.APPLE_CLIENT_ID,
+    c.env.APPLE_TEAM_ID,
+    c.env.APPLE_KEY_ID,
+    privateKeyBytes,
+    redirectUri,
+  );
 
   try {
     const tokens = await apple.validateAuthorizationCode(code);
@@ -264,7 +286,9 @@ authRoutes.post('/auth/apple/callback', async (c) => {
     let displayName: string | null = null;
     if (userJson) {
       try {
-        const appleUser = JSON.parse(userJson) as { name?: { firstName?: string; lastName?: string } };
+        const appleUser = JSON.parse(userJson) as {
+          name?: { firstName?: string; lastName?: string };
+        };
         const first = appleUser.name?.firstName ?? '';
         const last = appleUser.name?.lastName ?? '';
         displayName = [first, last].filter(Boolean).join(' ') || null;
@@ -283,14 +307,7 @@ authRoutes.post('/auth/apple/callback', async (c) => {
          email = COALESCE(excluded.email, users.email),
          display_name = COALESCE(excluded.display_name, users.display_name)`,
     )
-      .bind(
-        userId,
-        login,
-        Date.now(),
-        claims.sub,
-        claims.email ?? null,
-        displayName ?? login,
-      )
+      .bind(userId, login, Date.now(), claims.sub, claims.email ?? null, displayName ?? login)
       .run();
 
     const { roles, appRoles } = await computeRoles(userId, login, c.env);
@@ -457,9 +474,7 @@ async function computeRoles(
 
   try {
     // Check if the user has published any apps (creator role)
-    const appRow = await env.DB.prepare(
-      'SELECT 1 FROM apps WHERE creator_id = ? LIMIT 1',
-    )
+    const appRow = await env.DB.prepare('SELECT 1 FROM apps WHERE creator_id = ? LIMIT 1')
       .bind(userId)
       .first();
     if (appRow) roles.push('creator');
@@ -475,9 +490,7 @@ async function computeRoles(
     }
 
     // Auto-assign 'owner' for apps this user created (not stored in DB)
-    const { results: ownedApps } = await env.DB.prepare(
-      'SELECT id FROM apps WHERE creator_id = ?',
-    )
+    const { results: ownedApps } = await env.DB.prepare('SELECT id FROM apps WHERE creator_id = ?')
       .bind(userId)
       .all<{ id: string }>();
     for (const a of ownedApps ?? []) {

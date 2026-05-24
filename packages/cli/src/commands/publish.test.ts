@@ -230,10 +230,10 @@ describe('DEPLOY_YML', () => {
 
 describe('ensureDeployWorkflow', () => {
   let tmpDir: string;
-  let origCwd: string;
+  let _origCwd: string;
 
   beforeEach(() => {
-    origCwd = process.cwd();
+    _origCwd = process.cwd();
     tmpDir = join(import.meta.dirname, '..', '..', 'node_modules', '.cache', `test-${Date.now()}`);
     mkdirSync(tmpDir, { recursive: true });
     vi.spyOn(process, 'cwd').mockReturnValue(tmpDir);

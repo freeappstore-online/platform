@@ -36,13 +36,22 @@ export class Keys {
    * Check which providers the current user has keys configured for.
    * Useful for showing "configure your API key" prompts in the app.
    */
-  async status(): Promise<Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>> {
+  async status(): Promise<
+    Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>
+  > {
     if (!this.auth.token) return [];
     const res = await fetch(`${this.apiBase}/v1/keys/status`, {
       headers: { Authorization: `Bearer ${this.auth.token}`, Accept: 'application/json' },
     });
     if (!res.ok) return [];
-    const data = (await res.json()) as { keys: Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }> };
+    const data = (await res.json()) as {
+      keys: Array<{
+        provider: string;
+        label: string | null;
+        createdAt: number;
+        lastUsedAt: number | null;
+      }>;
+    };
     return data.keys;
   }
 

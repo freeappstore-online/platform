@@ -2,9 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 
 // Mock React for node environment
 vi.mock('react', () => {
-  class MockComponent { render() { return null; } }
+  class MockComponent {
+    render() {
+      return null;
+    }
+  }
   return {
-    useState: (init: unknown) => [typeof init === 'function' ? (init as () => unknown)() : init, vi.fn()],
+    useState: (init: unknown) => [
+      typeof init === 'function' ? (init as () => unknown)() : init,
+      vi.fn(),
+    ],
     useEffect: vi.fn(),
     useCallback: (fn: unknown) => fn,
     useRef: () => ({ current: null }),
@@ -46,7 +53,12 @@ describe('UI component exports', () => {
   it('Avatar renders with user', async () => {
     const mod = await import('./ui.js');
     const result = mod.Avatar({
-      user: { id: '1', login: 'test', avatarUrl: 'https://example.com/avatar.png', dateOfBirth: null },
+      user: {
+        id: '1',
+        login: 'test',
+        avatarUrl: 'https://example.com/avatar.png',
+        dateOfBirth: null,
+      },
       size: 32,
     });
     expect(result).toBeDefined();

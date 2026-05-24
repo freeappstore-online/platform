@@ -1,17 +1,42 @@
-export { Avatar, SignInButton, ThemeToggle, TextSizeToggle } from './core.js';
-export type { AvatarProps, SignInButtonProps } from './core.js';
-
-export { ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';
-export type { ProfileMenuProps, ProfilePageProps, ShellProps, ShellProps as FasShellProps } from './layout.js';
-
-export {
-  Spinner, Badge, Card, Tabs, Modal, ConfirmDialog,
-  EmptyState, ProgressBar, SearchInput, ListRow,
-  ErrorBoundary, KeyPrompt, BuildInfo, Footer, useStandalone,
-} from './components.js';
 export type {
-  SpinnerProps, BadgeProps, CardProps, TabsProps, ModalProps,
-  ConfirmDialogProps, EmptyStateProps, ProgressBarProps,
-  SearchInputProps, ListRowProps, ErrorBoundaryProps, KeyPromptProps,
-  BuildInfoProps, FooterProps,
+  BadgeProps,
+  BuildInfoProps,
+  CardProps,
+  ConfirmDialogProps,
+  EmptyStateProps,
+  ErrorBoundaryProps,
+  FooterProps,
+  KeyPromptProps,
+  ListRowProps,
+  ModalProps,
+  ProgressBarProps,
+  SearchInputProps,
+  SpinnerProps,
+  TabsProps,
 } from './components.js';
+export {
+  Badge,
+  BuildInfo,
+  Card,
+  ConfirmDialog,
+  EmptyState,
+  ErrorBoundary,
+  Footer,
+  KeyPrompt,
+  ListRow,
+  Modal,
+  ProgressBar,
+  SearchInput,
+  Spinner,
+  Tabs,
+  useStandalone,
+} from './components.js';
+export type { AvatarProps, SignInButtonProps } from './core.js';
+export { Avatar, SignInButton, TextSizeToggle, ThemeToggle } from './core.js';
+export type {
+  ProfileMenuProps,
+  ProfilePageProps,
+  ShellProps,
+  ShellProps as FasShellProps,
+} from './layout.js';
+export { ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';

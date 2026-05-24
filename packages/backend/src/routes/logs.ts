@@ -45,8 +45,8 @@ logsRoutes.post('/apps/:appId/logs', async (c) => {
   );
 
   const batch = entries
-    .filter(e => e.ts && e.level && e.message)
-    .map(e => {
+    .filter((e) => e.ts && e.level && e.message)
+    .map((e) => {
       const msg = String(e.message).slice(0, MAX_ENTRY_SIZE);
       const data = e.data ? JSON.stringify(e.data).slice(0, MAX_ENTRY_SIZE) : null;
       const build = e.build ? JSON.stringify(e.build) : null;
@@ -64,7 +64,7 @@ logsRoutes.post('/apps/:appId/logs', async (c) => {
 
 logsRoutes.get('/apps/:appId/logs', async (c) => {
   const appId = c.req.param('appId')!;
-  const user = await requireUser(c);
+  const _user = await requireUser(c);
 
   const level = c.req.query('level');
   const category = c.req.query('category');
@@ -72,7 +72,8 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
   const limit = Math.min(Number(c.req.query('limit') || 100), 500);
   const userId = c.req.query('user_id');
 
-  let sql = 'SELECT ts, level, category, message, data, user_id, build_meta FROM app_logs WHERE app_id = ?';
+  let sql =
+    'SELECT ts, level, category, message, data, user_id, build_meta FROM app_logs WHERE app_id = ?';
   const params: unknown[] = [appId];
 
   if (level) {
@@ -95,7 +96,9 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
   sql += ' ORDER BY ts DESC LIMIT ?';
   params.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...params)
+    .all();
 
   return c.json({
     logs: (result.results ?? []).map((r: Record<string, unknown>) => ({
@@ -114,7 +117,7 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
 
 logsRoutes.get('/apps/:appId/logs/build', async (c) => {
   const appId = c.req.param('appId')!;
-  const user = await requireUser(c);
+  const _user = await requireUser(c);
 
   const row = await c.env.DB.prepare(
     `SELECT build_meta, ts FROM app_logs

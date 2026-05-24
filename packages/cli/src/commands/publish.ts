@@ -525,11 +525,11 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
         run: |
-          aws s3 sync ./web/dist "s3://fas-apps/apps/\$\{GITHUB_REPOSITORY##*/}/" \\
+          aws s3 sync ./web/dist "s3://fas-apps/apps/$\{GITHUB_REPOSITORY##*/}/" \\
             --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
             --delete \\
             --no-progress
-          echo "Deployed apps/\$\{GITHUB_REPOSITORY##*/} from \$\{GITHUB_SHA::7}"
+          echo "Deployed apps/$\{GITHUB_REPOSITORY##*/} from $\{GITHUB_SHA::7}"
 
       - name: Code health scan
         run: npx @vibecodeqa/cli@0.31 --json --badge > /dev/null 2>&1 || true
@@ -541,7 +541,7 @@ jobs:
           AWS_DEFAULT_REGION: auto
           R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
         run: |
-          APP_ID="\$\{GITHUB_REPOSITORY##*/}"
+          APP_ID="$\{GITHUB_REPOSITORY##*/}"
           EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
           if [ -f .vibe-check/report.json ]; then
             aws s3 cp .vibe-check/report.json "s3://fas-apps/apps/$APP_ID/.vcqa/report.json" \\

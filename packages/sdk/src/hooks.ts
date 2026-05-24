@@ -1,4 +1,4 @@
-import { useSyncExternalStore, useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { FreeAppStore } from './index.js';
 import type { User } from './types.js';
 
@@ -126,10 +126,7 @@ export function useAuth(app: FreeAppStore) {
     app.auth.signOut();
   }, [app]);
 
-  const hasRole = useCallback(
-    (role: string) => app.roles.check(role),
-    [app],
-  );
+  const hasRole = useCallback((role: string) => app.roles.check(role), [app]);
 
   return { user, loading, signIn, signOut, deleteAccount, hasRole };
 }

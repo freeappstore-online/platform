@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireUser, HttpError } from '../lib/auth.js';
+import { HttpError, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 /**
@@ -111,9 +111,7 @@ rolesRoutes.delete('/apps/:appId/roles', async (c) => {
     return c.json({ error: "cannot revoke 'owner' role — transfer ownership instead" }, 400);
   }
 
-  await c.env.DB.prepare(
-    'DELETE FROM app_roles WHERE app_id = ? AND user_id = ? AND role_name = ?',
-  )
+  await c.env.DB.prepare('DELETE FROM app_roles WHERE app_id = ? AND user_id = ? AND role_name = ?')
     .bind(appId, body.userId, body.role)
     .run();
 

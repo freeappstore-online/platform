@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { signSession, verifySession } from './session.js';
 import { isAdminLogin } from './auth.js';
+import { signSession, verifySession } from './session.js';
 
 const KEY = 'a'.repeat(64);
 
@@ -47,7 +47,10 @@ describe('session token roles', () => {
     const sig = token.slice(dot + 1);
     const decoded = JSON.parse(atob(body.replace(/-/g, '+').replace(/_/g, '/')));
     decoded.roles = ['user', 'admin']; // escalation attempt
-    const tampered = btoa(JSON.stringify(decoded)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const tampered = btoa(JSON.stringify(decoded))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
     const result = await verifySession(`${tampered}.${sig}`, KEY);
     expect(result).toBeNull(); // signature mismatch
   });
@@ -59,11 +62,17 @@ describe('session token roles', () => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 86400,
     };
-    const body = btoa(JSON.stringify(oldPayload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const body = btoa(JSON.stringify(oldPayload))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
     // Sign it properly
     const key = await crypto.subtle.importKey(
-      'raw', new TextEncoder().encode(KEY),
-      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+      'raw',
+      new TextEncoder().encode(KEY),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
     );
     const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
     let bin = '';
@@ -78,8 +87,7 @@ describe('session token roles', () => {
 });
 
 describe('isAdminLogin', () => {
-  const makeEnv = (logins?: string) =>
-    ({ ADMIN_GITHUB_LOGINS: logins } as any);
+  const makeEnv = (logins?: string) => ({ ADMIN_GITHUB_LOGINS: logins }) as any;
 
   it('returns true for a login in the admin list', () => {
     expect(isAdminLogin('serge-ivo', makeEnv('serge-ivo'))).toBe(true);

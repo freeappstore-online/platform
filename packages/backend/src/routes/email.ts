@@ -9,7 +9,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireUser, type CurrentUser } from '../lib/auth.js';
+import { requireUser } from '../lib/auth.js';
 import { isLikelyEmail, sendEmail } from '../lib/email.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
@@ -21,19 +21,24 @@ const MAX_SUBJECT_LENGTH = 200;
 const MAX_BODY_LENGTH = 50_000; // 50KB
 
 emailRoutes.post('/apps/:appId/email/send', async (c) => {
-  const user = await requireUser(c);
+  const _user = await requireUser(c);
 
   if (!c.env.RESEND_API_KEY || !c.env.EMAIL_FROM) {
-    return c.json({ ok: false, error: 'Email not configured (RESEND_API_KEY or EMAIL_FROM missing).' }, 503);
+    return c.json(
+      { ok: false, error: 'Email not configured (RESEND_API_KEY or EMAIL_FROM missing).' },
+      503,
+    );
   }
 
   const appId = c.req.param('appId')!;
-  const body = await c.req.json<{
-    to: string;
-    subject: string;
-    html?: string;
-    text?: string;
-  }>().catch(() => null);
+  const body = await c.req
+    .json<{
+      to: string;
+      subject: string;
+      html?: string;
+      text?: string;
+    }>()
+    .catch(() => null);
 
   if (!body) {
     return c.json({ ok: false, error: 'Invalid JSON body.' }, 400);
@@ -67,10 +72,13 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
     nowMs: Date.now(),
   });
   if (!usage.allowed) {
-    return c.json({
-      ok: false,
-      error: `Daily email limit reached (${DAILY_EMAIL_LIMIT}/day per app). Resets at midnight UTC.`,
-    }, 429);
+    return c.json(
+      {
+        ok: false,
+        error: `Daily email limit reached (${DAILY_EMAIL_LIMIT}/day per app). Resets at midnight UTC.`,
+      },
+      429,
+    );
   }
 
   try {
@@ -96,5 +104,9 @@ function escapeHtml(s: string): string {
 }
 
 function stripHtml(s: string): string {
-  return s.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, ' ').trim();
+  return s
+    .replace(/<[^>]*>/g, '')
+    .replace(/&[^;]+;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

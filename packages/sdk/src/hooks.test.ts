@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 // Mock React hooks since we're running in node environment
 vi.mock('react', () => ({
   useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
-  useState: (init: unknown) => [typeof init === 'function' ? (init as () => unknown)() : init, vi.fn()],
+  useState: (init: unknown) => [
+    typeof init === 'function' ? (init as () => unknown)() : init,
+    vi.fn(),
+  ],
   useEffect: vi.fn(),
   useCallback: (fn: unknown) => fn,
 }));

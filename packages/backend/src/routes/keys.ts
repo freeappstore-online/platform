@@ -13,8 +13,8 @@
  */
 
 import { Hono } from 'hono';
+import { requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
-import { requireUser, type CurrentUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 type AppEnv = { Bindings: Env };
@@ -24,8 +24,9 @@ export const keysRoutes = new Hono<AppEnv>();
 // ── Providers list (public, no auth) ──────────────────────────────────
 
 keysRoutes.get('/keys/providers', async (c) => {
-  const rows = await c.env.DB.prepare('SELECT id, name, docs_url, key_prefix FROM key_providers ORDER BY name')
-    .all<{ id: string; name: string; docs_url: string | null; key_prefix: string | null }>();
+  const rows = await c.env.DB.prepare(
+    'SELECT id, name, docs_url, key_prefix FROM key_providers ORDER BY name',
+  ).all<{ id: string; name: string; docs_url: string | null; key_prefix: string | null }>();
   return c.json({ providers: rows.results });
 });
 
@@ -37,7 +38,12 @@ keysRoutes.get('/keys/status', async (c) => {
     'SELECT provider, label, created_at, last_used_at FROM user_api_keys WHERE user_id = ?',
   )
     .bind(user.id)
-    .all<{ provider: string; label: string | null; created_at: number; last_used_at: number | null }>();
+    .all<{
+      provider: string;
+      label: string | null;
+      created_at: number;
+      last_used_at: number | null;
+    }>();
   return c.json({
     keys: rows.results.map((r) => ({
       provider: r.provider,
@@ -72,10 +78,13 @@ keysRoutes.put('/keys/:provider', async (c) => {
 
   // Optional prefix validation
   if (prov.key_prefix && !body.value.startsWith(prov.key_prefix)) {
-    return c.json({
-      ok: false,
-      error: `Key should start with "${prov.key_prefix}". Check you copied the full key.`,
-    }, 400);
+    return c.json(
+      {
+        ok: false,
+        error: `Key should start with "${prov.key_prefix}". Check you copied the full key.`,
+      },
+      400,
+    );
   }
 
   const sealed = await sealSecret(body.value, c.env.APP_SECRET_KEK);
@@ -109,7 +118,9 @@ keysRoutes.delete('/keys/:provider', async (c) => {
   const user = await requireUser(c);
 
   const provider = c.req.param('provider');
-  const result = await c.env.DB.prepare('DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?')
+  const result = await c.env.DB.prepare(
+    'DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?',
+  )
     .bind(user.id, provider)
     .run();
 
@@ -124,9 +135,10 @@ export async function resolveUserKey(
   provider: string,
   kek: string,
 ): Promise<string | null> {
-  const row = await db.prepare(
-    'SELECT key_ciphertext, dek_wrapped, iv FROM user_api_keys WHERE user_id = ? AND provider = ?',
-  )
+  const row = await db
+    .prepare(
+      'SELECT key_ciphertext, dek_wrapped, iv FROM user_api_keys WHERE user_id = ? AND provider = ?',
+    )
     .bind(userId, provider)
     .first<{ key_ciphertext: ArrayBuffer; dek_wrapped: ArrayBuffer; iv: ArrayBuffer }>();
 
@@ -143,7 +155,8 @@ export async function resolveUserKey(
 
   // Probabilistic last_used_at update (1 in 10)
   if (Math.random() < 0.1) {
-    await db.prepare('UPDATE user_api_keys SET last_used_at = ? WHERE user_id = ? AND provider = ?')
+    await db
+      .prepare('UPDATE user_api_keys SET last_used_at = ? WHERE user_id = ? AND provider = ?')
       .bind(Date.now(), userId, provider)
       .run()
       .catch(() => {});
@@ -163,7 +176,12 @@ keysRoutes.get('/keys', async (c) => {
       'SELECT provider, label, created_at, last_used_at FROM user_api_keys WHERE user_id = ?',
     )
       .bind(user.id)
-      .all<{ provider: string; label: string | null; created_at: number; last_used_at: number | null }>();
+      .all<{
+        provider: string;
+        label: string | null;
+        created_at: number;
+        last_used_at: number | null;
+      }>();
     return c.json({ keys: rows.results });
   }
 

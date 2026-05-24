@@ -22,11 +22,7 @@ export class Email {
    * @param subject - email subject (max 200 chars, auto-prefixed with [appId])
    * @param opts - email body (at least one of html or text required)
    */
-  async send(
-    to: string,
-    subject: string,
-    opts: { html?: string; text?: string },
-  ): Promise<void> {
+  async send(to: string, subject: string, opts: { html?: string; text?: string }): Promise<void> {
     if (!this.auth.token) {
       throw new Error('email.send: not signed in. Call fas.auth.signIn() first.');
     }

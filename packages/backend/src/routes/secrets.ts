@@ -9,8 +9,8 @@ import {
   validateRule,
 } from '../lib/proxy-allowlist.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
-import { resolveUserKey } from './keys.js';
 import type { Env } from '../types.js';
+import { resolveUserKey } from './keys.js';
 
 export const secretsRoutes = new Hono<{ Bindings: Env }>();
 
@@ -404,12 +404,15 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       }
       const userKey = await resolveUserKey(c.env.DB, (user as CurrentUser).id, provider, kek);
       if (!userKey) {
-        return c.json({
-          error: `no_key`,
-          provider,
-          message: `You need to configure your ${provider} API key. Visit the platform key management page.`,
-          manage_url: `/v1/keys?provider=${provider}&app=${appId}`,
-        }, 403);
+        return c.json(
+          {
+            error: `no_key`,
+            provider,
+            message: `You need to configure your ${provider} API key. Visit the platform key management page.`,
+            manage_url: `/v1/keys?provider=${provider}&app=${appId}`,
+          },
+          403,
+        );
       }
       plaintext = userKey;
 

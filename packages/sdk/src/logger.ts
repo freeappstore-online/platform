@@ -66,10 +66,18 @@ export class Logger {
 
   // ── Public API ────────────────────────────────────────────────
 
-  debug(message: string, data?: unknown) { this.add('debug', 'app', message, data); }
-  info(message: string, data?: unknown) { this.add('info', 'app', message, data); }
-  warn(message: string, data?: unknown) { this.add('warn', 'app', message, data); }
-  error(message: string, data?: unknown) { this.add('error', 'app', message, data); }
+  debug(message: string, data?: unknown) {
+    this.add('debug', 'app', message, data);
+  }
+  info(message: string, data?: unknown) {
+    this.add('info', 'app', message, data);
+  }
+  warn(message: string, data?: unknown) {
+    this.add('warn', 'app', message, data);
+  }
+  error(message: string, data?: unknown) {
+    this.add('error', 'app', message, data);
+  }
 
   /** Get all in-memory log entries (newest first). */
   entries(): LogEntry[] {
@@ -78,11 +86,13 @@ export class Logger {
 
   /** Dump all logs as a formatted string (for console or clipboard). */
   dump(): string {
-    return this.entries().map(e => {
-      const time = new Date(e.ts).toISOString().slice(11, 23);
-      const data = e.data ? ` ${JSON.stringify(e.data)}` : '';
-      return `${time} [${e.level.toUpperCase().padEnd(5)}] ${e.category}: ${e.message}${data}`;
-    }).join('\n');
+    return this.entries()
+      .map((e) => {
+        const time = new Date(e.ts).toISOString().slice(11, 23);
+        const data = e.data ? ` ${JSON.stringify(e.data)}` : '';
+        return `${time} [${e.level.toUpperCase().padEnd(5)}] ${e.category}: ${e.message}${data}`;
+      })
+      .join('\n');
   }
 
   /** Clear all logs (memory + localStorage). */
@@ -101,7 +111,7 @@ export class Logger {
   /** Get build metadata for the current session. */
   getBuildMeta(): BuildMeta {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const env = typeof import.meta !== 'undefined' ? (import.meta as any).env ?? {} : {};
+    const env = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
     return {
       appVersion: env.VITE_APP_VERSION ?? undefined,
       commitSha: env.VITE_COMMIT_SHA ?? undefined,
@@ -109,7 +119,8 @@ export class Logger {
       sdkVersion: SDK_VERSION,
       userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown',
       url: typeof location !== 'undefined' ? location.href : 'unknown',
-      viewport: typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : 'unknown',
+      viewport:
+        typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : 'unknown',
       theme: typeof document !== 'undefined' ? document.documentElement.dataset.theme : undefined,
     };
   }
@@ -164,10 +175,7 @@ export class Logger {
     if (typeof localStorage === 'undefined') return;
     try {
       const entries = this.buffer.slice(-STORAGE_LIMIT);
-      localStorage.setItem(
-        `${STORAGE_KEY_PREFIX}${this.appId}`,
-        JSON.stringify(entries),
-      );
+      localStorage.setItem(`${STORAGE_KEY_PREFIX}${this.appId}`, JSON.stringify(entries));
     } catch {
       // Storage full or unavailable, ignore
     }
@@ -199,17 +207,14 @@ export class Logger {
 
     const batch = this.buffer.slice(-UPLOAD_BATCH_SIZE);
     try {
-      const res = await fetch(
-        `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/logs`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${this.auth.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ entries: batch }),
+      const res = await fetch(`${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/logs`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.auth.token}`,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({ entries: batch }),
+      });
       // Don't retry on failure, just let next interval try again
       if (!res.ok) return;
     } catch {

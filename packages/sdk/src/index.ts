@@ -8,15 +8,15 @@ import { Logger } from './logger.js';
 import { ApiProxy } from './proxy.js';
 import { Roles } from './roles.js';
 import { Rooms } from './rooms.js';
-import { Webhooks } from './webhooks.js';
 import type { FasInitOptions } from './types.js';
+import { Webhooks } from './webhooks.js';
 
 export type { AuthProvider } from './auth.js';
 export type { Collection, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
-export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
-export type { RoleAssignment, DefaultRole } from './roles.js';
+export type { DefaultRole, RoleAssignment } from './roles.js';
 export { DEFAULT_ROLES } from './roles.js';
+export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
 export type { FasInitOptions, Unsubscribe, User } from './types.js';
 
 /** Root SDK instance — provides auth, kv, collections, counters, rooms, and proxy sub-clients. */

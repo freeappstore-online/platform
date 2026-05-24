@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { HttpError } from './lib/auth.js';
 import { runAudit } from './lib/audit.js';
+import { HttpError } from './lib/auth.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { isAllowedOrigin } from './lib/origins.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
@@ -11,16 +11,16 @@ import { auditRoutes } from './routes/audit.js';
 import { authRoutes } from './routes/auth.js';
 import { counterRoutes } from './routes/counters.js';
 import { dbRoutes } from './routes/db.js';
+import { emailRoutes } from './routes/email.js';
 import { exchangeRoutes } from './routes/exchange.js';
+import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
+import { logsRoutes } from './routes/logs.js';
 import { publishRoutes } from './routes/publish.js';
+import { rolesRoutes } from './routes/roles.js';
 import { roomRoutes } from './routes/rooms.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { uptimeRoutes } from './routes/uptime.js';
-import { rolesRoutes } from './routes/roles.js';
-import { keysRoutes } from './routes/keys.js';
-import { emailRoutes } from './routes/email.js';
-import { logsRoutes } from './routes/logs.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import type { Env } from './types.js';
 
@@ -88,8 +88,12 @@ export default {
     } else if (event.cron === '0 3 * * *') {
       // Daily log cleanup — prune entries older than 7 days.
       const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const result = await env.DB.prepare('DELETE FROM app_logs WHERE ingested_at < ?').bind(cutoff).run();
-      console.log(`log-prune: deleted=${result.meta?.changes ?? 0} (cutoff=${new Date(cutoff).toISOString()})`);
+      const result = await env.DB.prepare('DELETE FROM app_logs WHERE ingested_at < ?')
+        .bind(cutoff)
+        .run();
+      console.log(
+        `log-prune: deleted=${result.meta?.changes ?? 0} (cutoff=${new Date(cutoff).toISOString()})`,
+      );
     } else if (event.cron === '0 6 * * SUN') {
       // Weekly compliance audit — Sunday 06:00 UTC. Logs the totals
       // so a missed audit is obvious in `wrangler tail`.
