@@ -9,6 +9,7 @@ import {
   validateRule,
 } from '../lib/proxy-allowlist.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
+import { getOAuth2Token } from '../lib/proxy-oauth2.js';
 import type { Env } from '../types.js';
 import { resolveUserKey } from './keys.js';
 
@@ -167,6 +168,8 @@ interface AllowlistRow {
   inject_kind: string;
   inject_name: string;
   secret_name: string;
+  secret_name_2: string | null;
+  token_url: string | null;
   methods: string;
   created_at: number;
 }
@@ -177,6 +180,8 @@ function rowToRule(r: AllowlistRow): AllowlistRule {
     injectKind: r.inject_kind as AllowlistRule['injectKind'],
     injectName: r.inject_name,
     secretName: r.secret_name,
+    secretName2: r.secret_name_2 ?? '',
+    tokenUrl: r.token_url ?? '',
     methods: r.methods.split(',').filter(Boolean),
   };
 }
@@ -186,7 +191,7 @@ secretsRoutes.get(
   wrap(async (c) => {
     await requireOwner(c, c.req.param('appId')!);
     const result = await c.env.DB.prepare(
-      `SELECT pattern, inject_kind, inject_name, secret_name, methods, created_at
+      `SELECT pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at
        FROM app_proxy_allowlist WHERE app_id = ? ORDER BY pattern`,
     )
       .bind(c.req.param('appId')!)
@@ -197,6 +202,8 @@ secretsRoutes.get(
         injectKind: r.inject_kind,
         injectName: r.inject_name,
         secretName: r.secret_name,
+        ...(r.secret_name_2 ? { secretName2: r.secret_name_2 } : {}),
+        ...(r.token_url ? { tokenUrl: r.token_url } : {}),
         methods: r.methods.split(',').filter(Boolean),
         createdAt: r.created_at,
       })),
@@ -209,6 +216,8 @@ interface PutAllowlistBody {
   injectKind?: unknown;
   injectName?: unknown;
   secretName?: unknown;
+  secretName2?: unknown;
+  tokenUrl?: unknown;
   methods?: unknown;
 }
 
@@ -223,10 +232,12 @@ secretsRoutes.put(
       injectKind: String(body.injectKind ?? ''),
       injectName: String(body.injectName ?? ''),
       secretName: String(body.secretName ?? ''),
+      secretName2: body.secretName2 ? String(body.secretName2) : '',
+      tokenUrl: body.tokenUrl ? String(body.tokenUrl) : '',
       methods: Array.isArray(body.methods) ? (body.methods as string[]) : [],
     });
 
-    // Secret must exist before we let an allowlist rule reference it —
+    // Secret(s) must exist before we let an allowlist rule reference them —
     // otherwise the proxy will silently 404 every call.
     const secretExists = await c.env.DB.prepare(
       'SELECT 1 FROM app_secrets WHERE app_id = ? AND name = ?',
@@ -235,6 +246,16 @@ secretsRoutes.put(
       .first();
     if (!secretExists) {
       throw new HttpError(400, `secret '${rule.secretName}' not found for this app`);
+    }
+    if (rule.secretName2) {
+      const secret2Exists = await c.env.DB.prepare(
+        'SELECT 1 FROM app_secrets WHERE app_id = ? AND name = ?',
+      )
+        .bind(appId, rule.secretName2)
+        .first();
+      if (!secret2Exists) {
+        throw new HttpError(400, `secret '${rule.secretName2}' not found for this app`);
+      }
     }
 
     // Free cap on rule count (only when adding a new pattern).
@@ -259,13 +280,15 @@ secretsRoutes.put(
 
     await c.env.DB.prepare(
       `INSERT INTO app_proxy_allowlist
-         (app_id, pattern, inject_kind, inject_name, secret_name, methods, created_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+         (app_id, pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
        ON CONFLICT(app_id, pattern) DO UPDATE SET
-         inject_kind = excluded.inject_kind,
-         inject_name = excluded.inject_name,
-         secret_name = excluded.secret_name,
-         methods     = excluded.methods`,
+         inject_kind   = excluded.inject_kind,
+         inject_name   = excluded.inject_name,
+         secret_name   = excluded.secret_name,
+         secret_name_2 = excluded.secret_name_2,
+         token_url     = excluded.token_url,
+         methods       = excluded.methods`,
     )
       .bind(
         appId,
@@ -273,6 +296,8 @@ secretsRoutes.put(
         rule.injectKind,
         rule.injectName,
         rule.secretName,
+        rule.secretName2 || null,
+        rule.tokenUrl || null,
         rule.methods.join(','),
         Date.now(),
       )
@@ -382,7 +407,7 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
 
     // Look up rules for the app, then pick the best match.
     const ruleRows = await c.env.DB.prepare(
-      `SELECT pattern, inject_kind, inject_name, secret_name, methods, created_at
+      `SELECT pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at
        FROM app_proxy_allowlist WHERE app_id = ?`,
     )
       .bind(appId)
@@ -464,9 +489,40 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
           forwardHeaders.set(k, v);
         }
       }
-      const injected = injectSecret(rule, upstreamUrl, forwardHeaders, plaintext);
-      injectedUrl = injected.url;
-      injectedHeaders = injected.headers;
+
+      if (rule.injectKind === 'oauth2_cc') {
+        // OAuth2 client_credentials: plaintext is client_id, decrypt secret2 for client_secret
+        const secret2Row = await c.env.DB.prepare(
+          `SELECT key_ciphertext, dek_wrapped, iv FROM app_secrets
+           WHERE app_id = ? AND name = ?`,
+        )
+          .bind(appId, rule.secretName2)
+          .first<{ key_ciphertext: unknown; dek_wrapped: unknown; iv: unknown }>();
+        if (!secret2Row) {
+          return c.json({ error: `secret '${rule.secretName2}' not found` }, 500);
+        }
+        const clientSecret = await openSecret({
+          keyCiphertext: toUint8(secret2Row.key_ciphertext),
+          dekWrapped: toUint8(secret2Row.dek_wrapped),
+          iv: toUint8(secret2Row.iv),
+        }, kek);
+
+        // Get cached or fresh OAuth2 bearer token
+        const cacheKey = `${appId}:${rule.secretName}`;
+        const bearerToken = await getOAuth2Token({
+          cacheKey,
+          tokenUrl: rule.tokenUrl,
+          clientId: plaintext,
+          clientSecret,
+        });
+        forwardHeaders.set('Authorization', `Bearer ${bearerToken}`);
+        injectedUrl = upstreamUrl;
+        injectedHeaders = forwardHeaders;
+      } else {
+        const injected = injectSecret(rule, upstreamUrl, forwardHeaders, plaintext);
+        injectedUrl = injected.url;
+        injectedHeaders = injected.headers;
+      }
     }
 
     // Body: cap at 100 KB. Pull into memory once so we can both measure

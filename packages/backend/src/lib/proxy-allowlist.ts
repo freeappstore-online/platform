@@ -12,9 +12,11 @@
  */
 export interface AllowlistRule {
   pattern: string; // URL prefix, no globs
-  injectKind: 'query' | 'header' | 'bearer';
-  injectName: string; // ignored for 'bearer'
-  secretName: string; // FK to app_secrets.name
+  injectKind: 'query' | 'header' | 'bearer' | 'oauth2_cc';
+  injectName: string; // ignored for 'bearer' and 'oauth2_cc'
+  secretName: string; // FK to app_secrets.name (client_id for oauth2_cc)
+  secretName2: string; // FK to app_secrets.name for client_secret (oauth2_cc only)
+  tokenUrl: string; // token endpoint URL (oauth2_cc only)
   methods: string[]; // upper-case HTTP verbs
 }
 
@@ -46,6 +48,8 @@ export function validateRule(input: {
   injectKind: string;
   injectName: string;
   secretName: string;
+  secretName2?: string;
+  tokenUrl?: string;
   methods: string[];
 }): AllowlistRule {
   const { pattern, injectKind, injectName, secretName, methods } = input;
@@ -64,15 +68,35 @@ export function validateRule(input: {
       `host ${url.hostname} is reserved for the PAS AI key vault and cannot be used with the free app-secret proxy`,
     );
   }
-  if (injectKind !== 'query' && injectKind !== 'header' && injectKind !== 'bearer') {
-    throw new AllowlistError(`injectKind must be 'query' | 'header' | 'bearer'`);
+  const validKinds = ['query', 'header', 'bearer', 'oauth2_cc'] as const;
+  if (!validKinds.includes(injectKind as typeof validKinds[number])) {
+    throw new AllowlistError(`injectKind must be one of: ${validKinds.join(', ')}`);
   }
-  if (injectKind !== 'bearer' && !injectName) {
+  if (injectKind !== 'bearer' && injectKind !== 'oauth2_cc' && !injectName) {
     throw new AllowlistError(`injectName is required for injectKind='${injectKind}'`);
   }
   if (!secretName) {
     throw new AllowlistError('secretName is required');
   }
+
+  // OAuth2 client_credentials requires a second secret (client_secret) and a token URL
+  let secretName2 = input.secretName2 ?? '';
+  let tokenUrl = input.tokenUrl ?? '';
+  if (injectKind === 'oauth2_cc') {
+    if (!secretName2) {
+      throw new AllowlistError('secretName2 (client_secret) is required for oauth2_cc');
+    }
+    if (!tokenUrl) {
+      throw new AllowlistError('tokenUrl is required for oauth2_cc');
+    }
+    if (!tokenUrl.startsWith('https://')) {
+      throw new AllowlistError('tokenUrl must start with https://');
+    }
+    try { new URL(tokenUrl); } catch {
+      throw new AllowlistError('tokenUrl is not a valid URL');
+    }
+  }
+
   if (!Array.isArray(methods) || methods.length === 0) {
     throw new AllowlistError('methods must be a non-empty array');
   }
@@ -84,9 +108,11 @@ export function validateRule(input: {
   }
   return {
     pattern,
-    injectKind,
+    injectKind: injectKind as AllowlistRule['injectKind'],
     injectName,
     secretName,
+    secretName2,
+    tokenUrl,
     methods: upperMethods,
   };
 }

@@ -64,7 +64,7 @@ describe('keys routes', () => {
     expect(res.status).toBe(200);
     const data = await res.json() as { keys: Array<{ provider: string }> };
     expect(data.keys).toHaveLength(1);
-    expect(data.keys[0].provider).toBe('openai');
+    expect(data.keys[0]!.provider).toBe('openai');
   });
 
   it('PUT /v1/keys/:provider returns 503 without APP_SECRET_KEK', async () => {

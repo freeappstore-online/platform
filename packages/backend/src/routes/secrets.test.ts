@@ -32,6 +32,8 @@ interface AllowRow {
   inject_kind: string;
   inject_name: string;
   secret_name: string;
+  secret_name_2: string | null;
+  token_url: string | null;
   methods: string;
   created_at: number;
 }
@@ -125,7 +127,7 @@ function all(sql: string, bound: unknown[], d: FakeData): unknown[] {
   }
   if (
     sql.startsWith(
-      'SELECT pattern, inject_kind, inject_name, secret_name, methods, created_at FROM app_proxy_allowlist',
+      'SELECT pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at FROM app_proxy_allowlist',
     )
   ) {
     return d.allow.filter((r) => r.app_id === bound[0]);
@@ -163,12 +165,14 @@ function run(sql: string, bound: unknown[], d: FakeData): number {
     return before - d.secrets.length;
   }
   if (sql.startsWith('INSERT INTO app_proxy_allowlist')) {
-    const [app_id, pattern, inject_kind, inject_name, secret_name, methods, created_at] = bound as [
+    const [app_id, pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at] = bound as [
       string,
       string,
       string,
       string,
       string,
+      string | null,
+      string | null,
       string,
       number,
     ];
@@ -179,6 +183,8 @@ function run(sql: string, bound: unknown[], d: FakeData): number {
       inject_kind,
       inject_name,
       secret_name,
+      secret_name_2,
+      token_url,
       methods,
       created_at,
     };
