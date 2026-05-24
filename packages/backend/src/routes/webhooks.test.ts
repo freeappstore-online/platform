@@ -16,6 +16,7 @@ function fakeDB(opts: {
         bind: (..._args: unknown[]) => ({
           first: async () => {
             if (trimmed.includes('FROM users')) return opts.user ?? null;
+            if (trimmed.includes('FROM apps')) return opts.user ? { owner_login: (opts.user as Record<string, unknown>).github_login } : null;
             if (trimmed.includes('COUNT(*)')) return { n: opts.count ?? 0 };
             if (trimmed.includes('FROM app_webhooks') && trimmed.includes('id = ?')) return opts.webhooks?.[0] ?? null;
             return null;

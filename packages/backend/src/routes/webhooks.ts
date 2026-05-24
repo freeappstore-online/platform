@@ -8,8 +8,17 @@
  */
 
 import { Hono } from 'hono';
-import { requireUser } from '../lib/auth.js';
+import { HttpError, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
+
+async function requireOwner(c: { req: { param: (n: string) => string }; env: Env }, appId: string) {
+  const user = await requireUser(c as Parameters<typeof requireUser>[0]);
+  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+    .bind(appId).first<{ owner_login: string }>();
+  if (!row) throw new HttpError(404, 'app not found');
+  if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
+  return user;
+}
 
 export const webhookRoutes = new Hono<{ Bindings: Env }>();
 
@@ -29,8 +38,8 @@ const MAX_WEBHOOKS_PER_APP = 5;
 // ── CRUD ────────────────────────────────────────────────────────
 
 webhookRoutes.get('/apps/:appId/webhooks', async (c) => {
-  const _user = await requireUser(c);
   const appId = c.req.param('appId')!;
+  await requireOwner(c, appId);
 
   const { results } = await c.env.DB.prepare(
     'SELECT id, event, url, active, created_at FROM app_webhooks WHERE app_id = ? ORDER BY created_at DESC',
@@ -42,8 +51,8 @@ webhookRoutes.get('/apps/:appId/webhooks', async (c) => {
 });
 
 webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
-  const _user = await requireUser(c);
   const appId = c.req.param('appId')!;
+  await requireOwner(c, appId);
 
   const body = await c.req.json<{ event: string; url: string }>().catch(() => null);
   if (!body?.event || !body?.url) {
@@ -107,8 +116,8 @@ webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
 });
 
 webhookRoutes.delete('/apps/:appId/webhooks/:id', async (c) => {
-  const _user = await requireUser(c);
   const appId = c.req.param('appId')!;
+  await requireOwner(c, appId);
   const webhookId = c.req.param('id')!;
 
   const result = await c.env.DB.prepare('DELETE FROM app_webhooks WHERE id = ? AND app_id = ?')
@@ -122,8 +131,8 @@ webhookRoutes.delete('/apps/:appId/webhooks/:id', async (c) => {
 // ── Test delivery ───────────────────────────────────────────────
 
 webhookRoutes.post('/apps/:appId/webhooks/:id/test', async (c) => {
-  const _user = await requireUser(c);
   const appId = c.req.param('appId')!;
+  await requireOwner(c, appId);
   const webhookId = c.req.param('id')!;
 
   const hook = await c.env.DB.prepare(
