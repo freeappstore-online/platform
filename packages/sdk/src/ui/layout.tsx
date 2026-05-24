@@ -1,8 +1,9 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
-import { Footer } from './components.js';
+import { Footer, Modal } from './components.js';
 import { Avatar, SignInButton, TextSizeToggle, ThemeToggle } from './core.js';
+import { FriendRequestBadge, FriendsList } from './friends.js';
 
 // ---------------------------------------------------------------------------
 // ProfileMenu
@@ -18,6 +19,7 @@ export interface ProfileMenuProps {
 export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMenuProps) {
   const { user, signOut, deleteAccount } = useAuth(app);
   const [open, setOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -114,6 +116,15 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
           >
             API Keys
           </button>
+          <button
+            onClick={() => {
+              setFriendsOpen(true);
+              setOpen(false);
+            }}
+            style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            Friends <FriendRequestBadge app={app} />
+          </button>
           {children}
           <button onClick={handleSignOut} style={menuItemStyle}>
             Sign out
@@ -123,6 +134,9 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
           </button>
         </div>
       )}
+      <Modal open={friendsOpen} onClose={() => setFriendsOpen(false)} title="Friends" maxWidth={420}>
+        <FriendsList app={app} />
+      </Modal>
     </div>
   );
 }

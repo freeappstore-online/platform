@@ -31,6 +31,10 @@ const SUPPORTED_EVENTS = [
   'counter.threshold',
   'role.assigned',
   'role.revoked',
+  'friend.requested',
+  'friend.accepted',
+  'friend.removed',
+  'friend.blocked',
 ];
 
 const MAX_WEBHOOKS_PER_APP = 5;
@@ -177,6 +181,42 @@ export async function dispatchWebhook(
     const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body));
 
     // Update delivery status
+    await db
+      .prepare('UPDATE webhook_deliveries SET status = ?, last_attempt_at = ? WHERE id = ?')
+      .bind(result.status, Math.floor(Date.now() / 1000), deliveryId)
+      .run();
+  }
+}
+
+/**
+ * Dispatch a webhook for platform-level events (not scoped to a single app).
+ * Queries all active webhooks for the event across all apps.
+ */
+export async function dispatchWebhookPlatform(
+  db: D1Database,
+  event: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const hooks = await db
+    .prepare(
+      'SELECT id, app_id, url, secret FROM app_webhooks WHERE event = ? AND active = 1',
+    )
+    .bind(event)
+    .all<{ id: string; app_id: string; url: string; secret: string }>();
+
+  for (const hook of hooks.results ?? []) {
+    const deliveryId = crypto.randomUUID();
+    const body = JSON.stringify({ ...payload, event, appId: hook.app_id, timestamp: Date.now() });
+
+    await db
+      .prepare(
+        'INSERT INTO webhook_deliveries (id, webhook_id, event, payload, attempts, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+      )
+      .bind(deliveryId, hook.id, event, body, Math.floor(Date.now() / 1000))
+      .run();
+
+    const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body));
+
     await db
       .prepare('UPDATE webhook_deliveries SET status = ?, last_attempt_at = ? WHERE id = ?')
       .bind(result.status, Math.floor(Date.now() / 1000), deliveryId)

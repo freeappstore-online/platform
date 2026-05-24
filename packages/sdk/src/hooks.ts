@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import type { Friend } from './friends.js';
 import type { FreeAppStore } from './index.js';
 import type { User } from './types.js';
 
@@ -129,4 +130,34 @@ export function useAuth(app: FreeAppStore) {
   const hasRole = useCallback((role: string) => app.roles.check(role), [app]);
 
   return { user, loading, signIn, signOut, deleteAccount, hasRole };
+}
+
+/**
+ * Friends hook — fetches friends + incoming requests on mount.
+ *
+ * Usage:
+ * ```tsx
+ * const { friends, requests, loading, requestCount, refresh } = useFriends(fas)
+ * ```
+ */
+export function useFriends(app: FreeAppStore) {
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [requests, setRequests] = useState<Friend[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      app.friends.list('accepted'),
+      app.friends.requests(),
+    ]).then(([f, r]) => {
+      setFriends(f);
+      setRequests(r);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [app]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  return { friends, requests, loading, requestCount: requests.length, refresh };
 }

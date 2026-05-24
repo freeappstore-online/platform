@@ -2,6 +2,7 @@ import { Auth } from './auth.js';
 import { Counters } from './counters.js';
 import { Collections } from './db.js';
 import { Email } from './email.js';
+import { Friends } from './friends.js';
 import { Keys } from './keys.js';
 import { Kv } from './kv.js';
 import { Logger } from './logger.js';
@@ -14,6 +15,7 @@ import { Webhooks } from './webhooks.js';
 export type { AuthProvider } from './auth.js';
 export type { Collection, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
+export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
 export type { DefaultRole, RoleAssignment } from './roles.js';
 export { DEFAULT_ROLES } from './roles.js';
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
@@ -32,6 +34,7 @@ export class FreeAppStore {
   readonly email: Email;
   readonly log: Logger;
   readonly webhooks: Webhooks;
+  readonly friends: Friends;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -46,6 +49,7 @@ export class FreeAppStore {
     this.email = new Email(opts.appId, apiBase, this.auth);
     this.log = new Logger(opts.appId, apiBase, this.auth);
     this.webhooks = new Webhooks(opts.appId, apiBase, this.auth);
+    this.friends = new Friends(opts.appId, apiBase, this.auth);
   }
 }
 

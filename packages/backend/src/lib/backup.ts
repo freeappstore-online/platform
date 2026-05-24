@@ -38,6 +38,7 @@ const PLAIN_TABLES = [
   'documents',
   'app_roles',
   'consumed_tokens',
+  'friendships',
 ] as const;
 
 export async function backupD1ToR2(

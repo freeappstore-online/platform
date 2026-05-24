@@ -40,3 +40,5 @@ export type {
   ShellProps as FasShellProps,
 } from './layout.js';
 export { ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';
+export type { AddFriendButtonProps, FriendRequestBadgeProps, FriendsListProps } from './friends.js';
+export { AddFriendButton, FriendRequestBadge, FriendsList } from './friends.js';
