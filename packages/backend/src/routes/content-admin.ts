@@ -173,7 +173,7 @@ contentAdminRoutes.get('/admin/apps', async (c) => {
   await requireAdmin(c);
 
   const apps = await c.env.DB.prepare(
-    'SELECT id, name, store, category, creator_id, created_at FROM apps ORDER BY created_at DESC',
+    'SELECT id, name, store, category, creator_id, created_at FROM apps ORDER BY id ASC',
   ).all();
 
   return c.json({ apps: apps.results ?? [] });
