@@ -85,6 +85,8 @@ export function VoiceTextArea({
   onSubmit,
   style: extraStyle,
 }: VoiceTextAreaProps) {
+  // Show interim transcript appended to real value, but never write it
+  // back via onChange — that would double-insert when onResult fires.
   const displayValue = voice.isListening && voice.transcript
     ? value + (value ? ' ' : '') + voice.transcript
     : value;
@@ -95,9 +97,14 @@ export function VoiceTextArea({
     <div style={{ position: 'relative', ...extraStyle }}>
       <textarea
         value={displayValue}
-        onChange={(e) => onChange(e.currentTarget.value)}
+        onChange={(e) => {
+          // While listening, ignore onChange — the displayed value includes
+          // interim transcript that shouldn't be committed to state.
+          if (!voice.isListening) onChange(e.currentTarget.value);
+        }}
         placeholder={displayPlaceholder}
-        disabled={disabled || voice.isListening}
+        disabled={disabled}
+        readOnly={voice.isListening}
         rows={rows}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && onSubmit) {

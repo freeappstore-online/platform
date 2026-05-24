@@ -56,6 +56,9 @@ function getSpeechRecognitionCtor(): (new () => SpeechRecognitionInstance) | nul
  * <button onClick={voice.toggle}>{voice.isListening ? 'Stop' : 'Mic'}</button>
  * ```
  */
+// Evaluate once at module load — SpeechRecognition availability doesn't change at runtime.
+const speechSupported = !!getSpeechRecognitionCtor();
+
 export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputReturn {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -63,7 +66,7 @@ export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputR
   const onResultRef = useRef(onResult);
   onResultRef.current = onResult;
 
-  const isSupported = !!getSpeechRecognitionCtor();
+  const isSupported = speechSupported;
 
   useEffect(() => {
     const Ctor = getSpeechRecognitionCtor();
