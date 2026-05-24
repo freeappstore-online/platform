@@ -21,6 +21,26 @@ const REQUEST_COOLDOWN_MS = 60_000; // 1 min cooldown after decline before re-re
 /** @internal Exported for test cleanup only. */
 export const searchRateMap = new Map<string, number>();
 export const requestCooldownMap = new Map<string, number>();
+const RATE_MAP_MAX = 5_000;
+
+/** Evict stale entries and cap map size to prevent memory leaks. */
+function pruneMap(map: Map<string, number>, maxAge: number): void {
+  if (map.size < RATE_MAP_MAX) return;
+  const cutoff = Date.now() - maxAge;
+  for (const [k, v] of map) {
+    if (v < cutoff) map.delete(k);
+  }
+  // If still too large after pruning stale entries, clear everything
+  if (map.size >= RATE_MAP_MAX) map.clear();
+}
+
+const MAX_USER_ID_LEN = 128;
+
+function validateUserId(id: string): void {
+  if (!id || id.length > MAX_USER_ID_LEN) {
+    throw new HttpError(400, 'invalid userId');
+  }
+}
 
 /** Order two IDs alphabetically so (user_a < user_b) always holds. */
 function pair(a: string, b: string): [string, string] {
@@ -50,6 +70,7 @@ friendsRoutes.post('/friends/request', async (c) => {
   const me = await requireUser(c);
   const body = await c.req.json<{ userId: string }>().catch(() => null);
   if (!body?.userId) throw new HttpError(400, 'userId required');
+  validateUserId(body.userId);
   if (body.userId === me.id) throw new HttpError(400, 'cannot friend yourself');
 
   const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
@@ -114,6 +135,7 @@ friendsRoutes.post('/friends/request', async (c) => {
   }
 
   // Cooldown check: prevent re-requesting immediately after being declined
+  pruneMap(requestCooldownMap, REQUEST_COOLDOWN_MS);
   const cooldownKey = `${me.id}:${body.userId}`;
   const cooldownUntil = requestCooldownMap.get(cooldownKey) ?? 0;
   if (now < cooldownUntil) {
@@ -167,7 +189,7 @@ friendsRoutes.post('/friends/request', async (c) => {
 friendsRoutes.get('/friends', async (c) => {
   const me = await requireUser(c);
   const statusFilter = c.req.query('status') || 'accepted';
-  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 100);
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '200', 10) || 200, 1), 200);
   const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
 
   let sql: string;
@@ -221,6 +243,7 @@ friendsRoutes.get('/friends', async (c) => {
 friendsRoutes.patch('/friends/:userId', async (c) => {
   const me = await requireUser(c);
   const targetId = c.req.param('userId');
+  validateUserId(targetId);
   const body = await c.req.json<{ action: string }>().catch(() => null);
   if (!body?.action) throw new HttpError(400, 'action required');
 
@@ -301,6 +324,7 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
 friendsRoutes.delete('/friends/:userId', async (c) => {
   const me = await requireUser(c);
   const targetId = c.req.param('userId');
+  validateUserId(targetId);
   const [a, b] = pair(me.id, targetId);
 
   const row = await c.env.DB.prepare(
@@ -338,6 +362,7 @@ friendsRoutes.delete('/friends/:userId', async (c) => {
 friendsRoutes.get('/friends/check/:userId', async (c) => {
   const me = await requireUser(c);
   const targetId = c.req.param('userId');
+  validateUserId(targetId);
   const [a, b] = pair(me.id, targetId);
 
   const row = await c.env.DB.prepare(
@@ -364,6 +389,7 @@ friendsRoutes.get('/friends/search', async (c) => {
 
   // Rate limit: 1 search per 2s per user (after input validation so bad
   // requests get a proper 400 without consuming rate-limit tokens)
+  pruneMap(searchRateMap, SEARCH_RATE_LIMIT_MS);
   const lastSearch = searchRateMap.get(me.id) ?? 0;
   if (Date.now() - lastSearch < SEARCH_RATE_LIMIT_MS) {
     throw new HttpError(429, 'too many searches, try again shortly');

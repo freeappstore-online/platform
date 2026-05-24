@@ -92,8 +92,22 @@ export function validateRule(input: {
     if (!tokenUrl.startsWith('https://')) {
       throw new AllowlistError('tokenUrl must start with https://');
     }
-    try { new URL(tokenUrl); } catch {
+    let tokenHost: string;
+    try { tokenHost = new URL(tokenUrl).hostname; } catch {
       throw new AllowlistError('tokenUrl is not a valid URL');
+    }
+    if (isAiProviderHost(tokenHost)) {
+      throw new AllowlistError(
+        `tokenUrl host ${tokenHost} is reserved for the PAS AI key vault`,
+      );
+    }
+    // Block private/internal hosts on tokenUrl (same as webhook validation)
+    const h = tokenHost.toLowerCase();
+    if (h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' ||
+        h === '[::1]' || h.endsWith('.local') ||
+        h.startsWith('10.') || h.startsWith('192.168.') ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h === '169.254.169.254') {
+      throw new AllowlistError('tokenUrl must not point to private/internal addresses');
     }
   }
 
@@ -154,7 +168,7 @@ export function injectSecret(
     out.set(rule.injectName, secret);
     return { url, headers: out };
   }
-  if (rule.injectKind === 'bearer') {
+  if (rule.injectKind === 'bearer' || rule.injectKind === 'oauth2_cc') {
     out.set('Authorization', `Bearer ${secret}`);
     return { url, headers: out };
   }

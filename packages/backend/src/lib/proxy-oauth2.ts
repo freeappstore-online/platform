@@ -74,8 +74,10 @@ async function refreshToken(
   });
 
   if (!res.ok) {
+    // Log details server-side but don't surface upstream error body to the client
     const text = await res.text().catch(() => '');
-    throw new Error(`OAuth2 token request failed (${res.status}): ${text.slice(0, 200)}`);
+    console.error(`OAuth2 token refresh failed: ${res.status} ${text.slice(0, 500)}`);
+    throw new Error(`OAuth2 token request failed (${res.status})`);
   }
 
   const data = (await res.json()) as {

@@ -1102,6 +1102,61 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect(fwd.get('authorization')).toBe('Bearer ghp_secret');
   });
 
+  it('injects an OAuth2 bearer token via client_credentials flow', async () => {
+    const data = freshData();
+    // Seed both client_id and client_secret
+    await realSeed(data, 'AMADEUS_ID', 'my-client-id', {
+      pattern: 'https://test.api.amadeus.com/v2/',
+      inject_kind: 'oauth2_cc',
+      inject_name: '',
+      secret_name: 'AMADEUS_ID',
+      secret_name_2: 'AMADEUS_SECRET',
+      token_url: 'https://test.api.amadeus.com/v1/security/oauth2/token',
+      methods: 'GET',
+    });
+    // realSeed only seeds one secret; manually seed the second
+    const { sealSecret } = await import('../lib/encryption.js');
+    const sealed2 = await sealSecret('my-client-secret', KEK);
+    data.secrets.push({
+      app_id: 'weather',
+      name: 'AMADEUS_SECRET',
+      key_ciphertext: sealed2.keyCiphertext,
+      dek_wrapped: sealed2.dekWrapped,
+      iv: sealed2.iv,
+      created_at: 0,
+      last_used_at: null,
+    });
+
+    const captured: { url?: string; init?: RequestInit } = {};
+    const tokenCalls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('amadeus.com/v1/security/oauth2/token')) {
+        tokenCalls.push(u);
+        return new Response(JSON.stringify({ access_token: 'tok_abc', expires_in: 1799 }));
+      }
+      if (u.includes('amadeus.com/v2/')) {
+        captured.url = u;
+        captured.init = init;
+        return new Response(JSON.stringify({ data: [] }));
+      }
+      // FAS auth
+      return new Response(JSON.stringify(ownerUser));
+    }) as typeof fetch;
+
+    const res = await app.request(
+      '/v1/apps/weather/proxy/test.api.amadeus.com/v2/shopping/flights',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(200);
+    // Token endpoint was called
+    expect(tokenCalls).toHaveLength(1);
+    // Upstream got the OAuth2 bearer token, not the client_id
+    const fwd = new Headers(captured.init?.headers);
+    expect(fwd.get('authorization')).toBe('Bearer tok_abc');
+  });
+
   it('injects a header secret', async () => {
     const data = freshData();
     await realSeed(data, 'API_KEY', 'sek', {

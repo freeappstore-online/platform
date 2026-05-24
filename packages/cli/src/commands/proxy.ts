@@ -38,7 +38,7 @@ export const proxyCommand = new Command('proxy')
       .requiredOption('--secret <name>', 'name of a previously stored secret')
       .requiredOption(
         '--inject <spec>',
-        "where to inject the secret: 'query:<name>', 'header:<name>', or 'bearer'",
+        "how to inject: 'query:<name>', 'header:<name>', 'bearer', or 'oauth2_cc'",
       )
       .option('--secret2 <name>', 'second secret (client_secret for oauth2_cc)')
       .option('--token-url <url>', 'OAuth2 token endpoint (required for oauth2_cc)')
