@@ -15,6 +15,7 @@ export const friendsRoutes = new Hono<{ Bindings: Env }>();
 
 const MAX_FRIENDS = 200;
 const MAX_PENDING_OUTGOING = 50;
+const PENDING_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const SEARCH_RATE_LIMIT_MS = 2_000; // 1 search per 2s per user
 const REQUEST_COOLDOWN_MS = 60_000; // 1 min cooldown after decline before re-requesting same user
 
@@ -136,13 +137,14 @@ friendsRoutes.post('/friends/request', async (c) => {
   // Check limits + insert atomically via conditional INSERT to close TOCTOU gap.
   // The INSERT only succeeds if both counts are under their limits.
   try {
+    const pendingCutoff = now - PENDING_TTL_MS;
     const result = await c.env.DB.prepare(
       `INSERT INTO friendships (user_a, user_b, status, initiator, created_at, updated_at)
        SELECT ?, ?, 'pending', ?, ?, ?
        WHERE (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted') < ?
-         AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'pending' AND initiator = ?) < ?`,
+         AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'pending' AND initiator = ? AND created_at > ?) < ?`,
     )
-      .bind(a, b, me.id, now, now, me.id, me.id, MAX_FRIENDS, me.id, me.id, me.id, MAX_PENDING_OUTGOING)
+      .bind(a, b, me.id, now, now, me.id, me.id, MAX_FRIENDS, me.id, me.id, me.id, pendingCutoff, MAX_PENDING_OUTGOING)
       .run();
     if (!result.meta.changes) {
       // INSERT matched 0 rows — one of the limits was hit. Check which.
@@ -199,22 +201,26 @@ friendsRoutes.get('/friends', async (c) => {
   let sql: string;
   let params: unknown[];
 
+  const pendingCutoff = Date.now() - PENDING_TTL_MS;
+
   if (statusFilter === 'pending_incoming') {
     sql = `SELECT f.*, u.github_login, u.avatar_url, u.display_name,
              CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friend_id
            FROM friendships f
            JOIN users u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END
            WHERE (f.user_a = ? OR f.user_b = ?) AND f.status = 'pending' AND f.initiator != ?
+             AND f.created_at > ?
            ORDER BY f.updated_at DESC LIMIT ? OFFSET ?`;
-    params = [me.id, me.id, me.id, me.id, me.id, limit, offset];
+    params = [me.id, me.id, me.id, me.id, me.id, pendingCutoff, limit, offset];
   } else if (statusFilter === 'pending_outgoing') {
     sql = `SELECT f.*, u.github_login, u.avatar_url, u.display_name,
              CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friend_id
            FROM friendships f
            JOIN users u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END
            WHERE (f.user_a = ? OR f.user_b = ?) AND f.status = 'pending' AND f.initiator = ?
+             AND f.created_at > ?
            ORDER BY f.updated_at DESC LIMIT ? OFFSET ?`;
-    params = [me.id, me.id, me.id, me.id, me.id, limit, offset];
+    params = [me.id, me.id, me.id, me.id, me.id, pendingCutoff, limit, offset];
   } else {
     // accepted (default)
     sql = `SELECT f.*, u.github_login, u.avatar_url, u.display_name,
@@ -312,11 +318,16 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
       return c.json({ ok: true, status: 'blocked' });
     }
 
-    // Block from any non-blocked state — upsert
+    // Block from any non-blocked state — upsert.
+    // ON CONFLICT preserves the first blocker if a race sets status='blocked'
+    // between our SELECT and this UPSERT (prevents blocker hijack via race).
     await c.env.DB.prepare(
       `INSERT INTO friendships (user_a, user_b, status, initiator, blocker, created_at, updated_at)
        VALUES (?, ?, 'blocked', ?, ?, ?, ?)
-       ON CONFLICT(user_a, user_b) DO UPDATE SET status = 'blocked', blocker = ?, updated_at = ?`,
+       ON CONFLICT(user_a, user_b) DO UPDATE SET
+         status = 'blocked',
+         blocker = CASE WHEN friendships.status = 'blocked' THEN friendships.blocker ELSE ? END,
+         updated_at = ?`,
     )
       .bind(a, b, me.id, me.id, now, now, me.id, now)
       .run();
