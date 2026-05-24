@@ -1127,7 +1127,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       last_used_at: null,
     });
 
-    const captured: { url?: string; init?: RequestInit } = {};
+    const captured: { url?: string; init?: RequestInit | undefined } = {};
     const tokenCalls: string[] = [];
     globalThis.fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
       const u = String(url);
@@ -1135,13 +1135,10 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
         tokenCalls.push(u);
         return new Response(JSON.stringify({ access_token: 'tok_abc', expires_in: 1799 }));
       }
-      if (u.includes('amadeus.com/v2/')) {
-        captured.url = u;
-        captured.init = init;
-        return new Response(JSON.stringify({ data: [] }));
-      }
-      // FAS auth
-      return new Response(JSON.stringify(ownerUser));
+      // Upstream API call
+      captured.url = u;
+      captured.init = init;
+      return new Response(JSON.stringify({ data: [] }));
     }) as typeof fetch;
 
     const res = await app.request(
