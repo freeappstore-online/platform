@@ -316,6 +316,105 @@ export function BuildInfo({ version, commit, buildDate, extra }: BuildInfoProps)
   );
 }
 
+// ---------------------------------------------------------------------------
+// Footer
+// ---------------------------------------------------------------------------
+
+export interface FooterProps {
+  /** Override the default "Part of FreeAppStore" text. */
+  text?: string;
+}
+
+/**
+ * Fixed bottom footer for PWA standalone mode. Shows "Part of FreeAppStore"
+ * branding and creates safe-area padding so app content doesn't sit in the
+ * iPhone home indicator / Siri zone.
+ *
+ * **Only renders when installed to home screen** (standalone display mode).
+ * Hidden in regular browser tabs where the browser already provides its own
+ * bottom chrome. This prevents accidental Siri activations on iPhones when
+ * users tap near the bottom of the screen.
+ *
+ * The Shell component includes this automatically. Use Footer directly only
+ * if you're building a custom layout without Shell.
+ */
+export function Footer({ text }: FooterProps) {
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(display-mode: standalone)');
+    const check = () => {
+      setIsStandalone(
+        mq.matches ||
+        (navigator as unknown as { standalone?: boolean }).standalone === true
+      );
+    };
+    check();
+    mq.addEventListener('change', check);
+    return () => mq.removeEventListener('change', check);
+  }, []);
+
+  if (!isStandalone) return null;
+
+  return (
+    <footer style={{
+      position: 'fixed',
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 900,
+      textAlign: 'center',
+      background: 'var(--surface, var(--dock, #ffffff))',
+      borderTop: '1px solid var(--border, var(--line, #e2e8f0))',
+      paddingTop: '0.5rem',
+      paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+    }}>
+      <a
+        href="https://freeappstore.online"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          fontSize: '0.65rem',
+          fontWeight: 600,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          color: 'var(--muted, #64748b)',
+          textDecoration: 'none',
+        }}
+      >
+        {text ?? 'Part of FreeAppStore'}
+      </a>
+    </footer>
+  );
+}
+
+/**
+ * Returns true when the app is running in PWA standalone mode (installed
+ * to home screen). Use this to add bottom padding to your content area
+ * so it doesn't sit behind the Footer.
+ */
+export function useStandalone(): boolean {
+  const [standalone, setStandalone] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(display-mode: standalone)');
+    const check = () => {
+      setStandalone(
+        mq.matches || (navigator as unknown as { standalone?: boolean }).standalone === true
+      );
+    };
+    check();
+    mq.addEventListener('change', check);
+    return () => mq.removeEventListener('change', check);
+  }, []);
+
+  return standalone;
+}
+
 export function KeyPrompt({ app, provider, providerName, message }: KeyPromptProps) {
   const name = providerName ?? provider;
   const msg = message ?? `This app uses ${name} and needs your API key. Your key is stored securely on the FreeAppStore platform and is never visible to the app.`;

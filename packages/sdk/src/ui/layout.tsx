@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from 'react';
 import type { FreeAppStore } from '../index.js';
 import { useAuth, useTheme } from '../hooks.js';
 import { Avatar, SignInButton, ThemeToggle, TextSizeToggle } from './core.js';
+import { Footer, useStandalone } from './components.js';
 
 // ---------------------------------------------------------------------------
 // ProfileMenu
@@ -279,10 +280,7 @@ export function Shell({ app, children, appName, requireAuth = false, showThemeTo
         </div>
       </header>
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>{children}</main>
-      <footer style={{ padding: '1rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--muted, #64748b)', borderTop: '1px solid var(--border, #e2e8f0)' }}>
-        Part of{' '}
-        <a href="https://freeappstore.online" style={{ color: 'var(--accent, #2563eb)', fontWeight: 600, textDecoration: 'none' }}>FreeAppStore</a>
-      </footer>
+      <Footer />
     </div>
   );
 }
