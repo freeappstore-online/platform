@@ -58,3 +58,6 @@ service = "freeappstore-admin"
 # Secrets (set interactively via `wrangler secret put <name>`):
 #   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
 #   SESSION_SIGNING_KEY      # 32+ bytes, e.g. `openssl rand -hex 32`
+#   APP_SECRET_KEK           # 32-byte base64 key for envelope encryption of app secrets
+#   INTERNAL_TOKEN           # shared with PAS backend (PAS's FAS_INTERNAL_TOKEN must match)
+#                            # enables POST /v1/internal/register-app for cross-store proxy
