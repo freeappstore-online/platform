@@ -23,6 +23,7 @@ import { secretsRoutes } from './routes/secrets.js';
 import { uptimeRoutes } from './routes/uptime.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { contentAdminRoutes } from './routes/content-admin.js';
+import { agentSessionRoutes } from './routes/agent-sessions.js';
 import type { Env } from './types.js';
 
 export { Room } from './do/room.js';
@@ -76,6 +77,7 @@ v1.route('/', emailRoutes);
 v1.route('/', logsRoutes);
 v1.route('/', webhookRoutes);
 v1.route('/', contentAdminRoutes);
+v1.route('/', agentSessionRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;
