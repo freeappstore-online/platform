@@ -6,6 +6,10 @@ describe('parseInject', () => {
     expect(parseInject('bearer')).toEqual({ kind: 'bearer', name: '' });
   });
 
+  it('recognizes oauth2_cc (no name)', () => {
+    expect(parseInject('oauth2_cc')).toEqual({ kind: 'oauth2_cc', name: '' });
+  });
+
   it('parses query:<name>', () => {
     expect(parseInject('query:appid')).toEqual({ kind: 'query', name: 'appid' });
   });

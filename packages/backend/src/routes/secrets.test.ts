@@ -634,6 +634,7 @@ describe('PUT /v1/apps/:appId/allowlist', () => {
         inject_kind: 'header',
         inject_name: 'X-API-Key',
         secret_name: 'KEY',
+        secret_name_2: null, token_url: null,
         methods: 'GET',
         created_at: 0,
       });
@@ -674,6 +675,7 @@ describe('PUT /v1/apps/:appId/allowlist', () => {
         inject_kind: 'header',
         inject_name: 'X-API-Key',
         secret_name: 'KEY',
+        secret_name_2: null, token_url: null,
         methods: 'GET',
         created_at: 0,
       });
@@ -740,6 +742,7 @@ describe('GET /v1/apps/:appId/allowlist', () => {
       inject_kind: 'query',
       inject_name: 'appid',
       secret_name: 'OPENWEATHER_KEY',
+      secret_name_2: null, token_url: null,
       methods: 'GET,POST',
       created_at: 1234,
     });
@@ -795,6 +798,7 @@ describe('DELETE /v1/apps/:appId/allowlist', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'KEY',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
       created_at: 0,
     });
@@ -847,6 +851,7 @@ describe('DELETE /v1/apps/:appId/allowlist', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'KEY',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
       created_at: 0,
     });
@@ -902,6 +907,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'X',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const res = await app.request(
@@ -919,6 +925,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'query',
       inject_name: 'appid',
       secret_name: 'OPENWEATHER_KEY',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { url?: string; init?: RequestInit | undefined } = {};
@@ -952,6 +959,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     // Match dayKey() format used by the route.
@@ -972,6 +980,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const huge = new Uint8Array(101 * 1024);
@@ -991,6 +1000,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'POST',
     });
     const big = new Uint8Array(101 * 1024);
@@ -1016,6 +1026,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     globalThis.fetch = vi.fn(async () => new Response('ok')) as typeof fetch;
@@ -1034,6 +1045,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     // Upstream returns gzip-tagged + multi-value Vary. Workers fetch would
@@ -1073,6 +1085,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'bearer',
       inject_name: '',
       secret_name: 'GH_TOKEN',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { init?: RequestInit | undefined } = {};
@@ -1096,6 +1109,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'API_KEY',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { init?: RequestInit | undefined } = {};
@@ -1119,6 +1133,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'query',
       inject_name: 'appid',
       secret_name: 'BASIC',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     await realSeed(data, 'PRO', 'pro-key', {
@@ -1126,6 +1141,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'query',
       inject_name: 'appid',
       secret_name: 'PRO',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { url?: string } = {};
@@ -1148,6 +1164,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { init?: RequestInit | undefined } = {};
@@ -1182,6 +1199,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { init?: RequestInit | undefined } = {};
@@ -1212,6 +1230,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'POST',
     });
     const captured: { init?: RequestInit | undefined } = {};
@@ -1243,6 +1262,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     globalThis.fetch = vi.fn(
@@ -1263,6 +1283,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'query',
       inject_name: 'appid',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { url?: string } = {};
@@ -1288,6 +1309,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'query',
       inject_name: 'apikey',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const captured: { url?: string } = {};
@@ -1312,6 +1334,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'GHOST',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
       created_at: 0,
     });
@@ -1332,6 +1355,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       inject_kind: 'header',
       inject_name: 'X-API-Key',
       secret_name: 'K',
+      secret_name_2: null, token_url: null,
       methods: 'GET',
     });
     const res = await app.request(

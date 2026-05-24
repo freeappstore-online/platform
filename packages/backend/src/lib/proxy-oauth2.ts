@@ -41,13 +41,18 @@ export async function getOAuth2Token(opts: {
 
   const promise = refreshToken(tokenUrl, clientId, clientSecret)
     .then(({ accessToken, expiresIn }) => {
-      // Cache with 60s safety margin
-      const expiresAt = Date.now() + (expiresIn - 60) * 1000;
+      // Cache with 60s safety margin, minimum 10s to avoid tight refresh loops
+      const ttlSeconds = Math.max(10, expiresIn - 60);
+      const expiresAt = Date.now() + ttlSeconds * 1000;
       tokenCache.set(cacheKey, { accessToken, expiresAt });
+      inflightRefresh.delete(cacheKey);
       return accessToken;
     })
-    .finally(() => {
+    .catch((err) => {
+      // Clear stale cache and inflight on failure so next request retries
+      tokenCache.delete(cacheKey);
       inflightRefresh.delete(cacheKey);
+      throw err;
     });
 
   inflightRefresh.set(cacheKey, promise);
