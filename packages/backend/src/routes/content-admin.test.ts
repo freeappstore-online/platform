@@ -43,16 +43,16 @@ function fakeDB(opts: {
 }
 
 function env(db: D1Database) {
-  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_GITHUB_LOGINS: 'admin-user' };
+  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY };
 }
 
 async function adminHeader() {
-  const token = await signSession({ uid: 'admin-1', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }, SIGNING_KEY);
+  const token = await signSession('admin-1', SIGNING_KEY, { roles: ['admin'] });
   return `Bearer ${token}`;
 }
 
 async function normalHeader() {
-  const token = await signSession({ uid: 'user-1', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }, SIGNING_KEY);
+  const token = await signSession('user-1', SIGNING_KEY);
   return `Bearer ${token}`;
 }
 

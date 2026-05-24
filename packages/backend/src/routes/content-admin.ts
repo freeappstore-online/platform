@@ -13,18 +13,10 @@
  */
 
 import { Hono } from 'hono';
-import { isAdminLogin, requireUser } from '../lib/auth.js';
+import { requireAdmin } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const contentAdminRoutes = new Hono<{ Bindings: Env }>();
-
-async function requireAdmin(c: { req: { header: (n: string) => string | undefined }; env: Env }) {
-  const user = await requireUser(c as Parameters<typeof requireUser>[0]);
-  if (!isAdminLogin(user.githubLogin, c.env)) {
-    throw new (await import('../lib/auth.js')).HttpError(403, 'admin access required');
-  }
-  return user;
-}
 
 // ── KV ──────────────────────────────────────────────────────────
 

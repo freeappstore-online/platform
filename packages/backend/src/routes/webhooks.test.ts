@@ -33,7 +33,7 @@ function env(db: D1Database) {
 }
 
 async function authHeader(userId = 'u1') {
-  const token = await signSession({ uid: userId, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 }, SIGNING_KEY);
+  const token = await signSession(userId, SIGNING_KEY);
   return `Bearer ${token}`;
 }
 
