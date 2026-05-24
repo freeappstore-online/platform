@@ -221,4 +221,91 @@ describe('POST /v1/publish', () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe('admin_provision_failed');
   });
+
+  it('returns 502 when admin returns 200 but a step failed (partial failure)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const partialResult = {
+      steps: [
+        { name: 'GitHub repo', status: 'ok', detail: 'created' },
+        { name: 'Hosting route', status: 'fail', detail: 'D1 error' },
+        { name: 'Store registry', status: 'skip', detail: 'hosting failed' },
+      ],
+      success: false,
+    };
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify(partialResult), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(validBody),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
+    );
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: string; failedSteps: Array<{ name: string }> };
+    expect(body.error).toBe('admin_provision_partial_failure');
+    expect(body.failedSteps).toHaveLength(1);
+    expect(body.failedSteps[0]!.name).toBe('Hosting route');
+  });
+
+  it('returns 400 for missing required fields', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'my-app' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null })),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for invalid store value', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, store: 'nope' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null })),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('passes store=games to admin correctly', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+      capture: calls,
+    });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, store: 'games' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
+    );
+    expect(res.status).toBe(200);
+    const sentBody = JSON.parse(calls[0]!.init.body as string);
+    expect(sentBody.store).toBe('games');
+    const respBody = (await res.json()) as { appUrl: string; repoUrl: string };
+    expect(respBody.appUrl).toBe('https://my-app.freegamestore.online');
+    expect(respBody.repoUrl).toBe('https://github.com/freegamestore-online/my-app');
+  });
 });
