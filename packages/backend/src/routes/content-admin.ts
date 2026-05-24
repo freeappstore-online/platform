@@ -35,7 +35,7 @@ contentAdminRoutes.get('/admin/kv', async (c) => {
   const prefix = c.req.query('prefix') ?? '';
   const limit = Math.min(Number(c.req.query('limit') || 50), 200);
 
-  let sql = 'SELECT app_id, user_id, key, length(value) as size, updated_at FROM kv_store WHERE 1=1';
+  let sql = 'SELECT app_id, user_id, key, value_size_bytes as size, updated_at FROM kv WHERE 1=1';
   const params: unknown[] = [];
 
   if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
@@ -57,7 +57,7 @@ contentAdminRoutes.get('/admin/kv/value', async (c) => {
   if (!appId || !userId || !key) return c.json({ error: 'app, user, key required' }, 400);
 
   const row = await c.env.DB.prepare(
-    'SELECT value FROM kv_store WHERE app_id = ? AND user_id = ? AND key = ?',
+    'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
   ).bind(appId, userId, key).first<{ value: string }>();
 
   if (!row) return c.json({ error: 'not found' }, 404);
@@ -72,7 +72,7 @@ contentAdminRoutes.delete('/admin/kv', async (c) => {
   if (!appId || !userId || !key) return c.json({ error: 'app, user, key required' }, 400);
 
   await c.env.DB.prepare(
-    'DELETE FROM kv_store WHERE app_id = ? AND user_id = ? AND key = ?',
+    'DELETE FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
   ).bind(appId, userId, key).run();
 
   return c.json({ ok: true });
@@ -125,13 +125,13 @@ contentAdminRoutes.get('/admin/counters', async (c) => {
   const prefix = c.req.query('prefix') ?? '';
   const limit = Math.min(Number(c.req.query('limit') || 100), 500);
 
-  let sql = 'SELECT app_id, name, value FROM counters WHERE 1=1';
+  let sql = 'SELECT app_id, key as name, value FROM counters WHERE 1=1';
   const params: unknown[] = [];
 
   if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
-  if (prefix) { sql += ' AND name LIKE ?'; params.push(`${prefix}%`); }
+  if (prefix) { sql += ' AND key LIKE ?'; params.push(`${prefix}%`); }
 
-  sql += ' ORDER BY app_id, name LIMIT ?';
+  sql += ' ORDER BY app_id, key LIMIT ?';
   params.push(limit);
 
   const result = await c.env.DB.prepare(sql).bind(...params).all();
@@ -145,7 +145,7 @@ contentAdminRoutes.delete('/admin/counters', async (c) => {
   if (!appId || !name) return c.json({ error: 'app, name required' }, 400);
 
   await c.env.DB.prepare(
-    'DELETE FROM counters WHERE app_id = ? AND name = ?',
+    'DELETE FROM counters WHERE app_id = ? AND key = ?',
   ).bind(appId, name).run();
 
   return c.json({ ok: true });
@@ -187,7 +187,7 @@ contentAdminRoutes.get('/admin/stats', async (c) => {
   const [users, apps, kvEntries, docs, counters] = await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) as n FROM users').first<{ n: number }>(),
     c.env.DB.prepare('SELECT COUNT(*) as n FROM apps').first<{ n: number }>(),
-    c.env.DB.prepare('SELECT COUNT(*) as n FROM kv_store').first<{ n: number }>(),
+    c.env.DB.prepare('SELECT COUNT(*) as n FROM kv').first<{ n: number }>(),
     c.env.DB.prepare('SELECT COUNT(*) as n FROM documents').first<{ n: number }>(),
     c.env.DB.prepare('SELECT COUNT(*) as n FROM counters').first<{ n: number }>(),
   ]);
