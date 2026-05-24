@@ -27,7 +27,7 @@ kvRoutes.get('/apps/:appId/kv', async (c) => {
       .all<{ key: string }>();
     return c.json(results.map((r) => r.key));
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });
@@ -46,7 +46,7 @@ kvRoutes.get('/apps/:appId/kv/:key', async (c) => {
       headers: { 'content-type': 'application/json' },
     });
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });
@@ -112,7 +112,7 @@ kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
 
     return c.body(null, 204);
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });
@@ -129,7 +129,7 @@ kvRoutes.delete('/apps/:appId/kv/:key', async (c) => {
     if (result.meta.changes === 0) return c.text('not found', 404);
     return c.body(null, 204);
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });

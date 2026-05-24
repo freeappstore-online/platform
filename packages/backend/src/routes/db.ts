@@ -84,7 +84,7 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
 
     return c.json({ id, ...data }, 201);
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });
@@ -220,7 +220,7 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
       _updatedAt: now,
     });
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });
@@ -249,7 +249,7 @@ dbRoutes.delete('/apps/:appId/db/:collection/:id', async (c) => {
 
     return c.body(null, 204);
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });

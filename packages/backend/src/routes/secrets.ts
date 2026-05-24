@@ -36,7 +36,7 @@ function wrap(handler: (c: Ctx) => Promise<Response>) {
     try {
       return await handler(c);
     } catch (err) {
-      if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+      if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
       if (err instanceof AllowlistError) return c.json({ error: err.message }, 400);
       throw err;
     }
@@ -525,7 +525,7 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       headers: respHeaders,
     });
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     if (err instanceof AllowlistError) return c.json({ error: err.message }, 400);
     throw err;
   }

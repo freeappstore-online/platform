@@ -96,7 +96,7 @@ auditRoutes.post('/audit/run', async (c) => {
   try {
     await requireUser(c);
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
   const r = await runAudit(c.env.DB);

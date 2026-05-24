@@ -414,7 +414,7 @@ authRoutes.get('/auth/me', async (c) => {
     const user = await requireUser(c);
     return c.json(user);
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });
@@ -451,7 +451,7 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
       .run();
     return c.json({ ...user, dateOfBirth: dob });
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });

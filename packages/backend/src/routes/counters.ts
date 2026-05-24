@@ -102,7 +102,7 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
 
     return c.json({ value: row?.value ?? increment });
   } catch (err) {
-    if (err instanceof HttpError) return c.text(err.message, err.status as 401);
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
   }
 });
