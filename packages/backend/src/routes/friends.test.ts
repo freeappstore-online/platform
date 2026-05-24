@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { searchRateMap, requestCooldownMap } from './friends.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -85,6 +86,11 @@ const user1 = { id: 'u1', github_login: 'alice', avatar_url: null, display_name:
 const user2 = { id: 'u2', github_login: 'bob', avatar_url: null, display_name: null, email: null, date_of_birth: null };
 
 describe('friends routes', () => {
+  afterEach(() => {
+    searchRateMap.clear();
+    requestCooldownMap.clear();
+  });
+
   // ── Auth guard ──────────────────────────────────────────────────
 
   it('POST /v1/friends/request returns 401 without auth', async () => {

@@ -15,6 +15,12 @@ export const friendsRoutes = new Hono<{ Bindings: Env }>();
 
 const MAX_FRIENDS = 200;
 const MAX_PENDING_OUTGOING = 50;
+const SEARCH_RATE_LIMIT_MS = 2_000; // 1 search per 2s per user
+const REQUEST_COOLDOWN_MS = 60_000; // 1 min cooldown after decline before re-requesting same user
+
+/** @internal Exported for test cleanup only. */
+export const searchRateMap = new Map<string, number>();
+export const requestCooldownMap = new Map<string, number>();
 
 /** Order two IDs alphabetically so (user_a < user_b) always holds. */
 function pair(a: string, b: string): [string, string] {
@@ -107,6 +113,13 @@ friendsRoutes.post('/friends/request', async (c) => {
     throw new HttpError(409, `too many pending requests (max ${MAX_PENDING_OUTGOING})`);
   }
 
+  // Cooldown check: prevent re-requesting immediately after being declined
+  const cooldownKey = `${me.id}:${body.userId}`;
+  const cooldownUntil = requestCooldownMap.get(cooldownKey) ?? 0;
+  if (now < cooldownUntil) {
+    throw new HttpError(429, 'please wait before sending another request to this user');
+  }
+
   // Insert new friendship request
   try {
     await c.env.DB.prepare(
@@ -154,6 +167,8 @@ friendsRoutes.post('/friends/request', async (c) => {
 friendsRoutes.get('/friends', async (c) => {
   const me = await requireUser(c);
   const statusFilter = c.req.query('status') || 'accepted';
+  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '50', 10) || 50, 1), 100);
+  const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
 
   let sql: string;
   let params: unknown[];
@@ -164,16 +179,16 @@ friendsRoutes.get('/friends', async (c) => {
            FROM friendships f
            JOIN users u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END
            WHERE (f.user_a = ? OR f.user_b = ?) AND f.status = 'pending' AND f.initiator != ?
-           ORDER BY f.updated_at DESC`;
-    params = [me.id, me.id, me.id, me.id, me.id];
+           ORDER BY f.updated_at DESC LIMIT ? OFFSET ?`;
+    params = [me.id, me.id, me.id, me.id, me.id, limit, offset];
   } else if (statusFilter === 'pending_outgoing') {
     sql = `SELECT f.*, u.github_login, u.avatar_url, u.display_name,
              CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END AS friend_id
            FROM friendships f
            JOIN users u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END
            WHERE (f.user_a = ? OR f.user_b = ?) AND f.status = 'pending' AND f.initiator = ?
-           ORDER BY f.updated_at DESC`;
-    params = [me.id, me.id, me.id, me.id, me.id];
+           ORDER BY f.updated_at DESC LIMIT ? OFFSET ?`;
+    params = [me.id, me.id, me.id, me.id, me.id, limit, offset];
   } else {
     // accepted (default)
     sql = `SELECT f.*, u.github_login, u.avatar_url, u.display_name,
@@ -181,8 +196,8 @@ friendsRoutes.get('/friends', async (c) => {
            FROM friendships f
            JOIN users u ON u.id = CASE WHEN f.user_a = ? THEN f.user_b ELSE f.user_a END
            WHERE (f.user_a = ? OR f.user_b = ?) AND f.status = 'accepted'
-           ORDER BY f.updated_at DESC`;
-    params = [me.id, me.id, me.id, me.id];
+           ORDER BY f.updated_at DESC LIMIT ? OFFSET ?`;
+    params = [me.id, me.id, me.id, me.id, limit, offset];
   }
 
   const stmt = c.env.DB.prepare(sql);
@@ -245,6 +260,9 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
     await c.env.DB.prepare('DELETE FROM friendships WHERE user_a = ? AND user_b = ?')
       .bind(a, b)
       .run();
+    // Set cooldown so the declined user can't immediately re-request
+    const declinedUser = row.initiator;
+    requestCooldownMap.set(`${declinedUser}:${me.id}`, now + REQUEST_COOLDOWN_MS);
     return c.json({ ok: true });
   }
 
@@ -343,6 +361,14 @@ friendsRoutes.get('/friends/search', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (q.length < 2) throw new HttpError(400, 'query must be at least 2 characters');
   if (q.length > 50) throw new HttpError(400, 'query too long');
+
+  // Rate limit: 1 search per 2s per user (after input validation so bad
+  // requests get a proper 400 without consuming rate-limit tokens)
+  const lastSearch = searchRateMap.get(me.id) ?? 0;
+  if (Date.now() - lastSearch < SEARCH_RATE_LIMIT_MS) {
+    throw new HttpError(429, 'too many searches, try again shortly');
+  }
+  searchRateMap.set(me.id, Date.now());
 
   // Escape LIKE special chars
   const escaped = q.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');

@@ -3,9 +3,11 @@ import { bearer, dieFromHttp, requireSession, resolveAppIdOrExit } from './secre
 
 interface AllowlistRule {
   pattern: string;
-  injectKind: 'query' | 'header' | 'bearer';
+  injectKind: 'query' | 'header' | 'bearer' | 'oauth2_cc';
   injectName: string;
   secretName: string;
+  secretName2?: string;
+  tokenUrl?: string;
   methods: string[];
   createdAt: number;
 }
@@ -15,13 +17,14 @@ interface AllowlistRule {
  * `header:X-API-Key` → custom header, `bearer` → Authorization: Bearer <secret>.
  */
 export function parseInject(s: string): {
-  kind: 'query' | 'header' | 'bearer';
+  kind: 'query' | 'header' | 'bearer' | 'oauth2_cc';
   name: string;
 } {
   if (s === 'bearer') return { kind: 'bearer', name: '' };
+  if (s === 'oauth2_cc') return { kind: 'oauth2_cc', name: '' };
   const m = /^(query|header):(.+)$/.exec(s);
   if (!m) {
-    throw new Error(`--inject must be 'bearer', 'query:<name>', or 'header:<name>' (got ${s})`);
+    throw new Error(`--inject must be 'bearer', 'oauth2_cc', 'query:<name>', or 'header:<name>' (got ${s})`);
   }
   return { kind: m[1] as 'query' | 'header', name: m[2]! };
 }
@@ -37,12 +40,14 @@ export const proxyCommand = new Command('proxy')
         '--inject <spec>',
         "where to inject the secret: 'query:<name>', 'header:<name>', or 'bearer'",
       )
+      .option('--secret2 <name>', 'second secret (client_secret for oauth2_cc)')
+      .option('--token-url <url>', 'OAuth2 token endpoint (required for oauth2_cc)')
       .option('--methods <list>', 'comma-separated HTTP methods', 'GET')
       .option('--app <id>', 'app id (defaults to package.json name in cwd)')
       .action(
         async (
           pattern: string,
-          opts: { secret: string; inject: string; methods: string; app?: string },
+          opts: { secret: string; secret2?: string; tokenUrl?: string; inject: string; methods: string; app?: string },
         ) => {
           const cfg = await requireSession();
           const appId = await resolveAppIdOrExit(opts.app);
@@ -61,6 +66,8 @@ export const proxyCommand = new Command('proxy')
               injectKind: inject.kind,
               injectName: inject.name,
               secretName: opts.secret,
+              ...(opts.secret2 ? { secretName2: opts.secret2 } : {}),
+              ...(opts.tokenUrl ? { tokenUrl: opts.tokenUrl } : {}),
               methods: opts.methods
                 .split(',')
                 .map((m) => m.trim())
@@ -95,10 +102,13 @@ export const proxyCommand = new Command('proxy')
           return;
         }
         for (const r of rules) {
-          const inject = r.injectKind === 'bearer' ? 'bearer' : `${r.injectKind}:${r.injectName}`;
-          process.stdout.write(
-            `${r.pattern}\n  secret=${r.secretName}  inject=${inject}  methods=${r.methods.join(',')}\n`,
-          );
+          const inject = r.injectKind === 'bearer' || r.injectKind === 'oauth2_cc'
+            ? r.injectKind
+            : `${r.injectKind}:${r.injectName}`;
+          let line = `${r.pattern}\n  secret=${r.secretName}  inject=${inject}  methods=${r.methods.join(',')}`;
+          if (r.secretName2) line += `  secret2=${r.secretName2}`;
+          if (r.tokenUrl) line += `\n  token-url=${r.tokenUrl}`;
+          process.stdout.write(`${line}\n`);
         }
       }),
   )

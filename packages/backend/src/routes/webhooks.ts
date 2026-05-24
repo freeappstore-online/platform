@@ -189,19 +189,29 @@ export async function dispatchWebhook(
 }
 
 /**
- * Dispatch a webhook for platform-level events (not scoped to a single app).
- * Queries all active webhooks for the event across all apps.
+ * Dispatch a webhook for platform-level events (friends).
+ * Scoped to apps where BOTH involved users have a role — prevents
+ * arbitrary app owners from passively mapping the social graph.
  */
 export async function dispatchWebhookPlatform(
   db: D1Database,
   event: string,
   payload: Record<string, unknown>,
 ): Promise<void> {
+  // Extract the two user IDs from the payload
+  const userIds = [payload.userId, payload.friendId ?? payload.blockedId].filter(Boolean) as string[];
+  if (userIds.length < 2) return;
+
+  // Only dispatch to apps where both users have roles (i.e., both use the app)
   const hooks = await db
     .prepare(
-      'SELECT id, app_id, url, secret FROM app_webhooks WHERE event = ? AND active = 1',
+      `SELECT w.id, w.app_id, w.url, w.secret
+       FROM app_webhooks w
+       WHERE w.event = ? AND w.active = 1
+         AND EXISTS (SELECT 1 FROM app_roles WHERE app_id = w.app_id AND user_id = ?)
+         AND EXISTS (SELECT 1 FROM app_roles WHERE app_id = w.app_id AND user_id = ?)`,
     )
-    .bind(event)
+    .bind(event, userIds[0], userIds[1])
     .all<{ id: string; app_id: string; url: string; secret: string }>();
 
   for (const hook of hooks.results ?? []) {
