@@ -4,6 +4,8 @@ import type { FreeAppStore } from './index.js';
 import type { User } from './types.js';
 
 export type { User } from './types.js';
+export { useVoiceInput } from './voice.js';
+export type { UseVoiceInputReturn } from './voice.js';
 
 const THEME_KEY = 'stores-theme';
 

@@ -20,6 +20,8 @@ export type { DefaultRole, RoleAssignment } from './roles.js';
 export { DEFAULT_ROLES } from './roles.js';
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
 export type { FasInitOptions, Unsubscribe, User } from './types.js';
+export type { UseVoiceInputReturn } from './voice.js';
+export { useVoiceInput } from './voice.js';
 
 /** Root SDK instance — provides auth, kv, collections, counters, rooms, and proxy sub-clients. */
 export class FreeAppStore {

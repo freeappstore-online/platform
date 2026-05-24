@@ -42,3 +42,5 @@ export type {
 export { ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';
 export type { AddFriendButtonProps, FriendRequestBadgeProps, FriendsListProps } from './friends.js';
 export { AddFriendButton, FriendRequestBadge, FriendsList } from './friends.js';
+export type { VoiceButtonProps, VoiceTextAreaProps } from './voice.js';
+export { VoiceButton, VoiceTextArea } from './voice.js';
