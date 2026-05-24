@@ -69,10 +69,16 @@ webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
   if (
     host === 'localhost' ||
     host === '127.0.0.1' ||
+    host === '[::1]' ||
+    host === '0.0.0.0' ||
     host.endsWith('.local') ||
+    host.endsWith('.internal') ||
     host.startsWith('10.') ||
     host.startsWith('192.168.') ||
-    host === '169.254.169.254'
+    host.startsWith('172.') ||
+    host.startsWith('169.254.') ||
+    host.startsWith('fc') ||
+    host.startsWith('fd')
   ) {
     return c.json(
       { ok: false, error: 'Webhook URL must not point to private/internal addresses' },

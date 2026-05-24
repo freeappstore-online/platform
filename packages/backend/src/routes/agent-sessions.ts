@@ -82,6 +82,14 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
 
   if (!body) return c.json({ error: 'invalid body' }, 400);
 
+  // Verify ownership: if a session with this ID already exists, it must belong to this user
+  const existing = await c.env.DB.prepare(
+    'SELECT user_id FROM agent_sessions WHERE session_id = ?',
+  ).bind(sessionId).first<{ user_id: string }>();
+  if (existing && existing.user_id !== user.id) {
+    return c.json({ error: 'session belongs to another user' }, 403);
+  }
+
   const now = Date.now();
 
   await c.env.DB.prepare(
@@ -120,9 +128,14 @@ agentSessionRoutes.put('/agent/sessions/:id/messages', async (c) => {
 
   if (!body?.messages) return c.json({ error: 'messages required' }, 400);
 
+  // Cap message size to prevent storage abuse (300 messages, ~500KB typical max)
+  const messages = Array.isArray(body.messages) ? body.messages.slice(-300) : [];
+  const json = JSON.stringify(messages);
+  if (json.length > 2_000_000) return c.json({ error: 'messages too large (max 2MB)' }, 413);
+
   await c.env.DB.prepare(
     `UPDATE agent_sessions SET messages = ?, updated_at = ? WHERE session_id = ? AND user_id = ?`,
-  ).bind(JSON.stringify(body.messages), Date.now(), sessionId, user.id).run();
+  ).bind(json, Date.now(), sessionId, user.id).run();
 
   return c.json({ ok: true });
 });
