@@ -171,20 +171,20 @@ rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
 
 /**
  * Assert the user is the app creator or a platform admin.
- * Reuses the apps table (creator_id) + platform role check.
+ * Checks owner_login (github username) in the apps table.
  */
 async function assertAppOwnerOrAdmin(
   c: { env: Env },
-  user: { id: string; roles: string[] },
+  user: { id: string; githubLogin: string; roles: string[] },
   appId: string,
 ): Promise<void> {
   if (user.roles.includes('admin')) return;
 
-  const row = await c.env.DB.prepare('SELECT creator_id FROM apps WHERE id = ?')
+  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
     .bind(appId)
-    .first<{ creator_id: string }>();
+    .first<{ owner_login: string }>();
   if (!row) throw new HttpError(404, 'app not found');
-  if (row.creator_id !== user.id) {
+  if (row.owner_login !== user.githubLogin) {
     throw new HttpError(403, 'only the app owner or admin can manage roles');
   }
 }

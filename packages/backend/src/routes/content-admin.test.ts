@@ -177,7 +177,7 @@ describe('content-admin routes', () => {
 
   // Apps
   it('GET /v1/admin/apps returns app list', async () => {
-    const apps = [{ id: 'timer', name: 'Timer', store: 'apps', creator_id: 'u1', created_at: 1000 }];
+    const apps = [{ id: 'timer', owner_login: 'admin-user', store: 'apps', category: 'utilities', created_at: 1000 }];
     const res = await app.request('/v1/admin/apps', {
       headers: { Authorization: await adminHeader() },
     }, env(fakeDB({ user: adminUser, apps })));

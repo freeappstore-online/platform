@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
+import { computeRoles } from './auth.js';
 
 export const exchangeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -60,7 +61,8 @@ exchangeRoutes.post('/auth/exchange', async (c) => {
     .bind(userId)
     .first<{ date_of_birth: string | null }>();
 
-  const sessionToken = await signSession(userId, c.env.SESSION_SIGNING_KEY);
+  const { roles, appRoles } = await computeRoles(userId, ghUser.login, c.env);
+  const sessionToken = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
 
   return c.json({
     sessionToken,

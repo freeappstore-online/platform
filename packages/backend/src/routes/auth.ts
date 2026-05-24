@@ -464,7 +464,7 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
  * - 'creator' — has at least one published app
  * - 'admin' — login is in ADMIN_GITHUB_LOGINS env var
  */
-async function computeRoles(
+export async function computeRoles(
   userId: string,
   login: string,
   env: Env,
@@ -473,9 +473,10 @@ async function computeRoles(
   const appRoles: Record<string, string[]> = {};
 
   try {
-    // Check if the user has published any apps (creator role)
-    const appRow = await env.DB.prepare('SELECT 1 FROM apps WHERE creator_id = ? LIMIT 1')
-      .bind(userId)
+    // Check if the user has published any apps (creator role).
+    // The apps table uses owner_login (github username), not user ID.
+    const appRow = await env.DB.prepare('SELECT 1 FROM apps WHERE owner_login = ? LIMIT 1')
+      .bind(login)
       .first();
     if (appRow) roles.push('creator');
 
@@ -489,9 +490,10 @@ async function computeRoles(
       (appRoles[r.app_id] ??= []).push(r.role_name);
     }
 
-    // Auto-assign 'owner' for apps this user created (not stored in DB)
-    const { results: ownedApps } = await env.DB.prepare('SELECT id FROM apps WHERE creator_id = ?')
-      .bind(userId)
+    // Auto-assign 'owner' for apps this user created (not stored in DB).
+    // The apps table uses owner_login (github username), not user ID.
+    const { results: ownedApps } = await env.DB.prepare('SELECT id FROM apps WHERE owner_login = ?')
+      .bind(login)
       .all<{ id: string }>();
     for (const a of ownedApps ?? []) {
       (appRoles[a.id] ??= []).push('owner');

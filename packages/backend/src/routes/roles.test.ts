@@ -16,7 +16,7 @@ function fakeDB(opts: {
       const result = {
         first: async () => {
           if (trimmed.includes('FROM users')) return opts.user ?? null;
-          if (trimmed.includes('FROM apps')) return opts.appCreator != null ? { creator_id: opts.appCreator } : null;
+          if (trimmed.includes('FROM apps')) return opts.appCreator != null ? { owner_login: opts.appCreator } : null;
           if (trimmed.includes('SELECT 1 FROM app_roles')) return opts.existingRole ? { 1: 1 } : null;
           return null;
         },
@@ -53,7 +53,7 @@ describe('roles routes', () => {
     const roles = [{ user_id: 'u2', role_name: 'editor', granted_by: 'u1', granted_at: 1000 }];
     const res = await app.request('/v1/apps/timer/roles', {
       headers: { Authorization: await authHeader() },
-    }, env(fakeDB({ user: owner, appCreator: 'u1', roles })));
+    }, env(fakeDB({ user: owner, appCreator: 'owner', roles })));
     expect(res.status).toBe(200);
     const data = await res.json() as { roles: unknown[] };
     expect(data.roles).toHaveLength(1);
@@ -63,7 +63,7 @@ describe('roles routes', () => {
     const nonOwner = { id: 'u2', github_login: 'other', avatar_url: null, date_of_birth: null };
     const res = await app.request('/v1/apps/timer/roles', {
       headers: { Authorization: await authHeader('u2') },
-    }, env(fakeDB({ user: nonOwner, appCreator: 'u1' })));
+    }, env(fakeDB({ user: nonOwner, appCreator: 'owner' })));
     expect(res.status).toBe(403);
   });
 
@@ -84,7 +84,7 @@ describe('roles routes', () => {
       method: 'POST',
       headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: 'u2', role: 'editor' }),
-    }, env(fakeDB({ user: owner, appCreator: 'u1' })));
+    }, env(fakeDB({ user: owner, appCreator: 'owner' })));
     expect(res.status).toBe(200);
     const data = await res.json() as { ok: boolean; role: string };
     expect(data.ok).toBe(true);
@@ -96,7 +96,7 @@ describe('roles routes', () => {
       method: 'POST',
       headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: 'u2', role: 'owner' }),
-    }, env(fakeDB({ user: owner, appCreator: 'u1' })));
+    }, env(fakeDB({ user: owner, appCreator: 'owner' })));
     expect(res.status).toBe(400);
   });
 
@@ -105,7 +105,7 @@ describe('roles routes', () => {
       method: 'POST',
       headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
-    }, env(fakeDB({ user: owner, appCreator: 'u1' })));
+    }, env(fakeDB({ user: owner, appCreator: 'owner' })));
     expect(res.status).toBe(400);
   });
 
@@ -115,7 +115,7 @@ describe('roles routes', () => {
       method: 'DELETE',
       headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: 'u2', role: 'editor' }),
-    }, env(fakeDB({ user: owner, appCreator: 'u1' })));
+    }, env(fakeDB({ user: owner, appCreator: 'owner' })));
     expect(res.status).toBe(200);
     const data = await res.json() as { ok: boolean };
     expect(data.ok).toBe(true);
@@ -126,7 +126,7 @@ describe('roles routes', () => {
       method: 'DELETE',
       headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: 'u2', role: 'owner' }),
-    }, env(fakeDB({ user: owner, appCreator: 'u1' })));
+    }, env(fakeDB({ user: owner, appCreator: 'owner' })));
     expect(res.status).toBe(400);
   });
 
