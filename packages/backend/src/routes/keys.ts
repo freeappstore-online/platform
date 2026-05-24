@@ -127,6 +127,21 @@ keysRoutes.delete('/keys/:provider', async (c) => {
   return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
 });
 
+// ── Internal key resolve (for agent service binding) ──────────────────
+// Called by the agent worker via service binding. Not public-facing.
+// The agent sends the user's session token + provider, we decrypt and return.
+
+keysRoutes.get('/keys/resolve/:provider', async (c) => {
+  const user = await requireUser(c);
+  if (!c.env.APP_SECRET_KEK) {
+    return c.json({ key: null, error: 'vault not configured' }, 503);
+  }
+  const provider = c.req.param('provider');
+  const key = await resolveUserKey(c.env.DB, user.id, provider, c.env.APP_SECRET_KEK);
+  if (!key) return c.json({ key: null });
+  return c.json({ key });
+});
+
 // ── Resolve a user's key (internal, used by proxy) ────────────────────
 
 export async function resolveUserKey(
