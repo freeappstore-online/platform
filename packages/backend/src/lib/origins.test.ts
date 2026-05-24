@@ -79,4 +79,15 @@ describe('isAllowedOrigin (CORS allowlist)', () => {
     expect(isAllowedOrigin('not a url')).toBe(false);
     expect(isAllowedOrigin('')).toBe(false);
   });
+
+  it('allows platform CF Pages preview domains', () => {
+    expect(isAllowedOrigin('https://abc123.freeappstore-create.pages.dev')).toBe(true);
+    expect(isAllowedOrigin('https://main.freegamestore-admin.pages.dev')).toBe(true);
+    expect(isAllowedOrigin('https://preview.proappstore-console.pages.dev')).toBe(true);
+  });
+
+  it('rejects arbitrary CF Pages preview domains', () => {
+    expect(isAllowedOrigin('https://evil-project.pages.dev')).toBe(false);
+    expect(isAllowedOrigin('https://attacker-site.pages.dev')).toBe(false);
+  });
 });

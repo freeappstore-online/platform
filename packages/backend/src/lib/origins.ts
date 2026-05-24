@@ -21,8 +21,12 @@ function isAllowedHost(url: URL): boolean {
   // backend (analytics, auth, KV). Without this, beacon fetch-fallbacks
   // and `window.fasAnalytics.event()` calls from game code hit CORS errors.
   if (host === 'freegamestore.online' || host.endsWith('.freegamestore.online')) return true;
-  // CF Pages preview domains
-  if (host.endsWith('.pages.dev')) return true;
+  // CF Pages preview domains — only allow platform-owned projects to prevent
+  // arbitrary *.pages.dev sites from making credentialed API requests.
+  if (
+    host.endsWith('.pages.dev') &&
+    (host.includes('freeappstore') || host.includes('freegamestore') || host.includes('proappstore'))
+  ) return true;
   return false;
 }
 
