@@ -4,7 +4,10 @@ import { verifySession } from './session.js';
 
 export interface CurrentUser {
   id: string;
+  /** Display-oriented name: display_name if set, otherwise github_login. */
   login: string;
+  /** Always the GitHub username — use this for ownership checks, collaborator APIs, admin login matching. */
+  githubLogin: string;
   avatarUrl: string | null;
   /** ISO 'YYYY-MM-DD'. Null until the user has set it through any app. */
   dateOfBirth: string | null;
@@ -40,6 +43,7 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
   return {
     id: row.id,
     login: row.display_name || row.github_login,
+    githubLogin: row.github_login,
     avatarUrl: row.avatar_url,
     dateOfBirth: row.date_of_birth,
     roles: payload.roles ?? ['user'],

@@ -44,7 +44,7 @@ appsRoutes.get('/apps/mine', async (c) => {
      WHERE owner_login = ?
      ORDER BY created_at DESC`,
   )
-    .bind(user.login)
+    .bind(user.githubLogin)
     .all<AppRow>();
 
   const apps = (result.results ?? []).map((r) => {

@@ -94,8 +94,8 @@ publishRoutes.post('/publish', async (c) => {
       description: body.oneliner,
       store,
       type: body.type,
-      githubLogin: user.login,
-      creatorGithub: user.login,
+      githubLogin: user.githubLogin,
+      creatorGithub: user.githubLogin,
       repo: body.repo,
       demo: body.demo,
     }),
@@ -148,7 +148,7 @@ publishRoutes.post('/publish', async (c) => {
     )
       .bind(
         body.name,
-        user.login,
+        user.githubLogin,
         Date.now(),
         body.category,
         body.type,

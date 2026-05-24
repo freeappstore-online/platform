@@ -67,7 +67,7 @@ async function requireOwner(c: Ctx, appId: string): Promise<CurrentUser> {
     .bind(appId)
     .first<{ owner_login: string }>();
   if (!row) throw new HttpError(404, 'app not found');
-  if (row.owner_login !== user.login) throw new HttpError(403, 'not the app owner');
+  if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
   return user;
 }
 
