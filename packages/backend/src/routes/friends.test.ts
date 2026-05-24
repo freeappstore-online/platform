@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
-import { searchRateMap, requestCooldownMap } from './friends.js';
+import { searchRateMap, requestCooldownMap, requestRateMap, mutationRateMap } from './friends.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -89,6 +89,8 @@ describe('friends routes', () => {
   afterEach(() => {
     searchRateMap.clear();
     requestCooldownMap.clear();
+    requestRateMap.clear();
+    mutationRateMap.clear();
   });
 
   // ── Auth guard ──────────────────────────────────────────────────
@@ -744,7 +746,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/search?q=bo', {
+    const res = await app.request('/v1/friends/search?q=bob', {
       headers: { Authorization: await authHeader() },
     }, env(db));
     expect(res.status).toBe(200);
@@ -776,7 +778,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/search?q=bo', {
+    const res = await app.request('/v1/friends/search?q=bob', {
       headers: { Authorization: await authHeader() },
     }, env(db));
     expect(res.status).toBe(200);
@@ -785,7 +787,7 @@ describe('friends routes', () => {
   });
 
   it('GET /v1/friends/search rejects short query', async () => {
-    const res = await app.request('/v1/friends/search?q=a', {
+    const res = await app.request('/v1/friends/search?q=ab', {
       headers: { Authorization: await authHeader() },
     }, env(fakeDB({ user: user1 })));
     expect(res.status).toBe(400);

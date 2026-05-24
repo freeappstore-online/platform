@@ -191,3 +191,32 @@ export function extractFailedSteps(body: unknown): AdminStep[] {
   }
   return failed;
 }
+
+/**
+ * Internal endpoint for cross-store app registration. PAS calls this
+ * during provision so Pro apps appear in the FAS `apps` table, which
+ * is required for proxy, secrets, and allowlist features to work.
+ *
+ * Auth: X-Internal-Token header (shared secret between FAS + PAS).
+ */
+publishRoutes.post('/internal/register-app', async (c) => {
+  const provided = c.req.header('X-Internal-Token');
+  const expected = (c.env as Env & { INTERNAL_TOKEN?: string }).INTERNAL_TOKEN;
+  if (!expected || provided !== expected) return c.text('forbidden', 403);
+
+  const body = await c.req.json<{ appId?: string; ownerLogin?: string }>()
+    .catch(() => ({}) as { appId?: string; ownerLogin?: string });
+  if (!body.appId || !body.ownerLogin) return c.text('appId and ownerLogin required', 400);
+  if (!/^[a-z][a-z0-9-]*$/.test(body.appId) || body.appId.length > 58) {
+    return c.text('invalid appId', 400);
+  }
+
+  await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO apps (id, owner_login, created_at, store)
+     VALUES (?, ?, ?, 'apps_pro')`,
+  )
+    .bind(body.appId, body.ownerLogin, Date.now())
+    .run();
+
+  return c.json({ ok: true, appId: body.appId });
+});

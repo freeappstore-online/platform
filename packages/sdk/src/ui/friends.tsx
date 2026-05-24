@@ -157,7 +157,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
   const handleSearch = useCallback((q: string) => {
     setSearchQuery(q);
     clearTimeout(debounceRef.current);
-    if (q.length < 2) { setSearchResults([]); return; }
+    if (q.length < 3) { setSearchResults([]); return; }
     debounceRef.current = setTimeout(() => {
       app.friends.search(q).then(setSearchResults).catch(() => {});
     }, 300);
@@ -166,7 +166,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
   const handleAccept = async (userId: string) => {
     await app.friends.respond(userId, 'accept');
     refresh();
-    if (searchQuery.length >= 2) {
+    if (searchQuery.length >= 3) {
       app.friends.search(searchQuery).then(setSearchResults).catch(() => {});
     }
   };
@@ -180,7 +180,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
     await app.friends.request(userId);
     refresh();
     // Re-run search to update statuses
-    if (searchQuery.length >= 2) {
+    if (searchQuery.length >= 3) {
       app.friends.search(searchQuery).then(setSearchResults).catch(() => {});
     }
   };
@@ -302,7 +302,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
               }
             />
           ))}
-          {searchQuery.length >= 2 && searchResults.length === 0 && (
+          {searchQuery.length >= 3 && searchResults.length === 0 && (
             <EmptyState title="No results" message={`No users found for "${searchQuery}".`} />
           )}
         </div>

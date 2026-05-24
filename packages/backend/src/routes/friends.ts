@@ -18,9 +18,14 @@ const MAX_PENDING_OUTGOING = 50;
 const SEARCH_RATE_LIMIT_MS = 2_000; // 1 search per 2s per user
 const REQUEST_COOLDOWN_MS = 60_000; // 1 min cooldown after decline before re-requesting same user
 
+const REQUEST_RATE_LIMIT_MS = 3_000; // 1 friend request per 3s per user
+const MUTATION_RATE_LIMIT_MS = 1_000; // 1 accept/decline/block/delete per 1s per user
+
 /** @internal Exported for test cleanup only. */
 export const searchRateMap = new Map<string, number>();
 export const requestCooldownMap = new Map<string, number>();
+export const requestRateMap = new Map<string, number>();
+export const mutationRateMap = new Map<string, number>();
 const RATE_MAP_MAX = 5_000;
 
 /** Evict stale entries and cap map size to prevent memory leaks. */
@@ -73,6 +78,14 @@ friendsRoutes.post('/friends/request', async (c) => {
   validateUserId(body.userId);
   if (body.userId === me.id) throw new HttpError(400, 'cannot friend yourself');
 
+  // Rate limit: 1 request per 3s — slows user-existence probing
+  pruneMap(requestRateMap, REQUEST_RATE_LIMIT_MS);
+  const lastReq = requestRateMap.get(me.id) ?? 0;
+  if (Date.now() - lastReq < REQUEST_RATE_LIMIT_MS) {
+    throw new HttpError(429, 'too many requests, slow down');
+  }
+  requestRateMap.set(me.id, Date.now());
+
   const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
     .bind(body.userId)
     .first<{ id: string }>();
@@ -112,28 +125,6 @@ friendsRoutes.post('/friends/request', async (c) => {
     }
   }
 
-  // Check friend count limit
-  const friendCount = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM friendships
-     WHERE (user_a = ? OR user_b = ?) AND status = 'accepted'`,
-  )
-    .bind(me.id, me.id)
-    .first<{ n: number }>();
-  if ((friendCount?.n ?? 0) >= MAX_FRIENDS) {
-    throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
-  }
-
-  // Check pending outgoing limit
-  const pendingCount = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n FROM friendships
-     WHERE (user_a = ? OR user_b = ?) AND status = 'pending' AND initiator = ?`,
-  )
-    .bind(me.id, me.id, me.id)
-    .first<{ n: number }>();
-  if ((pendingCount?.n ?? 0) >= MAX_PENDING_OUTGOING) {
-    throw new HttpError(409, `too many pending requests (max ${MAX_PENDING_OUTGOING})`);
-  }
-
   // Cooldown check: prevent re-requesting immediately after being declined
   pruneMap(requestCooldownMap, REQUEST_COOLDOWN_MS);
   const cooldownKey = `${me.id}:${body.userId}`;
@@ -142,14 +133,27 @@ friendsRoutes.post('/friends/request', async (c) => {
     throw new HttpError(429, 'please wait before sending another request to this user');
   }
 
-  // Insert new friendship request
+  // Check limits + insert atomically via conditional INSERT to close TOCTOU gap.
+  // The INSERT only succeeds if both counts are under their limits.
   try {
-    await c.env.DB.prepare(
+    const result = await c.env.DB.prepare(
       `INSERT INTO friendships (user_a, user_b, status, initiator, created_at, updated_at)
-       VALUES (?, ?, 'pending', ?, ?, ?)`,
+       SELECT ?, ?, 'pending', ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted') < ?
+         AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'pending' AND initiator = ?) < ?`,
     )
-      .bind(a, b, me.id, now, now)
+      .bind(a, b, me.id, now, now, me.id, me.id, MAX_FRIENDS, me.id, me.id, me.id, MAX_PENDING_OUTGOING)
       .run();
+    if (!result.meta.changes) {
+      // INSERT matched 0 rows — one of the limits was hit. Check which.
+      const friendCount = await c.env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted'`,
+      ).bind(me.id, me.id).first<{ n: number }>();
+      if ((friendCount?.n ?? 0) >= MAX_FRIENDS) {
+        throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
+      }
+      throw new HttpError(409, `too many pending requests (max ${MAX_PENDING_OUTGOING})`);
+    }
   } catch (err: unknown) {
     // Race condition: both users requested simultaneously
     const msg = err instanceof Error ? err.message : '';
@@ -247,6 +251,13 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
   const body = await c.req.json<{ action: string }>().catch(() => null);
   if (!body?.action) throw new HttpError(400, 'action required');
 
+  pruneMap(mutationRateMap, MUTATION_RATE_LIMIT_MS);
+  const lastMut = mutationRateMap.get(me.id) ?? 0;
+  if (Date.now() - lastMut < MUTATION_RATE_LIMIT_MS) {
+    throw new HttpError(429, 'too many requests, slow down');
+  }
+  mutationRateMap.set(me.id, Date.now());
+
   const [a, b] = pair(me.id, targetId);
   const now = Date.now();
 
@@ -325,6 +336,14 @@ friendsRoutes.delete('/friends/:userId', async (c) => {
   const me = await requireUser(c);
   const targetId = c.req.param('userId');
   validateUserId(targetId);
+
+  pruneMap(mutationRateMap, MUTATION_RATE_LIMIT_MS);
+  const lastMut = mutationRateMap.get(me.id) ?? 0;
+  if (Date.now() - lastMut < MUTATION_RATE_LIMIT_MS) {
+    throw new HttpError(429, 'too many requests, slow down');
+  }
+  mutationRateMap.set(me.id, Date.now());
+
   const [a, b] = pair(me.id, targetId);
 
   const row = await c.env.DB.prepare(
@@ -384,7 +403,7 @@ friendsRoutes.get('/friends/check/:userId', async (c) => {
 friendsRoutes.get('/friends/search', async (c) => {
   const me = await requireUser(c);
   const q = (c.req.query('q') ?? '').trim();
-  if (q.length < 2) throw new HttpError(400, 'query must be at least 2 characters');
+  if (q.length < 3) throw new HttpError(400, 'query must be at least 3 characters');
   if (q.length > 50) throw new HttpError(400, 'query too long');
 
   // Rate limit: 1 search per 2s per user (after input validation so bad
