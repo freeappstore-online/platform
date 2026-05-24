@@ -98,6 +98,10 @@ export default {
       console.log(
         `log-prune: deleted=${result.meta?.changes ?? 0} (cutoff=${new Date(cutoff).toISOString()})`,
       );
+      // Prune expired magic-link tokens (replay prevention table).
+      const nowEpoch = Math.floor(Date.now() / 1000);
+      await env.DB.prepare('DELETE FROM consumed_tokens WHERE expires_at < ?')
+        .bind(nowEpoch).run().catch(() => {});
     } else if (event.cron === '0 6 * * SUN') {
       // Weekly compliance audit — Sunday 06:00 UTC. Logs the totals
       // so a missed audit is obvious in `wrangler tail`.

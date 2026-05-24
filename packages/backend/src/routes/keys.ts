@@ -132,6 +132,14 @@ keysRoutes.delete('/keys/:provider', async (c) => {
 // The agent sends the user's session token + provider, we decrypt and return.
 
 keysRoutes.get('/keys/resolve/:provider', async (c) => {
+  // Internal-only: only callable via service binding (agent worker).
+  // Service binding requests use a synthetic host (not the public domain),
+  // so checking the Host header distinguishes internal from external calls.
+  const host = c.req.header('host') ?? '';
+  if (host.includes('freeappstore.online') || host.includes('localhost')) {
+    return c.json({ error: 'this endpoint is internal-only' }, 403);
+  }
+
   const user = await requireUser(c);
   if (!c.env.APP_SECRET_KEK) {
     return c.json({ key: null, error: 'vault not configured' }, 503);
@@ -257,7 +265,7 @@ function renderKeysPage(opts: { returnUrl: string; provider: string; appId: stri
   <div id="keys-list" class="hidden"></div>
   <div id="status"></div>
 
-  ${returnUrl ? `<a class="back" href="${escapeAttr(returnUrl)}">Back to ${appId || 'app'}</a>` : ''}
+  ${returnUrl ? `<a class="back" href="${escapeAttr(returnUrl)}">Back to ${escapeAttr(appId || 'app')}</a>` : ''}
 </div>
 <script>
 (function() {
