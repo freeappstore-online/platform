@@ -234,34 +234,36 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
       </div>
 
       {/* Appearance */}
-      {showThemeToggle && (
-        <ProfileSection title="Appearance">
-          <ProfileLabel>Theme</ProfileLabel>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            {themeOptions.map((opt) => (
-              <ToggleButton
-                key={opt.value}
-                active={preference === opt.value}
-                onClick={() => setPreference(opt.value)}
-              >
-                {opt.label}
-              </ToggleButton>
-            ))}
-          </div>
-          <ProfileLabel>Text Size</ProfileLabel>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {textSizeOptions.map((opt) => (
-              <ToggleButton
-                key={opt.value}
-                active={textSize === opt.value}
-                onClick={() => setTextSize(opt.value)}
-              >
-                {opt.label}
-              </ToggleButton>
-            ))}
-          </div>
-        </ProfileSection>
-      )}
+      <ProfileSection title="Appearance">
+        {showThemeToggle && (
+          <>
+            <ProfileLabel>Theme</ProfileLabel>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              {themeOptions.map((opt) => (
+                <ToggleButton
+                  key={opt.value}
+                  active={preference === opt.value}
+                  onClick={() => setPreference(opt.value)}
+                >
+                  {opt.label}
+                </ToggleButton>
+              ))}
+            </div>
+          </>
+        )}
+        <ProfileLabel>Text Size</ProfileLabel>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {textSizeOptions.map((opt) => (
+            <ToggleButton
+              key={opt.value}
+              active={textSize === opt.value}
+              onClick={() => setTextSize(opt.value)}
+            >
+              {opt.label}
+            </ToggleButton>
+          ))}
+        </div>
+      </ProfileSection>
 
       {/* Friends */}
       <ProfileSection title="Friends">

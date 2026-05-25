@@ -48,6 +48,16 @@ describe('UI component exports', () => {
     expect(typeof mod.ListRow).toBe('function');
     expect(typeof mod.ErrorBoundary).toBe('function');
     expect(typeof mod.KeyPrompt).toBe('function');
+    // Friends components
+    expect(typeof mod.FriendsList).toBe('function');
+    expect(typeof mod.FriendRequestBadge).toBe('function');
+    expect(typeof mod.AddFriendButton).toBe('function');
+    // Voice components
+    expect(typeof mod.VoiceButton).toBe('function');
+    expect(typeof mod.VoiceTextArea).toBe('function');
+    // Hooks
+    expect(typeof mod.useTextSize).toBe('function');
+    expect(typeof mod.TextSizeToggle).toBe('function');
   });
 
   it('Avatar renders with user', async () => {

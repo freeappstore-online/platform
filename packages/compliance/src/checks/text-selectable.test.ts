@@ -56,4 +56,32 @@ describe('checkTextSelectable', () => {
     }));
     expect(r.status).toBe('pass');
   });
+
+  it('warns on * { user-select: none }', async () => {
+    const r = await checkTextSelectable(source({
+      'web/src/index.css': '* { user-select: none; }',
+    }));
+    expect(r.status).toBe('warn');
+  });
+
+  it('warns on html, body combined selector', async () => {
+    const r = await checkTextSelectable(source({
+      'web/src/index.css': 'html, body { user-select: none; }',
+    }));
+    expect(r.status).toBe('warn');
+  });
+
+  it('warns on body after other rules (not first in file)', async () => {
+    const r = await checkTextSelectable(source({
+      'web/src/index.css': 'h1 { color: red; }\nbody { -webkit-user-select: none; user-select: none; }',
+    }));
+    expect(r.status).toBe('warn');
+  });
+
+  it('scans scss files too', async () => {
+    const r = await checkTextSelectable(source({
+      'web/src/styles.scss': 'body {\n  user-select: none;\n}',
+    }));
+    expect(r.status).toBe('warn');
+  });
 });

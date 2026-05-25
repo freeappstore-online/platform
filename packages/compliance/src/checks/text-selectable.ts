@@ -47,10 +47,11 @@ export async function checkTextSelectable(source: FileSource): Promise<CheckResu
   };
 }
 
-// Match user-select: none on html or body selectors
+// Match user-select: none on html, body, or * selectors.
+// Covers: `body {`, `html, body {`, `* {`, multi-line selectors.
 const BODY_USER_SELECT_NONE = [
-  /(?:^|[\s,{])(?:html|body)\s*\{[^}]*user-select\s*:\s*none/im,
-  /(?:^|[\s,{])(?:html|body)\s*\{[^}]*-webkit-user-select\s*:\s*none/im,
+  /(?:^|[}\s])(?:html|body|\*)\s*(?:,\s*(?:html|body|\*)\s*)*\{[^}]*user-select\s*:\s*none/im,
+  /(?:^|[}\s])(?:html|body|\*)\s*(?:,\s*(?:html|body|\*)\s*)*\{[^}]*-webkit-user-select\s*:\s*none/im,
 ];
 
 function lineNumberAt(content: string, index: number): number {

@@ -32,7 +32,7 @@ export {
   useStandalone,
 } from './components.js';
 export type { AvatarProps, SignInButtonProps } from './core.js';
-export { Avatar, SignInButton, TextSizeToggle, ThemeToggle } from './core.js';
+export { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 export type {
   ProfileMenuProps,
   ProfilePageProps,
