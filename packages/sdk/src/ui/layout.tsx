@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
 import { Footer, Modal } from './components.js';
-import { Avatar, SignInButton, TextSizeToggle, ThemeToggle } from './core.js';
+import { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
 
 // ---------------------------------------------------------------------------
@@ -163,10 +163,12 @@ export interface ProfilePageProps {
   showThemeToggle?: boolean;
 }
 
-/** Full-page settings view: avatar, username, theme selector, sign out, delete account. */
+/** Full-page profile & preferences: avatar, theme, text size, friends, sign out, delete. */
 export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   const { user, loading, signOut, deleteAccount } = useAuth(app);
   const { preference, setPreference } = useTheme();
+  const { size: textSize, setSize: setTextSize } = useTextSize();
+  const [friendsOpen, setFriendsOpen] = useState(false);
 
   if (loading) {
     return (
@@ -204,8 +206,15 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
     { value: 'dark', label: 'Dark' },
   ];
 
+  const textSizeOptions: Array<{ value: 'default' | 'lg' | 'sm'; label: string }> = [
+    { value: 'sm', label: 'Small' },
+    { value: 'default', label: 'Default' },
+    { value: 'lg', label: 'Large' },
+  ];
+
   return (
     <div style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem' }}>
+      {/* Identity */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
         <Avatar user={user} size={64} />
         <div>
@@ -224,70 +233,64 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
         </div>
       </div>
 
+      {/* Appearance */}
       {showThemeToggle && (
-        <div
-          style={{
-            background: 'var(--surface, #ffffff)',
-            border: '1px solid var(--border, #e2e8f0)',
-            borderRadius: 'var(--radius, 0.75rem)',
-            padding: '1.25rem',
-            marginBottom: '1rem',
-          }}
-        >
-          <div
-            style={{
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              marginBottom: '0.75rem',
-              color: 'var(--ink, #1e293b)',
-            }}
-          >
-            Appearance
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <ProfileSection title="Appearance">
+          <ProfileLabel>Theme</ProfileLabel>
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
             {themeOptions.map((opt) => (
-              <button
+              <ToggleButton
                 key={opt.value}
+                active={preference === opt.value}
                 onClick={() => setPreference(opt.value)}
-                style={{
-                  flex: 1,
-                  padding: '0.5rem',
-                  borderRadius: 'var(--radius-sm, 0.5rem)',
-                  border:
-                    preference === opt.value
-                      ? '2px solid var(--accent, #2563eb)'
-                      : '1px solid var(--border, #e2e8f0)',
-                  background:
-                    preference === opt.value ? 'var(--accent-soft, #eff6ff)' : 'transparent',
-                  color:
-                    preference === opt.value ? 'var(--accent, #2563eb)' : 'var(--muted, #64748b)',
-                  fontWeight: preference === opt.value ? 700 : 500,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
               >
                 {opt.label}
-              </button>
+              </ToggleButton>
             ))}
           </div>
-        </div>
+          <ProfileLabel>Text Size</ProfileLabel>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {textSizeOptions.map((opt) => (
+              <ToggleButton
+                key={opt.value}
+                active={textSize === opt.value}
+                onClick={() => setTextSize(opt.value)}
+              >
+                {opt.label}
+              </ToggleButton>
+            ))}
+          </div>
+        </ProfileSection>
       )}
 
+      {/* Friends */}
+      <ProfileSection title="Friends">
+        <button
+          onClick={() => setFriendsOpen(true)}
+          style={{
+            ...profileBtnStyle,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          Manage Friends <FriendRequestBadge app={app} />
+        </button>
+      </ProfileSection>
+
+      {/* API Keys */}
+      <ProfileSection title="API Keys">
+        <button onClick={() => app.keys.manage()} style={profileBtnStyle}>
+          Manage API Keys
+        </button>
+      </ProfileSection>
+
+      {/* Account */}
       <button
         onClick={signOut}
         style={{
-          width: '100%',
-          padding: '0.75rem',
-          borderRadius: 'var(--radius, 0.75rem)',
-          border: '1px solid var(--border, #e2e8f0)',
-          background: 'var(--surface, #ffffff)',
-          color: 'var(--ink, #1e293b)',
-          fontSize: '0.9rem',
-          fontWeight: 600,
-          cursor: 'pointer',
+          ...profileBtnStyle,
           marginBottom: '1.5rem',
-          fontFamily: 'inherit',
         }}
       >
         Sign out
@@ -325,9 +328,82 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
           Delete account
         </button>
       </div>
+
+      <Modal open={friendsOpen} onClose={() => setFriendsOpen(false)} title="Friends" maxWidth={420}>
+        <FriendsList app={app} />
+      </Modal>
     </div>
   );
 }
+
+function ProfileSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div
+      style={{
+        background: 'var(--surface, #ffffff)',
+        border: '1px solid var(--border, #e2e8f0)',
+        borderRadius: 'var(--radius, 0.75rem)',
+        padding: '1.25rem',
+        marginBottom: '1rem',
+      }}
+    >
+      <div
+        style={{
+          fontSize: '0.9rem',
+          fontWeight: 700,
+          marginBottom: '0.75rem',
+          color: 'var(--ink, #1e293b)',
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ProfileLabel({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted, #64748b)', marginBottom: '0.35rem' }}>
+      {children}
+    </div>
+  );
+}
+
+function ToggleButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        flex: 1,
+        padding: '0.5rem',
+        borderRadius: 'var(--radius-sm, 0.5rem)',
+        border: active ? '2px solid var(--accent, #2563eb)' : '1px solid var(--border, #e2e8f0)',
+        background: active ? 'var(--accent-soft, #eff6ff)' : 'transparent',
+        color: active ? 'var(--accent, #2563eb)' : 'var(--muted, #64748b)',
+        fontWeight: active ? 700 : 500,
+        fontSize: '0.85rem',
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+const profileBtnStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '0.75rem',
+  borderRadius: 'var(--radius, 0.75rem)',
+  border: '1px solid var(--border, #e2e8f0)',
+  background: 'var(--surface, #ffffff)',
+  color: 'var(--ink, #1e293b)',
+  fontSize: '0.9rem',
+  fontWeight: 600,
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+};
 
 // ---------------------------------------------------------------------------
 // Shell (also exported as FasShell for backwards compatibility)

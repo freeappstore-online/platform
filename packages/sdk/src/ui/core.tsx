@@ -180,23 +180,33 @@ function applyTextSize(size: TextSize): void {
   }
 }
 
-/** Text size toggle. Cycles: default -> large -> small. Shows A/A+/A-. */
-export function TextSizeToggle() {
+/** Hook for text size state. Used by TextSizeToggle and ProfilePage. */
+export function useTextSize() {
   const [size, setSize] = useState<TextSize>(getTextSize);
 
   useEffect(() => {
     applyTextSize(size);
   }, [size]);
 
-  const cycle = useCallback(() => {
-    const order: TextSize[] = ['default', 'lg', 'sm'];
-    const idx = order.indexOf(size);
-    const next = order[(idx + 1) % order.length]!;
+  const set = useCallback((next: TextSize) => {
     setSize(next);
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(TEXT_SIZE_KEY, next);
     }
-  }, [size]);
+  }, []);
+
+  return { size, setSize: set };
+}
+
+/** Text size toggle. Cycles: default -> large -> small. Shows A/A+/A-. */
+export function TextSizeToggle() {
+  const { size, setSize } = useTextSize();
+
+  const cycle = useCallback(() => {
+    const order: TextSize[] = ['default', 'lg', 'sm'];
+    const idx = order.indexOf(size);
+    setSize(order[(idx + 1) % order.length]!);
+  }, [size, setSize]);
 
   const label = size === 'lg' ? 'A+' : size === 'sm' ? 'A\u2212' : 'A';
   const title = size === 'lg' ? 'Text: large' : size === 'sm' ? 'Text: small' : 'Text: default';
