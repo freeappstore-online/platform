@@ -15,6 +15,7 @@ import { checkMaskableIcon } from './checks/pwa-maskable-icon.js';
 import { checkPwaMeta } from './checks/pwa-meta.js';
 import { checkPwaOffline } from './checks/pwa-offline.js';
 import { checkStoreLink } from './checks/store-link.js';
+import { checkTextSelectable } from './checks/text-selectable.js';
 import { checkUnsafeVh } from './checks/unsafe-vh.js';
 import { checkViewportSupport } from './checks/viewport-support.js';
 import { type FileSource, fsFileSource, mapFileSource } from './lib/file-source.js';
@@ -51,6 +52,7 @@ export {
   checkNoScroll,
   checkNoTracking,
   checkPwaMeta,
+  checkTextSelectable,
   checkPwaOffline,
   checkStoreLink,
   checkUnsafeVh,
@@ -95,6 +97,7 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkManifest(source),
     checkMaskableIcon(source),
     checkStoreLink(source),
+    checkTextSelectable(source),
     checkDarkMode(source),
     checkBundleSize(source),
     checkClaudeMdSlim(source),

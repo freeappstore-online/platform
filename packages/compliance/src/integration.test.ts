@@ -89,7 +89,7 @@ describe('failing-app fixture', () => {
     //  - PWA maskable icon intentionally passes when there's no manifest
     //    at all; the `PWA manifest` check already fails loudly for that
     //    and we don't want to double-report the same root cause.
-    expect(summary.pass.sort()).toEqual(['No scroll (games only)', 'PWA maskable icon']);
+    expect(summary.pass.sort()).toEqual(['No scroll (games only)', 'PWA maskable icon', 'Text selectable']);
   });
 });
 
