@@ -35,6 +35,12 @@ function validateCollection(name: string): string | null {
   return null;
 }
 
+/** Validate a JSON field name for use in json_extract paths. Alphanumeric + underscore only. */
+function sanitizeJsonField(name: string): string | null {
+  if (!name || name.length > 32 || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) return null;
+  return name;
+}
+
 export const dbRoutes = new Hono<{ Bindings: Env }>();
 
 /** Create a document. Auth required. */
@@ -108,6 +114,25 @@ dbRoutes.get('/apps/:appId/db/:collection', async (c) => {
   if (owner) {
     whereClause += ' AND owner_id = ?';
     bindings.push(owner);
+  }
+
+  // Geo bounding box — filter documents by JSON fields.
+  // Usage: ?lat_min=X&lat_max=Y&lon_min=X&lon_max=Y&lat_field=lat&lon_field=lon
+  // Fields default to 'lat' and 'lon'.
+  const latMin = c.req.query('lat_min');
+  const latMax = c.req.query('lat_max');
+  const lonMin = c.req.query('lon_min');
+  const lonMax = c.req.query('lon_max');
+  if (latMin != null && latMax != null && lonMin != null && lonMax != null) {
+    const latF = sanitizeJsonField(c.req.query('lat_field') || 'lat');
+    const lonF = sanitizeJsonField(c.req.query('lon_field') || 'lon');
+    if (!latF || !lonF) return c.text('invalid field name', 400);
+    const lats = [parseFloat(latMin), parseFloat(latMax)];
+    const lons = [parseFloat(lonMin), parseFloat(lonMax)];
+    if (lats.some(isNaN) || lons.some(isNaN)) return c.text('bbox params must be numbers', 400);
+    whereClause += ` AND json_extract(data, '$.${latF}') BETWEEN ? AND ?`;
+    whereClause += ` AND json_extract(data, '$.${lonF}') BETWEEN ? AND ?`;
+    bindings.push(lats[0], lats[1], lons[0], lons[1]);
   }
 
   const countResult = await c.env.DB.prepare(

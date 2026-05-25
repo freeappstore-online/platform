@@ -13,7 +13,7 @@ import type { FasInitOptions } from './types.js';
 import { Webhooks } from './webhooks.js';
 
 export type { AuthProvider } from './auth.js';
-export type { Collection, QueryOptions, QueryResult } from './db.js';
+export type { Collection, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
 export type { DefaultRole, RoleAssignment } from './roles.js';

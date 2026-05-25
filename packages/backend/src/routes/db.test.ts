@@ -143,4 +143,43 @@ describe('db (collections) routes', () => {
     }, env(fakeDB({ user, doc })));
     expect(res.status).toBe(403);
   });
+
+  // Geo bounding box
+  it('GET with bbox params adds json_extract filters', async () => {
+    const docs = [{ id: 'd1', data: '{"lat":1,"lon":2}', owner_id: 'u1', created_at: 1000, updated_at: 2000 }];
+    const res = await app.request(
+      '/v1/apps/timer/db/posts?lat_min=-10&lat_max=10&lon_min=-20&lon_max=20&limit=50',
+      {}, env(fakeDB({ docs, docCount: 1 })),
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json() as { documents: unknown[] };
+    expect(data.documents).toHaveLength(1);
+  });
+
+  it('GET with bbox rejects non-numeric params', async () => {
+    const res = await app.request(
+      '/v1/apps/timer/db/posts?lat_min=abc&lat_max=10&lon_min=0&lon_max=20',
+      {}, env(fakeDB({ docs: [] })),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('GET with bbox rejects invalid field names', async () => {
+    const res = await app.request(
+      '/v1/apps/timer/db/posts?lat_min=0&lat_max=10&lon_min=0&lon_max=20&lat_field=lat%27%3B+DROP',
+      {}, env(fakeDB({ docs: [] })),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('GET with partial bbox (missing lon) does not filter', async () => {
+    const docs = [{ id: 'd1', data: '{"x":1}', owner_id: 'u1', created_at: 1000, updated_at: 2000 }];
+    const res = await app.request(
+      '/v1/apps/timer/db/posts?lat_min=0&lat_max=10',
+      {}, env(fakeDB({ docs, docCount: 1 })),
+    );
+    expect(res.status).toBe(200);
+    const data = await res.json() as { documents: unknown[] };
+    expect(data.documents).toHaveLength(1);
+  });
 });

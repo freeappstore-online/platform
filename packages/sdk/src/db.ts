@@ -1,11 +1,22 @@
 import type { Auth } from './auth.js';
 
+export interface GeoBBox {
+  latMin: number;
+  latMax: number;
+  lonMin: number;
+  lonMax: number;
+  latField?: string;
+  lonField?: string;
+}
+
 export interface QueryOptions {
   owner?: string;
   limit?: number;
   offset?: number;
   orderBy?: string;
   order?: 'asc' | 'desc';
+  /** Filter documents by geo bounding box on JSON fields (default: lat/lon). */
+  bbox?: GeoBBox;
 }
 
 export interface QueryResult<T> {
@@ -86,6 +97,14 @@ export class Collection {
     if (opts?.offset !== undefined) url.searchParams.set('offset', String(opts.offset));
     if (opts?.orderBy) url.searchParams.set('orderBy', opts.orderBy);
     if (opts?.order) url.searchParams.set('order', opts.order);
+    if (opts?.bbox) {
+      url.searchParams.set('lat_min', String(opts.bbox.latMin));
+      url.searchParams.set('lat_max', String(opts.bbox.latMax));
+      url.searchParams.set('lon_min', String(opts.bbox.lonMin));
+      url.searchParams.set('lon_max', String(opts.bbox.lonMax));
+      if (opts.bbox.latField) url.searchParams.set('lat_field', opts.bbox.latField);
+      if (opts.bbox.lonField) url.searchParams.set('lon_field', opts.bbox.lonField);
+    }
     const response = await fetch(url);
     if (!response.ok) throw new Error(`db.query failed: ${response.status}`);
     return (await response.json()) as QueryResult<T>;
