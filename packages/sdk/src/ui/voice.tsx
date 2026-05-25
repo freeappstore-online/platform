@@ -107,7 +107,7 @@ export function VoiceTextArea({
         readOnly={voice.isListening}
         rows={rows}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && onSubmit) {
+          if (e.key === 'Enter' && !e.shiftKey && onSubmit && !voice.isListening) {
             e.preventDefault();
             onSubmit();
           }

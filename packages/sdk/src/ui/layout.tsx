@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
 import { Footer, Modal } from './components.js';
@@ -141,7 +141,7 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
   );
 }
 
-const menuItemStyle: React.CSSProperties = {
+const menuItemStyle: CSSProperties = {
   display: 'block',
   width: '100%',
   padding: '0.5rem 1rem',
@@ -394,7 +394,7 @@ function ToggleButton({ active, onClick, children }: { active: boolean; onClick:
   );
 }
 
-const profileBtnStyle: React.CSSProperties = {
+const profileBtnStyle: CSSProperties = {
   width: '100%',
   padding: '0.75rem',
   borderRadius: 'var(--radius, 0.75rem)',

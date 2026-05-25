@@ -29,14 +29,14 @@ export const requestRateMap = new Map<string, number>();
 export const mutationRateMap = new Map<string, number>();
 const RATE_MAP_MAX = 5_000;
 
-/** Evict stale entries and cap map size to prevent memory leaks. */
+/** Evict stale entries to prevent memory leaks. Runs on every call. */
 function pruneMap(map: Map<string, number>, maxAge: number): void {
-  if (map.size < RATE_MAP_MAX) return;
+  if (map.size === 0) return;
   const cutoff = Date.now() - maxAge;
   for (const [k, v] of map) {
     if (v < cutoff) map.delete(k);
   }
-  // If still too large after pruning stale entries, clear everything
+  // Hard cap — if still too large, clear everything
   if (map.size >= RATE_MAP_MAX) map.clear();
 }
 
