@@ -1,15 +1,9 @@
 name: Publish to npm
 
 # Triggers on any push to main that touches the publishable packages.
-# Each package self-checks: if its package.json version is unchanged
-# vs what's already on npm, the publish is a no-op. So the practical
-# release flow becomes:
-#
-#   1. cd packages/cli (or sdk)
-#   2. npm version patch    # bumps + commits + tags
-#   3. git push --follow-tags
-#
-# CI sees the version differs from what's on npm and publishes.
+# Auto-bumps patch version when changes exist but no manual bump was made.
+# Manual bumps (minor/major) are respected — auto-bump only kicks in
+# when local version == npm version and the package has changes in this push.
 #
 # Auth: OIDC trusted publishing — no stored NPM_TOKEN needed.
 # Each @freeappstore/* package is linked to this repo on npmjs.com.
@@ -23,21 +17,19 @@ on:
       - 'packages/compliance/**'
       - 'packages/quality/**'
       - '.github/workflows/publish.yml'
-  workflow_dispatch: # manual trigger from the Actions UI
+  workflow_dispatch: # manual trigger — publishes all packages
 
 permissions:
-  contents: read
+  contents: write # push version bumps back to main
   id-token: write # OIDC token for npm trusted publishing + provenance
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [cli, sdk, compliance, quality]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
 
@@ -50,33 +42,97 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # Build ALL packages, not just the one being published. cli depends on
-      # compliance + sdk, so it can't typecheck until those packages have a
-      # built dist/. Trade ~10s of redundant work for build-order correctness.
+      # Build ALL packages — cli depends on compliance + sdk.
       - name: Build all packages
         run: pnpm -r --filter './packages/*' build
 
-      - name: Decide whether to publish
-        id: decide
-        working-directory: packages/${{ matrix.package }}
+      - name: Publish packages
+        id: publish
         run: |
-          PKG_NAME=$(node -p "require('./package.json').name")
-          LOCAL_VER=$(node -p "require('./package.json').version")
-          NPM_VER=$(npm view "$PKG_NAME" version 2>/dev/null || echo "0.0.0")
-          echo "$PKG_NAME — local=$LOCAL_VER  npm=$NPM_VER"
-          if [ "$LOCAL_VER" = "$NPM_VER" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version unchanged — skipping publish."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version bumped ($NPM_VER → $LOCAL_VER) — will publish."
-          fi
+          BUMPED=""
+          FAILED=""
+          BEFORE="${{ github.event.before }}"
 
-      - name: Publish via OIDC trusted publishing
-        if: steps.decide.outputs.publish == 'true'
-        working-directory: packages/${{ matrix.package }}
-        # `pnpm publish` rewrites `workspace:*` deps to real versions at
-        # pack time. `npm publish` leaves them as the literal
-        # `workspace:*` and consumers' installs fail with
-        # `EUNSUPPORTEDPROTOCOL`. Same fix already in FGS + PAS.
-        run: pnpm publish --access public --provenance --no-git-checks
+          for PKG in cli sdk compliance quality; do
+            PKG_NAME=$(node -p "require('./packages/$PKG/package.json').name")
+            LOCAL_VER=$(node -p "require('./packages/$PKG/package.json').version")
+            NPM_VER=$(npm view "$PKG_NAME" version 2>/dev/null || echo "0.0.0")
+
+            # Compare versions (is local ahead of npm?)
+            IS_AHEAD=$(node -e "
+              const [a,b] = ['$LOCAL_VER','$NPM_VER'].map(v => v.split('.').map(Number));
+              const ahead = a[0]>b[0] || (a[0]===b[0] && (a[1]>b[1] || (a[1]===b[1] && a[2]>b[2])));
+              console.log(ahead ? 'true' : 'false');
+            ")
+
+            if [ "$LOCAL_VER" != "$NPM_VER" ] && [ "$IS_AHEAD" = "true" ]; then
+              # Manual bump — publish as-is
+              echo "::group::$PKG_NAME: manual bump $NPM_VER → $LOCAL_VER"
+              if (cd packages/$PKG && pnpm publish --access public --provenance --no-git-checks); then
+                echo "Published $PKG_NAME@$LOCAL_VER"
+              else
+                FAILED="$FAILED $PKG_NAME"
+              fi
+              echo "::endgroup::"
+
+            elif [ "$LOCAL_VER" != "$NPM_VER" ] && [ "$IS_AHEAD" = "false" ]; then
+              # Local is behind npm (missed bump commit) — heal by syncing local to npm
+              echo "$PKG_NAME: healing $LOCAL_VER → $NPM_VER (syncing to npm)"
+              node -e "
+                const fs = require('fs');
+                const pkg = JSON.parse(fs.readFileSync('./packages/$PKG/package.json', 'utf8'));
+                pkg.version = '$NPM_VER';
+                fs.writeFileSync('./packages/$PKG/package.json', JSON.stringify(pkg, null, 2) + '\n');
+              "
+              BUMPED="$BUMPED $PKG_NAME@$NPM_VER"
+
+            else
+              # Version matches npm — auto-bump only if this package has changes
+              HAS_CHANGES=true
+              if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+                if git diff --quiet "$BEFORE" HEAD -- "packages/$PKG/"; then
+                  HAS_CHANGES=false
+                fi
+              fi
+
+              if [ "$HAS_CHANGES" = "true" ]; then
+                IFS='.' read -r MAJOR MINOR PATCH <<< "$LOCAL_VER"
+                NEW_VER="$MAJOR.$MINOR.$((PATCH + 1))"
+                echo "::group::$PKG_NAME: auto-bump $LOCAL_VER → $NEW_VER"
+                node -e "
+                  const fs = require('fs');
+                  const pkg = JSON.parse(fs.readFileSync('./packages/$PKG/package.json', 'utf8'));
+                  pkg.version = '$NEW_VER';
+                  fs.writeFileSync('./packages/$PKG/package.json', JSON.stringify(pkg, null, 2) + '\n');
+                "
+                if (cd packages/$PKG && pnpm publish --access public --provenance --no-git-checks); then
+                  echo "Published $PKG_NAME@$NEW_VER"
+                  BUMPED="$BUMPED $PKG_NAME@$NEW_VER"
+                else
+                  FAILED="$FAILED $PKG_NAME"
+                fi
+                echo "::endgroup::"
+              else
+                echo "$PKG_NAME: no changes, skipping"
+              fi
+            fi
+          done
+
+          echo "bumped=$BUMPED" >> "$GITHUB_OUTPUT"
+          echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bumps
+        if: steps.publish.outputs.bumped != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/*/package.json
+          git commit -m "chore: auto-bump published versions [skip ci]"
+          git pull --rebase origin main
+          git push
+
+      - name: Report failures
+        if: steps.publish.outputs.failed != ''
+        run: |
+          echo "::error::Failed to publish:${{ steps.publish.outputs.failed }}"
+          exit 1
