@@ -236,11 +236,24 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
     }
   }
 
+  // Issue 4: missing navigateFallback. Without it, the SW intercepts
+  // navigation in standalone mode but has no cached response for '/' →
+  // blank screen when opening from iPhone home screen.
+  const hasNavigateFallback = /navigateFallback\s*:/.test(workbox);
+  if (!hasNavigateFallback) {
+    issues.push(
+      'no navigateFallback — opening from home screen (standalone mode) shows blank when offline',
+    );
+    suggestions.push(
+      "Add `navigateFallback: '/index.html'` to the workbox config so the SW serves the SPA shell for navigation requests.",
+    );
+  }
+
   if (issues.length === 0) {
     return {
       name: 'PWA offline correctness',
       status: 'pass',
-      detail: 'workbox precaches everything, fonts cached, bundle cap raised',
+      detail: 'workbox precaches everything, fonts cached, bundle cap raised, navigate fallback set',
     };
   }
 

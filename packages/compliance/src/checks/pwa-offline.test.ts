@@ -15,6 +15,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+        navigateFallback: "/index.html",
         runtimeCaching: [
           { urlPattern: /^https:\\/\\/fonts\\.googleapis\\.com\\/.*/i, handler: "CacheFirst" },
           { urlPattern: /^https:\\/\\/fonts\\.gstatic\\.com\\/.*/i, handler: "CacheFirst" },
@@ -159,6 +160,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
         },
       })] };`;
     const r = await checkPwaOffline(
@@ -173,6 +175,31 @@ describe('checkPwaOffline', () => {
     expect(r.detail).toMatch(/Google Fonts/);
   });
 
+  it('warns when navigateFallback is missing (blank home screen on iOS)', async () => {
+    const config = `
+      import { VitePWA } from "vite-plugin-pwa";
+      export default { plugins: [VitePWA({
+        workbox: {
+          globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
+          maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          runtimeCaching: [
+            { urlPattern: /^https:\\/\\/fonts\\.googleapis\\.com\\/.*/i },
+            { urlPattern: /^https:\\/\\/fonts\\.gstatic\\.com\\/.*/i },
+          ],
+        },
+      })] };`;
+    const r = await checkPwaOffline(
+      mapFileSource(
+        new Map([
+          [VITE_CONFIG, config],
+          [INDEX_HTML, HTML_WITH_FONTS],
+        ]),
+      ),
+    );
+    expect(r.status).toBe('warn');
+    expect(r.detail).toMatch(/navigateFallback/);
+  });
+
   it('passes when Google Fonts not used and runtimeCaching omitted', async () => {
     const config = `
       import { VitePWA } from "vite-plugin-pwa";
@@ -180,6 +207,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
         },
       })] };`;
     const r = await checkPwaOffline(
@@ -244,6 +272,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
         },
       })] };`;
     const r = await checkPwaOffline(
@@ -294,6 +323,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}", "**/*.wasm"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
           runtimeCaching: [
             { urlPattern: /^https:\\/\\/fonts\\.googleapis\\.com\\/.*/i },
             { urlPattern: /^https:\\/\\/fonts\\.gstatic\\.com\\/.*/i },
@@ -360,6 +390,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
           runtimeCaching: [{
             urlPattern: ({ request }) => request.destination === "font",
             handler: "CacheFirst",
@@ -407,6 +438,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
           runtimeCaching: [
             { urlPattern: /^https:\\/\\/fonts\\.googleapis\\.com\\/.*/i },
             { urlPattern: /^https:\\/\\/fonts\\.gstatic\\.com\\/.*/i },
@@ -432,6 +464,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
         },
       })] };`;
     const r = await checkPwaOffline(
@@ -454,6 +487,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
         },
       })] };`;
     const r = await checkPwaOffline(
@@ -476,6 +510,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/[abc]/*.{js,css,html,png,svg,ico,woff2}", "**/*.wasm"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
         },
       })] };`;
     const r = await checkPwaOffline(
@@ -500,6 +535,7 @@ describe('checkPwaOffline', () => {
         workbox: {
           globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2,wasm,json}"],
           maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+          navigateFallback: "/index.html",
           runtimeCaching: [
             { urlPattern: /^https:\\/\\/fonts\\.googleapis\\.com\\/.*/i },
             { urlPattern: /^https:\\/\\/fonts\\.gstatic\\.com\\/.*/i },
