@@ -1,6 +1,6 @@
 {
   "name": "@freeappstore/compliance",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Compliance checks for apps published on freeappstore.online — used by the CLI for local feedback and by CI for gating.",
   "license": "MIT",
   "type": "module",
