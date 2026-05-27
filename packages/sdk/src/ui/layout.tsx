@@ -1,7 +1,7 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
-import { Footer, Modal } from './components.js';
+import { ErrorBoundary, Footer, Modal } from './components.js';
 import { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
 
@@ -551,7 +551,9 @@ export function Shell({
           )}
         </div>
       </header>
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>{children}</main>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </main>
       <Footer />
     </div>
   );
