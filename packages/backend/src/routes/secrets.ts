@@ -22,6 +22,7 @@ export const secretsRoutes = new Hono<{ Bindings: Env }>();
 const MAX_SECRETS_PER_APP = 5;
 const MAX_ALLOWLIST_PER_APP = 5;
 const DAILY_PROXY_REQUESTS = 10_000;
+const DAILY_USER_KEY_REQUESTS = 1_000;
 const MAX_REQUEST_BODY_BYTES = 100 * 1024;
 const MAX_RESPONSE_BODY_BYTES = 100 * 1024;
 const SECRET_NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/; // uppercase + underscore convention
@@ -427,7 +428,22 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       if (!provider) {
         return c.json({ error: `no allowlist match for ${c.req.method} ${upstreamUrl}` }, 403);
       }
-      const userKey = await resolveUserKey(c.env.DB, (user as CurrentUser).id, provider, kek);
+
+      // Rate-limit user-key proxy calls (1k/day per user, across all apps)
+      const userId = (user as CurrentUser).id;
+      const userUsage = await checkAndBump(d1UsageStore(c.env.DB), {
+        appId: `userkey:${userId}`,
+        dailyLimit: DAILY_USER_KEY_REQUESTS,
+        nowMs: Date.now(),
+      });
+      if (!userUsage.allowed) {
+        return c.json(
+          { error: `daily key usage limit reached (${DAILY_USER_KEY_REQUESTS} requests/day)` },
+          429,
+        );
+      }
+
+      const userKey = await resolveUserKey(c.env.DB, userId, provider, kek);
       if (!userKey) {
         return c.json(
           {

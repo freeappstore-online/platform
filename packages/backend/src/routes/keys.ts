@@ -54,6 +54,19 @@ keysRoutes.get('/keys/status', async (c) => {
   });
 });
 
+// ── Usage (daily proxy calls via user keys) ──────────────────────────
+
+keysRoutes.get('/keys/usage', async (c) => {
+  const user = await requireUser(c);
+  const today = new Date().toISOString().slice(0, 10);
+  const row = await c.env.DB.prepare(
+    'SELECT count FROM app_proxy_usage WHERE app_id = ? AND day = ?',
+  )
+    .bind(`userkey:${user.id}`, today)
+    .first<{ count: number }>();
+  return c.json({ used: row?.count ?? 0, limit: 1000, day: today });
+});
+
 // ── Store / update a key ──────────────────────────────────────────────
 
 keysRoutes.put('/keys/:provider', async (c) => {
