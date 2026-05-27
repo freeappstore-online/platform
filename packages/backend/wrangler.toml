@@ -47,6 +47,13 @@ crons = ["*/15 * * * *", "0 3 * * *", "0 4 * * *", "0 6 * * SUN"]
 binding = "BACKUPS"
 bucket_name = "fas-backups"
 
+# R2 bucket for app assets (deployed app files, VCQA reports, badges).
+# The host Worker serves app content from here; the backend reads VCQA
+# reports for the /v1/apps/:id/quality endpoint.
+[[r2_buckets]]
+binding = "APPS_BUCKET"
+bucket_name = "fas-apps"
+
 # Service binding to the admin Worker for /v1/publish → /api/provision.
 # Worker-to-worker direct: bypasses CF Access (both are trusted internal),
 # bypasses edge loop detection (the cause of the earlier 522s), and removes

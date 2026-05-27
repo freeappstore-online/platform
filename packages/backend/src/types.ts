@@ -7,6 +7,12 @@ export interface Env {
    * this binding is missing.
    */
   BACKUPS?: R2Bucket;
+  /**
+   * R2 bucket holding deployed app assets. The host Worker serves app
+   * content from here; the backend reads VCQA quality reports and badges
+   * for the /v1/apps/:id/quality endpoint.
+   */
+  APPS_BUCKET?: R2Bucket;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;

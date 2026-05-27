@@ -25,6 +25,7 @@ import { webhookRoutes } from './routes/webhooks.js';
 import { friendsRoutes } from './routes/friends.js';
 import { contentAdminRoutes } from './routes/content-admin.js';
 import { agentSessionRoutes } from './routes/agent-sessions.js';
+import { qualityRoutes } from './routes/quality.js';
 import type { Env } from './types.js';
 
 export { Room } from './do/room.js';
@@ -80,6 +81,7 @@ v1.route('/', webhookRoutes);
 v1.route('/', friendsRoutes);
 v1.route('/', contentAdminRoutes);
 v1.route('/', agentSessionRoutes);
+v1.route('/', qualityRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;

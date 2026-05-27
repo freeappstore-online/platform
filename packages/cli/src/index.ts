@@ -15,6 +15,7 @@ import { publishCommand } from './commands/publish.js';
 import { screencheckCommand } from './commands/screencheck.js';
 import { secretCommand } from './commands/secret.js';
 import { whoamiCommand } from './commands/whoami.js';
+import { backgroundVersionCheck } from './lib/version-check.js';
 
 // Read version from the package's own package.json so `fas --version` always
 // matches the installed package. dist/index.js sits one level under the
@@ -23,6 +24,9 @@ const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, '..', 'package.json'), 'utf8')) as {
   version: string;
 };
+
+// Fire-and-forget: check npm for a newer version, warn if outdated.
+backgroundVersionCheck(pkg.version);
 
 const program = new Command();
 
