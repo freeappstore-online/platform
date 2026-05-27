@@ -6,8 +6,9 @@ export const publishRoutes = new Hono<{ Bindings: Env }>();
 
 interface PublishBody {
   name: string;
-  /** "apps" (FreeAppStore) | "games" (FreeGameStore). Defaults to "apps" if omitted. */
-  store?: 'apps' | 'games';
+  /** "apps" only — FAS platform now serves only FreeAppStore. FGS publishes go
+   *  through api.freegamestore.online (FGS admin Worker). */
+  store?: 'apps';
   category: string;
   /** "standalone" | "connected" — already mapped from the CLI's verbose option strings */
   type: string;
@@ -21,7 +22,6 @@ const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
 
 const STORE_DOMAIN = {
   apps: { domain: 'freeappstore.online', org: 'freeappstore-online' },
-  games: { domain: 'freegamestore.online', org: 'freegamestore-online' },
 } as const;
 
 /**
@@ -55,10 +55,31 @@ publishRoutes.post('/publish', async (c) => {
   if (!APP_ID_RE.test(body.name)) {
     return c.text('app name must be lowercase letters, digits, or hyphens (2-31 chars)', 400);
   }
-  // Backwards-compat: omitted store means "apps". Anything else is a 400.
-  const store: 'apps' | 'games' = body.store ?? 'apps';
-  if (store !== 'apps' && store !== 'games') {
-    return c.text('store must be "apps" or "games"', 400);
+  // FAS platform now serves only FreeAppStore. Reject games and pro stores
+  // explicitly with a redirect message so callers know where to go.
+  const store: 'apps' = (body.store ?? 'apps') as 'apps';
+  if ((body.store as string | undefined) === 'games') {
+    return c.json(
+      {
+        error: 'wrong_store',
+        hint:
+          'FGS publishes have moved to https://admin.freegamestore.online — ' +
+          'run `fgs publish` (CLI auto-routes) or POST to that admin Worker directly.',
+      },
+      410,
+    );
+  }
+  if ((body.store as string | undefined) === 'apps_pro' || (body.store as string | undefined) === 'games_pro') {
+    return c.json(
+      {
+        error: 'wrong_store',
+        hint: `Pro publishes go through the per-store admin Worker (proappstore-admin / progamestore-admin), not FAS.`,
+      },
+      410,
+    );
+  }
+  if (store !== 'apps') {
+    return c.text('store must be "apps"', 400);
   }
   if (!body.category?.trim()) return c.text('category is required', 400);
   if (!body.oneliner?.trim()) return c.text('oneliner is required', 400);
@@ -89,7 +110,7 @@ publishRoutes.post('/publish', async (c) => {
       id: body.name,
       name: body.name,
       category: body.category,
-      icon: store === 'games' ? '🎮' : '🚀',
+      icon: '🚀',
       iconBg: '#f3f4f6',
       description: body.oneliner,
       store,

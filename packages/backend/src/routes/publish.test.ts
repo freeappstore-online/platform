@@ -282,16 +282,8 @@ describe('POST /v1/publish', () => {
     expect(res.status).toBe(400);
   });
 
-  it('passes store=games to admin correctly', async () => {
+  it('returns 410 with redirect hint for store=games (FGS moved to its own admin)', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
-    const calls: AdminCall[] = [];
-    const admin = fakeAdmin({
-      response: new Response(JSON.stringify({ steps: [], success: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      }),
-      capture: calls,
-    });
     const res = await app.request(
       '/v1/publish',
       {
@@ -299,13 +291,27 @@ describe('POST /v1/publish', () => {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...validBody, store: 'games' }),
       },
-      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null })),
     );
-    expect(res.status).toBe(200);
-    const sentBody = JSON.parse(calls[0]!.init.body as string);
-    expect(sentBody.store).toBe('games');
-    const respBody = (await res.json()) as { appUrl: string; repoUrl: string };
-    expect(respBody.appUrl).toBe('https://my-app.freegamestore.online');
-    expect(respBody.repoUrl).toBe('https://github.com/freegamestore-online/my-app');
+    expect(res.status).toBe(410);
+    const body = (await res.json()) as { error: string; hint: string };
+    expect(body.error).toBe('wrong_store');
+    expect(body.hint).toContain('admin.freegamestore.online');
+  });
+
+  it('returns 410 for store=apps_pro (PAS has its own admin)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, store: 'apps_pro' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null })),
+    );
+    expect(res.status).toBe(410);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe('wrong_store');
   });
 });
