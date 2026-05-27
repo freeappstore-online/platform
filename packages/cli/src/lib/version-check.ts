@@ -10,7 +10,7 @@
  * DNS errors) are silently swallowed.
  */
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { yellow } from './style.js';

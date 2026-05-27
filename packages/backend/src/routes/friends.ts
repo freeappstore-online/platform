@@ -144,13 +144,29 @@ friendsRoutes.post('/friends/request', async (c) => {
        WHERE (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted') < ?
          AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'pending' AND initiator = ? AND created_at > ?) < ?`,
     )
-      .bind(a, b, me.id, now, now, me.id, me.id, MAX_FRIENDS, me.id, me.id, me.id, pendingCutoff, MAX_PENDING_OUTGOING)
+      .bind(
+        a,
+        b,
+        me.id,
+        now,
+        now,
+        me.id,
+        me.id,
+        MAX_FRIENDS,
+        me.id,
+        me.id,
+        me.id,
+        pendingCutoff,
+        MAX_PENDING_OUTGOING,
+      )
       .run();
     if (!result.meta.changes) {
       // INSERT matched 0 rows — one of the limits was hit. Check which.
       const friendCount = await c.env.DB.prepare(
         `SELECT COUNT(*) AS n FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted'`,
-      ).bind(me.id, me.id).first<{ n: number }>();
+      )
+        .bind(me.id, me.id)
+        .first<{ n: number }>();
       if ((friendCount?.n ?? 0) >= MAX_FRIENDS) {
         throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
       }
@@ -234,7 +250,12 @@ friendsRoutes.get('/friends', async (c) => {
 
   const stmt = c.env.DB.prepare(sql);
   const { results } = await stmt.bind(...params).all<
-    FriendshipRow & { friend_id: string; github_login: string; avatar_url: string | null; display_name: string | null }
+    FriendshipRow & {
+      friend_id: string;
+      github_login: string;
+      avatar_url: string | null;
+      display_name: string | null;
+    }
   >();
 
   const friends = (results ?? []).map((r) => ({
@@ -403,9 +424,12 @@ friendsRoutes.get('/friends/check/:userId', async (c) => {
 
   if (!row) return c.json({ status: 'none' });
   if (row.status === 'blocked' && row.blocker !== me.id) return c.json({ status: 'none' });
-  if (row.status === 'blocked' && row.blocker === me.id) return c.json({ status: 'blocked_by_you' });
-  if (row.status === 'pending' && row.initiator === me.id) return c.json({ status: 'pending_outgoing' });
-  if (row.status === 'pending' && row.initiator !== me.id) return c.json({ status: 'pending_incoming' });
+  if (row.status === 'blocked' && row.blocker === me.id)
+    return c.json({ status: 'blocked_by_you' });
+  if (row.status === 'pending' && row.initiator === me.id)
+    return c.json({ status: 'pending_outgoing' });
+  if (row.status === 'pending' && row.initiator !== me.id)
+    return c.json({ status: 'pending_incoming' });
   return c.json({ status: row.status });
 });
 
@@ -453,7 +477,8 @@ friendsRoutes.get('/friends/search', async (c) => {
     let friendStatus = 'none';
     if (friendship) {
       if (friendship.status === 'blocked') friendStatus = 'blocked_by_you';
-      else if (friendship.status === 'pending' && friendship.initiator === me.id) friendStatus = 'pending_outgoing';
+      else if (friendship.status === 'pending' && friendship.initiator === me.id)
+        friendStatus = 'pending_outgoing';
       else if (friendship.status === 'pending') friendStatus = 'pending_incoming';
       else friendStatus = friendship.status;
     }

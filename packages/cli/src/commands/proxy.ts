@@ -24,7 +24,9 @@ export function parseInject(s: string): {
   if (s === 'oauth2_cc') return { kind: 'oauth2_cc', name: '' };
   const m = /^(query|header):(.+)$/.exec(s);
   if (!m) {
-    throw new Error(`--inject must be 'bearer', 'oauth2_cc', 'query:<name>', or 'header:<name>' (got ${s})`);
+    throw new Error(
+      `--inject must be 'bearer', 'oauth2_cc', 'query:<name>', or 'header:<name>' (got ${s})`,
+    );
   }
   return { kind: m[1] as 'query' | 'header', name: m[2]! };
 }
@@ -47,7 +49,14 @@ export const proxyCommand = new Command('proxy')
       .action(
         async (
           pattern: string,
-          opts: { secret: string; secret2?: string; tokenUrl?: string; inject: string; methods: string; app?: string },
+          opts: {
+            secret: string;
+            secret2?: string;
+            tokenUrl?: string;
+            inject: string;
+            methods: string;
+            app?: string;
+          },
         ) => {
           const cfg = await requireSession();
           const appId = await resolveAppIdOrExit(opts.app);
@@ -102,9 +111,10 @@ export const proxyCommand = new Command('proxy')
           return;
         }
         for (const r of rules) {
-          const inject = r.injectKind === 'bearer' || r.injectKind === 'oauth2_cc'
-            ? r.injectKind
-            : `${r.injectKind}:${r.injectName}`;
+          const inject =
+            r.injectKind === 'bearer' || r.injectKind === 'oauth2_cc'
+              ? r.injectKind
+              : `${r.injectKind}:${r.injectName}`;
           let line = `${r.pattern}\n  secret=${r.secretName}  inject=${inject}  methods=${r.methods.join(',')}`;
           if (r.secretName2) line += `  secret2=${r.secretName2}`;
           if (r.tokenUrl) line += `\n  token-url=${r.tokenUrl}`;

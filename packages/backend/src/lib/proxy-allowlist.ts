@@ -69,7 +69,7 @@ export function validateRule(input: {
     );
   }
   const validKinds = ['query', 'header', 'bearer', 'oauth2_cc'] as const;
-  if (!validKinds.includes(injectKind as typeof validKinds[number])) {
+  if (!validKinds.includes(injectKind as (typeof validKinds)[number])) {
     throw new AllowlistError(`injectKind must be one of: ${validKinds.join(', ')}`);
   }
   if (injectKind !== 'bearer' && injectKind !== 'oauth2_cc' && !injectName) {
@@ -80,8 +80,8 @@ export function validateRule(input: {
   }
 
   // OAuth2 client_credentials requires a second secret (client_secret) and a token URL
-  let secretName2 = input.secretName2 ?? '';
-  let tokenUrl = input.tokenUrl ?? '';
+  const secretName2 = input.secretName2 ?? '';
+  const tokenUrl = input.tokenUrl ?? '';
   if (injectKind === 'oauth2_cc') {
     if (!secretName2) {
       throw new AllowlistError('secretName2 (client_secret) is required for oauth2_cc');
@@ -93,20 +93,27 @@ export function validateRule(input: {
       throw new AllowlistError('tokenUrl must start with https://');
     }
     let tokenHost: string;
-    try { tokenHost = new URL(tokenUrl).hostname; } catch {
+    try {
+      tokenHost = new URL(tokenUrl).hostname;
+    } catch {
       throw new AllowlistError('tokenUrl is not a valid URL');
     }
     if (isAiProviderHost(tokenHost)) {
-      throw new AllowlistError(
-        `tokenUrl host ${tokenHost} is reserved for the PAS AI key vault`,
-      );
+      throw new AllowlistError(`tokenUrl host ${tokenHost} is reserved for the PAS AI key vault`);
     }
     // Block private/internal hosts on tokenUrl (same as webhook validation)
     const h = tokenHost.toLowerCase();
-    if (h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0' ||
-        h === '[::1]' || h.endsWith('.local') ||
-        h.startsWith('10.') || h.startsWith('192.168.') ||
-        /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h === '169.254.169.254') {
+    if (
+      h === 'localhost' ||
+      h === '127.0.0.1' ||
+      h === '0.0.0.0' ||
+      h === '[::1]' ||
+      h.endsWith('.local') ||
+      h.startsWith('10.') ||
+      h.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h) ||
+      h === '169.254.169.254'
+    ) {
       throw new AllowlistError('tokenUrl must not point to private/internal addresses');
     }
   }

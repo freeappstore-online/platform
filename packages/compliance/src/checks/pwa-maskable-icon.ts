@@ -65,7 +65,7 @@ function validateStatic(raw: string): CheckResult {
 
 function validateInline(viteConfig: string): CheckResult {
   const inline = extractInlineManifest(viteConfig);
-  if (!inline || !inline.iconsRaw) {
+  if (!inline?.iconsRaw) {
     return {
       name: 'PWA maskable icon',
       status: 'fail',

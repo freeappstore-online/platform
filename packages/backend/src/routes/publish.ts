@@ -204,7 +204,8 @@ publishRoutes.post('/internal/register-app', async (c) => {
   const expected = (c.env as Env & { INTERNAL_TOKEN?: string }).INTERNAL_TOKEN;
   if (!expected || provided !== expected) return c.text('forbidden', 403);
 
-  const body = await c.req.json<{ appId?: string; ownerLogin?: string }>()
+  const body = await c.req
+    .json<{ appId?: string; ownerLogin?: string }>()
     .catch(() => ({}) as { appId?: string; ownerLogin?: string });
   if (!body.appId || !body.ownerLogin) return c.text('appId and ownerLogin required', 400);
   if (!/^[a-z][a-z0-9-]*$/.test(body.appId) || body.appId.length > 58) {

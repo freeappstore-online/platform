@@ -27,10 +27,25 @@
       "a11y": {
         "useButtonType": "off",
         "noSvgWithoutTitle": "off",
-        "useHtmlLang": "off"
+        "useHtmlLang": "off",
+        "noStaticElementInteractions": "warn",
+        "useKeyWithClickEvents": "warn"
+      },
+      "complexity": {
+        "noBannedTypes": "warn"
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noExplicitAny": "off" }
+        }
+      }
+    }
+  ],
   "javascript": {
     "formatter": {
       "quoteStyle": "single",

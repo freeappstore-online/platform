@@ -30,14 +30,25 @@ contentAdminRoutes.get('/admin/kv', async (c) => {
   let sql = 'SELECT app_id, user_id, key, value_size_bytes as size, updated_at FROM kv WHERE 1=1';
   const params: unknown[] = [];
 
-  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
-  if (userId) { sql += ' AND user_id = ?'; params.push(userId); }
-  if (prefix) { sql += ' AND key LIKE ?'; params.push(`${prefix}%`); }
+  if (appId) {
+    sql += ' AND app_id = ?';
+    params.push(appId);
+  }
+  if (userId) {
+    sql += ' AND user_id = ?';
+    params.push(userId);
+  }
+  if (prefix) {
+    sql += ' AND key LIKE ?';
+    params.push(`${prefix}%`);
+  }
 
   sql += ' ORDER BY updated_at DESC LIMIT ?';
   params.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...params)
+    .all();
   return c.json({ entries: result.results ?? [] });
 });
 
@@ -50,7 +61,9 @@ contentAdminRoutes.get('/admin/kv/value', async (c) => {
 
   const row = await c.env.DB.prepare(
     'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
-  ).bind(appId, userId, key).first<{ value: string }>();
+  )
+    .bind(appId, userId, key)
+    .first<{ value: string }>();
 
   if (!row) return c.json({ error: 'not found' }, 404);
   return c.json({ value: JSON.parse(row.value) });
@@ -63,9 +76,9 @@ contentAdminRoutes.delete('/admin/kv', async (c) => {
   const key = c.req.query('key');
   if (!appId || !userId || !key) return c.json({ error: 'app, user, key required' }, 400);
 
-  await c.env.DB.prepare(
-    'DELETE FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
-  ).bind(appId, userId, key).run();
+  await c.env.DB.prepare('DELETE FROM kv WHERE app_id = ? AND user_id = ? AND key = ?')
+    .bind(appId, userId, key)
+    .run();
 
   return c.json({ ok: true });
 });
@@ -78,16 +91,25 @@ contentAdminRoutes.get('/admin/collections', async (c) => {
   const collection = c.req.query('collection') ?? '';
   const limit = Math.min(Number(c.req.query('limit') || 50), 200);
 
-  let sql = 'SELECT id, app_id, collection, owner_id, data, created_at, updated_at FROM documents WHERE 1=1';
+  let sql =
+    'SELECT id, app_id, collection, owner_id, data, created_at, updated_at FROM documents WHERE 1=1';
   const params: unknown[] = [];
 
-  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
-  if (collection) { sql += ' AND collection = ?'; params.push(collection); }
+  if (appId) {
+    sql += ' AND app_id = ?';
+    params.push(appId);
+  }
+  if (collection) {
+    sql += ' AND collection = ?';
+    params.push(collection);
+  }
 
   sql += ' ORDER BY updated_at DESC LIMIT ?';
   params.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...params)
+    .all();
   const docs = (result.results ?? []).map((r: Record<string, unknown>) => ({
     ...r,
     data: r.data ? JSON.parse(r.data as string) : null,
@@ -102,9 +124,9 @@ contentAdminRoutes.delete('/admin/collections', async (c) => {
   const id = c.req.query('id');
   if (!appId || !collection || !id) return c.json({ error: 'app, collection, id required' }, 400);
 
-  await c.env.DB.prepare(
-    'DELETE FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
-  ).bind(appId, collection, id).run();
+  await c.env.DB.prepare('DELETE FROM documents WHERE app_id = ? AND collection = ? AND id = ?')
+    .bind(appId, collection, id)
+    .run();
 
   return c.json({ ok: true });
 });
@@ -120,13 +142,21 @@ contentAdminRoutes.get('/admin/counters', async (c) => {
   let sql = 'SELECT app_id, key as name, value FROM counters WHERE 1=1';
   const params: unknown[] = [];
 
-  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
-  if (prefix) { sql += ' AND key LIKE ?'; params.push(`${prefix}%`); }
+  if (appId) {
+    sql += ' AND app_id = ?';
+    params.push(appId);
+  }
+  if (prefix) {
+    sql += ' AND key LIKE ?';
+    params.push(`${prefix}%`);
+  }
 
   sql += ' ORDER BY app_id, key LIMIT ?';
   params.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...params)
+    .all();
   return c.json({ counters: result.results ?? [] });
 });
 
@@ -136,9 +166,9 @@ contentAdminRoutes.delete('/admin/counters', async (c) => {
   const name = c.req.query('name');
   if (!appId || !name) return c.json({ error: 'app, name required' }, 400);
 
-  await c.env.DB.prepare(
-    'DELETE FROM counters WHERE app_id = ? AND key = ?',
-  ).bind(appId, name).run();
+  await c.env.DB.prepare('DELETE FROM counters WHERE app_id = ? AND key = ?')
+    .bind(appId, name)
+    .run();
 
   return c.json({ ok: true });
 });
@@ -152,7 +182,9 @@ contentAdminRoutes.get('/admin/users', async (c) => {
 
   const result = await c.env.DB.prepare(
     'SELECT id, github_login, avatar_url, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?',
-  ).bind(limit, offset).all();
+  )
+    .bind(limit, offset)
+    .all();
 
   const count = await c.env.DB.prepare('SELECT COUNT(*) as n FROM users').first<{ n: number }>();
 

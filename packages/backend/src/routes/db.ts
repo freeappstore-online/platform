@@ -129,7 +129,8 @@ dbRoutes.get('/apps/:appId/db/:collection', async (c) => {
     if (!latF || !lonF) return c.text('invalid field name', 400);
     const lats = [parseFloat(latMin), parseFloat(latMax)];
     const lons = [parseFloat(lonMin), parseFloat(lonMax)];
-    if (lats.some(isNaN) || lons.some(isNaN)) return c.text('bbox params must be numbers', 400);
+    if (lats.some(Number.isNaN) || lons.some(Number.isNaN))
+      return c.text('bbox params must be numbers', 400);
     whereClause += ` AND json_extract(data, '$.${latF}') BETWEEN ? AND ?`;
     whereClause += ` AND json_extract(data, '$.${lonF}') BETWEEN ? AND ?`;
     bindings.push(lats[0], lats[1], lons[0], lons[1]);

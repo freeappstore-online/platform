@@ -121,7 +121,12 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
               setFriendsOpen(true);
               setOpen(false);
             }}
-            style={{ ...menuItemStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            style={{
+              ...menuItemStyle,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
           >
             Friends <FriendRequestBadge app={app} />
           </button>
@@ -134,7 +139,12 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
           </button>
         </div>
       )}
-      <Modal open={friendsOpen} onClose={() => setFriendsOpen(false)} title="Friends" maxWidth={420}>
+      <Modal
+        open={friendsOpen}
+        onClose={() => setFriendsOpen(false)}
+        title="Friends"
+        maxWidth={420}
+      >
         <FriendsList app={app} />
       </Modal>
     </div>
@@ -331,7 +341,12 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
         </button>
       </div>
 
-      <Modal open={friendsOpen} onClose={() => setFriendsOpen(false)} title="Friends" maxWidth={420}>
+      <Modal
+        open={friendsOpen}
+        onClose={() => setFriendsOpen(false)}
+        title="Friends"
+        maxWidth={420}
+      >
         <FriendsList app={app} />
       </Modal>
     </div>
@@ -366,13 +381,28 @@ function ProfileSection({ title, children }: { title: string; children: ReactNod
 
 function ProfileLabel({ children }: { children: ReactNode }) {
   return (
-    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--muted, #64748b)', marginBottom: '0.35rem' }}>
+    <div
+      style={{
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        color: 'var(--muted, #64748b)',
+        marginBottom: '0.35rem',
+      }}
+    >
       {children}
     </div>
   );
 }
 
-function ToggleButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+function ToggleButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       onClick={onClick}

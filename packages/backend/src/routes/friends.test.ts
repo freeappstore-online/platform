@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
-import { searchRateMap, requestCooldownMap, requestRateMap, mutationRateMap } from './friends.js';
+import { mutationRateMap, requestCooldownMap, requestRateMap, searchRateMap } from './friends.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -82,8 +82,22 @@ async function authHeader(userId = 'u1') {
   return `Bearer ${token}`;
 }
 
-const user1 = { id: 'u1', github_login: 'alice', avatar_url: null, display_name: null, email: null, date_of_birth: null };
-const user2 = { id: 'u2', github_login: 'bob', avatar_url: null, display_name: null, email: null, date_of_birth: null };
+const user1 = {
+  id: 'u1',
+  github_login: 'alice',
+  avatar_url: null,
+  display_name: null,
+  email: null,
+  date_of_birth: null,
+};
+const user2 = {
+  id: 'u2',
+  github_login: 'bob',
+  avatar_url: null,
+  display_name: null,
+  email: null,
+  date_of_birth: null,
+};
 
 describe('friends routes', () => {
   afterEach(() => {
@@ -96,22 +110,30 @@ describe('friends routes', () => {
   // ── Auth guard ──────────────────────────────────────────────────
 
   it('POST /v1/friends/request returns 401 without auth', async () => {
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u2' }),
-    }, env(fakeDB({})));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u2' }),
+      },
+      env(fakeDB({})),
+    );
     expect(res.status).toBe(401);
   });
 
   // ── Self-friend rejection ──────────────────────────────────────
 
   it('POST /v1/friends/request rejects self-friending', async () => {
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u1' }),
-    }, env(fakeDB({ user: user1 })));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u1' }),
+      },
+      env(fakeDB({ user: user1 })),
+    );
     expect(res.status).toBe(400);
   });
 
@@ -140,11 +162,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u99' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u99' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -158,8 +184,7 @@ describe('friends routes', () => {
           first: async () => {
             if (trimmed.includes('FROM users WHERE id = ?') && trimmed.includes('github_login'))
               return user1;
-            if (trimmed.includes('FROM users WHERE id = ?'))
-              return { id: 'u2' };
+            if (trimmed.includes('FROM users WHERE id = ?')) return { id: 'u2' };
             if (trimmed.includes('FROM friendships'))
               return { status: 'blocked', initiator: 'u2', blocker: 'u2' };
             return null;
@@ -171,11 +196,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u2' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u2' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -189,14 +218,10 @@ describe('friends routes', () => {
           first: async () => {
             if (trimmed.includes('FROM users WHERE id = ?') && trimmed.includes('github_login'))
               return user1;
-            if (trimmed.includes('FROM users WHERE id = ?'))
-              return { id: 'u2' };
-            if (trimmed.includes('FROM friendships'))
-              return null; // no existing friendship
-            if (trimmed.includes('COUNT') && trimmed.includes('accepted'))
-              return { n: 0 };
-            if (trimmed.includes('COUNT') && trimmed.includes('pending'))
-              return { n: 0 };
+            if (trimmed.includes('FROM users WHERE id = ?')) return { id: 'u2' };
+            if (trimmed.includes('FROM friendships')) return null; // no existing friendship
+            if (trimmed.includes('COUNT') && trimmed.includes('accepted')) return { n: 0 };
+            if (trimmed.includes('COUNT') && trimmed.includes('pending')) return { n: 0 };
             return null;
           },
           all: async () => ({ results: [] }),
@@ -206,13 +231,17 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u2' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u2' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { status: string; autoAccepted: boolean };
+    const data = (await res.json()) as { status: string; autoAccepted: boolean };
     expect(data.status).toBe('pending');
     expect(data.autoAccepted).toBe(false);
   });
@@ -227,8 +256,7 @@ describe('friends routes', () => {
           first: async () => {
             if (trimmed.includes('FROM users WHERE id = ?') && trimmed.includes('github_login'))
               return user1;
-            if (trimmed.includes('FROM users WHERE id = ?'))
-              return { id: 'u2' };
+            if (trimmed.includes('FROM users WHERE id = ?')) return { id: 'u2' };
             if (trimmed.includes('FROM friendships'))
               return { status: 'pending', initiator: 'u2', blocker: null };
             return null;
@@ -240,13 +268,17 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u2' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u2' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { status: string; autoAccepted: boolean };
+    const data = (await res.json()) as { status: string; autoAccepted: boolean };
     expect(data.status).toBe('accepted');
     expect(data.autoAccepted).toBe(true);
   });
@@ -261,8 +293,7 @@ describe('friends routes', () => {
           first: async () => {
             if (trimmed.includes('FROM users WHERE id = ?') && trimmed.includes('github_login'))
               return user1;
-            if (trimmed.includes('FROM users WHERE id = ?'))
-              return { id: 'u2' };
+            if (trimmed.includes('FROM users WHERE id = ?')) return { id: 'u2' };
             if (trimmed.includes('FROM friendships'))
               return { status: 'accepted', initiator: 'u1', blocker: null };
             return null;
@@ -274,11 +305,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u2' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u2' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(409);
   });
 
@@ -292,8 +327,7 @@ describe('friends routes', () => {
           first: async () => {
             if (trimmed.includes('FROM users WHERE id = ?') && trimmed.includes('github_login'))
               return user1;
-            if (trimmed.includes('FROM users WHERE id = ?'))
-              return { id: 'u2' };
+            if (trimmed.includes('FROM users WHERE id = ?')) return { id: 'u2' };
             if (trimmed.includes('FROM friendships'))
               return { status: 'pending', initiator: 'u1', blocker: null };
             return null;
@@ -305,55 +339,101 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/request', {
-      method: 'POST',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: 'u2' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u2' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(409);
   });
 
   // ── GET /friends — list accepted ────────────────────────────────
 
   it('GET /v1/friends returns accepted friends', async () => {
-    const friendsList = [{
-      user_a: 'u1', user_b: 'u2', status: 'accepted', initiator: 'u1',
-      blocker: null, created_at: 1000, updated_at: 2000,
-      friend_id: 'u2', github_login: 'bob', avatar_url: null, display_name: null,
-    }];
-    const res = await app.request('/v1/friends', {
-      headers: { Authorization: await authHeader() },
-    }, env(fakeDB({ user: user1, friendsList })));
+    const friendsList = [
+      {
+        user_a: 'u1',
+        user_b: 'u2',
+        status: 'accepted',
+        initiator: 'u1',
+        blocker: null,
+        created_at: 1000,
+        updated_at: 2000,
+        friend_id: 'u2',
+        github_login: 'bob',
+        avatar_url: null,
+        display_name: null,
+      },
+    ];
+    const res = await app.request(
+      '/v1/friends',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(fakeDB({ user: user1, friendsList })),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { friends: unknown[] };
+    const data = (await res.json()) as { friends: unknown[] };
     expect(data.friends).toHaveLength(1);
   });
 
   it('GET /v1/friends?status=pending_incoming returns incoming requests', async () => {
-    const friendsList = [{
-      user_a: 'u1', user_b: 'u2', status: 'pending', initiator: 'u2',
-      blocker: null, created_at: 1000, updated_at: 1000,
-      friend_id: 'u2', github_login: 'bob', avatar_url: null, display_name: null,
-    }];
-    const res = await app.request('/v1/friends?status=pending_incoming', {
-      headers: { Authorization: await authHeader() },
-    }, env(fakeDB({ user: user1, friendsList })));
+    const friendsList = [
+      {
+        user_a: 'u1',
+        user_b: 'u2',
+        status: 'pending',
+        initiator: 'u2',
+        blocker: null,
+        created_at: 1000,
+        updated_at: 1000,
+        friend_id: 'u2',
+        github_login: 'bob',
+        avatar_url: null,
+        display_name: null,
+      },
+    ];
+    const res = await app.request(
+      '/v1/friends?status=pending_incoming',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(fakeDB({ user: user1, friendsList })),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { friends: unknown[] };
+    const data = (await res.json()) as { friends: unknown[] };
     expect(data.friends).toHaveLength(1);
   });
 
   it('GET /v1/friends?status=pending_outgoing returns outgoing requests', async () => {
-    const friendsList = [{
-      user_a: 'u1', user_b: 'u2', status: 'pending', initiator: 'u1',
-      blocker: null, created_at: 1000, updated_at: 1000,
-      friend_id: 'u2', github_login: 'bob', avatar_url: null, display_name: null,
-    }];
-    const res = await app.request('/v1/friends?status=pending_outgoing', {
-      headers: { Authorization: await authHeader() },
-    }, env(fakeDB({ user: user1, friendsList })));
+    const friendsList = [
+      {
+        user_a: 'u1',
+        user_b: 'u2',
+        status: 'pending',
+        initiator: 'u1',
+        blocker: null,
+        created_at: 1000,
+        updated_at: 1000,
+        friend_id: 'u2',
+        github_login: 'bob',
+        avatar_url: null,
+        display_name: null,
+      },
+    ];
+    const res = await app.request(
+      '/v1/friends?status=pending_outgoing',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(fakeDB({ user: user1, friendsList })),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { friends: unknown[] };
+    const data = (await res.json()) as { friends: unknown[] };
     expect(data.friends).toHaveLength(1);
   });
 
@@ -365,8 +445,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'pending', initiator: 'u2', blocker: null };
             return null;
@@ -378,13 +457,17 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'PATCH',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'accept' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'PATCH',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accept' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { ok: boolean; status: string };
+    const data = (await res.json()) as { ok: boolean; status: string };
     expect(data.status).toBe('accepted');
   });
 
@@ -394,8 +477,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'pending', initiator: 'u1', blocker: null };
             return null;
@@ -407,11 +489,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'PATCH',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'accept' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'PATCH',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accept' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(400);
   });
 
@@ -423,8 +509,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'pending', initiator: 'u2', blocker: null };
             return null;
@@ -436,11 +521,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'PATCH',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'decline' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'PATCH',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'decline' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
   });
 
@@ -452,8 +541,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             return null;
           },
           all: async () => ({ results: [] }),
@@ -463,13 +551,17 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'PATCH',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'block' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'PATCH',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'block' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { ok: boolean; status: string };
+    const data = (await res.json()) as { ok: boolean; status: string };
     expect(data.status).toBe('blocked');
   });
 
@@ -479,10 +571,8 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
-            if (trimmed.includes('FROM friendships'))
-              return { status: 'blocked', blocker: 'u2' }; // already blocked by u2
+            if (trimmed.includes('FROM users')) return user1;
+            if (trimmed.includes('FROM friendships')) return { status: 'blocked', blocker: 'u2' }; // already blocked by u2
             return null;
           },
           all: async () => ({ results: [] }),
@@ -492,13 +582,17 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'PATCH',
-      headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'block' }),
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'PATCH',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'block' }),
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { ok: boolean; status: string };
+    const data = (await res.json()) as { ok: boolean; status: string };
     expect(data.status).toBe('blocked');
     // The key assertion: run() was never called (no DB write), meaning
     // the blocker field was NOT overwritten. We verify by checking that
@@ -513,8 +607,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'accepted', initiator: 'u1', blocker: null };
             return null;
@@ -526,10 +619,14 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'DELETE',
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
   });
 
@@ -539,8 +636,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'pending', initiator: 'u1', blocker: null };
             return null;
@@ -552,10 +648,14 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'DELETE',
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
   });
 
@@ -565,8 +665,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'blocked', initiator: 'u2', blocker: 'u2' };
             return null;
@@ -578,10 +677,14 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'DELETE',
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(403);
   });
 
@@ -591,10 +694,8 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
-            if (trimmed.includes('FROM friendships'))
-              return null;
+            if (trimmed.includes('FROM users')) return user1;
+            if (trimmed.includes('FROM friendships')) return null;
             return null;
           },
           all: async () => ({ results: [] }),
@@ -604,10 +705,14 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/u2', {
-      method: 'DELETE',
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'DELETE',
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -619,8 +724,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'accepted', blocker: null, initiator: 'u1' };
             return null;
@@ -632,11 +736,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/check/u2', {
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/check/u2',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { status: string };
+    const data = (await res.json()) as { status: string };
     expect(data.status).toBe('accepted');
   });
 
@@ -646,10 +754,8 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
-            if (trimmed.includes('FROM friendships'))
-              return null;
+            if (trimmed.includes('FROM users')) return user1;
+            if (trimmed.includes('FROM friendships')) return null;
             return null;
           },
           all: async () => ({ results: [] }),
@@ -659,11 +765,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/check/u2', {
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/check/u2',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { status: string };
+    const data = (await res.json()) as { status: string };
     expect(data.status).toBe('none');
   });
 
@@ -673,8 +783,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'blocked', blocker: 'u2', initiator: 'u2' };
             return null;
@@ -686,11 +795,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/check/u2', {
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/check/u2',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { status: string };
+    const data = (await res.json()) as { status: string };
     expect(data.status).toBe('none');
   });
 
@@ -700,8 +813,7 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users'))
-              return user1;
+            if (trimmed.includes('FROM users')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'blocked', blocker: 'u1', initiator: 'u1' };
             return null;
@@ -713,11 +825,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/check/u2', {
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/check/u2',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { status: string };
+    const data = (await res.json()) as { status: string };
     expect(data.status).toBe('blocked_by_you');
   });
 
@@ -729,15 +845,12 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users WHERE id = ?'))
-              return user1;
-            if (trimmed.includes('FROM friendships'))
-              return null; // no friendship
+            if (trimmed.includes('FROM users WHERE id = ?')) return user1;
+            if (trimmed.includes('FROM friendships')) return null; // no friendship
             return null;
           },
           all: async () => {
-            if (trimmed.includes('LIKE'))
-              return { results: [user2] };
+            if (trimmed.includes('LIKE')) return { results: [user2] };
             return { results: [] };
           },
           run: async () => ({ meta: { changes: 0 } }),
@@ -746,11 +859,15 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/search?q=bob', {
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/search?q=bob',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { users: Array<{ userId: string; friendStatus: string }> };
+    const data = (await res.json()) as { users: Array<{ userId: string; friendStatus: string }> };
     expect(data.users).toHaveLength(1);
     expect(data.users[0]!.friendStatus).toBe('none');
   });
@@ -761,15 +878,13 @@ describe('friends routes', () => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
         const result = {
           first: async () => {
-            if (trimmed.includes('FROM users WHERE id = ?'))
-              return user1;
+            if (trimmed.includes('FROM users WHERE id = ?')) return user1;
             if (trimmed.includes('FROM friendships'))
               return { status: 'blocked', blocker: 'u2', initiator: 'u2' }; // u2 blocked u1
             return null;
           },
           all: async () => {
-            if (trimmed.includes('LIKE'))
-              return { results: [user2] };
+            if (trimmed.includes('LIKE')) return { results: [user2] };
             return { results: [] };
           },
           run: async () => ({ meta: { changes: 0 } }),
@@ -778,18 +893,26 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request('/v1/friends/search?q=bob', {
-      headers: { Authorization: await authHeader() },
-    }, env(db));
+    const res = await app.request(
+      '/v1/friends/search?q=bob',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(db),
+    );
     expect(res.status).toBe(200);
-    const data = await res.json() as { users: unknown[] };
+    const data = (await res.json()) as { users: unknown[] };
     expect(data.users).toHaveLength(0);
   });
 
   it('GET /v1/friends/search rejects short query', async () => {
-    const res = await app.request('/v1/friends/search?q=ab', {
-      headers: { Authorization: await authHeader() },
-    }, env(fakeDB({ user: user1 })));
+    const res = await app.request(
+      '/v1/friends/search?q=ab',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(fakeDB({ user: user1 })),
+    );
     expect(res.status).toBe(400);
   });
 });

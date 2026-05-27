@@ -4,8 +4,8 @@ import type { FreeAppStore } from './index.js';
 import type { User } from './types.js';
 
 export type { User } from './types.js';
-export { useVoiceInput } from './voice.js';
 export type { UseVoiceInputReturn } from './voice.js';
+export { useVoiceInput } from './voice.js';
 
 const THEME_KEY = 'stores-theme';
 
@@ -149,17 +149,18 @@ export function useFriends(app: FreeAppStore) {
 
   const refresh = useCallback(() => {
     setLoading(true);
-    Promise.all([
-      app.friends.list('accepted'),
-      app.friends.requests(),
-    ]).then(([f, r]) => {
-      setFriends(f);
-      setRequests(r);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    Promise.all([app.friends.list('accepted'), app.friends.requests()])
+      .then(([f, r]) => {
+        setFriends(f);
+        setRequests(r);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [app]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   return { friends, requests, loading, requestCount: requests.length, refresh };
 }

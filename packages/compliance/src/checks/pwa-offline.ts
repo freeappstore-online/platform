@@ -253,7 +253,8 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
     return {
       name: 'PWA offline correctness',
       status: 'pass',
-      detail: 'workbox precaches everything, fonts cached, bundle cap raised, navigate fallback set',
+      detail:
+        'workbox precaches everything, fonts cached, bundle cap raised, navigate fallback set',
     };
   }
 

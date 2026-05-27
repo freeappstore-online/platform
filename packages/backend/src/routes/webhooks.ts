@@ -14,7 +14,8 @@ import type { Env } from '../types.js';
 async function requireOwner(c: { req: { param: (n: string) => string }; env: Env }, appId: string) {
   const user = await requireUser(c as Parameters<typeof requireUser>[0]);
   const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId).first<{ owner_login: string }>();
+    .bind(appId)
+    .first<{ owner_login: string }>();
   if (!row) throw new HttpError(404, 'app not found');
   if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
   return user;
@@ -199,7 +200,9 @@ export async function dispatchWebhookPlatform(
   payload: Record<string, unknown>,
 ): Promise<void> {
   // Extract the two user IDs from the payload
-  const userIds = [payload.userId, payload.friendId ?? payload.blockedId].filter(Boolean) as string[];
+  const userIds = [payload.userId, payload.friendId ?? payload.blockedId].filter(
+    Boolean,
+  ) as string[];
   if (userIds.length < 2) return;
 
   // Only dispatch to apps where both users have roles (i.e., both use the app)

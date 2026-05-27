@@ -5,27 +5,27 @@ import { HttpError } from './lib/auth.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { isAllowedOrigin } from './lib/origins.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
+import { agentSessionRoutes } from './routes/agent-sessions.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { appsRoutes } from './routes/apps.js';
 import { auditRoutes } from './routes/audit.js';
 import { authRoutes } from './routes/auth.js';
+import { contentAdminRoutes } from './routes/content-admin.js';
 import { counterRoutes } from './routes/counters.js';
 import { dbRoutes } from './routes/db.js';
 import { emailRoutes } from './routes/email.js';
 import { exchangeRoutes } from './routes/exchange.js';
+import { friendsRoutes } from './routes/friends.js';
 import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
 import { logsRoutes } from './routes/logs.js';
 import { publishRoutes } from './routes/publish.js';
+import { qualityRoutes } from './routes/quality.js';
 import { rolesRoutes } from './routes/roles.js';
 import { roomRoutes } from './routes/rooms.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { uptimeRoutes } from './routes/uptime.js';
 import { webhookRoutes } from './routes/webhooks.js';
-import { friendsRoutes } from './routes/friends.js';
-import { contentAdminRoutes } from './routes/content-admin.js';
-import { agentSessionRoutes } from './routes/agent-sessions.js';
-import { qualityRoutes } from './routes/quality.js';
 import type { Env } from './types.js';
 
 export { Room } from './do/room.js';
@@ -105,7 +105,9 @@ export default {
       // Prune expired magic-link tokens (replay prevention table).
       const nowEpoch = Math.floor(Date.now() / 1000);
       await env.DB.prepare('DELETE FROM consumed_tokens WHERE expires_at < ?')
-        .bind(nowEpoch).run().catch(() => {});
+        .bind(nowEpoch)
+        .run()
+        .catch(() => {});
     } else if (event.cron === '0 6 * * SUN') {
       // Weekly compliance audit — Sunday 06:00 UTC. Logs the totals
       // so a missed audit is obvious in `wrangler tail`.

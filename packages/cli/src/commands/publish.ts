@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runChecks } from '@freeappstore/compliance';
 import { Command } from 'commander';
@@ -582,9 +582,7 @@ export async function ensureDeployWorkflow(): Promise<DeployWorkflowResult> {
       existing.includes('pages deploy')
     ) {
       process.stderr.write(
-        yellow(
-          '⚠ Your deploy workflow uses legacy CF Pages hosting. Upgrading to R2...\n',
-        ),
+        yellow('⚠ Your deploy workflow uses legacy CF Pages hosting. Upgrading to R2...\n'),
       );
       await writeFile(target, DEPLOY_YML);
       return 'upgraded';

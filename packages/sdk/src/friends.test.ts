@@ -64,9 +64,11 @@ describe('Friends.request', () => {
   });
 
   it('sends POST with userId', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: 'pending', autoAccepted: false }), { status: 200 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ status: 'pending', autoAccepted: false }), { status: 200 }),
+      );
     const friends = new Friends('app1', 'https://api.example', fakeAuth('tok'));
     const result = await friends.request('u2');
     expect(result.status).toBe('pending');
@@ -79,9 +81,11 @@ describe('Friends.request', () => {
   });
 
   it('throws error message from server on failure', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: 'already friends' }), { status: 409 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ error: 'already friends' }), { status: 409 }),
+      );
     const friends = new Friends('app1', 'https://api.example', fakeAuth('tok'));
     await expect(friends.request('u2')).rejects.toThrow('already friends');
   });
@@ -89,9 +93,9 @@ describe('Friends.request', () => {
 
 describe('Friends.respond', () => {
   it('sends PATCH with action', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const friends = new Friends('app1', 'https://api.example', fakeAuth('tok'));
     await friends.respond('u2', 'accept');
 
@@ -142,9 +146,9 @@ describe('Friends.check', () => {
   });
 
   it('returns status from API', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: 'accepted' }), { status: 200 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ status: 'accepted' }), { status: 200 }));
     const friends = new Friends('app1', 'https://api.example', fakeAuth('tok'));
     const result = await friends.check('u2');
     expect(result).toBe('accepted');
@@ -153,17 +157,19 @@ describe('Friends.check', () => {
 
 describe('Friends.isFriend', () => {
   it('returns true when accepted', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: 'accepted' }), { status: 200 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ status: 'accepted' }), { status: 200 }));
     const friends = new Friends('app1', 'https://api.example', fakeAuth('tok'));
     expect(await friends.isFriend('u2')).toBe(true);
   });
 
   it('returns false for other statuses', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: 'pending_outgoing' }), { status: 200 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ status: 'pending_outgoing' }), { status: 200 }),
+      );
     const friends = new Friends('app1', 'https://api.example', fakeAuth('tok'));
     expect(await friends.isFriend('u2')).toBe(false);
   });
@@ -177,9 +183,9 @@ describe('Friends.search', () => {
   });
 
   it('encodes query in URL', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ users: [] }), { status: 200 }),
-    );
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ users: [] }), { status: 200 }));
     const friends = new Friends('app1', 'https://api.example', fakeAuth('tok'));
     await friends.search('test user');
     const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0] as string;

@@ -24,7 +24,9 @@ agentSessionRoutes.get('/agent/sessions', async (c) => {
   const result = await c.env.DB.prepare(
     `SELECT session_id, name, app_id, app_url, deployed, created_at, updated_at
      FROM agent_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
-  ).bind(user.id, limit).all();
+  )
+    .bind(user.id, limit)
+    .all();
 
   return c.json({
     sessions: (result.results ?? []).map((r: Record<string, unknown>) => ({
@@ -47,7 +49,9 @@ agentSessionRoutes.get('/agent/sessions/:id', async (c) => {
 
   const row = await c.env.DB.prepare(
     'SELECT * FROM agent_sessions WHERE session_id = ? AND user_id = ?',
-  ).bind(sessionId, user.id).first<Record<string, unknown>>();
+  )
+    .bind(sessionId, user.id)
+    .first<Record<string, unknown>>();
 
   if (!row) return c.json({ session: null });
 
@@ -71,21 +75,23 @@ agentSessionRoutes.get('/agent/sessions/:id', async (c) => {
 agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
   const user = await requireUser(c);
   const sessionId = c.req.param('id')!;
-  const body = await c.req.json<{
-    name?: string;
-    appId?: string;
-    appUrl?: string;
-    deployed?: boolean;
-    messages?: unknown[];
-    deployState?: unknown;
-  }>().catch(() => null);
+  const body = await c.req
+    .json<{
+      name?: string;
+      appId?: string;
+      appUrl?: string;
+      deployed?: boolean;
+      messages?: unknown[];
+      deployState?: unknown;
+    }>()
+    .catch(() => null);
 
   if (!body) return c.json({ error: 'invalid body' }, 400);
 
   // Verify ownership: if a session with this ID already exists, it must belong to this user
-  const existing = await c.env.DB.prepare(
-    'SELECT user_id FROM agent_sessions WHERE session_id = ?',
-  ).bind(sessionId).first<{ user_id: string }>();
+  const existing = await c.env.DB.prepare('SELECT user_id FROM agent_sessions WHERE session_id = ?')
+    .bind(sessionId)
+    .first<{ user_id: string }>();
   if (existing && existing.user_id !== user.id) {
     return c.json({ error: 'session belongs to another user' }, 403);
   }
@@ -103,18 +109,20 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
        messages = COALESCE(excluded.messages, agent_sessions.messages),
        deploy_state = COALESCE(excluded.deploy_state, agent_sessions.deploy_state),
        updated_at = excluded.updated_at`,
-  ).bind(
-    sessionId,
-    user.id,
-    body.name ?? 'New App',
-    body.appId ?? null,
-    body.appUrl ?? null,
-    body.deployed ? 1 : 0,
-    body.messages ? JSON.stringify(body.messages) : null,
-    body.deployState ? JSON.stringify(body.deployState) : null,
-    now,
-    now,
-  ).run();
+  )
+    .bind(
+      sessionId,
+      user.id,
+      body.name ?? 'New App',
+      body.appId ?? null,
+      body.appUrl ?? null,
+      body.deployed ? 1 : 0,
+      body.messages ? JSON.stringify(body.messages) : null,
+      body.deployState ? JSON.stringify(body.deployState) : null,
+      now,
+      now,
+    )
+    .run();
 
   return c.json({ ok: true });
 });
@@ -135,7 +143,9 @@ agentSessionRoutes.put('/agent/sessions/:id/messages', async (c) => {
 
   await c.env.DB.prepare(
     `UPDATE agent_sessions SET messages = ?, updated_at = ? WHERE session_id = ? AND user_id = ?`,
-  ).bind(json, Date.now(), sessionId, user.id).run();
+  )
+    .bind(json, Date.now(), sessionId, user.id)
+    .run();
 
   return c.json({ ok: true });
 });
@@ -146,9 +156,9 @@ agentSessionRoutes.delete('/agent/sessions/:id', async (c) => {
   const user = await requireUser(c);
   const sessionId = c.req.param('id')!;
 
-  await c.env.DB.prepare(
-    'DELETE FROM agent_sessions WHERE session_id = ? AND user_id = ?',
-  ).bind(sessionId, user.id).run();
+  await c.env.DB.prepare('DELETE FROM agent_sessions WHERE session_id = ? AND user_id = ?')
+    .bind(sessionId, user.id)
+    .run();
 
   return c.json({ ok: true });
 });

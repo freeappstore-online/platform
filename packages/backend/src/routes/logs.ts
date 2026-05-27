@@ -13,7 +13,8 @@ import type { Env } from '../types.js';
 async function requireOwner(c: { req: { param: (n: string) => string }; env: Env }, appId: string) {
   const user = await requireUser(c as Parameters<typeof requireUser>[0]);
   const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId).first<{ owner_login: string }>();
+    .bind(appId)
+    .first<{ owner_login: string }>();
   if (!row) throw new HttpError(404, 'app not found');
   if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
   return user;

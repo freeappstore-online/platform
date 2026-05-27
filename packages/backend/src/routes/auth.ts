@@ -393,9 +393,9 @@ authRoutes.get('/auth/email/callback', async (c) => {
   // replay from server logs, Referer headers, or shared browser history.
   const tokenHash = await hashForReplay(tokenRaw);
   try {
-    await c.env.DB.prepare(
-      'INSERT INTO consumed_tokens (hash, expires_at) VALUES (?, ?)',
-    ).bind(tokenHash, state.exp).run();
+    await c.env.DB.prepare('INSERT INTO consumed_tokens (hash, expires_at) VALUES (?, ?)')
+      .bind(tokenHash, state.exp)
+      .run();
   } catch {
     // UNIQUE constraint violation = token already used
     return c.text('link already used — request a new sign-in email', 400);
@@ -522,7 +522,9 @@ export async function computeRoles(
 
 async function hashForReplay(token: string): Promise<string> {
   const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 function ageFromDob(dob: string): number | null {

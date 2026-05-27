@@ -1,4 +1,4 @@
-import { type CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import type { UseVoiceInputReturn } from '../voice.js';
 
 export interface VoiceButtonProps {
@@ -35,18 +35,23 @@ export function VoiceButton({ voice, disabled = false, size = 32 }: VoiceButtonP
         flexShrink: 0,
       }}
     >
-      {voice.isListening ? (
-        <StopIcon size={iconSize} />
-      ) : (
-        <MicIcon size={iconSize} />
-      )}
+      {voice.isListening ? <StopIcon size={iconSize} /> : <MicIcon size={iconSize} />}
     </button>
   );
 }
 
 function MicIcon({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="9" y="1" width="6" height="12" rx="3" />
       <path d="M5 10a7 7 0 0 0 14 0" />
       <line x1="12" y1="17" x2="12" y2="21" />
@@ -87,9 +92,8 @@ export function VoiceTextArea({
 }: VoiceTextAreaProps) {
   // Show interim transcript appended to real value, but never write it
   // back via onChange — that would double-insert when onResult fires.
-  const displayValue = voice.isListening && voice.transcript
-    ? value + (value ? ' ' : '') + voice.transcript
-    : value;
+  const displayValue =
+    voice.isListening && voice.transcript ? value + (value ? ' ' : '') + voice.transcript : value;
 
   const displayPlaceholder = voice.isListening ? 'Listening...' : placeholder;
 
@@ -116,9 +120,7 @@ export function VoiceTextArea({
           width: '100%',
           padding: voice.isSupported ? '0.75rem 3rem 0.75rem 0.75rem' : '0.75rem',
           borderRadius: 'var(--radius, 0.75rem)',
-          border: voice.isListening
-            ? '2px solid #dc2626'
-            : '1px solid var(--border, #e2e8f0)',
+          border: voice.isListening ? '2px solid #dc2626' : '1px solid var(--border, #e2e8f0)',
           background: 'var(--surface, #ffffff)',
           color: 'var(--ink, #1e293b)',
           fontSize: '0.9rem',

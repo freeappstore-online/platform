@@ -13,7 +13,9 @@ describe('validateRule', () => {
     pattern: 'https://api.openweathermap.org/data/2.5/',
     injectKind: 'query',
     injectName: 'appid',
-    secretName: 'OPENWEATHER_KEY', secretName2: '', tokenUrl: '',
+    secretName: 'OPENWEATHER_KEY',
+    secretName2: '',
+    tokenUrl: '',
     methods: ['get', 'POST'],
   };
 
@@ -76,21 +78,27 @@ describe('pickRule', () => {
       pattern: 'https://api.openweathermap.org/data/2.5/',
       injectKind: 'query',
       injectName: 'appid',
-      secretName: 'OPENWEATHER_KEY', secretName2: '', tokenUrl: '',
+      secretName: 'OPENWEATHER_KEY',
+      secretName2: '',
+      tokenUrl: '',
       methods: ['GET'],
     },
     {
       pattern: 'https://api.openweathermap.org/data/2.5/onecall',
       injectKind: 'query',
       injectName: 'appid',
-      secretName: 'OPENWEATHER_PRO_KEY', secretName2: '', tokenUrl: '',
+      secretName: 'OPENWEATHER_PRO_KEY',
+      secretName2: '',
+      tokenUrl: '',
       methods: ['GET'],
     },
     {
       pattern: 'https://api.example.com/',
       injectKind: 'header',
       injectName: 'X-API-Key',
-      secretName: 'EXAMPLE_KEY', secretName2: '', tokenUrl: '',
+      secretName: 'EXAMPLE_KEY',
+      secretName2: '',
+      tokenUrl: '',
       methods: ['POST'],
     },
   ];
@@ -134,7 +142,9 @@ describe('injectSecret', () => {
     pattern: 'https://api.example.com/',
     injectKind: 'query',
     injectName: 'apikey',
-    secretName: 'X', secretName2: '', tokenUrl: '',
+    secretName: 'X',
+    secretName2: '',
+    tokenUrl: '',
     methods: ['GET'],
   };
 

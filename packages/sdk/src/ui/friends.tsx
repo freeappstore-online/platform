@@ -1,6 +1,13 @@
-import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import type { FreeAppStore } from '../index.js';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import type { Friend, FriendSearchResult, FriendshipStatus } from '../friends.js';
+import type { FreeAppStore } from '../index.js';
 import { EmptyState, SearchInput, Spinner, Tabs } from './components.js';
 import { Avatar } from './core.js';
 
@@ -19,13 +26,19 @@ export function FriendRequestBadge({ app }: FriendRequestBadgeProps) {
   useEffect(() => {
     let mounted = true;
     const poll = () => {
-      app.friends.requests().then((r) => {
-        if (mounted) setCount(r.length);
-      }).catch(() => {});
+      app.friends
+        .requests()
+        .then((r) => {
+          if (mounted) setCount(r.length);
+        })
+        .catch(() => {});
     };
     poll();
     const id = setInterval(poll, 30_000);
-    return () => { mounted = false; clearInterval(id); };
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
   }, [app]);
 
   if (count === 0) return null;
@@ -67,7 +80,10 @@ export function AddFriendButton({ app, userId }: AddFriendButtonProps) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    app.friends.check(userId).then(setStatus).catch(() => setStatus('none'));
+    app.friends
+      .check(userId)
+      .then(setStatus)
+      .catch(() => setStatus('none'));
   }, [app, userId]);
 
   const handleAction = async () => {
@@ -88,10 +104,25 @@ export function AddFriendButton({ app, userId }: AddFriendButtonProps) {
 
   const config = {
     none: { label: 'Add Friend', color: '#fff', bg: 'var(--accent, #2563eb)', clickable: true },
-    pending_outgoing: { label: 'Pending', color: 'var(--muted, #64748b)', bg: 'var(--surface, #f8fafc)', clickable: false },
+    pending_outgoing: {
+      label: 'Pending',
+      color: 'var(--muted, #64748b)',
+      bg: 'var(--surface, #f8fafc)',
+      clickable: false,
+    },
     pending_incoming: { label: 'Accept', color: '#fff', bg: '#16a34a', clickable: true },
-    accepted: { label: 'Friends', color: 'var(--muted, #64748b)', bg: 'var(--surface, #f8fafc)', clickable: false },
-    blocked_by_you: { label: 'Blocked', color: '#dc2626', bg: 'var(--surface, #f8fafc)', clickable: false },
+    accepted: {
+      label: 'Friends',
+      color: 'var(--muted, #64748b)',
+      bg: 'var(--surface, #f8fafc)',
+      clickable: false,
+    },
+    blocked_by_you: {
+      label: 'Blocked',
+      color: '#dc2626',
+      bg: 'var(--surface, #f8fafc)',
+      clickable: false,
+    },
   } as const;
 
   const cfg = status in config ? config[status as keyof typeof config] : config.none;
@@ -144,30 +175,46 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
       app.friends.list('accepted'),
       app.friends.list('pending_incoming'),
       app.friends.list('pending_outgoing'),
-    ]).then(([f, i, o]) => {
-      setFriends(f);
-      setIncoming(i);
-      setOutgoing(o);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    ])
+      .then(([f, i, o]) => {
+        setFriends(f);
+        setIncoming(i);
+        setOutgoing(o);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, [app]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
-  const handleSearch = useCallback((q: string) => {
-    setSearchQuery(q);
-    clearTimeout(debounceRef.current);
-    if (q.length < 3) { setSearchResults([]); return; }
-    debounceRef.current = setTimeout(() => {
-      app.friends.search(q).then(setSearchResults).catch(() => {});
-    }, 300);
-  }, [app]);
+  const handleSearch = useCallback(
+    (q: string) => {
+      setSearchQuery(q);
+      clearTimeout(debounceRef.current);
+      if (q.length < 3) {
+        setSearchResults([]);
+        return;
+      }
+      debounceRef.current = setTimeout(() => {
+        app.friends
+          .search(q)
+          .then(setSearchResults)
+          .catch(() => {});
+      }, 300);
+    },
+    [app],
+  );
 
   const handleAccept = async (userId: string) => {
     await app.friends.respond(userId, 'accept');
     refresh();
     if (searchQuery.length >= 3) {
-      app.friends.search(searchQuery).then(setSearchResults).catch(() => {});
+      app.friends
+        .search(searchQuery)
+        .then(setSearchResults)
+        .catch(() => {});
     }
   };
 
@@ -181,7 +228,10 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
     refresh();
     // Re-run search to update statuses
     if (searchQuery.length >= 3) {
-      app.friends.search(searchQuery).then(setSearchResults).catch(() => {});
+      app.friends
+        .search(searchQuery)
+        .then(setSearchResults)
+        .catch(() => {});
     }
   };
 
@@ -206,7 +256,12 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
 
   return (
     <div>
-      <Tabs tabs={tabs} active={tab} onChange={setTab} style={{ marginBottom: '1rem', width: '100%' }} />
+      <Tabs
+        tabs={tabs}
+        active={tab}
+        onChange={setTab}
+        style={{ marginBottom: '1rem', width: '100%' }}
+      />
 
       {tab === 'friends' && (
         <div>
@@ -221,7 +276,10 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                 {...(onSelectFriend ? { onClick: () => onSelectFriend(f.userId) } : {})}
                 trailing={
                   <button
-                    onClick={(e) => { e.stopPropagation(); handleRemove(f.userId); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemove(f.userId);
+                    }}
                     style={smallBtnStyle('#dc2626')}
                   >
                     Remove
@@ -245,8 +303,18 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                   avatarUrl={f.avatarUrl}
                   trailing={
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => handleAccept(f.userId)} style={smallBtnStyle('#16a34a')}>Accept</button>
-                      <button onClick={() => handleDecline(f.userId)} style={smallBtnStyle('#dc2626')}>Decline</button>
+                      <button
+                        onClick={() => handleAccept(f.userId)}
+                        style={smallBtnStyle('#16a34a')}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleDecline(f.userId)}
+                        style={smallBtnStyle('#dc2626')}
+                      >
+                        Decline
+                      </button>
                     </div>
                   }
                 />
@@ -262,7 +330,12 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                   login={f.login}
                   avatarUrl={f.avatarUrl}
                   trailing={
-                    <button onClick={() => handleRemove(f.userId)} style={smallBtnStyle('var(--muted, #64748b)')}>Cancel</button>
+                    <button
+                      onClick={() => handleRemove(f.userId)}
+                      style={smallBtnStyle('var(--muted, #64748b)')}
+                    >
+                      Cancel
+                    </button>
                   }
                 />
               ))}
@@ -289,14 +362,23 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
               avatarUrl={u.avatarUrl}
               trailing={
                 u.friendStatus === 'none' ? (
-                  <button onClick={() => handleRequest(u.userId)} style={smallBtnStyle('var(--accent, #2563eb)')}>
+                  <button
+                    onClick={() => handleRequest(u.userId)}
+                    style={smallBtnStyle('var(--accent, #2563eb)')}
+                  >
                     Add
                   </button>
                 ) : u.friendStatus === 'pending_incoming' ? (
-                  <button onClick={() => handleAccept(u.userId)} style={smallBtnStyle('#16a34a')}>Accept</button>
+                  <button onClick={() => handleAccept(u.userId)} style={smallBtnStyle('#16a34a')}>
+                    Accept
+                  </button>
                 ) : (
                   <span style={{ fontSize: '0.75rem', color: 'var(--muted, #64748b)' }}>
-                    {u.friendStatus === 'accepted' ? 'Friends' : u.friendStatus === 'pending_outgoing' ? 'Pending' : 'Blocked'}
+                    {u.friendStatus === 'accepted'
+                      ? 'Friends'
+                      : u.friendStatus === 'pending_outgoing'
+                        ? 'Pending'
+                        : 'Blocked'}
                   </span>
                 )
               }
@@ -346,7 +428,15 @@ function FriendRow({
       }}
     >
       <Avatar user={avatarUrl ? { id: '', login, avatarUrl, dateOfBirth: null } : null} size={28} />
-      <div style={{ flex: 1, minWidth: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--ink, #1e293b)' }}>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: '0.9rem',
+          fontWeight: 600,
+          color: 'var(--ink, #1e293b)',
+        }}
+      >
         {login}
       </div>
       {trailing && <div style={{ flexShrink: 0 }}>{trailing}</div>}

@@ -37,7 +37,7 @@ export type FriendshipStatus =
  */
 export class Friends {
   constructor(
-    private readonly appId: string,
+    readonly _appId: string,
     private readonly apiBase: string,
     private readonly auth: AuthLike,
   ) {}
@@ -148,10 +148,9 @@ export class Friends {
   async search(query: string): Promise<FriendSearchResult[]> {
     const token = this.auth.token;
     if (!token) return [];
-    const res = await fetch(
-      `${this.apiBase}/v1/friends/search?q=${encodeURIComponent(query)}`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
+    const res = await fetch(`${this.apiBase}/v1/friends/search?q=${encodeURIComponent(query)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     if (!res.ok) return [];
     const data = (await res.json()) as { users: FriendSearchResult[] };
     return data.users;

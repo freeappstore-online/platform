@@ -25,8 +25,11 @@ function isAllowedHost(url: URL): boolean {
   // arbitrary *.pages.dev sites from making credentialed API requests.
   if (
     host.endsWith('.pages.dev') &&
-    (host.includes('freeappstore') || host.includes('freegamestore') || host.includes('proappstore'))
-  ) return true;
+    (host.includes('freeappstore') ||
+      host.includes('freegamestore') ||
+      host.includes('proappstore'))
+  )
+    return true;
   return false;
 }
 

@@ -213,8 +213,11 @@ describe('DEPLOY_YML', () => {
   });
 
   it('references the three required R2 secrets', () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
     expect(DEPLOY_YML).toContain('${{ secrets.R2_ACCESS_KEY_ID }}');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
     expect(DEPLOY_YML).toContain('${{ secrets.R2_SECRET_ACCESS_KEY }}');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
     expect(DEPLOY_YML).toContain('${{ secrets.R2_ACCOUNT_ID }}');
   });
 

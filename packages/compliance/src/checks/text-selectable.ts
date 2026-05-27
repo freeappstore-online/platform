@@ -21,7 +21,9 @@ export async function checkTextSelectable(source: FileSource): Promise<CheckResu
       const m = re.exec(content);
       if (m) {
         const line = lineNumberAt(content, m.index);
-        issues.push(`${path}:${line} — user-select: none on body/html blocks all text selection. Scope it to buttons/nav instead.`);
+        issues.push(
+          `${path}:${line} — user-select: none on body/html blocks all text selection. Scope it to buttons/nav instead.`,
+        );
       }
     }
 

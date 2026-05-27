@@ -8,8 +8,8 @@ import {
   pickRule,
   validateRule,
 } from '../lib/proxy-allowlist.js';
-import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import { getOAuth2Token } from '../lib/proxy-oauth2.js';
+import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
 import { resolveUserKey } from './keys.js';
 
@@ -501,11 +501,14 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
         if (!secret2Row) {
           return c.json({ error: `secret '${rule.secretName2}' not found` }, 500);
         }
-        const clientSecret = await openSecret({
-          keyCiphertext: toUint8(secret2Row.key_ciphertext),
-          dekWrapped: toUint8(secret2Row.dek_wrapped),
-          iv: toUint8(secret2Row.iv),
-        }, kek);
+        const clientSecret = await openSecret(
+          {
+            keyCiphertext: toUint8(secret2Row.key_ciphertext),
+            dekWrapped: toUint8(secret2Row.dek_wrapped),
+            iv: toUint8(secret2Row.iv),
+          },
+          kek,
+        );
 
         // Get cached or fresh OAuth2 bearer token
         const cacheKey = `${appId}:${rule.secretName}`;
