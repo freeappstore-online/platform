@@ -246,9 +246,9 @@ describe('ensureDeployWorkflow', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('creates deploy.yml when missing and returns true', async () => {
+  it('creates deploy.yml when missing and returns "created"', async () => {
     const result = await ensureDeployWorkflow();
-    expect(result).toBe(true);
+    expect(result).toBe('created');
     const created = readFileSync(join(tmpDir, '.github', 'workflows', 'deploy.yml'), 'utf8');
     expect(created).toBe(DEPLOY_YML);
   });
@@ -258,15 +258,27 @@ describe('ensureDeployWorkflow', () => {
     expect(existsSync(join(tmpDir, '.github', 'workflows'))).toBe(true);
   });
 
-  it('returns false and does not overwrite when deploy.yml already exists', async () => {
+  it('returns "ok" and does not overwrite when deploy.yml already has R2 content', async () => {
     const dir = join(tmpDir, '.github', 'workflows');
     mkdirSync(dir, { recursive: true });
-    const existing = 'name: Existing workflow\n';
+    const existing = 'name: Deploy to R2\n';
     writeFileSync(join(dir, 'deploy.yml'), existing);
 
     const result = await ensureDeployWorkflow();
-    expect(result).toBe(false);
+    expect(result).toBe('ok');
     const content = readFileSync(join(dir, 'deploy.yml'), 'utf8');
     expect(content).toBe(existing);
+  });
+
+  it('returns "upgraded" and overwrites legacy CF Pages workflow', async () => {
+    const dir = join(tmpDir, '.github', 'workflows');
+    mkdirSync(dir, { recursive: true });
+    const legacy = 'name: Deploy to Cloudflare Pages\non: push\n';
+    writeFileSync(join(dir, 'deploy.yml'), legacy);
+
+    const result = await ensureDeployWorkflow();
+    expect(result).toBe('upgraded');
+    const content = readFileSync(join(dir, 'deploy.yml'), 'utf8');
+    expect(content).toBe(DEPLOY_YML);
   });
 });
