@@ -40,7 +40,7 @@ export interface BuildMeta {
   theme?: string | undefined;
 }
 
-const SDK_VERSION = '0.12.0';
+const SDK_VERSION = '0.14.4';
 const MEMORY_LIMIT = 200;
 const STORAGE_LIMIT = 500;
 const STORAGE_KEY_PREFIX = 'fas_logs:';
