@@ -12,6 +12,7 @@ import { logoutCommand } from './commands/logout.js';
 import { logsCommand } from './commands/logs.js';
 import { proxyCommand } from './commands/proxy.js';
 import { publishCommand } from './commands/publish.js';
+import { qualityCommand } from './commands/quality.js';
 import { screencheckCommand } from './commands/screencheck.js';
 import { secretCommand } from './commands/secret.js';
 import { whoamiCommand } from './commands/whoami.js';
@@ -47,6 +48,7 @@ program.addCommand(screencheckCommand);
 program.addCommand(listCommand);
 program.addCommand(secretCommand);
 program.addCommand(proxyCommand);
+program.addCommand(qualityCommand);
 
 // `fas` with no subcommand → launch the TUI when stdout is a TTY.
 // Subcommands keep their normal one-shot behavior, scriptable for CI / agents.
