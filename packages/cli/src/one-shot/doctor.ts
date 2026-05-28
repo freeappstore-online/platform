@@ -22,6 +22,7 @@ export async function runDoctor(): Promise<CheckResult[]> {
     checkNodeVersion(),
     checkBinary('git'),
     checkBinary('pnpm'),
+    checkPackageManager(),
     checkConfigFile(),
     checkSignedIn(),
     checkApiReachable(),
@@ -50,6 +51,28 @@ async function checkBinary(name: string): Promise<CheckResult> {
   return found
     ? { name: `${name} installed`, status: 'pass', detail: found }
     : { name: `${name} installed`, status: 'fail', detail: `${name} not on PATH` };
+}
+
+async function checkPackageManager(): Promise<CheckResult> {
+  const pkgPath = join(process.cwd(), 'package.json');
+  try {
+    const raw = await readFile(pkgPath, 'utf8');
+    const pkg = JSON.parse(raw);
+    if (!pkg.packageManager) {
+      return {
+        name: 'packageManager field',
+        status: 'fail',
+        detail: 'Missing in package.json — CI will fail. Add: "packageManager": "pnpm@10.30.3"',
+      };
+    }
+    return { name: 'packageManager field', status: 'pass', detail: pkg.packageManager };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'ENOENT') {
+      return { name: 'packageManager field', status: 'warn', detail: 'No package.json in current directory' };
+    }
+    return { name: 'packageManager field', status: 'warn', detail: 'Could not read package.json' };
+  }
 }
 
 async function checkConfigFile(): Promise<CheckResult> {

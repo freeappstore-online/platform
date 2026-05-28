@@ -14,13 +14,14 @@ afterEach(() => {
 });
 
 describe('runDoctor', () => {
-  it('runs all 6 expected checks and returns them in stable order', async () => {
+  it('runs all 7 expected checks and returns them in stable order', async () => {
     const results = await runDoctor();
     const names = results.map((r) => r.name);
     expect(names).toEqual([
       'Node version',
       'git installed',
       'pnpm installed',
+      'packageManager field',
       'Config file',
       'Signed in',
       'API reachable',
