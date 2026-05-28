@@ -20,10 +20,13 @@
 
 - T1: ✅ `create/.github/workflows/deploy.yml` exists.
 - T2: ✅ `console` + `create` serve 200 on their subdomains.
-- T3: 🟡 Redirect entry exists at `fas/host/src/index.ts:40` but the legacy
-  `freeappstore-publisher` Worker is still deployed and its more-specific
-  route preempts the host wildcard. Deletion handled by Phase 2 of
-  `../../PLAN-ARCH-CLEANUP.md`.
+- T3: ❌ **Reverted.** `freeappstore-publisher` Worker is not dead code —
+  it serves `/api/me`, `/api/create`, `/api/publish-existing` for
+  `create.freeappstore.online/publish`. An attempted delete on 2026-05-28
+  was rolled back same day. The host worker's `publisher:` redirect entry
+  (`fas/host/src/index.ts:40`) was also keyed wrong (would never fire).
+  See `../../PLAN-ARCH-CLEANUP.md` Phase 2 for the migration path that
+  would let this be redone properly.
 
 ## What stays out of this plan
 
