@@ -1,7 +1,8 @@
 /**
  * Allowed:
  *  - any HTTPS host on freeappstore.online (apex or subdomain)
- *  - Cloudflare Pages preview domains for FAS projects (*.pages.dev)
+ *  - any HTTPS host on proappstore.online (apex or subdomain)
+ *  - any HTTPS host on freegamestore.online (apex or subdomain)
  *  - localhost / 127.0.0.1 on http or https (dev only)
  *
  * Used for both:
@@ -21,15 +22,6 @@ function isAllowedHost(url: URL): boolean {
   // backend (analytics, auth, KV). Without this, beacon fetch-fallbacks
   // and `window.fasAnalytics.event()` calls from game code hit CORS errors.
   if (host === 'freegamestore.online' || host.endsWith('.freegamestore.online')) return true;
-  // CF Pages preview domains — only allow platform-owned projects to prevent
-  // arbitrary *.pages.dev sites from making credentialed API requests.
-  if (
-    host.endsWith('.pages.dev') &&
-    (host.includes('freeappstore') ||
-      host.includes('freegamestore') ||
-      host.includes('proappstore'))
-  )
-    return true;
   return false;
 }
 

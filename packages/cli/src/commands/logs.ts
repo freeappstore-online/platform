@@ -1,36 +1,34 @@
 import { spawn } from 'node:child_process';
 import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
-import { cfProjectFor } from '../lib/apps.js';
 
 export const logsCommand = new Command('logs')
-  .description("Tail live logs for one of your apps' Cloudflare Pages project.")
+  .description("Show recent GitHub Actions workflow runs for an app.")
   .argument('<app-id>', 'Short app id (e.g. "calculator")')
-  .option('--cf-project <name>', 'Override the Cloudflare Pages project name.')
-  .action(async (appId: string, opts: { cfProject?: string }) => {
+  .action(async (appId: string) => {
     assertValidAppId(appId);
-    const cfProject = opts.cfProject ?? cfProjectFor(appId);
 
-    process.stdout.write(`Tailing logs for ${cfProject} (Ctrl+C to stop)...\n`);
+    const repo = `freeappstore-online/${appId}`;
+    process.stdout.write(`Fetching workflow runs for ${repo}...\n`);
 
     await new Promise<void>((resolveFn, rejectFn) => {
       const child = spawn(
-        'wrangler',
-        ['pages', 'deployment', 'tail', '--project-name', cfProject],
+        'gh',
+        ['run', 'list', '--repo', repo, '--limit', '10'],
         {
           stdio: 'inherit',
         },
       );
       child.on('error', (err) => {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-          rejectFn(new Error('wrangler is not installed. Install it: npm i -g wrangler'));
+          rejectFn(new Error('gh CLI is not installed. Install it: https://cli.github.com'));
         } else {
           rejectFn(err);
         }
       });
       child.on('exit', (code) => {
         if (code === 0 || code === null) resolveFn();
-        else rejectFn(new Error(`wrangler exited with code ${code}`));
+        else rejectFn(new Error(`gh exited with code ${code}`));
       });
     });
   });
