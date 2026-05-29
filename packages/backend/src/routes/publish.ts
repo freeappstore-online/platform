@@ -30,8 +30,7 @@ const STORE_DOMAIN = {
  * are direct worker-to-worker — they bypass the CF edge entirely, which
  * also means CF Access doesn't run (intentional: both workers are trusted
  * internal). The admin Worker creates the GitHub repo from a template,
- * sets up the CF Pages project, DNS record, custom domain, and adds the
- * entry to the storefront registry.
+ * inserts the D1 hosting route and adds the entry to the storefront registry.
  *
  * Returns 503 if the ADMIN service binding isn't configured (e.g. local
  * dev without binding). Production wrangler.toml has [[services]] block.

@@ -1,6 +1,6 @@
 /**
  * Validates an app id. The same shape is enforced by the publisher portal
- * and used for DNS subdomains, CF Pages project naming, and repo names.
+ * and used for DNS subdomains and repo names.
  *
  * Rules: lowercase letter first, then 1-30 of [a-z0-9-]. Total length 2-31.
  */

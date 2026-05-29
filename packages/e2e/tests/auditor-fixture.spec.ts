@@ -25,7 +25,7 @@ declare const process: { env: Record<string, string | undefined> };
  * (build.js in the freegamestore repo copies audit-fixture/ into
  * dist/audit-fixture/). A subdomain deploy would also work — and
  * snapshot()'s appId regex is biased toward subdomains — but path is
- * simpler since CF Pages auto-deploys the storefront on every push.
+ * simpler since GitHub Actions auto-deploys the storefront on every push.
  *
  * Override via FAS_FIXTURE_BASE for local dev (e.g. point at a
  * Python http.server hosting audit-fixture/) or a staging URL.

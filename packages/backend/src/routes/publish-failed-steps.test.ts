@@ -19,7 +19,7 @@ describe('extractFailedSteps', () => {
     const body = {
       steps: [
         { name: 'create repo', status: 'ok' },
-        { name: 'create CF Pages', status: 'ok' },
+        { name: 'Hosting route', status: 'ok' },
         { name: 'add to registry', status: 'skip' },
       ],
     };
@@ -30,14 +30,14 @@ describe('extractFailedSteps', () => {
     const body = {
       steps: [
         { name: 'create repo', status: 'ok', detail: 'created freeappstore-online/foo' },
-        { name: 'create CF Pages', status: 'fail', detail: 'rate limited' },
+        { name: 'Hosting route', status: 'fail', detail: 'rate limited' },
         { name: 'add DNS', status: 'fail', detail: 'zone permission denied' },
         { name: 'update registry', status: 'ok' },
       ],
     };
     const failed = extractFailedSteps(body);
     expect(failed).toHaveLength(2);
-    expect(failed.map((s) => s.name)).toEqual(['create CF Pages', 'add DNS']);
+    expect(failed.map((s) => s.name)).toEqual(['Hosting route', 'add DNS']);
   });
 
   it('ignores entries with unexpected shapes', () => {
