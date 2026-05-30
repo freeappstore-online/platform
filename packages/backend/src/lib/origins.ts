@@ -22,6 +22,8 @@ function isAllowedHost(url: URL): boolean {
   // backend (analytics, auth, KV). Without this, beacon fetch-fallbacks
   // and `window.fasAnalytics.event()` calls from game code hit CORS errors.
   if (host === 'freegamestore.online' || host.endsWith('.freegamestore.online')) return true;
+  // Custom domains for FAS apps
+  if (host === 'agentcoder.space' || host.endsWith('.agentcoder.space')) return true;
   return false;
 }
 
