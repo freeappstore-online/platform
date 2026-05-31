@@ -69,7 +69,11 @@ async function checkPackageManager(): Promise<CheckResult> {
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
-      return { name: 'packageManager field', status: 'warn', detail: 'No package.json in current directory' };
+      return {
+        name: 'packageManager field',
+        status: 'warn',
+        detail: 'No package.json in current directory',
+      };
     }
     return { name: 'packageManager field', status: 'warn', detail: 'Could not read package.json' };
   }
