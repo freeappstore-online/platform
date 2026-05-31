@@ -37,7 +37,7 @@ Live in 30 seconds at `https://my-app.freeappstore.online`.
 | `fas check` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
 | `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing, then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
 | `fas list` (alias `fas ls`) | List apps and games you have published. `--json` for scripting, `-v` for recent commits. |
-| `fas logs <app-id>` | Tail live deployment logs for an app's Cloudflare Pages project. |
+| `fas logs <app-id>` | Tail live deployment logs for an app (GitHub Actions workflow runs). |
 | `fas secret set\|list\|rm` | Manage server-side encrypted API keys for an app. |
 | `fas proxy allow\|list\|deny` | Manage the URL allowlist for the per-app secret-injecting proxy. |
 | `fas screencheck` | Build the app and run a headless browser at every reference viewport to verify the layout fits without scrolling. |
@@ -150,16 +150,11 @@ fas list -v            # verbose — show last 3 commits per app
 
 ### `fas logs <app-id>`
 
-Tail live deployment logs for an app's Cloudflare Pages project. Requires `wrangler` to be installed globally.
+Show recent GitHub Actions deploy runs for an app. Shows status, timestamps, and links to failed runs.
 
 ```bash
 fas logs calculator
-fas logs calculator --cf-project freecalculator
 ```
-
-| Flag | Purpose |
-|---|---|
-| `--cf-project <name>` | Override the Cloudflare Pages project name (auto-derived by default). |
 
 ### `fas secret set|list|rm`
 
