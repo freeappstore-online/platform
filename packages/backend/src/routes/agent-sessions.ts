@@ -64,6 +64,8 @@ agentSessionRoutes.get('/agent/sessions/:id', async (c) => {
       deployed: row.deployed === 1,
       messages: row.messages ? JSON.parse(row.messages as string) : [],
       deployState: row.deploy_state ? JSON.parse(row.deploy_state as string) : null,
+      deployLog: row.deploy_log ? JSON.parse(row.deploy_log as string) : [],
+      errors: row.errors ? JSON.parse(row.errors as string) : [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     },

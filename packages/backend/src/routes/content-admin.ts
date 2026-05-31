@@ -10,6 +10,9 @@
  * DELETE /v1/admin/counters?app=&name=                 — reset a counter
  * GET  /v1/admin/users?limit=&offset=                 — browse platform users
  * GET  /v1/admin/apps                                  — list all apps with stats
+ * GET  /v1/admin/agent-errors?limit=&since=&user=     — VibeCode errors across all sessions
+ * GET  /v1/admin/agent-deploys?limit=&status=error    — failed deploys across all sessions
+ * GET  /v1/admin/agent-sessions/:id                   — full session detail for debugging
  */
 
 import { Hono } from 'hono';
@@ -201,6 +204,103 @@ contentAdminRoutes.get('/admin/apps', async (c) => {
   ).all();
 
   return c.json({ apps: apps.results ?? [] });
+});
+
+// ── Agent sessions (VibeCode debugging) ─────────────────────────
+
+/**
+ * GET /v1/admin/agent-errors — recent errors across all VibeCode sessions.
+ * Query: ?limit=50&since=<epoch_ms>&user=<user_id>
+ */
+contentAdminRoutes.get('/admin/agent-errors', async (c) => {
+  await requireAdmin(c);
+  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const since = Number(c.req.query('since') || 0);
+  const userId = c.req.query('user') ?? '';
+
+  let sql = `SELECT session_id, user_id, name, app_id, errors, deploy_state, deploy_log, updated_at
+     FROM agent_sessions WHERE errors IS NOT NULL AND errors != '[]'`;
+  const binds: unknown[] = [];
+
+  if (since) { sql += ' AND updated_at > ?'; binds.push(since); }
+  if (userId) { sql += ' AND user_id = ?'; binds.push(userId); }
+  sql += ' ORDER BY updated_at DESC LIMIT ?';
+  binds.push(limit);
+
+  const result = await c.env.DB.prepare(sql).bind(...binds).all();
+
+  const sessions = (result.results ?? []).map((r: Record<string, unknown>) => ({
+    sessionId: r.session_id,
+    userId: r.user_id,
+    name: r.name,
+    appId: r.app_id,
+    errors: r.errors ? JSON.parse(r.errors as string) : [],
+    deployState: r.deploy_state ? JSON.parse(r.deploy_state as string) : null,
+    deployLog: r.deploy_log ? JSON.parse(r.deploy_log as string) : [],
+    updatedAt: r.updated_at,
+  }));
+
+  return c.json({ sessions });
+});
+
+/**
+ * GET /v1/admin/agent-deploys — recent deploy failures across all sessions.
+ * Query: ?limit=50&status=error
+ */
+contentAdminRoutes.get('/admin/agent-deploys', async (c) => {
+  await requireAdmin(c);
+  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const statusFilter = c.req.query('status') ?? 'error';
+
+  const result = await c.env.DB.prepare(
+    `SELECT session_id, user_id, name, app_id, deploy_state, deploy_log, updated_at
+     FROM agent_sessions WHERE deploy_state LIKE ? ORDER BY updated_at DESC LIMIT ?`,
+  )
+    .bind(`%"phase":"${statusFilter}"%`, limit)
+    .all();
+
+  const sessions = (result.results ?? []).map((r: Record<string, unknown>) => ({
+    sessionId: r.session_id,
+    userId: r.user_id,
+    name: r.name,
+    appId: r.app_id,
+    deployState: r.deploy_state ? JSON.parse(r.deploy_state as string) : null,
+    deployLog: r.deploy_log ? JSON.parse(r.deploy_log as string) : [],
+    updatedAt: r.updated_at,
+  }));
+
+  return c.json({ sessions });
+});
+
+/**
+ * GET /v1/admin/agent-sessions/:id — full session detail for debugging.
+ */
+contentAdminRoutes.get('/admin/agent-sessions/:id', async (c) => {
+  await requireAdmin(c);
+  const sessionId = c.req.param('id')!;
+
+  const row = await c.env.DB.prepare('SELECT * FROM agent_sessions WHERE session_id = ?')
+    .bind(sessionId)
+    .first<Record<string, unknown>>();
+
+  if (!row) return c.json({ session: null }, 404);
+
+  return c.json({
+    session: {
+      id: row.session_id,
+      userId: row.user_id,
+      name: row.name,
+      appId: row.app_id,
+      appUrl: row.app_url,
+      deployed: row.deployed === 1,
+      messages: row.messages ? JSON.parse(row.messages as string) : [],
+      deployState: row.deploy_state ? JSON.parse(row.deploy_state as string) : null,
+      deployLog: row.deploy_log ? JSON.parse(row.deploy_log as string) : [],
+      errors: row.errors ? JSON.parse(row.errors as string) : [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+  });
 });
 
 // ── Stats ───────────────────────────────────────────────────────
