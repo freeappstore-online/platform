@@ -17,7 +17,7 @@ Platform owns the credentials. One account serves all apps. Devs call an SDK met
 | Integration | Status | FAS SDK method | Backed by | Notes |
 |---|---|---|---|---|
 | Auth (GitHub OAuth) | **Live** | `fas.auth.signIn()` | GitHub OAuth | Platform-managed OAuth app |
-| Transactional email | **Planned** | `fas.email.send()` | Resend | For magic link auth + app-triggered email |
+| Transactional email | **Live** | `fas.email.send()` | Resend | 100/day per app, magic link auth + app-triggered |
 
 FAS is free-tier. Heavy platform-managed services (AI, maps, SMS, push) live on PAS only. FAS apps that need AI use Tier 2 (user's own key).
 
@@ -37,7 +37,7 @@ Dev or user brings their own API key. Platform stores it encrypted (AES-256-GCM 
 
 2. **User keys** (user-managed): Each user stores their own key for a provider (e.g., OpenAI). The proxy falls back to user keys when no app-level allowlist matches. No daily cap on user-key proxied requests. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.
 
-### Tier 3: Webhooks (events out) -- NOT YET IMPLEMENTED
+### Tier 3: Webhooks (events out)
 
 Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier, Make, n8n, and any HTTP endpoint work natively.
 
@@ -79,12 +79,10 @@ Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier,
 
 - **Platform AI** (Workers AI) -- FAS apps use user keys through the proxy
 - **Maps, push, SMS** -- PAS Tier 1 services
-- **Transactional email** -- Resend (planned for both)
 - **Full-text search** -- D1 FTS5 (planned for PAS)
-- **Outbound webhooks** -- Planned for both
 
 ## Implementation priority for FAS
 
-1. **Transactional email** -- Resend is already wired for magic link auth. Expose `fas.email.send()` for apps. Needed by apps that want email notifications, password resets, etc.
-2. **Outbound webhooks** -- Enables automation integrations. Medium effort, high value for power users.
+1. ~~**Transactional email**~~ — **Shipped.** `fas.email.send()` live, 100/day per app.
+2. ~~**Outbound webhooks**~~ — **Shipped.** `fas.webhooks` CRUD + HMAC-SHA256, 5 per app, 8 events.
 3. **Full-text search** -- D1 FTS5 on the shared database. Low effort, useful for apps with collections.

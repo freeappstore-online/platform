@@ -8,7 +8,7 @@ The intent is to keep the entire platform inside Cloudflare's free / cheap tiers
 
 | Limit | Value | Notes |
 |---|---|---|
-| Identity providers | GitHub OAuth only | More providers come in v0.1+ once we know what creators ask for. |
+| Identity providers | GitHub, Google, Apple, Email magic link | 4 providers via `fas.auth.signIn(provider)` |
 | Session lifetime | 30 days | HMAC-signed bearer token; rotate `SESSION_SIGNING_KEY` to revoke all sessions. |
 
 ## Per-user KV (`fas.kv`)
@@ -83,7 +83,6 @@ AI provider hosts (openai.com, anthropic.com, etc.) are blocked from app-level s
 - Server-side AI — PAS includes Workers AI
 - Cron / scheduled tasks — PAS has Cron Workers
 - Custom domains — PAS supports your-domain.com
-- Transactional email — PAS includes Resend
 - Monetization — PAS has Stripe + creator payouts
 - Server-side compute — PAS gives each app a Worker + D1
 

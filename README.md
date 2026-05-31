@@ -36,7 +36,7 @@ Full guide: <https://freeappstore.online/contribute.html>
 - **Backend:** Cloudflare Workers + D1 (users, KV, ownership) + Durable Objects (rooms) + R2 (daily backups). One Worker, one D1, one DO class. No Firebase.
 - **Auth:** GitHub OAuth (device flow for CLI, web flow for browser). HMAC-signed sessions, 30-day TTL.
 - **Realtime:** one Durable Object per room with WebSocket fan-out. Ephemeral, capped — sized for cursors / presence / lightweight multiplayer.
-- **Apps:** standalone PWA template (Vite + React + Tailwind) deployed to Cloudflare Pages with custom subdomain.
+- **Apps:** standalone PWA template (Vite + React + Tailwind) deployed to R2 via GitHub Actions, served by host Worker with custom subdomain.
 
 ## What this SDK is *not*
 
