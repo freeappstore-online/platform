@@ -11,6 +11,7 @@ interface AppRow {
   category: string | null;
   type: string | null;
   oneliner: string | null;
+  display_name: string | null;
   repo: string | null;
   demo: string | null;
   store: string | null; // 'apps' | 'games'; nullable in case migration hasn't run
