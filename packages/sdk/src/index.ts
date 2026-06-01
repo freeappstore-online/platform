@@ -20,8 +20,11 @@ export type { DefaultRole, RoleAssignment } from './roles.js';
 export { DEFAULT_ROLES } from './roles.js';
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
 export type { FasInitOptions, Unsubscribe, User } from './types.js';
-export type { UseVoiceInputReturn } from './voice.js';
-export { useVoiceInput } from './voice.js';
+// React-dependent exports (useVoiceInput, UseVoiceInputReturn) live in the
+// './hooks' subpath, NOT this barrel. Re-exporting them here forced the main
+// entry to statically import 'react' — an *optional* peer dep — so any
+// non-React consumer doing `import { initApp } from '@freeappstore/sdk'`
+// crashed with ERR_MODULE_NOT_FOUND: react. See prod-smoke steps 2 & 6.
 
 /** Root SDK instance — provides auth, kv, collections, counters, rooms, and proxy sub-clients. */
 export class FreeAppStore {
