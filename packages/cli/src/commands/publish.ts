@@ -229,7 +229,14 @@ export const publishCommand = new Command('publish')
         }
         if (autoResult.kind === 'unauthorized') {
           process.stdout.write(`\n⚠  Not signed in. Run: fas login\n`);
-          return;
+          process.exit(1);
+        }
+        if (autoResult.kind === 'wrong_store') {
+          // Backend rejected the store for this CLI (e.g. games). Surface its
+          // hint and stop — falling back to a FreeGameStore issue form here
+          // just buries the "use the other CLI" message.
+          process.stdout.write(`\n✗ ${autoResult.reason}\n`);
+          process.exit(1);
         }
         process.stdout.write(
           `\n⚠  Auto-provision unavailable (${autoResult.reason}); falling back to Issue form.\n`,
@@ -255,7 +262,7 @@ interface AutoProvisionSuccess {
   repoUrl: string;
 }
 interface AutoProvisionFailure {
-  kind: 'unconfigured' | 'failed' | 'unauthorized';
+  kind: 'unconfigured' | 'failed' | 'unauthorized' | 'wrong_store';
   reason: string;
 }
 type AutoProvisionResult = AutoProvisionSuccess | AutoProvisionFailure;
@@ -287,6 +294,11 @@ async function tryAutoProvision(
     }),
   });
   if (res.status === 401) return { kind: 'unauthorized', reason: 'session expired' };
+  if (res.status === 410) {
+    // wrong_store: this CLI doesn't publish to that store (e.g. games → fgs).
+    const body = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
+    return { kind: 'wrong_store', reason: body.hint ?? body.error ?? 'wrong store for this CLI' };
+  }
   if (res.status === 503) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     return { kind: 'unconfigured', reason: body.error ?? '503' };
