@@ -47,6 +47,15 @@ app.use(
   }),
 );
 
+// Security headers on every response.
+app.use('*', async (c, next) => {
+  await next();
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+});
+
 // Global error handler: convert HttpError to proper HTTP responses
 // instead of letting them become 500s.
 app.onError((err, c) => {
