@@ -28,7 +28,17 @@ rolesRoutes.get('/apps/:appId/roles', async (c) => {
     .bind(appId)
     .all<{ user_id: string; role_name: string; granted_by: string | null; granted_at: number }>();
 
-  return c.json({ roles: results ?? [] });
+  // Map to the camelCase shape the SDK's RoleAssignment expects. Without this
+  // every field reads back undefined and Roles.list(role) — which filters on
+  // r.roleName — always returns []. (Matches keys/secrets/friends convention.)
+  const roles = (results ?? []).map((r) => ({
+    userId: r.user_id,
+    roleName: r.role_name,
+    grantedBy: r.granted_by,
+    grantedAt: r.granted_at,
+  }));
+
+  return c.json({ roles });
 });
 
 /** List roles for a specific user in an app. Any authenticated user can check their own roles. */

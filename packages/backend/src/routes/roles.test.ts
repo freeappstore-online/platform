@@ -61,8 +61,15 @@ describe('roles routes', () => {
       env(fakeDB({ user: owner, appCreator: 'owner', roles })),
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { roles: unknown[] };
+    const data = (await res.json()) as { roles: Record<string, unknown>[] };
     expect(data.roles).toHaveLength(1);
+    // Must be camelCase — the SDK's RoleAssignment / Roles.list() depend on it.
+    expect(data.roles[0]).toEqual({
+      userId: 'u2',
+      roleName: 'editor',
+      grantedBy: 'u1',
+      grantedAt: 1000,
+    });
   });
 
   it('GET /v1/apps/:appId/roles returns 403 for non-owner', async () => {
