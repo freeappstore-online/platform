@@ -39,7 +39,7 @@ appsRoutes.get('/apps/mine', async (c) => {
   }
 
   const result = await c.env.DB.prepare(
-    `SELECT id, owner_login, created_at, category, type, oneliner, repo, demo, store
+    `SELECT id, owner_login, created_at, category, type, oneliner, display_name, repo, demo, store
      FROM apps
      WHERE owner_login = ?
      ORDER BY created_at DESC`,
@@ -57,6 +57,7 @@ appsRoutes.get('/apps/mine', async (c) => {
       store,
       category: r.category,
       type: r.type,
+      name: r.display_name || r.id,
       oneliner: r.oneliner,
       repo: r.repo,
       demo: r.demo,
