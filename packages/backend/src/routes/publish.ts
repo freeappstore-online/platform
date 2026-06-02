@@ -68,7 +68,10 @@ publishRoutes.post('/publish', async (c) => {
       410,
     );
   }
-  if ((body.store as string | undefined) === 'apps_pro' || (body.store as string | undefined) === 'games_pro') {
+  if (
+    (body.store as string | undefined) === 'apps_pro' ||
+    (body.store as string | undefined) === 'games_pro'
+  ) {
     return c.json(
       {
         error: 'wrong_store',

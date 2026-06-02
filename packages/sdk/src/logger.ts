@@ -42,7 +42,7 @@ export interface BuildMeta {
 
 // Must track package.json version — bumped on release. Guarded by version.test.ts
 // so a forgotten bump fails CI instead of silently misattributing telemetry.
-export const SDK_VERSION = '0.14.9';
+export const SDK_VERSION = '0.14.10';
 const MEMORY_LIMIT = 200;
 const STORAGE_LIMIT = 500;
 const STORAGE_KEY_PREFIX = 'fas_logs:';
@@ -53,6 +53,12 @@ export class Logger {
   private buffer: LogEntry[] = [];
   private uploadTimer: ReturnType<typeof setInterval> | null = null;
   private sessionLogged = false;
+  // Upload watermark over the logical entry stream. `evicted` counts entries
+  // dropped off the front of the ring buffer; `uploadedThrough` counts stream
+  // entries confirmed uploaded. Together they let uploadBatch() send each entry
+  // exactly once without disturbing the recent()/entries() view held in `buffer`.
+  private uploadedThrough = 0;
+  private evicted = 0;
 
   constructor(
     private readonly appId: string,
@@ -100,6 +106,8 @@ export class Logger {
   /** Clear all logs (memory + localStorage). */
   clear() {
     this.buffer = [];
+    this.uploadedThrough = 0;
+    this.evicted = 0;
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(`${STORAGE_KEY_PREFIX}${this.appId}`);
     }
@@ -152,7 +160,9 @@ export class Logger {
 
     this.buffer.push(entry);
     if (this.buffer.length > MEMORY_LIMIT) {
-      this.buffer = this.buffer.slice(-MEMORY_LIMIT);
+      const drop = this.buffer.length - MEMORY_LIMIT;
+      this.buffer = this.buffer.slice(drop);
+      this.evicted += drop;
     }
 
     this.saveToStorage();
@@ -205,9 +215,14 @@ export class Logger {
   }
 
   private async uploadBatch(): Promise<void> {
-    if (!this.auth.token || this.buffer.length === 0) return;
+    if (!this.auth.token) return;
 
-    const batch = this.buffer.slice(-UPLOAD_BATCH_SIZE);
+    // Send the oldest not-yet-uploaded entries (a watermark over the stream),
+    // so each entry uploads exactly once instead of re-sending the tail every
+    // tick (which previously created duplicate rows server-side every 30s).
+    const startIdx = Math.max(0, this.uploadedThrough - this.evicted);
+    const batch = this.buffer.slice(startIdx, startIdx + UPLOAD_BATCH_SIZE);
+    if (batch.length === 0) return;
     try {
       const res = await fetch(`${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/logs`, {
         method: 'POST',
@@ -217,10 +232,11 @@ export class Logger {
         },
         body: JSON.stringify({ entries: batch }),
       });
-      // Don't retry on failure, just let next interval try again
+      // On failure leave the watermark untouched and retry next interval.
       if (!res.ok) return;
+      this.uploadedThrough = this.evicted + startIdx + batch.length;
     } catch {
-      // Network failure, will retry next interval
+      // Network failure, watermark unchanged — will retry next interval
     }
   }
 

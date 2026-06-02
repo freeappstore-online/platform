@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
 
 export const logsCommand = new Command('logs')
-  .description("Show recent GitHub Actions workflow runs for an app.")
+  .description('Show recent GitHub Actions workflow runs for an app.')
   .argument('<app-id>', 'Short app id (e.g. "calculator")')
   .action(async (appId: string) => {
     assertValidAppId(appId);
@@ -12,13 +12,9 @@ export const logsCommand = new Command('logs')
     process.stdout.write(`Fetching workflow runs for ${repo}...\n`);
 
     await new Promise<void>((resolveFn, rejectFn) => {
-      const child = spawn(
-        'gh',
-        ['run', 'list', '--repo', repo, '--limit', '10'],
-        {
-          stdio: 'inherit',
-        },
-      );
+      const child = spawn('gh', ['run', 'list', '--repo', repo, '--limit', '10'], {
+        stdio: 'inherit',
+      });
       child.on('error', (err) => {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
           rejectFn(new Error('gh CLI is not installed. Install it: https://cli.github.com'));

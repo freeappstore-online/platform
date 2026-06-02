@@ -100,31 +100,38 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
 
   const now = Date.now();
 
-  await c.env.DB.prepare(
-    `INSERT INTO agent_sessions (session_id, user_id, name, app_id, app_url, deployed, messages, deploy_state, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(session_id) DO UPDATE SET
-       name = COALESCE(excluded.name, agent_sessions.name),
-       app_id = COALESCE(excluded.app_id, agent_sessions.app_id),
-       app_url = COALESCE(excluded.app_url, agent_sessions.app_url),
-       deployed = COALESCE(excluded.deployed, agent_sessions.deployed),
-       messages = COALESCE(excluded.messages, agent_sessions.messages),
-       deploy_state = COALESCE(excluded.deploy_state, agent_sessions.deploy_state),
-       updated_at = excluded.updated_at`,
-  )
-    .bind(
-      sessionId,
-      user.id,
-      body.name ?? 'New App',
-      body.appId ?? null,
-      body.appUrl ?? null,
-      body.deployed ? 1 : 0,
-      body.messages ? JSON.stringify(body.messages) : null,
-      body.deployState ? JSON.stringify(body.deployState) : null,
-      now,
-      now,
-    )
-    .run();
+  // Bind null for any omitted field so partial PUTs preserve the prior value.
+  // (A single upsert can't do this: binding 'New App'/0 for omitted name/deployed
+  //  makes excluded.* non-null, so COALESCE(excluded, prior) always clobbers —
+  //  the original bug. Two statements separate "create with defaults" from
+  //  "patch supplied fields".)
+  const name = body.name ?? null;
+  const appId = body.appId ?? null;
+  const appUrl = body.appUrl ?? null;
+  const deployed = body.deployed === undefined ? null : body.deployed ? 1 : 0;
+  const messages = body.messages ? JSON.stringify(body.messages) : null;
+  const deployState = body.deployState ? JSON.stringify(body.deployState) : null;
+
+  await c.env.DB.batch([
+    // 1. Create the row if new — DB defaults fill omitted name ('New App') / deployed (0).
+    c.env.DB.prepare(
+      `INSERT INTO agent_sessions (session_id, user_id, name, app_id, app_url, deployed, messages, deploy_state, created_at, updated_at)
+       VALUES (?, ?, COALESCE(?, 'New App'), ?, ?, COALESCE(?, 0), ?, ?, ?, ?)
+       ON CONFLICT(session_id) DO NOTHING`,
+    ).bind(sessionId, user.id, name, appId, appUrl, deployed, messages, deployState, now, now),
+    // 2. Patch only the supplied fields; COALESCE(?, col) preserves omitted ones.
+    c.env.DB.prepare(
+      `UPDATE agent_sessions SET
+         name = COALESCE(?, name),
+         app_id = COALESCE(?, app_id),
+         app_url = COALESCE(?, app_url),
+         deployed = COALESCE(?, deployed),
+         messages = COALESCE(?, messages),
+         deploy_state = COALESCE(?, deploy_state),
+         updated_at = ?
+       WHERE session_id = ? AND user_id = ?`,
+    ).bind(name, appId, appUrl, deployed, messages, deployState, now, sessionId, user.id),
+  ]);
 
   return c.json({ ok: true });
 });

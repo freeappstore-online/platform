@@ -14,17 +14,23 @@ function fakeDB(opts: {
   sessions?: Array<Record<string, unknown>>;
   session?: Record<string, unknown> | null;
 }) {
+  const calls: Array<{ sql: string; bound: unknown[] }> = [];
   const prepare = (sql: string) => {
     const trimmed = sql.replace(/\s+/g, ' ').trim();
-    let _bound: unknown[] = [];
-    return {
-      bind: (...args: unknown[]) => {
-        _bound = args;
-        return { first: first as any, all, run };
-      },
+    const bound = (args: unknown[]) => ({
+      _sql: trimmed,
+      _bound: args,
       first: first as any,
       all,
       run,
+    });
+    return {
+      bind: (...args: unknown[]) => bound(args),
+      first: first as any,
+      all,
+      run,
+      _sql: trimmed,
+      _bound: [] as unknown[],
     };
     async function first<T>() {
       if (trimmed.includes('FROM users')) return (opts.user ?? null) as T;
@@ -40,7 +46,11 @@ function fakeDB(opts: {
       return { meta: { changes: 1 } };
     }
   };
-  return { prepare } as unknown as D1Database;
+  const batch = async (stmts: Array<{ _sql: string; _bound: unknown[] }>) => {
+    for (const s of stmts) calls.push({ sql: s._sql, bound: s._bound });
+    return stmts.map(() => ({ meta: { changes: 1 } }));
+  };
+  return { prepare, batch, _calls: calls } as unknown as D1Database;
 }
 
 function env(db: D1Database): Record<string, unknown> {
@@ -133,6 +143,28 @@ describe('agent-sessions', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { ok: boolean };
     expect(data.ok).toBe(true);
+  });
+
+  it('PUT /v1/agent/sessions/:id preserves omitted deployed (binds null, not 0)', async () => {
+    const db = fakeDB({ user });
+    const res = await app.request(
+      '/v1/agent/sessions/s3',
+      {
+        method: 'PUT',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed' }), // deployed + appId etc. omitted
+      },
+      env(db),
+    );
+    expect(res.status).toBe(200);
+    const calls = (db as unknown as { _calls: Array<{ sql: string; bound: unknown[] }> })._calls;
+    const update = calls.find((c) => c.sql.includes('UPDATE agent_sessions'));
+    expect(update).toBeTruthy();
+    expect(update?.sql).toContain('deployed = COALESCE(?, deployed)');
+    // UPDATE bind order: name, app_id, app_url, deployed, messages, deploy_state, now, id, user
+    expect(update?.bound[0]).toBe('Renamed'); // supplied → set
+    expect(update?.bound[3]).toBeNull(); // deployed omitted → null → COALESCE preserves prior
+    expect(update?.bound[1]).toBeNull(); // app_id omitted → preserved
   });
 
   it('PUT /v1/agent/sessions/:id/messages updates messages', async () => {

@@ -222,12 +222,20 @@ contentAdminRoutes.get('/admin/agent-errors', async (c) => {
      FROM agent_sessions WHERE errors IS NOT NULL AND errors != '[]'`;
   const binds: unknown[] = [];
 
-  if (since) { sql += ' AND updated_at > ?'; binds.push(since); }
-  if (userId) { sql += ' AND user_id = ?'; binds.push(userId); }
+  if (since) {
+    sql += ' AND updated_at > ?';
+    binds.push(since);
+  }
+  if (userId) {
+    sql += ' AND user_id = ?';
+    binds.push(userId);
+  }
   sql += ' ORDER BY updated_at DESC LIMIT ?';
   binds.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...binds).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...binds)
+    .all();
 
   const sessions = (result.results ?? []).map((r: Record<string, unknown>) => ({
     sessionId: r.session_id,
