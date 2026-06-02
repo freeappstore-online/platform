@@ -1,0 +1,57 @@
+name: Deploy admin
+
+# Deploys the freeappstore-admin Worker (privileged provisioning + admin SPA)
+# on pushes that touch workers/admin. Consolidated from the former
+# freeappstore-online/admin repo (2026-06-02).
+#
+# admin/ and admin/web/ are two independent pnpm projects (each its own
+# lockfile), so installs use --ignore-workspace to bypass this monorepo's
+# root pnpm workspace. The web SPA builds into workers/admin/public, which
+# wrangler serves via its `assets` binding.
+#
+# Note: the former repo also ran a post-deploy CF Access smoke using
+# ADMIN_CF_ACCESS_CLIENT_ID/SECRET. That step is omitted here; re-add it if
+# those secrets are provisioned on this repo.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/admin/**'
+      - '.github/workflows/deploy-admin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-admin
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install (worker)
+        run: pnpm install --frozen-lockfile --ignore-workspace
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Build admin SPA → public/
+        run: cd web && pnpm install --frozen-lockfile --ignore-workspace && pnpm build
+
+      - name: Deploy
+        run: pnpm exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

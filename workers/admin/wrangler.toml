@@ -1,0 +1,54 @@
+name = "freeappstore-admin"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+workers_dev = false
+assets = { directory = "public", binding = "ASSETS" }
+
+[vars]
+CF_ACCOUNT_ID = "c1089bfcc43c1c6c2aa89e584e86f0bc"
+FAS_ZONE_ID = "ebe8a9b64cb958520b8c32114f7f06ec"
+# Cross-store zone IDs are read-only here (FAS admin dashboard aggregates
+# stats across stores). All write paths for these zones live in their own
+# per-store admin Workers per the admin-worker-per-store principle.
+FGS_ZONE_ID = "fd33f88109b97569f2c5d6f1e5bb62ae"
+# PAS_ZONE_ID removed 2026-05-28 (Phase 4) — proappstore-admin owns PAS.
+# PGS_ZONE_ID removed 2026-05-28 (Phase 5) — progamestore-admin owns PGS.
+CF_ACCESS_TEAM_DOMAIN = "stores-access.cloudflareaccess.com"
+CF_ACCESS_AUD = "8d453037103c6de763e09d1e9c142fdfbeeb2fbae5215c36e2885216b82e98bf"
+
+[[routes]]
+pattern = "admin.freeappstore.online/*"
+zone_name = "freeappstore.online"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fas"
+database_id = "a32701c0-5a56-4a12-810d-485166202e39"
+
+[[kv_namespaces]]
+binding = "CREATORS"
+id = "b2aae28db28f4971b68d0a917b93103e"
+
+# Path B host bucket — deprovision purges an app's objects (apps/<id>/*) here
+# so a deprovisioned app leaves no orphaned R2 storage.
+[[r2_buckets]]
+binding = "APPS"
+bucket_name = "fas-apps"
+
+# Service binding to FAS platform backend — required for
+# `provisionCfWebAnalytics()` in src/publish.ts to persist the freshly-minted
+# cf_beacon_token into `app_analytics` table immediately after CF RUM creates
+# the site. Without this binding the analytics step silently skips
+# persistence (every step shows "manual paste" detail) and the storefront
+# never gets the token wired up.
+[[services]]
+binding = "BACKEND_FAS"
+service = "freeappstore-api"
+
+# Secrets (set via `wrangler secret put`):
+#   CF_API_TOKEN          Required for CF API calls.
+#   GITHUB_TOKEN          PAT with repo create + admin scopes on freeappstore-online.
+#   INTERNAL_TOKEN        Shared secret matching the one set on freeappstore-api.
+#                         Used as X-Internal-Token when persisting analytics
+#                         tokens via BACKEND_FAS. If unset, the persist step
+#                         skips (non-fatal but operator must paste manually).

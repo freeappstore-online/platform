@@ -1,0 +1,48 @@
+name: Deploy host
+
+# Deploys the freeappstore-host Worker (Path B R2 hosting) on pushes that
+# touch workers/host. Consolidated from the former freeappstore-online/host
+# repo (2026-06-02). Reuses the repo's CLOUDFLARE_API_TOKEN (same CF account).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/host/**'
+      - '.github/workflows/deploy-host.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-host
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/host
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Deploy
+        run: pnpm exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

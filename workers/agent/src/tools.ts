@@ -1,0 +1,342 @@
+import { runComplianceCheck } from "./compliance";
+import type { StoreConfig } from "./config";
+import type { ToolCall, ToolDef, ToolResult } from "./providers/types";
+
+/** File tools — identical across all stores */
+const FILE_TOOLS: ToolDef[] = [
+  {
+    name: "write_file",
+    description: "Create or overwrite a file in the project. Path is relative to project root (e.g. 'web/src/App.tsx').",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File path relative to project root" },
+        content: { type: "string", description: "Full file content" },
+      },
+      required: ["path", "content"],
+    },
+  },
+  {
+    name: "read_file",
+    description: "Read the contents of a file in the project.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File path relative to project root" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "list_files",
+    description: "List all files in the project.",
+    parameters: { type: "object", properties: {} },
+  },
+  {
+    name: "delete_file",
+    description: "Delete a file from the project.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "File path relative to project root" },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    name: "search_files",
+    description:
+      "Search across all project files for a text pattern (case-insensitive). Returns matching lines with file paths. Use for finding usages, debugging, or understanding the codebase.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Text to search for (case-insensitive substring match)" },
+      },
+      required: ["pattern"],
+    },
+  },
+  {
+    name: "register_api",
+    description:
+      "Declare a third-party API this app calls through the platform proxy (fas.proxy.fetch). Records it in fas.json so the developer can add the key once in the platform — the end user NEVER enters a key. Call this for each external API the app uses. Does NOT need the key value (the developer adds that in the app's API Keys page after publishing).",
+    parameters: {
+      type: "object",
+      properties: {
+        host: { type: "string", description: "Upstream API host, no scheme. e.g. 'api.openweathermap.org'" },
+        secretName: { type: "string", description: "Name for the developer's key. UPPER_SNAKE_CASE. e.g. 'OPENWEATHER_KEY'" },
+        injectKind: {
+          type: "string",
+          description: "How the key is sent: 'query' (URL param), 'header', or 'bearer' (Authorization: Bearer)",
+        },
+        injectName: {
+          type: "string",
+          description:
+            "Query-param or header name to inject the key into. Required for 'query'/'header'; omit for 'bearer'. e.g. 'appid' or 'X-API-Key'",
+        },
+        description: { type: "string", description: "Short note on what the API is for." },
+      },
+      required: ["host", "secretName", "injectKind"],
+    },
+  },
+];
+
+/** Tool definitions parameterized by store config */
+export function getToolDefinitions(config: StoreConfig): ToolDef[] {
+  const { noun, Noun, nounPlural, storeName, categories } = config;
+  const example = config.store === "games" ? "space-invaders" : "meditation-timer";
+  const exampleName = config.store === "games" ? "Space Invaders" : "Meditation Timer";
+
+  return [
+    ...FILE_TOOLS,
+
+    // ── Deploy + infra tools (executed server-side by the session) ──
+    {
+      name: "deploy",
+      description: `Full deploy: provision GitHub repo, then push all project files. GitHub Actions will deploy to R2. Use this for the FIRST deploy of a new ${noun}. Call only when the user explicitly asks to deploy.`,
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: `${Noun} ID — lowercase letters, numbers, hyphens. e.g. '${example}'` },
+          name: { type: "string", description: `Display name. e.g. '${exampleName}'` },
+          category: { type: "string", description: `Category: ${categories}` },
+          icon: { type: "string", description: "HTML entity for icon emoji. e.g. '&#128992;'" },
+          iconBg: { type: "string", description: "Icon background color. e.g. '#f0f9ff'" },
+          description: { type: "string", description: "One-sentence store description." },
+        },
+        required: ["id", "name", "category", "icon", "iconBg", "description"],
+      },
+    },
+    {
+      name: "push_update",
+      description: `Push updated files to an existing deployed ${noun}'s GitHub repo. Use this when the ${noun} is already deployed and the user wants to update it. Creates a new commit with changed files.`,
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: `${Noun} ID of the already-deployed ${noun}. e.g. '${example}'` },
+          message: { type: "string", description: "Commit message describing the update." },
+        },
+        required: ["id", "message"],
+      },
+    },
+    {
+      name: "check_deploy_status",
+      description: `Check the deployment status of a ${noun} via GitHub Actions. Returns the latest deployment status and URL.`,
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: `${Noun} ID. e.g. '${example}'` },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: `list_deployed_${nounPlural}`,
+      description: `List all ${nounPlural} currently deployed on ${storeName}. Returns ${noun} names, IDs, URLs, and categories from the store registry.`,
+      parameters: { type: "object", properties: {} },
+    },
+    {
+      name: "fetch_url",
+      description: `Fetch a URL and return the response body. Useful for checking if a deployed ${noun} is live, reading remote files, or verifying URLs.`,
+      parameters: {
+        type: "object",
+        properties: {
+          url: { type: "string", description: "URL to fetch" },
+          method: { type: "string", description: "HTTP method (default GET)" },
+        },
+        required: ["url"],
+      },
+    },
+    {
+      name: "run_compliance_check",
+      description: `Run ${storeName} compliance checks against the current project files. Validates: MIT license, no tracking SDKs, brand fonts, CSS variables, HTML meta tags, PWA manifest, ${config.domain} link, pnpm workspace. Returns pass/fail for each check with details. Run this BEFORE deploying to catch issues early.`,
+      parameters: { type: "object", properties: {} },
+    },
+    {
+      name: "get_build_logs",
+      description: `Get the latest GitHub Actions build/deploy logs for a ${noun}. Use when a deploy fails or the ${noun} isn't working to see build errors, missing dependencies, or compilation failures.`,
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: `${Noun} ID. e.g. '${example}'` },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "get_ci_results",
+      description: `Get GitHub Actions CI check results (compliance checks) for a ${noun}'s repo. Shows which checks passed/failed and error details. Use to diagnose compliance failures after pushing code.`,
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: `${Noun} ID (same as GitHub repo name)` },
+        },
+        required: ["id"],
+      },
+    },
+    {
+      name: "get_audit_results",
+      description: `Get quality audit results for a ${noun} from the ${storeName} auditor. Shows compliance score, viewport coverage, and any issues found. Use to understand what needs fixing for quality approval.`,
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: `${Noun} ID. e.g. '${example}'` },
+        },
+        required: ["id"],
+      },
+    },
+  ];
+}
+
+/** Infra tools that need env/network access — handled by the session DO */
+export const INFRA_TOOLS = new Set([
+  "deploy",
+  "push_update",
+  "check_deploy_status",
+  "list_deployed_apps",
+  "list_deployed_games",
+  "fetch_url",
+  "get_build_logs",
+  "get_ci_results",
+  "get_audit_results",
+]);
+
+// Infra files the LLM must never overwrite. These are set by the template
+// and contain fields (packageManager, engines, monorepo config) that the
+// LLM consistently drops when rewriting them, breaking CI.
+const LOCKED_FILES = new Set([
+  "package.json",
+  "web/package.json",
+  "pnpm-workspace.yaml",
+  "web/vite.config.ts",
+  "web/tsconfig.json",
+  "web/tsconfig.app.json",
+  "web/tsconfig.node.json",
+  "web/src/main.tsx",
+  ".gitignore",
+  "LICENSE",
+]);
+
+export function executeTool(toolCall: ToolCall, files: Map<string, string>, config: StoreConfig): ToolResult {
+  const { name, input, id } = toolCall;
+
+  switch (name) {
+    case "write_file": {
+      const path = input.path as string;
+      const content = input.content as string;
+      if (!path) return { id, content: "Error: path is required", isError: true };
+      if (path.includes("..") || path.startsWith("/") || path.startsWith(".github/")) {
+        return { id, content: `Error: path "${path}" is not allowed. No "..", absolute paths, or .github/ files.`, isError: true };
+      }
+      if (LOCKED_FILES.has(path)) {
+        return {
+          id,
+          content: `Error: "${path}" is a locked infrastructure file and cannot be modified. Build your app in web/src/ instead.`,
+          isError: true,
+        };
+      }
+      files.set(path, content);
+      return { id, content: `Wrote ${path} (${content.length} bytes)` };
+    }
+
+    case "read_file": {
+      const path = input.path as string;
+      const content = files.get(path);
+      if (content === undefined) {
+        return { id, content: `Error: file not found: ${path}`, isError: true };
+      }
+      return { id, content };
+    }
+
+    case "list_files": {
+      const paths = [...files.keys()].sort();
+      return { id, content: paths.join("\n") };
+    }
+
+    case "delete_file": {
+      const path = input.path as string;
+      if (!path) return { id, content: "Error: path is required", isError: true };
+      if (path.includes("..") || path.startsWith("/") || path.startsWith(".github/")) {
+        return { id, content: `Error: path "${path}" is not allowed.`, isError: true };
+      }
+      if (LOCKED_FILES.has(path)) {
+        return { id, content: `Error: "${path}" is a locked infrastructure file and cannot be deleted.`, isError: true };
+      }
+      if (!files.has(path)) return { id, content: `Error: file not found: ${path}`, isError: true };
+      files.delete(path);
+      return { id, content: `Deleted ${path}` };
+    }
+
+    case "search_files": {
+      const pattern = ((input.pattern as string) || "").toLowerCase();
+      if (!pattern) return { id, content: "Error: pattern is required", isError: true };
+      const matches: string[] = [];
+      for (const [path, content] of files) {
+        const lines = content.split("\n");
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].toLowerCase().includes(pattern)) {
+            matches.push(`${path}:${i + 1}: ${lines[i].trim()}`);
+          }
+        }
+      }
+      return { id, content: matches.length ? matches.slice(0, 50).join("\n") : `No matches for "${pattern}"` };
+    }
+
+    case "run_compliance_check": {
+      return { id, content: runComplianceCheck(files, config) };
+    }
+
+    case "register_api": {
+      const host = String(input.host || "")
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//, "")
+        .replace(/\/.*$/, "");
+      const secretName = String(input.secretName || "").trim();
+      const injectKind = String(input.injectKind || "").trim();
+      const injectName = input.injectName ? String(input.injectName).trim() : "";
+      if (!host || !secretName || !injectKind) {
+        return { id, content: "Error: host, secretName, and injectKind are required", isError: true };
+      }
+      // Must match the platform's secret-name rule (uppercase + underscores).
+      if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(secretName)) {
+        return { id, content: `Error: secretName "${secretName}" must be UPPER_SNAKE_CASE (e.g. OPENWEATHER_KEY).`, isError: true };
+      }
+      if (!["query", "header", "bearer"].includes(injectKind)) {
+        return { id, content: "Error: injectKind must be 'query', 'header', or 'bearer'", isError: true };
+      }
+      if (injectKind !== "bearer" && !injectName) {
+        return { id, content: "Error: injectName is required for injectKind 'query' or 'header'", isError: true };
+      }
+      // Merge into the fas.json manifest (committed at deploy; read by the
+      // create-web API Keys page to set up the allowlist + secret).
+      let manifest: { apis: Record<string, unknown>[] } = { apis: [] };
+      const existing = files.get("fas.json");
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing);
+          if (Array.isArray(parsed?.apis)) manifest = parsed;
+        } catch {
+          /* malformed — start fresh */
+        }
+      }
+      // pattern is a URL PREFIX (no globs) — the proxy matches url.startsWith(pattern).
+      const entry: Record<string, unknown> = { host, secretName, injectKind, pattern: `https://${host}/`, methods: ["GET"] };
+      if (injectName) entry.injectName = injectName;
+      if (input.description) entry.description = String(input.description);
+      const i = manifest.apis.findIndex((a) => a.host === host);
+      if (i >= 0) manifest.apis[i] = entry;
+      else manifest.apis.push(entry);
+      files.set("fas.json", `${JSON.stringify(manifest, null, 2)}\n`);
+      return {
+        id,
+        content: `Registered "${host}" (secret: ${secretName}) and wrote fas.json. The app must call it via fas.proxy.fetch('${host}/...'). Tell the user: after you publish this app, open its "API Keys" page and add a key named ${secretName} — the key is configured in the platform, never entered in the app.`,
+      };
+    }
+
+    default:
+      // Infra tools are handled by the session, not here
+      return { id, content: `Unknown tool: ${name}`, isError: true };
+  }
+}
+
+/** Run compliance checks locally on the virtual filesystem */

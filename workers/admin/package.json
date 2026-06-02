@@ -1,0 +1,26 @@
+{
+  "name": "freeappstore-admin",
+  "version": "1.0.0",
+  "repository": "https://github.com/freeappstore-online/admin",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@cloudflare/workers-types": "^4.20260530.1",
+    "@types/node": "^25.9.1",
+    "@vitest/coverage-v8": "^4.1.6",
+    "knip": "^6.14.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
+    "wrangler": "^4.76.0"
+  }
+}
