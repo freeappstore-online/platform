@@ -21,14 +21,12 @@ on:
     branches: [main]
     paths:
       - 'packages/cli/**'
-      - 'packages/fgs-cli/**'
       - 'packages/compliance/**'
       - '.github/workflows/scaffold-smoke.yml'
   pull_request:
     branches: [main]
     paths:
       - 'packages/cli/**'
-      - 'packages/fgs-cli/**'
       - 'packages/compliance/**'
       - '.github/workflows/scaffold-smoke.yml'
   schedule:
@@ -53,15 +51,10 @@ jobs:
           - cli: cli
             cli_bin: fas
             template: connected
-          - cli: fgs-cli
-            cli_bin: fgs
-            template: canvas
-          - cli: fgs-cli
-            cli_bin: fgs
-            template: grid
-          - cli: fgs-cli
-            cli_bin: fgs
-            template: 3d
+          # fgs-cli legs removed 2026-06-02: the FGS CLI + games SDK were split
+          # out of this repo into freegamestore-online/platform, which owns its
+          # own scaffold-smoke. Keeping them here built packages/fgs-cli (no
+          # longer present), so every fgs leg failed with "Cannot find module".
 
     steps:
       - uses: actions/checkout@v4
