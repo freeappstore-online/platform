@@ -334,7 +334,13 @@ export async function handlePublish(req: PublishRequest, env: PublishEnv, gh?: G
   if (req.creatorGithub) {
     const collab = await ghCall(`/repos/${config.org}/${req.id}/collaborators/${req.creatorGithub}`, "PUT", { permission: "push" });
     if (collab.id || collab.invitee) {
-      steps.push({ name: "Collaborator", status: "ok", detail: `${req.creatorGithub} granted push access` });
+      // Outside collaborators (creator not in the org) get a PENDING invite they
+      // must accept before they can push — and it expires in ~7 days. Tell them.
+      steps.push({
+        name: "Collaborator",
+        status: "ok",
+        detail: `${req.creatorGithub} invited as push collaborator — accept the GitHub invite at https://github.com/${config.org}/${req.id}/invitations (check email/notifications) before pushing`,
+      });
     } else if (collab.__empty && collab.__status === 204) {
       // GitHub returns 204 No Content when the user already has the requested
       // permission (e.g. org owners are implicit admins on every repo).
