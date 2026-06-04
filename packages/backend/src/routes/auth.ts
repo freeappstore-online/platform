@@ -9,6 +9,7 @@ import type { Env } from '../types.js';
 interface OAuthState {
   appId: string;
   returnTo: string;
+  responseMode?: string;
   exp: number;
 }
 
@@ -16,12 +17,14 @@ interface GoogleOAuthState {
   appId: string;
   returnTo: string;
   codeVerifier: string;
+  responseMode?: string;
   exp: number;
 }
 
 interface AppleOAuthState {
   appId: string;
   returnTo: string;
+  responseMode?: string;
   exp: number;
 }
 
@@ -29,6 +32,7 @@ interface EmailMagicState {
   email: string;
   appId: string;
   returnTo: string;
+  responseMode?: string;
   exp: number;
 }
 
@@ -40,11 +44,12 @@ export const authRoutes = new Hono<{ Bindings: Env }>();
 authRoutes.get('/auth/github/start', async (c) => {
   const appId = c.req.query('app_id') ?? '';
   const returnTo = c.req.query('return_to') ?? '';
+  const responseMode = c.req.query('response_mode');
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
   if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
 
   const state = await signPayload<OAuthState>(
-    { appId, returnTo, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    { appId, returnTo, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
     c.env.SESSION_SIGNING_KEY,
   );
   const url = new URL('https://github.com/login/oauth/authorize');
@@ -105,13 +110,18 @@ authRoutes.get('/auth/github/callback', async (c) => {
   const { roles, appRoles } = await computeRoles(userId, ghUser.login, c.env);
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
   const redirect = new URL(state.returnTo);
-  redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+  if (state.responseMode === 'query') {
+    redirect.searchParams.set('fas_session', session);
+  } else {
+    redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+  }
   return c.redirect(redirect.toString());
 });
 
 authRoutes.get('/auth/google/start', async (c) => {
   const appId = c.req.query('app_id') ?? '';
   const returnTo = c.req.query('return_to') ?? '';
+  const responseMode = c.req.query('response_mode');
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
   if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
 
@@ -126,7 +136,7 @@ authRoutes.get('/auth/google/start', async (c) => {
   const codeVerifier = generateCodeVerifier();
 
   const signedState = await signPayload<GoogleOAuthState>(
-    { appId, returnTo, codeVerifier, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    { appId, returnTo, codeVerifier, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
     c.env.SESSION_SIGNING_KEY,
   );
 
@@ -190,7 +200,11 @@ authRoutes.get('/auth/google/callback', async (c) => {
     const { roles, appRoles } = await computeRoles(userId, login, c.env);
     const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
     const redirect = new URL(state.returnTo);
-    redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+    if (state.responseMode === 'query') {
+      redirect.searchParams.set('fas_session', session);
+    } else {
+      redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+    }
     return c.redirect(redirect.toString());
   } catch (err) {
     console.error('Google OAuth callback error:', err);
@@ -208,6 +222,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
 authRoutes.get('/auth/apple/start', async (c) => {
   const appId = c.req.query('app_id') ?? '';
   const returnTo = c.req.query('return_to') ?? '';
+  const responseMode = c.req.query('response_mode');
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
   if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
 
@@ -231,7 +246,7 @@ authRoutes.get('/auth/apple/start', async (c) => {
   );
 
   const signedState = await signPayload<AppleOAuthState>(
-    { appId, returnTo, exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    { appId, returnTo, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
     c.env.SESSION_SIGNING_KEY,
   );
 
@@ -313,7 +328,11 @@ authRoutes.post('/auth/apple/callback', async (c) => {
     const { roles, appRoles } = await computeRoles(userId, login, c.env);
     const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
     const redirect = new URL(state.returnTo);
-    redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+    if (state.responseMode === 'query') {
+      redirect.searchParams.set('fas_session', session);
+    } else {
+      redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+    }
     return c.redirect(redirect.toString());
   } catch (err) {
     console.error('Apple OAuth callback error:', err);
@@ -333,10 +352,12 @@ authRoutes.post('/auth/email/start', async (c) => {
     email: rawEmail,
     appId,
     returnTo,
+    responseMode,
   } = await c.req.json<{
     email?: string;
     appId?: string;
     returnTo?: string;
+    responseMode?: string;
   }>();
 
   if (!rawEmail || !appId || !returnTo) {
@@ -349,7 +370,7 @@ authRoutes.post('/auth/email/start', async (c) => {
   if (!isAllowedReturnTo(returnTo)) return c.text('returnTo not allowed', 400);
 
   const token = await signPayload<EmailMagicState>(
-    { email, appId, returnTo, exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS },
+    { email, appId, returnTo, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS },
     c.env.SESSION_SIGNING_KEY,
   );
 
@@ -417,7 +438,11 @@ authRoutes.get('/auth/email/callback', async (c) => {
   const { roles, appRoles } = await computeRoles(userId, login, c.env);
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
   const redirect = new URL(state.returnTo);
-  redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+  if (state.responseMode === 'query') {
+    redirect.searchParams.set('fas_session', session);
+  } else {
+    redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+  }
   return c.redirect(redirect.toString());
 });
 
