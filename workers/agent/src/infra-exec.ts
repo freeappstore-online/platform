@@ -135,6 +135,7 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
   }
 
   // Insert D1 hosting route so the host worker can serve this app from R2
+  let routeError: string | undefined;
   if (ctx.env.DB) {
     const r2Prefix = `${ctx.config.nounPlural}/${appId}`;
     try {
@@ -147,8 +148,12 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
       )
         .bind(appId, ctx.config.domain, r2Prefix, ctx.config.store, Date.now())
         .run();
-    } catch {
-      /* D1 insert failed — app deploys but won't be routable until published */
+    } catch (e) {
+      // Reachability-critical: without this row the host worker can't serve the
+      // app on its subdomain (clean 404). Do NOT swallow — a silent failure here
+      // makes the agent report success while the app 404s on its subdomain.
+      routeError = e instanceof Error ? e.message : String(e);
+      ctx.onDeployStatus({ phase: "error", error: `Hosting route insert failed — app will 404 on its subdomain until the route is created: ${routeError}` });
     }
 
     // Record app ownership so /v1/apps/mine returns it in the console
@@ -174,6 +179,9 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     }
   }
 
+  if (routeError) {
+    return `Deploy built + pushed, but the hosting route FAILED to register, so the app will 404 on its subdomain until fixed: ${routeError}. Preview: ${liveUrl || "building..."}`;
+  }
   return `Deploy succeeded. Preview: ${liveUrl || "building..."}`;
 }
 
