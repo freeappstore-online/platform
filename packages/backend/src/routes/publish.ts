@@ -107,7 +107,14 @@ publishRoutes.post('/publish', async (c) => {
   // ignored by service-binding fetch; only the path matters.
   const adminRes = await c.env.ADMIN.fetch('https://admin/api/provision', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      // Authenticate this service-to-service call. Admin's CF Access gate can't
+      // see a JWT on a service-binding request, so present the shared
+      // INTERNAL_TOKEN. The end user is already authenticated above
+      // (requireUser); this only proves the call originates from the backend.
+      'X-Internal-Token': c.env.INTERNAL_TOKEN ?? '',
+    },
     body: JSON.stringify({
       id: body.name,
       name: body.name,

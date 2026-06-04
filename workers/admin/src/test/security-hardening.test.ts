@@ -2,35 +2,51 @@ import { describe, expect, it } from "vitest";
 
 // ── Auth check validation ──
 
-/** Replicate the isAuthenticated logic from index.ts for testing */
-function isAuthenticated(hostname: string, jwtHeader: string | null): boolean {
-  if (!hostname.includes("freeappstore.online")) return true;
-  return !!jwtHeader;
+/**
+ * Replicate the isAuthenticated decision from index.ts for testing. The real
+ * impl cryptographically verifies the JWT; here JWT acceptance is a boolean.
+ * The Host-based bypass was removed (commit 1a9e102) and replaced with a
+ * shared-secret (INTERNAL_TOKEN) bypass for service-to-service calls that
+ * carry no CF Access JWT (e.g. backend → /api/provision via service binding).
+ */
+function isAuthenticated(opts: {
+  accessConfigured: boolean;
+  jwtValid: boolean;
+  internalToken?: string;
+  sentToken?: string | null;
+}): boolean {
+  if (!opts.accessConfigured) return true; // local dev / test
+  if (opts.internalToken && opts.sentToken && opts.sentToken === opts.internalToken) return true;
+  return opts.jwtValid;
 }
 
 describe("Security: admin auth check", () => {
-  it("allows service binding calls (non-public hostname)", () => {
-    expect(isAuthenticated("admin", null)).toBe(true);
-    expect(isAuthenticated("do-internal", null)).toBe(true);
+  const cfg = { accessConfigured: true, internalToken: "secret-123" };
+
+  it("allows local dev / test when CF Access is unconfigured", () => {
+    expect(isAuthenticated({ accessConfigured: false, jwtValid: false })).toBe(true);
   });
 
-  it("rejects public domain calls without JWT", () => {
-    expect(isAuthenticated("admin.freeappstore.online", null)).toBe(false);
+  it("rejects public calls without a valid JWT", () => {
+    expect(isAuthenticated({ ...cfg, jwtValid: false })).toBe(false);
   });
 
-  it("allows public domain calls with JWT", () => {
-    expect(isAuthenticated("admin.freeappstore.online", "valid.jwt.token")).toBe(true);
+  it("allows public calls with a valid JWT", () => {
+    expect(isAuthenticated({ ...cfg, jwtValid: true })).toBe(true);
   });
 
-  it("rejects empty string JWT", () => {
-    expect(isAuthenticated("admin.freeappstore.online", "")).toBe(false);
+  it("allows service-to-service calls with the shared internal token", () => {
+    // backend → /api/provision via service binding (no CF Access JWT)
+    expect(isAuthenticated({ ...cfg, jwtValid: false, sentToken: "secret-123" })).toBe(true);
   });
 
-  // This tests the bypass vector: workers.dev hostname should NOT pass
-  it("would pass auth for workers.dev hostname (known risk)", () => {
-    // This documents the current behavior — workers.dev hostnames bypass auth
-    // because they don't contain "freeappstore.online". Mitigated by workers_dev = false.
-    expect(isAuthenticated("freeappstore-admin.workers.dev", null)).toBe(true);
+  it("rejects a wrong or missing internal token (no JWT)", () => {
+    expect(isAuthenticated({ ...cfg, jwtValid: false, sentToken: "wrong" })).toBe(false);
+    expect(isAuthenticated({ ...cfg, jwtValid: false, sentToken: null })).toBe(false);
+  });
+
+  it("does not bypass when INTERNAL_TOKEN is unset on the worker", () => {
+    expect(isAuthenticated({ accessConfigured: true, jwtValid: false, sentToken: "anything" })).toBe(false);
   });
 });
 

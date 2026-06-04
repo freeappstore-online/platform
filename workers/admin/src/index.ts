@@ -74,6 +74,13 @@ async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
   // CF Access not configured (local dev / test) — allow all requests.
   // In production, CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD are always set.
   if (!env.CF_ACCESS_TEAM_DOMAIN && !env.CF_ACCESS_AUD) return true;
+  // Trusted server-to-server callers (the FAS backend → /api/provision via the
+  // ADMIN service binding) present the shared INTERNAL_TOKEN. Service-binding
+  // requests carry no CF Access JWT, so accept the token here. This securely
+  // replaces the removed Host-based bypass: a server-only secret can't be
+  // spoofed by an external client the way a Host header could.
+  const internalToken = request.headers.get("X-Internal-Token");
+  if (env.INTERNAL_TOKEN && internalToken && internalToken === env.INTERNAL_TOKEN) return true;
   const jwt = request.headers.get("Cf-Access-Jwt-Assertion");
   if (!jwt) return false;
   return verifyAccessJwt(jwt, env.CF_ACCESS_TEAM_DOMAIN, env.CF_ACCESS_AUD);
@@ -191,7 +198,10 @@ export default {
         try {
           const unpubRes = await fetch(new URL("/api/unpublish", request.url).toString(), {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            // Self-call goes out to the public hostname → through CF Access,
+            // which has no JWT for a server-side fetch. Authenticate with the
+            // shared internal token instead (same as the backend → admin path).
+            headers: { "Content-Type": "application/json", "X-Internal-Token": env.INTERNAL_TOKEN ?? "" },
             body: JSON.stringify({ id: body.id, store: body.store }),
           });
           steps.push({ name: "registry", status: unpubRes.ok ? "ok" : "skip", detail: unpubRes.ok ? "Removed" : "Not in registry" });

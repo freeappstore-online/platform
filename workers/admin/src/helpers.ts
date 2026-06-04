@@ -5,6 +5,10 @@ export interface Env {
   CF_API_TOKEN: string;
   GITHUB_TOKEN: string;
   CI_TOKEN: string;
+  /** Shared secret with the FAS backend (freeappstore-api). Authenticates
+   *  server-to-server calls (backend → /api/provision via service binding)
+   *  that carry no CF Access JWT. Same value as the backend's INTERNAL_TOKEN. */
+  INTERNAL_TOKEN?: string;
   CF_ACCESS_TEAM_DOMAIN: string;
   CF_ACCESS_AUD: string;
   DB: D1Database;
