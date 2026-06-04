@@ -183,8 +183,11 @@ publishRoutes.post('/publish', async (c) => {
         body.category,
         body.type,
         body.oneliner,
-        body.repo,
-        body.demo,
+        // Coalesce to null: D1 .bind() throws on undefined, which the catch
+        // below swallows — so a client that omits repo/demo (e.g. the MCP
+        // create_app tool) would provision but never get an ownership row.
+        body.repo ?? null,
+        body.demo ?? null,
         store,
       )
       .run();
