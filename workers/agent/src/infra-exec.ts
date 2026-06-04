@@ -153,7 +153,10 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
       // app on its subdomain (clean 404). Do NOT swallow — a silent failure here
       // makes the agent report success while the app 404s on its subdomain.
       routeError = e instanceof Error ? e.message : String(e);
-      ctx.onDeployStatus({ phase: "error", error: `Hosting route insert failed — app will 404 on its subdomain until the route is created: ${routeError}` });
+      ctx.onDeployStatus({
+        phase: "error",
+        error: `Hosting route insert failed — app will 404 on its subdomain until the route is created: ${routeError}`,
+      });
     }
 
     // Record app ownership so /v1/apps/mine returns it in the console
