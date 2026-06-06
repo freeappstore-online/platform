@@ -55,7 +55,7 @@ describe('POST /v1/auth/email/start', () => {
 
   beforeEach(() => {
     fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
-    globalThis.fetch = fetchMock;
+    globalThis.fetch = fetchMock as typeof globalThis.fetch;
   });
   afterEach(() => {
     globalThis.fetch = originalFetch;

@@ -111,7 +111,8 @@ describe('backupD1ToR2', () => {
     );
     const parsed = JSON.parse(puts[0]!.body);
     expect(parsed.tables.kv[0].value_hex).toBe('7b226869223a227468657265227d');
-    expect(Buffer.from(parsed.tables.kv[0].value_hex, 'hex').toString()).toBe('{"hi":"there"}');
+    const bytes = Uint8Array.from(parsed.tables.kv[0].value_hex.match(/.{2}/g)!.map((h: string) => parseInt(h, 16)));
+    expect(new TextDecoder().decode(bytes)).toBe('{"hi":"there"}');
   });
 
   it('sets content-type application/json on the R2 object', async () => {
