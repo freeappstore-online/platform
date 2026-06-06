@@ -85,6 +85,16 @@ export class Room {
     return this._peers;
   }
 
+  /** Number of reconnect attempts since last successful connection. */
+  get reconnectAttempts(): number {
+    return this.reconnectAttempt;
+  }
+
+  /** Whether a reconnect is currently pending. */
+  get isReconnecting(): boolean {
+    return this.reconnectTimer !== null;
+  }
+
   send<T>(data: T): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       if (this.debug) console.warn('[rooms] send dropped — socket not open', this.connectionState);
@@ -169,7 +179,7 @@ export class Room {
           for (const l of this.peerListeners) l(this._peers);
         }
       } catch (e) {
-        console.warn('[rooms] malformed frame', e);
+        if (this.debug) console.warn('[rooms] malformed frame', ev.data, e);
       }
     });
 
@@ -182,9 +192,7 @@ export class Room {
     });
 
     socket.addEventListener('error', () => {
-      // We let the close handler do the actual reconnect logic. error is
-      // informational and may or may not be followed by close (it always is
-      // in browsers per spec).
+      if (this.debug) console.warn(`[rooms] socket error on ${this.roomId}`);
       this.setState('error');
     });
   }
@@ -196,6 +204,7 @@ export class Room {
     const backoff = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** this.reconnectAttempt);
     const jitter = Math.random() * 1000;
     this.reconnectAttempt++;
+    if (this.debug) console.log(`[rooms] reconnect #${this.reconnectAttempt} in ${Math.round(backoff + jitter)}ms`);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.explicitlyClosed) return;
