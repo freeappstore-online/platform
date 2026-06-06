@@ -1,6 +1,6 @@
 {
   "name": "@freeappstore/quality",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Quality reporter — apps post viewport metrics to a parent dashboard via postMessage so /quality can audit fit / scroll / clipping at every reference viewport without driving a headless browser per app.",
   "license": "MIT",
   "type": "module",
