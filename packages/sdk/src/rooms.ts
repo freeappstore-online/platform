@@ -204,7 +204,10 @@ export class Room {
     const backoff = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** this.reconnectAttempt);
     const jitter = Math.random() * 1000;
     this.reconnectAttempt++;
-    if (this.debug) console.log(`[rooms] reconnect #${this.reconnectAttempt} in ${Math.round(backoff + jitter)}ms`);
+    if (this.debug)
+      console.log(
+        `[rooms] reconnect #${this.reconnectAttempt} in ${Math.round(backoff + jitter)}ms`,
+      );
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (this.explicitlyClosed) return;

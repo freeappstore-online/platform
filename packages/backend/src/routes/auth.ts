@@ -49,7 +49,12 @@ authRoutes.get('/auth/github/start', async (c) => {
   if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
 
   const state = await signPayload<OAuthState>(
-    { appId, returnTo, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    {
+      appId,
+      returnTo,
+      ...(responseMode ? { responseMode } : {}),
+      exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
+    },
     c.env.SESSION_SIGNING_KEY,
   );
   const url = new URL('https://github.com/login/oauth/authorize');
@@ -136,7 +141,13 @@ authRoutes.get('/auth/google/start', async (c) => {
   const codeVerifier = generateCodeVerifier();
 
   const signedState = await signPayload<GoogleOAuthState>(
-    { appId, returnTo, codeVerifier, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    {
+      appId,
+      returnTo,
+      codeVerifier,
+      ...(responseMode ? { responseMode } : {}),
+      exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
+    },
     c.env.SESSION_SIGNING_KEY,
   );
 
@@ -246,7 +257,12 @@ authRoutes.get('/auth/apple/start', async (c) => {
   );
 
   const signedState = await signPayload<AppleOAuthState>(
-    { appId, returnTo, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS },
+    {
+      appId,
+      returnTo,
+      ...(responseMode ? { responseMode } : {}),
+      exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
+    },
     c.env.SESSION_SIGNING_KEY,
   );
 
@@ -370,7 +386,13 @@ authRoutes.post('/auth/email/start', async (c) => {
   if (!isAllowedReturnTo(returnTo)) return c.text('returnTo not allowed', 400);
 
   const token = await signPayload<EmailMagicState>(
-    { email, appId, returnTo, ...(responseMode ? { responseMode } : {}), exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS },
+    {
+      email,
+      appId,
+      returnTo,
+      ...(responseMode ? { responseMode } : {}),
+      exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS,
+    },
     c.env.SESSION_SIGNING_KEY,
   );
 
