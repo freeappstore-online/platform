@@ -180,9 +180,10 @@ rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
 });
 
 /**
- * Service-to-service role assignment via HMAC proof.
- * Used by PAS invite redeem to assign a role without owner auth.
- * Proof = HMAC-SHA256("claim:{appId}:{userId}:{role}", SESSION_SIGNING_KEY).
+ * Service-to-service role assignment via HMAC proof. Used by PAS invite
+ * redeem to assign a role without requiring owner auth. The caller
+ * proves knowledge of SESSION_SIGNING_KEY by providing:
+ *   proof = HMAC-SHA256("claim:{appId}:{userId}:{role}", key)
  */
 rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
   const appId = c.req.param('appId');
