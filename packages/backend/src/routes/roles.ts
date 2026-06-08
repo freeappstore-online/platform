@@ -180,6 +180,50 @@ rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
 });
 
 /**
+ * Service-to-service role assignment via HMAC proof.
+ * Used by PAS invite redeem to assign a role without owner auth.
+ * Proof = HMAC-SHA256("claim:{appId}:{userId}:{role}", SESSION_SIGNING_KEY).
+ */
+rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
+  const appId = c.req.param('appId');
+  const body = (await c.req.json().catch(() => null)) as {
+    userId?: string;
+    role?: string;
+    proof?: string;
+    grantedBy?: string;
+  } | null;
+
+  if (!body?.userId || !body?.role || !body?.proof) {
+    return c.json({ error: 'userId, role, and proof are required' }, 400);
+  }
+  if (body.role === 'owner') {
+    return c.json({ error: "cannot assign 'owner' via service" }, 400);
+  }
+
+  const enc = new TextEncoder();
+  const message = `claim:${appId}:${body.userId}:${body.role}`;
+  const key = await crypto.subtle.importKey(
+    'raw', enc.encode(c.env.SESSION_SIGNING_KEY) as BufferSource,
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message) as BufferSource);
+  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+  if (body.proof !== expected) {
+    return c.json({ error: 'invalid proof' }, 403);
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO app_roles (app_id, user_id, role_name, granted_by)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(app_id, user_id, role_name) DO NOTHING`,
+  ).bind(appId, body.userId, body.role, body.grantedBy ?? null).run();
+
+  return c.json({ ok: true });
+});
+
+/**
  * Assert the user is the app creator or a platform admin.
  * Checks owner_login (github username) in the apps table.
  */
