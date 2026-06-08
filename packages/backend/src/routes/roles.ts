@@ -203,12 +203,17 @@ rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
   const enc = new TextEncoder();
   const message = `claim:${appId}:${body.userId}:${body.role}`;
   const key = await crypto.subtle.importKey(
-    'raw', enc.encode(c.env.SESSION_SIGNING_KEY) as BufferSource,
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+    'raw',
+    enc.encode(c.env.SESSION_SIGNING_KEY) as BufferSource,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
   );
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message) as BufferSource);
   const expected = btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 
   if (body.proof !== expected) {
     return c.json({ error: 'invalid proof' }, 403);
@@ -218,7 +223,9 @@ rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
     `INSERT INTO app_roles (app_id, user_id, role_name, granted_by)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(app_id, user_id, role_name) DO NOTHING`,
-  ).bind(appId, body.userId, body.role, body.grantedBy ?? null).run();
+  )
+    .bind(appId, body.userId, body.role, body.grantedBy ?? null)
+    .run();
 
   return c.json({ ok: true });
 });
