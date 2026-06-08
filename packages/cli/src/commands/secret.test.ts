@@ -93,7 +93,6 @@ describe('dieFromHttp', () => {
     const exitSpy = mockExit();
     let captured = '';
     const origWrite = process.stderr.write.bind(process.stderr);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (process.stderr as any).write = (s: string) => {
       captured += s;
       return true;
@@ -115,7 +114,6 @@ describe('dieFromHttp', () => {
     const exitSpy = mockExit();
     let captured = '';
     const origWrite = process.stderr.write.bind(process.stderr);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (process.stderr as any).write = (s: string) => {
       captured += s;
       return true;
@@ -134,7 +132,6 @@ describe('dieFromHttp', () => {
     const exitSpy = mockExit();
     let captured = '';
     const origWrite = process.stderr.write.bind(process.stderr);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (process.stderr as any).write = (s: string) => {
       captured += s;
       return true;
@@ -153,13 +150,11 @@ describe('dieFromHttp', () => {
 
 function mockExit() {
   const original = process.exit;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (process as any).exit = (code?: number) => {
     throw new Error(`exit:${code ?? 0}`);
   };
   // Also silence stderr so the test output stays clean.
   const origWrite = process.stderr.write.bind(process.stderr);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (process.stderr as any).write = () => true;
   return {
     restore() {

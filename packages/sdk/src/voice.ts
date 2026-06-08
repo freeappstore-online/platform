@@ -40,7 +40,6 @@ export interface UseVoiceInputReturn {
 
 function getSpeechRecognitionCtor(): (new () => SpeechRecognitionInstance) | null {
   if (typeof window === 'undefined') return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
 }
 

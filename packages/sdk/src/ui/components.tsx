@@ -636,7 +636,6 @@ export function BuildInfo({ version, commit, buildDate, extra }: BuildInfoProps)
   const [tapCount, setTapCount] = useState(0);
 
   // Auto-read from Vite env vars if props not provided
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const env = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
   const v = version ?? env.VITE_APP_VERSION ?? '';
   const sha = commit ?? env.VITE_COMMIT_SHA ?? '';

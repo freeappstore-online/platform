@@ -120,7 +120,6 @@ export class Logger {
 
   /** Get build metadata for the current session. */
   getBuildMeta(): BuildMeta {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const env = typeof import.meta !== 'undefined' ? ((import.meta as any).env ?? {}) : {};
     return {
       appVersion: env.VITE_APP_VERSION ?? undefined,
