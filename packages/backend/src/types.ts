@@ -85,6 +85,8 @@ export interface Env {
 
 export interface SessionPayload {
   uid: string;
+  /** Optional display/login claim from external credential issuers. */
+  login?: string;
   /** Platform-level roles: 'user', 'creator', 'admin'. */
   roles?: string[];
   /** Per-app roles assigned by app creators: { appId: ['moderator', ...] }. */

@@ -46,7 +46,7 @@ authRoutes.get('/auth/github/start', async (c) => {
   const returnTo = c.req.query('return_to') ?? '';
   const responseMode = c.req.query('response_mode');
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
-  if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
+  if (!isAllowedReturnTo(returnTo, appId)) return c.text('return_to not allowed', 400);
 
   const state = await signPayload<OAuthState>(
     {
@@ -73,7 +73,7 @@ authRoutes.get('/auth/github/callback', async (c) => {
   const state = await verifyPayload<OAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
   if (!state) return c.text('invalid state', 400);
   if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
-  if (!isAllowedReturnTo(state.returnTo)) return c.text('return_to not allowed', 400);
+  if (!isAllowedReturnTo(state.returnTo, state.appId)) return c.text('return_to not allowed', 400);
 
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
@@ -128,7 +128,7 @@ authRoutes.get('/auth/google/start', async (c) => {
   const returnTo = c.req.query('return_to') ?? '';
   const responseMode = c.req.query('response_mode');
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
-  if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
+  if (!isAllowedReturnTo(returnTo, appId)) return c.text('return_to not allowed', 400);
 
   if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.text('Google OAuth not configured', 503);
@@ -167,7 +167,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
   const state = await verifyPayload<GoogleOAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
   if (!state) return c.text('invalid state', 400);
   if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
-  if (!isAllowedReturnTo(state.returnTo)) return c.text('return_to not allowed', 400);
+  if (!isAllowedReturnTo(state.returnTo, state.appId)) return c.text('return_to not allowed', 400);
 
   if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.text('Google OAuth not configured', 503);
@@ -235,7 +235,7 @@ authRoutes.get('/auth/apple/start', async (c) => {
   const returnTo = c.req.query('return_to') ?? '';
   const responseMode = c.req.query('response_mode');
   if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
-  if (!isAllowedReturnTo(returnTo)) return c.text('return_to not allowed', 400);
+  if (!isAllowedReturnTo(returnTo, appId)) return c.text('return_to not allowed', 400);
 
   if (
     !c.env.APPLE_CLIENT_ID ||
@@ -285,7 +285,7 @@ authRoutes.post('/auth/apple/callback', async (c) => {
   const state = await verifyPayload<AppleOAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
   if (!state) return c.text('invalid state', 400);
   if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
-  if (!isAllowedReturnTo(state.returnTo)) return c.text('return_to not allowed', 400);
+  if (!isAllowedReturnTo(state.returnTo, state.appId)) return c.text('return_to not allowed', 400);
 
   if (
     !c.env.APPLE_CLIENT_ID ||
@@ -383,7 +383,7 @@ authRoutes.post('/auth/email/start', async (c) => {
   // valid addresses; then validate the canonical form.
   const email = normalizeEmail(rawEmail);
   if (!isLikelyEmail(email)) return c.text('invalid email', 400);
-  if (!isAllowedReturnTo(returnTo)) return c.text('returnTo not allowed', 400);
+  if (!isAllowedReturnTo(returnTo, appId)) return c.text('returnTo not allowed', 400);
 
   const token = await signPayload<EmailMagicState>(
     {
@@ -430,7 +430,7 @@ authRoutes.get('/auth/email/callback', async (c) => {
   const state = await verifyPayload<EmailMagicState>(tokenRaw, c.env.SESSION_SIGNING_KEY);
   if (!state) return c.text('invalid token', 400);
   if (state.exp < Math.floor(Date.now() / 1000)) return c.text('link expired', 400);
-  if (!isAllowedReturnTo(state.returnTo)) return c.text('returnTo not allowed', 400);
+  if (!isAllowedReturnTo(state.returnTo, state.appId)) return c.text('returnTo not allowed', 400);
 
   // One-time-use: hash the token and reject if already consumed. Prevents
   // replay from server logs, Referer headers, or shared browser history.

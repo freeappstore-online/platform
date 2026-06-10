@@ -30,9 +30,17 @@ function isAllowedHost(url: URL): boolean {
   return false;
 }
 
-export function isAllowedReturnTo(returnTo: string): boolean {
+function isAllowedExtensionReturn(url: URL, appId?: string): boolean {
+  if (appId !== 'ofo-copilot-extension') return false;
+  if (url.protocol !== 'https:') return false;
+  if (!/^[a-p]{32}\.chromiumapp\.org$/.test(url.hostname.toLowerCase())) return false;
+  return url.pathname === '/ofo-copilot';
+}
+
+export function isAllowedReturnTo(returnTo: string, appId?: string): boolean {
   try {
-    return isAllowedHost(new URL(returnTo));
+    const url = new URL(returnTo);
+    return isAllowedHost(url) || isAllowedExtensionReturn(url, appId);
   } catch {
     return false;
   }

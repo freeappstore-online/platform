@@ -21,6 +21,34 @@ describe('isAllowedReturnTo', () => {
     expect(isAllowedReturnTo('http://127.0.0.1:8787/cb')).toBe(true);
   });
 
+  it('allows the OFO Copilot Chrome identity redirect for the extension app only', () => {
+    const redirect = 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/ofo-copilot';
+    expect(isAllowedReturnTo(redirect, 'ofo-copilot-extension')).toBe(true);
+    expect(isAllowedReturnTo(redirect, 'store')).toBe(false);
+    expect(isAllowedReturnTo(redirect)).toBe(false);
+  });
+
+  it('rejects malformed Chrome identity redirect lookalikes', () => {
+    expect(
+      isAllowedReturnTo(
+        'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/other',
+        'ofo-copilot-extension',
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedReturnTo(
+        'https://abcdefghijklmnopabcdefghijklmnop.evilchromiumapp.org/ofo-copilot',
+        'ofo-copilot-extension',
+      ),
+    ).toBe(false);
+    expect(
+      isAllowedReturnTo(
+        'http://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/ofo-copilot',
+        'ofo-copilot-extension',
+      ),
+    ).toBe(false);
+  });
+
   it('rejects unrelated origins', () => {
     expect(isAllowedReturnTo('https://evil.com/')).toBe(false);
     expect(isAllowedReturnTo('https://attacker.example/?x=y')).toBe(false);
@@ -84,5 +112,9 @@ describe('isAllowedOrigin (CORS allowlist)', () => {
     expect(isAllowedOrigin('https://abc123.freeappstore-create.pages.dev')).toBe(false);
     expect(isAllowedOrigin('https://evil-project.pages.dev')).toBe(false);
     expect(isAllowedOrigin('https://attacker-site.pages.dev')).toBe(false);
+  });
+
+  it('does not allow Chrome identity URLs as CORS origins', () => {
+    expect(isAllowedOrigin('https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org')).toBe(false);
   });
 });
