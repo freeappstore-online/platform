@@ -3,6 +3,7 @@
  *  - any HTTPS host on freeappstore.online (apex or subdomain)
  *  - any HTTPS host on proappstore.online (apex or subdomain)
  *  - any HTTPS host on freegamestore.online (apex or subdomain)
+ *  - idea store origins that share platform auth
  *  - localhost / 127.0.0.1 on http or https (dev only)
  *
  * Used for both:
@@ -25,6 +26,8 @@ function isAllowedHost(url: URL): boolean {
   // Agent stores share the FAS auth backend
   if (host === 'freeagentstore.online' || host.endsWith('.freeagentstore.online')) return true;
   if (host === 'proagentstore.online' || host.endsWith('.proagentstore.online')) return true;
+  if (host === 'freeideastore.online' || host.endsWith('.freeideastore.online')) return true;
+  if (host === 'proideastore.online' || host.endsWith('.proideastore.online')) return true;
   // Custom domains for FAS apps
   if (host === 'agentcoder.space' || host.endsWith('.agentcoder.space')) return true;
   return false;

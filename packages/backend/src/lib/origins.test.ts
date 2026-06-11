@@ -90,6 +90,13 @@ describe('isAllowedOrigin (CORS allowlist)', () => {
     expect(isAllowedOrigin('https://carsads.proappstore.online')).toBe(true);
   });
 
+  it('allows idea store custom origins that share auth', () => {
+    expect(isAllowedReturnTo('https://freeideastore.online/.fis/auth/callback')).toBe(true);
+    expect(isAllowedReturnTo('https://proideastore.online/.pis/auth/callback')).toBe(true);
+    expect(isAllowedOrigin('https://freeideastore.online')).toBe(true);
+    expect(isAllowedOrigin('https://proideastore.online')).toBe(true);
+  });
+
   it('allows localhost / 127.0.0.1 dev origins', () => {
     expect(isAllowedOrigin('http://localhost:5173')).toBe(true);
     expect(isAllowedOrigin('http://127.0.0.1:8787')).toBe(true);
