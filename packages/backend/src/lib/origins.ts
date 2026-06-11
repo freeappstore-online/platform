@@ -40,10 +40,16 @@ function isAllowedExtensionReturn(url: URL, appId?: string): boolean {
   return url.pathname === '/ofo-copilot';
 }
 
+function isAllowedMcpWorkerReturn(url: URL, appId?: string): boolean {
+  if (appId !== 'mcp') return false;
+  if (url.protocol !== 'https:') return false;
+  return url.hostname.toLowerCase() === 'freeideastore-mcp.serge-the-dev.workers.dev';
+}
+
 export function isAllowedReturnTo(returnTo: string, appId?: string): boolean {
   try {
     const url = new URL(returnTo);
-    return isAllowedHost(url) || isAllowedExtensionReturn(url, appId);
+    return isAllowedHost(url) || isAllowedExtensionReturn(url, appId) || isAllowedMcpWorkerReturn(url, appId);
   } catch {
     return false;
   }

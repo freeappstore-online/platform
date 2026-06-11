@@ -97,6 +97,13 @@ describe('isAllowedOrigin (CORS allowlist)', () => {
     expect(isAllowedOrigin('https://proideastore.online')).toBe(true);
   });
 
+  it('allows the temporary FreeIdeaStore MCP workers.dev callback for MCP OAuth only', () => {
+    const callback = 'https://freeideastore-mcp.serge-the-dev.workers.dev/oauth/callback';
+    expect(isAllowedReturnTo(callback, 'mcp')).toBe(true);
+    expect(isAllowedReturnTo(callback, 'freeideastore')).toBe(false);
+    expect(isAllowedOrigin('https://freeideastore-mcp.serge-the-dev.workers.dev')).toBe(false);
+  });
+
   it('allows localhost / 127.0.0.1 dev origins', () => {
     expect(isAllowedOrigin('http://localhost:5173')).toBe(true);
     expect(isAllowedOrigin('http://127.0.0.1:8787')).toBe(true);
