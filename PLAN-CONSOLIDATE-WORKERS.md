@@ -13,7 +13,7 @@
 ## Goal (Phase A only)
 
 - `create` repo deploys to R2 via GitHub Actions (mirror of `console`).
-- `host` Worker routes `create.freeappstore.online` and `console.freeappstore.online` via the same R2 path lookup it uses for apps.
+- `host` Worker routes `console.freeappstore.online/create` and `console.freeappstore.online` via the same R2 path lookup it uses for apps.
 - `publish.freeappstore.online` redirects 301 → `console.freeappstore.online`. Publisher Worker becomes redundant and can be deleted.
 
 ## Status (2026-05-28)
@@ -22,7 +22,7 @@
 - T2: ✅ `console` + `create` serve 200 on their subdomains.
 - T3: ❌ **Reverted.** `freeappstore-publisher` Worker is not dead code —
   it serves `/api/me`, `/api/create`, `/api/publish-existing` for
-  `create.freeappstore.online/publish`. An attempted delete on 2026-05-28
+  `console.freeappstore.online/create/publish`. An attempted delete on 2026-05-28
   was rolled back same day. The host worker's `publisher:` redirect entry
   (`fas/host/src/index.ts:40`) was also keyed wrong (would never fire).
   See `../../PLAN-ARCH-CLEANUP.md` Phase 2 for the migration path that

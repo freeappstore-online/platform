@@ -201,7 +201,7 @@ describe("Security: CORS origin validation", () => {
 
   it("allows subdomains", () => {
     expect(isAllowedOrigin("https://admin.freeappstore.online")).toBe(true);
-    expect(isAllowedOrigin("https://create.freeappstore.online")).toBe(true);
+    expect(isAllowedOrigin("https://console.freeappstore.online")).toBe(true);
   });
 
   it("rejects random domains", () => {

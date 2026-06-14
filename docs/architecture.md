@@ -40,7 +40,7 @@ fas/platform/
 | Host | *.freeappstore.online | freeappstore-host |
 | Admin | admin.freeappstore.online | freeappstore-admin |
 | Console | console.freeappstore.online | CF Pages |
-| VibeCode | create.freeappstore.online | CF Pages |
+| VibeCode | console.freeappstore.online/create | CF Pages |
 | Publisher | publish.freeappstore.online | freeappstore-publisher |
 | Docs | docs.freeappstore.online | freeappstore-kb-host |
 | KB | kb.freeappstore.online | freeappstore-kb-host |

@@ -12,7 +12,7 @@ fas publish
 
 ### Via VibeCode (AI builder)
 
-Go to [create.freeappstore.online](https://create.freeappstore.online), describe your app, and the AI builds + deploys it.
+Go to [console.freeappstore.online/create](https://console.freeappstore.online/create), describe your app, and the AI builds + deploys it.
 
 ## What `fas publish` does
 
