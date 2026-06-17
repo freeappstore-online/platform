@@ -6,11 +6,8 @@ import { Command } from 'commander';
 import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
 import { readConfig, sessionDaysRemaining } from '../lib/config.js';
-import { openUrl } from '../lib/open.js';
 import { yellow } from '../lib/style.js';
 import { renderCheckResults } from './check.js';
-
-const SUBMISSION_URL = 'https://github.com/freeappstore-online/submissions/issues/new';
 
 // Must match the dropdown options in
 // freeappstore-online/submissions/.github/ISSUE_TEMPLATE/app-submission.yml
@@ -51,30 +48,30 @@ export const STORE_META = {
     label: 'FreeAppStore',
     domain: 'freeappstore.online',
     org: 'freeappstore-online',
-    submissionRepo: 'freeappstore-online/submissions',
   },
   games: {
     label: 'FreeGameStore',
     domain: 'freegamestore.online',
     org: 'freegamestore-online',
-    submissionRepo: 'freegamestore-online/submissions',
   },
 } as const;
 
+// Where to look when provisioning is down. Surfaced on hard failures so a
+// blocked creator can see status instead of being quietly shunted to a form.
+const STATUS_URL = 'https://api.freeappstore.online/status';
+
 export const publishCommand = new Command('publish')
   .description(
-    'Publish this app or game. Provisions repo + hosting + DNS automatically. If auto-provision is unavailable, falls back to opening a prefilled submission Issue for admin review.',
+    'Publish this app or game. Provisions repo + hosting + DNS automatically. If provisioning fails, it fails loudly with the reason — there is no manual submission fallback.',
   )
   .option(
     '--store <name>',
     'Target store: "apps" (FreeAppStore) or "games" (FreeGameStore). Defaults to "apps".',
     'apps',
   )
-  .option('--no-open', 'Print the fallback Issue URL instead of opening a browser.')
-  .option('--issue', 'Skip auto-provision; always open the GitHub Issue form.')
   .option(
     '--skip-checks',
-    'Skip compliance checks (not recommended — your submission may be rejected).',
+    'Skip compliance checks (not recommended — provisioning may still reject the app).',
   )
   .option('--name <id>', 'App id (lowercase, used as subdomain). Skips the prompt.')
   .option(
@@ -91,8 +88,6 @@ export const publishCommand = new Command('publish')
   .action(
     async (opts: {
       store?: string;
-      open: boolean;
-      issue?: boolean;
       skipChecks?: boolean;
       name?: string;
       category?: string;
@@ -108,20 +103,18 @@ export const publishCommand = new Command('publish')
       }
       const meta = STORE_META[store];
       // Check auth BEFORE prompting — there's no point asking the user for
-      // 5 fields just to bail at the end with an auth error. --issue skips
-      // this since the GitHub Issue form path doesn't need a session.
+      // 5 fields just to bail at the end with an auth error.
       // We distinguish "never signed in" from "session expired": both are
       // fixed by `fas login`, but calling an expired session "not signed in"
       // reads as a permissions problem and sends people chasing access grants
       // that don't exist (publishing needs no special permission).
-      if (!opts.issue) {
+      {
         const config = await readConfig();
         const daysLeft = sessionDaysRemaining(config);
         if (!config.session?.token) {
           process.stdout.write(
             '\n⚠  Not signed in. Run `fas login` to get started.\n' +
-              '   Any signed-in account can publish — there is no separate permission to request.\n' +
-              '   (Or run `fas publish --issue` to submit via the GitHub Issue form instead.)\n',
+              '   Any signed-in account can publish — there is no separate permission to request.\n',
           );
           process.exit(1);
         }
@@ -165,11 +158,6 @@ export const publishCommand = new Command('publish')
       process.stdout.write(
         `\nLet's publish your ${store === 'games' ? 'game' : 'app'} to ${meta.label}.\n`,
       );
-      if (!repo && opts.issue) {
-        process.stdout.write(
-          '⚠  No GitHub origin detected. Push your repo to GitHub first, then run again.\n',
-        );
-      }
 
       // Resolve flag values up-front. Whatever's missing falls through to a
       // prompt — unless --yes is set, in which case missing values abort.
@@ -208,82 +196,69 @@ export const publishCommand = new Command('publish')
         category: merged.category!,
         type: merged.type!,
         oneliner: merged.oneliner!,
-        // Reuse the oneliner as the body description for the Issue-form
-        // fallback. Auto-provision flow doesn't use it (admin's storefront
-        // uses oneliner directly).
+        // The backend's /v1/publish requires a non-empty description; the
+        // storefront only shows the oneliner, so we reuse it here.
         description: merged.oneliner!,
         repo: repo ? `https://github.com/${repo}` : null,
         demo: merged.demo?.trim() ? merged.demo : null,
       };
 
-      // Try auto-provision first unless the user explicitly asked for the
-      // Issue-form fallback.
-      if (!opts.issue) {
-        const autoResult = await tryAutoProvision(input, store);
-        if (autoResult.kind === 'success') {
-          const noun = store === 'games' ? 'game' : 'app';
-          const listingPath = store === 'games' ? 'games' : 'apps';
+      // Provision. There is no manual submission fallback: provisioning either
+      // succeeds, or we fail loudly with the reason so it gets fixed (rather
+      // than silently shunting the creator to a form they hate).
+      const autoResult = await tryAutoProvision(input, store);
+      if (autoResult.kind === 'success') {
+        const noun = store === 'games' ? 'game' : 'app';
+        const listingPath = store === 'games' ? 'games' : 'apps';
 
-          // Ensure the deploy workflow exists locally so the first push
-          // triggers an R2 deploy. Also upgrades legacy CF Pages workflows
-          // to the current R2 template.
-          const workflowResult = await ensureDeployWorkflow();
+        // Ensure the deploy workflow exists locally so the first push
+        // triggers an R2 deploy. Also upgrades legacy CF Pages workflows
+        // to the current R2 template.
+        const workflowResult = await ensureDeployWorkflow();
 
-          process.stdout.write(`\n✓ Provisioned!\n`);
-          process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
-          process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
-          process.stdout.write(
-            `  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`,
-          );
-          if (workflowResult === 'created') {
-            process.stdout.write(`  Added .github/workflows/deploy.yml (R2 deploy workflow)\n\n`);
-          } else if (workflowResult === 'upgraded') {
-            process.stdout.write(`  Upgraded .github/workflows/deploy.yml from CF Pages to R2\n\n`);
-          }
-          process.stdout.write(`Push your code so the live URL serves it:\n\n`);
-          process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
-          process.stdout.write(`  git push upstream main\n\n`);
-          process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
-          process.stdout.write(`Run \`fas list\` any time to see your ${noun}s.\n`);
-          return;
+        process.stdout.write(`\n✓ Provisioned!\n`);
+        process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
+        process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
+        process.stdout.write(`  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`);
+        if (workflowResult === 'created') {
+          process.stdout.write(`  Added .github/workflows/deploy.yml (R2 deploy workflow)\n\n`);
+        } else if (workflowResult === 'upgraded') {
+          process.stdout.write(`  Upgraded .github/workflows/deploy.yml from CF Pages to R2\n\n`);
         }
-        if (autoResult.kind === 'unauthorized') {
-          // The server rejected our session (expired or invalid). The pre-flight
-          // check above usually catches a stale token first, but the server is
-          // authoritative on `exp`, so handle it here too. Never say "not
-          // authorized / no permission" — publishing needs none; this is purely
-          // an expired-credential problem that `fas login` fixes.
-          process.stdout.write(
-            '\n⚠  Your fas session is no longer valid (it likely expired — sessions last 30 days).\n' +
-              '   Run `fas login` to refresh it, then re-run `fas publish`.\n' +
-              '   There is no separate publishing permission to request; a fresh login is all it takes.\n',
-          );
-          process.exit(1);
-        }
-        if (autoResult.kind === 'wrong_store') {
-          // Backend rejected the store for this CLI (e.g. games). Surface its
-          // hint and stop — falling back to a FreeGameStore issue form here
-          // just buries the "use the other CLI" message.
-          process.stdout.write(`\n✗ ${autoResult.reason}\n`);
-          process.exit(1);
-        }
+        process.stdout.write(`Push your code so the live URL serves it:\n\n`);
+        process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
+        process.stdout.write(`  git push upstream main\n\n`);
+        process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
+        process.stdout.write(`Run \`fas list\` any time to see your ${noun}s.\n`);
+        return;
+      }
+
+      // ── Failure paths: every branch exits non-zero with an actionable message ──
+      if (autoResult.kind === 'unauthorized') {
+        // The server rejected our session (expired or invalid). Never say "not
+        // authorized / no permission" — publishing needs none; this is purely
+        // an expired-credential problem that `fas login` fixes.
         process.stdout.write(
-          `\n⚠  Couldn't auto-provision this time: ${autoResult.reason}\n` +
-            `   No problem — submitting via the GitHub Issue form instead, where a maintainer\n` +
-            `   will pick it up. Your app and compliance checks are fine; this is on our side.\n`,
+          '\n✗ Publish failed: your fas session is no longer valid (it likely expired — sessions last 30 days).\n' +
+            '  Run `fas login` to refresh it, then re-run `fas publish`.\n' +
+            '  There is no separate publishing permission to request; a fresh login is all it takes.\n',
         );
+        process.exit(1);
       }
-
-      // Fallback: prefilled GitHub Issue form for admin review.
-      const url = buildSubmissionUrl(input);
-      if (opts.open) {
-        process.stdout.write('\nOpening submission form on GitHub...\n');
-        process.stdout.write('Review the prefilled fields and click "Submit new issue".\n');
-        process.stdout.write('A maintainer will provision your app within ~48h.\n');
-        await openUrl(url);
-      } else {
-        process.stdout.write(`\n${url}\n`);
+      if (autoResult.kind === 'wrong_store') {
+        process.stdout.write(`\n✗ Publish failed: ${autoResult.reason}\n`);
+        process.exit(1);
       }
+      // unconfigured | failed → a real platform-side problem. Tell the creator
+      // exactly what broke and where to watch status, and exit non-zero so CI
+      // and scripts see the failure. Nothing they did is wrong.
+      process.stdout.write(
+        `\n✗ Provisioning failed: ${autoResult.reason}\n` +
+          `  This is a platform-side error, not a problem with your ${store === 'games' ? 'game' : 'app'} — your compliance checks passed.\n` +
+          `  Nothing is queued; no submission form. Please retry shortly, and if it persists, report it.\n` +
+          `  Live status: ${STATUS_URL}\n`,
+      );
+      process.exit(1);
     },
   );
 
@@ -496,20 +471,6 @@ export function buildPromptList(
     });
   }
   return list;
-}
-
-export function buildSubmissionUrl(input: SubmissionInput): string {
-  const url = new URL(SUBMISSION_URL);
-  url.searchParams.set('template', 'app-submission.yml');
-  url.searchParams.set('title', `[Submission] ${input.name}`);
-  url.searchParams.set('name', input.name);
-  url.searchParams.set('category', input.category);
-  url.searchParams.set('type', input.type);
-  url.searchParams.set('oneliner', input.oneliner);
-  url.searchParams.set('description', input.description);
-  if (input.repo) url.searchParams.set('repo', input.repo);
-  if (input.demo) url.searchParams.set('demo', input.demo);
-  return url.toString();
 }
 
 async function detectAppName(): Promise<string | null> {
