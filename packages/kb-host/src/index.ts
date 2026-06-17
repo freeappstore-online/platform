@@ -17,8 +17,10 @@
 
 export interface Env {
   KB_R2: R2Bucket;
-  /** Shared internal token (Doppler INTERNAL_TOKEN) — auth for the CI ingest. */
-  INTERNAL_TOKEN: string;
+  /** Dedicated KB-ingest token (Doppler KB_INGEST_TOKEN), synced by CI — auth
+   *  for the docs-publish CI job. Separate from the provisioning token so a
+   *  docs-pipeline leak can't reach the backend↔admin plane. */
+  KB_INGEST_TOKEN: string;
 }
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -75,9 +77,9 @@ export default {
 
     // ── Ingest: CI uploads each built KB file here, written to R2 via the
     //    binding (no R2 API token needed → no token-scope 403). Authed by the
-    //    shared INTERNAL_TOKEN. PUT /_ingest/<app>/<path> with the file as body.
+    //    dedicated KB_INGEST_TOKEN. PUT /_ingest/<app>/<path> with the file as body.
     if (request.method === 'PUT' && url.pathname.startsWith('/_ingest/')) {
-      if (!env.INTERNAL_TOKEN || request.headers.get('x-internal-token') !== env.INTERNAL_TOKEN) {
+      if (!env.KB_INGEST_TOKEN || request.headers.get('x-internal-token') !== env.KB_INGEST_TOKEN) {
         return new Response('forbidden', { status: 403 });
       }
       const key = decodeURIComponent(url.pathname.slice('/_ingest/'.length));

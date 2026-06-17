@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
  * Replicate the isAuthenticated decision from index.ts for testing. The real
  * impl cryptographically verifies the JWT; here JWT acceptance is a boolean.
  * The Host-based bypass was removed (commit 1a9e102) and replaced with a
- * shared-secret (INTERNAL_TOKEN) bypass for service-to-service calls that
+ * shared-secret (ADMIN_PROVISION_TOKEN) bypass for service-to-service calls that
  * carry no CF Access JWT (e.g. backend → /api/provision via service binding).
  */
 function isAuthenticated(opts: {
@@ -45,7 +45,7 @@ describe("Security: admin auth check", () => {
     expect(isAuthenticated({ ...cfg, jwtValid: false, sentToken: null })).toBe(false);
   });
 
-  it("does not bypass when INTERNAL_TOKEN is unset on the worker", () => {
+  it("does not bypass when the provision token is unset on the worker", () => {
     expect(isAuthenticated({ accessConfigured: true, jwtValid: false, sentToken: "anything" })).toBe(false);
   });
 });

@@ -52,12 +52,19 @@ export interface Env {
    */
   ADMIN?: Fetcher;
   /**
-   * Shared secret the admin Worker uses to authenticate inbound calls to
-   * `/v1/internal/*` (e.g. PUT analytics/cf-token after minting a CF Web
-   * Analytics site). Set via `wrangler secret put INTERNAL_TOKEN` and the
-   * same value on the admin Worker. Internal routes 403 when the secret is unset.
+   * Provisioning control-plane token shared ONLY with the admin Worker
+   * (freeappstore-admin). Authenticates both directions: backend→admin
+   * (/api/provision) and admin→backend (/v1/internal analytics callbacks).
+   * Sourced from Doppler (fas/prd ADMIN_PROVISION_TOKEN) and synced to both
+   * workers by CI — never set by hand. Internal routes 403 when unset.
    */
-  INTERNAL_TOKEN?: string;
+  ADMIN_PROVISION_TOKEN?: string;
+  /**
+   * Separate token for cross-store app registration (PAS → FAS
+   * /v1/internal/register-app). Distinct from ADMIN_PROVISION_TOKEN so a PAS
+   * compromise can't reach the provisioning plane. Doppler: CROSS_STORE_REGISTER_TOKEN.
+   */
+  CROSS_STORE_REGISTER_TOKEN?: string;
   /**
    * Workers Analytics Engine dataset binding. Each page-view from the
    * `/v1/analytics.js` loader writes one row; per-app rollups + the

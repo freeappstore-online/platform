@@ -111,9 +111,9 @@ publishRoutes.post('/publish', async (c) => {
       'Content-Type': 'application/json',
       // Authenticate this service-to-service call. Admin's CF Access gate can't
       // see a JWT on a service-binding request, so present the shared
-      // INTERNAL_TOKEN. The end user is already authenticated above
+      // ADMIN_PROVISION_TOKEN. The end user is already authenticated above
       // (requireUser); this only proves the call originates from the backend.
-      'X-Internal-Token': c.env.INTERNAL_TOKEN ?? '',
+      'X-Internal-Token': c.env.ADMIN_PROVISION_TOKEN ?? '',
     },
     body: JSON.stringify({
       id: body.name,
@@ -230,11 +230,12 @@ export function extractFailedSteps(body: unknown): AdminStep[] {
  * during provision so Pro apps appear in the FAS `apps` table, which
  * is required for proxy, secrets, and allowlist features to work.
  *
- * Auth: X-Internal-Token header (shared secret between FAS + PAS).
+ * Auth: X-Internal-Token header — CROSS_STORE_REGISTER_TOKEN, a dedicated
+ * FAS↔PAS secret distinct from the backend↔admin provisioning token.
  */
 publishRoutes.post('/internal/register-app', async (c) => {
   const provided = c.req.header('X-Internal-Token');
-  const expected = (c.env as Env & { INTERNAL_TOKEN?: string }).INTERNAL_TOKEN;
+  const expected = c.env.CROSS_STORE_REGISTER_TOKEN;
   if (!expected || provided !== expected) return c.text('forbidden', 403);
 
   const body = await c.req

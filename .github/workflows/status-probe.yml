@@ -1,0 +1,49 @@
+name: Status probe
+
+# Status-page-style live probing. Every 15 minutes (and on demand) this hits the
+# real deployed services and the cross-service /status aggregator, so token drift
+# or a downed dependency surfaces as a failed run + notification BEFORE a creator
+# hits it during `fas publish`. No mocks — these are the production endpoints.
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: status-probe
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Backend /health
+        run: |
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://api.freeappstore.online/health)
+          echo "backend /health → $CODE"
+          [ "$CODE" = "200" ] || { echo '::error::backend /health is not 200'; exit 1; }
+
+      - name: Backend /status (probes backend→admin auth, DB)
+        run: |
+          BODY=$(curl -sS -w '\n%{http_code}' --max-time 25 https://api.freeappstore.online/status)
+          CODE=$(printf '%s' "$BODY" | tail -n1)
+          JSON=$(printf '%s' "$BODY" | sed '$d')
+          echo "$JSON" | jq .
+          if [ "$CODE" != "200" ]; then
+            echo "::error::/status degraded (HTTP $CODE) — see failed probes above"
+            # Surface each red probe as an annotation.
+            echo "$JSON" | jq -r '.checks[] | select(.status=="fail") | "::error::status probe failed: \(.name) — \(.detail)"'
+            exit 1
+          fi
+          echo "✓ all backend status probes green"
+
+      - name: KB host docs site
+        run: |
+          CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://docs.freeappstore.online/)
+          echo "docs.freeappstore.online → $CODE"
+          # 200 or a redirect to the index is fine; only a 5xx/timeout is a failure.
+          case "$CODE" in 2*|3*) : ;; *) echo '::error::docs site unhealthy'; exit 1 ;; esac

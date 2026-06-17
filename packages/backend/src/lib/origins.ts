@@ -49,7 +49,11 @@ function isAllowedMcpWorkerReturn(url: URL, appId?: string): boolean {
 export function isAllowedReturnTo(returnTo: string, appId?: string): boolean {
   try {
     const url = new URL(returnTo);
-    return isAllowedHost(url) || isAllowedExtensionReturn(url, appId) || isAllowedMcpWorkerReturn(url, appId);
+    return (
+      isAllowedHost(url) ||
+      isAllowedExtensionReturn(url, appId) ||
+      isAllowedMcpWorkerReturn(url, appId)
+    );
   } catch {
     return false;
   }

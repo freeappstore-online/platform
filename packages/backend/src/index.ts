@@ -4,6 +4,7 @@ import { runAudit } from './lib/audit.js';
 import { HttpError } from './lib/auth.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { isAllowedOrigin } from './lib/origins.js';
+import { runStatusChecks } from './lib/status.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
 import { agentSessionRoutes } from './routes/agent-sessions.js';
 import { analyticsRoutes } from './routes/analytics.js';
@@ -68,6 +69,14 @@ app.onError((err, c) => {
 
 app.get('/', (c) => c.text('FreeAppStore API'));
 app.get('/health', (c) => c.json({ ok: true }));
+
+// Status page: actively probes downstream dependencies (DB, backend→admin
+// provisioning auth). Public (no secrets in the body) so a scheduled probe and
+// the post-deploy smoke can read it. Returns 503 when any critical probe is red.
+app.get('/status', async (c) => {
+  const report = await runStatusChecks(c.env);
+  return c.json(report, report.status === 'ok' ? 200 : 503);
+});
 
 const v1 = new Hono<{ Bindings: Env }>();
 v1.route('/', authRoutes);

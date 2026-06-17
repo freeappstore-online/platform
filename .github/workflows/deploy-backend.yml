@@ -60,6 +60,18 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      # Push this Worker's secrets from Doppler BEFORE deploy so the new code
+      # always finds them present. Doppler is the source of truth — no manual
+      # `wrangler secret put`. Manifest: packages/backend/.doppler-secrets.
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      - name: Sync secrets from Doppler
+        run: bash scripts/sync-worker-secrets.sh packages/backend
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy Worker
         working-directory: packages/backend
         run: pnpm exec wrangler deploy
@@ -67,16 +79,22 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Smoke test
+      # Post-deploy: /status actively probes every downstream dependency
+      # (admin auth round-trip, GitHub, DB, KV). A red probe fails the deploy.
+      - name: Smoke test (/health + /status probes)
         run: |
+          ok=""
           for i in 1 2 3 4 5; do
             CODE=$(curl -sS -o /dev/null -w "%{http_code}" https://api.freeappstore.online/health)
-            if [ "$CODE" = "200" ]; then
-              echo "✓ /health returned 200"
-              exit 0
-            fi
-            echo "attempt $i: $CODE, retrying..."
-            sleep 5
+            if [ "$CODE" = "200" ]; then echo "✓ /health 200"; ok=1; break; fi
+            echo "attempt $i: /health $CODE, retrying..."; sleep 5
           done
-          echo "✗ /health never returned 200 after deploy"
-          exit 1
+          [ -n "$ok" ] || { echo "✗ /health never 200 after deploy"; exit 1; }
+          echo "Probing /status ..."
+          BODY=$(curl -sS -w "\n%{http_code}" https://api.freeappstore.online/status)
+          CODE=$(printf '%s' "$BODY" | tail -n1)
+          printf '%s\n' "$BODY" | sed '$d'
+          if [ "$CODE" != "200" ]; then
+            echo "✗ /status reported a degraded dependency (HTTP $CODE)"; exit 1
+          fi
+          echo "✓ all status probes green"

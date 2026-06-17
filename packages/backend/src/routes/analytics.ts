@@ -154,7 +154,8 @@ analyticsRoutes.put('/internal/apps/:appId/analytics/cf-token', async (c) => {
   const appId = c.req.param('appId')!;
   if (!APP_ID_RE.test(appId)) return c.text('invalid app id', 400);
   const provided = c.req.header('X-Internal-Token');
-  const expected = (c.env as Env & { INTERNAL_TOKEN?: string }).INTERNAL_TOKEN;
+  // admin → backend runs on the provisioning control plane → ADMIN_PROVISION_TOKEN.
+  const expected = c.env.ADMIN_PROVISION_TOKEN;
   if (!expected || provided !== expected) return c.text('forbidden', 403);
 
   let body: { cf_beacon_token?: string };

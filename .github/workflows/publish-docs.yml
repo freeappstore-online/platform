@@ -93,15 +93,20 @@ jobs:
             - MCP: mcp.md
           YAML
           python -m zensical build
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
       - name: Publish to kb-host
         env:
-          INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
-          if [ -z "$INTERNAL_TOKEN" ]; then echo "INTERNAL_TOKEN missing — cannot publish docs"; exit 1; fi
+          # KB ingest auth is its own token (KB_INGEST_TOKEN), sourced from
+          # Doppler — separate from the backend↔admin provisioning token.
+          KB_INGEST_TOKEN=$(doppler secrets get KB_INGEST_TOKEN --project fas --config prd --plain)
+          if [ -z "$KB_INGEST_TOKEN" ]; then echo "KB_INGEST_TOKEN missing in Doppler — cannot publish docs"; exit 1; fi
           out=site
           [ -d "$out" ] || out=public
           cd "$out"
           find . -type f | while read -r f; do
-            curl -fsS -X PUT "https://kb.freeappstore.online/_ingest/platform/${f#./}" -H "x-internal-token: $INTERNAL_TOKEN" --data-binary "@$f" >/dev/null
+            curl -fsS -X PUT "https://kb.freeappstore.online/_ingest/platform/${f#./}" -H "x-internal-token: $KB_INGEST_TOKEN" --data-binary "@$f" >/dev/null
           done
           echo "Platform docs published → https://docs.freeappstore.online/"

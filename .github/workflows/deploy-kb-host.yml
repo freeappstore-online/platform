@@ -33,6 +33,16 @@ jobs:
       - name: Typecheck
         working-directory: packages/kb-host
         run: pnpm exec tsc --noEmit
+      # Push secrets from Doppler before deploy (source of truth; no manual
+      # `wrangler secret put`). Manifest: packages/kb-host/.doppler-secrets.
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      - name: Sync secrets from Doppler
+        run: bash scripts/sync-worker-secrets.sh packages/kb-host
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy Worker
         working-directory: packages/kb-host
         run: pnpm exec wrangler deploy

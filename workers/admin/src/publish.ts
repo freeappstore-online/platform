@@ -404,7 +404,7 @@ export async function handlePublish(req: PublishRequest, env: PublishEnv, gh?: G
 async function provisionCfWebAnalytics(
   env: PublishEnv & {
     BACKEND_FAS?: Fetcher;
-    INTERNAL_TOKEN?: string;
+    ADMIN_PROVISION_TOKEN?: string;
   },
   req: PublishRequest,
   config: StoreConfig,
@@ -441,12 +441,12 @@ async function provisionCfWebAnalytics(
     // FAS admin only serves "apps" — analytics rows live in the FAS backend D1.
     const targetBackend = env.BACKEND_FAS;
     const targetName = "FAS backend";
-    if (targetBackend && env.INTERNAL_TOKEN) {
+    if (targetBackend && env.ADMIN_PROVISION_TOKEN) {
       const persistRes = await targetBackend.fetch(`https://backend/v1/internal/apps/${encodeURIComponent(req.id)}/analytics/cf-token`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "X-Internal-Token": env.INTERNAL_TOKEN,
+          "X-Internal-Token": env.ADMIN_PROVISION_TOKEN,
         },
         body: JSON.stringify({ cf_beacon_token: siteTag }),
       });

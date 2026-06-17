@@ -50,6 +50,19 @@ jobs:
       - name: Build admin SPA → public/
         run: cd web && pnpm install --frozen-lockfile --ignore-workspace && pnpm build
 
+      # Push secrets from Doppler before deploy (source of truth; no manual
+      # `wrangler secret put`). Manifest: workers/admin/.doppler-secrets.
+      # working-directory is overridden to repo root so the script path resolves.
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      - name: Sync secrets from Doppler
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/sync-worker-secrets.sh workers/admin
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy
         run: pnpm exec wrangler deploy
         env:
