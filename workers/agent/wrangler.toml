@@ -31,6 +31,14 @@ database_id = "a32701c0-5a56-4a12-810d-485166202e39"
 STORE = "apps"
 VAPID_PUBLIC_KEY = "BB9nIKmrVFJQJWZ4MiXzv3eN2UfGtuXESqVlQMobPiZiTmS8cQuldiXNreIV03dCo3Jkkflk6UDoAzWMvhNXCuw"
 
+# Cloudflare AI Gateway (opt-in). Account is shared with PAS. Routing only
+# activates once BOTH ACCOUNT_ID and ID are set, so this stays inert until the
+# `fas-agent` gateway is created in the dashboard. To activate: uncomment
+# AI_GATEWAY_ID below (matching the gateway's name) and redeploy.
+AI_GATEWAY_ACCOUNT_ID = "c1089bfcc43c1c6c2aa89e584e86f0bc"
+# AI_GATEWAY_ID = "fas-agent"
+
 # Secrets (set via `wrangler secret put`):
 # GITHUB_TOKEN       — org-level PAT for provisioning + pushing code
 # VAPID_PRIVATE_KEY  — VAPID private key for web push notifications
+# AI_GATEWAY_TOKEN   — only for an authenticated gateway (optional; via Doppler)

@@ -22,11 +22,12 @@ export class GoogleAdapter extends BaseAdapter {
       ];
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:streamGenerateContent?alt=sse`;
+    const base = this.gateway?.baseUrl ?? "https://generativelanguage.googleapis.com";
+    const url = `${base}/v1beta/models/${this.model}:streamGenerateContent?alt=sse`;
 
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": this.apiKey },
+      headers: { ...this.gateway?.headers, "Content-Type": "application/json", "x-goog-api-key": this.apiKey },
       body: JSON.stringify(body),
     });
 

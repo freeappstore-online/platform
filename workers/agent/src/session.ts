@@ -314,7 +314,7 @@ export class AgentSession implements DurableObject {
           fileCount: files.size,
           fileList: [...files.keys()].sort().join(", "),
         };
-        const result = await runAgentTurn(body.aiConfig, session.messages, body.message, files, writer, config, sessionCtx).catch((err) => {
+        const result = await runAgentTurn(body.aiConfig, session.messages, body.message, files, writer, config, sessionCtx, this.env).catch((err) => {
           this.logError("agent", String(err));
           throw err;
         });
@@ -404,12 +404,21 @@ export class AgentSession implements DurableObject {
             : "The action completed. Summarize the result briefly for the user.";
 
           try {
-            const followUp = await runAgentTurn(body.aiConfig, session.messages, followUpPrompt, files, writer, config, {
-              appId: session.appId,
-              appName: session.appName,
-              fileCount: files.size,
-              fileList: [...files.keys()].sort().join(", "),
-            });
+            const followUp = await runAgentTurn(
+              body.aiConfig,
+              session.messages,
+              followUpPrompt,
+              files,
+              writer,
+              config,
+              {
+                appId: session.appId,
+                appName: session.appName,
+                fileCount: files.size,
+                fileList: [...files.keys()].sort().join(", "),
+              },
+              this.env,
+            );
             session.messages.push(...followUp.newMessages);
             if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
             session.files = Object.fromEntries(files);

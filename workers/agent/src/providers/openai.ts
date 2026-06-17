@@ -1,12 +1,23 @@
 import { BaseAdapter } from "./base";
+import type { GatewayConfig } from "./ai-gateway";
 import { readSSELines } from "./sse";
 import type { Message, StreamEvent, ToolCall, ToolDef } from "./types";
 
 export class OpenAIAdapter extends BaseAdapter {
+  /** Provider base URL WITHOUT the `/chat/completions` suffix (appended below).
+   *  OpenAI direct → `https://api.openai.com/v1`; gateway → `…/openai`;
+   *  GitHub Models → `https://models.github.ai/inference`. */
   private baseUrl: string;
 
-  constructor(apiKey: string, model: string, baseUrl = "https://api.openai.com/v1/chat/completions", temperature = 0.7, maxTokens = 16384) {
-    super(apiKey, model, temperature, maxTokens);
+  constructor(
+    apiKey: string,
+    model: string,
+    baseUrl = "https://api.openai.com/v1",
+    temperature = 0.7,
+    maxTokens = 16384,
+    gateway?: GatewayConfig,
+  ) {
+    super(apiKey, model, temperature, maxTokens, gateway);
     this.baseUrl = baseUrl;
   }
 
@@ -27,9 +38,10 @@ export class OpenAIAdapter extends BaseAdapter {
       }));
     }
 
-    const res = await fetch(this.baseUrl, {
+    const res = await fetch(`${this.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
+        ...this.gateway?.headers,
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
       },

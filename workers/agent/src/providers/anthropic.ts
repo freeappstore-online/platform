@@ -18,9 +18,11 @@ export class AnthropicAdapter extends BaseAdapter {
       stream: true,
     };
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const base = this.gateway?.baseUrl ?? "https://api.anthropic.com";
+    const res = await fetch(`${base}/v1/messages`, {
       method: "POST",
       headers: {
+        ...this.gateway?.headers,
         "x-api-key": this.apiKey,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",

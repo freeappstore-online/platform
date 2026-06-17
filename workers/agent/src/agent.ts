@@ -1,6 +1,7 @@
 /** Agent loop: send messages to AI, handle tool calls, repeat until done. */
 
 import type { StoreConfig } from "./config";
+import { type GatewayEnv, resolveGateway } from "./providers/ai-gateway";
 import { AnthropicAdapter } from "./providers/anthropic";
 import { GitHubModelsAdapter } from "./providers/github";
 import { GoogleAdapter } from "./providers/google";
@@ -9,16 +10,23 @@ import type { AIConfig, Message, ProviderAdapter, StreamEvent, ToolCall, ToolRes
 import { getSystemPrompt } from "./template";
 import { executeTool, getToolDefinitions, INFRA_TOOLS } from "./tools";
 
-function createAdapter(config: AIConfig): ProviderAdapter {
+/**
+ * Build the provider adapter, routing through Cloudflare AI Gateway when the
+ * AI_GATEWAY_* env is configured (else direct to the provider). GitHub Models
+ * is not a gateway provider, so it always calls direct.
+ */
+function createAdapter(config: AIConfig, gatewayEnv: GatewayEnv): ProviderAdapter {
   const providerTemp = config.temperature ?? 0.7;
   const providerMaxTokens = config.maxTokens ?? 16384;
   switch (config.provider) {
     case "anthropic":
-      return new AnthropicAdapter(config.apiKey, config.model, providerTemp, providerMaxTokens);
-    case "openai":
-      return new OpenAIAdapter(config.apiKey, config.model, undefined, providerTemp, providerMaxTokens);
+      return new AnthropicAdapter(config.apiKey, config.model, providerTemp, providerMaxTokens, resolveGateway(gatewayEnv, "anthropic"));
+    case "openai": {
+      const gw = resolveGateway(gatewayEnv, "openai");
+      return new OpenAIAdapter(config.apiKey, config.model, gw.baseUrl, providerTemp, providerMaxTokens, gw);
+    }
     case "google":
-      return new GoogleAdapter(config.apiKey, config.model, providerTemp, providerMaxTokens);
+      return new GoogleAdapter(config.apiKey, config.model, providerTemp, providerMaxTokens, resolveGateway(gatewayEnv, "google"));
     case "github":
       return new GitHubModelsAdapter(config.apiKey, config.model, providerTemp, providerMaxTokens);
   }
@@ -55,9 +63,11 @@ export async function runAgentTurn(
   writer: WritableStreamDefaultWriter<Uint8Array>,
   storeConfig: StoreConfig,
   ctx?: SessionContext,
+  /** AI Gateway env (AI_GATEWAY_*). Omit/empty → direct provider calls. */
+  gatewayEnv: GatewayEnv = {},
 ): Promise<AgentTurnResult> {
   const encoder = new TextEncoder();
-  const adapter = createAdapter(config);
+  const adapter = createAdapter(config, gatewayEnv);
   const MAX_LOOPS = 25;
   const toolDefinitions = getToolDefinitions(storeConfig);
 
