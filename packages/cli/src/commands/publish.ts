@@ -5,7 +5,7 @@ import { runChecks } from '@freeappstore/compliance';
 import { Command } from 'commander';
 import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
-import { readConfig } from '../lib/config.js';
+import { readConfig, sessionDaysRemaining } from '../lib/config.js';
 import { openUrl } from '../lib/open.js';
 import { yellow } from '../lib/style.js';
 import { renderCheckResults } from './check.js';
@@ -108,16 +108,36 @@ export const publishCommand = new Command('publish')
       }
       const meta = STORE_META[store];
       // Check auth BEFORE prompting — there's no point asking the user for
-      // 5 fields just to bail at the end with "not signed in". --issue
-      // skips this since the GitHub Issue form path doesn't need a session.
+      // 5 fields just to bail at the end with an auth error. --issue skips
+      // this since the GitHub Issue form path doesn't need a session.
+      // We distinguish "never signed in" from "session expired": both are
+      // fixed by `fas login`, but calling an expired session "not signed in"
+      // reads as a permissions problem and sends people chasing access grants
+      // that don't exist (publishing needs no special permission).
       if (!opts.issue) {
         const config = await readConfig();
+        const daysLeft = sessionDaysRemaining(config);
         if (!config.session?.token) {
           process.stdout.write(
-            '\n⚠  Not signed in. Run: fas login\n' +
-              '   (or run `fas publish --issue` to submit via the GitHub Issue form instead.)\n',
+            '\n⚠  Not signed in. Run `fas login` to get started.\n' +
+              '   Any signed-in account can publish — there is no separate permission to request.\n' +
+              '   (Or run `fas publish --issue` to submit via the GitHub Issue form instead.)\n',
           );
           process.exit(1);
+        }
+        if (daysLeft !== null && daysLeft <= 0) {
+          process.stdout.write(
+            '\n⚠  Your fas session has expired (sessions last 30 days).\n' +
+              '   Run `fas login` to refresh it, then re-run `fas publish` — that is all you need.\n' +
+              '   (No publishing permission is required; a fresh login fully restores access.)\n',
+          );
+          process.exit(1);
+        }
+        if (daysLeft !== null && daysLeft <= 3) {
+          process.stdout.write(
+            `\nℹ  Heads up: your fas session expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}. ` +
+              'Run `fas login` soon to avoid interruptions.\n',
+          );
         }
       }
 
@@ -228,7 +248,16 @@ export const publishCommand = new Command('publish')
           return;
         }
         if (autoResult.kind === 'unauthorized') {
-          process.stdout.write(`\n⚠  Not signed in. Run: fas login\n`);
+          // The server rejected our session (expired or invalid). The pre-flight
+          // check above usually catches a stale token first, but the server is
+          // authoritative on `exp`, so handle it here too. Never say "not
+          // authorized / no permission" — publishing needs none; this is purely
+          // an expired-credential problem that `fas login` fixes.
+          process.stdout.write(
+            '\n⚠  Your fas session is no longer valid (it likely expired — sessions last 30 days).\n' +
+              '   Run `fas login` to refresh it, then re-run `fas publish`.\n' +
+              '   There is no separate publishing permission to request; a fresh login is all it takes.\n',
+          );
           process.exit(1);
         }
         if (autoResult.kind === 'wrong_store') {
@@ -239,7 +268,9 @@ export const publishCommand = new Command('publish')
           process.exit(1);
         }
         process.stdout.write(
-          `\n⚠  Auto-provision unavailable (${autoResult.reason}); falling back to Issue form.\n`,
+          `\n⚠  Couldn't auto-provision this time: ${autoResult.reason}\n` +
+            `   No problem — submitting via the GitHub Issue form instead, where a maintainer\n` +
+            `   will pick it up. Your app and compliance checks are fine; this is on our side.\n`,
         );
       }
 
@@ -304,11 +335,43 @@ async function tryAutoProvision(
     return { kind: 'unconfigured', reason: body.error ?? '503' };
   }
   if (!res.ok) {
-    const body = await res.text();
-    return { kind: 'failed', reason: `${res.status}: ${body}` };
+    const text = await res.text();
+    return { kind: 'failed', reason: humanizeProvisionError(res.status, text) };
   }
   const result = (await res.json()) as { appUrl: string; repoUrl: string };
   return { kind: 'success', appUrl: result.appUrl, repoUrl: result.repoUrl };
+}
+
+/**
+ * Turn a non-OK provision response into one concise, human-readable line.
+ * The backend returns a few known JSON shapes (publish.ts):
+ *   - { error: 'admin_provision_partial_failure', failedSteps: [{ name, detail }] }
+ *   - { error: 'admin_provision_failed', status, body }
+ *   - plain-text validation messages (400s)
+ * Anything unrecognized falls back to a trimmed status + body so we never
+ * surface a raw JSON blob to the user.
+ */
+export function humanizeProvisionError(status: number, body: string): string {
+  const trimmed = body.trim();
+  try {
+    const j = JSON.parse(trimmed) as {
+      error?: string;
+      hint?: string;
+      failedSteps?: { name?: string; detail?: string }[];
+    };
+    if (j.failedSteps?.length) {
+      const steps = j.failedSteps
+        .map((s) => (s.detail ? `${s.name} (${s.detail})` : s.name))
+        .filter(Boolean)
+        .join('; ');
+      return `provisioning step failed: ${steps}`;
+    }
+    if (j.error) return j.hint ? `${j.error} — ${j.hint}` : j.error;
+  } catch {
+    // not JSON — fall through to the plain-text path
+  }
+  if (trimmed) return `${status}: ${trimmed.slice(0, 200)}`;
+  return `server returned ${status}`;
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   buildSubmissionUrl,
   DEPLOY_YML,
   ensureDeployWorkflow,
+  humanizeProvisionError,
   parseGitHubRepo,
   resolveCategory,
   resolveFromFlags,
@@ -283,5 +284,42 @@ describe('ensureDeployWorkflow', () => {
     expect(result).toBe('upgraded');
     const content = readFileSync(join(dir, 'deploy.yml'), 'utf8');
     expect(content).toBe(DEPLOY_YML);
+  });
+});
+
+describe('humanizeProvisionError', () => {
+  it('summarizes a partial-failure step list with details', () => {
+    const body = JSON.stringify({
+      error: 'admin_provision_partial_failure',
+      failedSteps: [{ name: 'github_repo', detail: 'name taken' }, { name: 'dns' }],
+    });
+    expect(humanizeProvisionError(502, body)).toBe(
+      'provisioning step failed: github_repo (name taken); dns',
+    );
+  });
+
+  it('joins error + hint for a known error shape', () => {
+    const body = JSON.stringify({ error: 'wrong_store', hint: 'use fgs publish' });
+    expect(humanizeProvisionError(410, body)).toBe('wrong_store — use fgs publish');
+  });
+
+  it('uses the bare error when there is no hint', () => {
+    expect(humanizeProvisionError(502, JSON.stringify({ error: 'admin_provision_failed' }))).toBe(
+      'admin_provision_failed',
+    );
+  });
+
+  it('falls back to status + trimmed text for non-JSON bodies', () => {
+    expect(humanizeProvisionError(400, 'category is required')).toBe('400: category is required');
+  });
+
+  it('handles an empty body', () => {
+    expect(humanizeProvisionError(500, '')).toBe('server returned 500');
+  });
+
+  it('never returns a raw JSON blob (caps very long plain text)', () => {
+    const long = 'x'.repeat(500);
+    const out = humanizeProvisionError(502, long);
+    expect(out.length).toBeLessThan(220);
   });
 });

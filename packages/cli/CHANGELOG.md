@@ -1,5 +1,14 @@
 # @freeappstore/cli
 
+## 0.4.25
+
+- **Fix (DX):** Clearer auth messaging on `fas publish`. An expired session used to surface as `401 Unauthorized` → "Not signed in", which reads as a _permissions_ problem and sent creators chasing access grants that don't exist (real support thread: a creator asked to be "granted publishing permission" when their token had simply expired). Now the CLI:
+  - Distinguishes **never signed in** from **session expired** and says so explicitly, always noting that *any signed-in account can publish — there is no separate permission to request*.
+  - Detects an expired (or soon-to-expire, ≤3 days) session **before** prompting, via a client-side check against the 30-day TTL.
+  - `fas whoami` now reports session status (`active, expires in N days` / `expired`).
+  - `fas login` confirms the 30-day lifetime and that you're ready to publish.
+  - Provisioning failures that fall back to the Issue form now print a concise, human-readable reason instead of a raw JSON blob, and reassure the creator the fallback is normal.
+
 ## 0.4.5
 
 - **Fix:** `fas login` now includes the resolved exchange URL in the error message when the auth-exchange step fails. A common support pattern is creators with a stale `apiBase` in `~/.fas/config.json` or a leftover `FAS_API_BASE` env var pointing at a host that returns a 404 — the previous error was hard to attribute. Now: `Auth exchange failed (404 from https://wrong-host/v1/auth/exchange): ...` with a one-line hint about where to fix it.

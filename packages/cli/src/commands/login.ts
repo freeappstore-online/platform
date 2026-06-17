@@ -53,7 +53,11 @@ export async function runLogin(): Promise<{ login: string }> {
     github: { accessToken, login, obtainedAt: Date.now() },
     session: { token: sessionToken, obtainedAt: Date.now() },
   });
-  process.stdout.write(`\n✓ Signed in as @${login}\n`);
+  process.stdout.write(
+    `\n✓ Signed in as @${login}\n` +
+      `  Your session is good for 30 days. Run \`fas login\` again to refresh it.\n` +
+      `  You're all set to \`fas publish\` — every signed-in account can publish, no extra permission needed.\n`,
+  );
   return { login };
 }
 

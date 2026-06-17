@@ -36,6 +36,31 @@ export function normalizeApiBase(s: string): string {
   return s.replace(/\/+$/, '');
 }
 
+/**
+ * fas session lifetime. MUST match SESSION_TTL_SECONDS in the backend
+ * (packages/backend/src/lib/session.ts) — the backend signs the JWT's `exp`,
+ * the CLI uses this only to warn the user *before* the server 401s.
+ */
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Whole days until the stored session expires, computed from `obtainedAt`.
+ * - `null` — no session, or a legacy config with no `obtainedAt` (can't tell;
+ *   don't warn).
+ * - `<= 0` — already expired (the server will 401; the user must `fas login`).
+ * Lets commands give an accurate "your session expired" message instead of the
+ * misleading "not signed in" (which reads as a permissions problem).
+ */
+export function sessionDaysRemaining(config: FasConfig): number | null {
+  const obtainedAt = config.session?.obtainedAt;
+  if (!config.session?.token || !obtainedAt) return null;
+  const msLeft = obtainedAt + SESSION_TTL_MS - Date.now();
+  // ceil so a token with 29.99 days left reads as "30 days", not "29" right
+  // after login. An already-expired token still yields <= 0 (ceil of a small
+  // negative is 0 or negative), which callers treat as "must re-login".
+  return Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+}
+
 export async function readConfig(): Promise<FasConfig> {
   try {
     const raw = await readFile(CONFIG_FILE, 'utf8');
