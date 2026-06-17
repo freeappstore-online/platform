@@ -53,6 +53,21 @@ jobs:
           FAILED=""
           BEFORE="${{ github.event.before }}"
 
+          # Keep in-source version constants in lockstep with package.json so
+          # version.test.ts can't drift on release (the SDK telemetry version in
+          # logger.ts used to fall behind every auto-bump and red the deploy).
+          sync_source_version() {
+            if [ "$1" = "sdk" ]; then
+              node -e "
+                const fs=require('fs'); const p='packages/sdk/src/logger.ts';
+                const s=fs.readFileSync(p,'utf8').replace(
+                  /(export const SDK_VERSION = ')[^']*(';)/, '\$1$2\$2');
+                fs.writeFileSync(p,s);
+              "
+              echo "synced logger.ts SDK_VERSION → $2"
+            fi
+          }
+
           for PKG in cli sdk compliance quality; do
             PKG_NAME=$(node -p "require('./packages/$PKG/package.json').name")
             LOCAL_VER=$(node -p "require('./packages/$PKG/package.json').version")
@@ -84,6 +99,7 @@ jobs:
                 pkg.version = '$NPM_VER';
                 fs.writeFileSync('./packages/$PKG/package.json', JSON.stringify(pkg, null, 2) + '\n');
               "
+              sync_source_version "$PKG" "$NPM_VER"
               BUMPED="$BUMPED $PKG_NAME@$NPM_VER"
 
             else
@@ -105,6 +121,7 @@ jobs:
                   pkg.version = '$NEW_VER';
                   fs.writeFileSync('./packages/$PKG/package.json', JSON.stringify(pkg, null, 2) + '\n');
                 "
+                sync_source_version "$PKG" "$NEW_VER"
                 if (cd packages/$PKG && pnpm publish --access public --provenance --no-git-checks); then
                   echo "Published $PKG_NAME@$NEW_VER"
                   BUMPED="$BUMPED $PKG_NAME@$NEW_VER"
@@ -126,7 +143,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/*/package.json
+          git add packages/*/package.json packages/sdk/src/logger.ts
           git commit -m "chore: auto-bump published versions [skip ci]"
           git pull --rebase origin main
           git push
