@@ -1,5 +1,5 @@
-import { BaseAdapter } from "./base";
 import type { GatewayConfig } from "./ai-gateway";
+import { BaseAdapter } from "./base";
 import { readSSELines } from "./sse";
 import type { Message, StreamEvent, ToolCall, ToolDef } from "./types";
 

@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  gatewayEnabled,
-  gatewayHeaders,
-  providerBaseUrl,
-  resolveGateway,
-} from "./ai-gateway";
+import { gatewayEnabled, gatewayHeaders, providerBaseUrl, resolveGateway } from "./ai-gateway";
 
 const GW = { AI_GATEWAY_ACCOUNT_ID: "acct123", AI_GATEWAY_ID: "fas-agent" };
 
@@ -27,25 +22,17 @@ describe("providerBaseUrl", () => {
   });
 
   it("returns gateway URLs with the correct provider slug when enabled", () => {
-    expect(providerBaseUrl(GW, "anthropic")).toBe(
-      "https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/anthropic",
-    );
-    expect(providerBaseUrl(GW, "openai")).toBe(
-      "https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/openai",
-    );
+    expect(providerBaseUrl(GW, "anthropic")).toBe("https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/anthropic");
+    expect(providerBaseUrl(GW, "openai")).toBe("https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/openai");
     // Google maps to the google-ai-studio slug, not "google".
-    expect(providerBaseUrl(GW, "google")).toBe(
-      "https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/google-ai-studio",
-    );
+    expect(providerBaseUrl(GW, "google")).toBe("https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/google-ai-studio");
   });
 
   it("produces correct full endpoints when callers append their suffix", () => {
     expect(`${providerBaseUrl(GW, "anthropic")}/v1/messages`).toBe(
       "https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/anthropic/v1/messages",
     );
-    expect(`${providerBaseUrl({}, "openai")}/chat/completions`).toBe(
-      "https://api.openai.com/v1/chat/completions",
-    );
+    expect(`${providerBaseUrl({}, "openai")}/chat/completions`).toBe("https://api.openai.com/v1/chat/completions");
     expect(`${providerBaseUrl(GW, "google")}/v1beta/models/gemini-2.0:streamGenerateContent`).toBe(
       "https://gateway.ai.cloudflare.com/v1/acct123/fas-agent/google-ai-studio/v1beta/models/gemini-2.0:streamGenerateContent",
     );

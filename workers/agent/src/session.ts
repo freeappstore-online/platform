@@ -314,10 +314,12 @@ export class AgentSession implements DurableObject {
           fileCount: files.size,
           fileList: [...files.keys()].sort().join(", "),
         };
-        const result = await runAgentTurn(body.aiConfig, session.messages, body.message, files, writer, config, sessionCtx, this.env).catch((err) => {
-          this.logError("agent", String(err));
-          throw err;
-        });
+        const result = await runAgentTurn(body.aiConfig, session.messages, body.message, files, writer, config, sessionCtx, this.env).catch(
+          (err) => {
+            this.logError("agent", String(err));
+            throw err;
+          },
+        );
 
         session.messages.push(...result.newMessages);
         // Enforce limits to prevent unbounded storage growth
