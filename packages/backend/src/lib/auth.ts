@@ -38,7 +38,22 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
       email: string | null;
       date_of_birth: string | null;
     }>();
-  if (!row) throw new HttpError(401, 'user not found');
+
+  // PAS credential accounts (cred:*) and other cross-store identities may not
+  // exist in FAS D1. The token signature is already verified, so trust the
+  // claims and return a synthetic user. This lets kv/rooms/counters/roles work
+  // for PAS credential users without requiring a FAS user row.
+  if (!row) {
+    return {
+      id: payload.uid,
+      login: payload.login ?? payload.uid,
+      githubLogin: '',
+      avatarUrl: null,
+      dateOfBirth: null,
+      roles: payload.roles ?? ['user'],
+      appRoles: payload.appRoles ?? {},
+    };
+  }
 
   return {
     id: row.id,

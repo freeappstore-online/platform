@@ -449,6 +449,10 @@ export interface ShellProps {
   showThemeToggle?: boolean;
 }
 
+function normalizeShellAppName(appName?: string) {
+  return appName === 'AppStore' ? 'FreeAppStore' : appName;
+}
+
 /** Full wrapper: sticky topbar, main content, footer. Optional auth gate. */
 export function Shell({
   app,
@@ -458,6 +462,7 @@ export function Shell({
   showThemeToggle = true,
 }: ShellProps) {
   const { user, loading } = useAuth(app);
+  const displayAppName = normalizeShellAppName(appName);
 
   if (loading) {
     return (
@@ -494,7 +499,7 @@ export function Shell({
               color: 'var(--ink, #1e293b)',
             }}
           >
-            {appName || 'FreeAppStore'}
+            {displayAppName || 'FreeAppStore'}
           </h1>
           <p style={{ color: 'var(--muted, #64748b)', fontSize: '0.9rem', marginBottom: '1rem' }}>
             Sign in to continue.
@@ -535,9 +540,9 @@ export function Shell({
           >
             Free
           </a>
-          {appName && (
+          {displayAppName && displayAppName !== 'FreeAppStore' && (
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
-              {appName}
+              {displayAppName}
             </span>
           )}
         </div>
