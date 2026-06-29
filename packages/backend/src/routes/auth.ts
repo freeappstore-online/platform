@@ -208,7 +208,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
       )
       .run();
 
-    const { roles, appRoles } = await computeRoles(userId, login, c.env);
+    const { roles, appRoles } = await computeRoles(userId, login, c.env, 'google');
     const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
     const redirect = new URL(state.returnTo);
     if (state.responseMode === 'query') {
@@ -341,7 +341,7 @@ authRoutes.post('/auth/apple/callback', async (c) => {
       .bind(userId, login, Date.now(), claims.sub, claims.email ?? null, displayName ?? login)
       .run();
 
-    const { roles, appRoles } = await computeRoles(userId, login, c.env);
+    const { roles, appRoles } = await computeRoles(userId, login, c.env, 'apple');
     const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
     const redirect = new URL(state.returnTo);
     if (state.responseMode === 'query') {
@@ -457,7 +457,7 @@ authRoutes.get('/auth/email/callback', async (c) => {
     .bind(userId, login, Date.now(), state.email, state.email, login)
     .run();
 
-  const { roles, appRoles } = await computeRoles(userId, login, c.env);
+  const { roles, appRoles } = await computeRoles(userId, login, c.env, 'email');
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
   const redirect = new URL(state.returnTo);
   if (state.responseMode === 'query') {
@@ -527,19 +527,30 @@ export async function computeRoles(
   userId: string,
   login: string,
   env: Env,
+  provider = 'github',
 ): Promise<{ roles: string[]; appRoles: Record<string, string[]> }> {
   const roles = ['user'];
   const appRoles: Record<string, string[]> = {};
 
-  try {
-    // Check if the user has published any apps (creator role).
-    // The apps table uses owner_login (github username), not user ID.
-    const appRow = await env.DB.prepare('SELECT 1 FROM apps WHERE owner_login = ? LIMIT 1')
-      .bind(login)
-      .first();
-    if (appRow) roles.push('creator');
+  // SECURITY: app ownership (apps.owner_login) and admin (ADMIN_GITHUB_LOGINS)
+  // are keyed by GitHub username. For non-GitHub providers `login` is the email
+  // local-part (attacker-chosen on any domain they control), so matching it
+  // against GitHub usernames would let someone who can receive mail at
+  // <adminGithubLogin>@anydomain or <appOwner>@anydomain claim admin / app
+  // ownership. Only honor login-based matches for actual GitHub auth; per-app
+  // grants below are keyed by user_id and remain valid for every provider.
+  const isGithub = provider === 'github';
 
-    // Load per-app role assignments
+  try {
+    if (isGithub) {
+      // Check if the user has published any apps (creator role).
+      const appRow = await env.DB.prepare('SELECT 1 FROM apps WHERE owner_login = ? LIMIT 1')
+        .bind(login)
+        .first();
+      if (appRow) roles.push('creator');
+    }
+
+    // Load per-app role assignments (keyed by user_id — safe for all providers).
     const { results } = await env.DB.prepare(
       'SELECT app_id, role_name FROM app_roles WHERE user_id = ?',
     )
@@ -549,20 +560,23 @@ export async function computeRoles(
       (appRoles[r.app_id] ??= []).push(r.role_name);
     }
 
-    // Auto-assign 'owner' for apps this user created (not stored in DB).
-    // The apps table uses owner_login (github username), not user ID.
-    const { results: ownedApps } = await env.DB.prepare('SELECT id FROM apps WHERE owner_login = ?')
-      .bind(login)
-      .all<{ id: string }>();
-    for (const a of ownedApps ?? []) {
-      (appRoles[a.id] ??= []).push('owner');
+    if (isGithub) {
+      // Auto-assign 'owner' for apps this user created (not stored in DB).
+      const { results: ownedApps } = await env.DB.prepare(
+        'SELECT id FROM apps WHERE owner_login = ?',
+      )
+        .bind(login)
+        .all<{ id: string }>();
+      for (const a of ownedApps ?? []) {
+        (appRoles[a.id] ??= []).push('owner');
+      }
     }
   } catch {
     // Tables don't exist yet (fresh DB or test env) — skip
   }
 
-  // Check admin list
-  if (isAdminLogin(login, env)) roles.push('admin');
+  // Check admin list (GitHub identities only — see security note above).
+  if (isGithub && isAdminLogin(login, env)) roles.push('admin');
 
   return { roles, appRoles };
 }
