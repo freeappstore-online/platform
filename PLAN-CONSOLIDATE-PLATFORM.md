@@ -5,8 +5,10 @@
 > (`apps/*`), public-intake, and clone-to-scaffold repos stay standalone — see
 > "Stays standalone" below for why.
 >
-> Supersedes the narrower `PLAN-CONSOLIDATE-WORKERS.md` (which only covered the
-> admin/agent/host Workers — already folded into `workers/` on 2026-06-02).
+> Supersedes the narrower `PLAN-CONSOLIDATE-WORKERS.md` (admin/agent/host Workers,
+> folded into `workers/` on 2026-06-02) — that doc was removed 2026-06-30 as stale;
+> its rationale (privileged Workers stay separate per `admin-worker-per-store`)
+> lives in the workspace `CLAUDE.md` + git history.
 >
 > Started 2026-06-30. Status legend: ✅ done · 🔜 pending verification · ⬜ not started.
 
