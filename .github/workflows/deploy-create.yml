@@ -10,11 +10,11 @@ name: Deploy create
 # freeappstore-online/create and enable the push trigger below.
 
 on:
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - 'sites/create/**'
-  #     - '.github/workflows/deploy-create.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'sites/create/**'
+      - '.github/workflows/deploy-create.yml'
   workflow_dispatch:
 
 permissions:

@@ -13,11 +13,11 @@ name: Deploy mcp
 # push trigger below.
 
 on:
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - 'workers/mcp/**'
-  #     - '.github/workflows/deploy-mcp.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'workers/mcp/**'
+      - '.github/workflows/deploy-mcp.yml'
   workflow_dispatch:
 
 permissions:

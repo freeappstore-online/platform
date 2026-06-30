@@ -29,10 +29,25 @@
   `deploy-console.yml`, `deploy-create.yml` (pnpm, hardcoded R2 prefix). Push
   triggers are commented out until G4 secrets are provisioned + first run verified.
 - ✅ `brand` + `ops` remotes archived; local clones deleted (zero deploy risk).
-- 🔜 `mcp` / `console` / `create` / `publisher` remotes kept **live** as rollback;
-  archive only after a dispatch run is verified green (and, for console/create,
-  R2 secrets G4 are added to the platform repo). Local clones deleted — the live
-  R2 content / workers are untouched and still served.
+- ✅ **Cutover verified & complete.** Dispatch runs of `deploy-mcp`,
+  `deploy-console`, `deploy-create` all green from the monorepo (incl. the R2
+  upload — confirming the R2 creds are **org-level secrets** inherited by
+  `platform`, so G4 needed no provisioning). Post-cutover live checks: all 200 —
+  `console.freeappstore.online`, `console.freeappstore.online/create`,
+  `mcp.freeappstore.online` (protocol endpoints 405/406 = healthy).
+- ✅ Push triggers enabled on all three deploy workflows.
+- ✅ `mcp` / `console` / `create` / `publisher` remotes **archived**; local clones
+  deleted.
+
+### One remaining code-level follow-up (not a repo)
+
+- `publisher`: source is folded to `workers/publisher` and the remote is archived,
+  but the **live `freeappstore-publisher` worker still serves** `/api/me`,
+  `/api/create`, `/api/publish-existing` (archiving a repo does not undeploy its
+  worker). To fully retire it: port those 3 endpoints into `packages/backend`,
+  cut the host routing over, then `wrangler delete` the worker. No deploy workflow
+  exists for `workers/publisher` by design — patch via manual `wrangler deploy`
+  from that dir if an emergency fix is ever needed before the port.
 
 ## Fold into `platform` (6 repos)
 

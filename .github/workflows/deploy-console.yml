@@ -17,11 +17,11 @@ name: Deploy console
 # the push trigger below.
 
 on:
-  # push:
-  #   branches: [main]
-  #   paths:
-  #     - 'sites/console/**'
-  #     - '.github/workflows/deploy-console.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'sites/console/**'
+      - '.github/workflows/deploy-console.yml'
   workflow_dispatch:
 
 permissions:
