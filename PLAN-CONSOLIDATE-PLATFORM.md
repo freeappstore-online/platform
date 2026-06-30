@@ -41,15 +41,32 @@
 - ✅ `mcp` / `console` / `create` / `publisher` remotes **archived**; local clones
   deleted.
 
-### One remaining code-level follow-up (not a repo)
+### Publisher decommission — ✅ DONE (2026-06-30)
 
-- `publisher`: source is folded to `workers/publisher` and the remote is archived,
-  but the **live `freeappstore-publisher` worker still serves** `/api/me`,
-  `/api/create`, `/api/publish-existing` (archiving a repo does not undeploy its
-  worker). To fully retire it: port those 3 endpoints into `packages/backend`,
-  cut the host routing over, then `wrangler delete` the worker. No deploy workflow
-  exists for `workers/publisher` by design — patch via manual `wrangler deploy`
-  from that dir if an emergency fix is ever needed before the port.
+The `freeappstore-publisher` worker is fully decommissioned:
+
+- **Root cause found:** publisher was redundant legacy — its provisioning is
+  duplicated by the canonical `backend /v1/publish` (session-auth → admin Worker,
+  Path B), and it used a *different* auth model (Cloudflare Access) plus the
+  abandoned CF Pages provisioning path. Its only consumer was the create site's
+  `/publish` page.
+- **Migrated:** `sites/create/web/src/pages/Publish.tsx` now POSTs
+  `api.freeappstore.online/v1/publish` with the platform session (the auth the
+  rest of the site already uses) and lists apps via `GET /v1/apps/mine`. Dropped
+  the Path-B-obsolete "publish existing" form, per-app icon fields (admin assigns
+  the icon), and the games option. Verified: deployed page 200, both endpoints
+  401 unauth, live bundle has 0 `publish.freeappstore.online` refs.
+- **Worker deleted:** `wrangler delete freeappstore-publisher` (2026-06-30).
+  Source removed from `workers/publisher`; recoverable from git history if needed.
+- **Console link** repointed to `create.freeappstore.online/publish`; host routing
+  comment + create CLAUDE.md updated.
+- **Orphans needing CF dashboard cleanup** (token lacks DNS/Access edit scope):
+  the `publish.freeappstore.online` DNS record + its Cloudflare Access application
+  still exist, so the subdomain 302s to an Access login that now leads nowhere.
+  Harmless; delete the DNS record + Access app to fully tidy.
+
+Consolidation is complete: every foldable platform-tooling repo is in `platform`,
+all legacy/stale leftovers removed.
 
 ## Fold into `platform` (6 repos)
 
