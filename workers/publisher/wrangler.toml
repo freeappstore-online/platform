@@ -1,0 +1,20 @@
+name = "freeappstore-publisher"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+workers_dev = false
+
+[vars]
+CF_ACCOUNT_ID = "c1089bfcc43c1c6c2aa89e584e86f0bc"
+MAX_APPS_PER_USER = "5"
+CF_ACCESS_TEAM_DOMAIN = "project-spending.cloudflareaccess.com"
+CF_ACCESS_AUD = "2fa92565c989816d3f41c5e5ad7bb3a3910c4db0637ffd48b262b39560ef72a5"
+FAS_ZONE_ID = "ebe8a9b64cb958520b8c32114f7f06ec"
+FGS_ZONE_ID = "fd33f88109b97569f2c5d6f1e5bb62ae"
+
+[[routes]]
+pattern = "publish.freeappstore.online/*"
+zone_name = "freeappstore.online"
+
+[[kv_namespaces]]
+binding = "CREATORS"
+id = "b2aae28db28f4971b68d0a917b93103e"

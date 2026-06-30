@@ -1,0 +1,69 @@
+name: Deploy console
+
+# Deploys the creator console SPA (console.freeappstore.online) to R2.
+# Folded from the former freeappstore-online/console repo (2026-06-30, see
+# PLAN-CONSOLIDATE-PLATFORM.md).
+#
+# Two things differ from the per-repo original:
+#  - R2 prefix is HARDCODED to apps/console/ (G2). The old workflow derived it
+#    from ${GITHUB_REPOSITORY##*/}, which resolves to "platform" in the monorepo
+#    and would write to the wrong key. The host Worker's `routes` table maps
+#    console.freeappstore.online -> apps/console, so this prefix must not drift.
+#  - console is a nested pnpm workspace; `working-directory: sites/console` makes
+#    pnpm root at the nearest pnpm-workspace.yaml (G3).
+#
+# Dispatch-only until the R2 S3 secrets (G4) are provisioned on this repo and the
+# deploy is verified green; then archive freeappstore-online/console and enable
+# the push trigger below.
+
+on:
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'sites/console/**'
+  #     - '.github/workflows/deploy-console.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-console
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sites/console
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Verify build output
+        run: |
+          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
+          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
+
+      - name: Upload to R2 (prefix apps/console — must match the host routes table)
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          aws s3 sync ./web/dist "s3://fas-apps/apps/console/" \
+            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
+            --delete \
+            --no-progress
+          echo "Deployed apps/console from ${GITHUB_SHA::7}"

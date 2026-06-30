@@ -1,0 +1,52 @@
+name: Deploy mcp
+
+# Deploys the freeappstore-mcp Worker (mcp.freeappstore.online) — MCP server.
+# Folded from the former freeappstore-online/mcp repo (2026-06-30, see
+# PLAN-CONSOLIDATE-PLATFORM.md).
+#
+# NOTE: mcp uses npm (package-lock.json), NOT pnpm like the other Workers (G1).
+# Worker name `freeappstore-mcp` is unchanged, so the Durable Object namespace
+# (FasMcpAgent) and its applied migrations carry over (G5).
+#
+# Dispatch-only for now: the standalone freeappstore-online/mcp repo still owns
+# auto-deploy until this is verified, then we archive that remote and enable the
+# push trigger below.
+
+on:
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'workers/mcp/**'
+  #     - '.github/workflows/deploy-mcp.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-mcp
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/mcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Deploy
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

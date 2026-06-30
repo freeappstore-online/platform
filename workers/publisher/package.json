@@ -1,0 +1,15 @@
+{
+  "name": "freeappstore-publisher",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.15",
+    "@vitest/coverage-v8": "^4.1.6",
+    "knip": "^6.14.0",
+    "vitest": "^4.1.5"
+  }
+}

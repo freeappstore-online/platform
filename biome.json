@@ -3,7 +3,7 @@
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/dist", "!**/node_modules", "!**/.vibe-check", "!workers"]
+    "includes": ["**", "!**/dist", "!**/node_modules", "!**/.vibe-check", "!workers", "!sites", "!brand", "!ops"]
   },
   "formatter": {
     "enabled": true,

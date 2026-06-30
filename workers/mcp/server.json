@@ -1,0 +1,38 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.freeappstore-online/mcp",
+  "description": "AI agent tools for FreeAppStore: deploy status, SDK docs, app info, platform guide.",
+  "repository": {
+    "url": "https://github.com/freeappstore-online/mcp",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.freeappstore.online/mcp"
+    }
+  ],
+  "tools": [
+    {
+      "name": "deploy_status",
+      "description": "Check GitHub Actions deploy status for any app (last 5 runs)"
+    },
+    {
+      "name": "app_info",
+      "description": "Get live URL, repo, store listing, and up/down status for any app"
+    },
+    {
+      "name": "sdk_reference",
+      "description": "Quick SDK reference for auth, KV, counters, collections, rooms, proxy, hooks, UI"
+    },
+    {
+      "name": "platform_guide",
+      "description": "Fetch the full SKILLS.md platform guide"
+    },
+    {
+      "name": "list_apps",
+      "description": "List your published apps (requires FAS session token)"
+    }
+  ]
+}

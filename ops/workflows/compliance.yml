@@ -1,0 +1,94 @@
+name: Platform Compliance
+
+# Single source of truth for compliance is the @freeappstore/compliance npm
+# package — its checks back both this CI workflow and the local `fas check`
+# command, so there's no drift between what we tell creators and what we
+# enforce. A small set of repo-shape checks that live outside the package
+# (license, env-file hygiene, etc.) stay inline below.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  compliance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      # Runs the same checks as `fas check`: no-placeholders, no-tracking,
+      # brand-fonts, manifest, bundle-size. Hard fails block the merge.
+      # `npm i --no-save` keeps the lockfile clean — this CI step doesn't
+      # need to touch the template's deps.
+      - name: Install compliance package
+        run: npm i --no-save @freeappstore/compliance@latest
+
+      # Package is ESM-only, so use --input-type=module and `import`.
+      - name: Run @freeappstore/compliance checks
+        run: |
+          node --input-type=module -e "
+            import { runChecks } from '@freeappstore/compliance';
+            const rs = await runChecks(process.cwd());
+            let failed = 0, warned = 0;
+            for (const r of rs) {
+              const icon = r.status === 'pass' ? '✓' : r.status === 'warn' ? '!' : '✗';
+              console.log(icon + '  ' + r.name + ' — ' + r.detail);
+              for (const s of (r.suggestions || [])) console.log('     → ' + s);
+              if (r.status === 'fail') failed++;
+              else if (r.status === 'warn') warned++;
+            }
+            console.log('');
+            console.log(failed > 0 ? ('✗ ' + failed + ' failed') : '✓ all hard checks passed');
+            if (warned > 0) console.log('  ' + warned + ' warning(s)');
+            if (failed > 0) process.exit(1);
+          "
+
+      # Repo-shape checks not (yet) covered by the npm package.
+      - name: MIT License
+        run: grep -qi "MIT" LICENSE
+
+      - name: No .env.production in repo
+        run: test ! -f .env.production && test ! -f web/.env.production
+
+      - name: CSS variables
+        run: |
+          CSS_FILE=$(find web/src -name "index.css" | head -1)
+          grep -q "\-\-paper" "$CSS_FILE"
+          grep -q "\-\-ink" "$CSS_FILE"
+          grep -q "\-\-accent" "$CSS_FILE"
+
+      - name: HTML meta tags
+        run: |
+          grep -q 'lang=' web/index.html
+          grep -q 'viewport' web/index.html
+          grep -q '<title>' web/index.html
+
+      - name: PWA meta tags
+        run: |
+          grep -qi "apple-mobile-web-app-capable\|mobile-web-app-capable" web/index.html
+
+      - name: FreeAppStore link
+        run: grep -r "freeappstore.online" web/src/ | grep -q .
+
+      - name: Dark mode
+        run: grep -rE "prefers-color-scheme|data-theme|color-scheme" web/src/ | grep -q .
+
+      - name: pnpm workspace
+        run: |
+          grep -q "pnpm" package.json
+          test -f pnpm-workspace.yaml

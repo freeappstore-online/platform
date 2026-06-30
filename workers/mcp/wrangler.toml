@@ -1,0 +1,22 @@
+name = "freeappstore-mcp"
+main = "src/index.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+API_BASE = "https://api.freeappstore.online"
+GITHUB_ORG = "freeappstore-online"
+AGENT_BASE = "https://agent.freeappstore.online"
+
+[[routes]]
+pattern = "mcp.freeappstore.online/*"
+zone_name = "freeappstore.online"
+
+[durable_objects]
+bindings = [
+  { name = "MCP_OBJECT", class_name = "FasMcpAgent" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FasMcpAgent"]

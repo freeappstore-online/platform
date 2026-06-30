@@ -1,0 +1,14 @@
+{
+  "name": "fas-console",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "engines": { "node": ">=22" },
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "repository": { "type": "git", "url": "git+https://github.com/freeappstore-online/console.git" },
+  "scripts": {
+    "dev": "pnpm --filter @fas-console/web dev",
+    "build": "pnpm --filter @fas-console/web build",
+    "preview": "pnpm --filter @fas-console/web preview",
+    "typecheck": "pnpm --filter @fas-console/web exec tsc -b"
+  }
+}
