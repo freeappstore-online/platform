@@ -344,7 +344,7 @@ cd my-app && pnpm dev`}
           Already have an app? Submit it for review and get listed on the store.
         </p>
         <a
-          href="https://publish.freeappstore.online"
+          href="https://create.freeappstore.online/publish"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2 text-sm font-medium text-[var(--ink)] hover:bg-[var(--panel-hover)] no-underline"

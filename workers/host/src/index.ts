@@ -36,13 +36,12 @@ const PLATFORM_SUBDOMAINS: Record<string, PlatformDispatch> = {
   docs: { type: "service", binding: "KB" },
   kb: { type: "service", binding: "KB" },
   compliance: { type: "proxy", target: "https://compliance.pages.dev" },
-  // `publish.freeappstore.online/*` is served by freeappstore-publisher
-  // (more-specific Worker Route — beats the wildcard that lands here).
-  // It exposes /api/me, /api/create called by
-  // console.freeappstore.online/publish. If publisher is ever decommissioned,
-  // those endpoints need to land on FAS platform backend first, and only
-  // then can a redirect entry be added here (keyed `publish`, not
-  // `publisher` — the former was a typo that meant the entry never fired).
+  // `publish.freeappstore.online` (freeappstore-publisher) was DECOMMISSIONED
+  // 2026-06-30. Its provisioning now lives on the platform backend at
+  // api.freeappstore.online/v1/publish (session-auth → admin Worker), which the
+  // create site's /publish page calls. The old subdomain is inert; if a stray
+  // bookmark needs catching, add a `publish` redirect entry here pointing at
+  // https://create.freeappstore.online/publish.
   submissions: { type: "proxy", target: "https://submissions.pages.dev" },
   agent: { type: "proxy", target: "https://agent.pages.dev" },
   // console and create serve from R2 via D1 routes rows.
