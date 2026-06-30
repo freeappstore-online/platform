@@ -178,3 +178,37 @@ From 15 non-app repos → **5** (or **4** if `freeappstore` also folds). `apps/*
 ## Open decision
 
 - **`freeappstore` — fold or keep separate?** Default in this plan: keep separate.
+
+## Repo-takeover / supply-chain risk assessment (2026-06-30)
+
+Verified after the consolidation + archival. **Overall risk: LOW.**
+
+- **Subdomain takeover — none.** `publish.freeappstore.online` (worker deleted)
+  resolves to Cloudflare-proxied IPs (104.21.x / 172.67.x), not an external CNAME
+  to a claimable SaaS. The orphaned DNS routes into CF where nothing serves it
+  (CF Access gate → dead end). No external resource for an attacker to provision.
+- **Repo-name reclamation — none.** All 9 retired repos (`admin`, `agent`, `host`,
+  `brand`, `ops`, `mcp`, `console`, `create`, `publisher`) are **archived, not
+  deleted** — the org still owns every name; none can be re-registered.
+- **Org-level guard — confirmed.** `freeappstore-online` has
+  `members_can_create_repositories: false` (public too), so even a freed name
+  couldn't be created by a non-owner.
+- **Templates — kept, not archived (correct).** `template-standalone` /
+  `template-connected` must stay clonable for `fas init`. They are the real
+  supply-chain surface (a malicious push to a template injects code into every
+  new app), but that's pre-existing and unchanged by this work.
+
+**Standing rules to keep this LOW (do not violate):**
+1. **Never hard-delete** the 9 archived repos. Archived (read-only, name-owned)
+   is the safe terminal state; deletion frees the public name for reclamation.
+2. **Never delete the template repos**, and treat write access to them as
+   privileged (supply-chain blast radius = every scaffolded app).
+3. **Keep org repo-creation locked.** Re-enabling it without a drift-reconcile
+   cron reopens both the takeover and the unregistered-repo-drift surfaces.
+4. The `publish.freeappstore.online` DNS record + CF Access app are harmless
+   orphans; deleting them (dashboard, needs DNS/Access scope) is tidy-up, not
+   security-critical.
+
+---
+*Consolidation session closed 2026-06-30. See git history on this repo for the
+full change set (commits from 586c0ae onward).*
