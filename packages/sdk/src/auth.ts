@@ -144,9 +144,18 @@ export class Auth {
     try {
       const user = await this.fetchUser(token);
       this.session = { token, user };
-      this.writeStorage(this.session);
+      // Emit/ensure BEFORE persisting: writeStorage() can throw in
+      // storage-restricted contexts (private-mode webviews, disabled/full
+      // localStorage). If it threw first, the in-memory session would be set but
+      // listeners never notified — the UI stays signed-out with the hash already
+      // cleared, stranding the user. A memory-only session is fine.
       this.emit();
       this.ensureMember();
+      try {
+        this.writeStorage(this.session);
+      } catch {
+        /* memory-only session; nothing more to do */
+      }
     } catch {
       // Token was invalid or network failed. Hash already cleared so the user
       // won't get stuck in a retry loop. Silently remain signed out.

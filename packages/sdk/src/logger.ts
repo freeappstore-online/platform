@@ -214,6 +214,20 @@ export class Logger {
   }
 
   private async uploadBatch(): Promise<void> {
+    // Serialize uploads: a manual flush() firing at the same instant as the
+    // interval tick would otherwise read the same watermark, slice the same
+    // batch, and POST it twice — the exact duplication the watermark prevents
+    // for serial uploads. Coalesce concurrent callers onto one in-flight upload.
+    if (this.uploading) return this.uploading;
+    this.uploading = this.doUploadBatch().finally(() => {
+      this.uploading = null;
+    });
+    return this.uploading;
+  }
+
+  private uploading: Promise<void> | null = null;
+
+  private async doUploadBatch(): Promise<void> {
     if (!this.auth.token) return;
 
     // Send the oldest not-yet-uploaded entries (a watermark over the stream),

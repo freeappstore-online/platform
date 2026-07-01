@@ -21,11 +21,15 @@ export const secretCommand = new Command('secret')
       .action(async (name: string, value: string, opts: { app?: string }) => {
         const cfg = await requireSession();
         const appId = await resolveAppIdOrExit(opts.app);
-        const res = await fetch(`${cfg.apiBase}/v1/apps/${appId}/secrets/${name}`, {
-          method: 'PUT',
-          headers: bearer(cfg),
-          body: JSON.stringify({ value }),
-        });
+        assertValidSecretName(name);
+        const res = await fetch(
+          `${cfg.apiBase}/v1/apps/${appId}/secrets/${encodeURIComponent(name)}`,
+          {
+            method: 'PUT',
+            headers: bearer(cfg),
+            body: JSON.stringify({ value }),
+          },
+        );
         if (!res.ok) await dieFromHttp(res, `set ${name}`);
         process.stdout.write(`✓ stored ${name} for ${appId}\n`);
       }),
@@ -67,10 +71,14 @@ export const secretCommand = new Command('secret')
       .action(async (name: string, opts: { app?: string }) => {
         const cfg = await requireSession();
         const appId = await resolveAppIdOrExit(opts.app);
-        const res = await fetch(`${cfg.apiBase}/v1/apps/${appId}/secrets/${name}`, {
-          method: 'DELETE',
-          headers: bearer(cfg),
-        });
+        assertValidSecretName(name);
+        const res = await fetch(
+          `${cfg.apiBase}/v1/apps/${appId}/secrets/${encodeURIComponent(name)}`,
+          {
+            method: 'DELETE',
+            headers: bearer(cfg),
+          },
+        );
         if (!res.ok) await dieFromHttp(res, `rm ${name}`);
         process.stdout.write(`✓ removed ${name} from ${appId}\n`);
       }),
@@ -87,6 +95,18 @@ export async function requireSession(): Promise<FasConfig> {
     process.exit(1);
   }
   return cfg;
+}
+
+// Secret names are uppercase env-style identifiers. Validate before building
+// the URL: an unvalidated name like `../allowlist` would collapse dot-segments
+// and target a different app resource (proxy allowlist) instead of a secret.
+export function assertValidSecretName(name: string): void {
+  if (!/^[A-Z][A-Z0-9_]{0,63}$/.test(name)) {
+    process.stderr.write(
+      `fas: invalid secret name "${name}" (use UPPER_SNAKE_CASE, e.g. OPENWEATHER_KEY).\n`,
+    );
+    process.exit(1);
+  }
 }
 
 export function bearer(cfg: FasConfig): Record<string, string> {
