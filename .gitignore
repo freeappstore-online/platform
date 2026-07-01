@@ -10,3 +10,7 @@ dist/
 coverage/
 .dev.vars
 .vibe-check/
+playwright-report/
+screencheck-out/
+test-results/
+.playwright-mcp/
