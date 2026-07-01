@@ -28,8 +28,20 @@ fas/platform/
 ├── packages/compliance  Compliance checks
 ├── packages/quality     VCQA quality scanner
 ├── packages/kb-host     Docs + KB host worker — docs/kb.freeappstore.online
-└── packages/e2e         End-to-end tests
+├── packages/e2e         End-to-end tests
+├── workers/admin        Provisioning + moderation — admin.freeappstore.online
+├── workers/agent        VibeCode AI app builder
+├── workers/host         R2 host worker — *.freeappstore.online
+├── workers/mcp          MCP server (12 tools) — mcp.freeappstore.online
+├── sites/console        Creator portal — console.freeappstore.online
+├── sites/create         VibeCode + self-service publish — create.freeappstore.online
+├── brand/               Brand assets + BRAND.md / SKILLS.md
+└── ops/                 Ops docs (DR, infra, submission) + scripts
 ```
+
+> `workers/*` and `sites/*` are self-contained projects (own `package.json` +
+> lockfile) outside the root pnpm workspace globs — folded in from their former
+> standalone repos during the 2026-06-30 consolidation.
 
 ## Services
 
@@ -39,25 +51,25 @@ fas/platform/
 | API | api.freeappstore.online | freeappstore-api |
 | Host | *.freeappstore.online | freeappstore-host |
 | Admin | admin.freeappstore.online | freeappstore-admin |
-| Console | console.freeappstore.online | CF Pages |
-| VibeCode | console.freeappstore.online/create | CF Pages |
-| Publisher | publish.freeappstore.online | freeappstore-publisher |
+| Console | console.freeappstore.online | R2 via host (Path B) |
+| VibeCode / Publish | create.freeappstore.online | R2 via host (Path B) |
 | Docs | docs.freeappstore.online | freeappstore-kb-host |
 | KB | kb.freeappstore.online | freeappstore-kb-host |
 | MCP | mcp.freeappstore.online | freeappstore-mcp |
 
 ## Companion repos
 
+All platform tooling (admin, agent, host, mcp, console, create, brand, ops) lives
+**in this monorepo** since the 2026-06-30 consolidation — those former standalone
+repos are archived. `publisher` was decommissioned (its provisioning is redundant
+with `backend /v1/publish`). Only these repos remain standalone:
+
 | Repo | Purpose |
 |------|---------|
-| `freeappstore/` | Static HTML storefront |
-| `admin/` | Provisioning + moderation worker |
-| `agent/` | VibeCode AI app builder |
-| `create/` | VibeCode React frontend |
-| `console/` | Creator portal |
-| `host/` | R2 host worker |
-| `mcp/` | MCP server (12 tools) |
-| `publisher/` | Self-service publish worker |
+| `freeappstore/` | Static HTML storefront (own deploy) |
+| `submissions/` | Public issue-intake repo (referenced by CLI + app READMEs) |
+| `template-connected/` | Clone-to-scaffold seed for `fas init` (must stay standalone) |
+| `template-standalone/` | Clone-to-scaffold seed for `fas init` (must stay standalone) |
 
 ## App hosting (Path B)
 

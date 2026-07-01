@@ -72,18 +72,18 @@ all legacy/stale leftovers removed.
 
 | Repo | Current role | Lands at | Deploy rewiring | Status |
 |---|---|---|---|---|
-| `mcp` | MCP server (`mcp.freeappstore.online`) | `workers/mcp/` | new `deploy-mcp.yml`, path-filtered. **Uses npm (`package-lock.json`), NOT pnpm** — `npm ci` + `npx wrangler deploy`, do NOT mirror the pnpm-based `deploy-admin.yml` install step. Keep `wrangler.toml` route `mcp.freeappstore.online/*`. Worker name `freeappstore-mcp` (no collision). | ⬜ |
-| `publisher` | Legacy publish Worker — still serves `/api/me`, `/api/create`, `/api/publish-existing` | `workers/publisher/` | **Source-only fold.** Publisher has NO CI deploy workflow today (deployed manually/historically); the live `freeappstore-publisher` worker is untouched by this move. Vendor the source in for retirement prep, then port the 3 endpoints into `packages/backend` and decommission. No `deploy-publisher.yml` until/unless we choose to manage it from CI. | ⬜ |
-| `console` | Creator portal SPA (`console.freeappstore.online`) | `sites/console/` | new `deploy-console.yml` — **hardcode R2 prefix `apps/console/`** (repo-name derivation `${GITHUB_REPOSITORY##*/}` resolves to `platform` in the monorepo). **Nested pnpm workspace** — see Gotcha G3. Needs R2 S3 secrets on platform repo — see G4. | ⬜ |
-| `create` | Onboarding/scaffold site | `sites/create/` | new `deploy-create.yml` — **hardcode R2 prefix `apps/create/`**. Same nested-workspace (G3) + R2-secrets (G4) caveats. | ⬜ |
-| `brand` | Brand assets + `BRAND.md`/`SKILLS.md` | `brand/` | none (content only). **Archive, don't delete** the remote — if any app references brand assets by raw URL, archived repos stay readable; deleting would break them. (No such refs found in `fas`/`landing`/`docs`, but apps/* not exhaustively scanned.) | ⬜ |
-| `ops` | Ops docs (DR, infra, submission) + scripts | `ops/` | none (content only). No URL refs to `freeappstore-online/ops` found. | ⬜ |
+| `mcp` | MCP server (`mcp.freeappstore.online`) | `workers/mcp/` | new `deploy-mcp.yml`, path-filtered. **Uses npm (`package-lock.json`), NOT pnpm** — `npm ci` + `npx wrangler deploy`, do NOT mirror the pnpm-based `deploy-admin.yml` install step. Keep `wrangler.toml` route `mcp.freeappstore.online/*`. Worker name `freeappstore-mcp` (no collision). | ✅ |
+| `publisher` | Legacy publish Worker — still serves `/api/me`, `/api/create`, `/api/publish-existing` | `workers/publisher/` | **Source-only fold.** Publisher has NO CI deploy workflow today (deployed manually/historically); the live `freeappstore-publisher` worker is untouched by this move. Vendor the source in for retirement prep, then port the 3 endpoints into `packages/backend` and decommission. No `deploy-publisher.yml` until/unless we choose to manage it from CI. | ✅ decommissioned (see log) |
+| `console` | Creator portal SPA (`console.freeappstore.online`) | `sites/console/` | new `deploy-console.yml` — **hardcode R2 prefix `apps/console/`** (repo-name derivation `${GITHUB_REPOSITORY##*/}` resolves to `platform` in the monorepo). **Nested pnpm workspace** — see Gotcha G3. Needs R2 S3 secrets on platform repo — see G4. | ✅ |
+| `create` | Onboarding/scaffold site | `sites/create/` | new `deploy-create.yml` — **hardcode R2 prefix `apps/create/`**. Same nested-workspace (G3) + R2-secrets (G4) caveats. | ✅ |
+| `brand` | Brand assets + `BRAND.md`/`SKILLS.md` | `brand/` | none (content only). **Archive, don't delete** the remote — if any app references brand assets by raw URL, archived repos stay readable; deleting would break them. (No such refs found in `fas`/`landing`/`docs`, but apps/* not exhaustively scanned.) | ✅ archived |
+| `ops` | Ops docs (DR, infra, submission) + scripts | `ops/` | none (content only). No URL refs to `freeappstore-online/ops` found. | ✅ archived |
 
 ## Delete (stale duplicate, no fold)
 
 | Repo | Why | Action | Status |
 |---|---|---|---|
-| `population-agent` (top-level clone) | Same remote as `apps/population-agent` — a stray duplicate clone on disk | Delete local clone; canonical stays in `apps/`. No archival. | ⬜ |
+| `population-agent` (top-level clone) | Same remote as `apps/population-agent` — a stray duplicate clone on disk | Delete local clone; canonical stays in `apps/`. No archival. | ✅ |
 
 ## Stays standalone (cannot / should not fold)
 
@@ -93,7 +93,7 @@ all legacy/stale leftovers removed.
 | `templates/template-connected` | `fas init` runs `git clone https://github.com/freeappstore-online/template-connected.git` — must remain a standalone, public, clonable repo. |
 | `templates/template-standalone` | Same — cloned by URL to scaffold new apps. |
 | `freeappstore` | Public storefront / marketing site (`freeappstore.online`), independent deploy. It is the product's public face, not dev tooling. **Default: keep separate.** Optional: could fold as `sites/storefront/` if desired. |
-| `apps/*` (109) | Published apps — one-repo-per-app by design (per-repo GitHub Actions → R2 + registry entry). Never fold. |
+| `apps/*` (~135 active in the org) | Published apps — one-repo-per-app by design (per-repo GitHub Actions → R2 + registry entry). Never fold. Many are throwaway test fixtures; reducing the count is a *pruning* (archive dead apps) task, not a consolidation one. |
 
 ## End-state `platform/` layout
 
@@ -125,7 +125,14 @@ use `--ignore-workspace`.
 | After admin/agent/host fold | 10 + 2 templates |
 | **After this plan** | **`platform` + `freeappstore` + `submissions` + 2 templates = 5** |
 
-From 15 non-app repos → **5** (or **4** if `freeappstore` also folds). `apps/*` (109) untouched throughout.
+From 15 non-app repos → **5** (or **4** if `freeappstore` also folds). `apps/*` untouched throughout.
+
+**Verified 2026-07-01:** org has 140 active + 14 archived repos. Of the 140 active,
+exactly 5 are infra/tooling (`platform`, `freeappstore`, `submissions`,
+`template-connected`, `template-standalone`); the remaining ~135 are app repos. The
+9 folded tooling repos (`admin`, `agent`, `host`, `mcp`, `console`, `create`, `brand`,
+`ops`, `publisher`) are all confirmed archived. **Tooling consolidation is complete —
+5 infra repos is the correct floor.**
 
 ## Prerequisites & gotchas (verified against the code 2026-06-30)
 
@@ -212,3 +219,9 @@ Verified after the consolidation + archival. **Overall risk: LOW.**
 ---
 *Consolidation session closed 2026-06-30. See git history on this repo for the
 full change set (commits from 586c0ae onward).*
+
+*Status reconciled 2026-07-01: the plan tables' `⬜` cells were stale — every item
+had already shipped per the execution log above. Flipped to `✅`, corrected the app
+count against the live org (~135, not 109), and confirmed all 9 tooling repos
+archived. The only outstanding tidy-up is deleting the harmless orphaned
+`publish.freeappstore.online` DNS record + CF Access app (needs dashboard scope).*
