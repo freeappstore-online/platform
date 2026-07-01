@@ -60,68 +60,88 @@ let created: FakeWebSocket[] = [];
 beforeEach(() => {
   created = [];
   (globalThis as Record<string, unknown>).WebSocket = FakeWebSocket;
+  // The client now exchanges the session token (header auth) for a short-lived
+  // room ticket before opening the socket. Mock that round-trip.
+  (globalThis as Record<string, unknown>).fetch = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ticket: 'tkt' }),
+  }));
 });
 
 afterEach(() => {
   delete (globalThis as Record<string, unknown>).WebSocket;
+  delete (globalThis as Record<string, unknown>).fetch;
   vi.useRealTimers();
 });
+
+// Connection is now async (ticket fetch → socket). Flush pending microtasks so
+// the fetch→json→WebSocket chain settles. Works under fake timers (microtasks
+// are not faked). Also drains any real timers if they're active.
+async function flush(): Promise<void> {
+  for (let i = 0; i < 6; i++) await Promise.resolve();
+}
 
 function fakeAuth(token: string | null): Auth {
   return { token } as unknown as Auth;
 }
 
-function newRoom(token: string | null = 'tok'): Room {
+async function newRoom(token: string | null = 'tok'): Promise<Room> {
   const rooms = new Rooms('demo', 'https://api.example', fakeAuth(token));
-  return rooms.join('lobby');
+  const room = rooms.join('lobby');
+  await flush();
+  return room;
 }
 
 describe('Room.connect — initial state', () => {
-  it('starts in connecting state and creates a WebSocket immediately', () => {
-    const room = newRoom();
+  it('starts in connecting state and creates a WebSocket with a ticket (not the session token)', async () => {
+    const room = await newRoom();
     expect(created).toHaveLength(1);
     expect(room.state).toBe('connecting');
     expect(created[0]!.url).toMatch(/wss:\/\/api\.example\/v1\/apps\/demo\/rooms\/lobby/);
-    expect(created[0]!.url).toContain('token=tok');
+    // The account session token must NOT be in the WS URL; only the ticket.
+    expect(created[0]!.url).toContain('ticket=tkt');
+    expect(created[0]!.url).not.toContain('token=');
   });
 
-  it('encodes appId and roomId in the URL path', () => {
+  it('encodes appId and roomId in the URL path', async () => {
     const rooms = new Rooms('app%name', 'https://api.example', fakeAuth('tok'));
     rooms.join('room/with/slashes');
+    await flush();
     expect(created[0]!.url).toContain('/v1/apps/app%25name/rooms/room%2Fwith%2Fslashes');
   });
 
-  it('with no auth token, sets state to closed and does NOT open a socket', () => {
-    const room = newRoom(null);
+  it('with no auth token, sets state to closed and does NOT open a socket', async () => {
+    const room = await newRoom(null);
     expect(created).toHaveLength(0);
     expect(room.state).toBe('closed');
   });
 
-  it('flips to open state when the socket opens', () => {
-    const room = newRoom();
+  it('flips to open state when the socket opens', async () => {
+    const room = await newRoom();
     created[0]!.triggerOpen();
     expect(room.state).toBe('open');
   });
 });
 
 describe('Room.onConnectionState', () => {
-  it('fires immediately with current state on subscribe', () => {
-    const room = newRoom();
+  it('fires immediately with current state on subscribe', async () => {
+    const room = await newRoom();
     const seen: string[] = [];
     room.onConnectionState((s) => seen.push(s));
     expect(seen).toEqual(['connecting']);
   });
 
-  it('fires on every state transition', () => {
-    const room = newRoom();
+  it('fires on every state transition', async () => {
+    const room = await newRoom();
     const seen: string[] = [];
     room.onConnectionState((s) => seen.push(s));
     created[0]!.triggerOpen();
     expect(seen).toEqual(['connecting', 'open']);
   });
 
-  it('does not fire when state is set to the same value', () => {
-    const room = newRoom();
+  it('does not fire when state is set to the same value', async () => {
+    const room = await newRoom();
     const seen: string[] = [];
     room.onConnectionState((s) => seen.push(s));
     // Trigger open twice — should only see one open transition.
@@ -130,8 +150,8 @@ describe('Room.onConnectionState', () => {
     expect(seen.filter((s) => s === 'open')).toHaveLength(1);
   });
 
-  it('returns an unsubscribe function', () => {
-    const room = newRoom();
+  it('returns an unsubscribe function', async () => {
+    const room = await newRoom();
     const seen: string[] = [];
     const unsub = room.onConnectionState((s) => seen.push(s));
     unsub();
@@ -141,21 +161,21 @@ describe('Room.onConnectionState', () => {
 });
 
 describe('Room.send', () => {
-  it('serializes data to a kind:msg envelope when socket is open', () => {
-    const room = newRoom();
+  it('serializes data to a kind:msg envelope when socket is open', async () => {
+    const room = await newRoom();
     created[0]!.triggerOpen();
     room.send({ hello: 'world' });
     expect(created[0]!.sent).toEqual([JSON.stringify({ kind: 'msg', data: { hello: 'world' } })]);
   });
 
-  it('silently drops messages when socket is not yet open (regression: no throw)', () => {
-    const room = newRoom();
+  it('silently drops messages when socket is not yet open (regression: no throw)', async () => {
+    const room = await newRoom();
     expect(() => room.send({ hello: 'world' })).not.toThrow();
     expect(created[0]!.sent).toEqual([]);
   });
 
-  it('silently drops messages after close', () => {
-    const room = newRoom();
+  it('silently drops messages after close', async () => {
+    const room = await newRoom();
     created[0]!.triggerOpen();
     room.close();
     room.send({ hello: 'world' });
@@ -165,8 +185,8 @@ describe('Room.send', () => {
 });
 
 describe('Room.onMessage', () => {
-  it('receives kind:msg frames as RoomMessage', () => {
-    const room = newRoom();
+  it('receives kind:msg frames as RoomMessage', async () => {
+    const room = await newRoom();
     created[0]!.triggerOpen();
     const messages: { from: RoomPeer; data: unknown; at: number }[] = [];
     room.onMessage((m) => messages.push(m));
@@ -183,8 +203,8 @@ describe('Room.onMessage', () => {
     expect(messages[0]!.data).toEqual({ text: 'hi' });
   });
 
-  it('ignores malformed JSON frames without throwing', () => {
-    const room = newRoom();
+  it('ignores malformed JSON frames without throwing', async () => {
+    const room = await newRoom();
     created[0]!.triggerOpen();
     const messages: unknown[] = [];
     room.onMessage((m) => messages.push(m));
@@ -192,8 +212,8 @@ describe('Room.onMessage', () => {
     expect(messages).toEqual([]);
   });
 
-  it('ignores frames with unknown `kind`', () => {
-    const room = newRoom();
+  it('ignores frames with unknown `kind`', async () => {
+    const room = await newRoom();
     created[0]!.triggerOpen();
     const messages: unknown[] = [];
     room.onMessage((m) => messages.push(m));
@@ -203,15 +223,15 @@ describe('Room.onMessage', () => {
 });
 
 describe('Room.onPeers', () => {
-  it('fires immediately with empty peers list on subscribe', () => {
-    const room = newRoom();
+  it('fires immediately with empty peers list on subscribe', async () => {
+    const room = await newRoom();
     const calls: RoomPeer[][] = [];
     room.onPeers((peers) => calls.push(peers));
     expect(calls).toEqual([[]]);
   });
 
-  it('updates on kind:peers frame', () => {
-    const room = newRoom();
+  it('updates on kind:peers frame', async () => {
+    const room = await newRoom();
     created[0]!.triggerOpen();
     const calls: RoomPeer[][] = [];
     room.onPeers((peers) => calls.push(peers));
@@ -233,8 +253,8 @@ describe('Room.onPeers', () => {
 });
 
 describe('Room.close', () => {
-  it('stops reconnect, clears listeners, sets state to closed', () => {
-    const room = newRoom();
+  it('stops reconnect, clears listeners, sets state to closed', async () => {
+    const room = await newRoom();
     const stateSeen: string[] = [];
     const messages: unknown[] = [];
     room.onConnectionState((s) => stateSeen.push(s));
@@ -249,9 +269,9 @@ describe('Room.close', () => {
     expect(created[0]!.sent.filter((s) => s.includes('"x":1'))).toEqual([]);
   });
 
-  it('cancels a pending reconnect timer', () => {
+  it('cancels a pending reconnect timer', async () => {
     vi.useFakeTimers();
-    const room = newRoom();
+    const room = await newRoom();
     created[0]!.triggerOpen();
     created[0]!.triggerClose(); // unexpected close → schedules reconnect
     expect(room.state).toBe('closed');
@@ -259,14 +279,15 @@ describe('Room.close', () => {
     room.close(); // user-initiated; should cancel reconnect
 
     vi.advanceTimersByTime(60_000); // jump past any backoff
+    await flush();
     expect(created).toHaveLength(1); // no second connect
   });
 });
 
 describe('Room reconnect on unexpected close', () => {
-  it('opens a new WebSocket after backoff', () => {
+  it('opens a new WebSocket after backoff', async () => {
     vi.useFakeTimers();
-    const room = newRoom();
+    const room = await newRoom();
     created[0]!.triggerOpen();
     expect(created).toHaveLength(1);
 
@@ -275,24 +296,26 @@ describe('Room reconnect on unexpected close', () => {
 
     // First reconnect attempt fires after RECONNECT_BASE_MS (1000ms) + jitter (up to 1000ms).
     vi.advanceTimersByTime(2100);
+    await flush(); // let the ticket fetch → socket chain settle
     expect(created.length).toBeGreaterThanOrEqual(2);
     expect(room.state).toBe('connecting');
   });
 
-  it('opens succeed → state goes back to open + reconnect counter resets', () => {
+  it('opens succeed → state goes back to open + reconnect counter resets', async () => {
     vi.useFakeTimers();
-    const room = newRoom();
+    const room = await newRoom();
     created[0]!.triggerOpen();
     created[0]!.triggerClose();
     vi.advanceTimersByTime(2100);
+    await flush();
     created[1]!.triggerOpen();
     expect(room.state).toBe('open');
   });
 });
 
 describe('Room error handling', () => {
-  it('socket error → state goes to error', () => {
-    const room = newRoom();
+  it('socket error → state goes to error', async () => {
+    const room = await newRoom();
     created[0]!.triggerError();
     expect(room.state).toBe('error');
   });

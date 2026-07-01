@@ -138,6 +138,10 @@ export class Room {
   }
 
   private connect(): void {
+    void this.connectAsync();
+  }
+
+  private async connectAsync(): Promise<void> {
     const token = this.auth.token;
     if (!token) {
       // Auth state may have changed (sign-out). Stop trying.
@@ -146,12 +150,36 @@ export class Room {
     }
     this.setState('connecting');
 
+    // Exchange the account session token (header auth, off the URL) for a
+    // short-lived room ticket, then put only the ticket in the WS URL. This
+    // keeps the account-wide token out of edge/proxy access logs.
+    let ticket: string;
+    try {
+      const res = await fetch(
+        new URL(
+          `/v1/apps/${encodeURIComponent(this.appId)}/rooms/${encodeURIComponent(this.roomId)}/ticket`,
+          this.apiBase,
+        ),
+        { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error(`ticket request failed (${res.status})`);
+      ticket = ((await res.json()) as { ticket: string }).ticket;
+    } catch (e) {
+      if (this.debug) console.warn('[rooms] ticket fetch failed', e);
+      this.setState('error');
+      this.scheduleReconnect();
+      return;
+    }
+
+    // The room may have been closed while the ticket request was in flight.
+    if (this.explicitlyClosed) return;
+
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/rooms/${encodeURIComponent(this.roomId)}`,
       this.apiBase,
     );
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    url.searchParams.set('token', token);
+    url.searchParams.set('ticket', ticket);
     const socket = new WebSocket(url.toString());
     this.socket = socket;
 
