@@ -42,7 +42,7 @@ export interface BuildMeta {
 
 // Must track package.json version — bumped on release. Guarded by version.test.ts
 // so a forgotten bump fails CI instead of silently misattributing telemetry.
-export const SDK_VERSION = '0.14.21';
+export const SDK_VERSION = '0.14.22';
 const MEMORY_LIMIT = 200;
 const STORAGE_LIMIT = 500;
 const STORAGE_KEY_PREFIX = 'fas_logs:';
