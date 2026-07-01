@@ -406,6 +406,20 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
     const incomingUrl = new URL(c.req.url);
     const upstreamUrl = `https://${host}/${restPath}${incomingUrl.search}`;
 
+    // Guard against host-injection: a `:host` like `api.x.com@evil.com` (userinfo
+    // trick) would pass a prefix-based allowlist rule (`https://api.x.com`) yet
+    // resolve to evil.com, exfiltrating the injected secret. Require the parsed
+    // host to equal the supplied segment before we look up any rule/key.
+    let parsedUpstream: URL;
+    try {
+      parsedUpstream = new URL(upstreamUrl);
+    } catch {
+      return c.json({ error: 'invalid upstream host' }, 400);
+    }
+    if (parsedUpstream.host.toLowerCase() !== host.toLowerCase()) {
+      return c.json({ error: 'invalid proxy host' }, 400);
+    }
+
     // Look up rules for the app, then pick the best match.
     const ruleRows = await c.env.DB.prepare(
       `SELECT pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at

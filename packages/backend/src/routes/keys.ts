@@ -221,8 +221,12 @@ keysRoutes.get('/keys', async (c) => {
     return c.json({ keys: rows.results });
   }
 
-  // HTML mode: render the key management page
-  const returnUrl = c.req.query('return') ?? '';
+  // HTML mode: render the key management page.
+  // returnUrl is attacker-supplied — only allow http(s) or same-origin relative
+  // paths, so a `javascript:`/`data:` scheme can't become a clickable XSS link.
+  const returnUrlRaw = c.req.query('return') ?? '';
+  const returnUrl =
+    /^https?:\/\//i.test(returnUrlRaw) || returnUrlRaw.startsWith('/') ? returnUrlRaw : '';
   const provider = c.req.query('provider') ?? '';
   const appId = c.req.query('app') ?? '';
   return c.html(renderKeysPage({ returnUrl, provider, appId }));
@@ -284,7 +288,7 @@ function renderKeysPage(opts: { returnUrl: string; provider: string; appId: stri
 (function() {
   var API = '/v1';
   var token = null;
-  var highlightProvider = ${JSON.stringify(provider)};
+  var highlightProvider = ${JSON.stringify(provider).replace(/</g, '\\u003c')};
 
   // Get session token from cookie or localStorage
   function getToken() {

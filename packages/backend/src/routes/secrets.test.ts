@@ -934,6 +934,31 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect(res.status).toBe(403);
   });
 
+  it('400s on host-injection (userinfo) instead of leaking the secret', async () => {
+    const data = freshData();
+    // Path-less rule — the vulnerable case a prefix match would wrongly accept.
+    await realSeed(data, 'X', 'sekret', {
+      pattern: 'https://api.example.com',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'X',
+      secret_name_2: null,
+      token_url: null,
+      methods: 'GET',
+    });
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    globalThis.fetch = fetchSpy as typeof fetch;
+    // `api.example.com@evil.com` prefix-matches the rule but resolves to evil.com.
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com@evil.com/x',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+    // Critical: the secret must never be forwarded to the injected host.
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('injects a query secret and forwards the request', async () => {
     const data = freshData();
     await realSeed(data, 'OPENWEATHER_KEY', 'sk-real', {

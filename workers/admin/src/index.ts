@@ -286,7 +286,8 @@ export default {
             steps.push({ name: "delete_repo", status: "fail", detail: String(e) });
           }
         }
-        return json({ ok: true, id: body.id, steps }, 200, request);
+        const ok = steps.every((s) => s.status !== "fail");
+        return json({ ok, id: body.id, steps }, ok ? 200 : 500, request);
       } catch (e) {
         return json({ error: "Deprovision failed" }, 500, request);
       }

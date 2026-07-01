@@ -471,6 +471,39 @@ describe('friends routes', () => {
     expect(data.status).toBe('accepted');
   });
 
+  it('PATCH /v1/friends/:userId accept enforces the friend cap (conditional UPDATE matches 0 rows)', async () => {
+    const db = {
+      prepare: (sql: string) => {
+        const trimmed = sql.replace(/\s+/g, ' ').trim();
+        const result = {
+          first: async () => {
+            if (trimmed.includes('FROM users')) return user1;
+            if (trimmed.includes('FROM friendships'))
+              return { status: 'pending', initiator: 'u2', blocker: null };
+            return null;
+          },
+          all: async () => ({ results: [] }),
+          // The cap-guarded UPDATE matches no rows when the accepter is at MAX.
+          run: async () => ({ meta: { changes: trimmed.startsWith('UPDATE friendships') ? 0 : 1 } }),
+        };
+        return { ...result, bind: (..._args: unknown[]) => result };
+      },
+    } as unknown as D1Database;
+
+    const res = await app.request(
+      '/v1/friends/u2',
+      {
+        method: 'PATCH',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accept' }),
+      },
+      env(db),
+    );
+    expect(res.status).toBe(409);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toContain('friend limit');
+  });
+
   it('PATCH /v1/friends/:userId rejects accepting own request', async () => {
     const db = {
       prepare: (sql: string) => {

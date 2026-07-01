@@ -113,11 +113,16 @@ friendsRoutes.post('/friends/request', async (c) => {
     }
     // Pending from them — auto-accept (mutual request)
     if (existing.status === 'pending' && existing.initiator !== me.id) {
-      await c.env.DB.prepare(
-        'UPDATE friendships SET status = ?, updated_at = ? WHERE user_a = ? AND user_b = ?',
+      // Enforce the accepter's friend cap here too (the INSERT-side cap below
+      // only guards the initiator). Conditional UPDATE keeps it TOCTOU-safe.
+      const acc = await c.env.DB.prepare(
+        `UPDATE friendships SET status = 'accepted', updated_at = ?
+         WHERE user_a = ? AND user_b = ? AND status = 'pending'
+           AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted') < ?`,
       )
-        .bind('accepted', now, a, b)
+        .bind(now, a, b, me.id, me.id, MAX_FRIENDS)
         .run();
+      if (!acc.meta.changes) throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
       await dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
         userId: me.id,
         friendId: body.userId,
@@ -183,11 +188,14 @@ friendsRoutes.post('/friends/request', async (c) => {
         .bind(a, b)
         .first<{ status: string; initiator: string }>();
       if (row?.status === 'pending' && row.initiator !== me.id) {
-        await c.env.DB.prepare(
-          'UPDATE friendships SET status = ?, updated_at = ? WHERE user_a = ? AND user_b = ?',
+        const acc = await c.env.DB.prepare(
+          `UPDATE friendships SET status = 'accepted', updated_at = ?
+           WHERE user_a = ? AND user_b = ? AND status = 'pending'
+             AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted') < ?`,
         )
-          .bind('accepted', now, a, b)
+          .bind(now, a, b, me.id, me.id, MAX_FRIENDS)
           .run();
+        if (!acc.meta.changes) throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
         await dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
           userId: me.id,
           friendId: body.userId,
@@ -297,11 +305,14 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
     if (!row || row.status !== 'pending') throw new HttpError(404, 'no pending request');
     if (row.initiator === me.id) throw new HttpError(400, 'cannot accept your own request');
 
-    await c.env.DB.prepare(
-      'UPDATE friendships SET status = ?, updated_at = ? WHERE user_a = ? AND user_b = ?',
+    const acc = await c.env.DB.prepare(
+      `UPDATE friendships SET status = 'accepted', updated_at = ?
+       WHERE user_a = ? AND user_b = ? AND status = 'pending'
+         AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted') < ?`,
     )
-      .bind('accepted', now, a, b)
+      .bind(now, a, b, me.id, me.id, MAX_FRIENDS)
       .run();
+    if (!acc.meta.changes) throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
     await dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
       userId: me.id,
       friendId: targetId,

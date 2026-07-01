@@ -39,6 +39,12 @@ interface EmailMagicState {
 const STATE_TTL_SECONDS = 10 * 60;
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
+// Best-effort per-recipient throttle for magic-link sends (per-isolate, same
+// pattern as friends.ts rate limits). Stops an unauthenticated caller from
+// email-bombing a victim address / burning the Resend quota.
+const EMAIL_SEND_COOLDOWN_MS = 60_000;
+const emailSendMap = new Map<string, number>();
+
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
 authRoutes.get('/auth/github/start', async (c) => {
@@ -384,6 +390,20 @@ authRoutes.post('/auth/email/start', async (c) => {
   const email = normalizeEmail(rawEmail);
   if (!isLikelyEmail(email)) return c.text('invalid email', 400);
   if (!isAllowedReturnTo(returnTo, appId)) return c.text('returnTo not allowed', 400);
+
+  // Per-recipient send throttle. Silently succeed (don't leak account presence
+  // or give an abuse oracle) but skip the actual send if within the cooldown.
+  const nowMs = Date.now();
+  if (emailSendMap.size > 5000) {
+    for (const [k, t] of emailSendMap) {
+      if (nowMs - t > EMAIL_SEND_COOLDOWN_MS) emailSendMap.delete(k);
+    }
+  }
+  const lastSend = emailSendMap.get(email) ?? 0;
+  if (nowMs - lastSend < EMAIL_SEND_COOLDOWN_MS) {
+    return c.json({ ok: true });
+  }
+  emailSendMap.set(email, nowMs);
 
   const token = await signPayload<EmailMagicState>(
     {

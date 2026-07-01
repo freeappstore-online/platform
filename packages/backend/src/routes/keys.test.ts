@@ -153,4 +153,29 @@ describe('keys routes', () => {
     const data = (await res.json()) as { keys: unknown[] };
     expect(data.keys).toHaveLength(1);
   });
+
+  it('GET /v1/keys HTML mode does not let ?provider break out of the inline script (XSS)', async () => {
+    const payload = "</script><script>alert(1)</script>";
+    const res = await app.request(
+      `/v1/keys?provider=${encodeURIComponent(payload)}`,
+      {},
+      env(fakeDB({})),
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    // The raw closing tag must not appear — it must be escaped to <.
+    expect(html).not.toContain('</script><script>alert(1)');
+    expect(html).toContain('\\u003c/script');
+  });
+
+  it('GET /v1/keys HTML mode drops a javascript: return URL (no clickable XSS link)', async () => {
+    const res = await app.request(
+      `/v1/keys?app=demo&return=${encodeURIComponent('javascript:alert(1)')}`,
+      {},
+      env(fakeDB({})),
+    );
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).not.toContain('javascript:alert(1)');
+  });
 });

@@ -496,10 +496,18 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
               if (!line) continue;
               try {
                 const ev = JSON.parse(line.slice(6));
-                if (ev.type === "deploy" && ev.data) {
-                  try { const d = JSON.parse(ev.data); if (d.phase) phases.push(d.phase); if (d.appId) appId = d.appId; } catch { /* */ }
+                // The agent DO emits deploy progress as `deploy_status` (not
+                // `deploy`), and carries the URL only on the live phase — never a
+                // top-level appId. Derive the id from the live appUrl.
+                if (ev.type === "deploy_status" && ev.data) {
+                  try {
+                    const d = JSON.parse(ev.data);
+                    if (d.phase) phases.push(d.phase);
+                    if (d.phase === "live" && d.appUrl) {
+                      appId = String(d.appUrl).replace(/^https?:\/\//, "").split(".")[0];
+                    }
+                  } catch { /* */ }
                 }
-                if (ev.appId) appId = ev.appId;
               } catch { /* */ }
             }
           }
