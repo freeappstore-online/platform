@@ -79,10 +79,13 @@ webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
   }
   if (parsed.protocol !== 'https:')
     return c.json({ ok: false, error: 'Webhook URL must use HTTPS' }, 400);
-  const host = parsed.hostname.toLowerCase();
+  // Strip IPv6 brackets so the fc00::/7 (fc/fd) ULA checks below actually fire —
+  // `new URL('https://[fc00::1]/').hostname` is `[fc00::1]`, not `fc00::1`.
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (
     host === 'localhost' ||
     host === '127.0.0.1' ||
+    host === '::1' ||
     host === '[::1]' ||
     host === '0.0.0.0' ||
     host.endsWith('.local') ||
@@ -217,24 +220,28 @@ export async function dispatchWebhookPlatform(
     .bind(event, userIds[0], userIds[1])
     .all<{ id: string; app_id: string; url: string; secret: string }>();
 
-  for (const hook of hooks.results ?? []) {
-    const deliveryId = crypto.randomUUID();
-    const body = JSON.stringify({ ...payload, event, appId: hook.app_id, timestamp: Date.now() });
+  // Deliver in parallel: a slow/hung hook must not serialize behind the others
+  // (each fetch is already bounded by the 5s timeout in deliverWebhook).
+  await Promise.allSettled(
+    (hooks.results ?? []).map(async (hook) => {
+      const deliveryId = crypto.randomUUID();
+      const body = JSON.stringify({ ...payload, event, appId: hook.app_id, timestamp: Date.now() });
 
-    await db
-      .prepare(
-        'INSERT INTO webhook_deliveries (id, webhook_id, event, payload, attempts, created_at) VALUES (?, ?, ?, ?, 1, ?)',
-      )
-      .bind(deliveryId, hook.id, event, body, Math.floor(Date.now() / 1000))
-      .run();
+      await db
+        .prepare(
+          'INSERT INTO webhook_deliveries (id, webhook_id, event, payload, attempts, created_at) VALUES (?, ?, ?, ?, 1, ?)',
+        )
+        .bind(deliveryId, hook.id, event, body, Math.floor(Date.now() / 1000))
+        .run();
 
-    const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body));
+      const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body));
 
-    await db
-      .prepare('UPDATE webhook_deliveries SET status = ?, last_attempt_at = ? WHERE id = ?')
-      .bind(result.status, Math.floor(Date.now() / 1000), deliveryId)
-      .run();
-  }
+      await db
+        .prepare('UPDATE webhook_deliveries SET status = ?, last_attempt_at = ? WHERE id = ?')
+        .bind(result.status, Math.floor(Date.now() / 1000), deliveryId)
+        .run();
+    }),
+  );
 }
 
 async function deliverWebhook(
@@ -267,6 +274,8 @@ async function deliverWebhook(
         'X-FAS-Event': event,
       },
       body,
+      // Bound delivery so a tar-pit endpoint can't hang the triggering request.
+      signal: AbortSignal.timeout(5000),
     });
     const text = await res.text().catch(() => '');
     return { status: res.status, body: text.slice(0, 1000) };

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
 /**
@@ -216,7 +217,7 @@ rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 
-  if (body.proof !== expected) {
+  if (!timingSafeEqual(body.proof, expected)) {
     return c.json({ error: 'invalid proof' }, 403);
   }
 

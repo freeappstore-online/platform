@@ -15,6 +15,7 @@ function fakeDB(opts: {
       const trimmed = sql.replace(/\s+/g, ' ').trim();
       const result = {
         first: async () => {
+          if (trimmed.includes('FROM apps')) return { ok: 1 };
           if (trimmed.includes('FROM users')) return opts.user ?? null;
           if (trimmed.includes('COUNT(*)'))
             return { cnt: opts.docCount ?? 0, total: opts.docCount ?? 0 };
@@ -65,6 +66,48 @@ describe('db (collections) routes', () => {
     const data = (await res.json()) as { id: string; title: string };
     expect(data.title).toBe('Hello');
     expect(typeof data.id).toBe('string');
+  });
+
+  it('POST returns 404 for an unknown app (quota-reset guard)', async () => {
+    // Same harness, but the apps existence lookup returns null.
+    const db = {
+      prepare: (sql: string) => {
+        const trimmed = sql.replace(/\s+/g, ' ').trim();
+        const result = {
+          first: async () => (trimmed.includes('FROM users') ? user : null),
+          all: async () => ({ results: [] }),
+          run: async () => ({ meta: { changes: 1 } }),
+        };
+        return { ...result, bind: (..._a: unknown[]) => result };
+      },
+    } as unknown as D1Database;
+    const res = await app.request(
+      '/v1/apps/no-such-app/db/posts',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: 'Hello' }),
+      },
+      env(db),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('POST create response uses the server id, not a client-supplied id', async () => {
+    const res = await app.request(
+      '/v1/apps/timer/db/posts',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'client-chosen', title: 'Hello' }),
+      },
+      env(fakeDB({ user, docCount: 0 })),
+    );
+    expect(res.status).toBe(201);
+    const data = (await res.json()) as { id: string; title: string };
+    // The row is stored under a generated id; the response must not echo the
+    // client's id (else GET by that id 404s).
+    expect(data.id).not.toBe('client-chosen');
   });
 
   it('POST rejects invalid collection name', async () => {

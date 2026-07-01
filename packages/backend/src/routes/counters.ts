@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
@@ -56,6 +57,7 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
   try {
     await requireUser(c);
     const { appId, key } = c.req.param();
+    if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
 
     if (key.length > MAX_KEY_LENGTH) {
       return c.text(`counter key exceeds ${MAX_KEY_LENGTH} chars`, 400);

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
@@ -51,9 +52,12 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
 
     const colErr = validateCollection(collection);
     if (colErr) return c.text(colErr, 400);
+    if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
 
     const body = await c.req.text();
-    if (body.length > MAX_DOC_BYTES) {
+    // Measure UTF-8 bytes: D1 stores TEXT as UTF-8, so `body.length` (UTF-16
+    // code units) under-counts multibyte content and lets the cap be exceeded.
+    if (new TextEncoder().encode(body).length > MAX_DOC_BYTES) {
       return c.text(`document exceeds ${MAX_DOC_BYTES} bytes`, 413);
     }
 
@@ -88,7 +92,9 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
       .bind(appId, collection, id, body, user.id, now, now)
       .run();
 
-    return c.json({ id, ...data }, 201);
+    // `id` last: a client-supplied `data.id` must not shadow the server id in
+    // the response (the row is stored under the generated id).
+    return c.json({ ...data, id }, 201);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
@@ -208,7 +214,7 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
     if (existing.owner_id !== user.id) return c.text('forbidden', 403);
 
     const body = await c.req.text();
-    if (body.length > MAX_DOC_BYTES) {
+    if (new TextEncoder().encode(body).length > MAX_DOC_BYTES) {
       return c.text(`document exceeds ${MAX_DOC_BYTES} bytes`, 413);
     }
 
@@ -226,7 +232,7 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
     const merged = { ...existingData, ...patch };
     const mergedJson = JSON.stringify(merged);
 
-    if (mergedJson.length > MAX_DOC_BYTES) {
+    if (new TextEncoder().encode(mergedJson).length > MAX_DOC_BYTES) {
       return c.text(`merged document exceeds ${MAX_DOC_BYTES} bytes`, 413);
     }
 

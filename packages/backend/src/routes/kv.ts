@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
 import { checkKvWrite, KV_LIMITS } from '../lib/quota.js';
 import type { Env } from '../types.js';
@@ -68,6 +69,10 @@ kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
   try {
     const user = await requireUser(c);
     const { appId, key } = c.req.param();
+    if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
+    // Cap key length: keys are stored but not metered against the value quota,
+    // so an unbounded key would bypass the per-user byte cap.
+    if (key.length > 512) return c.text('key too long (max 512 chars)', 400);
     const body = await c.req.arrayBuffer();
     if (body.byteLength === 0) {
       // An empty body would store 0 bytes; subsequent kv.get() on the SDK

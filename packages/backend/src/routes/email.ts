@@ -9,6 +9,7 @@
  */
 
 import { Hono } from 'hono';
+import { appExists } from '../lib/apps.js';
 import { requireUser } from '../lib/auth.js';
 import { isLikelyEmail, sendEmail } from '../lib/email.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
@@ -17,6 +18,7 @@ import type { Env } from '../types.js';
 export const emailRoutes = new Hono<{ Bindings: Env }>();
 
 const DAILY_EMAIL_LIMIT = 100;
+const DAILY_EMAIL_LIMIT_PER_USER = 50;
 const MAX_SUBJECT_LENGTH = 200;
 const MAX_BODY_LENGTH = 50_000; // 50KB
 
@@ -31,6 +33,12 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
   }
 
   const appId = c.req.param('appId')!;
+  // Require a real app — otherwise the per-app quota is trivially reset by
+  // rotating the id, turning this into an unbounded relay from the platform's
+  // verified sending domain.
+  if (!(await appExists(c.env, appId))) {
+    return c.json({ ok: false, error: 'unknown app' }, 404);
+  }
   const body = await c.req
     .json<{
       to: string;
@@ -65,17 +73,34 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
     return c.json({ ok: false, error: `Text body too large (max ${MAX_BODY_LENGTH} chars).` }, 413);
   }
 
-  // Daily rate limit per app
+  // Daily rate limit per app…
+  const now = Date.now();
   const usage = await checkAndBump(d1UsageStore(c.env.DB), {
     appId: `email:${appId}`,
     dailyLimit: DAILY_EMAIL_LIMIT,
-    nowMs: Date.now(),
+    nowMs: now,
   });
   if (!usage.allowed) {
     return c.json(
       {
         ok: false,
         error: `Daily email limit reached (${DAILY_EMAIL_LIMIT}/day per app). Resets at midnight UTC.`,
+      },
+      429,
+    );
+  }
+  // …and per user, so one account can't burn an app's whole quota (and can't
+  // reset it by rotating appId).
+  const userUsage = await checkAndBump(d1UsageStore(c.env.DB), {
+    appId: `email-user:${_user.id}`,
+    dailyLimit: DAILY_EMAIL_LIMIT_PER_USER,
+    nowMs: now,
+  });
+  if (!userUsage.allowed) {
+    return c.json(
+      {
+        ok: false,
+        error: `Daily email limit reached (${DAILY_EMAIL_LIMIT_PER_USER}/day per user). Resets at midnight UTC.`,
       },
       429,
     );

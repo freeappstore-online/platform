@@ -15,6 +15,7 @@ function fakeDB(opts: {
       const trimmed = sql.replace(/\s+/g, ' ').trim();
       const result = {
         first: async () => {
+          if (trimmed.includes('FROM apps')) return { ok: 1 };
           if (trimmed.includes('FROM users')) return opts.user ?? null;
           if (trimmed.includes('SELECT value FROM counters')) {
             const key = Object.keys(opts.counters ?? {})[0];

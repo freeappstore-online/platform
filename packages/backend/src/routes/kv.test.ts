@@ -32,6 +32,7 @@ function fakeDB(opts: {
       },
       first: async <T>() => {
         calls.push({ sql: trimmed, args: bound });
+        if (trimmed.includes('FROM apps')) return { ok: 1 } as T;
         if (trimmed.startsWith('SELECT id, github_login')) {
           return (opts.user ?? null) as T | null;
         }

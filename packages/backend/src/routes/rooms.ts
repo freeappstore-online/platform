@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { appExists } from '../lib/apps.js';
 import { verifySession } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -22,6 +23,9 @@ roomRoutes.get('/apps/:appId/rooms/:roomId', async (c) => {
   if (!user) return c.text('user not found', 401);
 
   const { appId, roomId } = c.req.param();
+  // Require a real app so a caller can't spin up unbounded Durable Objects under
+  // arbitrary appIds. (Note: the per-app 64-room cap still needs a coordinator.)
+  if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
   const id = c.env.ROOM.idFromName(`${appId}:${roomId}`);
   const stub = c.env.ROOM.get(id);
   const url = new URL(c.req.url);
