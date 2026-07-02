@@ -54,6 +54,13 @@ function fakeDB(rows: { apps?: AppRow[]; users?: UserRow[] } = {}): D1Database {
               meta: {},
             } as unknown as D1Result<T>;
           }
+          if (trimmed.startsWith('SELECT id, owner_login FROM apps')) {
+            return {
+              results: apps as unknown as T[],
+              success: true,
+              meta: {},
+            } as unknown as D1Result<T>;
+          }
           return {
             results: [] as unknown as T[],
             success: true,
@@ -225,5 +232,28 @@ describe('GET /v1/apps/mine', () => {
     );
     const body = (await res.json()) as { apps: Array<{ repoUrl: string }> };
     expect(body.apps[0]!.repoUrl).toBe('https://github.com/freeappstore-online/tip');
+  });
+});
+
+describe('GET /v1/apps/creators', () => {
+  const row = (id: string, owner: string): AppRow => ({
+    id,
+    owner_login: owner,
+    created_at: 0,
+    category: null,
+    type: null,
+    oneliner: null,
+    repo: null,
+    demo: null,
+  });
+
+  it('returns the public id→owner map with no auth', async () => {
+    const env = baseEnv(
+      fakeDB({ apps: [row('typeflow', 'abid8195'), row('snowman', 'dawsonhuang0')] }),
+    );
+    const res = await app.request('/v1/apps/creators', {}, env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { creators: Record<string, string> };
+    expect(body.creators).toEqual({ typeflow: 'abid8195', snowman: 'dawsonhuang0' });
   });
 });

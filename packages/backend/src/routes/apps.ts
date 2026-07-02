@@ -67,3 +67,25 @@ appsRoutes.get('/apps/mine', async (c) => {
 
   return c.json({ apps });
 });
+
+/**
+ * Public creator feed: `{ creators: { <appId>: <ownerLogin> } }` straight from
+ * D1 (the source of truth). The storefront `registry.json` is a static file that
+ * can drift from D1 on ownership changes; the reconcile script pulls this at
+ * deploy time to re-sync `creatorGithub` without giving the storefront runtime
+ * DB access. owner_login is already public (shown on every app page), so no auth.
+ */
+appsRoutes.get('/apps/creators', async (c) => {
+  const result = await c.env.DB.prepare(
+    "SELECT id, owner_login FROM apps WHERE store IS NULL OR store = 'apps'",
+  ).all<{ id: string; owner_login: string }>();
+  const creators: Record<string, string> = {};
+  for (const r of result.results ?? []) {
+    if (r.owner_login) creators[r.id] = r.owner_login;
+  }
+  return c.json(
+    { creators },
+    200,
+    { 'Cache-Control': 'public, max-age=300' },
+  );
+});
