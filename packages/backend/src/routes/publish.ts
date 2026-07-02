@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { HttpError, isAdminLogin, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const publishRoutes = new Hono<{ Bindings: Env }>();
@@ -16,9 +16,19 @@ interface PublishBody {
   description: string;
   repo: string | null;
   demo: string | null;
+  /**
+   * Attribute the app to a different creator than the publisher — for onboarding
+   * a contributor's app on their behalf. Admin-only (a regular publisher is
+   * always recorded as the creator, so nobody can spoof credit). Defaults to the
+   * publisher's login.
+   */
+  creatorGithub?: string;
 }
 
 const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
+// GitHub username rules: 1–39 chars, alphanumeric or single hyphens (not
+// leading/trailing/doubled).
+const GITHUB_LOGIN_RE = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
 
 const VALID_CATEGORIES = [
   'Learning', 'Strategy', 'Discovery', 'Brain Training', 'Social',
@@ -101,6 +111,20 @@ publishRoutes.post('/publish', async (c) => {
   }
   const meta = STORE_DOMAIN[store];
 
+  // Resolve the creator. Defaults to the publisher; only an admin may attribute
+  // an app to a different user (contributor onboarding), so a regular publisher
+  // can't spoof credit to (or blame) someone else.
+  let creatorGithub = user.githubLogin;
+  if (body.creatorGithub && body.creatorGithub !== user.githubLogin) {
+    if (!isAdminLogin(user.githubLogin, c.env)) {
+      return c.text('only admins may set creatorGithub for another user', 403);
+    }
+    if (!GITHUB_LOGIN_RE.test(body.creatorGithub)) {
+      return c.text('invalid creatorGithub', 400);
+    }
+    creatorGithub = body.creatorGithub;
+  }
+
   if (!c.env.ADMIN) {
     return c.json(
       {
@@ -134,8 +158,8 @@ publishRoutes.post('/publish', async (c) => {
       description: body.oneliner,
       store,
       type: body.type,
-      githubLogin: user.githubLogin,
-      creatorGithub: user.githubLogin,
+      githubLogin: creatorGithub,
+      creatorGithub,
       repo: body.repo,
       demo: body.demo,
     }),
@@ -188,7 +212,7 @@ publishRoutes.post('/publish', async (c) => {
     )
       .bind(
         body.name,
-        user.githubLogin,
+        creatorGithub,
         Date.now(),
         body.category,
         body.type,

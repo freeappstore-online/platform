@@ -205,6 +205,70 @@ describe('POST /v1/publish', () => {
     expect(appInsert!.binds[7]).toBeNull();
   });
 
+  it('lets an admin attribute the app to a different creator (contributor onboarding)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const calls: AdminCall[] = [];
+    const inserts: InsertCapture[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+      capture: calls,
+    });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, creatorGithub: 'abid8195' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, inserts), {
+        ADMIN: admin,
+        ADMIN_GITHUB_LOGINS: 'me',
+      }),
+    );
+    expect(res.status).toBe(200);
+    // Registry credit goes to the contributor…
+    const sentBody = JSON.parse(calls[0]!.init.body as string);
+    expect(sentBody.creatorGithub).toBe('abid8195');
+    // …and so does the D1 ownership row.
+    const appInsert = inserts.find((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'));
+    expect(appInsert!.binds[1]).toBe('abid8195');
+  });
+
+  it('forbids a non-admin from attributing the app to someone else', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, creatorGithub: 'someone-else' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), {
+        ADMIN_GITHUB_LOGINS: '', // caller is not an admin
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 400 for an invalid creatorGithub (admin)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, creatorGithub: 'bad login!' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), {
+        ADMIN_GITHUB_LOGINS: 'me',
+      }),
+    );
+    expect(res.status).toBe(400);
+  });
+
   it('returns 502 when admin returns 5xx', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
     const admin = fakeAdmin({ response: new Response('upstream boom', { status: 500 }) });
