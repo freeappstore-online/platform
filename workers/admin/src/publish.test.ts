@@ -3,16 +3,34 @@ import { type GhFn, handlePublish, insertHostRoute, writeRegistryWithRetry } fro
 
 // ── Helpers ──
 
-function fakeDB(opts?: { shouldThrow?: boolean }) {
+interface StmtCapture {
+  sql: string;
+  binds: unknown[];
+}
+
+function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[] }) {
+  const makeStmt = (sql: string) => {
+    const stmt: { sql: string; binds: unknown[]; bind: (...a: unknown[]) => unknown; run: () => Promise<unknown> } = {
+      sql: sql.replace(/\s+/g, " ").trim(),
+      binds: [],
+      bind: (...args: unknown[]) => {
+        stmt.binds = args;
+        return stmt;
+      },
+      run: async () => {
+        if (opts?.shouldThrow) throw new Error("D1 constraint error");
+        return { meta: { changes: 1 } };
+      },
+    };
+    return stmt;
+  };
   return {
-    prepare: () => ({
-      bind: () => ({
-        run: async () => {
-          if (opts?.shouldThrow) throw new Error("D1 constraint error");
-          return { meta: { changes: 1 } };
-        },
-      }),
-    }),
+    prepare: (sql: string) => makeStmt(sql),
+    batch: async (stmts: StmtCapture[]) => {
+      if (opts?.shouldThrow) throw new Error("D1 constraint error");
+      opts?.capture?.push(...stmts.map((s) => ({ sql: s.sql, binds: s.binds })));
+      return stmts.map(() => ({ meta: { changes: 1 } }));
+    },
   } as unknown as D1Database;
 }
 
@@ -96,6 +114,44 @@ describe("insertHostRoute", () => {
     const result = await insertHostRoute(env, req, config);
     expect(result.status).toBe("fail");
     expect(result.detail).toContain("D1 constraint error");
+  });
+
+  it("writes the routes row AND the apps ownership row in one atomic batch", async () => {
+    const capture: StmtCapture[] = [];
+    const env = baseEnv({ DB: fakeDB({ capture }) });
+    const req = baseReq({ id: "kanban", creatorGithub: "abid8195", category: "Productivity", type: "connected", description: "Boards", repo: "abid8195/kanban", demo: "https://demo.example" });
+    const config = { org: "freeappstore-online", domain: "freeappstore.online", registryKey: "apps" } as any;
+    const result = await insertHostRoute(env, req, config);
+    expect(result.status).toBe("ok");
+    expect(result.detail).toContain("owner abid8195");
+
+    // Both statements land in the same batch() call — that's the atomicity.
+    expect(capture).toHaveLength(2);
+    const routesStmt = capture.find((s) => s.sql.startsWith("INSERT INTO routes"));
+    const appsStmt = capture.find((s) => s.sql.startsWith("INSERT OR IGNORE INTO apps"));
+    expect(routesStmt).toBeDefined();
+    expect(appsStmt).toBeDefined();
+    // apps binds: id, owner_login, created_at, category, type, oneliner, repo, demo, store
+    expect(appsStmt!.binds[0]).toBe("kanban");
+    expect(appsStmt!.binds[1]).toBe("abid8195");
+    expect(typeof appsStmt!.binds[2]).toBe("number");
+    expect(appsStmt!.binds[3]).toBe("Productivity");
+    expect(appsStmt!.binds[4]).toBe("connected");
+    expect(appsStmt!.binds[5]).toBe("Boards");
+    expect(appsStmt!.binds[6]).toBe("abid8195/kanban");
+    expect(appsStmt!.binds[7]).toBe("https://demo.example");
+    expect(appsStmt!.binds[8]).toBe("apps");
+  });
+
+  it("falls back to the org as owner when no creatorGithub is given", async () => {
+    const capture: StmtCapture[] = [];
+    const env = baseEnv({ DB: fakeDB({ capture }) });
+    const req = baseReq({ id: "orphanless", creatorGithub: undefined });
+    const config = { org: "freeappstore-online", domain: "freeappstore.online", registryKey: "apps" } as any;
+    const result = await insertHostRoute(env, req, config);
+    expect(result.status).toBe("ok");
+    const appsStmt = capture.find((s) => s.sql.startsWith("INSERT OR IGNORE INTO apps"));
+    expect(appsStmt!.binds[1]).toBe("freeappstore-online");
   });
 });
 

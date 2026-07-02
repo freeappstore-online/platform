@@ -200,37 +200,14 @@ publishRoutes.post('/publish', async (c) => {
     );
   }
 
-  // Record this app/game as owned by the user so `fas list` / GET /v1/apps/mine
-  // can return it. INSERT OR IGNORE because retries of a successful publish
-  // shouldn't fail — the admin worker is idempotent on the registry side.
-  // The store column lets us tell apps and games apart in `fas list`.
-  try {
-    await c.env.DB.prepare(
-      `INSERT OR IGNORE INTO apps
-       (id, owner_login, created_at, category, type, oneliner, repo, demo, store)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
-        body.name,
-        creatorGithub,
-        Date.now(),
-        body.category,
-        body.type,
-        body.oneliner,
-        // Coalesce to null: D1 .bind() throws on undefined, which the catch
-        // below swallows — so a client that omits repo/demo (e.g. the MCP
-        // create_app tool) would provision but never get an ownership row.
-        body.repo ?? null,
-        body.demo ?? null,
-        store,
-      )
-      .run();
-  } catch (err) {
-    // Ownership-record failure should not undo a successful provision —
-    // the storefront registry is the canonical record. Log + continue.
-    console.error('failed to record app ownership', err);
-  }
-
+  // Ownership is recorded by the admin worker, which writes the `apps` row in
+  // the SAME D1 batch as the `routes` row (see insertHostRoute). We deliberately
+  // do NOT insert here: this wrapper and the admin worker used to write
+  // overlapping state to the shared `fas` DB from two places, and the
+  // best-effort try/catch here silently dropped 21 apps' ownership rows when it
+  // failed. The backend is now a pure auth/validation proxy — it resolves
+  // `creatorGithub` (admin-gated) and forwards it; the admin worker is the
+  // single writer of both the route and the ownership row, atomically.
   return c.json({
     appId: body.name,
     store,

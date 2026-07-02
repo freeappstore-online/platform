@@ -36,6 +36,11 @@ interface PublishRequest {
   store: Store;
   type?: string;
   creatorGithub?: string;
+  /** GitHub repo the code lives in ('owner/name' or URL), if known. Persisted
+   *  to the `apps.repo` column. */
+  repo?: string | null;
+  /** Live demo URL, if any. Persisted to the `apps.demo` column. */
+  demo?: string | null;
   /** Pro-only: bullet list of features the pro subscription unlocks. */
   proFeatures?: string[];
 }
@@ -236,14 +241,24 @@ export async function writeRegistryWithRetry(gh: GhFn, req: PublishRequest, conf
   };
 }
 
-/** Insert (or upsert) the routes-table row that freeappstore-host reads
- *  to map this app's subdomain to its R2 prefix.
+/** Write the two D1 rows that make an app real: the `routes` row
+ *  freeappstore-host reads to map the subdomain → R2 prefix, AND the `apps`
+ *  ownership/metadata row every per-app backend feature (kv, rooms, counters,
+ *  db, email, secrets, webhooks, roles) gates on.
  *
- *  Idempotent via ON CONFLICT DO UPDATE — re-publishing the same id is a
- *  no-op for routing, just bumps updated_at. The r2_prefix follows the
- *  convention `{registryKey}/{id}` (e.g. `apps/kanban`, `games/chess`)
- *  which matches the path the per-app `.github/workflows/deploy.yml`
- *  uploads to in the fas-apps bucket. */
+ *  Both are written in a single `env.DB.batch([...])` transaction so a
+ *  provision can never land in one table but not the other. That split was the
+ *  root cause of the drift class that orphaned 21 early apps: they were created
+ *  in registry.json + `routes` by the admin worker, but the `apps` INSERT lived
+ *  in the backend wrapper as a best-effort try/catch — when it silently failed
+ *  (or the caller skipped the backend path), the app existed everywhere except
+ *  `apps`, so `appExists()`/owner_login checks 403'd every backend feature.
+ *  Unifying the write here makes every provision path write identical state.
+ *
+ *  Idempotent: `routes` upserts via ON CONFLICT DO UPDATE (re-publish just
+ *  bumps updated_at); `apps` uses INSERT OR IGNORE so a re-publish never
+ *  clobbers an existing owner. The r2_prefix follows `{registryKey}/{id}`
+ *  (e.g. `apps/kanban`) — the path the per-app deploy.yml uploads to. */
 export async function insertHostRoute(env: PublishEnv, req: PublishRequest, config: StoreConfig): Promise<Step> {
   const slug = req.id;
   const zone = config.domain;
@@ -252,8 +267,12 @@ export async function insertHostRoute(env: PublishEnv, req: PublishRequest, conf
   if (!env.DB) {
     return { name: "Hosting route", status: "fail", detail: "D1 binding not available (cross-store service binding?)" };
   }
+  // owner_login is NOT NULL. The backend always resolves + sends creatorGithub;
+  // a direct admin-UI provision may omit it, in which case the org owns the app
+  // until it's explicitly reassigned.
+  const ownerLogin = req.creatorGithub || config.org;
   try {
-    await env.DB.prepare(
+    const routesStmt = env.DB.prepare(
       `INSERT INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at)
          VALUES (?1, ?2, ?3, ?4, 'r2', ?5, ?5)
          ON CONFLICT (slug, zone) DO UPDATE SET
@@ -261,12 +280,26 @@ export async function insertHostRoute(env: PublishEnv, req: PublishRequest, conf
            store = excluded.store,
            hosted_on = excluded.hosted_on,
            updated_at = excluded.updated_at`,
-    )
-      .bind(slug, zone, r2Prefix, req.store, now)
-      .run();
-    return { name: "Hosting route", status: "ok", detail: `${slug}.${zone} → r2://fas-apps/${r2Prefix}` };
+    ).bind(slug, zone, r2Prefix, req.store, now);
+    const appsStmt = env.DB.prepare(
+      `INSERT OR IGNORE INTO apps
+         (id, owner_login, created_at, category, type, oneliner, repo, demo, store)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+    ).bind(
+      req.id,
+      ownerLogin,
+      now,
+      req.category ?? null,
+      req.type || "standalone",
+      req.description ?? null,
+      req.repo ?? null,
+      req.demo ?? null,
+      req.store,
+    );
+    await env.DB.batch([routesStmt, appsStmt]);
+    return { name: "Hosting route", status: "ok", detail: `${slug}.${zone} → r2://fas-apps/${r2Prefix} (owner ${ownerLogin})` };
   } catch (e: any) {
-    return { name: "Hosting route", status: "fail", detail: e?.message ?? "D1 insert failed" };
+    return { name: "Hosting route", status: "fail", detail: e?.message ?? "D1 write failed" };
   }
 }
 

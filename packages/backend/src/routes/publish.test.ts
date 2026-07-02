@@ -170,14 +170,16 @@ describe('POST /v1/publish', () => {
     expect(respBody.repoUrl).toBe('https://github.com/freeappstore-online/my-app');
   });
 
-  it('records ownership in the apps table after successful provision', async () => {
+  it('forwards the full ownership payload to admin (which writes the apps row atomically)', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
     const inserts: InsertCapture[] = [];
+    const calls: AdminCall[] = [];
     const admin = fakeAdmin({
       response: new Response(JSON.stringify({ steps: [], success: true }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
+      capture: calls,
     });
     const res = await app.request(
       '/v1/publish',
@@ -192,17 +194,18 @@ describe('POST /v1/publish', () => {
     );
     expect(res.status).toBe(200);
 
-    const appInsert = inserts.find((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'));
-    expect(appInsert).toBeDefined();
-    // Order matches the SQL: id, owner_login, created_at, category, type, oneliner, repo, demo
-    expect(appInsert!.binds[0]).toBe('my-app');
-    expect(appInsert!.binds[1]).toBe('me');
-    expect(typeof appInsert!.binds[2]).toBe('number');
-    expect(appInsert!.binds[3]).toBe('Productivity');
-    expect(appInsert!.binds[4]).toBe('standalone');
-    expect(appInsert!.binds[5]).toBe('A simple test');
-    expect(appInsert!.binds[6]).toBe('https://github.com/me/my-app');
-    expect(appInsert!.binds[7]).toBeNull();
+    // The backend is a pure proxy now — it must NOT write the apps row itself
+    // (that was the drift source). The admin worker owns the write, so every
+    // field it needs to build that row has to be forwarded.
+    expect(inserts.some((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'))).toBe(false);
+    const sentBody = JSON.parse(calls[0]!.init.body as string);
+    expect(sentBody.id).toBe('my-app');
+    expect(sentBody.creatorGithub).toBe('me');
+    expect(sentBody.category).toBe('Productivity');
+    expect(sentBody.type).toBe('standalone');
+    expect(sentBody.description).toBe('A simple test'); // oneliner → apps.oneliner
+    expect(sentBody.repo).toBe('https://github.com/me/my-app');
+    expect(sentBody.demo).toBeNull();
   });
 
   it('lets an admin attribute the app to a different creator (contributor onboarding)', async () => {
@@ -229,12 +232,13 @@ describe('POST /v1/publish', () => {
       }),
     );
     expect(res.status).toBe(200);
-    // Registry credit goes to the contributor…
+    // The contributor is forwarded as creatorGithub — the admin worker credits
+    // them in BOTH the registry entry and the D1 `apps.owner_login` row (which
+    // it writes atomically with the route). The backend writes no apps row.
     const sentBody = JSON.parse(calls[0]!.init.body as string);
     expect(sentBody.creatorGithub).toBe('abid8195');
-    // …and so does the D1 ownership row.
-    const appInsert = inserts.find((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'));
-    expect(appInsert!.binds[1]).toBe('abid8195');
+    expect(sentBody.githubLogin).toBe('abid8195');
+    expect(inserts.some((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'))).toBe(false);
   });
 
   it('forbids a non-admin from attributing the app to someone else', async () => {

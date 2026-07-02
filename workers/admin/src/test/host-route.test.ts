@@ -26,12 +26,28 @@ const req = {
 };
 
 // Minimal D1Database stub — captures the SQL and bound params so tests can
-// assert on the query shape without standing up a real D1.
+// assert on the query shape without standing up a real D1. insertHostRoute now
+// writes the routes row AND the apps row in a single batch(), so the stub
+// records each prepared statement (sql + binds) and exposes a batch() that the
+// tests can assert against.
 function mockDb(opts: { fail?: boolean } = {}) {
-  const run = opts.fail ? vi.fn().mockRejectedValue(new Error("D1 unreachable")) : vi.fn().mockResolvedValue({ success: true });
-  const bind = vi.fn().mockReturnValue({ run });
-  const prepare = vi.fn().mockReturnValue({ bind });
-  return { db: { prepare } as any, prepare, bind, run };
+  const prepared: Array<{ sql: string; binds: unknown[] }> = [];
+  const prepare = vi.fn().mockImplementation((sql: string) => {
+    const stmt: { sql: string; binds: unknown[]; bind: (...a: unknown[]) => unknown } = {
+      sql,
+      binds: [],
+      bind(...a: unknown[]) {
+        stmt.binds = a;
+        return stmt;
+      },
+    };
+    prepared.push(stmt);
+    return stmt;
+  });
+  const batch = opts.fail
+    ? vi.fn().mockRejectedValue(new Error("D1 unreachable"))
+    : vi.fn().mockResolvedValue([{ success: true }, { success: true }]);
+  return { db: { prepare, batch } as any, prepare, batch, prepared };
 }
 
 const env = (db: any) =>
@@ -46,23 +62,27 @@ const env = (db: any) =>
 
 describe("insertHostRoute", () => {
   it("returns ok with the resolved r2 prefix on success", async () => {
-    const { db, bind } = mockDb();
+    const { db, batch, prepared } = mockDb();
     const step = await insertHostRoute(env(db), req, config);
     expect(step.status).toBe("ok");
     expect(step.detail).toContain("calendar.freeappstore.online");
     expect(step.detail).toContain("apps/calendar");
-    // Confirms the row shape matches what the host worker reads.
-    const args = bind.mock.calls[0];
-    expect(args.slice(0, 4)).toEqual(["calendar", "freeappstore.online", "apps/calendar", "apps"]);
-    expect(typeof args[4]).toBe("number");
+    // Both rows go through a single batch() — that atomicity is the point.
+    expect(batch).toHaveBeenCalledTimes(1);
+    expect(batch.mock.calls[0][0]).toHaveLength(2);
+    // routes row shape matches what the host worker reads.
+    const routes = prepared.find((s) => /INSERT\s+INTO\s+routes/.test(s.sql))!;
+    expect(routes.binds.slice(0, 4)).toEqual(["calendar", "freeappstore.online", "apps/calendar", "apps"]);
+    expect(typeof routes.binds[4]).toBe("number");
   });
 
   it("uses the store's registryKey as the r2 prefix root", async () => {
-    const { db, bind } = mockDb();
+    const { db, prepared } = mockDb();
     const gamesConfig = { ...config, registryKey: "games", domain: "freegamestore.online" };
     await insertHostRoute(env(db), { ...req, store: "games" as any }, gamesConfig);
-    expect(bind.mock.calls[0][2]).toBe("games/calendar");
-    expect(bind.mock.calls[0][1]).toBe("freegamestore.online");
+    const routes = prepared.find((s) => /INSERT\s+INTO\s+routes/.test(s.sql))!;
+    expect(routes.binds[2]).toBe("games/calendar");
+    expect(routes.binds[1]).toBe("freegamestore.online");
   });
 
   it("returns fail when D1 throws", async () => {
@@ -72,11 +92,12 @@ describe("insertHostRoute", () => {
     expect(step.detail).toContain("D1 unreachable");
   });
 
-  it("uses INSERT ... ON CONFLICT for idempotent re-publish", async () => {
-    const { db, prepare } = mockDb();
+  it("writes routes (upsert) + apps (insert-or-ignore) in the same batch", async () => {
+    const { db, prepared } = mockDb();
     await insertHostRoute(env(db), req, config);
-    const sql = prepare.mock.calls[0][0];
-    expect(sql).toMatch(/INSERT\s+INTO\s+routes/);
-    expect(sql).toMatch(/ON\s+CONFLICT\s*\(\s*slug\s*,\s*zone\s*\)\s+DO\s+UPDATE/);
+    const routesSql = prepared.find((s) => /INSERT\s+INTO\s+routes/.test(s.sql))!.sql;
+    expect(routesSql).toMatch(/ON\s+CONFLICT\s*\(\s*slug\s*,\s*zone\s*\)\s+DO\s+UPDATE/);
+    const appsSql = prepared.find((s) => /INSERT\s+OR\s+IGNORE\s+INTO\s+apps/.test(s.sql))!.sql;
+    expect(appsSql).toBeDefined();
   });
 });
