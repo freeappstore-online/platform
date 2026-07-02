@@ -61,3 +61,38 @@ describe('DELETE /v1/auth/me', () => {
     expect(capture.batched?.[capture.batched.length - 1]).toContain('DELETE FROM users');
   });
 });
+
+describe('deletion is not undone by the synthetic-user fallback', () => {
+  // A DB with no users row (as after DELETE /v1/auth/me).
+  const emptyDB = {
+    prepare: () => {
+      const stmt = {
+        bind: (..._a: unknown[]) => stmt,
+        first: async () => null,
+        all: async () => ({ results: [] }),
+        run: async () => ({ meta: { changes: 0 } }),
+      };
+      return stmt;
+    },
+  } as unknown as D1Database;
+
+  it('rejects a FAS-native token whose account row is gone (no resurrection)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/apps/mine',
+      { headers: { Authorization: `Bearer ${token}` } },
+      env(emptyDB),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('still synthesizes a cross-store (cred:*) user with no FAS row', async () => {
+    const token = await signSession('cred:pas-user', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/apps/mine',
+      { headers: { Authorization: `Bearer ${token}` } },
+      env(emptyDB),
+    );
+    expect(res.status).toBe(200);
+  });
+});

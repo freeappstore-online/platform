@@ -39,18 +39,32 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
       date_of_birth: string | null;
     }>();
 
-  // PAS credential accounts (cred:*) and other cross-store identities may not
-  // exist in FAS D1. The token signature is already verified, so trust the
-  // claims and return a synthetic user. This lets kv/rooms/counters/roles work
-  // for PAS credential users without requiring a FAS user row.
+  // Cross-store identities (e.g. PAS `cred:*`) legitimately have no FAS user
+  // row — the token signature is verified, so synthesize a user to let
+  // kv/rooms/counters/roles work for them without a FAS row.
+  //
+  // But a FAS-NATIVE uid with no row means the account was deleted (or never
+  // existed). We must NOT resurrect it as a synthetic authorized user — that
+  // would silently undo `DELETE /v1/auth/me` (and any future ban), keeping the
+  // token working with its baked roles for the rest of its TTL. Reject instead.
+  //
+  // We also never honor cross-store `admin`/`creator` claims: those are
+  // FAS-computed, so a token minted by another store (shared signing key) can't
+  // vote itself into FAS privilege.
   if (!row) {
+    if (/^(gh|google|apple|email):/.test(payload.uid)) {
+      throw new HttpError(401, 'account not found');
+    }
+    const crossStoreRoles = (payload.roles ?? ['user']).filter(
+      (r) => r !== 'admin' && r !== 'creator',
+    );
     return {
       id: payload.uid,
       login: payload.login ?? payload.uid,
       githubLogin: '',
       avatarUrl: null,
       dateOfBirth: null,
-      roles: payload.roles ?? ['user'],
+      roles: crossStoreRoles.length ? crossStoreRoles : ['user'],
       appRoles: payload.appRoles ?? {},
     };
   }
