@@ -536,6 +536,37 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
 });
 
 /**
+ * Delete the signed-in account and its personal data across the platform:
+ * API keys, KV, friendships, app roles, owned documents, and logs, then the
+ * user row itself. Runs as one D1 batch (transactional).
+ *
+ * Deliberately NOT deleted: apps the user owns (provisioned resources with their
+ * own deprovision flow) and app-shared counters. NOTE: sessions are stateless
+ * HMAC tokens, so the caller's current token remains valid until it expires
+ * (≤30d) — there is no server-side revocation list yet. Full revocation needs a
+ * stateful-session change; tracked separately.
+ */
+authRoutes.delete('/auth/me', async (c) => {
+  try {
+    const user = await requireUser(c);
+    const db = c.env.DB;
+    await db.batch([
+      db.prepare('DELETE FROM user_api_keys WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM kv WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM friendships WHERE user_a = ? OR user_b = ?').bind(user.id, user.id),
+      db.prepare('DELETE FROM app_roles WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM documents WHERE owner_id = ?').bind(user.id),
+      db.prepare('DELETE FROM app_logs WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
+    ]);
+    return c.json({ ok: true });
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+});
+
+/**
  * Compute platform roles for a user at sign-in time. Roles are baked
  * into the session token so per-request checks are zero-I/O.
  *

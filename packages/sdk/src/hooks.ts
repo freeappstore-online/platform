@@ -119,15 +119,8 @@ export function useAuth(app: FreeAppStore) {
   const signIn = useCallback(() => app.auth.signIn(), [app]);
   const signOut = useCallback(() => app.auth.signOut(), [app]);
 
-  const deleteAccount = useCallback(async () => {
-    try {
-      const keys = await app.kv.list();
-      for (const key of keys) {
-        await app.kv.delete(key).catch(() => {});
-      }
-    } catch {}
-    app.auth.signOut();
-  }, [app]);
+  // Really deletes the account server-side (not just local KV), then signs out.
+  const deleteAccount = useCallback(() => app.auth.deleteAccount(), [app]);
 
   const hasRole = useCallback((role: string) => app.roles.check(role), [app]);
 

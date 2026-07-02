@@ -110,6 +110,32 @@ export class Auth {
   }
 
   /**
+   * Permanently delete the signed-in account and its personal data on the
+   * server (API keys, KV, friendships, roles, owned documents, logs), then
+   * sign out locally. Throws if the server call fails, so a "delete account"
+   * button can surface the error instead of falsely reporting success.
+   *
+   * Not deleted: apps you own (deprovision those separately). Note: the current
+   * session token stays valid until it expires; there is no server-side token
+   * revocation yet.
+   */
+  async deleteAccount(): Promise<void> {
+    const token = this.session?.token;
+    if (!token) {
+      this.signOut();
+      return;
+    }
+    const res = await fetch(new URL('/v1/auth/me', this.apiBase), {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      throw new Error(`account deletion failed (${res.status})`);
+    }
+    this.signOut();
+  }
+
+  /**
    * Call this once at app start, before rendering anything that depends on
    * auth state. If the page was loaded via an auth callback (e.g. after
    * `signIn()` returned from GitHub), this captures the session from the
