@@ -61,7 +61,7 @@ All published apps must:
 
 After publishing:
 
-- **Console** -- [console.freeappstore.online](https://console.freeappstore.online) for roles, secrets, webhooks, logs, deploys
+- **Console** -- [freeappstore.online/app](https://freeappstore.online/app/) for roles, secrets, webhooks, logs, deploys
 - **Updates** -- `git push` to auto-deploy
 - **Secrets** -- `fas secret set` to add API keys
 - **Quality** -- `fas quality` to check your VCQA score

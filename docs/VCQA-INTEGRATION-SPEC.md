@@ -10,7 +10,7 @@ Requirements for integrating vibecodeqa.online into the FreeAppStore platform (a
 
 FreeAppStore hosts 30+ web apps. Each app is a GitHub repo in the `freeappstore-online` org. We want to show VCQA code health scores in two places:
 
-1. **Creator Console** (`console.freeappstore.online`) -- each app's detail page shows its VCQA score, grade, issue count, and trend
+1. **Creator Console** (`freeappstore.online/app/`) -- each app's detail page shows its VCQA score, grade, issue count, and trend
 2. **Store listings** (`freeappstore.online/apps/{id}`) -- a badge showing the grade
 
 We do NOT want to run `@vibecodeqa/cli` in our CI pipeline because:

@@ -1,6 +1,13 @@
 name: Deploy console
 
-# Deploys the creator console SPA (console.freeappstore.online) to R2.
+# Deploys the creator console SPA to R2 (prefix apps/console).
+#
+# User-facing URL is https://freeappstore.online/app/ — the storefront Pages
+# Function freeappstore/functions/app/[[path]].ts strips the /app prefix and
+# proxies to the console origin console.freeappstore.online (which serves this
+# apps/console prefix). The build MUST use a relative Vite base ('./') or the
+# HTML asks for assets at the apex root and 404s. See sites/console/CLAUDE.md.
+#
 # Folded from the former freeappstore-online/console repo (2026-06-30, see
 # PLAN-CONSOLIDATE-PLATFORM.md).
 #
