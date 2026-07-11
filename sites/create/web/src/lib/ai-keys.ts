@@ -107,6 +107,10 @@ export function toVaultProvider(type: string): string {
   return type === "google" ? "google-ai" : type;
 }
 
+export function fromVaultProvider(type: string): string {
+  return type === "google-ai" ? "google" : type;
+}
+
 function authHeaders(): Record<string, string> {
   const s = getSession();
   return s?.token

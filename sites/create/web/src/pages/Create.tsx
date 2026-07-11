@@ -13,7 +13,7 @@ import type { StudioSettings } from "../components/studio/types";
 import { useAuth } from "../hooks/useAuth";
 import { useAgent, type AIConfig } from "../hooks/useAgent";
 import { useSpeech } from "../hooks/useSpeech";
-import { PROVIDERS, MODEL_OPTIONS, fetchVaultStatus, getKey, getDefaultProvider, toVaultProvider, type VaultKeyStatus } from "../lib/ai-keys";
+import { PROVIDERS, MODEL_OPTIONS, fetchVaultStatus, getKey, getDefaultProvider, toVaultProvider, fromVaultProvider, type VaultKeyStatus } from "../lib/ai-keys";
 
 export function Create() {
   const { user, loading, signIn } = useAuth();
@@ -80,6 +80,17 @@ export function Create() {
   const hasVaultKey = vaultMap.has(toVaultProvider(provider));
   const isFreeProvider = !!providerCfg?.free;
   const keyReady = isFreeProvider || hasVaultKey || !!getKey(provider);
+
+  useEffect(() => {
+    if (!user || keyReady || vaultKeys.length === 0) return;
+    const nextProvider = vaultKeys
+      .map((k) => fromVaultProvider(k.provider))
+      .find((p) => MODEL_OPTIONS[p]?.length);
+    if (!nextProvider || nextProvider === provider) return;
+    setProvider(nextProvider);
+    setModel(MODEL_OPTIONS[nextProvider][0]?.value || "");
+  }, [user?.id, keyReady, vaultKeys, provider]);
+
   const keyStatus = isFreeProvider
     ? { color: "var(--success)", label: "Free · no key needed" }
     : hasVaultKey
