@@ -62,7 +62,7 @@ interface UserRecord {
   name: string;
   photo_url: string | null;
   provider: string;
-  created_at: string;
+  created_at: string | number;
 }
 
 interface Creator {
@@ -83,6 +83,45 @@ interface AgentSession {
   deployed: boolean;
   deployState: { phase?: string } | null;
   updatedAt: number;
+}
+
+interface AgentToolCall {
+  name?: string;
+  input?: Record<string, unknown>;
+}
+
+interface AgentToolResult {
+  id?: string;
+  content?: string;
+}
+
+interface AgentMessage {
+  role?: string;
+  content?: string;
+  toolCalls?: AgentToolCall[];
+  toolResults?: AgentToolResult[];
+}
+
+interface AgentErrorEntry {
+  timestamp?: string;
+  ts?: string | number;
+  source?: string;
+  message?: string;
+}
+
+interface AgentDeployLogEntry {
+  timestamp?: string;
+  phase?: string;
+  detail?: string;
+}
+
+interface AgentSessionDetail extends Omit<AgentSession, "sessionId"> {
+  id: string;
+  sessionId?: string;
+  messages: AgentMessage[];
+  deployLog: AgentDeployLogEntry[];
+  errors: AgentErrorEntry[];
+  createdAt?: number;
 }
 
 interface GrantUser {
@@ -133,6 +172,7 @@ function SessionsTab() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [selected, setSelected] = useState<AgentSession | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -162,6 +202,7 @@ function SessionsTab() {
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>App</th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Status</th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Updated</th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -178,6 +219,11 @@ function SessionsTab() {
                   <td className="p-2 text-xs">{s.appUrl ? <a href={s.appUrl} target="_blank" style={{ color: "var(--accent)" }}>{s.appId || s.appUrl}</a> : s.appId || "not deployed"}</td>
                   <td className="p-2"><StatusDot status={s.deployed ? "deployed" : s.deployState?.phase || "draft"} /></td>
                   <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{timeAgo(s.updatedAt)}</td>
+                  <td className="p-2">
+                    <button onClick={() => setSelected(s)} className="text-xs font-semibold px-2 py-1 rounded-md border" style={{ color: "var(--accent)", borderColor: "color-mix(in srgb, var(--accent) 35%, var(--line))", background: "color-mix(in srgb, var(--accent) 8%, var(--panel))", cursor: "pointer" }}>
+                      Inspect
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -185,7 +231,132 @@ function SessionsTab() {
           {sessions.length === 0 && <p className="py-8 text-center" style={{ color: "var(--muted)" }}>No sessions found.</p>}
         </div>
       )}
+      {selected && <SessionInspectModal summary={selected} onClose={() => setSelected(null)} />}
     </>
+  );
+}
+
+function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onClose: () => void }) {
+  const [detail, setDetail] = useState<AgentSessionDetail | null>(null);
+  const [view, setView] = useState<"transcript" | "tools" | "errors" | "deploy">("transcript");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const sessionId = summary.sessionId;
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const data = await adminFetchJson<{ session: AgentSessionDetail }>(`${API_URL}/v1/admin/agent-sessions/${encodeURIComponent(sessionId)}`);
+        if (!cancelled) {
+          setDetail(data.session);
+          setError("");
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    const timer = window.setInterval(load, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [sessionId]);
+
+  const userName = detail?.userDisplayName || detail?.userLogin || summary.userDisplayName || summary.userLogin || summary.userId;
+  const userId = detail?.userId || summary.userId;
+  const messages = detail?.messages || [];
+  const toolMessages = messages.filter((m) => m.role === "tool" || m.role === "tool_result" || (m.toolCalls?.length || 0) > 0 || (m.toolResults?.length || 0) > 0);
+  const errors = detail?.errors || [];
+  const deployLog = detail?.deployLog || [];
+
+  return (
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div className="rounded-xl border" style={{ width: "min(1100px, 100%)", maxHeight: "88vh", overflow: "hidden", background: "var(--paper)", borderColor: "var(--line)", boxShadow: "0 24px 80px rgba(0,0,0,0.3)" }}>
+        <div className="p-4 border-b flex items-start justify-between gap-3" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <div>
+            <h3 className="font-bold text-lg">{detail?.name || summary.name}</h3>
+            <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>{sessionId}</div>
+            <div className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+              {userName} <span className="font-mono">{userId}</span>
+              {detail?.appUrl || summary.appUrl ? <> · <a href={detail?.appUrl || summary.appUrl || "#"} target="_blank" style={{ color: "var(--accent)" }}>{detail?.appId || summary.appId || "live app"}</a></> : null}
+            </div>
+          </div>
+          <button onClick={onClose} className="text-xl leading-none" style={{ color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>x</button>
+        </div>
+
+        <div className="px-4 pt-3 flex gap-2 flex-wrap" style={{ background: "var(--paper)" }}>
+          {(["transcript", "tools", "errors", "deploy"] as const).map((t) => (
+            <button key={t} onClick={() => setView(t)} className="px-3 py-1.5 rounded-lg text-sm font-semibold capitalize" style={{ background: view === t ? "var(--accent)" : "var(--panel)", color: view === t ? "white" : "var(--muted)", border: "1px solid var(--line)", cursor: "pointer" }}>
+              {t}{t === "errors" && errors.length ? ` (${errors.length})` : ""}{t === "tools" && toolMessages.length ? ` (${toolMessages.length})` : ""}
+            </button>
+          ))}
+          <span className="text-xs self-center" style={{ color: "var(--success)" }}>● live poll</span>
+        </div>
+
+        <div className="p-4" style={{ maxHeight: "64vh", overflow: "auto" }}>
+          {loading && <p style={{ color: "var(--muted)" }}>Loading session...</p>}
+          {error && <AdminAccessError message={error} />}
+          {!loading && !error && view === "transcript" && (
+            messages.length ? <div className="grid gap-3">{messages.map((m, i) => <AgentMessageBlock key={i} message={m} userName={userName} />)}</div> : <p style={{ color: "var(--muted)" }}>No messages saved for this session yet.</p>
+          )}
+          {!loading && !error && view === "tools" && (
+            toolMessages.length ? <div className="grid gap-3">{toolMessages.map((m, i) => <AgentMessageBlock key={i} message={m} userName={userName} forceExpanded />)}</div> : <p style={{ color: "var(--muted)" }}>No tool calls/results saved yet.</p>
+          )}
+          {!loading && !error && view === "errors" && (
+            errors.length ? <div className="grid gap-3">{errors.map((entry, i) => <LogBlock key={i} tone="error" title={entry.source || "error"} time={entry.timestamp || entry.ts} body={entry.message || ""} />)}</div> : <p style={{ color: "var(--success)" }}>No server-side errors for this session.</p>
+          )}
+          {!loading && !error && view === "deploy" && (
+            deployLog.length ? <div className="grid gap-3">{deployLog.map((entry, i) => <LogBlock key={i} tone={entry.phase === "error" ? "error" : "info"} title={entry.phase || "deploy"} time={entry.timestamp} body={entry.detail || ""} />)}</div> : <p style={{ color: "var(--muted)" }}>No deploy log entries saved yet.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentMessageBlock({ message, userName, forceExpanded = false }: { message: AgentMessage; userName: string; forceExpanded?: boolean }) {
+  const role = message.role || "message";
+  const isUser = role === "user";
+  const isTool = role === "tool" || role === "tool_result";
+  const title = isUser ? userName : isTool ? "Tool" : role === "assistant" ? "AI" : role;
+  const bg = isUser ? "color-mix(in srgb, var(--accent) 10%, var(--panel))" : isTool ? "var(--panel)" : "var(--paper)";
+  const border = isUser ? "color-mix(in srgb, var(--accent) 30%, var(--line))" : "var(--line)";
+  const toolCalls = message.toolCalls || [];
+  const toolResults = message.toolResults || [];
+  return (
+    <div className="rounded-lg border p-3" style={{ background: bg, borderColor: border }}>
+      <div className="text-xs font-bold uppercase mb-2" style={{ color: isTool ? "var(--warning)" : isUser ? "var(--accent)" : "var(--success)" }}>{title}</div>
+      {message.content && <pre className="text-sm" style={{ whiteSpace: "pre-wrap", margin: 0, fontFamily: "inherit", color: "var(--ink)" }}>{message.content}</pre>}
+      {toolCalls.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {toolCalls.map((tc, i) => <code key={i} className="text-xs px-2 py-1 rounded-md" style={{ background: "var(--line)", color: "var(--ink)" }}>{tc.name || "tool"} {toolArg(tc.input)}</code>)}
+        </div>
+      )}
+      {toolResults.length > 0 && (
+        <details open={forceExpanded} className="mt-3">
+          <summary className="text-xs font-semibold" style={{ color: "var(--muted)", cursor: "pointer" }}>tool result{toolResults.length > 1 ? `s (${toolResults.length})` : ""}</summary>
+          <div className="grid gap-2 mt-2">
+            {toolResults.map((tr, i) => <pre key={i} className="text-xs rounded-md p-2" style={{ whiteSpace: "pre-wrap", maxHeight: 260, overflow: "auto", background: "var(--panel)", color: "var(--muted)", margin: 0 }}>{tr.content || ""}</pre>)}
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function LogBlock({ title, time, body, tone }: { title: string; time?: string | number; body: string; tone: "error" | "info" }) {
+  return (
+    <div className="rounded-lg border p-3" style={{ background: tone === "error" ? "color-mix(in srgb, var(--error) 8%, var(--panel))" : "var(--panel)", borderColor: tone === "error" ? "color-mix(in srgb, var(--error) 35%, var(--line))" : "var(--line)" }}>
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <strong className="text-sm" style={{ color: tone === "error" ? "var(--error)" : "var(--accent)" }}>{title}</strong>
+        <span className="text-xs" style={{ color: "var(--muted)" }}>{formatDateTime(time)}</span>
+      </div>
+      <pre className="text-xs" style={{ whiteSpace: "pre-wrap", margin: 0, color: "var(--ink)" }}>{body}</pre>
+    </div>
   );
 }
 
@@ -621,7 +792,7 @@ function UsersTab() {
           name: String(u.display_name || u.github_login || u.id || ""),
           photo_url: u.avatar_url ? String(u.avatar_url) : null,
           provider: String(u.provider || "github"),
-          created_at: String(u.created_at || ""),
+          created_at: typeof u.created_at === "number" ? u.created_at : String(u.created_at || ""),
         })));
         setTotal(data.total || 0);
         setPages(Math.max(1, Math.ceil((data.total || 0) / 50)));
@@ -655,7 +826,7 @@ function UsersTab() {
                 </td>
                 <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{u.email}</td>
                 <td className="p-2 text-xs">{u.provider}</td>
-                <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{new Date(u.created_at).toLocaleDateString()}</td>
+                <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{formatDate(u.created_at)}</td>
               </tr>
             ))}
           </tbody>
@@ -721,8 +892,8 @@ function CreatorsTab() {
 
 function StatusDot({ status }: { status: string | undefined }) {
   const color = !status ? "var(--muted)" :
-    ["active", "success", "completed"].includes(status) ? "var(--success)" :
-    ["pending", "in_progress"].includes(status) ? "var(--warning)" : "var(--error)";
+    ["active", "success", "completed", "deployed", "live", "ok"].includes(status) ? "var(--success)" :
+    ["pending", "in_progress", "draft", "building", "pushing", "provisioning"].includes(status) ? "var(--warning)" : "var(--error)";
   return <span style={{ color, fontSize: "0.9rem" }}>● <span className="text-xs" style={{ color: "var(--muted)" }}>{status || "?"}</span></span>;
 }
 
@@ -736,6 +907,30 @@ function timeAgo(value: string | number): string {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function parseTime(value: string | number | undefined): number {
+  if (value === undefined || value === null || value === "") return NaN;
+  if (typeof value === "number") return value < 10_000_000_000 ? value * 1000 : value;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+  return new Date(value).getTime();
+}
+
+function formatDate(value: string | number | undefined): string {
+  const time = parseTime(value);
+  return Number.isFinite(time) ? new Date(time).toLocaleDateString() : "—";
+}
+
+function formatDateTime(value: string | number | undefined): string {
+  const time = parseTime(value);
+  return Number.isFinite(time) ? new Date(time).toLocaleString() : "—";
+}
+
+function toolArg(input: Record<string, unknown> | undefined): string {
+  if (!input) return "";
+  const value = input.path || input.id || input.name || input.url || input.pattern;
+  return typeof value === "string" ? value : "";
 }
 
 function formatNum(n: number): string {

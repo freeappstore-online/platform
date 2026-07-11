@@ -347,7 +347,12 @@ contentAdminRoutes.get('/admin/agent-sessions/:id', async (c) => {
   await requireAdmin(c);
   const sessionId = c.req.param('id')!;
 
-  const row = await c.env.DB.prepare('SELECT * FROM agent_sessions WHERE session_id = ?')
+  const row = await c.env.DB.prepare(
+    `SELECT s.*, u.github_login, u.display_name
+     FROM agent_sessions s
+     LEFT JOIN users u ON u.id = s.user_id
+     WHERE s.session_id = ?`,
+  )
     .bind(sessionId)
     .first<Record<string, unknown>>();
 
@@ -357,6 +362,8 @@ contentAdminRoutes.get('/admin/agent-sessions/:id', async (c) => {
     session: {
       id: row.session_id,
       userId: row.user_id,
+      userLogin: row.github_login,
+      userDisplayName: row.display_name,
       name: row.name,
       appId: row.app_id,
       appUrl: row.app_url,

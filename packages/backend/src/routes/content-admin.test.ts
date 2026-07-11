@@ -20,6 +20,7 @@ function fakeDB(opts: {
       const trimmed = sql.replace(/\s+/g, ' ').trim();
       const stmtResult = {
         first: async () => {
+          if (trimmed.includes('FROM agent_sessions')) return opts.sessions?.[0] ?? null;
           if (trimmed.includes('FROM users')) return opts.user ?? null;
           if (trimmed.includes('FROM kv') && trimmed.includes('value FROM'))
             return opts.kvValue ?? null;
@@ -136,6 +137,41 @@ describe('content-admin routes', () => {
     };
     expect(data.sessions[0]!.userLogin).toBe('alice');
     expect(data.sessions[0]!.userDisplayName).toBe('Alice Example');
+  });
+
+  it('GET /v1/admin/agent-sessions/:id includes user names and debug data', async () => {
+    const sessions = [
+      {
+        session_id: 's1',
+        user_id: 'gh:1',
+        github_login: 'alice',
+        display_name: 'Alice Example',
+        name: 'New App',
+        app_id: 'demo',
+        app_url: 'https://demo.freeappstore.online',
+        deployed: 1,
+        messages: '[{"role":"user","content":"hi"}]',
+        deploy_state: '{"phase":"live"}',
+        deploy_log: '[{"phase":"live","detail":"ok"}]',
+        errors: '[{"source":"agent","message":"x"}]',
+        created_at: 1000,
+        updated_at: 2000,
+      },
+    ];
+    const res = await app.request(
+      '/v1/admin/agent-sessions/s1',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser, sessions })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      session: { userLogin: string; userDisplayName: string; messages: unknown[] };
+    };
+    expect(data.session.userLogin).toBe('alice');
+    expect(data.session.userDisplayName).toBe('Alice Example');
+    expect(data.session.messages).toHaveLength(1);
   });
 
   // KV

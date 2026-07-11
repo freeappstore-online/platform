@@ -239,6 +239,7 @@ export class AgentSession implements DurableObject {
     session.messages.push({ role: "assistant", content: `Error: ${errorText}` });
     if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
     await this.save();
+    await this.syncToD1();
   }
 
   /** POST /chat — stream an agent turn via SSE */
@@ -285,14 +286,20 @@ export class AgentSession implements DurableObject {
 
     const session = await this.load();
     const files = new Map(Object.entries(session.files));
+    const history = session.messages.slice();
+    session.messages.push({ role: "user", content: body.message });
+    if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    await this.save();
+    await this.syncToD1();
 
     const { readable, writable } = new TransformStream<Uint8Array>();
     const writer = writable.getWriter();
 
     // Build deploy env directly from DO's env bindings (no header passing)
-    const deployEnv: DeployEnv | null = this.env.GITHUB_TOKEN ? { GITHUB_TOKEN: this.env.GITHUB_TOKEN, DB: this.env.DB } : null;
+    const deployEnv: DeployEnv | null = this.env.GITHUB_TOKEN ? { GITHUB_TOKEN: this.env.GITHUB_TOKEN, PLATFORM: this.env.PLATFORM, DB: this.env.DB } : null;
 
     const config = this.config;
+    const authHeader = request.headers.get("Authorization") || undefined;
 
     // Scrub the user's API key from any error messages before streaming
     const apiKey = body.aiConfig.apiKey;
@@ -314,14 +321,14 @@ export class AgentSession implements DurableObject {
           fileCount: files.size,
           fileList: [...files.keys()].sort().join(", "),
         };
-        const result = await runAgentTurn(body.aiConfig, session.messages, body.message, files, writer, config, sessionCtx, this.env).catch(
+        const result = await runAgentTurn(body.aiConfig, history, body.message, files, writer, config, sessionCtx, this.env).catch(
           (err) => {
             this.logError("agent", String(err));
             throw err;
           },
         );
 
-        session.messages.push(...result.newMessages);
+        session.messages = [...history, ...result.newMessages];
         // Enforce limits to prevent unbounded storage growth
         if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
         if (session.errors.length > MAX_ERRORS) session.errors = session.errors.slice(-MAX_ERRORS);
@@ -334,6 +341,7 @@ export class AgentSession implements DurableObject {
         }
         session.files = Object.fromEntries(files);
         await this.save();
+        await this.syncToD1();
         turnSaved = true;
 
         // Execute infra tools server-side and feed results back to agent
@@ -353,6 +361,7 @@ export class AgentSession implements DurableObject {
               toolResult = await executeInfraTool(tc, {
                 appId: session.appId,
                 ownerLogin: session.ownerLogin,
+                authHeader,
                 files,
                 env: deployEnv,
                 config,
@@ -397,6 +406,7 @@ export class AgentSession implements DurableObject {
           // Persist state after all infra tools complete
           session.files = Object.fromEntries(files);
           await this.save();
+          await this.syncToD1();
 
           // Follow-up: let the AI react to infra tool results.
           // If deploy/push failed, the AI can diagnose and retry.
@@ -435,6 +445,7 @@ export class AgentSession implements DurableObject {
                   toolResult = await executeInfraTool(tc, {
                     appId: session.appId,
                     ownerLogin: session.ownerLogin,
+                    authHeader,
                     files,
                     env: deployEnv,
                     config,
@@ -469,8 +480,10 @@ export class AgentSession implements DurableObject {
               session.files = Object.fromEntries(files);
             }
             await this.save();
+            await this.syncToD1();
           } catch (followUpErr) {
             this.logError("follow-up", scrubKey(String(followUpErr)));
+            await this.syncToD1();
             // Follow-up failed — not critical, the infra action already completed
           }
         }
@@ -479,16 +492,18 @@ export class AgentSession implements DurableObject {
       } catch (err) {
         this.logError("chat", scrubKey(String(err)));
         sendSSE({ type: "error", data: String(err) });
-        // If the turn threw before we saved it, the user's message + this error
-        // would be lost on reconnect. Persist them so every message is kept.
+        // If the turn threw before the final save, append the error to the
+        // provisional user message saved at turn start.
         if (!turnSaved) {
           try {
-            await this.recordErrorTurn(body.message, scrubKey(String(err)));
+            session.messages.push({ role: "assistant", content: `Error: ${scrubKey(String(err))}` });
+            if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+            await this.save();
           } catch {
             /* best effort */
           }
         }
-        this.syncToD1();
+        await this.syncToD1();
       } finally {
         this.chatInProgress = false;
         writer.close().catch(() => {});
@@ -571,14 +586,15 @@ export class AgentSession implements DurableObject {
     if (this.session.deployLog.length > 200) this.session.deployLog = this.session.deployLog.slice(-200);
   }
 
-  /** Write deploy_log + errors to D1 for durable persistence beyond DO eviction. */
+  /** Write transcript + deploy_log + errors to D1 for durable admin/debug persistence beyond DO eviction. */
   private async syncToD1(): Promise<void> {
     if (!this.session?.sessionId) return;
     try {
       await this.env.DB.prepare(
-        `UPDATE agent_sessions SET deploy_log = ?, errors = ?, deploy_state = ?, updated_at = ? WHERE session_id = ?`,
+        `UPDATE agent_sessions SET messages = ?, deploy_log = ?, errors = ?, deploy_state = ?, updated_at = ? WHERE session_id = ?`,
       )
         .bind(
+          JSON.stringify(this.session.messages),
           JSON.stringify(this.session.deployLog),
           JSON.stringify(this.session.errors),
           this.session.deployStatus ? JSON.stringify(this.session.deployStatus) : null,

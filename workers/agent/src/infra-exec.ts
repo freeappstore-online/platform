@@ -9,6 +9,7 @@ import type { ToolCall } from "./providers/types";
 interface ExecContext {
   appId: string | null;
   ownerLogin: string | null;
+  authHeader?: string;
   files: Map<string, string>;
   env: DeployEnv;
   config: StoreConfig;
@@ -159,6 +160,8 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     return `Deploy FAILED: ${deployError}`;
   }
 
+  const publishError = await publishStoreListing(appId, appName, tc, ctx);
+
   // Insert D1 hosting route so the host worker can serve this app from R2
   if (ctx.env.DB) {
     const r2Prefix = `${ctx.config.nounPlural}/${appId}`;
@@ -200,7 +203,56 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
   }
 
   const renamed = appId !== requestedId ? ` (ID "${requestedId}" was taken — deployed as "${appId}")` : "";
-  return `Deploy succeeded${renamed}. Preview: ${liveUrl || "building..."}`;
+  const listing = publishError ? ` Store listing failed: ${publishError}` : " Store listing published.";
+  return `Deploy succeeded${renamed}. Preview: ${liveUrl || "building..."}.${listing}`;
+}
+
+async function publishStoreListing(appId: string, appName: string, tc: ToolCall, ctx: ExecContext): Promise<string | null> {
+  if (!ctx.env.PLATFORM || !ctx.authHeader) return "platform publish binding unavailable";
+  try {
+    const description = String(tc.input.description || appName);
+    const res = await ctx.env.PLATFORM.fetch("https://backend/v1/publish", {
+      method: "POST",
+      headers: {
+        Authorization: ctx.authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: appId,
+        store: "apps",
+        category: normalizePublishCategory(String(tc.input.category || "Utilities")),
+        type: "standalone",
+        oneliner: description,
+        description,
+        repo: `${ctx.config.org}/${appId}`,
+        demo: null,
+      }),
+    });
+    if (res.ok) return null;
+    const body = await res.text().catch(() => "");
+    return `${res.status} ${body.slice(0, 300)}`;
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+}
+
+function normalizePublishCategory(category: string): string {
+  const normalized = category.trim().toLowerCase();
+  const map: Record<string, string> = {
+    utilities: "Utilities",
+    productivity: "Productivity",
+    learning: "Learning",
+    lifestyle: "Lifestyle",
+    finance: "Finance",
+    health: "Health & Fitness",
+    "health & fitness": "Health & Fitness",
+    creative: "Creative",
+    social: "Social",
+    discovery: "Discovery",
+    strategy: "Strategy",
+    "brain training": "Brain Training",
+  };
+  return map[normalized] || "Other (specify in description)";
 }
 
 /** Replace APPNAME (display name; id in package.json) + APPID (the slug, everywhere). */
