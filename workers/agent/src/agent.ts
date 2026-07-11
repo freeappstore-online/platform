@@ -29,6 +29,8 @@ function createAdapter(config: AIConfig, gatewayEnv: GatewayEnv): ProviderAdapte
       return new GoogleAdapter(config.apiKey, config.model, providerTemp, providerMaxTokens, resolveGateway(gatewayEnv, "google"));
     case "github":
       return new GitHubModelsAdapter(config.apiKey, config.model, providerTemp, providerMaxTokens);
+    case "openrouter":
+      return new OpenAIAdapter(config.apiKey, config.model, "https://openrouter.ai/api/v1", providerTemp, providerMaxTokens);
   }
 }
 
