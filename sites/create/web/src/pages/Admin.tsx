@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 
 const ADMIN_API = "https://admin.freeappstore.online";
 
-type Tab = "overview" | "apps" | "users" | "creators";
+type Tab = "overview" | "apps" | "users" | "sessions" | "grants" | "creators";
 
 interface Stats {
   apps: number;
@@ -12,8 +12,8 @@ interface Stats {
   users: number;
   creators: number;
   traffic: {
-    fas: { totals: { requests: number; pageViews: number; visitors: number }; days: any[] } | null;
-    fgs: { totals: { requests: number; pageViews: number; visitors: number }; days: any[] } | null;
+    fas: { totals: { requests: number; pageViews: number; visitors: number }; days: { sum?: { requests?: number } }[] } | null;
+    fgs: { totals: { requests: number; pageViews: number; visitors: number }; days: { sum?: { requests?: number } }[] } | null;
   } | null;
 }
 
@@ -44,6 +44,25 @@ interface Creator {
   maxApps: number;
 }
 
+interface AgentSession {
+  sessionId: string;
+  userId: string;
+  name: string;
+  appId: string | null;
+  appUrl: string | null;
+  deployed: boolean;
+  deployState: { phase?: string } | null;
+  updatedAt: number;
+}
+
+interface GrantUser {
+  id: string;
+  githubLogin: string;
+  displayName: string | null;
+  keys: { provider: string }[];
+  grant: { provider: string; model: string; expiresAt: string | null } | null;
+}
+
 export function Admin() {
   const { user, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
@@ -57,7 +76,7 @@ export function Admin() {
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-extrabold">Admin Dashboard</h1>
           <div className="flex gap-1 p-1 rounded-xl" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-            {(["overview", "apps", "users", "creators"] as Tab[]).map((t) => (
+            {(["overview", "apps", "users", "sessions", "grants", "creators"] as Tab[]).map((t) => (
               <button key={t} onClick={() => setTab(t)} className="px-3 py-1.5 rounded-lg text-sm font-semibold capitalize" style={{ background: tab === t ? "var(--accent)" : "transparent", color: tab === t ? "white" : "var(--muted)", border: "none", cursor: "pointer" }}>
                 {t}
               </button>
@@ -68,8 +87,164 @@ export function Admin() {
         {tab === "overview" && <OverviewTab />}
         {tab === "apps" && <AppsTab />}
         {tab === "users" && <UsersTab />}
+        {tab === "sessions" && <SessionsTab />}
+        {tab === "grants" && <GrantsTab />}
         {tab === "creators" && <CreatorsTab />}
       </main>
+    </>
+  );
+}
+
+// ── VibeCode Sessions Tab ──
+
+function SessionsTab() {
+  const [sessions, setSessions] = useState<AgentSession[]>([]);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = new URLSearchParams({ page: "1" });
+    if (search) params.set("q", search);
+    fetch(`${ADMIN_API}/api/agent/sessions?${params}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((data) => { setSessions(data.sessions || []); setTotal(data.total || 0); })
+      .catch(() => { /* best-effort */ })
+      .finally(() => setLoading(false));
+  }, [search]);
+
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>{total} total VibeCode sessions</p>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search sessions..." className="p-2 rounded-lg border text-sm" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)", width: 260 }} />
+      </div>
+      {loading ? <p style={{ color: "var(--muted)" }}>Loading sessions...</p> : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Session</th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>User</th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>App</th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Status</th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s) => (
+                <tr key={s.sessionId} style={{ borderBottom: "1px solid var(--line)" }}>
+                  <td className="p-2">
+                    <strong>{s.name}</strong>
+                    <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>{s.sessionId}</div>
+                  </td>
+                  <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>{s.userId}</td>
+                  <td className="p-2 text-xs">{s.appUrl ? <a href={s.appUrl} target="_blank" style={{ color: "var(--accent)" }}>{s.appId || s.appUrl}</a> : s.appId || "not deployed"}</td>
+                  <td className="p-2"><StatusDot status={s.deployed ? "deployed" : s.deployState?.phase || "draft"} /></td>
+                  <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{timeAgo(s.updatedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {sessions.length === 0 && <p className="py-8 text-center" style={{ color: "var(--muted)" }}>No sessions found.</p>}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── AI Grants Tab ──
+
+function GrantsTab() {
+  const [users, setUsers] = useState<GrantUser[]>([]);
+  const [funded, setFunded] = useState<string[]>([]);
+  const [selectedUser, setSelectedUser] = useState("");
+  const [provider, setProvider] = useState("anthropic");
+  const [model, setModel] = useState("claude-sonnet-4-6");
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    Promise.all([
+      fetch(`${ADMIN_API}/api/ai-grants/users`, { credentials: "include" }).then((r) => r.json()),
+      fetch(`${ADMIN_API}/api/ai-grants`, { credentials: "include" }).then((r) => r.json()),
+    ])
+      .then(([userData, grantData]) => {
+        setUsers(userData.users || []);
+        setFunded(grantData.funded || []);
+        setSelectedUser((current) => current || userData.users?.[0]?.id || "");
+      })
+      .catch(() => { /* best-effort */ })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
+  async function saveGrant() {
+    const res = await fetch(`${ADMIN_API}/api/ai-grants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ userId: selectedUser, provider, model, note: note || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) alert(data.error || "Failed to grant");
+    load();
+  }
+
+  async function revoke(userId: string) {
+    if (!confirm(`Revoke grant for ${userId}?`)) return;
+    await fetch(`${ADMIN_API}/api/ai-grants/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ userId }),
+    });
+    load();
+  }
+
+  if (loading) return <p style={{ color: "var(--muted)" }}>Loading grants...</p>;
+
+  return (
+    <>
+      <div className="p-4 rounded-xl border mb-5" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+        <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>Funded providers: {funded.length ? funded.join(", ") : "none configured"}</p>
+        <div className="grid md:grid-cols-5 gap-2">
+          <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }}>
+            {users.map((u) => <option key={u.id} value={u.id}>{u.githubLogin || u.id}</option>)}
+          </select>
+          <select value={provider} onChange={(e) => { setProvider(e.target.value); setModel(defaultGrantModel(e.target.value)); }} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }}>
+            {["anthropic", "openai", "google"].map((p) => <option key={p} value={p}>{p}{funded.includes(p) ? "" : " (unfunded)"}</option>)}
+          </select>
+          <input value={model} onChange={(e) => setModel(e.target.value)} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }} />
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note" className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }} />
+          <button onClick={saveGrant} disabled={!funded.includes(provider)} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white", opacity: funded.includes(provider) ? 1 : 0.5 }}>Save Grant</button>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--line)" }}>
+              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>User</th>
+              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Grant</th>
+              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Vault Keys</th>
+              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map((u) => (
+              <tr key={u.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                <td className="p-2"><strong>{u.displayName || u.githubLogin || u.id}</strong><div className="text-xs" style={{ color: "var(--muted)" }}>{u.id}</div></td>
+                <td className="p-2 text-xs">{u.grant ? `${u.grant.provider} / ${u.grant.model}` : "none"}</td>
+                <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{u.keys.length ? u.keys.map((k) => k.provider).join(", ") : "none"}</td>
+                <td className="p-2">{u.grant && <button onClick={() => revoke(u.id)} className="text-xs font-semibold" style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}>Revoke</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
@@ -84,7 +259,7 @@ function OverviewTab() {
     fetch(`${ADMIN_API}/api/stats`, { credentials: "include" })
       .then((r) => r.json())
       .then(setStats)
-      .catch(() => {})
+      .catch(() => { /* best-effort */ })
       .finally(() => setLoading(false));
   }, []);
 
@@ -107,8 +282,8 @@ function OverviewTab() {
       {/* Traffic */}
       <h2 className="text-lg font-bold mb-3">Traffic (30 days)</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-        <TrafficCard title="FreeAppStore" totals={fasT} days={stats.traffic?.fas?.days} />
-        <TrafficCard title="FreeGameStore" totals={fgsT} days={stats.traffic?.fgs?.days} />
+        <TrafficCard title="FreeAppStore" totals={fasT ?? null} days={stats.traffic?.fas?.days} />
+        <TrafficCard title="FreeGameStore" totals={fgsT ?? null} days={stats.traffic?.fgs?.days} />
       </div>
     </>
   );
@@ -123,7 +298,7 @@ function StatCard({ label, value, color }: { label: string; value: number; color
   );
 }
 
-function TrafficCard({ title, totals, days }: { title: string; totals: any; days: any[] | undefined }) {
+function TrafficCard({ title, totals, days }: { title: string; totals: { requests: number; pageViews: number; visitors: number } | null; days: { sum?: { requests?: number } }[] | undefined }) {
   if (!totals) return (
     <div className="p-5 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
       <h3 className="font-bold mb-2">{title}</h3>
@@ -132,7 +307,7 @@ function TrafficCard({ title, totals, days }: { title: string; totals: any; days
   );
 
   // Simple sparkline from daily data
-  const dailyRequests = (days || []).map((d: any) => d.sum?.requests || 0);
+  const dailyRequests = (days || []).map((d) => d.sum?.requests || 0);
   const max = Math.max(...dailyRequests, 1);
   const barWidth = 100 / Math.max(dailyRequests.length, 1);
 
@@ -177,7 +352,7 @@ function AppsTab() {
     fetch(`${ADMIN_API}/api/status?store=${store}`, { credentials: "include" })
       .then((r) => r.json())
       .then(setApps)
-      .catch(() => {})
+      .catch(() => { /* best-effort */ })
       .finally(() => setLoadingApps(false));
   }, [store]);
 
@@ -199,7 +374,7 @@ function AppsTab() {
   }
 
   async function handleDeprovision(id: string) {
-    const deleteRepo = confirm(`DELETE "${id}" completely?\n\nThis will remove:\n- Custom domain\n- CF Pages project\n- DNS record\n- Store registry entry\n\nClick OK to also delete the GitHub repo, or Cancel to keep it.`);
+    const deleteRepo = confirm(`DELETE "${id}" completely?\n\nThis will remove:\n- Custom domain\n- R2 hosting route\n- DNS record\n- Store registry entry\n\nClick OK to also delete the GitHub repo, or Cancel to keep it.`);
     if (!confirm(`Are you sure you want to delete "${id}"? This cannot be undone.`)) return;
     try {
       const res = await fetch(`${ADMIN_API}/api/deprovision`, {
@@ -211,7 +386,7 @@ function AppsTab() {
       const data = await res.json();
       if (data.ok) {
         setApps((prev) => prev.filter((a) => a.id !== id));
-        alert(`Deleted "${id}":\n${data.steps.map((s: any) => `${s.name}: ${s.status}`).join("\n")}`);
+        alert(`Deleted "${id}":\n${data.steps.map((s: { name: string; status: string }) => `${s.name}: ${s.status}`).join("\n")}`);
       } else {
         alert(data.error || "Failed");
       }
@@ -228,7 +403,7 @@ function AppsTab() {
         <button onClick={() => setStore("apps")} className="px-3 py-1 rounded-full text-sm font-semibold" style={{ background: store === "apps" ? "var(--accent)" : "var(--panel)", color: store === "apps" ? "white" : "var(--muted)", border: "1px solid var(--line)" }}>Apps</button>
         <button onClick={() => setStore("games")} className="px-3 py-1 rounded-full text-sm font-semibold" style={{ background: store === "games" ? "var(--accent)" : "var(--panel)", color: store === "games" ? "white" : "var(--muted)", border: "1px solid var(--line)" }}>Games</button>
       </div>
-      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${store}...`} className="w-full p-2 rounded-lg border mb-4" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }} />
+      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${store}...`} aria-label={`Search ${store}`} className="w-full p-2 rounded-lg border mb-4" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }} />
       {loadingApps ? <p style={{ color: "var(--muted)" }}>Loading...</p> : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
@@ -283,7 +458,7 @@ function UsersTab() {
     fetch(`${ADMIN_API}/api/users?page=${page}`, { credentials: "include" })
       .then((r) => r.json())
       .then((data) => { setUsers(data.users || []); setTotal(data.total || 0); setPages(data.pages || 1); })
-      .catch(() => {})
+      .catch(() => { /* best-effort */ })
       .finally(() => setLoading(false));
   }, [page]);
 
@@ -338,7 +513,7 @@ function CreatorsTab() {
     fetch(`${ADMIN_API}/api/creators`, { credentials: "include" })
       .then((r) => r.json())
       .then(setCreators)
-      .catch(() => {})
+      .catch(() => { /* best-effort */ })
       .finally(() => setLoading(false));
   }, []);
 
@@ -382,8 +557,10 @@ function StatusDot({ status }: { status: string | undefined }) {
   return <span style={{ color, fontSize: "0.9rem" }}>● <span className="text-xs" style={{ color: "var(--muted)" }}>{status || "?"}</span></span>;
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
+function timeAgo(value: string | number): string {
+  const then = typeof value === "number" ? value : new Date(value).getTime();
+  if (!Number.isFinite(then)) return "—";
+  const diff = Date.now() - then;
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
@@ -396,4 +573,10 @@ function formatNum(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toLocaleString();
+}
+
+function defaultGrantModel(provider: string): string {
+  if (provider === "openai") return "gpt-4o";
+  if (provider === "google") return "gemini-2.5-flash";
+  return "claude-sonnet-4-6";
 }
