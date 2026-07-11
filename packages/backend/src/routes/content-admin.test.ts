@@ -339,7 +339,7 @@ describe('content-admin routes', () => {
         store: 'apps',
         hosted_on: 'r2',
         created_at: 1000,
-        updated_at: 3000,
+        updated_at: '2026-05-23 20:36:02',
       },
     ];
     const sessions = [
@@ -375,6 +375,7 @@ describe('content-admin routes', () => {
         ownerDisplayName: string;
         sessionCount: number;
         latestSession: { sessionId: string; deployed: boolean };
+        updatedAt: number;
       }>;
     };
     expect(data.apps).toHaveLength(1);
@@ -384,5 +385,6 @@ describe('content-admin routes', () => {
     expect(data.apps[0]!.sessionCount).toBe(1);
     expect(data.apps[0]!.latestSession.sessionId).toBe('s1');
     expect(data.apps[0]!.latestSession.deployed).toBe(true);
+    expect(data.apps[0]!.updatedAt).toBeGreaterThan(0);
   });
 });

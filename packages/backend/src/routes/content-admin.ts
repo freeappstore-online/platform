@@ -353,6 +353,8 @@ function numberValue(value: unknown): number | null {
   if (typeof value === 'string' && value.trim()) {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) return parsed;
+    const parsedDate = Date.parse(value);
+    if (Number.isFinite(parsedDate)) return parsedDate;
   }
   return null;
 }
