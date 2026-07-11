@@ -87,7 +87,7 @@ interface GrantUser {
   id: string;
   githubLogin: string;
   displayName: string | null;
-  keys: { provider: string }[];
+  keys: { provider: string; label?: string | null }[];
   grant: { provider: string; model: string; expiresAt: string | null } | null;
 }
 
@@ -192,6 +192,11 @@ function GrantsTab() {
   const [selectedUser, setSelectedUser] = useState("");
   const [provider, setProvider] = useState("anthropic");
   const [model, setModel] = useState("claude-sonnet-4-6");
+  const [keyUser, setKeyUser] = useState<GrantUser | null>(null);
+  const [keyProvider, setKeyProvider] = useState("anthropic");
+  const [keyValue, setKeyValue] = useState("");
+  const [keyMessage, setKeyMessage] = useState("");
+  const [keySaving, setKeySaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -235,6 +240,56 @@ function GrantsTab() {
     load();
   }
 
+  function openKeyModal(user: GrantUser) {
+    setKeyUser(user);
+    setKeyProvider("anthropic");
+    setKeyValue("");
+    setKeyMessage("");
+  }
+
+  function closeKeyModal() {
+    setKeyUser(null);
+    setKeyValue("");
+    setKeyMessage("");
+    setKeySaving(false);
+  }
+
+  async function saveUserKey() {
+    if (!keyUser) return;
+    if (!keyValue.trim()) {
+      setKeyMessage("Paste an API key first.");
+      return;
+    }
+    setKeySaving(true);
+    setKeyMessage("Saving...");
+    try {
+      await adminFetchJson(`${API_URL}/v1/admin/ai-keys`, {
+        method: "POST",
+        body: JSON.stringify({
+          userId: keyUser.id,
+          provider: keyProvider,
+          key: keyValue.trim(),
+          label: "Admin provisioned",
+        }),
+      });
+      setKeyMessage(`Saved ${keyProvider} key.`);
+      load();
+      setTimeout(closeKeyModal, 700);
+    } catch (e) {
+      setKeyMessage(e instanceof Error ? e.message : String(e));
+      setKeySaving(false);
+    }
+  }
+
+  async function removeUserKey(userId: string, providerId: string) {
+    if (!confirm(`Remove the ${providerId} key for ${userId}?`)) return;
+    await adminFetchJson(`${API_URL}/v1/admin/ai-keys/delete`, {
+      method: "POST",
+      body: JSON.stringify({ userId, provider: providerId }),
+    });
+    load();
+  }
+
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading grants...</p>;
   if (error) return <AdminAccessError message={error} />;
 
@@ -273,13 +328,55 @@ function GrantsTab() {
               <tr key={u.id} style={{ borderBottom: "1px solid var(--line)" }}>
                 <td className="p-2"><strong>{u.displayName || u.githubLogin || u.id}</strong><div className="text-xs" style={{ color: "var(--muted)" }}>{u.id}</div></td>
                 <td className="p-2 text-xs">{u.grant ? `${u.grant.provider} / ${u.grant.model}` : "none"}</td>
-                <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{u.keys.length ? u.keys.map((k) => k.provider).join(", ") : "none"}</td>
-                <td className="p-2">{u.grant && <button onClick={() => revoke(u.id)} className="text-xs font-semibold" style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}>Revoke</button>}</td>
+                <td className="p-2 text-xs">
+                  {u.keys.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {u.keys.map((k) => (
+                        <span key={k.provider} className="inline-flex items-center gap-1 px-2 py-1 rounded-md border" style={{ color: "var(--success)", borderColor: "color-mix(in srgb, var(--success) 35%, var(--line))", background: "color-mix(in srgb, var(--success) 10%, var(--panel))" }}>
+                          {k.provider}
+                          <button onClick={() => removeUserKey(u.id, k.provider)} title={`Remove ${k.provider} key`} style={{ color: "var(--success)", background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 1 }}>x</button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span style={{ color: "var(--muted)" }}>none</span>
+                  )}
+                </td>
+                <td className="p-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => openKeyModal(u)} className="text-xs font-semibold px-2 py-1 rounded-md border" style={{ color: "var(--success)", borderColor: "color-mix(in srgb, var(--success) 35%, var(--line))", background: "color-mix(in srgb, var(--success) 10%, var(--panel))", cursor: "pointer" }}>Add Key</button>
+                    {u.grant && <button onClick={() => revoke(u.id)} className="text-xs font-semibold" style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}>Revoke Grant</button>}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {keyUser && (
+        <div onClick={(e) => { if (e.target === e.currentTarget) closeKeyModal(); }} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div className="rounded-xl border p-5" style={{ width: "min(520px, 100%)", background: "var(--panel)", borderColor: "var(--line)", boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="font-bold text-lg">Add AI Key</h3>
+                <p className="text-xs" style={{ color: "var(--muted)" }}>{keyUser.displayName || keyUser.githubLogin || keyUser.id} - {keyUser.id}</p>
+              </div>
+              <button onClick={closeKeyModal} className="text-xl leading-none" style={{ color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>x</button>
+            </div>
+            <div className="grid gap-3">
+              <select value={keyProvider} onChange={(e) => setKeyProvider(e.target.value)} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }}>
+                {keyProviderOptions().map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <input value={keyValue} onChange={(e) => setKeyValue(e.target.value)} type="password" autoComplete="off" placeholder="Paste API key" className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }} />
+              {keyMessage && <p className="text-sm" style={{ color: keyMessage.includes("Saved") ? "var(--success)" : "var(--muted)" }}>{keyMessage}</p>}
+              <div className="flex justify-end gap-2">
+                <button onClick={closeKeyModal} className="px-3 py-2 rounded-lg text-sm font-semibold border" style={{ borderColor: "var(--line)", color: "var(--ink)", background: "var(--paper)" }}>Cancel</button>
+                <button onClick={saveUserKey} disabled={keySaving || !keyValue.trim()} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white", opacity: keySaving || !keyValue.trim() ? 0.5 : 1 }}>Save Key</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -667,4 +764,13 @@ function grantModelOptions(provider: string): Array<{ value: string; label: stri
     { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
   ];
   return [{ value: defaultGrantModel(provider), label: defaultGrantModel(provider) }];
+}
+
+function keyProviderOptions(): Array<{ value: string; label: string }> {
+  return [
+    { value: "anthropic", label: "Anthropic" },
+    { value: "openrouter", label: "OpenRouter" },
+    { value: "openai", label: "OpenAI" },
+    { value: "google-ai", label: "Google AI" },
+  ];
 }

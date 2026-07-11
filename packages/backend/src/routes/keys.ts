@@ -370,6 +370,72 @@ keysRoutes.post('/admin/ai-grants/delete', async (c) => {
   return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
 });
 
+keysRoutes.post('/admin/ai-keys', async (c) => {
+  await requireAdmin(c);
+  if (!c.env.APP_SECRET_KEK) {
+    return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
+  }
+
+  const body = await c.req.json<{ userId?: string; provider?: string; key?: string; label?: string }>().catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const key = String(body?.key ?? '').trim();
+  const label = body?.label ? String(body.label).trim().slice(0, 80) : 'Admin provisioned';
+
+  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!key || key.length > 500) return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
+
+  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!user) return c.json({ ok: false, error: 'user not found' }, 404);
+
+  const prov = await c.env.DB.prepare('SELECT id, key_prefix FROM key_providers WHERE id = ?')
+    .bind(provider)
+    .first<{ id: string; key_prefix: string | null }>();
+  if (!prov) return c.json({ ok: false, error: `Unknown provider: ${provider}` }, 400);
+  if (prov.key_prefix && !key.startsWith(prov.key_prefix)) {
+    return c.json(
+      {
+        ok: false,
+        error: `Key should start with "${prov.key_prefix}". Check you copied the full key.`,
+      },
+      400,
+    );
+  }
+
+  const sealed = await sealSecret(key, c.env.APP_SECRET_KEK);
+  await c.env.DB.prepare(
+    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (user_id, provider) DO UPDATE SET
+       label = excluded.label,
+       key_ciphertext = excluded.key_ciphertext,
+       dek_wrapped = excluded.dek_wrapped,
+       iv = excluded.iv,
+       created_at = excluded.created_at`,
+  )
+    .bind(userId, provider, label, sealed.keyCiphertext, sealed.dekWrapped, sealed.iv, Date.now())
+    .run();
+
+  return c.json({ ok: true, userId, provider });
+});
+
+keysRoutes.post('/admin/ai-keys/delete', async (c) => {
+  await requireAdmin(c);
+  const body = await c.req.json<{ userId?: string; provider?: string }>().catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  if (!USER_ID_RE.test(userId) || !provider) {
+    return c.json({ ok: false, error: 'userId and provider are required' }, 400);
+  }
+
+  const result = await c.env.DB.prepare('DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?')
+    .bind(userId, provider)
+    .run();
+  return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
+});
+
 keysRoutes.post('/internal/keys/userkey', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
   if (!c.env.APP_SECRET_KEK) {

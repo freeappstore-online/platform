@@ -57,6 +57,11 @@ async function authHeader() {
   return `Bearer ${token}`;
 }
 
+async function adminHeader() {
+  const token = await signSession('admin-1', SIGNING_KEY, { roles: ['admin'] });
+  return `Bearer ${token}`;
+}
+
 describe('keys routes', () => {
   const user = { id: 'u1', github_login: 'test', avatar_url: null, date_of_birth: null };
   const providers = [
@@ -281,6 +286,44 @@ describe('keys routes', () => {
     expect(res.status).toBe(200);
     expect(runs[0]!.sql).toContain('DELETE FROM user_api_keys');
     expect(runs[0]!.binds).toEqual(['gh:1', 'openai']);
+  });
+
+  it('POST /v1/admin/ai-keys stores an encrypted user key as product admin', async () => {
+    const runs: Array<{ sql: string; binds: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/admin/ai-keys',
+      {
+        method: 'POST',
+        headers: { Authorization: await adminHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic', key: 'sk-ant-test-key', label: 'Admin provisioned' }),
+      },
+      env(
+        fakeDB({
+          user: { id: 'gh:1', github_login: 'alice', avatar_url: null, date_of_birth: null },
+          provider: { id: 'anthropic', key_prefix: 'sk-ant-' },
+          runs,
+        }),
+        internalEnv,
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(runs.some((r) => r.sql.includes('INSERT INTO user_api_keys'))).toBe(true);
+  });
+
+  it('POST /v1/admin/ai-keys/delete removes a user key as product admin', async () => {
+    const runs: Array<{ sql: string; binds: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/admin/ai-keys/delete',
+      {
+        method: 'POST',
+        headers: { Authorization: await adminHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic' }),
+      },
+      env(fakeDB({ user: { id: 'admin-1', github_login: 'admin', avatar_url: null, date_of_birth: null }, runs }), internalEnv),
+    );
+    expect(res.status).toBe(200);
+    expect(runs[0]!.sql).toContain('DELETE FROM user_api_keys');
+    expect(runs[0]!.binds).toEqual(['gh:1', 'anthropic']);
   });
 
   it('GET /v1/internal/keys/grants lists grants and funded providers', async () => {
