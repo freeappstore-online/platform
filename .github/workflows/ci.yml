@@ -74,6 +74,7 @@ jobs:
           EOF
           npx wrangler d1 migrations apply fas --local
           npx wrangler d1 execute fas --local --command "INSERT OR IGNORE INTO users (id, github_id, github_login, avatar_url, created_at) VALUES ('gh:1', 1, 'testuser', NULL, $(date +%s)000)"
+          npx wrangler d1 execute fas --local --command "INSERT OR IGNORE INTO apps (id, owner_login, created_at, store) VALUES ('e2e', 'testuser', $(date +%s)000, 'apps')"
 
       - name: Start wrangler dev
         working-directory: packages/backend
