@@ -2,7 +2,7 @@
 
 import type { StoreConfig } from "./config";
 import type { DeployEnv, DeployStatus } from "./deploy";
-import { deployApp, pushUpdate } from "./deploy";
+import { deployApp, pushUpdate, waitForGitHubDeploy } from "./deploy";
 import { checkDeployStatus, fetchUrl, getAuditResults, getBuildLogs, getCIResults, listDeployed } from "./infra";
 import type { ToolCall } from "./providers/types";
 
@@ -271,10 +271,12 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string
   if (ctx.appId) applyPlaceholders(ctx.files, ctx.appId, ctx.appId);
   ctx.onDeployStatus({ phase: "pushing", progress: "Pushing update..." });
   const result = await pushUpdate(tc.input.id as string, ctx.files, (tc.input.message as string) || "Update", ctx.env, ctx.config);
-  if (!result.startsWith("Error")) {
-    ctx.onDeployStatus({ phase: "building", deployUrl: `Pushing update...` });
+  if (!result.ok) {
+    ctx.onDeployStatus({ phase: "error", error: result.message });
+    return result.message;
   }
-  return result;
+  await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
+  return result.message;
 }
 
 async function executeFetchUrl(tc: ToolCall, config: StoreConfig): Promise<string> {

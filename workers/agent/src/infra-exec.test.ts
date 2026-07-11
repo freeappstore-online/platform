@@ -110,6 +110,56 @@ describe("executeInfraTool — ID validation", () => {
     const result = await executeInfraTool({ id: "1", name: "push_update", input: { id: "other-app", message: "update" } }, ctx);
     expect(result).toContain("you can only push_update on your own app");
   });
+
+  it("waits for push_update deploy status and marks the app live", async () => {
+    vi.useFakeTimers();
+    const originalFetch = globalThis.fetch;
+    const commitSha = "abc123456789";
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method || "GET";
+      if (method === "GET" && url.endsWith("/git/ref/heads/main")) {
+        return { ok: true, json: async () => ({ object: { sha: "parent-sha" } }) } as Response;
+      }
+      if (method === "POST" && url.endsWith("/git/blobs")) {
+        return { ok: true, json: async () => ({ sha: "blob-sha" }) } as Response;
+      }
+      if (method === "GET" && url.endsWith("/git/commits/parent-sha")) {
+        return { ok: true, json: async () => ({ tree: { sha: "base-tree-sha" } }) } as Response;
+      }
+      if (method === "POST" && url.endsWith("/git/trees")) {
+        return { ok: true, json: async () => ({ sha: "tree-sha" }) } as Response;
+      }
+      if (method === "POST" && url.endsWith("/git/commits")) {
+        return { ok: true, json: async () => ({ sha: commitSha }) } as Response;
+      }
+      if (method === "PATCH" && url.endsWith("/git/refs/heads/main")) {
+        return { ok: true, json: async () => ({ ref: "refs/heads/main" }) } as Response;
+      }
+      if (method === "GET" && url.endsWith("/actions/runs?per_page=10")) {
+        return {
+          ok: true,
+          json: async () => ({ workflow_runs: [{ id: 123, status: "completed", conclusion: "success", head_sha: commitSha }] }),
+        } as Response;
+      }
+      return { ok: false, status: 404, json: async () => ({ message: `Unexpected request: ${method} ${url}` }) } as Response;
+    }) as typeof fetch;
+
+    try {
+      const ctx = makeCtx({ appId: "my-app" });
+      ctx.files.set("web/src/App.tsx", "export default () => <div/>");
+      const resultPromise = executeInfraTool({ id: "1", name: "push_update", input: { id: "my-app", message: "update" } }, ctx);
+      await vi.advanceTimersByTimeAsync(8000);
+      const result = await resultPromise;
+
+      expect(result).toContain("Pushed update");
+      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "pushing", progress: "Pushing update..." });
+      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "building", deployUrl: "https://my-app.freeappstore.online" });
+      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "live", appUrl: "https://my-app.freeappstore.online" });
+    } finally {
+      globalThis.fetch = originalFetch;
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("executeInfraTool — uniqueness check", () => {

@@ -32,6 +32,8 @@ export type DeployStatus =
   | { phase: "error"; error: string };
 
 type TreeItem = { path: string; mode: string; type: string; sha: string };
+export type PushUpdateResult = { ok: true; message: string; commitSha: string } | { ok: false; message: string };
+type WorkflowRun = { id: number; status?: string; conclusion?: string | null; head_sha?: string };
 
 async function createBlobs(ghApi: ReturnType<typeof makeGhApi>, repo: string, files: Map<string, string>): Promise<TreeItem[]> {
   const items: TreeItem[] = [];
@@ -87,26 +89,43 @@ export async function deployApp(
   onStatus({ phase: "provisioning", steps: [...steps] });
 
   // Step 3: Wait for GitHub Actions deploy
-  const appUrl = `https://${deployConfig.id}.${config.domain}`;
+  await waitForGitHubDeploy(deployConfig.id, env, config, onStatus);
+}
+
+export async function waitForGitHubDeploy(
+  appId: string,
+  env: DeployEnv,
+  config: StoreConfig,
+  onStatus: (status: DeployStatus) => void,
+  commitSha?: string,
+): Promise<void> {
+  const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
+  const appUrl = `https://${appId}.${config.domain}`;
+  const repo = `${config.org}/${appId}`;
   onStatus({ phase: "building", deployUrl: appUrl });
 
   const deadline = Date.now() + 150_000; // 2.5 min
-  const repo = `${config.org}/${deployConfig.id}`;
   while (Date.now() < deadline) {
     await sleep(8000);
     try {
-      const runs = await ghApi(`/repos/${repo}/actions/runs?per_page=1&status=completed`);
-      const latestRun = runs.workflow_runs?.[0];
-      if (latestRun) {
-        if (latestRun.conclusion === "success") {
-          onStatus({ phase: "live", appUrl });
-          return;
-        }
-        if (latestRun.conclusion === "failure") {
-          const errorDetail = await fetchCIFailureDetails(ghApi, repo, latestRun.id, env.GITHUB_TOKEN);
-          onStatus({ phase: "error", error: errorDetail });
-          return;
-        }
+      const runs = await ghApi(`/repos/${repo}/actions/runs?per_page=10`);
+      const workflowRuns = (runs.workflow_runs || []) as WorkflowRun[];
+      const latestRun = commitSha ? workflowRuns.find((run) => run.head_sha === commitSha) : workflowRuns[0];
+      if (!latestRun) continue;
+      if (latestRun.status !== "completed") continue;
+
+      if (latestRun.conclusion === "success") {
+        onStatus({ phase: "live", appUrl });
+        return;
+      }
+      if (latestRun.conclusion === "failure") {
+        const errorDetail = await fetchCIFailureDetails(ghApi, repo, latestRun.id, env.GITHUB_TOKEN);
+        onStatus({ phase: "error", error: errorDetail });
+        return;
+      }
+      if (latestRun.conclusion) {
+        onStatus({ phase: "error", error: `GitHub Actions deploy ended with ${latestRun.conclusion}. Check: https://github.com/${repo}/actions` });
+        return;
       }
     } catch {
       /* GH API transient error — retry on next poll */
@@ -214,23 +233,23 @@ export async function pushUpdate(
   commitMessage: string,
   env: DeployEnv,
   config: StoreConfig,
-): Promise<string> {
+): Promise<PushUpdateResult> {
   const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
   const repo = `${config.org}/${appId}`;
 
   const ref = await ghApi(`/repos/${repo}/git/ref/heads/main`);
   const parentSha = ref.object?.sha;
-  if (!parentSha) return `Error: could not find HEAD for ${repo}. Is the ${config.noun} deployed?`;
+  if (!parentSha) return { ok: false, message: `Error: could not find HEAD for ${repo}. Is the ${config.noun} deployed?` };
 
   let treeItems: TreeItem[];
   try {
     treeItems = await createBlobs(ghApi, repo, files);
   } catch (e) {
-    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+    return { ok: false, message: `Error: ${e instanceof Error ? e.message : String(e)}` };
   }
 
   const parentCommit = await ghApi(`/repos/${repo}/git/commits/${parentSha}`);
-  if (!parentCommit.tree?.sha) return `Error: could not read parent commit tree for ${repo}.`;
+  if (!parentCommit.tree?.sha) return { ok: false, message: `Error: could not read parent commit tree for ${repo}.` };
 
   const tree = await ghApi(`/repos/${repo}/git/trees`, "POST", {
     base_tree: parentCommit.tree.sha,
@@ -246,9 +265,10 @@ export async function pushUpdate(
   const refUpdate = await ghApi(`/repos/${repo}/git/refs/heads/main`, "PATCH", {
     sha: commit.sha,
   });
-  if (!refUpdate.ref) return `Error: failed to update ref for ${repo}: ${refUpdate.message || "unknown"}`;
+  if (!refUpdate.ref) return { ok: false, message: `Error: failed to update ref for ${repo}: ${refUpdate.message || "unknown"}` };
+  if (!commit.sha) return { ok: false, message: `Error: GitHub did not return a commit sha for ${repo}.` };
 
-  return `Pushed update to ${repo} (${commit.sha?.slice(0, 7)}). GitHub Actions will deploy to R2.`;
+  return { ok: true, message: `Pushed update to ${repo} (${commit.sha.slice(0, 7)}). GitHub Actions will deploy to R2.`, commitSha: commit.sha };
 }
 
 function sleep(ms: number) {
