@@ -87,7 +87,7 @@ export default {
         if (body.aiConfig && !body.aiConfig.apiKey && authHeader) {
           const provider = mapProviderToVault(body.aiConfig.provider) ?? body.aiConfig.provider;
           if (provider) {
-            const vaultRes = await env.PLATFORM.fetch(`https://api.freeappstore.online/v1/keys/resolve-agent/${provider}`, {
+            const vaultRes = await env.PLATFORM.fetch(`https://backend/v1/keys/resolve-agent/${provider}`, {
               headers: { Authorization: authHeader },
             });
             if (vaultRes.ok) {
