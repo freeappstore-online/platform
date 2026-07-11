@@ -192,7 +192,6 @@ function GrantsTab() {
   const [selectedUser, setSelectedUser] = useState("");
   const [provider, setProvider] = useState("anthropic");
   const [model, setModel] = useState("claude-sonnet-4-6");
-  const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -215,11 +214,15 @@ function GrantsTab() {
   useEffect(load, []);
 
   async function saveGrant() {
-    const data = await adminFetchJson<{ error?: string }>(`${API_URL}/v1/admin/ai-grants`, {
+    const isFunded = funded.includes(provider);
+    const data = await adminFetchJson<{ error?: string; funded?: boolean }>(`${API_URL}/v1/admin/ai-grants`, {
       method: "POST",
-      body: JSON.stringify({ userId: selectedUser, provider, model, note: note || null }),
+      body: JSON.stringify({ userId: selectedUser, provider, model, note: null }),
     });
     if (data.error) alert(data.error);
+    if (!isFunded || data.funded === false) {
+      alert(`Grant saved, but ${provider} is not funded yet. Set COMP_KEY_${provider.toUpperCase()} on freeappstore-api for it to work.`);
+    }
     load();
   }
 
@@ -238,17 +241,21 @@ function GrantsTab() {
   return (
     <>
       <div className="p-4 rounded-xl border mb-5" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
-        <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>Funded providers: {funded.length ? funded.join(", ") : "none configured"}</p>
-        <div className="grid md:grid-cols-5 gap-2">
+        <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+          Funded providers: {funded.length ? funded.join(", ") : "none configured"}.
+          {!funded.length && " Grants can be saved now, but they only run after the matching COMP_KEY secret is set."}
+        </p>
+        <div className="grid md:grid-cols-4 gap-2">
           <select value={selectedUser} onChange={(e) => setSelectedUser(e.target.value)} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }}>
             {users.map((u) => <option key={u.id} value={u.id}>{u.githubLogin || u.id}</option>)}
           </select>
           <select value={provider} onChange={(e) => { setProvider(e.target.value); setModel(defaultGrantModel(e.target.value)); }} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }}>
             {["anthropic", "openai", "google"].map((p) => <option key={p} value={p}>{p}{funded.includes(p) ? "" : " (unfunded)"}</option>)}
           </select>
-          <input value={model} onChange={(e) => setModel(e.target.value)} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }} />
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note" className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }} />
-          <button onClick={saveGrant} disabled={!funded.includes(provider)} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white", opacity: funded.includes(provider) ? 1 : 0.5 }}>Save Grant</button>
+          <select value={model} onChange={(e) => setModel(e.target.value)} className="p-2 rounded-lg border text-sm" style={{ background: "var(--paper)", borderColor: "var(--line)" }}>
+            {grantModelOptions(provider).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <button onClick={saveGrant} disabled={!selectedUser || !provider || !model} className="px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white", opacity: selectedUser && provider && model ? 1 : 0.5 }}>Save Grant</button>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -636,7 +643,28 @@ function formatNum(n: number): string {
 }
 
 function defaultGrantModel(provider: string): string {
+  if (provider === "anthropic") return "claude-sonnet-4-6";
   if (provider === "openai") return "gpt-4o";
   if (provider === "google") return "gemini-2.5-flash";
   return "claude-sonnet-4-6";
+}
+
+function grantModelOptions(provider: string): Array<{ value: string; label: string }> {
+  if (provider === "anthropic") return [
+    { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
+    { value: "claude-opus-4-8", label: "Claude Opus 4.8" },
+    { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
+    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
+  ];
+  if (provider === "openai") return [
+    { value: "gpt-4o", label: "GPT-4o" },
+    { value: "gpt-4o-mini", label: "GPT-4o Mini" },
+    { value: "o4-mini", label: "o4 Mini" },
+    { value: "o3", label: "o3" },
+  ];
+  if (provider === "google") return [
+    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+  ];
+  return [{ value: defaultGrantModel(provider), label: defaultGrantModel(provider) }];
 }

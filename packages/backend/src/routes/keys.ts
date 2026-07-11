@@ -215,7 +215,7 @@ keysRoutes.post('/internal/keys/grants', async (c) => {
   if (!COMP_PROVIDERS.has(provider)) return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
   if (!model || model.length > 128) return c.json({ ok: false, error: 'valid model is required' }, 400);
   if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
-  if (!compKeyFor(c.env, provider)) return c.json({ ok: false, error: `no platform key configured for ${provider}` }, 400);
+  const funded = !!compKeyFor(c.env, provider);
 
   const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
     .bind(userId)
@@ -235,7 +235,7 @@ keysRoutes.post('/internal/keys/grants', async (c) => {
   )
     .bind(userId, provider, model, grantedBy, note, Date.now(), expiresAt)
     .run();
-  return c.json({ ok: true, userId, provider, model, expiresAt });
+  return c.json({ ok: true, userId, provider, model, expiresAt, funded });
 });
 
 keysRoutes.post('/internal/keys/grants/delete', async (c) => {
@@ -335,7 +335,7 @@ keysRoutes.post('/admin/ai-grants', async (c) => {
   if (!COMP_PROVIDERS.has(provider)) return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
   if (!model || model.length > 128) return c.json({ ok: false, error: 'valid model is required' }, 400);
   if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
-  if (!compKeyFor(c.env, provider)) return c.json({ ok: false, error: `no platform key configured for ${provider}` }, 400);
+  const funded = !!compKeyFor(c.env, provider);
 
   const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
     .bind(userId)
@@ -355,7 +355,7 @@ keysRoutes.post('/admin/ai-grants', async (c) => {
   )
     .bind(userId, provider, model, admin.githubLogin || admin.login, note, Date.now(), expiresAt)
     .run();
-  return c.json({ ok: true, userId, provider, model, expiresAt });
+  return c.json({ ok: true, userId, provider, model, expiresAt, funded });
 });
 
 keysRoutes.post('/admin/ai-grants/delete', async (c) => {

@@ -315,6 +315,26 @@ describe('keys routes', () => {
     expect(runs.some((r) => r.sql.includes('INSERT INTO complimentary_grants'))).toBe(true);
   });
 
+  it('POST /v1/internal/keys/grants stores an unfunded complimentary grant', async () => {
+    const runs: Array<{ sql: string; binds: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/internal/keys/grants',
+      {
+        method: 'POST',
+        headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic', model: 'claude-sonnet-4-6' }),
+      },
+      env(fakeDB({ user: { id: 'gh:1' }, runs }), {
+        ADMIN_PROVISION_TOKEN: 'internal-token',
+        APP_SECRET_KEK: internalEnv.APP_SECRET_KEK,
+      }),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { funded: boolean };
+    expect(data.funded).toBe(false);
+    expect(runs.some((r) => r.sql.includes('INSERT INTO complimentary_grants'))).toBe(true);
+  });
+
   it('POST /v1/internal/keys/grants/delete revokes a complimentary grant', async () => {
     const runs: Array<{ sql: string; binds: unknown[] }> = [];
     const res = await app.request(
