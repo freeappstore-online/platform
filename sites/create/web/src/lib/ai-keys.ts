@@ -222,10 +222,11 @@ export function getDefaultProvider(): string {
   const stored = localStorage.getItem("fas_provider");
   // Fall back if the stored provider is no longer offered (e.g. legacy
   // "github" after we removed it from the dropdown).
-  if (stored && PROVIDERS.some((p) => p.type === stored)) return stored;
-  return "openrouter";
+  if (stored && stored !== "openrouter" && PROVIDERS.some((p) => p.type === stored)) return stored;
+  if (stored === "openrouter" && getSavedKeys().openrouter) return stored;
+  return "anthropic";
 }
 
 export function getDefaultModel(): string {
-  return localStorage.getItem("fas_model") || "anthropic/claude-sonnet-4";
+  return localStorage.getItem("fas_model") || "claude-sonnet-4-6";
 }

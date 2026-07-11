@@ -34,7 +34,7 @@ export function Create() {
     const p = getDefaultProvider();
     const stored = localStorage.getItem("fas_model");
     const valid = MODEL_OPTIONS[p]?.some((m) => m.value === stored);
-    return valid ? stored! : MODEL_OPTIONS[p]?.[0]?.value || "anthropic/claude-sonnet-4";
+    return valid ? stored! : MODEL_OPTIONS[p]?.[0]?.value || "claude-sonnet-4-6";
   });
   const [temperature, setTemperature] = useState(0.7);
   const [settingsOpen, setSettingsOpen] = useState(false);

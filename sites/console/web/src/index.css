@@ -13,7 +13,6 @@
   --panel: rgba(255, 255, 255, 0.72);
   --panel-strong: rgba(255, 255, 255, 0.88);
   --panel-quiet: rgba(255, 255, 255, 0.6);
-  --dock: #f7f7f7;
   --panel-hover: rgba(255, 255, 255, 0.85);
   --accent: #2563eb;
   --accent-soft: #eff6ff;
@@ -55,7 +54,6 @@
   --panel: rgba(18, 18, 18, 0.8);
   --panel-strong: rgba(18, 18, 18, 0.92);
   --panel-quiet: rgba(22, 22, 22, 0.8);
-  --dock: #0a0a0a;
   --panel-hover: rgba(38, 38, 38, 0.9);
   --accent: #3b82f6;
   --accent-soft: #1e3a8a;

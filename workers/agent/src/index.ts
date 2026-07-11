@@ -91,7 +91,11 @@ export default {
               headers: { Authorization: authHeader },
             });
             if (vaultRes.ok) {
-              const { key, provider: resolvedProvider, model } = (await vaultRes.json()) as {
+              const {
+                key,
+                provider: resolvedProvider,
+                model,
+              } = (await vaultRes.json()) as {
                 key: string | null;
                 provider?: string;
                 model?: string;

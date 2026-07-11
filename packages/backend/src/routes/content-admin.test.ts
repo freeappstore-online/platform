@@ -10,6 +10,7 @@ function fakeDB(opts: {
   docs?: Array<Record<string, unknown>>;
   counters?: Array<Record<string, unknown>>;
   users?: Array<Record<string, unknown>>;
+  sessions?: Array<Record<string, unknown>>;
   apps?: Array<Record<string, unknown>>;
   stats?: Record<string, number>;
   kvValue?: Record<string, unknown> | null;
@@ -29,6 +30,7 @@ function fakeDB(opts: {
           if (trimmed.includes('FROM kv')) return { results: opts.kvEntries ?? [] };
           if (trimmed.includes('FROM documents')) return { results: opts.docs ?? [] };
           if (trimmed.includes('FROM counters')) return { results: opts.counters ?? [] };
+          if (trimmed.includes('FROM agent_sessions')) return { results: opts.sessions ?? [] };
           if (trimmed.includes('FROM users') && trimmed.includes('LIMIT'))
             return { results: opts.users ?? [] };
           if (trimmed.includes('FROM apps')) return { results: opts.apps ?? [] };
@@ -103,6 +105,35 @@ describe('content-admin routes', () => {
     const data = (await res.json()) as Record<string, number>;
     expect(typeof data.users).toBe('number');
     expect(typeof data.apps).toBe('number');
+  });
+
+  it('GET /v1/admin/agent-sessions includes user names', async () => {
+    const sessions = [
+      {
+        session_id: 's1',
+        user_id: 'gh:1',
+        github_login: 'alice',
+        display_name: 'Alice Example',
+        name: 'New App',
+        app_id: null,
+        app_url: null,
+        deployed: 0,
+        deploy_state: null,
+        created_at: 1000,
+        updated_at: 2000,
+      },
+    ];
+    const res = await app.request(
+      '/v1/admin/agent-sessions',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser, sessions, stats: { users: 1 } })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { sessions: Array<{ userLogin: string; userDisplayName: string }> };
+    expect(data.sessions[0]!.userLogin).toBe('alice');
+    expect(data.sessions[0]!.userDisplayName).toBe('Alice Example');
   });
 
   // KV

@@ -75,6 +75,8 @@ interface Creator {
 interface AgentSession {
   sessionId: string;
   userId: string;
+  userLogin?: string | null;
+  userDisplayName?: string | null;
   name: string;
   appId: string | null;
   appUrl: string | null;
@@ -169,7 +171,10 @@ function SessionsTab() {
                     <strong>{s.name}</strong>
                     <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>{s.sessionId}</div>
                   </td>
-                  <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>{s.userId}</td>
+                  <td className="p-2">
+                    <strong className="text-sm">{s.userDisplayName || s.userLogin || s.userId}</strong>
+                    <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>{s.userId}</div>
+                  </td>
                   <td className="p-2 text-xs">{s.appUrl ? <a href={s.appUrl} target="_blank" style={{ color: "var(--accent)" }}>{s.appId || s.appUrl}</a> : s.appId || "not deployed"}</td>
                   <td className="p-2"><StatusDot status={s.deployed ? "deployed" : s.deployState?.phase || "draft"} /></td>
                   <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>{timeAgo(s.updatedAt)}</td>

@@ -218,20 +218,23 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
   const offset = Number(c.req.query('offset') || 0);
   const q = (c.req.query('q') ?? '').trim();
 
-  let sql = `SELECT session_id, user_id, name, app_id, app_url, deployed, deploy_state, created_at, updated_at
-     FROM agent_sessions`;
-  let countSql = 'SELECT COUNT(*) as n FROM agent_sessions';
+  let sql = `SELECT
+       s.session_id, s.user_id, s.name, s.app_id, s.app_url, s.deployed, s.deploy_state, s.created_at, s.updated_at,
+       u.github_login, u.display_name
+     FROM agent_sessions s
+     LEFT JOIN users u ON u.id = s.user_id`;
+  let countSql = 'SELECT COUNT(*) as n FROM agent_sessions s LEFT JOIN users u ON u.id = s.user_id';
   const binds: unknown[] = [];
   const countBinds: unknown[] = [];
 
   if (q) {
-    sql += ' WHERE name LIKE ? OR app_id LIKE ? OR session_id LIKE ? OR user_id LIKE ?';
-    countSql += ' WHERE name LIKE ? OR app_id LIKE ? OR session_id LIKE ? OR user_id LIKE ?';
+    sql += ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
+    countSql += ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
     const like = `%${q.replace(/[%_]/g, '\\$&')}%`;
-    binds.push(like, like, like, like);
-    countBinds.push(like, like, like, like);
+    binds.push(like, like, like, like, like, like);
+    countBinds.push(like, like, like, like, like, like);
   }
-  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  sql += ' ORDER BY s.updated_at DESC LIMIT ? OFFSET ?';
   binds.push(limit, offset);
 
   const [rows, count] = await Promise.all([
@@ -247,6 +250,8 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
     sessions: (rows.results ?? []).map((r) => ({
       sessionId: r.session_id,
       userId: r.user_id,
+      userLogin: r.github_login,
+      userDisplayName: r.display_name,
       name: r.name,
       appId: r.app_id,
       appUrl: r.app_url,

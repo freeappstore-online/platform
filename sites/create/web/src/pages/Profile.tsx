@@ -75,7 +75,13 @@ export function Profile() {
   const notif = useNotificationState();
   const speech = useSpeech();
   const [provider, setProvider] = useState(getDefaultProvider);
-  const [model, setModel] = useState(getDefaultModel);
+  const [model, setModel] = useState(() => {
+    const p = getDefaultProvider();
+    const stored = getDefaultModel();
+    return MODEL_OPTIONS[p]?.some((m) => m.value === stored)
+      ? stored
+      : MODEL_OPTIONS[p]?.[0]?.value || "claude-sonnet-4-6";
+  });
   const [usage, setUsage] = useState<VaultUsage | null>(null);
 
   useEffect(() => { localStorage.setItem("fas_provider", provider); }, [provider]);
