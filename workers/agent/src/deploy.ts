@@ -124,7 +124,10 @@ export async function waitForGitHubDeploy(
         return;
       }
       if (latestRun.conclusion) {
-        onStatus({ phase: "error", error: `GitHub Actions deploy ended with ${latestRun.conclusion}. Check: https://github.com/${repo}/actions` });
+        onStatus({
+          phase: "error",
+          error: `GitHub Actions deploy ended with ${latestRun.conclusion}. Check: https://github.com/${repo}/actions`,
+        });
         return;
       }
     } catch {
@@ -268,7 +271,11 @@ export async function pushUpdate(
   if (!refUpdate.ref) return { ok: false, message: `Error: failed to update ref for ${repo}: ${refUpdate.message || "unknown"}` };
   if (!commit.sha) return { ok: false, message: `Error: GitHub did not return a commit sha for ${repo}.` };
 
-  return { ok: true, message: `Pushed update to ${repo} (${commit.sha.slice(0, 7)}). GitHub Actions will deploy to R2.`, commitSha: commit.sha };
+  return {
+    ok: true,
+    message: `Pushed update to ${repo} (${commit.sha.slice(0, 7)}). GitHub Actions will deploy to R2.`,
+    commitSha: commit.sha,
+  };
 }
 
 function sleep(ms: number) {
