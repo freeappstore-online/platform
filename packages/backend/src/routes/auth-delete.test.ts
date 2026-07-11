@@ -13,7 +13,14 @@ function fakeDB(capture: { batched?: string[] } = {}) {
         bind: (..._a: unknown[]) => stmt,
         first: async () =>
           trimmed.includes('FROM users')
-            ? { id: 'u1', github_login: 'alice', avatar_url: null, display_name: null, email: null, date_of_birth: null }
+            ? {
+                id: 'u1',
+                github_login: 'alice',
+                avatar_url: null,
+                display_name: null,
+                email: null,
+                date_of_birth: null,
+              }
             : null,
         run: async () => ({ meta: { changes: 1 } }),
       };

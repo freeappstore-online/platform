@@ -131,7 +131,9 @@ describe('content-admin routes', () => {
       env(fakeDB({ user: adminUser, sessions, stats: { users: 1 } })),
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { sessions: Array<{ userLogin: string; userDisplayName: string }> };
+    const data = (await res.json()) as {
+      sessions: Array<{ userLogin: string; userDisplayName: string }>;
+    };
     expect(data.sessions[0]!.userLogin).toBe('alice');
     expect(data.sessions[0]!.userDisplayName).toBe('Alice Example');
   });

@@ -484,7 +484,9 @@ describe('friends routes', () => {
           },
           all: async () => ({ results: [] }),
           // The cap-guarded UPDATE matches no rows when the accepter is at MAX.
-          run: async () => ({ meta: { changes: trimmed.startsWith('UPDATE friendships') ? 0 : 1 } }),
+          run: async () => ({
+            meta: { changes: trimmed.startsWith('UPDATE friendships') ? 0 : 1 },
+          }),
         };
         return { ...result, bind: (..._args: unknown[]) => result };
       },

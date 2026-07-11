@@ -182,7 +182,7 @@ describe('keys routes', () => {
   });
 
   it('GET /v1/keys HTML mode does not let ?provider break out of the inline script (XSS)', async () => {
-    const payload = "</script><script>alert(1)</script>";
+    const payload = '</script><script>alert(1)</script>';
     const res = await app.request(
       `/v1/keys?provider=${encodeURIComponent(payload)}`,
       {},
@@ -217,14 +217,32 @@ describe('keys routes', () => {
       { headers: { 'X-Internal-Token': 'internal-token' } },
       env(
         fakeDB({
-          users: [{ id: 'gh:1', github_login: 'alice', display_name: 'Alice', avatar_url: null, created_at: 123 }],
-          keys: [{ user_id: 'gh:1', provider: 'openai', label: 'Admin', created_at: 456, last_used_at: null }],
+          users: [
+            {
+              id: 'gh:1',
+              github_login: 'alice',
+              display_name: 'Alice',
+              avatar_url: null,
+              created_at: 123,
+            },
+          ],
+          keys: [
+            {
+              user_id: 'gh:1',
+              provider: 'openai',
+              label: 'Admin',
+              created_at: 456,
+              last_used_at: null,
+            },
+          ],
         }),
         internalEnv,
       ),
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { users: Array<{ id: string; keys: Array<{ provider: string }> }> };
+    const data = (await res.json()) as {
+      users: Array<{ id: string; keys: Array<{ provider: string }> }>;
+    };
     expect(data.users[0]!.id).toBe('gh:1');
     expect(data.users[0]!.keys[0]!.provider).toBe('openai');
   });
@@ -255,7 +273,12 @@ describe('keys routes', () => {
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'gh:1', provider: 'openai', key: 'sk-test-key', label: 'Admin provisioned' }),
+        body: JSON.stringify({
+          userId: 'gh:1',
+          provider: 'openai',
+          key: 'sk-test-key',
+          label: 'Admin provisioned',
+        }),
       },
       env(
         fakeDB({
@@ -295,7 +318,12 @@ describe('keys routes', () => {
       {
         method: 'POST',
         headers: { Authorization: await adminHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic', key: 'sk-ant-test-key', label: 'Admin provisioned' }),
+        body: JSON.stringify({
+          userId: 'gh:1',
+          provider: 'anthropic',
+          key: 'sk-ant-test-key',
+          label: 'Admin provisioned',
+        }),
       },
       env(
         fakeDB({
@@ -319,7 +347,13 @@ describe('keys routes', () => {
         headers: { Authorization: await adminHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic' }),
       },
-      env(fakeDB({ user: { id: 'admin-1', github_login: 'admin', avatar_url: null, date_of_birth: null }, runs }), internalEnv),
+      env(
+        fakeDB({
+          user: { id: 'admin-1', github_login: 'admin', avatar_url: null, date_of_birth: null },
+          runs,
+        }),
+        internalEnv,
+      ),
     );
     expect(res.status).toBe(200);
     expect(runs[0]!.sql).toContain('DELETE FROM user_api_keys');
@@ -332,7 +366,17 @@ describe('keys routes', () => {
       { headers: { 'X-Internal-Token': 'internal-token' } },
       env(
         fakeDB({
-          grants: [{ user_id: 'gh:1', provider: 'anthropic', model: 'claude-sonnet-4-6', granted_by: 'admin', note: null, created_at: 123, expires_at: null }],
+          grants: [
+            {
+              user_id: 'gh:1',
+              provider: 'anthropic',
+              model: 'claude-sonnet-4-6',
+              granted_by: 'admin',
+              note: null,
+              created_at: 123,
+              expires_at: null,
+            },
+          ],
         }),
         internalEnv,
       ),
@@ -350,7 +394,12 @@ describe('keys routes', () => {
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic', model: 'claude-sonnet-4-6', note: 'beta' }),
+        body: JSON.stringify({
+          userId: 'gh:1',
+          provider: 'anthropic',
+          model: 'claude-sonnet-4-6',
+          note: 'beta',
+        }),
       },
       env(fakeDB({ user: { id: 'gh:1' }, runs }), internalEnv),
     );
@@ -403,13 +452,26 @@ describe('keys routes', () => {
       env(
         fakeDB({
           user: { id: 'gh:1', github_login: 'alice', avatar_url: null, date_of_birth: null },
-          grant: { user_id: 'gh:1', provider: 'anthropic', model: 'claude-sonnet-4-6', granted_by: 'admin', note: null, created_at: 123, expires_at: null },
+          grant: {
+            user_id: 'gh:1',
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
+            granted_by: 'admin',
+            note: null,
+            created_at: 123,
+            expires_at: null,
+          },
         }),
         internalEnv,
       ),
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { key: string | null; provider: string; model: string; source: string };
+    const data = (await res.json()) as {
+      key: string | null;
+      provider: string;
+      model: string;
+      source: string;
+    };
     expect(data.key).toBe('sk-ant-platform');
     expect(data.provider).toBe('anthropic');
     expect(data.model).toBe('claude-sonnet-4-6');

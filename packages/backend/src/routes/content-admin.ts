@@ -228,8 +228,10 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
   const countBinds: unknown[] = [];
 
   if (q) {
-    sql += ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
-    countSql += ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
+    sql +=
+      ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
+    countSql +=
+      ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
     const like = `%${q.replace(/[%_]/g, '\\$&')}%`;
     binds.push(like, like, like, like, like, like);
     countBinds.push(like, like, like, like, like, like);

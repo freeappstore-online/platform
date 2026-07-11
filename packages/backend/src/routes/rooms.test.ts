@@ -53,11 +53,7 @@ async function bearer(uid = 'u1') {
 
 describe('rooms: ticket issuance', () => {
   it('401s without auth', async () => {
-    const res = await app.request(
-      '/v1/apps/timer/rooms/lobby/ticket',
-      { method: 'POST' },
-      env(),
-    );
+    const res = await app.request('/v1/apps/timer/rooms/lobby/ticket', { method: 'POST' }, env());
     expect(res.status).toBe(401);
   });
 
@@ -90,7 +86,14 @@ describe('rooms: websocket join', () => {
 
   it('rejects a ticket bound to a different room', async () => {
     const ticket = await signPayload(
-      { typ: 'room', appId: 'timer', roomId: 'other', uid: 'u1', login: 'alice', exp: 2_000_000_000 },
+      {
+        typ: 'room',
+        appId: 'timer',
+        roomId: 'other',
+        uid: 'u1',
+        login: 'alice',
+        exp: 2_000_000_000,
+      },
       SIGNING_KEY,
     );
     const res = await app.request(
@@ -116,7 +119,14 @@ describe('rooms: websocket join', () => {
 
   it('accepts a valid ticket and forwards to the room DO with uid/login (no credential)', async () => {
     const ticket = await signPayload(
-      { typ: 'room', appId: 'timer', roomId: 'lobby', uid: 'u1', login: 'alice', exp: 2_000_000_000 },
+      {
+        typ: 'room',
+        appId: 'timer',
+        roomId: 'lobby',
+        uid: 'u1',
+        login: 'alice',
+        exp: 2_000_000_000,
+      },
       SIGNING_KEY,
     );
     const captured: { url?: string } = {};

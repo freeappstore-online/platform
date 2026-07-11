@@ -31,9 +31,17 @@ const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
 const GITHUB_LOGIN_RE = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
 
 const VALID_CATEGORIES = [
-  'Learning', 'Strategy', 'Discovery', 'Brain Training', 'Social',
-  'Productivity', 'Health & Fitness', 'Finance', 'News & Weather',
-  'Utilities', 'Other (specify in description)',
+  'Learning',
+  'Strategy',
+  'Discovery',
+  'Brain Training',
+  'Social',
+  'Productivity',
+  'Health & Fitness',
+  'Finance',
+  'News & Weather',
+  'Utilities',
+  'Other (specify in description)',
 ] as const;
 
 const STORE_DOMAIN = {
@@ -101,8 +109,12 @@ publishRoutes.post('/publish', async (c) => {
   }
   if (!body.category?.trim()) return c.text('category is required', 400);
   const catNorm = body.category.trim();
-  const validCat = VALID_CATEGORIES.find(c => c.toLowerCase() === catNorm.toLowerCase());
-  if (!validCat) return c.text(`invalid category: ${catNorm}. Must be one of: ${VALID_CATEGORIES.join(', ')}`, 400);
+  const validCat = VALID_CATEGORIES.find((c) => c.toLowerCase() === catNorm.toLowerCase());
+  if (!validCat)
+    return c.text(
+      `invalid category: ${catNorm}. Must be one of: ${VALID_CATEGORIES.join(', ')}`,
+      400,
+    );
   body.category = validCat;
   if (!body.oneliner?.trim()) return c.text('oneliner is required', 400);
   if (!body.description?.trim()) return c.text('description is required', 400);

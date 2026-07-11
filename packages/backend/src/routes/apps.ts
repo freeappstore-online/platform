@@ -83,9 +83,5 @@ appsRoutes.get('/apps/creators', async (c) => {
   for (const r of result.results ?? []) {
     if (r.owner_login) creators[r.id] = r.owner_login;
   }
-  return c.json(
-    { creators },
-    200,
-    { 'Cache-Control': 'public, max-age=300' },
-  );
+  return c.json({ creators }, 200, { 'Cache-Control': 'public, max-age=300' });
 });

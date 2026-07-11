@@ -109,7 +109,10 @@ async function getActiveCompGrant(env: Env, userId: string) {
   if (!row) return null;
   const grant = rowToGrant(row);
   if (grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now()) {
-    await env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(userId).run().catch(() => {});
+    await env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
+      .bind(userId)
+      .run()
+      .catch(() => {});
     return null;
   }
   return grant;
@@ -167,7 +170,10 @@ keysRoutes.get('/internal/keys/users', async (c) => {
       .catch(() => ({ results: [] })),
   ]);
 
-  const keysByUser = new Map<string, Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>>();
+  const keysByUser = new Map<
+    string,
+    Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>
+  >();
   for (const key of keysRes.results) {
     const keys = keysByUser.get(key.user_id) ?? [];
     keys.push({
@@ -202,19 +208,32 @@ keysRoutes.get('/internal/keys/grants', async (c) => {
 keysRoutes.post('/internal/keys/grants', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req
-    .json<{ userId?: string; provider?: string; model?: string; note?: string; expiresAt?: string | null; grantedBy?: string }>()
+    .json<{
+      userId?: string;
+      provider?: string;
+      model?: string;
+      note?: string;
+      expiresAt?: string | null;
+      grantedBy?: string;
+    }>()
     .catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const provider = String(body?.provider ?? '')
+    .trim()
+    .toLowerCase();
   const model = String(body?.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
   const note = body?.note ? String(body.note).trim().slice(0, 200) : null;
   const expiresAt = body?.expiresAt ? String(body.expiresAt).trim() : null;
   const grantedBy = body?.grantedBy ? String(body.grantedBy).trim().slice(0, 120) : 'admin';
 
-  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  if (!COMP_PROVIDERS.has(provider)) return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
-  if (!model || model.length > 128) return c.json({ ok: false, error: 'valid model is required' }, 400);
-  if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
+  if (!USER_ID_RE.test(userId))
+    return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!COMP_PROVIDERS.has(provider))
+    return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
+  if (!model || model.length > 128)
+    return c.json({ ok: false, error: 'valid model is required' }, 400);
+  if (expiresAt && Number.isNaN(Date.parse(expiresAt)))
+    return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
   const funded = !!compKeyFor(c.env, provider);
 
   const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
@@ -242,7 +261,8 @@ keysRoutes.post('/internal/keys/grants/delete', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json<{ userId?: string }>().catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!USER_ID_RE.test(userId))
+    return c.json({ ok: false, error: 'valid userId is required' }, 400);
   await ensureCompSchema(c.env.DB);
   const result = await c.env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
     .bind(userId)
@@ -288,7 +308,10 @@ keysRoutes.get('/admin/ai-grants/users', async (c) => {
       .catch(() => ({ results: [] })),
   ]);
 
-  const keysByUser = new Map<string, Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>>();
+  const keysByUser = new Map<
+    string,
+    Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>
+  >();
   for (const key of keysRes.results) {
     const keys = keysByUser.get(key.user_id) ?? [];
     keys.push({
@@ -323,18 +346,30 @@ keysRoutes.get('/admin/ai-grants', async (c) => {
 keysRoutes.post('/admin/ai-grants', async (c) => {
   const admin = await requireAdmin(c);
   const body = await c.req
-    .json<{ userId?: string; provider?: string; model?: string; note?: string; expiresAt?: string | null }>()
+    .json<{
+      userId?: string;
+      provider?: string;
+      model?: string;
+      note?: string;
+      expiresAt?: string | null;
+    }>()
     .catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const provider = String(body?.provider ?? '')
+    .trim()
+    .toLowerCase();
   const model = String(body?.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
   const note = body?.note ? String(body.note).trim().slice(0, 200) : null;
   const expiresAt = body?.expiresAt ? String(body.expiresAt).trim() : null;
 
-  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  if (!COMP_PROVIDERS.has(provider)) return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
-  if (!model || model.length > 128) return c.json({ ok: false, error: 'valid model is required' }, 400);
-  if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
+  if (!USER_ID_RE.test(userId))
+    return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!COMP_PROVIDERS.has(provider))
+    return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
+  if (!model || model.length > 128)
+    return c.json({ ok: false, error: 'valid model is required' }, 400);
+  if (expiresAt && Number.isNaN(Date.parse(expiresAt)))
+    return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
   const funded = !!compKeyFor(c.env, provider);
 
   const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
@@ -362,7 +397,8 @@ keysRoutes.post('/admin/ai-grants/delete', async (c) => {
   await requireAdmin(c);
   const body = await c.req.json<{ userId?: string }>().catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!USER_ID_RE.test(userId))
+    return c.json({ ok: false, error: 'valid userId is required' }, 400);
   await ensureCompSchema(c.env.DB);
   const result = await c.env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
     .bind(userId)
@@ -376,14 +412,20 @@ keysRoutes.post('/admin/ai-keys', async (c) => {
     return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
   }
 
-  const body = await c.req.json<{ userId?: string; provider?: string; key?: string; label?: string }>().catch(() => null);
+  const body = await c.req
+    .json<{ userId?: string; provider?: string; key?: string; label?: string }>()
+    .catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const provider = String(body?.provider ?? '')
+    .trim()
+    .toLowerCase();
   const key = String(body?.key ?? '').trim();
   const label = body?.label ? String(body.label).trim().slice(0, 80) : 'Admin provisioned';
 
-  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  if (!key || key.length > 500) return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
+  if (!USER_ID_RE.test(userId))
+    return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!key || key.length > 500)
+    return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
 
   const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
     .bind(userId)
@@ -425,12 +467,16 @@ keysRoutes.post('/admin/ai-keys/delete', async (c) => {
   await requireAdmin(c);
   const body = await c.req.json<{ userId?: string; provider?: string }>().catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const provider = String(body?.provider ?? '')
+    .trim()
+    .toLowerCase();
   if (!USER_ID_RE.test(userId) || !provider) {
     return c.json({ ok: false, error: 'userId and provider are required' }, 400);
   }
 
-  const result = await c.env.DB.prepare('DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?')
+  const result = await c.env.DB.prepare(
+    'DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?',
+  )
     .bind(userId, provider)
     .run();
   return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
@@ -442,14 +488,20 @@ keysRoutes.post('/internal/keys/userkey', async (c) => {
     return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
   }
 
-  const body = await c.req.json<{ userId?: string; provider?: string; key?: string; label?: string }>().catch(() => null);
+  const body = await c.req
+    .json<{ userId?: string; provider?: string; key?: string; label?: string }>()
+    .catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const provider = String(body?.provider ?? '')
+    .trim()
+    .toLowerCase();
   const key = String(body?.key ?? '').trim();
   const label = body?.label ? String(body.label).trim().slice(0, 80) : null;
 
-  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  if (!key || key.length > 500) return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
+  if (!USER_ID_RE.test(userId))
+    return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!key || key.length > 500)
+    return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
 
   const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
     .bind(userId)
@@ -491,12 +543,16 @@ keysRoutes.post('/internal/keys/userkey/delete', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json<{ userId?: string; provider?: string }>().catch(() => null);
   const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const provider = String(body?.provider ?? '')
+    .trim()
+    .toLowerCase();
   if (!USER_ID_RE.test(userId) || !provider) {
     return c.json({ ok: false, error: 'userId and provider are required' }, 400);
   }
 
-  const result = await c.env.DB.prepare('DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?')
+  const result = await c.env.DB.prepare(
+    'DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?',
+  )
     .bind(userId, provider)
     .run();
   return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
@@ -658,7 +714,13 @@ keysRoutes.get('/keys/resolve-agent/:provider', async (c) => {
   const grant = await getActiveCompGrant(c.env, user.id);
   if (!grant) return c.json({ key: null, source: 'none' });
   const grantKey = compKeyFor(c.env, grant.provider);
-  if (!grantKey) return c.json({ key: null, source: 'grant_unfunded', provider: grant.provider, model: grant.model });
+  if (!grantKey)
+    return c.json({
+      key: null,
+      source: 'grant_unfunded',
+      provider: grant.provider,
+      model: grant.model,
+    });
 
   return c.json({
     key: grantKey,
