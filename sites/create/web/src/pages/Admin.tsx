@@ -1,9 +1,17 @@
 import { useState, useEffect } from "react";
 import { Nav } from "../components/Nav";
 import { useAuth } from "../hooks/useAuth";
+import { API_URL, getSession } from "../lib/api";
 
 const ADMIN_API = "https://admin.freeappstore.online";
-const ADMIN_ACCESS_MESSAGE = "Admin API access required. Open admin.freeappstore.online, sign in, then reload this page.";
+const ADMIN_ACCESS_MESSAGE = "Platform admin access required. Sign out and back in if your admin role was just added.";
+
+function authHeaders(): Record<string, string> {
+  const session = getSession();
+  return session?.token
+    ? { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" }
+    : { "Content-Type": "application/json" };
+}
 
 type Tab = "overview" | "apps" | "users" | "sessions" | "grants" | "creators";
 
@@ -108,9 +116,9 @@ function SessionsTab() {
   useEffect(() => {
     setLoading(true);
     setError("");
-    const params = new URLSearchParams({ page: "1" });
+    const params = new URLSearchParams({ limit: "50" });
     if (search) params.set("q", search);
-    fetch(`${ADMIN_API}/api/agent/sessions?${params}`, { credentials: "include" })
+    fetch(`${API_URL}/v1/admin/agent-sessions?${params}`, { headers: authHeaders() })
       .then(async (r) => {
         if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
         return r.json();
@@ -177,11 +185,11 @@ function GrantsTab() {
     setLoading(true);
     setError("");
     Promise.all([
-      fetch(`${ADMIN_API}/api/ai-grants/users`, { credentials: "include" }).then(async (r) => {
+      fetch(`${API_URL}/v1/admin/ai-grants/users`, { headers: authHeaders() }).then(async (r) => {
         if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
         return r.json();
       }),
-      fetch(`${ADMIN_API}/api/ai-grants`, { credentials: "include" }).then(async (r) => {
+      fetch(`${API_URL}/v1/admin/ai-grants`, { headers: authHeaders() }).then(async (r) => {
         if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
         return r.json();
       }),
@@ -198,10 +206,9 @@ function GrantsTab() {
   useEffect(load, []);
 
   async function saveGrant() {
-    const res = await fetch(`${ADMIN_API}/api/ai-grants`, {
+    const res = await fetch(`${API_URL}/v1/admin/ai-grants`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
+      headers: authHeaders(),
       body: JSON.stringify({ userId: selectedUser, provider, model, note: note || null }),
     });
     const data = await res.json();
@@ -211,10 +218,9 @@ function GrantsTab() {
 
   async function revoke(userId: string) {
     if (!confirm(`Revoke grant for ${userId}?`)) return;
-    await fetch(`${ADMIN_API}/api/ai-grants/delete`, {
+    await fetch(`${API_URL}/v1/admin/ai-grants/delete`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
+      headers: authHeaders(),
       body: JSON.stringify({ userId }),
     });
     load();
@@ -274,12 +280,18 @@ function OverviewTab() {
 
   useEffect(() => {
     setError("");
-    fetch(`${ADMIN_API}/api/stats`, { credentials: "include" })
+    fetch(`${API_URL}/v1/admin/stats`, { headers: authHeaders() })
       .then(async (r) => {
         if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
         return r.json();
       })
-      .then(setStats)
+      .then((data) => setStats({
+        apps: Number(data.apps || 0),
+        games: 0,
+        users: Number(data.users || 0),
+        creators: 0,
+        traffic: null,
+      }))
       .catch(() => setError(ADMIN_ACCESS_MESSAGE))
       .finally(() => setLoading(false));
   }, []);
@@ -314,8 +326,8 @@ function AdminAccessError() {
   return (
     <div className="p-4 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
       <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>{ADMIN_ACCESS_MESSAGE}</p>
-      <a href={`${ADMIN_API}/#/ai-keys`} target="_blank" className="inline-flex px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white" }}>
-        Open FAS Admin
+      <a href="/profile" className="inline-flex px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white" }}>
+        Open Profile
       </a>
     </div>
   );
@@ -489,12 +501,24 @@ function UsersTab() {
   useEffect(() => {
     setLoading(true);
     setError("");
-    fetch(`${ADMIN_API}/api/users?page=${page}`, { credentials: "include" })
+    const offset = (page - 1) * 50;
+    fetch(`${API_URL}/v1/admin/users?limit=50&offset=${offset}`, { headers: authHeaders() })
       .then(async (r) => {
         if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
         return r.json();
       })
-      .then((data) => { setUsers(data.users || []); setTotal(data.total || 0); setPages(data.pages || 1); })
+      .then((data) => {
+        setUsers((data.users || []).map((u: Record<string, unknown>) => ({
+          id: String(u.id || ""),
+          email: String(u.email || ""),
+          name: String(u.display_name || u.github_login || u.id || ""),
+          photo_url: u.avatar_url ? String(u.avatar_url) : null,
+          provider: String(u.provider || "github"),
+          created_at: String(u.created_at || ""),
+        })));
+        setTotal(data.total || 0);
+        setPages(Math.max(1, Math.ceil((data.total || 0) / 50)));
+      })
       .catch(() => setError(ADMIN_ACCESS_MESSAGE))
       .finally(() => setLoading(false));
   }, [page]);

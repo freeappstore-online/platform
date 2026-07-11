@@ -184,7 +184,7 @@ contentAdminRoutes.get('/admin/users', async (c) => {
   const offset = Number(c.req.query('offset') || 0);
 
   const result = await c.env.DB.prepare(
-    'SELECT id, github_login, avatar_url, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    'SELECT id, github_login, display_name, email, provider, avatar_url, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?',
   )
     .bind(limit, offset)
     .all();
@@ -207,6 +207,59 @@ contentAdminRoutes.get('/admin/apps', async (c) => {
 });
 
 // ── Agent sessions (VibeCode debugging) ─────────────────────────
+
+/**
+ * GET /v1/admin/agent-sessions — every user's VibeCode sessions.
+ * Query: ?limit=50&offset=0&q=<search>
+ */
+contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
+  await requireAdmin(c);
+  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const offset = Number(c.req.query('offset') || 0);
+  const q = (c.req.query('q') ?? '').trim();
+
+  let sql = `SELECT session_id, user_id, name, app_id, app_url, deployed, deploy_state, created_at, updated_at
+     FROM agent_sessions`;
+  let countSql = 'SELECT COUNT(*) as n FROM agent_sessions';
+  const binds: unknown[] = [];
+  const countBinds: unknown[] = [];
+
+  if (q) {
+    sql += ' WHERE name LIKE ? OR app_id LIKE ? OR session_id LIKE ? OR user_id LIKE ?';
+    countSql += ' WHERE name LIKE ? OR app_id LIKE ? OR session_id LIKE ? OR user_id LIKE ?';
+    const like = `%${q.replace(/[%_]/g, '\\$&')}%`;
+    binds.push(like, like, like, like);
+    countBinds.push(like, like, like, like);
+  }
+  sql += ' ORDER BY updated_at DESC LIMIT ? OFFSET ?';
+  binds.push(limit, offset);
+
+  const [rows, count] = await Promise.all([
+    c.env.DB.prepare(sql)
+      .bind(...binds)
+      .all<Record<string, unknown>>(),
+    c.env.DB.prepare(countSql)
+      .bind(...countBinds)
+      .first<{ n: number }>(),
+  ]);
+
+  return c.json({
+    sessions: (rows.results ?? []).map((r) => ({
+      sessionId: r.session_id,
+      userId: r.user_id,
+      name: r.name,
+      appId: r.app_id,
+      appUrl: r.app_url,
+      deployed: r.deployed === 1 || r.deployed === true,
+      deployState: r.deploy_state ? JSON.parse(r.deploy_state as string) : null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    })),
+    total: count?.n ?? 0,
+    limit,
+    offset,
+  });
+});
 
 /**
  * GET /v1/admin/agent-errors — recent errors across all VibeCode sessions.

@@ -13,7 +13,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireUser } from '../lib/auth.js';
+import { requireAdmin, requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
 import type { Env } from '../types.js';
 
@@ -240,6 +240,126 @@ keysRoutes.post('/internal/keys/grants', async (c) => {
 
 keysRoutes.post('/internal/keys/grants/delete', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json<{ userId?: string }>().catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  await ensureCompSchema(c.env.DB);
+  const result = await c.env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
+    .bind(userId)
+    .run();
+  return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
+});
+
+// ── Product-session admin grant management ────────────────────────────
+// These routes power create.freeappstore.online/admin using the normal FAS
+// session token. They avoid the separate Cloudflare Access login on the admin
+// Worker, while still requiring the platform admin role.
+
+keysRoutes.get('/admin/ai-grants/users', async (c) => {
+  await requireAdmin(c);
+
+  const grants = await listCompGrants(c.env);
+  const grantsByUser = new Map(grants.map((grant) => [grant.userId, grant]));
+  const [usersRes, keysRes] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, github_login, display_name, avatar_url, created_at
+       FROM users
+       ORDER BY created_at DESC
+       LIMIT 1000`,
+    ).all<{
+      id: string;
+      github_login: string;
+      display_name: string | null;
+      avatar_url: string | null;
+      created_at: number | null;
+    }>(),
+    c.env.DB.prepare(
+      `SELECT user_id, provider, label, created_at, last_used_at
+       FROM user_api_keys
+       ORDER BY provider`,
+    )
+      .all<{
+        user_id: string;
+        provider: string;
+        label: string | null;
+        created_at: number;
+        last_used_at: number | null;
+      }>()
+      .catch(() => ({ results: [] })),
+  ]);
+
+  const keysByUser = new Map<string, Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>>();
+  for (const key of keysRes.results) {
+    const keys = keysByUser.get(key.user_id) ?? [];
+    keys.push({
+      provider: key.provider,
+      label: key.label,
+      createdAt: key.created_at,
+      lastUsedAt: key.last_used_at,
+    });
+    keysByUser.set(key.user_id, keys);
+  }
+
+  return c.json({
+    users: usersRes.results.map((user) => ({
+      id: user.id,
+      githubLogin: user.github_login,
+      displayName: user.display_name,
+      avatarUrl: user.avatar_url,
+      createdAt: user.created_at,
+      keys: keysByUser.get(user.id) ?? [],
+      grant: grantsByUser.get(user.id) ?? null,
+    })),
+  });
+});
+
+keysRoutes.get('/admin/ai-grants', async (c) => {
+  await requireAdmin(c);
+  const funded = [...COMP_PROVIDERS].filter((provider) => !!compKeyFor(c.env, provider));
+  const grants = await listCompGrants(c.env);
+  return c.json({ grants, funded });
+});
+
+keysRoutes.post('/admin/ai-grants', async (c) => {
+  const admin = await requireAdmin(c);
+  const body = await c.req
+    .json<{ userId?: string; provider?: string; model?: string; note?: string; expiresAt?: string | null }>()
+    .catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const model = String(body?.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
+  const note = body?.note ? String(body.note).trim().slice(0, 200) : null;
+  const expiresAt = body?.expiresAt ? String(body.expiresAt).trim() : null;
+
+  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!COMP_PROVIDERS.has(provider)) return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
+  if (!model || model.length > 128) return c.json({ ok: false, error: 'valid model is required' }, 400);
+  if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
+  if (!compKeyFor(c.env, provider)) return c.json({ ok: false, error: `no platform key configured for ${provider}` }, 400);
+
+  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!user) return c.json({ ok: false, error: 'user not found' }, 404);
+
+  await ensureCompSchema(c.env.DB);
+  await c.env.DB.prepare(
+    `INSERT INTO complimentary_grants (user_id, provider, model, granted_by, note, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       provider = excluded.provider,
+       model = excluded.model,
+       granted_by = excluded.granted_by,
+       note = excluded.note,
+       expires_at = excluded.expires_at`,
+  )
+    .bind(userId, provider, model, admin.githubLogin || admin.login, note, Date.now(), expiresAt)
+    .run();
+  return c.json({ ok: true, userId, provider, model, expiresAt });
+});
+
+keysRoutes.post('/admin/ai-grants/delete', async (c) => {
+  await requireAdmin(c);
   const body = await c.req.json<{ userId?: string }>().catch(() => null);
   const userId = String(body?.userId ?? '').trim();
   if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);

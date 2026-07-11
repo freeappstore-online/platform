@@ -87,7 +87,7 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
  */
 export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<CurrentUser> {
   const user = await requireUser(c);
-  if (!user.roles.includes('admin')) {
+  if (!user.roles.includes('admin') && !isAdminLogin(user.githubLogin, c.env)) {
     throw new HttpError(403, 'admin only');
   }
   return user;
