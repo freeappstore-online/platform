@@ -21,6 +21,100 @@ type AppEnv = { Bindings: Env };
 
 export const keysRoutes = new Hono<AppEnv>();
 
+const USER_ID_RE = /^[a-z][a-z0-9:_-]{1,127}$/i;
+const AGENT_PROVIDER_TO_VAULT: Record<string, string> = {
+  anthropic: 'anthropic',
+  openai: 'openai',
+  google: 'google-ai',
+  openrouter: 'openrouter',
+};
+const VAULT_PROVIDER_TO_AGENT: Record<string, string> = {
+  anthropic: 'anthropic',
+  openai: 'openai',
+  'google-ai': 'google',
+  openrouter: 'openrouter',
+};
+const COMP_PROVIDERS = new Set(['anthropic', 'openai', 'google']);
+const DEFAULT_COMP_MODELS: Record<string, string> = {
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-4o',
+  google: 'gemini-2.5-flash',
+};
+const COMP_SCHEMA = `CREATE TABLE IF NOT EXISTS complimentary_grants (
+  user_id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  granted_by TEXT NOT NULL,
+  note TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at TEXT
+)`;
+let compSchemaReady = false;
+
+function hasInternalToken(c: { env: Env; req: { header: (name: string) => string | undefined } }) {
+  const expected = c.env.ADMIN_PROVISION_TOKEN;
+  const provided = c.req.header('X-Internal-Token');
+  return !!expected && provided === expected;
+}
+
+async function ensureCompSchema(db: D1Database): Promise<void> {
+  if (compSchemaReady) return;
+  await db.prepare(COMP_SCHEMA).run();
+  compSchemaReady = true;
+}
+
+function compKeyFor(env: Env, provider: string): string | null {
+  const key =
+    provider === 'anthropic'
+      ? env.COMP_KEY_ANTHROPIC
+      : provider === 'openai'
+        ? env.COMP_KEY_OPENAI
+        : provider === 'google'
+          ? env.COMP_KEY_GOOGLE
+          : null;
+  return key?.trim() || null;
+}
+
+function rowToGrant(row: Record<string, unknown>) {
+  return {
+    userId: String(row.user_id),
+    provider: String(row.provider),
+    model: String(row.model),
+    grantedBy: String(row.granted_by),
+    note: row.note ? String(row.note) : null,
+    createdAt: Number(row.created_at) || 0,
+    expiresAt: row.expires_at ? String(row.expires_at) : null,
+  };
+}
+
+async function listCompGrants(env: Env) {
+  await ensureCompSchema(env.DB);
+  const rows = await env.DB.prepare(
+    `SELECT user_id, provider, model, granted_by, note, created_at, expires_at
+     FROM complimentary_grants
+     ORDER BY created_at DESC`,
+  ).all<Record<string, unknown>>();
+  return rows.results.map(rowToGrant);
+}
+
+async function getActiveCompGrant(env: Env, userId: string) {
+  await ensureCompSchema(env.DB);
+  const row = await env.DB.prepare(
+    `SELECT user_id, provider, model, granted_by, note, created_at, expires_at
+     FROM complimentary_grants
+     WHERE user_id = ?`,
+  )
+    .bind(userId)
+    .first<Record<string, unknown>>();
+  if (!row) return null;
+  const grant = rowToGrant(row);
+  if (grant.expiresAt && Date.parse(grant.expiresAt) <= Date.now()) {
+    await env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(userId).run().catch(() => {});
+    return null;
+  }
+  return grant;
+}
+
 // ── Providers list (public, no auth) ──────────────────────────────────
 
 keysRoutes.get('/keys/providers', async (c) => {
@@ -28,6 +122,198 @@ keysRoutes.get('/keys/providers', async (c) => {
     'SELECT id, name, docs_url, key_prefix FROM key_providers ORDER BY name',
   ).all<{ id: string; name: string; docs_url: string | null; key_prefix: string | null }>();
   return c.json({ providers: rows.results });
+});
+
+// ── Internal admin key provisioning ───────────────────────────────────
+
+keysRoutes.get('/internal/keys/providers', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  const rows = await c.env.DB.prepare(
+    'SELECT id, name, docs_url, key_prefix FROM key_providers ORDER BY name',
+  ).all<{ id: string; name: string; docs_url: string | null; key_prefix: string | null }>();
+  return c.json({ providers: rows.results });
+});
+
+keysRoutes.get('/internal/keys/users', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+
+  const grants = await listCompGrants(c.env);
+  const grantsByUser = new Map(grants.map((grant) => [grant.userId, grant]));
+  const [usersRes, keysRes] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, github_login, display_name, avatar_url, created_at
+       FROM users
+       ORDER BY created_at DESC
+       LIMIT 1000`,
+    ).all<{
+      id: string;
+      github_login: string;
+      display_name: string | null;
+      avatar_url: string | null;
+      created_at: number | null;
+    }>(),
+    c.env.DB.prepare(
+      `SELECT user_id, provider, label, created_at, last_used_at
+       FROM user_api_keys
+       ORDER BY provider`,
+    )
+      .all<{
+        user_id: string;
+        provider: string;
+        label: string | null;
+        created_at: number;
+        last_used_at: number | null;
+      }>()
+      .catch(() => ({ results: [] })),
+  ]);
+
+  const keysByUser = new Map<string, Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>>();
+  for (const key of keysRes.results) {
+    const keys = keysByUser.get(key.user_id) ?? [];
+    keys.push({
+      provider: key.provider,
+      label: key.label,
+      createdAt: key.created_at,
+      lastUsedAt: key.last_used_at,
+    });
+    keysByUser.set(key.user_id, keys);
+  }
+
+  return c.json({
+    users: usersRes.results.map((user) => ({
+      id: user.id,
+      githubLogin: user.github_login,
+      displayName: user.display_name,
+      avatarUrl: user.avatar_url,
+      createdAt: user.created_at,
+      keys: keysByUser.get(user.id) ?? [],
+      grant: grantsByUser.get(user.id) ?? null,
+    })),
+  });
+});
+
+keysRoutes.get('/internal/keys/grants', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  const funded = [...COMP_PROVIDERS].filter((provider) => !!compKeyFor(c.env, provider));
+  const grants = await listCompGrants(c.env);
+  return c.json({ grants, funded });
+});
+
+keysRoutes.post('/internal/keys/grants', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req
+    .json<{ userId?: string; provider?: string; model?: string; note?: string; expiresAt?: string | null; grantedBy?: string }>()
+    .catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const model = String(body?.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
+  const note = body?.note ? String(body.note).trim().slice(0, 200) : null;
+  const expiresAt = body?.expiresAt ? String(body.expiresAt).trim() : null;
+  const grantedBy = body?.grantedBy ? String(body.grantedBy).trim().slice(0, 120) : 'admin';
+
+  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!COMP_PROVIDERS.has(provider)) return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
+  if (!model || model.length > 128) return c.json({ ok: false, error: 'valid model is required' }, 400);
+  if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
+  if (!compKeyFor(c.env, provider)) return c.json({ ok: false, error: `no platform key configured for ${provider}` }, 400);
+
+  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!user) return c.json({ ok: false, error: 'user not found' }, 404);
+
+  await ensureCompSchema(c.env.DB);
+  await c.env.DB.prepare(
+    `INSERT INTO complimentary_grants (user_id, provider, model, granted_by, note, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       provider = excluded.provider,
+       model = excluded.model,
+       granted_by = excluded.granted_by,
+       note = excluded.note,
+       expires_at = excluded.expires_at`,
+  )
+    .bind(userId, provider, model, grantedBy, note, Date.now(), expiresAt)
+    .run();
+  return c.json({ ok: true, userId, provider, model, expiresAt });
+});
+
+keysRoutes.post('/internal/keys/grants/delete', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json<{ userId?: string }>().catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  await ensureCompSchema(c.env.DB);
+  const result = await c.env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
+    .bind(userId)
+    .run();
+  return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
+});
+
+keysRoutes.post('/internal/keys/userkey', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!c.env.APP_SECRET_KEK) {
+    return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
+  }
+
+  const body = await c.req.json<{ userId?: string; provider?: string; key?: string; label?: string }>().catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  const key = String(body?.key ?? '').trim();
+  const label = body?.label ? String(body.label).trim().slice(0, 80) : null;
+
+  if (!USER_ID_RE.test(userId)) return c.json({ ok: false, error: 'valid userId is required' }, 400);
+  if (!key || key.length > 500) return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
+
+  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!user) return c.json({ ok: false, error: 'user not found' }, 404);
+
+  const prov = await c.env.DB.prepare('SELECT id, key_prefix FROM key_providers WHERE id = ?')
+    .bind(provider)
+    .first<{ id: string; key_prefix: string | null }>();
+  if (!prov) return c.json({ ok: false, error: `Unknown provider: ${provider}` }, 400);
+  if (prov.key_prefix && !key.startsWith(prov.key_prefix)) {
+    return c.json(
+      {
+        ok: false,
+        error: `Key should start with "${prov.key_prefix}". Check you copied the full key.`,
+      },
+      400,
+    );
+  }
+
+  const sealed = await sealSecret(key, c.env.APP_SECRET_KEK);
+  await c.env.DB.prepare(
+    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (user_id, provider) DO UPDATE SET
+       label = excluded.label,
+       key_ciphertext = excluded.key_ciphertext,
+       dek_wrapped = excluded.dek_wrapped,
+       iv = excluded.iv,
+       created_at = excluded.created_at`,
+  )
+    .bind(userId, provider, label, sealed.keyCiphertext, sealed.dekWrapped, sealed.iv, Date.now())
+    .run();
+
+  return c.json({ ok: true, userId, provider });
+});
+
+keysRoutes.post('/internal/keys/userkey/delete', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json<{ userId?: string; provider?: string }>().catch(() => null);
+  const userId = String(body?.userId ?? '').trim();
+  const provider = String(body?.provider ?? '').trim().toLowerCase();
+  if (!USER_ID_RE.test(userId) || !provider) {
+    return c.json({ ok: false, error: 'userId and provider are required' }, 400);
+  }
+
+  const result = await c.env.DB.prepare('DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?')
+    .bind(userId, provider)
+    .run();
+  return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
 });
 
 // ── Key status (which providers user has keys for) ────────────────────
@@ -161,6 +447,40 @@ keysRoutes.get('/keys/resolve/:provider', async (c) => {
   const key = await resolveUserKey(c.env.DB, user.id, provider, c.env.APP_SECRET_KEK);
   if (!key) return c.json({ key: null });
   return c.json({ key });
+});
+
+keysRoutes.get('/keys/resolve-agent/:provider', async (c) => {
+  // Internal-only: only callable via service binding (agent worker).
+  const host = c.req.header('host') ?? '';
+  if (host.includes('freeappstore.online') || host.includes('localhost')) {
+    return c.json({ error: 'this endpoint is internal-only' }, 403);
+  }
+
+  const user = await requireUser(c);
+  if (!c.env.APP_SECRET_KEK) {
+    return c.json({ key: null, source: 'none', error: 'vault not configured' }, 503);
+  }
+
+  const requestedProvider = c.req.param('provider');
+  const vaultProvider = AGENT_PROVIDER_TO_VAULT[requestedProvider] ?? requestedProvider;
+  const agentProvider = VAULT_PROVIDER_TO_AGENT[vaultProvider] ?? requestedProvider;
+  const key = await resolveUserKey(c.env.DB, user.id, vaultProvider, c.env.APP_SECRET_KEK);
+  if (key) {
+    return c.json({ key, provider: agentProvider, source: 'vault' });
+  }
+
+  const grant = await getActiveCompGrant(c.env, user.id);
+  if (!grant) return c.json({ key: null, source: 'none' });
+  const grantKey = compKeyFor(c.env, grant.provider);
+  if (!grantKey) return c.json({ key: null, source: 'grant_unfunded', provider: grant.provider, model: grant.model });
+
+  return c.json({
+    key: grantKey,
+    provider: grant.provider,
+    model: grant.model,
+    source: 'grant',
+    grantExpiresAt: grant.expiresAt,
+  });
 });
 
 // ── Resolve a user's key (internal, used by proxy) ────────────────────

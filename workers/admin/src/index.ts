@@ -293,6 +293,58 @@ export default {
       }
     }
 
+    // ── AI key provisioning ──
+
+    if (
+      url.pathname === "/api/ai-keys/users" ||
+      url.pathname === "/api/ai-keys/providers" ||
+      url.pathname === "/api/ai-keys/userkey" ||
+      url.pathname === "/api/ai-keys/userkey/delete" ||
+      url.pathname === "/api/ai-grants/users" ||
+      url.pathname === "/api/ai-grants" ||
+      url.pathname === "/api/ai-grants/delete"
+    ) {
+      if (!env.BACKEND_FAS || !env.INTERNAL_TOKEN) {
+        return json({ error: "backend key provisioning is not wired (missing BACKEND_FAS or INTERNAL_TOKEN)" }, 500, request);
+      }
+      const method = request.method;
+      const allowed =
+        (method === "GET" && (url.pathname === "/api/ai-keys/users" || url.pathname === "/api/ai-keys/providers")) ||
+        (method === "GET" && (url.pathname === "/api/ai-grants/users" || url.pathname === "/api/ai-grants")) ||
+        (method === "POST" && (url.pathname === "/api/ai-keys/userkey" || url.pathname === "/api/ai-keys/userkey/delete" || url.pathname === "/api/ai-grants" || url.pathname === "/api/ai-grants/delete"));
+      if (!allowed) return json({ error: "method not allowed" }, 405, request);
+
+      const backendPath =
+        url.pathname === "/api/ai-keys/users" || url.pathname === "/api/ai-grants/users"
+          ? "/v1/internal/keys/users"
+          : url.pathname === "/api/ai-keys/providers"
+            ? "/v1/internal/keys/providers"
+            : url.pathname === "/api/ai-keys/userkey"
+              ? "/v1/internal/keys/userkey"
+              : url.pathname === "/api/ai-keys/userkey/delete"
+                ? "/v1/internal/keys/userkey/delete"
+                : url.pathname === "/api/ai-grants"
+                  ? "/v1/internal/keys/grants"
+                  : "/v1/internal/keys/grants/delete";
+      const res = await env.BACKEND_FAS.fetch(`https://backend${backendPath}`, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Token": env.INTERNAL_TOKEN,
+        },
+        body: method === "POST" ? await request.text() : undefined,
+      });
+      const text = await res.text();
+      return new Response(text, {
+        status: res.status,
+        headers: {
+          "Content-Type": res.headers.get("Content-Type") || "application/json",
+          "Cache-Control": "no-store",
+          ...corsHeaders(request),
+        },
+      });
+    }
+
     // ── Stats ──
 
     if (url.pathname === "/api/stats") {
@@ -328,12 +380,19 @@ export default {
         const limit = 50;
         const offset = (page - 1) * limit;
         const [rows, total] = await Promise.all([
-          env.DB.prepare("SELECT id, github_login, avatar_url, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?")
+          env.DB.prepare("SELECT id, github_login, display_name, email, avatar_url, provider, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?")
             .bind(limit, offset)
             .all(),
           env.DB.prepare("SELECT COUNT(*) as count FROM users").first<{ count: number }>(),
         ]);
-        return json({ users: rows.results, total: total?.count || 0, page, pages: Math.ceil((total?.count || 0) / limit) }, 200, request);
+        const users = (rows.results ?? []).map((u: any) => ({
+          ...u,
+          name: u.display_name || u.github_login || u.id,
+          email: u.email || "",
+          photo_url: u.avatar_url || null,
+          provider: u.provider || "github",
+        }));
+        return json({ users, total: total?.count || 0, page, pages: Math.ceil((total?.count || 0) / limit) }, 200, request);
       } catch {
         return json({ error: "Internal server error", users: [], total: 0, page: 1, pages: 0 }, 500, request);
       }

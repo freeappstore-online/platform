@@ -134,3 +134,50 @@ export interface AgentSessionsResponse {
   page: number
   pages: number
 }
+
+export interface KeyProvider {
+  id: string
+  name: string
+  docs_url: string | null
+  key_prefix: string | null
+}
+
+export interface UserApiKey {
+  provider: string
+  label: string | null
+  createdAt: number
+  lastUsedAt: number | null
+}
+
+export interface ComplimentaryGrant {
+  userId: string
+  provider: string
+  model: string
+  grantedBy: string
+  note: string | null
+  createdAt: number
+  expiresAt: string | null
+}
+
+export interface AdminUser {
+  id: string
+  githubLogin: string
+  displayName: string | null
+  avatarUrl: string | null
+  createdAt: number | null
+  keys: UserApiKey[]
+  grant: ComplimentaryGrant | null
+}
+
+export interface KeyUsersResponse {
+  users: AdminUser[]
+}
+
+export interface KeyProvidersResponse {
+  providers: KeyProvider[]
+}
+
+export interface GrantsResponse {
+  grants: ComplimentaryGrant[]
+  funded: string[]
+}

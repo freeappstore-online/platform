@@ -6,27 +6,44 @@ const SIGNING_KEY = 'a'.repeat(64);
 
 function fakeDB(opts: {
   user?: Record<string, unknown> | null;
+  users?: Array<Record<string, unknown>>;
   providers?: Array<Record<string, unknown>>;
   keys?: Array<Record<string, unknown>>;
+  grant?: Record<string, unknown> | null;
+  grants?: Array<Record<string, unknown>>;
   provider?: Record<string, unknown> | null;
+  runs?: Array<{ sql: string; binds: unknown[] }>;
 }) {
   return {
     prepare: (sql: string) => {
       const trimmed = sql.replace(/\s+/g, ' ').trim();
+      let bound: unknown[] = [];
       const result = {
         first: async () => {
           if (trimmed.includes('FROM users')) return opts.user ?? null;
           if (trimmed.includes('FROM key_providers')) return opts.provider ?? null;
+          if (trimmed.includes('FROM complimentary_grants')) return opts.grant ?? null;
           return null;
         },
         all: async () => {
           if (trimmed.includes('FROM key_providers')) return { results: opts.providers ?? [] };
           if (trimmed.includes('FROM user_api_keys')) return { results: opts.keys ?? [] };
+          if (trimmed.includes('FROM users')) return { results: opts.users ?? [] };
+          if (trimmed.includes('FROM complimentary_grants')) return { results: opts.grants ?? [] };
           return { results: [] };
         },
-        run: async () => ({ meta: { changes: 1 } }),
+        run: async () => {
+          opts.runs?.push({ sql: trimmed, binds: bound });
+          return { meta: { changes: 1 } };
+        },
       };
-      return { ...result, bind: (..._args: unknown[]) => result };
+      return {
+        ...result,
+        bind: (...args: unknown[]) => {
+          bound = args;
+          return result;
+        },
+      };
     },
   } as unknown as D1Database;
 }
@@ -45,6 +62,11 @@ describe('keys routes', () => {
   const providers = [
     { id: 'openai', name: 'OpenAI', docs_url: 'https://openai.com', key_prefix: 'sk-' },
   ];
+  const internalEnv = {
+    ADMIN_PROVISION_TOKEN: 'internal-token',
+    APP_SECRET_KEK: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    COMP_KEY_ANTHROPIC: 'sk-ant-platform',
+  };
 
   it('GET /v1/keys/providers returns providers (no auth)', async () => {
     const res = await app.request('/v1/keys/providers', {}, env(fakeDB({ providers })));
@@ -177,5 +199,157 @@ describe('keys routes', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).not.toContain('javascript:alert(1)');
+  });
+
+  it('GET /v1/internal/keys/users requires the internal token', async () => {
+    const res = await app.request('/v1/internal/keys/users', {}, env(fakeDB({})));
+    expect(res.status).toBe(403);
+  });
+
+  it('GET /v1/internal/keys/users lists users with configured providers', async () => {
+    const res = await app.request(
+      '/v1/internal/keys/users',
+      { headers: { 'X-Internal-Token': 'internal-token' } },
+      env(
+        fakeDB({
+          users: [{ id: 'gh:1', github_login: 'alice', display_name: 'Alice', avatar_url: null, created_at: 123 }],
+          keys: [{ user_id: 'gh:1', provider: 'openai', label: 'Admin', created_at: 456, last_used_at: null }],
+        }),
+        internalEnv,
+      ),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { users: Array<{ id: string; keys: Array<{ provider: string }> }> };
+    expect(data.users[0]!.id).toBe('gh:1');
+    expect(data.users[0]!.keys[0]!.provider).toBe('openai');
+  });
+
+  it('POST /v1/internal/keys/userkey validates provider prefixes', async () => {
+    const res = await app.request(
+      '/v1/internal/keys/userkey',
+      {
+        method: 'POST',
+        headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1', provider: 'openai', key: 'bad-key' }),
+      },
+      env(
+        fakeDB({
+          user: { id: 'gh:1' },
+          provider: { id: 'openai', key_prefix: 'sk-' },
+        }),
+        internalEnv,
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /v1/internal/keys/userkey stores an encrypted user key', async () => {
+    const runs: Array<{ sql: string; binds: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/internal/keys/userkey',
+      {
+        method: 'POST',
+        headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1', provider: 'openai', key: 'sk-test-key', label: 'Admin provisioned' }),
+      },
+      env(
+        fakeDB({
+          user: { id: 'gh:1' },
+          provider: { id: 'openai', key_prefix: 'sk-' },
+          runs,
+        }),
+        internalEnv,
+      ),
+    );
+    expect(res.status).toBe(200);
+    expect(runs[0]!.sql).toContain('INSERT INTO user_api_keys');
+    expect(runs[0]!.binds.slice(0, 3)).toEqual(['gh:1', 'openai', 'Admin provisioned']);
+    expect(runs[0]!.binds[3]).toBeInstanceOf(Uint8Array);
+  });
+
+  it('POST /v1/internal/keys/userkey/delete removes a user key', async () => {
+    const runs: Array<{ sql: string; binds: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/internal/keys/userkey/delete',
+      {
+        method: 'POST',
+        headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1', provider: 'openai' }),
+      },
+      env(fakeDB({ runs }), internalEnv),
+    );
+    expect(res.status).toBe(200);
+    expect(runs[0]!.sql).toContain('DELETE FROM user_api_keys');
+    expect(runs[0]!.binds).toEqual(['gh:1', 'openai']);
+  });
+
+  it('GET /v1/internal/keys/grants lists grants and funded providers', async () => {
+    const res = await app.request(
+      '/v1/internal/keys/grants',
+      { headers: { 'X-Internal-Token': 'internal-token' } },
+      env(
+        fakeDB({
+          grants: [{ user_id: 'gh:1', provider: 'anthropic', model: 'claude-sonnet-4-6', granted_by: 'admin', note: null, created_at: 123, expires_at: null }],
+        }),
+        internalEnv,
+      ),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { grants: Array<{ userId: string }>; funded: string[] };
+    expect(data.grants[0]!.userId).toBe('gh:1');
+    expect(data.funded).toContain('anthropic');
+  });
+
+  it('POST /v1/internal/keys/grants stores a complimentary grant', async () => {
+    const runs: Array<{ sql: string; binds: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/internal/keys/grants',
+      {
+        method: 'POST',
+        headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic', model: 'claude-sonnet-4-6', note: 'beta' }),
+      },
+      env(fakeDB({ user: { id: 'gh:1' }, runs }), internalEnv),
+    );
+    expect(res.status).toBe(200);
+    expect(runs.some((r) => r.sql.includes('INSERT INTO complimentary_grants'))).toBe(true);
+  });
+
+  it('POST /v1/internal/keys/grants/delete revokes a complimentary grant', async () => {
+    const runs: Array<{ sql: string; binds: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/internal/keys/grants/delete',
+      {
+        method: 'POST',
+        headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:1' }),
+      },
+      env(fakeDB({ runs }), internalEnv),
+    );
+    expect(res.status).toBe(200);
+    expect(runs.some((r) => r.sql.includes('DELETE FROM complimentary_grants'))).toBe(true);
+  });
+
+  it('GET /v1/keys/resolve-agent falls back to active complimentary grant', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      'https://backend/v1/keys/resolve-agent/anthropic',
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      env(
+        fakeDB({
+          user: { id: 'gh:1', github_login: 'alice', avatar_url: null, date_of_birth: null },
+          grant: { user_id: 'gh:1', provider: 'anthropic', model: 'claude-sonnet-4-6', granted_by: 'admin', note: null, created_at: 123, expires_at: null },
+        }),
+        internalEnv,
+      ),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { key: string | null; provider: string; model: string; source: string };
+    expect(data.key).toBe('sk-ant-platform');
+    expect(data.provider).toBe('anthropic');
+    expect(data.model).toBe('claude-sonnet-4-6');
+    expect(data.source).toBe('grant');
   });
 });

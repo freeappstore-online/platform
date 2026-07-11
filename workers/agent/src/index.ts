@@ -81,16 +81,27 @@ export default {
         const body = JSON.parse(bodyText);
         const authHeader = request.headers.get("Authorization") || "";
 
-        // If no API key in request but user is authenticated, try the vault
+        // If no API key in request but user is authenticated, resolve the
+        // effective access server-side: user's vault key first, then an active
+        // complimentary grant funded by a platform provider key.
         if (body.aiConfig && !body.aiConfig.apiKey && authHeader) {
-          const provider = mapProviderToVault(body.aiConfig.provider);
+          const provider = mapProviderToVault(body.aiConfig.provider) ?? body.aiConfig.provider;
           if (provider) {
-            const vaultRes = await env.PLATFORM.fetch(`https://api.freeappstore.online/v1/keys/resolve/${provider}`, {
+            const vaultRes = await env.PLATFORM.fetch(`https://api.freeappstore.online/v1/keys/resolve-agent/${provider}`, {
               headers: { Authorization: authHeader },
             });
             if (vaultRes.ok) {
-              const { key } = (await vaultRes.json()) as { key: string | null };
-              if (key) body.aiConfig.apiKey = key;
+              const { key, provider: resolvedProvider, model } = (await vaultRes.json()) as {
+                key: string | null;
+                provider?: string;
+                model?: string;
+                source?: string;
+              };
+              if (key) {
+                body.aiConfig.apiKey = key;
+                if (resolvedProvider) body.aiConfig.provider = resolvedProvider;
+                if (model) body.aiConfig.model = model;
+              }
             }
           }
         }

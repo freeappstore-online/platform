@@ -17,6 +17,10 @@ export interface Env {
   CREATORS: KVNamespace;
   /** Path B host bucket (fas-apps) — deprovision purges apps/<id>/* here. */
   APPS?: R2Bucket;
+  /** Service binding to the FAS platform backend for internal admin operations. */
+  BACKEND_FAS?: Fetcher;
+  /** Shared internal token accepted by the FAS platform backend. */
+  INTERNAL_TOKEN?: string;
   FAS_ZONE_ID: string;
   FGS_ZONE_ID: string;
 }
