@@ -19,7 +19,7 @@ export interface Env {
   APPS?: R2Bucket;
   /** Service binding to the FAS platform backend for internal admin operations. */
   BACKEND_FAS?: Fetcher;
-  /** Shared internal token accepted by the FAS platform backend. */
+  /** Legacy alias for the backend internal token. Prefer ADMIN_PROVISION_TOKEN. */
   INTERNAL_TOKEN?: string;
   FAS_ZONE_ID: string;
   FGS_ZONE_ID: string;

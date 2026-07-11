@@ -48,7 +48,6 @@ service = "freeappstore-api"
 # Secrets (set via `wrangler secret put`):
 #   CF_API_TOKEN          Required for CF API calls.
 #   GITHUB_TOKEN          PAT with repo create + admin scopes on freeappstore-online.
-#   INTERNAL_TOKEN        Shared secret matching the one set on freeappstore-api.
-#                         Used as X-Internal-Token when persisting analytics
-#                         tokens via BACKEND_FAS. If unset, the persist step
-#                         skips (non-fatal but operator must paste manually).
+#   ADMIN_PROVISION_TOKEN Shared secret matching the one set on freeappstore-api.
+#                         Used as X-Internal-Token for service-binding calls into
+#                         the backend, including analytics persistence and AI grants.

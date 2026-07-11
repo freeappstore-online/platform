@@ -328,6 +328,32 @@ describe("/api/agent/sessions/:id", () => {
   });
 });
 
+describe("/api/ai-grants", () => {
+  it("proxies to the backend with ADMIN_PROVISION_TOKEN", async () => {
+    const { default: worker } = await import("../index.js");
+    let forwardedToken = "";
+    let forwardedUrl = "";
+    const env = mockEnv({
+      ADMIN_PROVISION_TOKEN: "admin-provision-token",
+      BACKEND_FAS: {
+        fetch: async (url: string | URL | Request, init?: RequestInit) => {
+          forwardedUrl = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+          forwardedToken = new Headers(init?.headers).get("X-Internal-Token") || "";
+          return new Response(JSON.stringify({ grants: [], funded: ["anthropic"] }), {
+            headers: { "Content-Type": "application/json" },
+          });
+        },
+      },
+    });
+
+    const res = await worker.fetch(new Request("https://localhost/api/ai-grants"), env as any);
+
+    expect(res.status).toBe(200);
+    expect(forwardedUrl).toBe("https://backend/v1/internal/keys/grants");
+    expect(forwardedToken).toBe("admin-provision-token");
+  });
+});
+
 describe("/api/apps/:id/health", () => {
   it("returns health check with route info", async () => {
     const originalFetch = globalThis.fetch;

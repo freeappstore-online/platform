@@ -304,8 +304,9 @@ export default {
       url.pathname === "/api/ai-grants" ||
       url.pathname === "/api/ai-grants/delete"
     ) {
-      if (!env.BACKEND_FAS || !env.INTERNAL_TOKEN) {
-        return json({ error: "backend key provisioning is not wired (missing BACKEND_FAS or INTERNAL_TOKEN)" }, 500, request);
+      const backendToken = env.ADMIN_PROVISION_TOKEN || env.INTERNAL_TOKEN;
+      if (!env.BACKEND_FAS || !backendToken) {
+        return json({ error: "backend key provisioning is not wired (missing BACKEND_FAS or ADMIN_PROVISION_TOKEN)" }, 500, request);
       }
       const method = request.method;
       const allowed =
@@ -330,7 +331,7 @@ export default {
         method,
         headers: {
           "Content-Type": "application/json",
-          "X-Internal-Token": env.INTERNAL_TOKEN,
+          "X-Internal-Token": backendToken,
         },
         body: method === "POST" ? await request.text() : undefined,
       });
