@@ -36,24 +36,26 @@ type Tab = "overview" | "apps" | "users" | "sessions" | "grants" | "creators";
 
 interface Stats {
   apps: number;
-  games: number;
   users: number;
   creators: number;
   traffic: {
     fas: { totals: { requests: number; pageViews: number; visitors: number }; days: { sum?: { requests?: number } }[] } | null;
-    fgs: { totals: { requests: number; pageViews: number; visitors: number }; days: { sum?: { requests?: number } }[] } | null;
   } | null;
 }
 
-interface AppStatus {
+interface AdminApp {
   id: string;
   name: string;
   category?: string;
   appUrl?: string;
   repo?: string;
   domain?: string;
-  cf?: { deploy: { status: string; time: string | null; url: string | null }; domain: { status: string } };
-  gh?: { lastRun: string | null; pushed: string | null };
+  store?: string;
+  hostedOn?: string;
+  inRegistry?: boolean;
+  owner?: string | null;
+  createdAt?: number | string | null;
+  updatedAt?: number | string | null;
 }
 
 interface UserRecord {
@@ -971,7 +973,6 @@ function OverviewTab() {
       .then((data) =>
         setStats({
           apps: Number(data.apps || 0),
-          games: 0,
           users: Number(data.users || 0),
           creators: 0,
           traffic: null,
@@ -985,23 +986,20 @@ function OverviewTab() {
   if (error || !stats) return <AdminAccessError message={error || "No stats returned"} />;
 
   const fasT = stats.traffic?.fas?.totals;
-  const fgsT = stats.traffic?.fgs?.totals;
 
   return (
     <>
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <StatCard label="Apps" value={stats.apps} color="var(--accent)" />
-        <StatCard label="Games" value={stats.games} color="#10b981" />
         <StatCard label="Users" value={stats.users} color="#8b5cf6" />
         <StatCard label="Creators" value={stats.creators} color="#f59e0b" />
       </div>
 
       {/* Traffic */}
       <h2 className="text-lg font-bold mb-3">Traffic (30 days)</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 gap-4 mb-8">
         <TrafficCard title="FreeAppStore" totals={fasT ?? null} days={stats.traffic?.fas?.days} />
-        <TrafficCard title="FreeGameStore" totals={fgsT ?? null} days={stats.traffic?.fgs?.days} />
       </div>
     </>
   );
@@ -1101,21 +1099,24 @@ function TrafficCard({
 // ── Apps Tab ──
 
 function AppsTab() {
-  const [store, setStore] = useState<"apps" | "games">("apps");
-  const [apps, setApps] = useState<AppStatus[]>([]);
+  const [apps, setApps] = useState<AdminApp[]>([]);
   const [loadingApps, setLoadingApps] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     setLoadingApps(true);
-    fetch(`${ADMIN_API}/api/status?store=${store}`, { credentials: "include" })
-      .then((r) => r.json())
-      .then(setApps)
-      .catch(() => {
-        /* best-effort */
+    setError(null);
+    adminFetchJson<AdminApp[]>(`${ADMIN_API}/api/apps/all`)
+      .then((all) => {
+        setApps((Array.isArray(all) ? all : []).filter(isFreeAppStoreApp));
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setApps([]);
       })
       .finally(() => setLoadingApps(false));
-  }, [store]);
+  }, []);
 
   async function handleUnpublish(id: string) {
     if (!confirm(`Remove "${id}" from the store?`)) return;
@@ -1124,7 +1125,7 @@ function AppsTab() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ id, store }),
+        body: JSON.stringify({ id, store: "apps" }),
       });
       const data = await res.json();
       if (data.ok) setApps((prev) => prev.filter((a) => a.id !== id));
@@ -1144,7 +1145,7 @@ function AppsTab() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ id, store, deleteRepo }),
+        body: JSON.stringify({ id, store: "apps", deleteRepo }),
       });
       const data = await res.json();
       if (data.ok) {
@@ -1164,35 +1165,11 @@ function AppsTab() {
 
   return (
     <>
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setStore("apps")}
-          className="px-3 py-1 rounded-full text-sm font-semibold"
-          style={{
-            background: store === "apps" ? "var(--accent)" : "var(--panel)",
-            color: store === "apps" ? "white" : "var(--muted)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          Apps
-        </button>
-        <button
-          onClick={() => setStore("games")}
-          className="px-3 py-1 rounded-full text-sm font-semibold"
-          style={{
-            background: store === "games" ? "var(--accent)" : "var(--panel)",
-            color: store === "games" ? "white" : "var(--muted)",
-            border: "1px solid var(--line)",
-          }}
-        >
-          Games
-        </button>
-      </div>
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder={`Search ${store}...`}
-        aria-label={`Search ${store}`}
+        placeholder="Search apps..."
+        aria-label="Search apps"
         className="w-full p-2 rounded-lg border mb-4"
         style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}
       />
@@ -1200,6 +1177,11 @@ function AppsTab() {
         <p style={{ color: "var(--muted)" }}>Loading...</p>
       ) : (
         <div className="overflow-x-auto">
+          {error && (
+            <p className="mb-3 text-sm" style={{ color: "var(--error)" }}>
+              Failed to load apps: {error}
+            </p>
+          )}
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid var(--line)" }}>
@@ -1207,13 +1189,16 @@ function AppsTab() {
                   Name
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
-                  Deploy
+                  Hosting
+                </th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  Registry
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                   Domain
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
-                  Last Push
+                  Updated
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                   Links
@@ -1223,7 +1208,7 @@ function AppsTab() {
             <tbody>
               {filtered.map((app) => {
                 const url = app.appUrl || (app.domain ? `https://${app.domain}` : "#");
-                const repo = app.repo || `${store === "apps" ? "freeappstore-online" : "freegamestore-online"}/${app.id}`;
+                const repo = app.repo || `freeappstore-online/${app.id}`;
                 return (
                   <tr key={app.id} style={{ borderBottom: "1px solid var(--line)" }}>
                     <td className="p-2">
@@ -1233,13 +1218,16 @@ function AppsTab() {
                       </div>
                     </td>
                     <td className="p-2">
-                      <StatusDot status={app.cf?.deploy?.status} />
+                      <StatusDot status={app.hostedOn === "r2" ? "active" : app.hostedOn || "unknown"} />
                     </td>
                     <td className="p-2">
-                      <StatusDot status={app.cf?.domain?.status} />
+                      <StatusDot status={app.inRegistry ? "active" : "unlisted"} />
+                    </td>
+                    <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>
+                      {app.domain || "—"}
                     </td>
                     <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
-                      {app.gh?.pushed ? timeAgo(app.gh.pushed) : "—"}
+                      {app.updatedAt ? timeAgo(app.updatedAt) : "—"}
                     </td>
                     <td className="p-2 flex gap-2 flex-wrap">
                       <a href={url} target="_blank" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
@@ -1274,7 +1262,7 @@ function AppsTab() {
             </tbody>
           </table>
           <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
-            {filtered.length} of {apps.length} {store}
+            {filtered.length} of {apps.length} apps
           </p>
         </div>
       )}
@@ -1477,6 +1465,12 @@ function StatusDot({ status }: { status: string | undefined }) {
       </span>
     </span>
   );
+}
+
+function isFreeAppStoreApp(app: AdminApp): boolean {
+  const store = (app.store || "").toLowerCase();
+  const domain = (app.domain || app.appUrl || "").toLowerCase();
+  return store === "apps" || store === "fas" || domain.includes(".freeappstore.online") || domain.endsWith("freeappstore.online");
 }
 
 function timeAgo(value: string | number): string {
