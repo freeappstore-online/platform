@@ -3,6 +3,7 @@ import { Nav } from "../components/Nav";
 import { useAuth } from "../hooks/useAuth";
 
 const ADMIN_API = "https://admin.freeappstore.online";
+const ADMIN_ACCESS_MESSAGE = "Admin API access required. Open admin.freeappstore.online, sign in, then reload this page.";
 
 type Tab = "overview" | "apps" | "users" | "sessions" | "grants" | "creators";
 
@@ -102,15 +103,20 @@ function SessionsTab() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setLoading(true);
+    setError("");
     const params = new URLSearchParams({ page: "1" });
     if (search) params.set("q", search);
     fetch(`${ADMIN_API}/api/agent/sessions?${params}`, { credentials: "include" })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
+        return r.json();
+      })
       .then((data) => { setSessions(data.sessions || []); setTotal(data.total || 0); })
-      .catch(() => { /* best-effort */ })
+      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
       .finally(() => setLoading(false));
   }, [search]);
 
@@ -120,6 +126,7 @@ function SessionsTab() {
         <p className="text-sm" style={{ color: "var(--muted)" }}>{total} total VibeCode sessions</p>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search sessions..." className="p-2 rounded-lg border text-sm" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)", width: 260 }} />
       </div>
+      {error && <AdminAccessError />}
       {loading ? <p style={{ color: "var(--muted)" }}>Loading sessions...</p> : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
@@ -164,19 +171,27 @@ function GrantsTab() {
   const [model, setModel] = useState("claude-sonnet-4-6");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   const load = () => {
     setLoading(true);
+    setError("");
     Promise.all([
-      fetch(`${ADMIN_API}/api/ai-grants/users`, { credentials: "include" }).then((r) => r.json()),
-      fetch(`${ADMIN_API}/api/ai-grants`, { credentials: "include" }).then((r) => r.json()),
+      fetch(`${ADMIN_API}/api/ai-grants/users`, { credentials: "include" }).then(async (r) => {
+        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
+        return r.json();
+      }),
+      fetch(`${ADMIN_API}/api/ai-grants`, { credentials: "include" }).then(async (r) => {
+        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
+        return r.json();
+      }),
     ])
       .then(([userData, grantData]) => {
         setUsers(userData.users || []);
         setFunded(grantData.funded || []);
         setSelectedUser((current) => current || userData.users?.[0]?.id || "");
       })
-      .catch(() => { /* best-effort */ })
+      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
       .finally(() => setLoading(false));
   };
 
@@ -206,6 +221,7 @@ function GrantsTab() {
   }
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading grants...</p>;
+  if (error) return <AdminAccessError />;
 
   return (
     <>
@@ -254,17 +270,22 @@ function GrantsTab() {
 function OverviewTab() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    setError("");
     fetch(`${ADMIN_API}/api/stats`, { credentials: "include" })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
+        return r.json();
+      })
       .then(setStats)
-      .catch(() => { /* best-effort */ })
+      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading stats...</p>;
-  if (!stats) return <p style={{ color: "var(--error)" }}>Failed to load stats.</p>;
+  if (error || !stats) return <AdminAccessError />;
 
   const fasT = stats.traffic?.fas?.totals;
   const fgsT = stats.traffic?.fgs?.totals;
@@ -286,6 +307,17 @@ function OverviewTab() {
         <TrafficCard title="FreeGameStore" totals={fgsT ?? null} days={stats.traffic?.fgs?.days} />
       </div>
     </>
+  );
+}
+
+function AdminAccessError() {
+  return (
+    <div className="p-4 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+      <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>{ADMIN_ACCESS_MESSAGE}</p>
+      <a href={`${ADMIN_API}/#/ai-keys`} target="_blank" className="inline-flex px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white" }}>
+        Open FAS Admin
+      </a>
+    </div>
   );
 }
 
@@ -452,17 +484,23 @@ function UsersTab() {
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     setLoading(true);
+    setError("");
     fetch(`${ADMIN_API}/api/users?page=${page}`, { credentials: "include" })
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
+        return r.json();
+      })
       .then((data) => { setUsers(data.users || []); setTotal(data.total || 0); setPages(data.pages || 1); })
-      .catch(() => { /* best-effort */ })
+      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
       .finally(() => setLoading(false));
   }, [page]);
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading users...</p>;
+  if (error) return <AdminAccessError />;
 
   return (
     <>

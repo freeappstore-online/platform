@@ -131,6 +131,9 @@ export function Profile() {
           <p className="text-xs" style={{ color: "var(--muted)" }}>
             Signed in via GitHub
           </p>
+          <p className="text-xs font-mono mt-1 select-all" style={{ color: "var(--muted)" }}>
+            {user.id}
+          </p>
         </div>
       </div>
 
