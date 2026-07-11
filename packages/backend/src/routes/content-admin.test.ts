@@ -12,6 +12,7 @@ function fakeDB(opts: {
   users?: Array<Record<string, unknown>>;
   sessions?: Array<Record<string, unknown>>;
   apps?: Array<Record<string, unknown>>;
+  routes?: Array<Record<string, unknown>>;
   stats?: Record<string, number>;
   kvValue?: Record<string, unknown> | null;
 }) {
@@ -32,8 +33,8 @@ function fakeDB(opts: {
           if (trimmed.includes('FROM documents')) return { results: opts.docs ?? [] };
           if (trimmed.includes('FROM counters')) return { results: opts.counters ?? [] };
           if (trimmed.includes('FROM agent_sessions')) return { results: opts.sessions ?? [] };
-          if (trimmed.includes('FROM users') && trimmed.includes('LIMIT'))
-            return { results: opts.users ?? [] };
+          if (trimmed.includes('FROM routes')) return { results: opts.routes ?? [] };
+          if (trimmed.includes('FROM users')) return { results: opts.users ?? [] };
           if (trimmed.includes('FROM apps')) return { results: opts.apps ?? [] };
           return { results: [] };
         },
@@ -324,7 +325,39 @@ describe('content-admin routes', () => {
         owner_login: 'admin-user',
         store: 'apps',
         category: 'utilities',
+        type: 'standalone',
+        oneliner: 'Fast timer',
+        repo: null,
         created_at: 1000,
+      },
+    ];
+    const routes = [
+      {
+        slug: 'timer',
+        zone: 'freeappstore.online',
+        r2_prefix: 'apps/timer',
+        store: 'apps',
+        hosted_on: 'r2',
+        created_at: 1000,
+        updated_at: 3000,
+      },
+    ];
+    const sessions = [
+      {
+        session_id: 's1',
+        app_id: 'timer',
+        name: 'Timer App',
+        app_url: 'https://timer.freeappstore.online',
+        deployed: 1,
+        deploy_state: '{"phase":"live"}',
+        updated_at: 4000,
+      },
+    ];
+    const users = [
+      {
+        github_login: 'admin-user',
+        display_name: 'Admin User',
+        avatar_url: 'https://example.com/avatar.png',
       },
     ];
     const res = await app.request(
@@ -332,10 +365,24 @@ describe('content-admin routes', () => {
       {
         headers: { Authorization: await adminHeader() },
       },
-      env(fakeDB({ user: adminUser, apps })),
+      env(fakeDB({ user: adminUser, apps, routes, sessions, users })),
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { apps: unknown[] };
+    const data = (await res.json()) as {
+      apps: Array<{
+        id: string;
+        domain: string;
+        ownerDisplayName: string;
+        sessionCount: number;
+        latestSession: { sessionId: string; deployed: boolean };
+      }>;
+    };
     expect(data.apps).toHaveLength(1);
+    expect(data.apps[0]!.id).toBe('timer');
+    expect(data.apps[0]!.domain).toBe('timer.freeappstore.online');
+    expect(data.apps[0]!.ownerDisplayName).toBe('Admin User');
+    expect(data.apps[0]!.sessionCount).toBe(1);
+    expect(data.apps[0]!.latestSession.sessionId).toBe('s1');
+    expect(data.apps[0]!.latestSession.deployed).toBe(true);
   });
 });

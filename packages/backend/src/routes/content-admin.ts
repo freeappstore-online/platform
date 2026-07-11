@@ -199,12 +199,180 @@ contentAdminRoutes.get('/admin/users', async (c) => {
 contentAdminRoutes.get('/admin/apps', async (c) => {
   await requireAdmin(c);
 
-  const apps = await c.env.DB.prepare(
-    'SELECT id, owner_login, store, category, oneliner, created_at FROM apps ORDER BY id ASC',
-  ).all();
+  const [appRows, routeRows, sessionRows, userRows] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT id, owner_login, store, category, type, oneliner, repo, created_at
+       FROM apps
+       ORDER BY id ASC`,
+    ).all<Record<string, unknown>>(),
+    c.env.DB.prepare(
+      `SELECT slug, zone, r2_prefix, store, hosted_on, created_at, updated_at
+       FROM routes
+       WHERE zone = 'freeappstore.online'
+       ORDER BY slug ASC`,
+    ).all<Record<string, unknown>>(),
+    c.env.DB.prepare(
+      `SELECT session_id, app_id, name, app_url, deployed, deploy_state, updated_at
+       FROM agent_sessions
+       WHERE app_id IS NOT NULL
+       ORDER BY updated_at DESC`,
+    ).all<Record<string, unknown>>(),
+    c.env.DB.prepare(
+      'SELECT github_login, display_name, avatar_url FROM users WHERE github_login IS NOT NULL',
+    ).all<Record<string, unknown>>(),
+  ]);
 
-  return c.json({ apps: apps.results ?? [] });
+  const routesBySlug = new Map<string, Record<string, unknown>>();
+  for (const route of routeRows.results ?? []) {
+    const slug = stringValue(route.slug);
+    if (slug) routesBySlug.set(slug, route);
+  }
+
+  const usersByLogin = new Map<string, Record<string, unknown>>();
+  for (const user of userRows.results ?? []) {
+    const login = stringValue(user.github_login);
+    if (login) usersByLogin.set(login, user);
+  }
+
+  const sessionStats = new Map<string, { count: number; latest: Record<string, unknown> | null }>();
+  for (const session of sessionRows.results ?? []) {
+    const appId = stringValue(session.app_id);
+    if (!appId) continue;
+    const stat = sessionStats.get(appId) ?? { count: 0, latest: null };
+    stat.count += 1;
+    if (!stat.latest) stat.latest = session;
+    sessionStats.set(appId, stat);
+  }
+
+  const combined = new Map<string, Record<string, unknown>>();
+  for (const app of appRows.results ?? []) {
+    const id = stringValue(app.id);
+    if (!id) continue;
+    combined.set(
+      id,
+      toAdminApp({
+        id,
+        app,
+        route: routesBySlug.get(id) ?? null,
+        user: usersByLogin.get(stringValue(app.owner_login) ?? '') ?? null,
+        sessions: sessionStats.get(id) ?? null,
+        inRegistry: true,
+      }),
+    );
+  }
+
+  for (const [slug, route] of routesBySlug) {
+    if (combined.has(slug)) continue;
+    combined.set(
+      slug,
+      toAdminApp({
+        id: slug,
+        app: null,
+        route,
+        user: null,
+        sessions: sessionStats.get(slug) ?? null,
+        inRegistry: false,
+      }),
+    );
+  }
+
+  const apps = Array.from(combined.values()).sort((a, b) => {
+    const aUpdated = numberValue(a.updatedAt) ?? numberValue(a.createdAt) ?? 0;
+    const bUpdated = numberValue(b.updatedAt) ?? numberValue(b.createdAt) ?? 0;
+    return bUpdated - aUpdated || String(a.id).localeCompare(String(b.id));
+  });
+
+  return c.json({ apps });
 });
+
+function toAdminApp(input: {
+  id: string;
+  app: Record<string, unknown> | null;
+  route: Record<string, unknown> | null;
+  user: Record<string, unknown> | null;
+  sessions: { count: number; latest: Record<string, unknown> | null } | null;
+  inRegistry: boolean;
+}) {
+  const { id, app, route, user, sessions, inRegistry } = input;
+  const latest = sessions?.latest ?? null;
+  const domain = route
+    ? `${stringValue(route.slug) ?? id}.${stringValue(route.zone) ?? 'freeappstore.online'}`
+    : null;
+  const store = normalizeStore(stringValue(app?.store) ?? stringValue(route?.store));
+  const createdAt = numberValue(route?.created_at) ?? numberValue(app?.created_at) ?? null;
+  const updatedAt = maxNumber(
+    numberValue(route?.updated_at),
+    numberValue(latest?.updated_at),
+    createdAt,
+  );
+
+  return {
+    id,
+    name: stringValue(latest?.name) ?? stringValue(app?.oneliner) ?? id,
+    store,
+    category: stringValue(app?.category),
+    type: stringValue(app?.type),
+    oneliner: stringValue(app?.oneliner),
+    repo: stringValue(app?.repo) ?? `freeappstore-online/${id}`,
+    appUrl: stringValue(latest?.app_url) ?? (domain ? `https://${domain}` : null),
+    domain,
+    hostedOn: stringValue(route?.hosted_on) ?? (route ? 'r2' : 'missing-route'),
+    hasRoute: !!route,
+    r2Prefix: stringValue(route?.r2_prefix),
+    inRegistry,
+    owner: stringValue(app?.owner_login),
+    ownerDisplayName: stringValue(user?.display_name),
+    ownerAvatar: stringValue(user?.avatar_url),
+    sessionCount: sessions?.count ?? 0,
+    latestSession: latest
+      ? {
+          sessionId: stringValue(latest.session_id),
+          name: stringValue(latest.name),
+          appUrl: stringValue(latest.app_url),
+          deployed: latest.deployed === 1 || latest.deployed === true,
+          deployState: parseJsonObject(latest.deploy_state),
+          updatedAt: numberValue(latest.updated_at),
+        }
+      : null,
+    createdAt,
+    updatedAt,
+  };
+}
+
+function normalizeStore(value: string | null | undefined): string {
+  const store = (value || 'apps').toLowerCase();
+  return store === 'fas' ? 'apps' : store;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function maxNumber(...values: Array<number | null>): number | null {
+  const numbers = values.filter((value): value is number => typeof value === 'number');
+  return numbers.length ? Math.max(...numbers) : null;
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 // ── Agent sessions (VibeCode debugging) ─────────────────────────
 

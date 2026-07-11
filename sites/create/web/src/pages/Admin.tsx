@@ -47,13 +47,28 @@ interface AdminApp {
   id: string;
   name: string;
   category?: string;
+  type?: string | null;
+  oneliner?: string | null;
   appUrl?: string;
   repo?: string;
   domain?: string;
   store?: string;
   hostedOn?: string;
+  hasRoute?: boolean;
+  r2Prefix?: string | null;
   inRegistry?: boolean;
   owner?: string | null;
+  ownerDisplayName?: string | null;
+  ownerAvatar?: string | null;
+  sessionCount?: number;
+  latestSession?: {
+    sessionId?: string | null;
+    name?: string | null;
+    appUrl?: string | null;
+    deployed?: boolean;
+    deployState?: { phase?: string } | null;
+    updatedAt?: number | null;
+  } | null;
   createdAt?: number | string | null;
   updatedAt?: number | string | null;
 }
@@ -1107,9 +1122,9 @@ function AppsTab() {
   useEffect(() => {
     setLoadingApps(true);
     setError(null);
-    adminFetchJson<AdminApp[]>(`${ADMIN_API}/api/apps/all`)
-      .then((all) => {
-        setApps((Array.isArray(all) ? all : []).filter(isFreeAppStoreApp));
+    adminFetchJson<{ apps?: AdminApp[] }>(`${API_URL}/v1/admin/apps`)
+      .then((data) => {
+        setApps((data.apps || []).filter(isFreeAppStoreApp));
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err));
@@ -1118,49 +1133,13 @@ function AppsTab() {
       .finally(() => setLoadingApps(false));
   }, []);
 
-  async function handleUnpublish(id: string) {
-    if (!confirm(`Remove "${id}" from the store?`)) return;
-    try {
-      const res = await fetch(`${ADMIN_API}/api/unpublish`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ id, store: "apps" }),
-      });
-      const data = await res.json();
-      if (data.ok) setApps((prev) => prev.filter((a) => a.id !== id));
-      else alert(data.error || "Failed");
-    } catch (err) {
-      alert(`Network error: ${err}`);
-    }
-  }
-
-  async function handleDeprovision(id: string) {
-    const deleteRepo = confirm(
-      `DELETE "${id}" completely?\n\nThis will remove:\n- Custom domain\n- R2 hosting route\n- DNS record\n- Store registry entry\n\nClick OK to also delete the GitHub repo, or Cancel to keep it.`,
-    );
-    if (!confirm(`Are you sure you want to delete "${id}"? This cannot be undone.`)) return;
-    try {
-      const res = await fetch(`${ADMIN_API}/api/deprovision`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ id, store: "apps", deleteRepo }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setApps((prev) => prev.filter((a) => a.id !== id));
-        alert(`Deleted "${id}":\n${data.steps.map((s: { name: string; status: string }) => `${s.name}: ${s.status}`).join("\n")}`);
-      } else {
-        alert(data.error || "Failed");
-      }
-    } catch (err) {
-      alert(`Network error: ${err}`);
-    }
-  }
-
   const filtered = apps.filter(
-    (a) => !search || a.name?.toLowerCase().includes(search.toLowerCase()) || a.id.includes(search.toLowerCase()),
+    (a) =>
+      !search ||
+      a.name?.toLowerCase().includes(search.toLowerCase()) ||
+      a.id.includes(search.toLowerCase()) ||
+      a.owner?.toLowerCase().includes(search.toLowerCase()) ||
+      a.domain?.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -1189,10 +1168,13 @@ function AppsTab() {
                   Name
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  Owner
+                </th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                   Hosting
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
-                  Registry
+                  Sessions
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                   Domain
@@ -1208,7 +1190,10 @@ function AppsTab() {
             <tbody>
               {filtered.map((app) => {
                 const url = app.appUrl || (app.domain ? `https://${app.domain}` : "#");
-                const repo = app.repo || `freeappstore-online/${app.id}`;
+                const repoUrl = githubRepoUrl(app.repo, app.id);
+                const latestPhase = app.latestSession?.deployed
+                  ? "deployed"
+                  : app.latestSession?.deployState?.phase || (app.sessionCount ? "draft" : "none");
                 return (
                   <tr key={app.id} style={{ borderBottom: "1px solid var(--line)" }}>
                     <td className="p-2">
@@ -1218,10 +1203,21 @@ function AppsTab() {
                       </div>
                     </td>
                     <td className="p-2">
-                      <StatusDot status={app.hostedOn === "r2" ? "active" : app.hostedOn || "unknown"} />
+                      <strong className="text-sm">{app.ownerDisplayName || app.owner || "—"}</strong>
+                      {app.ownerDisplayName && app.owner && (
+                        <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                          {app.owner}
+                        </div>
+                      )}
                     </td>
                     <td className="p-2">
-                      <StatusDot status={app.inRegistry ? "active" : "unlisted"} />
+                      <StatusDot status={app.hasRoute === false ? "missing route" : app.hostedOn === "r2" ? "active" : app.hostedOn || "unknown"} />
+                    </td>
+                    <td className="p-2">
+                      <StatusDot status={latestPhase} />
+                      <div className="text-xs" style={{ color: "var(--muted)" }}>
+                        {app.sessionCount || 0} total
+                      </div>
                     </td>
                     <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>
                       {app.domain || "—"}
@@ -1234,27 +1230,13 @@ function AppsTab() {
                         Visit
                       </a>
                       <a
-                        href={`https://github.com/${repo}`}
+                        href={repoUrl}
                         target="_blank"
                         className="text-xs font-semibold"
                         style={{ color: "var(--accent)" }}
                       >
                         Code
                       </a>
-                      <button
-                        onClick={() => handleUnpublish(app.id)}
-                        className="text-xs font-semibold"
-                        style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}
-                      >
-                        Unpublish
-                      </button>
-                      <button
-                        onClick={() => handleDeprovision(app.id)}
-                        className="text-xs font-semibold"
-                        style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer", opacity: 0.6 }}
-                      >
-                        Delete
-                      </button>
                     </td>
                   </tr>
                 );
@@ -1471,6 +1453,12 @@ function isFreeAppStoreApp(app: AdminApp): boolean {
   const store = (app.store || "").toLowerCase();
   const domain = (app.domain || app.appUrl || "").toLowerCase();
   return store === "apps" || store === "fas" || domain.includes(".freeappstore.online") || domain.endsWith("freeappstore.online");
+}
+
+function githubRepoUrl(repo: string | null | undefined, id: string): string {
+  if (!repo) return `https://github.com/freeappstore-online/${id}`;
+  if (/^https?:\/\//i.test(repo)) return repo;
+  return `https://github.com/${repo.replace(/^\/+/, "")}`;
 }
 
 function timeAgo(value: string | number): string {
