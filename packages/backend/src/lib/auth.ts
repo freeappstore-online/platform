@@ -87,9 +87,29 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
  */
 export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<CurrentUser> {
   const user = await requireUser(c);
-  if (!user.roles.includes('admin') && !isAdminLogin(user.githubLogin, c.env)) {
+  const roleOk = user.roles.includes('admin');
+  const loginOk = isAdminLogin(user.githubLogin, c.env);
+  const userIdOk = isAdminUserId(user.id, c.env);
+  if (!roleOk && !loginOk && !userIdOk) {
+    console.warn('admin_denied', {
+      userId: user.id,
+      login: user.login,
+      githubLogin: user.githubLogin,
+      roles: user.roles,
+      hasAdminGithubLogins: !!c.env.ADMIN_GITHUB_LOGINS,
+      hasAdminUserIds: !!c.env.ADMIN_USER_IDS,
+      path: c.req.path,
+    });
     throw new HttpError(403, 'admin only');
   }
+  console.log('admin_allowed', {
+    userId: user.id,
+    githubLogin: user.githubLogin,
+    roleOk,
+    loginOk,
+    userIdOk,
+    path: c.req.path,
+  });
   return user;
 }
 
@@ -117,6 +137,14 @@ export function isAdminLogin(login: string, env: Env): boolean {
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   return admins.includes(login.toLowerCase());
+}
+
+export function isAdminUserId(userId: string, env: Env): boolean {
+  const admins = (env.ADMIN_USER_IDS ?? '')
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return admins.includes(userId.toLowerCase());
 }
 
 export class HttpError extends Error {

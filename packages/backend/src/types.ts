@@ -88,6 +88,8 @@ export interface Env {
    * and admin endpoints 403. Set via `wrangler secret put ADMIN_GITHUB_LOGINS`.
    */
   ADMIN_GITHUB_LOGINS?: string;
+  /** Comma-separated platform user ids allowed to call admin-only endpoints. */
+  ADMIN_USER_IDS?: string;
   /** Platform-funded AI provider keys used by complimentary VibeCode grants. */
   COMP_KEY_OPENAI?: string;
   COMP_KEY_ANTHROPIC?: string;

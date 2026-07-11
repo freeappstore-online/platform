@@ -13,6 +13,25 @@ function authHeaders(): Record<string, string> {
     : { "Content-Type": "application/json" };
 }
 
+async function adminFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, { ...init, headers: { ...authHeaders(), ...init?.headers } });
+  const text = await res.text();
+  let body: unknown = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  if (!res.ok) {
+    console.error("Admin API failed", { url, status: res.status, body });
+    const detail = typeof body === "object" && body && "error" in body
+      ? String((body as { error?: unknown }).error)
+      : text || res.statusText;
+    throw new Error(`${url} returned ${res.status}: ${detail}`);
+  }
+  return body as T;
+}
+
 type Tab = "overview" | "apps" | "users" | "sessions" | "grants" | "creators";
 
 interface Stats {
@@ -118,13 +137,9 @@ function SessionsTab() {
     setError("");
     const params = new URLSearchParams({ limit: "50" });
     if (search) params.set("q", search);
-    fetch(`${API_URL}/v1/admin/agent-sessions?${params}`, { headers: authHeaders() })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
-        return r.json();
-      })
+    adminFetchJson<{ sessions?: AgentSession[]; total?: number }>(`${API_URL}/v1/admin/agent-sessions?${params}`)
       .then((data) => { setSessions(data.sessions || []); setTotal(data.total || 0); })
-      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, [search]);
 
@@ -134,7 +149,7 @@ function SessionsTab() {
         <p className="text-sm" style={{ color: "var(--muted)" }}>{total} total VibeCode sessions</p>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search sessions..." className="p-2 rounded-lg border text-sm" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)", width: 260 }} />
       </div>
-      {error && <AdminAccessError />}
+      {error && <AdminAccessError message={error} />}
       {loading ? <p style={{ color: "var(--muted)" }}>Loading sessions...</p> : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
@@ -185,49 +200,40 @@ function GrantsTab() {
     setLoading(true);
     setError("");
     Promise.all([
-      fetch(`${API_URL}/v1/admin/ai-grants/users`, { headers: authHeaders() }).then(async (r) => {
-        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
-        return r.json();
-      }),
-      fetch(`${API_URL}/v1/admin/ai-grants`, { headers: authHeaders() }).then(async (r) => {
-        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
-        return r.json();
-      }),
+      adminFetchJson<{ users?: GrantUser[] }>(`${API_URL}/v1/admin/ai-grants/users`),
+      adminFetchJson<{ funded?: string[] }>(`${API_URL}/v1/admin/ai-grants`),
     ])
       .then(([userData, grantData]) => {
         setUsers(userData.users || []);
         setFunded(grantData.funded || []);
         setSelectedUser((current) => current || userData.users?.[0]?.id || "");
       })
-      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
 
   async function saveGrant() {
-    const res = await fetch(`${API_URL}/v1/admin/ai-grants`, {
+    const data = await adminFetchJson<{ error?: string }>(`${API_URL}/v1/admin/ai-grants`, {
       method: "POST",
-      headers: authHeaders(),
       body: JSON.stringify({ userId: selectedUser, provider, model, note: note || null }),
     });
-    const data = await res.json();
-    if (!res.ok) alert(data.error || "Failed to grant");
+    if (data.error) alert(data.error);
     load();
   }
 
   async function revoke(userId: string) {
     if (!confirm(`Revoke grant for ${userId}?`)) return;
-    await fetch(`${API_URL}/v1/admin/ai-grants/delete`, {
+    await adminFetchJson(`${API_URL}/v1/admin/ai-grants/delete`, {
       method: "POST",
-      headers: authHeaders(),
       body: JSON.stringify({ userId }),
     });
     load();
   }
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading grants...</p>;
-  if (error) return <AdminAccessError />;
+  if (error) return <AdminAccessError message={error} />;
 
   return (
     <>
@@ -280,11 +286,7 @@ function OverviewTab() {
 
   useEffect(() => {
     setError("");
-    fetch(`${API_URL}/v1/admin/stats`, { headers: authHeaders() })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
-        return r.json();
-      })
+    adminFetchJson<Record<string, unknown>>(`${API_URL}/v1/admin/stats`)
       .then((data) => setStats({
         apps: Number(data.apps || 0),
         games: 0,
@@ -292,12 +294,12 @@ function OverviewTab() {
         creators: 0,
         traffic: null,
       }))
-      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading stats...</p>;
-  if (error || !stats) return <AdminAccessError />;
+  if (error || !stats) return <AdminAccessError message={error || "No stats returned"} />;
 
   const fasT = stats.traffic?.fas?.totals;
   const fgsT = stats.traffic?.fgs?.totals;
@@ -322,10 +324,10 @@ function OverviewTab() {
   );
 }
 
-function AdminAccessError() {
+function AdminAccessError({ message }: { message?: string }) {
   return (
     <div className="p-4 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
-      <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>{ADMIN_ACCESS_MESSAGE}</p>
+      <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>{message || ADMIN_ACCESS_MESSAGE}</p>
       <a href="/profile" className="inline-flex px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: "var(--accent)", color: "white" }}>
         Open Profile
       </a>
@@ -502,11 +504,7 @@ function UsersTab() {
     setLoading(true);
     setError("");
     const offset = (page - 1) * 50;
-    fetch(`${API_URL}/v1/admin/users?limit=50&offset=${offset}`, { headers: authHeaders() })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`Admin API returned ${r.status}`);
-        return r.json();
-      })
+    adminFetchJson<{ users?: Record<string, unknown>[]; total?: number }>(`${API_URL}/v1/admin/users?limit=50&offset=${offset}`)
       .then((data) => {
         setUsers((data.users || []).map((u: Record<string, unknown>) => ({
           id: String(u.id || ""),
@@ -519,12 +517,12 @@ function UsersTab() {
         setTotal(data.total || 0);
         setPages(Math.max(1, Math.ceil((data.total || 0) / 50)));
       })
-      .catch(() => setError(ADMIN_ACCESS_MESSAGE))
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, [page]);
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading users...</p>;
-  if (error) return <AdminAccessError />;
+  if (error) return <AdminAccessError message={error} />;
 
   return (
     <>
