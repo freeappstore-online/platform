@@ -126,8 +126,7 @@ The API uses a D1 database (`fas`) with tables including:
 Migrations are in `platform/packages/backend/migrations/`. Apply with:
 ```bash
 cd ~/dev/stores/fas/platform/packages/backend
-CLOUDFLARE_API_TOKEN=$(doppler secrets get CLOUDFLARE_API_TOKEN --project fas --config prd --plain) \
-  npx wrangler d1 migrations apply fas --remote
+npx wrangler d1 migrations apply fas --remote
 ```
 
 ## GitHub OAuth App

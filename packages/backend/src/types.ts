@@ -55,14 +55,14 @@ export interface Env {
    * Provisioning control-plane token shared ONLY with the admin Worker
    * (freeappstore-admin). Authenticates both directions: backend→admin
    * (/api/provision) and admin→backend (/v1/internal analytics callbacks).
-   * Sourced from Doppler (fas/prd ADMIN_PROVISION_TOKEN) and synced to both
-   * workers by CI — never set by hand. Internal routes 403 when unset.
+   * Managed from the private SOPS secrets repo (`serge-ivo/secrets`) and synced
+   * to both Workers on rotation/touch. Internal routes 403 when unset.
    */
   ADMIN_PROVISION_TOKEN?: string;
   /**
    * Separate token for cross-store app registration (PAS → FAS
    * /v1/internal/register-app). Distinct from ADMIN_PROVISION_TOKEN so a PAS
-   * compromise can't reach the provisioning plane. Doppler: CROSS_STORE_REGISTER_TOKEN.
+   * compromise can't reach the provisioning plane.
    */
   CROSS_STORE_REGISTER_TOKEN?: string;
   /**

@@ -6,10 +6,10 @@ export interface Env {
   GITHUB_TOKEN: string;
   CI_TOKEN: string;
   /** Provisioning control-plane token shared with the FAS backend
-   *  (freeappstore-api). Authenticates server-to-server calls (backend →
-   *  /api/provision via service binding, admin → backend analytics, admin's
-   *  own /api/unpublish self-call) that carry no CF Access JWT. Sourced from
-   *  Doppler (ADMIN_PROVISION_TOKEN) and synced by CI — never set by hand. */
+   *  (freeappstore-api). Authenticates server-to-server calls (backend ->
+   *  /api/provision via service binding, admin -> backend analytics, admin's
+   *  own /api/unpublish self-call) that carry no CF Access JWT. Managed from
+   *  the private SOPS secrets repo and synced on rotation/touch. */
   ADMIN_PROVISION_TOKEN?: string;
   CF_ACCESS_TEAM_DOMAIN: string;
   CF_ACCESS_AUD: string;

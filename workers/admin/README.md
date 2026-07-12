@@ -33,12 +33,12 @@ If step 2 or 3 fails, step 5 is skipped to avoid leaving dead-link entries on th
 - **Humans:** Cloudflare Access policy fronting the worker's domain. Google sign-in.
 - **Service:** the api worker calls in via service binding (`env.ADMIN.fetch(...)`). Service-binding calls bypass the edge entirely, so they bypass CF Access too — both workers are trusted internal.
 
-Secrets for GitHub + DNS + D1 calls are managed in Doppler (`fas` project) and set via:
+Secrets for GitHub + DNS + D1 calls are managed in the private SOPS repo
+`serge-ivo/secrets` (`~/dev/secrets`) and pushed to Cloudflare on rotation/touch:
 
 ```bash
-doppler secrets --project fas --config prd  # view all
-wrangler secret put GH_TOKEN           # PAT with admin:org + repo scopes
-wrangler secret put STORE_GH_TOKEN     # PAT for the storefront registry repo writes
+cd ~/dev/stores/fas/platform
+SECRETS_PROJECT=fas bash scripts/sync-worker-secrets.sh workers/admin
 ```
 
 ## Develop

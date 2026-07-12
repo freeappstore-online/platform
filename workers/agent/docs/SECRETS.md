@@ -14,8 +14,8 @@ VAPID_PRIVATE_KEY← wrangler secret (web push notifications)
 ```
 
 **Note:** `CF_API_TOKEN` is no longer needed. Deploy creates a GitHub repo and
-pushes code — GitHub Actions handles the R2 upload via org-level secrets (synced
-from Doppler).
+pushes code — GitHub Actions handles the R2 upload via org-level secrets managed
+from `~/dev/secrets`.
 
 ## Verify secrets are set
 
@@ -68,4 +68,4 @@ echo "new_token_value" | npx wrangler secret put GITHUB_TOKEN
 | Deploy fails "no GITHUB_TOKEN" | Secret is empty | Re-set with `echo "value" \| npx wrangler secret put GITHUB_TOKEN` |
 | Wrangler secret put hangs | No TTY input | Always pipe via `echo "value" \|` |
 | GitHub API 401 | Token expired or wrong scope | Regenerate PAT with correct scopes |
-| GH Actions deploy fails | Org secrets not synced from Doppler | Check `doppler secrets --project fas --config prd` |
+| GH Actions deploy fails | Missing GitHub Actions secret or stale Worker runtime secret | Check `~/dev/secrets/inventory.yaml`, then sync the listed consumer |

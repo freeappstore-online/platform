@@ -17,9 +17,9 @@
 
 export interface Env {
   KB_R2: R2Bucket;
-  /** Dedicated KB-ingest token (Doppler KB_INGEST_TOKEN), synced by CI — auth
-   *  for the docs-publish CI job. Separate from the provisioning token so a
-   *  docs-pipeline leak can't reach the backend↔admin plane. */
+  /** Dedicated KB-ingest token, managed from the private SOPS secrets repo.
+   *  Auth for the docs-publish CI job. Separate from the provisioning token so
+   *  a docs-pipeline leak can't reach the backend<->admin plane. */
   KB_INGEST_TOKEN: string;
 }
 
