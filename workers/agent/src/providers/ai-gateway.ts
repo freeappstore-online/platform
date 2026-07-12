@@ -15,7 +15,7 @@
  * Set up (one-time, per account):
  *   1. Dashboard → AI → AI Gateway → create a gateway (e.g. `fas-agent`).
  *   2. workers/agent/wrangler.toml [vars]: AI_GATEWAY_ACCOUNT_ID, AI_GATEWAY_ID.
- *   3. (optional) authenticated gateway: set AI_GATEWAY_TOKEN (via Doppler).
+ *   3. (optional) authenticated gateway: set AI_GATEWAY_TOKEN from the SOPS secrets repo.
  */
 
 export type GatewayProvider = "anthropic" | "openai" | "google";

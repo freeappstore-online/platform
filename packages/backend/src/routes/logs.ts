@@ -116,9 +116,9 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
       level: r.level,
       category: r.category,
       message: r.message,
-      data: r.data ? JSON.parse(r.data as string) : undefined,
+      data: parseJsonObject(r.data) ?? undefined,
       userId: r.user_id,
-      build: r.build_meta ? JSON.parse(r.build_meta as string) : undefined,
+      build: parseJsonObject(r.build_meta) ?? undefined,
     })),
   });
 });
@@ -140,7 +140,19 @@ logsRoutes.get('/apps/:appId/logs/build', async (c) => {
   if (!row) return c.json({ build: null });
 
   return c.json({
-    build: JSON.parse(row.build_meta),
+    build: parseJsonObject(row.build_meta),
     ts: row.ts,
   });
 });
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}

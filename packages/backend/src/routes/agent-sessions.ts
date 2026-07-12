@@ -62,10 +62,10 @@ agentSessionRoutes.get('/agent/sessions/:id', async (c) => {
       appId: row.app_id,
       appUrl: row.app_url,
       deployed: row.deployed === 1,
-      messages: row.messages ? JSON.parse(row.messages as string) : [],
-      deployState: row.deploy_state ? JSON.parse(row.deploy_state as string) : null,
-      deployLog: row.deploy_log ? JSON.parse(row.deploy_log as string) : [],
-      errors: row.errors ? JSON.parse(row.errors as string) : [],
+      messages: parseJsonArray(row.messages),
+      deployState: parseJsonObject(row.deploy_state),
+      deployLog: parseJsonArray(row.deploy_log),
+      errors: parseJsonArray(row.errors),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     },
@@ -135,6 +135,28 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
 
   return c.json({ ok: true });
 });
+
+function parseJsonArray(value: unknown): unknown[] {
+  if (!value || typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 // ── Update messages only (called frequently during chat) ────────
 

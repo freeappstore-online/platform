@@ -48,8 +48,8 @@ function fakeDB(opts: {
   } as unknown as D1Database;
 }
 
-function env(db: D1Database) {
-  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY };
+function env(db: D1Database, overrides: Record<string, unknown> = {}) {
+  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY, ...overrides };
 }
 
 async function adminHeader() {
@@ -140,6 +140,34 @@ describe('content-admin routes', () => {
     expect(data.sessions[0]!.userDisplayName).toBe('Alice Example');
   });
 
+  it('GET /v1/admin/agent-sessions tolerates malformed deploy state', async () => {
+    const sessions = [
+      {
+        session_id: 's1',
+        user_id: 'gh:1',
+        github_login: 'alice',
+        display_name: 'Alice Example',
+        name: 'New App',
+        app_id: null,
+        app_url: null,
+        deployed: 0,
+        deploy_state: '{bad',
+        created_at: 1000,
+        updated_at: 2000,
+      },
+    ];
+    const res = await app.request(
+      '/v1/admin/agent-sessions',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser, sessions, stats: { users: 1 } })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { sessions: Array<{ deployState: unknown }> };
+    expect(data.sessions[0]!.deployState).toBeNull();
+  });
+
   it('GET /v1/admin/agent-sessions/:id includes user names and debug data', async () => {
     const sessions = [
       {
@@ -175,6 +203,47 @@ describe('content-admin routes', () => {
     expect(data.session.messages).toHaveLength(1);
   });
 
+  it('GET /v1/admin/agent-sessions/:id tolerates malformed debug JSON', async () => {
+    const sessions = [
+      {
+        session_id: 's1',
+        user_id: 'gh:1',
+        github_login: 'alice',
+        display_name: 'Alice Example',
+        name: 'New App',
+        app_id: 'demo',
+        app_url: 'https://demo.freeappstore.online',
+        deployed: 1,
+        messages: '{bad',
+        deploy_state: '{bad',
+        deploy_log: '{bad',
+        errors: '{bad',
+        created_at: 1000,
+        updated_at: 2000,
+      },
+    ];
+    const res = await app.request(
+      '/v1/admin/agent-sessions/s1',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser, sessions })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      session: {
+        messages: unknown[];
+        deployState: unknown;
+        deployLog: unknown[];
+        errors: unknown[];
+      };
+    };
+    expect(data.session.messages).toEqual([]);
+    expect(data.session.deployState).toBeNull();
+    expect(data.session.deployLog).toEqual([]);
+    expect(data.session.errors).toEqual([]);
+  });
+
   // KV
   it('GET /v1/admin/kv returns entries', async () => {
     const kvEntries = [
@@ -201,6 +270,21 @@ describe('content-admin routes', () => {
       env(fakeDB({ user: adminUser, kvValue: { value: '{"color":"blue"}' } })),
     );
     expect(res.status).toBe(200);
+    const data = (await res.json()) as { value: { color: string } };
+    expect(data.value.color).toBe('blue');
+  });
+
+  it('GET /v1/admin/kv/value tolerates malformed JSON', async () => {
+    const res = await app.request(
+      '/v1/admin/kv/value?app=timer&user=u1&key=theme',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser, kvValue: { value: '{bad' } })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { value: unknown };
+    expect(data.value).toBeNull();
   });
 
   it('GET /v1/admin/kv/value returns 400 without params', async () => {
@@ -261,6 +345,30 @@ describe('content-admin routes', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { documents: unknown[] };
     expect(data.documents).toHaveLength(1);
+  });
+
+  it('GET /v1/admin/collections tolerates malformed document JSON', async () => {
+    const docs = [
+      {
+        id: 'd1',
+        app_id: 'timer',
+        collection: 'posts',
+        data: '{bad',
+        owner_id: 'u1',
+        created_at: 1000,
+        updated_at: 2000,
+      },
+    ];
+    const res = await app.request(
+      '/v1/admin/collections?app=timer',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser, docs })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { documents: Array<{ data: unknown }> };
+    expect(data.documents[0]!.data).toBeNull();
   });
 
   it('DELETE /v1/admin/collections returns 400 without params', async () => {
@@ -386,5 +494,38 @@ describe('content-admin routes', () => {
     expect(data.apps[0]!.latestSession.sessionId).toBe('s1');
     expect(data.apps[0]!.latestSession.deployed).toBe(true);
     expect(data.apps[0]!.updatedAt).toBeGreaterThan(0);
+  });
+
+  it('GET /v1/admin/creators proxies through the admin worker binding', async () => {
+    const admin = {
+      fetch: async (url: string, init?: RequestInit) => {
+        expect(url).toBe('https://admin.freeappstore.online/api/creators');
+        expect(init?.headers).toEqual({ 'X-Internal-Token': 'token-1' });
+        return Response.json([{ github: 'alice', apps: [], banned: false, maxApps: 3 }]);
+      },
+    } as Fetcher;
+    const res = await app.request(
+      '/v1/admin/creators',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser }), { ADMIN: admin, ADMIN_PROVISION_TOKEN: 'token-1' }),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Array<{ github: string }>;
+    expect(data[0]!.github).toBe('alice');
+  });
+
+  it('GET /v1/admin/creators reports missing admin worker setup', async () => {
+    const res = await app.request(
+      '/v1/admin/creators',
+      {
+        headers: { Authorization: await adminHeader() },
+      },
+      env(fakeDB({ user: adminUser })),
+    );
+    expect(res.status).toBe(503);
+    const data = (await res.json()) as { error: string };
+    expect(data.error).toContain('Admin worker binding');
   });
 });

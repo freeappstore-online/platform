@@ -4,7 +4,6 @@ import { Markdown } from "../components/Markdown";
 import { useAuth } from "../hooks/useAuth";
 import { API_URL, getSession } from "../lib/api";
 
-const ADMIN_API = "https://admin.freeappstore.online";
 const ADMIN_ACCESS_MESSAGE = "Platform admin access required. Sign out and back in if your admin role was just added.";
 
 function authHeaders(): Record<string, string> {
@@ -1376,8 +1375,7 @@ function CreatorsTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${ADMIN_API}/api/creators`, { credentials: "include" })
-      .then((r) => r.json())
+    adminFetchJson<Creator[]>(`${API_URL}/v1/admin/creators`)
       .then(setCreators)
       .catch(() => {
         /* best-effort */

@@ -20,7 +20,7 @@ Separate from the store site (freeappstore.online) which is static HTML.
 | `/` | Create | VibeCode chat + preview + deploy. Main AI builder. |
 | `/profile` | Profile | User account, AI provider key management |
 | `/publish` | Publish | Self-service publish to store (POSTs api.freeappstore.online/v1/publish with the platform session) |
-| `/admin` | Admin | Monitoring dashboard + unpublish (calls admin.freeappstore.online) |
+| `/admin` | Admin | Monitoring dashboard (calls `api.freeappstore.online/v1/admin/*` with the platform session) |
 
 ## Structure
 ```
@@ -85,5 +85,6 @@ project management (localStorage), deploy status tracking.
 - `api.freeappstore.online` — auth (sign in, sign out, user info, GitHub token)
 - `agent.freeappstore.online` — AI chat sessions (SSE streaming)
 - `api.freeappstore.online/v1/publish` — self-service publish (from /publish page; session-auth, proxies to the admin Worker). The legacy `publish.freeappstore.online` (freeappstore-publisher) was decommissioned 2026-06-30.
-- `admin.freeappstore.online` — monitoring + unpublish (from /admin page)
+- `api.freeappstore.online/v1/admin/*` — monitoring and grants from `/admin`
+- `admin.freeappstore.online` — privileged provisioning/deprovisioning worker, protected by Cloudflare Access
 - `api.github.com` — org repos list (unauthenticated, for project picker)

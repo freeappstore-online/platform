@@ -69,7 +69,7 @@ contentAdminRoutes.get('/admin/kv/value', async (c) => {
     .first<{ value: string }>();
 
   if (!row) return c.json({ error: 'not found' }, 404);
-  return c.json({ value: JSON.parse(row.value) });
+  return c.json({ value: parseJsonValue(row.value) });
 });
 
 contentAdminRoutes.delete('/admin/kv', async (c) => {
@@ -115,7 +115,7 @@ contentAdminRoutes.get('/admin/collections', async (c) => {
     .all();
   const docs = (result.results ?? []).map((r: Record<string, unknown>) => ({
     ...r,
-    data: r.data ? JSON.parse(r.data as string) : null,
+    data: parseJsonObject(r.data),
   }));
   return c.json({ documents: docs });
 });
@@ -285,6 +285,30 @@ contentAdminRoutes.get('/admin/apps', async (c) => {
   return c.json({ apps });
 });
 
+contentAdminRoutes.get('/admin/creators', async (c) => {
+  await requireAdmin(c);
+  if (!c.env.ADMIN || !c.env.ADMIN_PROVISION_TOKEN) {
+    return c.json(
+      {
+        error:
+          'Admin worker binding is not configured. Add service binding ADMIN and ADMIN_PROVISION_TOKEN.',
+      },
+      503,
+    );
+  }
+
+  const res = await c.env.ADMIN.fetch('https://admin.freeappstore.online/api/creators', {
+    headers: { 'X-Internal-Token': c.env.ADMIN_PROVISION_TOKEN },
+  });
+  const text = await res.text();
+  const body = parseJsonValue(text);
+  if (!res.ok) {
+    const detail = body && typeof body === 'object' && 'error' in body ? body.error : text;
+    return c.json({ error: `Admin worker returned ${res.status}: ${String(detail)}` }, 502);
+  }
+  return c.json(Array.isArray(body) ? body : []);
+});
+
 function toAdminApp(input: {
   id: string;
   app: Record<string, unknown> | null;
@@ -376,6 +400,25 @@ function parseJsonObject(value: unknown): Record<string, unknown> | null {
   }
 }
 
+function parseJsonValue(value: unknown): unknown {
+  if (!value || typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonArray(value: unknown): unknown[] {
+  if (!value || typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 // ── Agent sessions (VibeCode debugging) ─────────────────────────
 
 /**
@@ -428,7 +471,7 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
       appId: r.app_id,
       appUrl: r.app_url,
       deployed: r.deployed === 1 || r.deployed === true,
-      deployState: r.deploy_state ? JSON.parse(r.deploy_state as string) : null,
+      deployState: parseJsonObject(r.deploy_state),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     })),
@@ -472,9 +515,9 @@ contentAdminRoutes.get('/admin/agent-errors', async (c) => {
     userId: r.user_id,
     name: r.name,
     appId: r.app_id,
-    errors: r.errors ? JSON.parse(r.errors as string) : [],
-    deployState: r.deploy_state ? JSON.parse(r.deploy_state as string) : null,
-    deployLog: r.deploy_log ? JSON.parse(r.deploy_log as string) : [],
+    errors: parseJsonArray(r.errors),
+    deployState: parseJsonObject(r.deploy_state),
+    deployLog: parseJsonArray(r.deploy_log),
     updatedAt: r.updated_at,
   }));
 
@@ -502,8 +545,8 @@ contentAdminRoutes.get('/admin/agent-deploys', async (c) => {
     userId: r.user_id,
     name: r.name,
     appId: r.app_id,
-    deployState: r.deploy_state ? JSON.parse(r.deploy_state as string) : null,
-    deployLog: r.deploy_log ? JSON.parse(r.deploy_log as string) : [],
+    deployState: parseJsonObject(r.deploy_state),
+    deployLog: parseJsonArray(r.deploy_log),
     updatedAt: r.updated_at,
   }));
 
@@ -538,10 +581,10 @@ contentAdminRoutes.get('/admin/agent-sessions/:id', async (c) => {
       appId: row.app_id,
       appUrl: row.app_url,
       deployed: row.deployed === 1,
-      messages: row.messages ? JSON.parse(row.messages as string) : [],
-      deployState: row.deploy_state ? JSON.parse(row.deploy_state as string) : null,
-      deployLog: row.deploy_log ? JSON.parse(row.deploy_log as string) : [],
-      errors: row.errors ? JSON.parse(row.errors as string) : [],
+      messages: parseJsonArray(row.messages),
+      deployState: parseJsonObject(row.deploy_state),
+      deployLog: parseJsonArray(row.deploy_log),
+      errors: parseJsonArray(row.errors),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     },

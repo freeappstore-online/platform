@@ -16,7 +16,8 @@ export interface Env {
   /** Cloudflare AI Gateway routing (opt-in). When ACCOUNT_ID + ID are set,
    *  provider LLM calls route through the gateway for caching + cost/token
    *  observability. ACCOUNT_ID + ID live in wrangler.toml [vars]; the optional
-   *  TOKEN (authenticated gateway) comes from Doppler. See providers/ai-gateway.ts. */
+   *  TOKEN (authenticated gateway) is managed from the private SOPS secrets repo.
+   *  See providers/ai-gateway.ts. */
   AI_GATEWAY_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
   AI_GATEWAY_TOKEN?: string;

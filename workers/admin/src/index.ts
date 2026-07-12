@@ -80,8 +80,7 @@ async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
   // replaces the removed Host-based bypass: a server-only secret can't be
   // spoofed by an external client the way a Host header could.
   const internalToken = request.headers.get("X-Internal-Token");
-  if (env.ADMIN_PROVISION_TOKEN && internalToken && internalToken === env.ADMIN_PROVISION_TOKEN)
-    return true;
+  if (env.ADMIN_PROVISION_TOKEN && internalToken && internalToken === env.ADMIN_PROVISION_TOKEN) return true;
   const jwt = request.headers.get("Cf-Access-Jwt-Assertion");
   if (!jwt) return false;
   return verifyAccessJwt(jwt, env.CF_ACCESS_TEAM_DOMAIN, env.CF_ACCESS_AUD);
@@ -91,6 +90,15 @@ async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
 
 function json(data: unknown, status: number, request: Request) {
   return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Worker ──
@@ -132,8 +140,8 @@ export default {
           if (provUser) {
             const rlKey = `ratelimit:${provUser}:provision`;
             const rlRaw = await env.CREATORS.get(rlKey);
-            if (rlRaw && parseInt(rlRaw) >= 3) return json({ error: "Rate limit: max 3 provisions per hour" }, 429, request);
-            await env.CREATORS.put(rlKey, String((rlRaw ? parseInt(rlRaw) : 0) + 1), { expirationTtl: 3600 });
+            if (rlRaw && parseInt(rlRaw, 10) >= 3) return json({ error: "Rate limit: max 3 provisions per hour" }, 429, request);
+            await env.CREATORS.put(rlKey, String((rlRaw ? parseInt(rlRaw, 10) : 0) + 1), { expirationTtl: 3600 });
           }
         } catch {
           return json({ error: "Invalid authentication" }, 401, request);
@@ -187,7 +195,7 @@ export default {
           },
           body: JSON.stringify({
             message: `Unpublish ${body.id}`,
-            content: btoa(JSON.stringify(registry, null, 2) + "\n"),
+            content: btoa(`${JSON.stringify(registry, null, 2)}\n`),
             sha: regFile.sha,
           }),
         });
@@ -288,7 +296,7 @@ export default {
         }
         const ok = steps.every((s) => s.status !== "fail");
         return json({ ok, id: body.id, steps }, ok ? 200 : 500, request);
-      } catch (e) {
+      } catch {
         return json({ error: "Deprovision failed" }, 500, request);
       }
     }
@@ -312,7 +320,11 @@ export default {
       const allowed =
         (method === "GET" && (url.pathname === "/api/ai-keys/users" || url.pathname === "/api/ai-keys/providers")) ||
         (method === "GET" && (url.pathname === "/api/ai-grants/users" || url.pathname === "/api/ai-grants")) ||
-        (method === "POST" && (url.pathname === "/api/ai-keys/userkey" || url.pathname === "/api/ai-keys/userkey/delete" || url.pathname === "/api/ai-grants" || url.pathname === "/api/ai-grants/delete"));
+        (method === "POST" &&
+          (url.pathname === "/api/ai-keys/userkey" ||
+            url.pathname === "/api/ai-keys/userkey/delete" ||
+            url.pathname === "/api/ai-grants" ||
+            url.pathname === "/api/ai-grants/delete"));
       if (!allowed) return json({ error: "method not allowed" }, 405, request);
 
       const backendPath =
@@ -377,11 +389,13 @@ export default {
 
     if (url.pathname === "/api/users") {
       try {
-        const page = Math.max(1, parseInt(url.searchParams.get("page") || "1") || 1);
+        const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10) || 1);
         const limit = 50;
         const offset = (page - 1) * limit;
         const [rows, total] = await Promise.all([
-          env.DB.prepare("SELECT id, github_login, display_name, email, avatar_url, provider, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?")
+          env.DB.prepare(
+            "SELECT id, github_login, display_name, email, avatar_url, provider, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?",
+          )
             .bind(limit, offset)
             .all(),
           env.DB.prepare("SELECT COUNT(*) as count FROM users").first<{ count: number }>(),
@@ -405,7 +419,8 @@ export default {
         list.keys.map(async (k) => {
           const raw = await env.CREATORS.get(k.name);
           if (!raw) return null;
-          const data = JSON.parse(raw);
+          const data = parseJsonObject(raw);
+          if (!data) return null;
           return { github: data.github, apps: data.apps, banned: data.banned, maxApps: data.maxApps };
         }),
       );

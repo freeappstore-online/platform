@@ -16,7 +16,7 @@
 | R2 app bucket | `fas-apps` |
 | R2 backups | `fas-backups` |
 | R2 docs | `fas-kb` |
-| Doppler project | `fas` |
+| Secrets source | Private SOPS repo `serge-ivo/secrets` (`fas` project key) |
 
 ## Monorepo layout
 
@@ -109,7 +109,7 @@ All data lives in a single D1 database (`fas`):
 - `app_analytics` -- visitor analytics
 - `health_checks` -- uptime check results
 - `audit_results` -- compliance audit results
-- `agent_session_logs` -- VibeCode agent build logs
+- `agent_sessions` -- VibeCode sessions, messages, deploy state, deploy logs, and errors
 
 ## Cron jobs
 

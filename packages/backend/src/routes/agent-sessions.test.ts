@@ -117,6 +117,42 @@ describe('agent-sessions', () => {
     expect(data.session.messages).toHaveLength(1);
   });
 
+  it('GET /v1/agent/sessions/:id tolerates malformed persisted JSON', async () => {
+    const session = {
+      session_id: 's1',
+      user_id: 'user-1',
+      name: 'Test',
+      app_id: null,
+      app_url: null,
+      deployed: 0,
+      messages: '{bad',
+      deploy_state: '{bad',
+      deploy_log: '{bad',
+      errors: '{bad',
+      created_at: 1000,
+      updated_at: 2000,
+    };
+    const db = fakeDB({ user, session });
+    const res = await app.request(
+      '/v1/agent/sessions/s1',
+      { headers: { Authorization: await authHeader() } },
+      env(db),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as {
+      session: {
+        messages: unknown[];
+        deployState: unknown;
+        deployLog: unknown[];
+        errors: unknown[];
+      };
+    };
+    expect(data.session.messages).toEqual([]);
+    expect(data.session.deployState).toBeNull();
+    expect(data.session.deployLog).toEqual([]);
+    expect(data.session.errors).toEqual([]);
+  });
+
   it('GET /v1/agent/sessions/:id returns null for nonexistent', async () => {
     const db = fakeDB({ user, session: null });
     const res = await app.request(

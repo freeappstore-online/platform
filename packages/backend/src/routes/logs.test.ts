@@ -4,7 +4,13 @@ import { signSession } from '../lib/session.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
-function fakeDB(user: Record<string, unknown> | null) {
+function fakeDB(
+  user: Record<string, unknown> | null,
+  opts: {
+    logs?: Array<Record<string, unknown>>;
+    build?: Record<string, unknown> | null;
+  } = {},
+) {
   return {
     prepare: (sql: string) => ({
       bind: (..._args: unknown[]) => ({
@@ -13,10 +19,10 @@ function fakeDB(user: Record<string, unknown> | null) {
           if (sql.includes('FROM apps'))
             return user ? { owner_login: (user as Record<string, unknown>).github_login } : null;
           if (sql.includes('FROM app_logs') && sql.includes('build_meta IS NOT NULL'))
-            return { build_meta: '{"sdkVersion":"0.12.0"}', ts: 1000 };
+            return opts.build ?? { build_meta: '{"sdkVersion":"0.12.0"}', ts: 1000 };
           return null;
         },
-        all: async () => ({ results: [] }),
+        all: async () => ({ results: opts.logs ?? [] }),
         run: async () => ({ meta: { changes: 0 } }),
       }),
     }),
@@ -99,6 +105,32 @@ describe('logs routes', () => {
     expect(Array.isArray(data.logs)).toBe(true);
   });
 
+  it('GET /v1/apps/:appId/logs tolerates malformed JSON fields', async () => {
+    const logs = [
+      {
+        ts: 1000,
+        level: 'error',
+        category: 'app',
+        message: 'bad row',
+        data: '{bad',
+        build_meta: '{bad',
+        user_id: 'u1',
+      },
+    ];
+    const res = await app.request(
+      '/v1/apps/timer/logs',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(fakeDB(user, { logs })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { logs: Array<{ data?: unknown; build?: unknown }> };
+    expect(data.logs).toHaveLength(1);
+    expect(data.logs[0]!.data).toBeUndefined();
+    expect(data.logs[0]!.build).toBeUndefined();
+  });
+
   it('GET /v1/apps/:appId/logs/build returns build metadata', async () => {
     const res = await app.request(
       '/v1/apps/timer/logs/build',
@@ -110,5 +142,19 @@ describe('logs routes', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { build: Record<string, unknown>; ts: number };
     expect(data.build.sdkVersion).toBe('0.12.0');
+  });
+
+  it('GET /v1/apps/:appId/logs/build tolerates malformed build metadata', async () => {
+    const res = await app.request(
+      '/v1/apps/timer/logs/build',
+      {
+        headers: { Authorization: await authHeader() },
+      },
+      env(fakeDB(user, { build: { build_meta: '{bad', ts: 1000 } })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { build: unknown; ts: number };
+    expect(data.build).toBeNull();
+    expect(data.ts).toBe(1000);
   });
 });

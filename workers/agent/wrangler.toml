@@ -41,4 +41,4 @@ AI_GATEWAY_ACCOUNT_ID = "c1089bfcc43c1c6c2aa89e584e86f0bc"
 # Secrets (set via `wrangler secret put`):
 # GITHUB_TOKEN       — org-level PAT for provisioning + pushing code
 # VAPID_PRIVATE_KEY  — VAPID private key for web push notifications
-# AI_GATEWAY_TOKEN   — only for an authenticated gateway (optional; via Doppler)
+# AI_GATEWAY_TOKEN   — only for an authenticated gateway (optional; SOPS-managed)

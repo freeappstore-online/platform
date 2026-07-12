@@ -62,12 +62,12 @@ bucket_name = "fas-apps"
 binding = "ADMIN"
 service = "freeappstore-admin"
 
-# Secrets (set interactively via `wrangler secret put <name>`):
+# Secrets (managed from the private SOPS secrets repo and synced with wrangler):
 #   GITHUB_CLIENT_SECRET     # generated on the OAuth App settings page
 #   SESSION_SIGNING_KEY      # 32+ bytes, e.g. `openssl rand -hex 32`
 #   APP_SECRET_KEK           # 32-byte base64 key for envelope encryption of app secrets
+#   ADMIN_PROVISION_TOKEN    # backend→admin service-binding auth
+#   CROSS_STORE_REGISTER_TOKEN # PAS→FAS app registration auth
 #   COMP_KEY_OPENAI          # platform-funded OpenAI key for complimentary VibeCode grants
 #   COMP_KEY_ANTHROPIC       # platform-funded Anthropic key for complimentary VibeCode grants
 #   COMP_KEY_GOOGLE          # platform-funded Google AI key for complimentary VibeCode grants
-#   INTERNAL_TOKEN           # shared with PAS backend (PAS's FAS_INTERNAL_TOKEN must match)
-#                            # enables POST /v1/internal/register-app for cross-store proxy
