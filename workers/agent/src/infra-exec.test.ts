@@ -213,3 +213,50 @@ describe("executeInfraTool — uniqueness check", () => {
     }
   });
 });
+
+describe("executeInfraTool — build sanity preflight", () => {
+  it("blocks deploy before repo checks when generated source has duplicate top-level declarations", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
+
+    try {
+      const ctx = makeCtx();
+      ctx.files.set("web/src/App.tsx", "function draw() {}\nfunction draw() {}\nexport default function App() { return null; }");
+      const result = await executeInfraTool(
+        {
+          id: "1",
+          name: "deploy",
+          input: { id: "safe-app", name: "Safe App", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "test" },
+        },
+        ctx,
+      );
+
+      expect(result).toContain("Deploy BLOCKED");
+      expect(result).toContain("duplicate top-level declaration");
+      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "error", error: "Build check failed: web/src/App.tsx" });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("blocks push_update before pushing when generated source has multiple default exports", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
+
+    try {
+      const ctx = makeCtx({ appId: "my-app" });
+      ctx.files.set("web/src/App.tsx", "export default function A() { return null; }\nexport default function B() { return null; }");
+      const result = await executeInfraTool({ id: "1", name: "push_update", input: { id: "my-app", message: "update" } }, ctx);
+
+      expect(result).toContain("Deploy BLOCKED");
+      expect(result).toContain("export default");
+      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "error", error: "Build check failed: web/src/App.tsx" });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
