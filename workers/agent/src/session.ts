@@ -147,10 +147,18 @@ export class AgentSession implements DurableObject {
       }
     }
 
-    // Validate token against the platform API
-    const res = await fetch("https://api.freeappstore.online/v1/auth/me", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    // Validate token against the platform API. api.freeappstore.online is a
+    // route-mapped Worker on this zone, so a plain same-zone fetch() would
+    // bypass it — go through the PLATFORM service binding (host is ignored for
+    // bound calls; only the path matters). Fall back to the public URL only
+    // when the binding is absent (e.g. local dev / cross-zone).
+    const res = this.env.PLATFORM
+      ? await this.env.PLATFORM.fetch("https://backend/v1/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      : await fetch("https://api.freeappstore.online/v1/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
     if (!res.ok) {
       return { userId: null, error: json({ error: "Invalid auth token" }, 401, request, this.config.domain) };

@@ -51,3 +51,10 @@ service = "freeappstore-api"
 #   ADMIN_PROVISION_TOKEN Shared secret matching the one set on freeappstore-api.
 #                         Used as X-Internal-Token for service-binding calls into
 #                         the backend, including analytics persistence and AI grants.
+
+# Service binding to the agent Worker — agent.freeappstore.online is a
+# route-mapped Worker on this zone, so a plain same-zone fetch() bypasses it.
+# The agent-session history read (helpers.ts loadMessages) goes through this.
+[[services]]
+binding = "AGENT"
+service = "freeappstore-agent"

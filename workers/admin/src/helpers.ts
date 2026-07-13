@@ -19,6 +19,10 @@ export interface Env {
   APPS?: R2Bucket;
   /** Service binding to the FAS platform backend for internal admin operations. */
   BACKEND_FAS?: Fetcher;
+  /** Service binding to the agent Worker (freeappstore-agent). agent.freeappstore.online
+   *  is route-mapped on this zone, so a plain same-zone fetch() would bypass it —
+   *  the session-history read must go through this binding. */
+  AGENT?: Fetcher;
   /** Legacy alias for the backend internal token. Prefer ADMIN_PROVISION_TOKEN. */
   INTERNAL_TOKEN?: string;
   FAS_ZONE_ID: string;
@@ -287,7 +291,7 @@ export async function handleAgentSessions(url: URL, env: Env) {
 }
 
 /** Try to load messages from D1 row, falling back to the agent DO if D1 has none. */
-async function loadMessages(rawMessages: unknown, sessionId: string): Promise<unknown[]> {
+async function loadMessages(rawMessages: unknown, sessionId: string, env: Env): Promise<unknown[]> {
   let messages: unknown[] = [];
   try {
     messages = rawMessages ? JSON.parse(rawMessages as string) : [];
@@ -296,9 +300,14 @@ async function loadMessages(rawMessages: unknown, sessionId: string): Promise<un
   }
   if (messages.length === 0 && sessionId) {
     try {
-      const doRes = await fetch(`https://agent.freeappstore.online/session/${sessionId}/history`, {
-        signal: AbortSignal.timeout(5000),
-      });
+      // agent.freeappstore.online is route-mapped on this zone — a plain
+      // same-zone fetch() bypasses the agent Worker, so go through the AGENT
+      // service binding (host ignored for bound calls). Fall back to the
+      // public URL only when the binding is absent (local dev / cross-zone).
+      const historyUrl = `https://agent.freeappstore.online/session/${sessionId}/history`;
+      const doRes = env.AGENT
+        ? await env.AGENT.fetch(historyUrl, { signal: AbortSignal.timeout(5000) })
+        : await fetch(historyUrl, { signal: AbortSignal.timeout(5000) });
       if (doRes.ok) {
         const doData = (await doRes.json()) as { messages?: unknown[] };
         if (doData.messages?.length) messages = doData.messages;
@@ -319,7 +328,7 @@ export async function handleAgentSessionDetail(sessionId: string, env: Env) {
 
   if (!row) return null;
 
-  const messages = await loadMessages(row.messages, sessionId);
+  const messages = await loadMessages(row.messages, sessionId, env);
 
   return {
     sessionId: row.session_id,
@@ -344,7 +353,7 @@ export async function handleAppSessions(appId: string, env: Env) {
 
   const sessions = await Promise.all(
     (rows.results ?? []).map(async (r: any) => {
-      const messages = await loadMessages(r.messages, r.session_id);
+      const messages = await loadMessages(r.messages, r.session_id, env);
 
       return {
         sessionId: r.session_id,
