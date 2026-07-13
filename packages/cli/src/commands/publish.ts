@@ -134,6 +134,13 @@ export const publishCommand = new Command('publish')
         }
       }
 
+      // Refuse a cross-store project up front (FGS game published via fas publish).
+      const storeErr = await assertFreeAppStoreProject(process.cwd());
+      if (storeErr) {
+        process.stdout.write(`\n✗ ${storeErr}\n`);
+        process.exit(1);
+      }
+
       // Run compliance checks BEFORE prompts so a doomed submission fails
       // fast. Hard fails block; warnings allow through. Bypass with
       // --skip-checks if you really need to (admin review will still
@@ -471,6 +478,32 @@ export function buildPromptList(
     });
   }
   return list;
+}
+
+/** FreeAppStore and FreeGameStore are SEPARATE stores — separate R2 buckets
+ *  (fas-apps vs fgs-games), credentials, host workers and domains. A project
+ *  scaffolded for FreeGameStore (uses @freegamestore/games, or a deploy.yml
+ *  pinned to the fgs-games bucket) cannot deploy from FreeAppStore: the push
+ *  fails opaquely at "Upload to R2" with AccessDenied (the FAS token has no
+ *  access to fgs-games). Catch the mismatch HERE, before provisioning. */
+export async function assertFreeAppStoreProject(cwd: string): Promise<string | null> {
+  const read = async (rel: string): Promise<string> => {
+    try {
+      return await readFile(join(cwd, rel), 'utf8');
+    } catch {
+      return '';
+    }
+  };
+  const haystack =
+    (await read('web/package.json')) +
+    '\n' +
+    (await read('package.json')) +
+    '\n' +
+    (await read('.github/workflows/deploy.yml'));
+  if (/@freegamestore\/games|fgs-games|freegamestore-host/.test(haystack)) {
+    return 'This looks like a FreeGameStore game (it uses @freegamestore/games or the fgs-games bucket). FreeGameStore and FreeAppStore are separate stores — publish it with `fgs publish` instead. Cross-publishing fails at R2 upload (AccessDenied) because each store\'s credentials only reach its own bucket.';
+  }
+  return null;
 }
 
 async function detectAppName(): Promise<string | null> {
