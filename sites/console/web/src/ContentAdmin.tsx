@@ -124,7 +124,7 @@ function KvTab({ headers }: { headers: () => Record<string, string> }) {
                   <span className="font-mono text-[var(--muted)] w-20 truncate flex-shrink-0">{String(e.user_id).slice(0, 8)}</span>
                   <button onClick={() => loadValue(String(e.app_id), String(e.user_id), String(e.key))} className="font-mono text-[var(--ink)] truncate flex-1 text-left hover:underline">{String(e.key)}</button>
                   <span className="text-[var(--muted)] flex-shrink-0">{String(e.size)}B</span>
-                  <button onClick={() => deleteEntry(String(e.app_id), String(e.user_id), String(e.key))} className="text-[var(--error)] font-semibold flex-shrink-0 min-h-[32px] px-1">Del</button>
+                  <button onClick={() => deleteEntry(String(e.app_id), String(e.user_id), String(e.key))} className="text-[var(--danger)] font-semibold flex-shrink-0 min-h-[32px] px-1">Del</button>
                 </div>
                 {expanded === cacheKey && valueCache[cacheKey] !== undefined && (
                   <pre className="px-3 py-2 text-xs font-mono bg-[var(--paper)] text-[var(--ink)] whitespace-pre-wrap break-all max-h-[200px] overflow-auto border-t border-[var(--line)]">
@@ -184,7 +184,7 @@ function CollectionsTab({ headers }: { headers: () => Record<string, string> }) 
                 <span className="font-mono text-[var(--muted)] w-20 truncate flex-shrink-0">{String(d.collection)}</span>
                 <button onClick={() => setExpanded(expanded === i ? null : i)} className="font-mono text-[var(--ink)] truncate flex-1 text-left hover:underline">{String(d.id).slice(0, 12)}</button>
                 <span className="text-[var(--muted)] flex-shrink-0">{String(d.owner_id).slice(0, 8)}</span>
-                <button onClick={() => deleteDoc(String(d.app_id), String(d.collection), String(d.id))} className="text-[var(--error)] font-semibold flex-shrink-0 min-h-[32px] px-1">Del</button>
+                <button onClick={() => deleteDoc(String(d.app_id), String(d.collection), String(d.id))} className="text-[var(--danger)] font-semibold flex-shrink-0 min-h-[32px] px-1">Del</button>
               </div>
               {expanded === i && (
                 <pre className="px-3 py-2 text-xs font-mono bg-[var(--paper)] text-[var(--ink)] whitespace-pre-wrap break-all max-h-[200px] overflow-auto border-t border-[var(--line)]">
@@ -237,7 +237,7 @@ function CountersTab({ headers }: { headers: () => Record<string, string> }) {
               <span className="font-mono text-[var(--accent)] w-20 truncate flex-shrink-0">{String(c.app_id)}</span>
               <span className="font-mono text-[var(--ink)] flex-1 truncate">{String(c.name)}</span>
               <span className="font-bold text-[var(--ink)] w-16 text-right flex-shrink-0">{String(c.value)}</span>
-              <button onClick={() => deleteCounter(String(c.app_id), String(c.name))} className="text-[var(--error)] font-semibold flex-shrink-0 min-h-[32px] px-1">Del</button>
+              <button onClick={() => deleteCounter(String(c.app_id), String(c.name))} className="text-[var(--danger)] font-semibold flex-shrink-0 min-h-[32px] px-1">Del</button>
             </div>
           ))}
         </div>

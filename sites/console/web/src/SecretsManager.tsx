@@ -103,7 +103,7 @@ export function SecretsManager({ appId, getToken }: Props) {
           </button>
         </div>
 
-        {error && <p className="text-sm text-[var(--error)] mb-3">{error}</p>}
+        {error && <p className="text-sm text-[var(--danger)] mb-3">{error}</p>}
 
         <p className="text-xs text-[var(--muted)] mb-3">
           Encrypted API keys injected server-side by the proxy. Apps never see plaintext values.
@@ -132,7 +132,7 @@ export function SecretsManager({ appId, getToken }: Props) {
             </div>
             <button
               onClick={() => deleteSecret(s.name)}
-              className="text-xs text-[var(--error)] hover:underline min-h-[44px] px-2"
+              className="text-xs text-[var(--danger)] hover:underline min-h-[44px] px-2"
             >
               Delete
             </button>
@@ -175,7 +175,7 @@ export function SecretsManager({ appId, getToken }: Props) {
               <span className="font-mono text-sm text-[var(--ink)] truncate">{r.pattern}</span>
               <button
                 onClick={() => deleteRule(r.pattern)}
-                className="text-xs text-[var(--error)] hover:underline min-h-[44px] px-2 flex-shrink-0"
+                className="text-xs text-[var(--danger)] hover:underline min-h-[44px] px-2 flex-shrink-0"
               >
                 Remove
               </button>

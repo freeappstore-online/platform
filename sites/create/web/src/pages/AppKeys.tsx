@@ -78,8 +78,8 @@ export function AppKeys() {
         {loading && <p className="text-sm py-8 text-center" style={{ color: "var(--muted)" }}>Loading…</p>}
 
         {!loading && error && (
-          <div className="p-4 rounded-xl border mb-4" style={{ borderColor: "var(--error)", background: "color-mix(in srgb, var(--error) 8%, var(--panel))" }}>
-            <p className="text-sm" style={{ color: "var(--error)" }}>{error}</p>
+          <div className="p-4 rounded-xl border mb-4" style={{ borderColor: "var(--danger)", background: "color-mix(in srgb, var(--danger) 8%, var(--panel))" }}>
+            <p className="text-sm" style={{ color: "var(--danger)" }}>{error}</p>
             <button onClick={load} className="mt-2 text-xs font-semibold" style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}>Retry</button>
           </div>
         )}
@@ -189,7 +189,7 @@ function ManualAddForm({ appId, existing, onAdded }: { appId: string; existing: 
           )}
         </div>
         <input type="password" value={value} onChange={(e) => setValue(e.target.value)} placeholder="API key value" className="p-2 rounded-lg border text-sm" style={{ ...inp, fontFamily: "monospace" }} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
-        {err && <p className="text-xs" style={{ color: "var(--error)" }}>{err}</p>}
+        {err && <p className="text-xs" style={{ color: "var(--danger)" }}>{err}</p>}
         <button onClick={add} disabled={saving} className="p-2 rounded-lg text-sm font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
           {saving ? "Saving…" : "Add API + key"}
         </button>
@@ -247,7 +247,7 @@ function ApiKeyRow({ appId, api, isSet, onSaved }: { appId: string; api: Manifes
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
-      {err && <p className="text-xs mt-1" style={{ color: "var(--error)" }}>{err}</p>}
+      {err && <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{err}</p>}
     </div>
   );
 }

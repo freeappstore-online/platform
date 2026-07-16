@@ -94,8 +94,8 @@ function Loading() {
 
 function ErrorBox({ message }: { message: string }) {
   return (
-    <div className="rounded-xl p-4 mt-4" style={{ background: 'var(--panel)', border: '1px solid var(--error)' }}>
-      <p className="text-sm font-medium" style={{ color: 'var(--error)' }}>Error: {message}</p>
+    <div className="rounded-xl p-4 mt-4" style={{ background: 'var(--panel)', border: '1px solid var(--danger)' }}>
+      <p className="text-sm font-medium" style={{ color: 'var(--danger)' }}>Error: {message}</p>
     </div>
   )
 }

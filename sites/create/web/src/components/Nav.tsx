@@ -122,7 +122,7 @@ export function Nav() {
                   <button
                     onClick={() => { setAvatarMenuOpen(false); signOut(); navigate("/"); }}
                     className="w-full text-left px-3 py-2 text-sm"
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--error)" }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)" }}
                   >
                     Sign out
                   </button>
@@ -215,7 +215,7 @@ export function Nav() {
                 <button
                   onClick={() => { setMenuOpen(false); signOut(); navigate("/"); }}
                   className="mt-2 text-sm"
-                  style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+                  style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
                 >
                   Sign out
                 </button>

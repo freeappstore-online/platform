@@ -196,7 +196,7 @@ export function AIKeys() {
                           onClick={() => revokeGrant(user.id)}
                           disabled={saving}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                          style={{ border: '1px solid var(--line)', color: 'var(--error)', opacity: saving ? 0.5 : 1 }}
+                          style={{ border: '1px solid var(--line)', color: 'var(--danger)', opacity: saving ? 0.5 : 1 }}
                         >
                           Revoke
                         </button>

@@ -144,13 +144,13 @@ function AppCard({ project, status, isCurrent, onSelect }: {
   // Dot + label combine dev status (working/error) with resting state (live/draft).
   const working = status?.state === "working" || status?.state === "deploying";
   const errored = status?.state === "error";
-  const dotColor = working ? "var(--warning)" : errored ? "var(--error)" : project.deployed ? "var(--success)" : "var(--line-strong)";
+  const dotColor = working ? "var(--warning)" : errored ? "var(--danger)" : project.deployed ? "var(--success)" : "var(--line-strong)";
   const label = working || errored
     ? status!.detail
     : project.appId
     ? `${project.appId}.freeappstore.online`
     : "Draft";
-  const labelColor = working ? "var(--warning)" : errored ? "var(--error)" : "var(--muted)";
+  const labelColor = working ? "var(--warning)" : errored ? "var(--danger)" : "var(--muted)";
 
   return (
     <button

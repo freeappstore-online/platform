@@ -189,7 +189,7 @@ export function Profile() {
         <Section title="Daily Usage">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm">API proxy calls today</span>
-            <span className="text-sm font-semibold" style={{ color: usage.used >= usage.limit ? "var(--error)" : "var(--ink)" }}>
+            <span className="text-sm font-semibold" style={{ color: usage.used >= usage.limit ? "var(--danger)" : "var(--ink)" }}>
               {usage.used.toLocaleString()} / {usage.limit.toLocaleString()}
             </span>
           </div>
@@ -198,7 +198,7 @@ export function Profile() {
               className="h-full rounded-full"
               style={{
                 width: `${Math.min((usage.used / usage.limit) * 100, 100)}%`,
-                background: usage.used >= usage.limit * 0.9 ? "var(--error)" : "var(--accent)",
+                background: usage.used >= usage.limit * 0.9 ? "var(--danger)" : "var(--accent)",
               }}
             />
           </div>

@@ -513,7 +513,7 @@ function DeployBadge({ appId }: { appId: string }) {
   if (deploy.status === 'unknown') return null
   const colors = {
     success: 'bg-[var(--success)] text-white',
-    failure: 'bg-[var(--error)] text-white',
+    failure: 'bg-[var(--danger)] text-white',
     in_progress: 'bg-[var(--warning)] text-white',
   }
   const labels = { success: 'Live', failure: 'Deploy failed', in_progress: 'Deploying' }

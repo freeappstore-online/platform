@@ -17,7 +17,7 @@
   --accent-deep: #1d4ed8;
   --success: #2f8f57;
   --warning: #c6862a;
-  --error: #c74f43;
+  --danger: #c74f43;
   --bg-start: #ffffff;
   --bg-mid: #fafafa;
   --bg-end: #f5f5f5;
@@ -40,7 +40,7 @@
   --accent-deep: #93c5fd;
   --success: #74d49a;
   --warning: #f0bd6e;
-  --error: #ff7a72;
+  --danger: #ff7a72;
   --bg-start: #000000;
   --bg-mid: #050505;
   --bg-end: #0a0a0a;

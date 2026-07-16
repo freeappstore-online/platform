@@ -162,9 +162,9 @@ export function Publish() {
             <label className="text-xs font-semibold mb-1 block" style={{ color: "var(--muted)" }}>
               Unique ID — becomes your URL
             </label>
-            <input name="id" placeholder="e.g. meditation-timer" required className="p-2 rounded-lg border w-full font-mono" style={{ background: "var(--panel)", borderColor: idError ? "var(--error)" : "var(--line)", color: "var(--ink)" }} onChange={(e) => { setIdValue(e.target.value); setIdError(validateId(e.target.value)); }} />
+            <input name="id" placeholder="e.g. meditation-timer" required className="p-2 rounded-lg border w-full font-mono" style={{ background: "var(--panel)", borderColor: idError ? "var(--danger)" : "var(--line)", color: "var(--ink)" }} onChange={(e) => { setIdValue(e.target.value); setIdError(validateId(e.target.value)); }} />
             {idError ? (
-              <p className="text-xs mt-1" style={{ color: "var(--error)" }}>{idError}</p>
+              <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{idError}</p>
             ) : idValue && (
               <p className="text-xs mt-1 font-mono" style={{ color: "var(--success)" }}>{idValue}.freeappstore.online</p>
             )}
@@ -185,12 +185,12 @@ export function Publish() {
         </form>
 
         {/* Result */}
-        {error && <p className="mt-4 text-sm" style={{ color: "var(--error)" }}>{error}</p>}
+        {error && <p className="mt-4 text-sm" style={{ color: "var(--danger)" }}>{error}</p>}
         {result && (
           <div className="mt-4 flex flex-col gap-1 text-sm font-mono">
             {result.admin?.steps?.map((s, i) => (
               <div key={i} className="flex items-center gap-2">
-                <span style={{ color: s.status === "ok" ? "var(--success)" : s.status === "skip" ? "var(--warning)" : "var(--error)" }}>●</span>
+                <span style={{ color: s.status === "ok" ? "var(--success)" : s.status === "skip" ? "var(--warning)" : "var(--danger)" }}>●</span>
                 <span><strong>{s.name}</strong>{s.detail ? `: ${s.detail}` : ""}</span>
               </div>
             ))}

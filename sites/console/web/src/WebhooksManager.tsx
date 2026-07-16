@@ -98,7 +98,7 @@ export function WebhooksManager({ appId, getToken }: Props) {
         </button>
       </div>
 
-      {error && <p className="text-sm text-[var(--error)] mb-3">{error}</p>}
+      {error && <p className="text-sm text-[var(--danger)] mb-3">{error}</p>}
 
       <p className="text-xs text-[var(--muted)] mb-3">
         Receive HTTP POST when events fire. Each delivery is signed with HMAC-SHA256 (X-FAS-Signature header).
@@ -138,7 +138,7 @@ export function WebhooksManager({ appId, getToken }: Props) {
             </button>
             <button
               onClick={() => deleteWebhook(wh.id)}
-              className="text-xs text-[var(--error)] hover:underline min-h-[36px] px-2"
+              className="text-xs text-[var(--danger)] hover:underline min-h-[36px] px-2"
             >
               Remove
             </button>
@@ -147,7 +147,7 @@ export function WebhooksManager({ appId, getToken }: Props) {
             <div className={`mt-1.5 rounded-lg border px-3 py-2 text-xs font-mono ${
               testResult.status >= 200 && testResult.status < 300
                 ? 'border-[var(--success)] bg-[color-mix(in_srgb,var(--success)_10%,transparent)] text-[var(--success)]'
-                : 'border-[var(--error)] bg-[color-mix(in_srgb,var(--error)_10%,transparent)] text-[var(--error)]'
+                : 'border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] text-[var(--danger)]'
             }`}>
               HTTP {testResult.status} {testResult.body.slice(0, 200)}
             </div>

@@ -81,7 +81,7 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
               <div className="text-xs mb-3">
                 {result.admin.steps.map((s: any, i: number) => (
                   <div key={i} className="flex items-center gap-1">
-                    <span style={{ color: s.status === "ok" ? "var(--success)" : s.status === "skip" ? "var(--muted)" : "var(--error)" }}>●</span>
+                    <span style={{ color: s.status === "ok" ? "var(--success)" : s.status === "skip" ? "var(--muted)" : "var(--danger)" }}>●</span>
                     <span>{s.name}{s.detail ? ` — ${s.detail}` : ""}</span>
                   </div>
                 ))}
@@ -104,7 +104,7 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
                 <p className="text-sm font-mono" style={{ color: "var(--accent)" }}>{appId}.freeappstore.online</p>
               </div>
               {!idValid && (
-                <p className="text-xs" style={{ color: "var(--error)" }}>
+                <p className="text-xs" style={{ color: "var(--danger)" }}>
                   This app's id "{appId}" isn't a valid store id (needs lowercase letters/digits/hyphens, 2–31 chars). Re-deploy with a simpler name first.
                 </p>
               )}
@@ -125,7 +125,7 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
                 <label className="text-xs font-semibold" style={{ color: "var(--muted)" }}>One-line description</label>
                 <input name="oneliner" placeholder="What does it do, in one line?" required className="w-full p-2 rounded-lg border text-sm" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }} />
               </div>
-              {error && <p className="text-xs" style={{ color: "var(--error)" }}>{error}</p>}
+              {error && <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p>}
               <button type="submit" disabled={publishing || !idValid} className="p-2 rounded-lg font-semibold text-white text-sm" style={{ background: "var(--accent)", border: "none", cursor: "pointer", opacity: publishing || !idValid ? 0.6 : 1 }}>
                 {publishing ? "Publishing..." : "Publish"}
               </button>

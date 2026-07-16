@@ -53,7 +53,7 @@ export function LogsViewer({ appId, getToken }: Props) {
   useEffect(() => { load() }, [load])
 
   const levelColor = (l: string) => {
-    if (l === 'error') return 'var(--error, #dc2626)'
+    if (l === 'error') return 'var(--danger, #dc2626)'
     if (l === 'warn') return 'var(--warning, #ca8a04)'
     if (l === 'info') return 'var(--accent, #2563eb)'
     return 'var(--muted, #64748b)'

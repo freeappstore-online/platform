@@ -116,7 +116,7 @@ export function AppDetail({ appId, appName, getToken, onBack }: Props) {
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
                     d.conclusion === 'success' ? 'bg-[var(--success)]' :
-                    d.conclusion === 'failure' ? 'bg-[var(--error)]' :
+                    d.conclusion === 'failure' ? 'bg-[var(--danger)]' :
                     d.status === 'in_progress' ? 'bg-[var(--warning)]' : 'bg-[var(--muted)]'
                   }`} />
                   <span className="text-sm text-[var(--ink)] truncate">{d.name}</span>
@@ -369,7 +369,7 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
                     <span className="font-mono text-[var(--muted)] w-16 truncate flex-shrink-0">{String(e.user_id).slice(0, 8)}</span>
                     <button onClick={() => { loadKvValue(String(e.user_id), String(e.key)); setExpanded(expanded === i ? null : i) }} className="font-mono text-[var(--ink)] truncate flex-1 text-left hover:underline">{String(e.key)}</button>
                     <span className="text-[var(--muted)] flex-shrink-0">{String(e.size)}B</span>
-                    <button onClick={() => deleteItem(`app=${appId}&user=${e.user_id}&key=${encodeURIComponent(String(e.key))}`)} className="text-[var(--error)] hover:text-[var(--error)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                    <button onClick={() => deleteItem(`app=${appId}&user=${e.user_id}&key=${encodeURIComponent(String(e.key))}`)} className="text-[var(--danger)] hover:text-[var(--danger)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                   </div>
                   {expanded === i && valueCache[cacheKey] !== undefined && (
                     <JsonView data={valueCache[cacheKey]} onPreview={setPreviewUrl} />
@@ -384,7 +384,7 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
                     <span className="font-mono text-[var(--muted)] w-16 truncate flex-shrink-0">{String(e.collection)}</span>
                     <button onClick={() => setExpanded(expanded === i ? null : i)} className="font-mono text-[var(--ink)] truncate flex-1 text-left hover:underline">{String(e.id).slice(0, 12)}</button>
                     <span className="text-[var(--muted)] flex-shrink-0">{String(e.owner_id).slice(0, 8)}</span>
-                    <button onClick={() => deleteItem(`app=${appId}&collection=${e.collection}&id=${e.id}`)} className="text-[var(--error)] hover:text-[var(--error)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                    <button onClick={() => deleteItem(`app=${appId}&collection=${e.collection}&id=${e.id}`)} className="text-[var(--danger)] hover:text-[var(--danger)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                   </div>
                   {expanded === i && (
                     <JsonView data={e.data} onPreview={setPreviewUrl} />
@@ -397,7 +397,7 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
               <div key={i} className="flex items-center gap-2 px-3 py-2 text-xs border-b border-[var(--line)] last:border-0">
                 <span className="font-mono text-[var(--ink)] flex-1 truncate">{String(e.name)}</span>
                 <span className="font-bold text-[var(--ink)] w-16 text-right flex-shrink-0">{String(e.value)}</span>
-                <button onClick={() => deleteItem(`app=${appId}&name=${encodeURIComponent(String(e.name))}`)} className="text-[var(--error)] hover:text-[var(--error)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                <button onClick={() => deleteItem(`app=${appId}&name=${encodeURIComponent(String(e.name))}`)} className="text-[var(--danger)] hover:text-[var(--danger)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             )
           })}
@@ -492,7 +492,7 @@ function CodeHealth({ appId }: { appId: string }) {
     if (g === 'A') return 'var(--success, #16a34a)'
     if (g === 'B') return 'var(--success, #16a34a)'
     if (g === 'C') return 'var(--warning, #ca8a04)'
-    return 'var(--error, #dc2626)'
+    return 'var(--danger, #dc2626)'
   }
 
   const activeChecks = report.checks?.filter(c => c.score !== undefined && c.grade !== 'skip') ?? []
@@ -563,7 +563,7 @@ function CodeHealth({ appId }: { appId: string }) {
                   <div className="ml-8 mb-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] overflow-hidden">
                     {issues.slice(0, 20).map((issue, i) => (
                       <div key={i} className="flex items-start gap-2 px-3 py-1.5 border-b border-[var(--line)] last:border-0 text-xs">
-                        <span className={`flex-shrink-0 font-semibold ${issue.severity === 'error' ? 'text-[var(--error,#dc2626)]' : 'text-[var(--warning,#ca8a04)]'}`}>
+                        <span className={`flex-shrink-0 font-semibold ${issue.severity === 'error' ? 'text-[var(--danger,#dc2626)]' : 'text-[var(--warning,#ca8a04)]'}`}>
                           {issue.severity === 'error' ? '!' : '~'}
                         </span>
                         <div className="min-w-0 flex-1">

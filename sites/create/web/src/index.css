@@ -23,7 +23,7 @@
   /* Status */
   --success: #16a34a;
   --warning: #d97706;
-  --error: #dc2626;
+  --danger: #dc2626;
 
   /* Shape */
   --radius-sm: 0.5rem;
@@ -60,7 +60,7 @@
 
   --success: #22c55e;
   --warning: #fbbf24;
-  --error: #ef4444;
+  --danger: #ef4444;
 
   color-scheme: dark;
 }

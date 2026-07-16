@@ -110,7 +110,7 @@ export function RolesManager({ appId, getToken }: Props) {
       <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-4">Roles</h3>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-[var(--error)] bg-[var(--error)]/10 px-3 py-2 text-sm text-[var(--error)]">
+        <div className="mb-4 rounded-lg border border-[var(--danger)] bg-[var(--danger)]/10 px-3 py-2 text-sm text-[var(--danger)]">
           {error}
         </div>
       )}
@@ -156,7 +156,7 @@ export function RolesManager({ appId, getToken }: Props) {
                   <button
                     onClick={() => handleRevoke(r.user_id, r.role_name)}
                     disabled={revoking === key}
-                    className="flex-shrink-0 rounded-lg border border-[var(--error)] px-3 py-1.5 text-xs font-medium text-[var(--error)] hover:bg-[var(--error)] hover:text-white disabled:opacity-50 min-h-[32px]"
+                    className="flex-shrink-0 rounded-lg border border-[var(--danger)] px-3 py-1.5 text-xs font-medium text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white disabled:opacity-50 min-h-[32px]"
                   >
                     {revoking === key ? 'Revoking...' : 'Revoke'}
                   </button>

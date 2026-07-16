@@ -162,7 +162,7 @@ export function StatusBadge({ status, label }: { status: string; label?: string 
     case 'fail':
     case 'not_configured':
       bg = 'rgba(199, 79, 67, 0.12)'
-      fg = 'var(--error)'
+      fg = 'var(--danger)'
       break
     case 'idle':
     case 'none':

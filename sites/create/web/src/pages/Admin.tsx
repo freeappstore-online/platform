@@ -603,12 +603,12 @@ function LogBlock({ title, time, body, tone }: { title: string; time?: string | 
     <div
       className="rounded-lg border p-3"
       style={{
-        background: tone === "error" ? "color-mix(in srgb, var(--error) 8%, var(--panel))" : "var(--panel)",
-        borderColor: tone === "error" ? "color-mix(in srgb, var(--error) 35%, var(--line))" : "var(--line)",
+        background: tone === "error" ? "color-mix(in srgb, var(--danger) 8%, var(--panel))" : "var(--panel)",
+        borderColor: tone === "error" ? "color-mix(in srgb, var(--danger) 35%, var(--line))" : "var(--line)",
       }}
     >
       <div className="flex items-center justify-between gap-3 mb-2">
-        <strong className="text-sm" style={{ color: tone === "error" ? "var(--error)" : "var(--accent)" }}>
+        <strong className="text-sm" style={{ color: tone === "error" ? "var(--danger)" : "var(--accent)" }}>
           {title}
         </strong>
         <span className="text-xs" style={{ color: "var(--muted)" }}>
@@ -870,7 +870,7 @@ function GrantsTab() {
                       <button
                         onClick={() => revoke(u.id)}
                         className="text-xs font-semibold"
-                        style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}
+                        style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer" }}
                       >
                         Revoke Grant
                       </button>
@@ -1156,7 +1156,7 @@ function AppsTab() {
       ) : (
         <div className="overflow-x-auto">
           {error && (
-            <p className="mb-3 text-sm" style={{ color: "var(--error)" }}>
+            <p className="mb-3 text-sm" style={{ color: "var(--danger)" }}>
               Failed to load apps: {error}
             </p>
           )}
@@ -1401,7 +1401,7 @@ function CreatorsTab() {
                 {c.banned && (
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                    style={{ background: "color-mix(in srgb, var(--error) 15%, var(--panel))", color: "var(--error)" }}
+                    style={{ background: "color-mix(in srgb, var(--danger) 15%, var(--panel))", color: "var(--danger)" }}
                   >
                     Banned
                   </span>
@@ -1436,7 +1436,7 @@ function StatusDot({ status }: { status: string | undefined }) {
       ? "var(--success)"
       : ["pending", "in_progress", "draft", "building", "pushing", "provisioning"].includes(status)
         ? "var(--warning)"
-        : "var(--error)";
+        : "var(--danger)";
   return (
     <span style={{ color, fontSize: "0.9rem" }}>
       ●{" "}

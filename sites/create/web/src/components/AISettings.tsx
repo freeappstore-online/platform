@@ -178,7 +178,7 @@ function ProviderRow({
                   {new Date(vaultStatus.createdAt).toLocaleDateString()}
                 </span>
                 <button onClick={onStartEdit} className="text-xs font-semibold" style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}>Update</button>
-                <button onClick={onRemove} disabled={saving} className="text-xs font-semibold" style={{ color: "var(--error)", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                <button onClick={onRemove} disabled={saving} className="text-xs font-semibold" style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
               </div>
             ) : !isEditing ? (
               <button onClick={onStartEdit} className="text-xs px-3 py-1.5 rounded-lg font-semibold" style={{ background: "var(--accent)", color: "white", border: "none", cursor: "pointer" }}>
@@ -201,7 +201,7 @@ function ProviderRow({
             autoFocus
             onKeyDown={(e) => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancel(); }}
           />
-          {error && <p className="text-xs mt-1" style={{ color: "var(--error)" }}>{error}</p>}
+          {error && <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{error}</p>}
           <div className="flex gap-2 mt-2">
             <button onClick={onSave} disabled={saving || !inputValue.trim()} className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer", opacity: saving || !inputValue.trim() ? 0.5 : 1 }}>
               {saving ? "Saving..." : "Save to vault"}

@@ -293,7 +293,7 @@ function ActionsPanel({ id, store, onRefresh, navigate }: { id: string; store: s
         <button
           onClick={() => setShowDeprovision(true)}
           className="px-4 py-2 rounded-lg text-sm font-medium"
-          style={{ background: 'rgba(199, 79, 67, 0.12)', color: 'var(--error)' }}
+          style={{ background: 'rgba(199, 79, 67, 0.12)', color: 'var(--danger)' }}
         >
           Deprovision
         </button>
@@ -333,8 +333,8 @@ function DeprovisionModal({ appId, loading, onConfirm, onCancel }: {
 }) {
   const [deleteRepo, setDeleteRepo] = useState(false)
   return (
-    <div className="mt-4 rounded-xl p-5" style={{ background: 'var(--paper-deep)', border: '1px solid var(--error)' }}>
-      <h3 className="text-base font-bold mb-2" style={{ color: 'var(--error)' }}>Deprovision "{appId}"</h3>
+    <div className="mt-4 rounded-xl p-5" style={{ background: 'var(--paper-deep)', border: '1px solid var(--danger)' }}>
+      <h3 className="text-base font-bold mb-2" style={{ color: 'var(--danger)' }}>Deprovision "{appId}"</h3>
       <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>
         This will remove the route, registry entry, and DNS records.
       </p>
@@ -345,7 +345,7 @@ function DeprovisionModal({ appId, loading, onConfirm, onCancel }: {
       <div className="flex gap-3">
         <button onClick={() => onConfirm(deleteRepo)} disabled={loading}
           className="px-4 py-2 rounded-lg text-sm font-semibold"
-          style={{ background: 'var(--error)', color: '#fff', opacity: loading ? 0.6 : 1 }}>
+          style={{ background: 'var(--danger)', color: '#fff', opacity: loading ? 0.6 : 1 }}>
           {loading ? 'Deprovisioning...' : 'Confirm'}
         </button>
         <button onClick={onCancel} disabled={loading}

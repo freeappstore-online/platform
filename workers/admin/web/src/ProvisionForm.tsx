@@ -153,7 +153,7 @@ export function ProvisionForm({ navigate }: { navigate: (h: string) => void }) {
           <StepList steps={result.steps} />
           <p
             className="mt-4 text-sm font-semibold"
-            style={{ color: result.success ? 'var(--success)' : 'var(--error)' }}
+            style={{ color: result.success ? 'var(--success)' : 'var(--danger)' }}
           >
             {result.success ? 'Provisioned successfully!' : 'Some steps failed.'}
           </p>
