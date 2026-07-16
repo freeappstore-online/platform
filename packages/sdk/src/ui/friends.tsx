@@ -103,24 +103,24 @@ export function AddFriendButton({ app, userId }: AddFriendButtonProps) {
   if (status === 'loading') return null;
 
   const config = {
-    none: { label: 'Add Friend', color: '#fff', bg: 'var(--accent, #2563eb)', clickable: true },
+    none: { label: 'Add Friend', color: '#fff', bg: 'var(--accent)', clickable: true },
     pending_outgoing: {
       label: 'Pending',
-      color: 'var(--muted, #64748b)',
-      bg: 'var(--surface, #f8fafc)',
+      color: 'var(--muted)',
+      bg: 'var(--panel)',
       clickable: false,
     },
     pending_incoming: { label: 'Accept', color: '#fff', bg: '#16a34a', clickable: true },
     accepted: {
       label: 'Friends',
-      color: 'var(--muted, #64748b)',
-      bg: 'var(--surface, #f8fafc)',
+      color: 'var(--muted)',
+      bg: 'var(--panel)',
       clickable: false,
     },
     blocked_by_you: {
       label: 'Blocked',
       color: '#dc2626',
-      bg: 'var(--surface, #f8fafc)',
+      bg: 'var(--panel)',
       clickable: false,
     },
   } as const;
@@ -134,7 +134,7 @@ export function AddFriendButton({ app, userId }: AddFriendButtonProps) {
       style={{
         padding: '0.3rem 0.7rem',
         borderRadius: 'var(--radius-sm, 0.5rem)',
-        border: '1px solid var(--border, #e2e8f0)',
+        border: '1px solid var(--line)',
         background: cfg.bg,
         color: cfg.color,
         fontSize: '0.8rem',
@@ -332,7 +332,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                   trailing={
                     <button
                       onClick={() => handleRemove(f.userId)}
-                      style={smallBtnStyle('var(--muted, #64748b)')}
+                      style={smallBtnStyle('var(--muted)')}
                     >
                       Cancel
                     </button>
@@ -364,7 +364,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                 u.friendStatus === 'none' ? (
                   <button
                     onClick={() => handleRequest(u.userId)}
-                    style={smallBtnStyle('var(--accent, #2563eb)')}
+                    style={smallBtnStyle('var(--accent)')}
                   >
                     Add
                   </button>
@@ -373,7 +373,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                     Accept
                   </button>
                 ) : (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--muted, #64748b)' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>
                     {u.friendStatus === 'accepted'
                       ? 'Friends'
                       : u.friendStatus === 'pending_outgoing'
@@ -420,7 +420,7 @@ function FriendRow({
         padding: '0.65rem 0.5rem',
         background: 'none',
         border: 'none',
-        borderBottom: '1px solid var(--border, #e2e8f0)',
+        borderBottom: '1px solid var(--line)',
         textAlign: 'left',
         cursor: onClick ? 'pointer' : undefined,
         fontFamily: 'inherit',
@@ -434,7 +434,7 @@ function FriendRow({
           minWidth: 0,
           fontSize: '0.9rem',
           fontWeight: 600,
-          color: 'var(--ink, #1e293b)',
+          color: 'var(--ink)',
         }}
       >
         {login}
@@ -461,7 +461,7 @@ function smallBtnStyle(color: string): CSSProperties {
 const sectionLabel: CSSProperties = {
   fontSize: '0.75rem',
   fontWeight: 700,
-  color: 'var(--muted, #64748b)',
+  color: 'var(--muted)',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
   padding: '0.5rem 0',

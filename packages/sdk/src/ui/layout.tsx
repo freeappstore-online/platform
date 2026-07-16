@@ -55,7 +55,7 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
         onClick={() => setOpen(!open)}
         style={{
           background: 'none',
-          border: '2px solid var(--border, #e2e8f0)',
+          border: '2px solid var(--line)',
           borderRadius: '50%',
           padding: 0,
           cursor: 'pointer',
@@ -73,8 +73,8 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
             position: 'absolute',
             top: 40,
             right: 0,
-            background: 'var(--surface, #ffffff)',
-            border: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--panel)',
+            border: '1px solid var(--line)',
             borderRadius: 'var(--radius, 0.75rem)',
             boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
             minWidth: 200,
@@ -85,10 +85,10 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
           <div
             style={{
               padding: '0.5rem 1rem',
-              borderBottom: '1px solid var(--border, #e2e8f0)',
+              borderBottom: '1px solid var(--line)',
               fontSize: '0.85rem',
               fontWeight: 700,
-              color: 'var(--ink, #1e293b)',
+              color: 'var(--ink)',
             }}
           >
             {user.login}
@@ -97,13 +97,13 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
             <div
               style={{
                 padding: '0.5rem 1rem',
-                borderBottom: '1px solid var(--border, #e2e8f0)',
+                borderBottom: '1px solid var(--line)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
               }}
             >
-              <span style={{ fontSize: '0.85rem', color: 'var(--muted, #64748b)' }}>Theme</span>
+              <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Theme</span>
               <ThemeToggle />
             </div>
           )}
@@ -160,7 +160,7 @@ const menuItemStyle: CSSProperties = {
   textAlign: 'left',
   fontSize: '0.85rem',
   cursor: 'pointer',
-  color: 'var(--ink, #1e293b)',
+  color: 'var(--ink)',
   fontFamily: 'inherit',
 };
 
@@ -182,7 +182,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted, #64748b)' }}>
+      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>
         Loading...
       </div>
     );
@@ -191,7 +191,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   if (!user) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <p style={{ color: 'var(--muted, #64748b)', marginBottom: '1rem' }}>
+        <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
           Sign in to view your profile.
         </p>
         <SignInButton app={app} />
@@ -232,12 +232,12 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
             style={{
               fontSize: '1.25rem',
               fontWeight: 700,
-              color: 'var(--ink-strong, var(--ink, #0f172a))',
+              color: 'var(--ink-strong)',
             }}
           >
             {user.login}
           </div>
-          <div style={{ fontSize: '0.85rem', color: 'var(--muted, #64748b)' }}>
+          <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
             FreeAppStore account
           </div>
         </div>
@@ -320,7 +320,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
         >
           Danger zone
         </div>
-        <p style={{ fontSize: '0.85rem', color: 'var(--muted, #64748b)', marginBottom: '0.75rem' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
           Permanently delete your account and all data across all apps.
         </p>
         <button
@@ -357,8 +357,8 @@ function ProfileSection({ title, children }: { title: string; children: ReactNod
   return (
     <div
       style={{
-        background: 'var(--surface, #ffffff)',
-        border: '1px solid var(--border, #e2e8f0)',
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
         borderRadius: 'var(--radius, 0.75rem)',
         padding: '1.25rem',
         marginBottom: '1rem',
@@ -369,7 +369,7 @@ function ProfileSection({ title, children }: { title: string; children: ReactNod
           fontSize: '0.9rem',
           fontWeight: 700,
           marginBottom: '0.75rem',
-          color: 'var(--ink, #1e293b)',
+          color: 'var(--ink)',
         }}
       >
         {title}
@@ -385,7 +385,7 @@ function ProfileLabel({ children }: { children: ReactNode }) {
       style={{
         fontSize: '0.75rem',
         fontWeight: 600,
-        color: 'var(--muted, #64748b)',
+        color: 'var(--muted)',
         marginBottom: '0.35rem',
       }}
     >
@@ -410,9 +410,9 @@ function ToggleButton({
         flex: 1,
         padding: '0.5rem',
         borderRadius: 'var(--radius-sm, 0.5rem)',
-        border: active ? '2px solid var(--accent, #2563eb)' : '1px solid var(--border, #e2e8f0)',
-        background: active ? 'var(--accent-soft, #eff6ff)' : 'transparent',
-        color: active ? 'var(--accent, #2563eb)' : 'var(--muted, #64748b)',
+        border: active ? '2px solid var(--accent)' : '1px solid var(--line)',
+        background: active ? 'var(--accent-soft)' : 'transparent',
+        color: active ? 'var(--accent)' : 'var(--muted)',
         fontWeight: active ? 700 : 500,
         fontSize: '0.85rem',
         cursor: 'pointer',
@@ -428,9 +428,9 @@ const profileBtnStyle: CSSProperties = {
   width: '100%',
   padding: '0.75rem',
   borderRadius: 'var(--radius, 0.75rem)',
-  border: '1px solid var(--border, #e2e8f0)',
-  background: 'var(--surface, #ffffff)',
-  color: 'var(--ink, #1e293b)',
+  border: '1px solid var(--line)',
+  background: 'var(--panel)',
+  color: 'var(--ink)',
   fontSize: '0.9rem',
   fontWeight: 600,
   cursor: 'pointer',
@@ -474,7 +474,7 @@ export function Shell({
           justifyContent: 'center',
         }}
       >
-        <p style={{ color: 'var(--muted, #64748b)' }}>Loading...</p>
+        <p style={{ color: 'var(--muted)' }}>Loading...</p>
       </div>
     );
   }
@@ -496,16 +496,16 @@ export function Shell({
               fontSize: '1.5rem',
               fontWeight: 800,
               marginBottom: '0.5rem',
-              color: 'var(--ink, #1e293b)',
+              color: 'var(--ink)',
             }}
           >
             {displayAppName || 'FreeAppStore'}
           </h1>
-          <p style={{ color: 'var(--muted, #64748b)', fontSize: '0.9rem', marginBottom: '1rem' }}>
+          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
             Sign in to continue.
           </p>
           <SignInButton app={app} />
-          <p style={{ color: 'var(--muted, #64748b)', fontSize: '0.75rem', marginTop: '0.75rem' }}>
+          <p style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '0.75rem' }}>
             One account for all Free apps.
           </p>
         </div>
@@ -521,8 +521,8 @@ export function Shell({
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: '0.5rem 1rem',
-          borderBottom: '1px solid var(--border, #e2e8f0)',
-          background: 'var(--surface, #ffffff)',
+          borderBottom: '1px solid var(--line)',
+          background: 'var(--panel)',
           position: 'sticky',
           top: 0,
           zIndex: 50,
@@ -534,14 +534,14 @@ export function Shell({
             style={{
               fontWeight: 800,
               fontSize: '1rem',
-              color: 'var(--accent, #2563eb)',
+              color: 'var(--accent)',
               textDecoration: 'none',
             }}
           >
             Free
           </a>
           {displayAppName && displayAppName !== 'FreeAppStore' && (
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--muted, #64748b)' }}>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--muted)' }}>
               {displayAppName}
             </span>
           )}

@@ -19,13 +19,13 @@ export interface SpinnerProps {
   color?: string;
 }
 
-export function Spinner({ size = 24, color = 'var(--accent, #2563eb)' }: SpinnerProps) {
+export function Spinner({ size = 24, color = 'var(--accent)' }: SpinnerProps) {
   return (
     <div
       style={{
         width: size,
         height: size,
-        border: '2px solid var(--border, #e2e8f0)',
+        border: '2px solid var(--line)',
         borderTopColor: color,
         borderRadius: '50%',
         animation: 'fas-spin 0.6s linear infinite',
@@ -46,14 +46,14 @@ export interface BadgeProps {
 
 const badgeColors: Record<string, { bg: string; color: string; border: string }> = {
   default: {
-    bg: 'var(--surface, #f8fafc)',
-    color: 'var(--muted, #64748b)',
-    border: 'var(--border, #e2e8f0)',
+    bg: 'var(--panel)',
+    color: 'var(--muted)',
+    border: 'var(--line)',
   },
   accent: {
-    bg: 'var(--accent-soft, #eff6ff)',
-    color: 'var(--accent, #2563eb)',
-    border: 'var(--accent, #2563eb)',
+    bg: 'var(--accent-soft)',
+    color: 'var(--accent)',
+    border: 'var(--accent)',
   },
   success: { bg: '#f0fdf4', color: '#16a34a', border: '#86efac' },
   warning: { bg: '#fefce8', color: '#ca8a04', border: '#fde047' },
@@ -107,8 +107,8 @@ export function Card({ children, onClick, padding = '1rem', style: extraStyle }:
         textAlign: 'left',
         padding,
         borderRadius: 'var(--radius, 0.75rem)',
-        border: '1px solid var(--border, var(--line, #e2e8f0))',
-        background: 'var(--surface, var(--panel, #ffffff))',
+        border: '1px solid var(--line)',
+        background: 'var(--panel)',
         cursor: interactive ? 'pointer' : undefined,
         fontFamily: 'inherit',
         fontSize: 'inherit',
@@ -142,8 +142,8 @@ export function Tabs({ tabs, active, onChange, style: extraStyle }: TabsProps) {
         gap: '0.25rem',
         padding: '0.25rem',
         borderRadius: '9999px',
-        border: '1px solid var(--border, var(--line, #e2e8f0))',
-        background: 'var(--surface, var(--glass, #f8fafc))',
+        border: '1px solid var(--line)',
+        background: 'var(--panel)',
         ...extraStyle,
       }}
     >
@@ -160,8 +160,8 @@ export function Tabs({ tabs, active, onChange, style: extraStyle }: TabsProps) {
             cursor: 'pointer',
             fontFamily: 'inherit',
             transition: 'all 0.15s',
-            background: active === tab.key ? 'var(--ink, #1e293b)' : 'transparent',
-            color: active === tab.key ? 'var(--surface, #ffffff)' : 'var(--muted, #64748b)',
+            background: active === tab.key ? 'var(--ink)' : 'transparent',
+            color: active === tab.key ? 'var(--panel)' : 'var(--muted)',
           }}
         >
           {tab.label}
@@ -214,8 +214,8 @@ export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalP
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'var(--surface, var(--panel, #ffffff))',
-          border: '1px solid var(--border, var(--line, #e2e8f0))',
+          background: 'var(--panel)',
+          border: '1px solid var(--line)',
           borderRadius: 'var(--radius-lg, var(--radius, 0.75rem))',
           maxWidth,
           width: '100%',
@@ -231,11 +231,11 @@ export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalP
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '1rem 1.25rem',
-              borderBottom: '1px solid var(--border, var(--line, #e2e8f0))',
+              borderBottom: '1px solid var(--line)',
             }}
           >
             <h2
-              style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink, #1e293b)' }}
+              style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}
             >
               {title}
             </h2>
@@ -247,7 +247,7 @@ export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalP
                 border: 'none',
                 cursor: 'pointer',
                 padding: '0.25rem',
-                color: 'var(--muted, #64748b)',
+                color: 'var(--muted)',
                 fontSize: '1.25rem',
                 lineHeight: 1,
                 fontFamily: 'inherit',
@@ -289,7 +289,7 @@ export function ConfirmDialog({
   const isDanger = variant === 'danger';
   return (
     <Modal open={open} onClose={onCancel} title={title} maxWidth={400}>
-      <p style={{ fontSize: '0.9rem', color: 'var(--muted, #64748b)', margin: '0 0 1.25rem' }}>
+      <p style={{ fontSize: '0.9rem', color: 'var(--muted)', margin: '0 0 1.25rem' }}>
         {message}
       </p>
       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
@@ -298,9 +298,9 @@ export function ConfirmDialog({
           style={{
             padding: '0.5rem 1rem',
             borderRadius: 'var(--radius-sm, 0.5rem)',
-            border: '1px solid var(--border, #e2e8f0)',
+            border: '1px solid var(--line)',
             background: 'transparent',
-            color: 'var(--ink, #1e293b)',
+            color: 'var(--ink)',
             fontSize: '0.85rem',
             fontWeight: 600,
             cursor: 'pointer',
@@ -319,7 +319,7 @@ export function ConfirmDialog({
             fontWeight: 600,
             cursor: 'pointer',
             fontFamily: 'inherit',
-            background: isDanger ? '#dc2626' : 'var(--accent, #2563eb)',
+            background: isDanger ? '#dc2626' : 'var(--accent)',
             color: '#fff',
           }}
         >
@@ -345,7 +345,7 @@ export function EmptyState({ icon, title, message, action }: EmptyStateProps) {
   return (
     <div style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
       {icon && (
-        <div style={{ marginBottom: '0.75rem', color: 'var(--muted, #94a3b8)', fontSize: '2rem' }}>
+        <div style={{ marginBottom: '0.75rem', color: 'var(--muted)', fontSize: '2rem' }}>
           {icon}
         </div>
       )}
@@ -354,7 +354,7 @@ export function EmptyState({ icon, title, message, action }: EmptyStateProps) {
           style={{
             fontSize: '1rem',
             fontWeight: 700,
-            color: 'var(--ink, #1e293b)',
+            color: 'var(--ink)',
             marginBottom: '0.35rem',
           }}
         >
@@ -364,7 +364,7 @@ export function EmptyState({ icon, title, message, action }: EmptyStateProps) {
       <p
         style={{
           fontSize: '0.85rem',
-          color: 'var(--muted, #64748b)',
+          color: 'var(--muted)',
           margin: '0 0 1rem',
           maxWidth: 320,
           marginInline: 'auto',
@@ -392,7 +392,7 @@ export interface ProgressBarProps {
 export function ProgressBar({
   value,
   max = 100,
-  color = 'var(--accent, #2563eb)',
+  color = 'var(--accent)',
   height = 8,
   label,
 }: ProgressBarProps) {
@@ -404,7 +404,7 @@ export function ProgressBar({
           style={{
             fontSize: '0.75rem',
             fontWeight: 600,
-            color: 'var(--muted, #64748b)',
+            color: 'var(--muted)',
             marginBottom: '0.35rem',
           }}
         >
@@ -416,7 +416,7 @@ export function ProgressBar({
           width: '100%',
           height,
           borderRadius: height,
-          background: 'var(--border, var(--line, #e2e8f0))',
+          background: 'var(--line)',
           overflow: 'hidden',
         }}
       >
@@ -458,7 +458,7 @@ export function SearchInput({
         height="16"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="var(--muted, #64748b)"
+        stroke="var(--muted)"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -482,9 +482,9 @@ export function SearchInput({
           width: '100%',
           padding: '0.5rem 0.75rem 0.5rem 2.25rem',
           borderRadius: '9999px',
-          border: '1px solid var(--border, var(--line, #e2e8f0))',
-          background: 'var(--surface, var(--glass, #ffffff))',
-          color: 'var(--ink, #1e293b)',
+          border: '1px solid var(--line)',
+          background: 'var(--panel)',
+          color: 'var(--ink)',
           fontSize: '0.85rem',
           fontFamily: 'inherit',
           outline: 'none',
@@ -519,20 +519,20 @@ export function ListRow({ icon, title, subtitle, trailing, onClick }: ListRowPro
         padding: '0.65rem 0.75rem',
         background: 'none',
         border: 'none',
-        borderBottom: '1px solid var(--border, var(--line, #e2e8f0))',
+        borderBottom: '1px solid var(--line)',
         textAlign: 'left',
         cursor: onClick ? 'pointer' : undefined,
         fontFamily: 'inherit',
         color: 'inherit',
       }}
     >
-      {icon && <div style={{ flexShrink: 0, color: 'var(--muted, #64748b)' }}>{icon}</div>}
+      {icon && <div style={{ flexShrink: 0, color: 'var(--muted)' }}>{icon}</div>}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
             fontSize: '0.9rem',
             fontWeight: 600,
-            color: 'var(--ink, #1e293b)',
+            color: 'var(--ink)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -544,7 +544,7 @@ export function ListRow({ icon, title, subtitle, trailing, onClick }: ListRowPro
           <div
             style={{
               fontSize: '0.75rem',
-              color: 'var(--muted, #64748b)',
+              color: 'var(--muted)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -584,7 +584,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <p style={{ color: '#dc2626', fontWeight: 700, marginBottom: '0.5rem' }}>
               Something went wrong
             </p>
-            <p style={{ color: 'var(--muted, #64748b)', fontSize: '0.85rem' }}>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
               {this.state.error.message}
             </p>
           </div>
@@ -720,7 +720,7 @@ export function BuildInfo({ version, commit, buildDate, extra }: BuildInfoProps)
                 {val}
               </div>
             ))}
-          <div style={{ color: '#64748b', marginTop: '0.25rem', fontSize: '0.6rem' }}>
+          <div style={{ color: 'var(--muted)', marginTop: '0.25rem', fontSize: '0.6rem' }}>
             tap to dismiss
           </div>
         </div>
@@ -778,8 +778,8 @@ export function Footer({ text }: FooterProps) {
         bottom: 0,
         zIndex: 900,
         textAlign: 'center',
-        background: 'var(--surface, var(--dock, #ffffff))',
-        borderTop: '1px solid var(--border, var(--line, #e2e8f0))',
+        background: 'var(--panel)',
+        borderTop: '1px solid var(--line)',
         paddingTop: '0.5rem',
         paddingBottom: 'calc(0.5rem + env(safe-area-inset-bottom, 0px))',
         backdropFilter: 'blur(20px)',
@@ -795,7 +795,7 @@ export function Footer({ text }: FooterProps) {
           fontWeight: 600,
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
-          color: 'var(--muted, #64748b)',
+          color: 'var(--muted)',
           textDecoration: 'none',
         }}
       >
@@ -837,8 +837,8 @@ export function KeyPrompt({ app, provider, providerName, message }: KeyPromptPro
   return (
     <div
       style={{
-        background: 'var(--surface, var(--panel, #f8fafc))',
-        border: '1px solid var(--border, var(--line, #e2e8f0))',
+        background: 'var(--panel)',
+        border: '1px solid var(--line)',
         borderRadius: 'var(--radius, 0.75rem)',
         padding: '1.5rem',
         maxWidth: 420,
@@ -852,7 +852,7 @@ export function KeyPrompt({ app, provider, providerName, message }: KeyPromptPro
           height="28"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="var(--muted, #64748b)"
+          stroke="var(--muted)"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -865,7 +865,7 @@ export function KeyPrompt({ app, provider, providerName, message }: KeyPromptPro
         style={{
           fontSize: '1rem',
           fontWeight: 700,
-          color: 'var(--ink, #1e293b)',
+          color: 'var(--ink)',
           marginBottom: '0.5rem',
         }}
       >
@@ -874,7 +874,7 @@ export function KeyPrompt({ app, provider, providerName, message }: KeyPromptPro
       <p
         style={{
           fontSize: '0.85rem',
-          color: 'var(--muted, #64748b)',
+          color: 'var(--muted)',
           margin: '0 0 1rem',
           lineHeight: 1.5,
         }}
@@ -884,7 +884,7 @@ export function KeyPrompt({ app, provider, providerName, message }: KeyPromptPro
       <button
         onClick={() => app.keys.manage(provider)}
         style={{
-          background: 'var(--accent, #2563eb)',
+          background: 'var(--accent)',
           color: '#fff',
           border: 'none',
           padding: '0.6rem 1.5rem',
