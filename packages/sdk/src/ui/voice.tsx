@@ -30,7 +30,7 @@ export function VoiceButton({ voice, disabled = false, size = 32 }: VoiceButtonP
         cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.4 : 1,
         background: voice.isListening ? '#fecaca' : 'var(--panel)',
-        color: voice.isListening ? '#dc2626' : 'var(--muted)',
+        color: voice.isListening ? 'var(--danger, #dc2626)' : 'var(--muted)',
         fontFamily: 'inherit',
         flexShrink: 0,
       }}
@@ -120,7 +120,7 @@ export function VoiceTextArea({
           width: '100%',
           padding: voice.isSupported ? '0.75rem 3rem 0.75rem 0.75rem' : '0.75rem',
           borderRadius: 'var(--radius, 0.75rem)',
-          border: voice.isListening ? '2px solid #dc2626' : '1px solid var(--line)',
+          border: voice.isListening ? '2px solid var(--danger, #dc2626)' : '1px solid var(--line)',
           background: 'var(--panel)',
           color: 'var(--ink)',
           fontSize: '0.9rem',

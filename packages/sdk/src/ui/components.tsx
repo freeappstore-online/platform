@@ -55,9 +55,9 @@ const badgeColors: Record<string, { bg: string; color: string; border: string }>
     color: 'var(--accent)',
     border: 'var(--accent)',
   },
-  success: { bg: '#f0fdf4', color: '#16a34a', border: '#86efac' },
-  warning: { bg: '#fefce8', color: '#ca8a04', border: '#fde047' },
-  danger: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+  success: { bg: 'var(--success-soft, #f0fdf4)', color: 'var(--success, #16a34a)', border: '#86efac' },
+  warning: { bg: 'var(--warning-soft, #fefce8)', color: 'var(--warning, #ca8a04)', border: '#fde047' },
+  danger: { bg: 'var(--danger-soft, #fef2f2)', color: 'var(--danger, #dc2626)', border: '#fecaca' },
 };
 
 export function Badge({ children, variant = 'default', style: extraStyle }: BadgeProps) {
@@ -319,7 +319,7 @@ export function ConfirmDialog({
             fontWeight: 600,
             cursor: 'pointer',
             fontFamily: 'inherit',
-            background: isDanger ? '#dc2626' : 'var(--accent)',
+            background: isDanger ? 'var(--danger, #dc2626)' : 'var(--accent)',
             color: '#fff',
           }}
         >
@@ -581,7 +581,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         this.props.fallback ?? (
           <div style={{ padding: '2rem', textAlign: 'center' }}>
-            <p style={{ color: '#dc2626', fontWeight: 700, marginBottom: '0.5rem' }}>
+            <p style={{ color: 'var(--danger, #dc2626)', fontWeight: 700, marginBottom: '0.5rem' }}>
               Something went wrong
             </p>
             <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>

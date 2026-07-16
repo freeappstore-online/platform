@@ -53,7 +53,7 @@ export function FriendRequestBadge({ app }: FriendRequestBadgeProps) {
         height: 18,
         padding: '0 5px',
         borderRadius: '9999px',
-        background: '#dc2626',
+        background: 'var(--danger, #dc2626)',
         color: '#fff',
         fontSize: '0.7rem',
         fontWeight: 700,
@@ -110,7 +110,7 @@ export function AddFriendButton({ app, userId }: AddFriendButtonProps) {
       bg: 'var(--panel)',
       clickable: false,
     },
-    pending_incoming: { label: 'Accept', color: '#fff', bg: '#16a34a', clickable: true },
+    pending_incoming: { label: 'Accept', color: '#fff', bg: 'var(--success, #16a34a)', clickable: true },
     accepted: {
       label: 'Friends',
       color: 'var(--muted)',
@@ -119,7 +119,7 @@ export function AddFriendButton({ app, userId }: AddFriendButtonProps) {
     },
     blocked_by_you: {
       label: 'Blocked',
-      color: '#dc2626',
+      color: 'var(--danger, #dc2626)',
       bg: 'var(--panel)',
       clickable: false,
     },
@@ -280,7 +280,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                       e.stopPropagation();
                       handleRemove(f.userId);
                     }}
-                    style={smallBtnStyle('#dc2626')}
+                    style={smallBtnStyle('var(--danger, #dc2626)')}
                   >
                     Remove
                   </button>
@@ -305,13 +305,13 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button
                         onClick={() => handleAccept(f.userId)}
-                        style={smallBtnStyle('#16a34a')}
+                        style={smallBtnStyle('var(--success, #16a34a)')}
                       >
                         Accept
                       </button>
                       <button
                         onClick={() => handleDecline(f.userId)}
-                        style={smallBtnStyle('#dc2626')}
+                        style={smallBtnStyle('var(--danger, #dc2626)')}
                       >
                         Decline
                       </button>
@@ -369,7 +369,7 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                     Add
                   </button>
                 ) : u.friendStatus === 'pending_incoming' ? (
-                  <button onClick={() => handleAccept(u.userId)} style={smallBtnStyle('#16a34a')}>
+                  <button onClick={() => handleAccept(u.userId)} style={smallBtnStyle('var(--success, #16a34a)')}>
                     Accept
                   </button>
                 ) : (
