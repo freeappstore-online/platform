@@ -44,8 +44,15 @@ const PLATFORM_SUBDOMAINS: Record<string, PlatformDispatch> = {
   // https://create.freeappstore.online/publish.
   submissions: { type: "proxy", target: "https://submissions.pages.dev" },
   agent: { type: "proxy", target: "https://agent.pages.dev" },
-  // console and create serve from R2 via D1 routes rows.
-  // They are NOT in PLATFORM_SUBDOMAINS — they fall through to resolveRoute().
+  // `console` serves from R2 via a D1 routes row (apps/console) — it is NOT here,
+  // it falls through to resolveRoute(). Its user-facing URL is freeappstore.online/app/.
+  //
+  // `create.freeappstore.online` (the VibeCode builder) was FOLDED INTO the console
+  // at freeappstore.online/app/build (2026-07-18). This 301 preserves the path so
+  // old builder links map 1:1: create.freeappstore.online/app/<id> →
+  // freeappstore.online/app/build/app/<id>. Takes precedence over the (now inert)
+  // apps/create D1 route. Source in sites/create is retained but no longer reachable.
+  create: { type: "redirect", to: "https://freeappstore.online/app/build", status: 301 },
   // www → 301 to the apex.
   www: { type: "redirect", to: "https://freeappstore.online", status: 301 },
   // `auth.freeappstore.online` is NOT a real web subdomain — the OAuth
