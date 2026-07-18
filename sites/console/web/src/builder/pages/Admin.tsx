@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Nav } from "../components/Nav";
 import { Markdown } from "../components/Markdown";
 import { useAuth } from "../hooks/useAuth";
@@ -1025,13 +1026,13 @@ function AdminAccessError({ message }: { message?: string }) {
       <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
         {message || ADMIN_ACCESS_MESSAGE}
       </p>
-      <a
-        href="/profile"
+      <Link
+        to="/profile"
         className="inline-flex px-3 py-2 rounded-lg text-sm font-semibold"
         style={{ background: "var(--accent)", color: "white" }}
       >
         Open Profile
-      </a>
+      </Link>
     </div>
   );
 }

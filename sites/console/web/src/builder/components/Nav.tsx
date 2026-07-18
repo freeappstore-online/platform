@@ -28,7 +28,6 @@ const NAV_LINKS = [
   { to: "https://freegamestore.online", label: "Games", external: true },
   { to: "https://freeappstore.online/about.html", label: "About", external: true },
   { to: "https://freeappstore.online/build-with-ai.html", label: "Build", external: true },
-  { to: "/", label: "VibeCode" },
   { to: "https://proappstore.online", label: "Pro", external: true, className: "pro-link" },
 ];
 
@@ -39,6 +38,10 @@ export function Nav() {
   const { user, signIn, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  // Full-page escape back to the console shell (dashboard/publish/manage). The
+  // builder lives under /build; the console home is the mount root — BASE-aware
+  // so it works both under the /app/ proxy and on the console origin directly.
+  const consoleHome = typeof window !== "undefined" && window.location.pathname.startsWith("/app") ? "/app/" : "/";
 
   useEffect(() => {
     if (!avatarMenuOpen) return;
@@ -61,6 +64,7 @@ export function Nav() {
         {/* Desktop nav */}
         <nav className="hidden sm:flex items-center gap-5">
           <ThemeToggle />
+          <a href={consoleHome} className="text-sm font-semibold no-underline" style={{ color: "var(--accent)" }}>&#8592; Console</a>
           {NAV_LINKS.map((link) =>
             link.external ? (
               <a
@@ -178,6 +182,7 @@ export function Nav() {
             >
               &#10005;
             </button>
+            <a href={consoleHome} className="block py-2 text-base font-semibold no-underline" style={{ color: "var(--accent)" }} onClick={() => setMenuOpen(false)}>&#8592; Console</a>
             {NAV_LINKS.map((link) =>
               link.external ? (
                 <a
