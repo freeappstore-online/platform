@@ -69,8 +69,8 @@ export function Nav() {
               <a
                 key={link.to}
                 href={link.to}
-                className={`text-sm font-semibold no-underline ${link.className || ""}`}
-                style={{ color: link.className === "pro-link" ? "var(--pro)" : "var(--muted)" }}
+                className="text-sm font-semibold no-underline"
+                style={{ color: "var(--muted)" }}
               >
                 {link.label}
               </a>
@@ -188,7 +188,7 @@ export function Nav() {
                   key={link.to}
                   href={link.to}
                   className="block py-2 text-base font-semibold no-underline"
-                  style={{ color: link.className === "pro-link" ? "var(--pro)" : "var(--muted)" }}
+                  style={{ color: "var(--muted)" }}
                   onClick={() => setMenuOpen(false)}
                 >
                   {link.label}
