@@ -189,38 +189,28 @@ a:focus-visible {
 
 /* ──────────────────────────────────────────────────────────────────────────
    VibeCode builder (ported from the former create.freeappstore.online app).
-   The builder was designed against create's opaque token set + its own utility
-   classes; re-declare them scoped to `.builder-root` so the immersive builder
-   keeps its original look without disturbing the console's translucent theme.
-   Unlayered (outside @layer base) so these win the cascade.
+   Consolidated design: the builder now ADOPTS the console's palette (glass
+   panels, blue accent, gradient) by INHERITING the console's :root tokens.
+   We only define the handful of tokens the console doesn't have, mapped to
+   console equivalents, plus the builder's own utility classes. Unlayered so
+   these win the cascade. Do NOT redeclare --panel/--ink/--paper/etc. here —
+   inheriting them is what makes the two views look like one app.
    ────────────────────────────────────────────────────────────────────────── */
 .builder-root {
-  --paper: #f8fafc;
-  --panel: #ffffff;
-  --panel-alt: #f1f5f9;
-  --ink: #1e293b;
-  --ink-strong: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
-  --line-strong: #cbd5e1;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
-  --accent-soft: #eff6ff;
+  --ink-strong: var(--ink);
+  --accent-hover: var(--accent-deep);
+  --panel-alt: var(--panel-quiet);
   --pro: #7c3aed;
-  --success: #16a34a;
-  --warning: #d97706;
-  --danger: #dc2626;
-  --radius-sm: 0.5rem;
-  --radius: 0.75rem;
-  --radius-lg: 1rem;
-  --shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
-  --shadow-lg: 0 10px 25px -8px rgba(15, 23, 42, 0.15), 0 4px 10px -4px rgba(15, 23, 42, 0.08);
-  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --radius-sm: 0.625rem;
+  --radius: 0.875rem;
+  --radius-lg: 1.25rem;
+  --shadow: var(--shadow-card);
+  --shadow-lg: var(--shadow-soft);
+  --font-body: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
   font-family: var(--font-body);
   color: var(--ink);
-  background: var(--paper);
   min-height: 100dvh;
   /* Console body sets user-select:none; the builder wants selectable chat text. */
   -webkit-user-select: text;
@@ -228,21 +218,7 @@ a:focus-visible {
 }
 
 :root[data-theme="dark"] .builder-root {
-  --paper: #0f172a;
-  --panel: #1e293b;
-  --panel-alt: #0f172a;
-  --ink: #f1f5f9;
-  --ink-strong: #ffffff;
-  --muted: #94a3b8;
-  --line: #334155;
-  --line-strong: #475569;
-  --accent: #3b82f6;
-  --accent-hover: #2563eb;
-  --accent-soft: rgba(96, 165, 250, 0.14);
   --pro: #a78bfa;
-  --success: #22c55e;
-  --warning: #fbbf24;
-  --danger: #ef4444;
 }
 
 .builder-root .font-display {

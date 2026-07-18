@@ -23,12 +23,11 @@ function ThemeToggle() {
   );
 }
 
+// Aligned with the console Header's links (this is one app now, not the old
+// standalone marketing site). "← Console" is added separately in the component.
 const NAV_LINKS = [
-  { to: "https://freeappstore.online", label: "Apps", external: true },
-  { to: "https://freegamestore.online", label: "Games", external: true },
-  { to: "https://freeappstore.online/about.html", label: "About", external: true },
-  { to: "https://freeappstore.online/build-with-ai.html", label: "Build", external: true },
-  { to: "https://proappstore.online", label: "Pro", external: true, className: "pro-link" },
+  { to: "https://freeappstore.online", label: "Store", external: true },
+  { to: "https://freeappstore.online/docs", label: "Docs", external: true },
 ];
 
 export function Nav() {
@@ -55,10 +54,10 @@ export function Nav() {
   }, [avatarMenuOpen]);
 
   return (
-    <header className="border-b" style={{ borderColor: "var(--line)", padding: "0.75rem 0" }}>
+    <header className="sticky top-0 z-30 border-b backdrop-blur-xl" style={{ borderColor: "var(--line)", background: "var(--panel)", padding: "0.5rem 0" }}>
       <div className="container flex items-center justify-between">
-        <Link to="/" className="font-display text-2xl font-extrabold tracking-tight no-underline" style={{ color: "var(--ink-strong)" }}>
-          Free <span style={{ color: "var(--accent)" }}>Apps</span>
+        <Link to="/" className="font-display text-lg font-bold tracking-tight no-underline" style={{ color: "var(--ink)" }}>
+          Free<span style={{ color: "var(--accent)" }}>Apps</span> <span className="font-sans text-sm font-medium" style={{ color: "var(--muted)" }}>Studio</span>
         </Link>
 
         {/* Desktop nav */}
