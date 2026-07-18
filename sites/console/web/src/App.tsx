@@ -5,6 +5,7 @@ import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
 import { Avatar, SignInButton, ThemeToggle, TextSizeToggle, ProfileMenu, ProfilePage, FasShell } from '@freeappstore/sdk/ui'
 import { AppDetail } from './AppDetail'
 import { ContentAdmin } from './ContentAdmin'
+import { PublishForm } from './PublishForm'
 
 const fas = initApp({ appId: 'console' })
 
@@ -124,7 +125,7 @@ export default function App() {
             onBack={() => navigate('dashboard')}
           />
         )}
-        {view === 'publish' && <PublishView />}
+        {view === 'publish' && <PublishView getToken={() => fas.auth.token} />}
         {view === 'settings' && <Settings />}
         {view === 'ui-library' && <UILibraryView />}
         {view === 'content-admin' && <ContentAdmin getToken={() => fas.auth.token} />}
@@ -296,7 +297,7 @@ function Dashboard({ user, apps, onOpenApp, onPublish }: { user: User; apps: App
   )
 }
 
-function PublishView() {
+function PublishView({ getToken }: { getToken: () => string | null }) {
   return (
     <div className="space-y-8">
       <h2 className="display-font text-2xl font-bold text-[var(--ink)]">Publish an App</h2>
@@ -338,20 +339,7 @@ cd my-app && pnpm dev`}
         </div>
       </div>
 
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6">
-        <h3 className="display-font text-lg font-bold text-[var(--ink)] mb-2">Publisher Portal</h3>
-        <p className="text-sm text-[var(--muted)] mb-4">
-          Already have an app? Submit it for review and get listed on the store.
-        </p>
-        <a
-          href="https://create.freeappstore.online/publish"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2 text-sm font-medium text-[var(--ink)] hover:bg-[var(--panel-hover)] no-underline"
-        >
-          Open Publisher Portal
-        </a>
-      </div>
+      <PublishForm getToken={getToken} />
     </div>
   )
 }
