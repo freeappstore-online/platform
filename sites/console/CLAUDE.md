@@ -1,7 +1,17 @@
 # Creator Console
 
-Creator portal for FreeAppStore developers.
+Creator portal for FreeAppStore developers — the **one** creator app: dashboard,
+app management, self-service publish, and the **VibeCode AI builder**.
 
+- **VibeCode builder** lives at `/app/build` — `web/src/builder/` is the former
+  create.freeappstore.online app, folded in as a self-contained react-router island
+  (2026-07-18). It keeps its own react-router (BASE-aware `basename`) + hand-rolled
+  auth, which reads the same `fas:session` key the SDK writes, so the session is
+  shared. `create.freeappstore.online` now 301s to `/app/build`. Lazy-loaded so it
+  stays out of the console's initial bundle. Edit builder code under `web/src/builder/`.
+- The router in `web/src/App.tsx` is a small custom path router; it computes a
+  `BASE` (`/app` under the storefront proxy, else `''`) so routes work at both
+  `freeappstore.online/app/*` and the `console.freeappstore.online` origin.
 - **Canonical URL:** `https://freeappstore.online/app/` (path-based, not a subdomain).
 - Dev: `pnpm install && pnpm dev`
 - Build: `pnpm build`

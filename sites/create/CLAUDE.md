@@ -1,11 +1,18 @@
-# VibeCode (create.freeappstore.online)
+# VibeCode (RETIRED — folded into the console 2026-07-18)
 
-## What this is
+> **This standalone app is no longer deployed to users.** The VibeCode builder was
+> ported into the console at `freeappstore.online/app/build`
+> (`sites/console/web/src/builder/`, a react-router island). `create.freeappstore.online`
+> now **301-redirects** to `/app/build` (see `workers/host/src/index.ts` PLATFORM_SUBDOMAINS).
+> This source + `deploy-create.yml` are kept for reference/history only; edit the copy
+> under `sites/console/web/src/builder/` instead. Do not resurrect this subdomain.
+
+## What this was
 The VibeCode React app — AI-powered app builder for FreeAppStore.
 Users describe an app, the agent builds it, deploys it, and they get a preview on `.pages.dev`.
 Publishing to the store (DNS + custom domain + registry) is a separate step via the Publish page.
 
-Deployed at: `create.freeappstore.online`
+Was deployed at: `create.freeappstore.online` (now redirected).
 Separate from the store site (freeappstore.online) which is static HTML.
 
 ## Tech Stack
