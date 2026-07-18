@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { initApp } from '@freeappstore/sdk'
 import type { User } from '@freeappstore/sdk'
 import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
@@ -6,10 +6,18 @@ import { Avatar, SignInButton, ThemeToggle, TextSizeToggle, ProfileMenu, Profile
 import { AppDetail } from './AppDetail'
 import { ContentAdmin } from './ContentAdmin'
 import { PublishForm } from './PublishForm'
+// Lazy — the builder is a large react-router island; keep it out of the console's
+// initial bundle and load it only when the user opens /build.
+const BuilderApp = lazy(() => import('./builder/BuilderApp'))
 
 const fas = initApp({ appId: 'console' })
 
-type View = 'dashboard' | 'app-detail' | 'publish' | 'settings' | 'ui-library' | 'content-admin'
+// The console is served at console.freeappstore.online/ (no prefix) AND at
+// freeappstore.online/app/ (the storefront proxy strips /app server-side but the
+// browser URL keeps it). Normalize so client-side routing works under either mount.
+const BASE = (location.pathname === '/app' || location.pathname.startsWith('/app/')) ? '/app' : ''
+
+type View = 'dashboard' | 'app-detail' | 'publish' | 'settings' | 'ui-library' | 'content-admin' | 'builder'
 
 interface AppEntry {
   id: string
@@ -42,7 +50,10 @@ async function fetchApps(token: string | null): Promise<AppEntry[]> {
 }
 
 function parseRoute(): { view: View; appId: string | null } {
-  const path = location.pathname
+  const path = location.pathname.slice(BASE.length) || '/'
+  // The builder is a self-contained react-router island; anything under /build
+  // is its territory (it manages its own sub-routes).
+  if (path === '/build' || path.startsWith('/build/')) return { view: 'builder', appId: null }
   const appMatch = path.match(/^\/apps\/([a-z0-9-]+)(?:\/(.+))?$/)
   if (appMatch) return { view: 'app-detail', appId: appMatch[1] }
   if (path === '/publish') return { view: 'publish', appId: null }
@@ -62,7 +73,8 @@ function navigate(view: View, appId?: string) {
   else if (view === 'settings') path = '/settings'
   else if (view === 'ui-library') path = '/ui-library'
   else if (view === 'content-admin') path = '/admin'
-  history.pushState(null, '', path)
+  else if (view === 'builder') path = '/build'
+  history.pushState(null, '', BASE + path)
   const next = parseRoute()
   if (_setRoute) _setRoute(next)
 }
@@ -109,6 +121,19 @@ export default function App() {
   }
 
   if (!user) return <Landing />
+
+  // The builder is immersive (chat + live preview, its own toolbar) — render it
+  // full-bleed without the console Header shell. Scoped `.builder-root` restores
+  // the builder's original (opaque) design tokens.
+  if (view === 'builder') {
+    return (
+      <div className="builder-root">
+        <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center"><p className="text-[var(--muted)]">Loading builder…</p></div>}>
+          <BuilderApp basename={`${BASE}/build`} />
+        </Suspense>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
@@ -162,6 +187,7 @@ function Landing() {
 
 const TABS: { key: View; label: string }[] = [
   { key: 'dashboard', label: 'Dashboard' },
+  { key: 'builder', label: 'Build' },
   { key: 'publish', label: 'Publish' },
   { key: 'settings', label: 'Settings' },
   { key: 'ui-library', label: 'UI Library' },
@@ -183,7 +209,7 @@ function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate
             <nav className="hidden sm:flex items-center gap-2.5 text-xs font-medium text-[var(--muted)]">
               <a href="https://freeappstore.online" className="hover:text-[var(--ink)] no-underline">Store</a>
               <a href="https://freeappstore.online/docs" className="hover:text-[var(--ink)] no-underline">Docs</a>
-              <a href="https://create.freeappstore.online" className="hover:text-[var(--ink)] no-underline">VibeCode</a>
+              <button type="button" onClick={() => onNavigate('builder')} className="hover:text-[var(--ink)] bg-transparent border-0 p-0 cursor-pointer text-xs font-medium text-[var(--muted)]">VibeCode</button>
             </nav>
           </div>
           <div className="flex items-center gap-2.5">
@@ -257,9 +283,9 @@ function Dashboard({ user, apps, onOpenApp, onPublish }: { user: User; apps: App
           <div className="rounded-2xl border border-dashed border-[var(--line-strong)] p-12 text-center">
             <p className="text-[var(--muted)]">
               No apps yet. Create your first app with{' '}
-              <a href="https://create.freeappstore.online" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)] font-semibold underline">
+              <button type="button" onClick={() => navigate('builder')} className="text-[var(--accent)] font-semibold underline bg-transparent border-0 p-0 cursor-pointer">
                 VibeCode
-              </a>{' '}
+              </button>{' '}
               or the CLI.
             </p>
           </div>
@@ -308,14 +334,13 @@ function PublishView({ getToken }: { getToken: () => string | null }) {
           <p className="text-sm text-[var(--muted)] mb-4">
             Describe your app in plain English and AI builds it for you. No coding required.
           </p>
-          <a
-            href="https://create.freeappstore.online"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 no-underline"
+          <button
+            type="button"
+            onClick={() => navigate('builder')}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 border-0 cursor-pointer"
           >
             Open VibeCode
-          </a>
+          </button>
         </div>
 
         <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6">

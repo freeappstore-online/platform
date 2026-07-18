@@ -186,3 +186,83 @@ a:focus-visible {
 }
 
 } /* end @layer base */
+
+/* ──────────────────────────────────────────────────────────────────────────
+   VibeCode builder (ported from the former create.freeappstore.online app).
+   The builder was designed against create's opaque token set + its own utility
+   classes; re-declare them scoped to `.builder-root` so the immersive builder
+   keeps its original look without disturbing the console's translucent theme.
+   Unlayered (outside @layer base) so these win the cascade.
+   ────────────────────────────────────────────────────────────────────────── */
+.builder-root {
+  --paper: #f8fafc;
+  --panel: #ffffff;
+  --panel-alt: #f1f5f9;
+  --ink: #1e293b;
+  --ink-strong: #0f172a;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --pro: #7c3aed;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --radius-sm: 0.5rem;
+  --radius: 0.75rem;
+  --radius-lg: 1rem;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 10px 25px -8px rgba(15, 23, 42, 0.15), 0 4px 10px -4px rgba(15, 23, 42, 0.08);
+  --font-body: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  min-height: 100dvh;
+  /* Console body sets user-select:none; the builder wants selectable chat text. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+:root[data-theme="dark"] .builder-root {
+  --paper: #0f172a;
+  --panel: #1e293b;
+  --panel-alt: #0f172a;
+  --ink: #f1f5f9;
+  --ink-strong: #ffffff;
+  --muted: #94a3b8;
+  --line: #334155;
+  --line-strong: #475569;
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-soft: rgba(96, 165, 250, 0.14);
+  --pro: #a78bfa;
+  --success: #22c55e;
+  --warning: #fbbf24;
+  --danger: #ef4444;
+}
+
+.builder-root .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.builder-root .container {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  width: 100%;
+}
+
+.builder-root .status-pulse {
+  animation: status-pulse 1.5s ease-out infinite;
+}
+
+@keyframes status-pulse {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  70% { box-shadow: 0 0 0 5px transparent; opacity: 0.85; }
+  100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+}
