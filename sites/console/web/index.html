@@ -2,6 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // The console is served at BOTH console.freeappstore.online/ and
+      // freeappstore.online/app/ (the storefront proxy strips /app server-side
+      // but the browser URL keeps it). Vite uses a relative asset base, which
+      // only resolves at the mount root — at deeper routes like /app/build/ or
+      // /app/build/app/<id> the browser would look for /app/build/assets/* and
+      // 404. Emit a <base> matching the mount so relative assets + manifest
+      // always resolve to the mount root regardless of route depth.
+      (function () {
+        var p = location.pathname;
+        var base = (p === '/app' || p.indexOf('/app/') === 0) ? '/app/' : '/';
+        document.write('<base href="' + base + '">');
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
