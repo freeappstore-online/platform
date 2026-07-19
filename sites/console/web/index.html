@@ -33,12 +33,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Creator Console — FreeAppStore</title>
-    <!-- CF Web Analytics beacon for the console itself. Cookieless, no PII.
-         Token is the literal string until set; replace PROAPPSTORE_CONSOLE_CF_BEACON_TOKEN
-         with the real Web Analytics site_token from the CF dashboard
-         (or wire a build-time substitution if/when the console grows a build pipeline). -->
-    <script defer src="https://static.cloudflareinsights.com/beacon.min.js"
-            data-cf-beacon='{"token":"FREEAPPSTORE_CONSOLE_CF_BEACON_TOKEN"}'></script>
+    <!-- CF Web Analytics beacon removed: it shipped with a placeholder site_token
+         (never a real one), so it collected nothing and only threw a CORS error on
+         cloudflareinsights.com/cdn-cgi/rum. Re-add a <script src=beacon.min.js> with
+         a real Web Analytics site_token from the CF dashboard if console RUM is wanted. -->
   </head>
   <body>
     <div id="root"></div>
