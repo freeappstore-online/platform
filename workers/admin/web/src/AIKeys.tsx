@@ -22,8 +22,15 @@ const GRANT_MODELS: Record<string, { value: string; label: string }[]> = {
 }
 
 // Providers you can paste a key for (stored in the user's encrypted vault).
-// The backend validates the id against key_providers, so keep these in sync.
-const KEY_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter']
+// `id` must match the backend key_providers table EXACTLY (note google-ai, not
+// google) or the paste 400s. The label shows the required key prefix so admins
+// don't paste a mismatched/truncated key (the backend enforces the prefix).
+const KEY_PROVIDERS = [
+  { id: 'anthropic', label: 'Anthropic — key starts sk-ant-' },
+  { id: 'openai', label: 'OpenAI — key starts sk-' },
+  { id: 'google-ai', label: 'Google AI — key starts AI' },
+  { id: 'openrouter', label: 'OpenRouter — key starts sk-or-' },
+]
 
 export function AIKeys() {
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -327,7 +334,7 @@ export function AIKeys() {
               style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
             >
               {KEY_PROVIDERS.map((item) => (
-                <option key={item} value={item}>{item}</option>
+                <option key={item.id} value={item.id}>{item.label}</option>
               ))}
             </select>
 
