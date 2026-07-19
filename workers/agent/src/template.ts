@@ -34,7 +34,8 @@ const SHARED_FILES: Record<string, string> = {
   },
   "dependencies": {
     "react": "^19",
-    "react-dom": "^19"
+    "react-dom": "^19",
+    "@freeappstore/sdk": "^0.14.25"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1",
