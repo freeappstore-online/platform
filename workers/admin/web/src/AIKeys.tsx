@@ -21,6 +21,10 @@ const GRANT_MODELS: Record<string, { value: string; label: string }[]> = {
   ],
 }
 
+// Providers you can paste a key for (stored in the user's encrypted vault).
+// The backend validates the id against key_providers, so keep these in sync.
+const KEY_PROVIDERS = ['anthropic', 'openai', 'google', 'openrouter']
+
 export function AIKeys() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [funded, setFunded] = useState<string[]>([])
@@ -34,6 +38,9 @@ export function AIKeys() {
   const [expiresAt, setExpiresAt] = useState('')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [keyProvider, setKeyProvider] = useState('anthropic')
+  const [keyValue, setKeyValue] = useState('')
+  const [keySaving, setKeySaving] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -118,6 +125,26 @@ export function AIKeys() {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function saveUserKey() {
+    if (!selectedUser || !keyProvider || !keyValue.trim()) return
+    setKeySaving(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await api('/api/ai-keys/userkey', {
+        method: 'POST',
+        body: JSON.stringify({ userId: selectedUser, provider: keyProvider, key: keyValue.trim() }),
+      })
+      setNotice(`Saved ${keyProvider} key for ${activeUser?.githubLogin || selectedUser}.`)
+      setKeyValue('')
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setKeySaving(false)
     }
   }
 
@@ -279,12 +306,51 @@ export function AIKeys() {
 
           <button
             onClick={grantUser}
-            disabled={saving || !selectedUser || !provider || !model || !funded.includes(provider)}
+            disabled={saving || !selectedUser || !provider || !model}
             className="w-full px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{ background: 'var(--accent)', color: '#fff', opacity: saving || !funded.includes(provider) ? 0.55 : 1 }}
+            style={{ background: 'var(--accent)', color: '#fff', opacity: saving || !selectedUser || !model ? 0.55 : 1 }}
           >
-            {saving ? 'Saving...' : 'Save Grant'}
+            {saving ? 'Saving...' : funded.includes(provider) ? 'Save Grant' : 'Save Grant (unfunded)'}
           </button>
+
+          <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+            <h2 className="text-base font-bold mb-1">Paste API Key</h2>
+            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
+              Store a provider key in <strong>{activeUser?.githubLogin || selectedUser || 'the selected user'}</strong>'s encrypted vault — their VibeCode builds pick it up automatically. This works without funding a grant.
+            </p>
+
+            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Provider</label>
+            <select
+              value={keyProvider}
+              onChange={(event) => setKeyProvider(event.target.value)}
+              className="w-full px-3 py-2 rounded-lg text-sm mb-3"
+              style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+            >
+              {KEY_PROVIDERS.map((item) => (
+                <option key={item} value={item}>{item}</option>
+              ))}
+            </select>
+
+            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>API key</label>
+            <input
+              type="password"
+              value={keyValue}
+              onChange={(event) => setKeyValue(event.target.value)}
+              placeholder="sk-…  (stored encrypted, never shown again)"
+              autoComplete="off"
+              className="w-full px-3 py-2 rounded-lg text-sm mb-3"
+              style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+            />
+
+            <button
+              onClick={saveUserKey}
+              disabled={keySaving || !selectedUser || !keyValue.trim()}
+              className="w-full px-4 py-2 rounded-lg text-sm font-semibold"
+              style={{ background: 'var(--accent)', color: '#fff', opacity: keySaving || !keyValue.trim() ? 0.55 : 1 }}
+            >
+              {keySaving ? 'Saving...' : 'Save Key'}
+            </button>
+          </div>
         </aside>
       </div>
     </div>
