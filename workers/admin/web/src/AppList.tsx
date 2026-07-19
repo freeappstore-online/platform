@@ -5,7 +5,7 @@ import { Loading, ErrorBox } from './Overview.tsx'
 
 const PAGE_SIZE = 25
 
-export function AppList({ navigate }: { navigate: (h: string) => void }) {
+export function AppList({ navigate, owner }: { navigate: (h: string) => void; owner?: string }) {
   const [items, setItems] = useState<UnifiedApp[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -22,18 +22,21 @@ export function AppList({ navigate }: { navigate: (h: string) => void }) {
   }, [])
 
   const filtered = useMemo(() => {
-    if (!search) return items
+    let list = items
+    // Owner drill-down (#/apps/owner/<login>): only this person's apps.
+    if (owner) list = list.filter((a) => (a.owner ?? '').toLowerCase() === owner.toLowerCase())
+    if (!search) return list
     const q = search.toLowerCase()
-    return items.filter((a) =>
+    return list.filter((a) =>
       a.id.includes(q) || a.name.toLowerCase().includes(q) || (a.owner ?? '').toLowerCase().includes(q) || a.domain.includes(q),
     )
-  }, [items, search])
+  }, [items, search, owner])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
-  // Reset to page 1 when search changes
-  useEffect(() => setPage(1), [search])
+  // Reset to page 1 when the search or owner filter changes
+  useEffect(() => setPage(1), [search, owner])
 
   if (loading) return <Loading />
   if (error) return <ErrorBox message={error} />
@@ -41,7 +44,14 @@ export function AppList({ navigate }: { navigate: (h: string) => void }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-        <h1 className="text-2xl font-bold">Apps</h1>
+        <div>
+          <h1 className="text-2xl font-bold">{owner ? `Apps by @${owner}` : 'Apps'}</h1>
+          {owner && (
+            <button onClick={() => navigate('/apps')} className="text-xs mt-0.5" style={{ color: 'var(--accent)' }}>
+              ← All apps
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <input
             type="text"
@@ -108,7 +118,18 @@ export function AppList({ navigate }: { navigate: (h: string) => void }) {
                   />
                 </td>
                 <td className="px-4 py-3 hidden md:table-cell">
-                  <span className="text-xs" style={{ color: 'var(--muted)' }}>{app.owner ?? '-'}</span>
+                  {app.owner ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate('/apps/owner/' + encodeURIComponent(app.owner!)) }}
+                      className="text-xs hover:underline"
+                      style={{ color: 'var(--accent)' }}
+                      title={`All apps by ${app.owner}`}
+                    >
+                      {app.owner}
+                    </button>
+                  ) : (
+                    <span className="text-xs" style={{ color: 'var(--muted)' }}>-</span>
+                  )}
                 </td>
               </tr>
             ))}

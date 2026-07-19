@@ -32,7 +32,7 @@ const KEY_PROVIDERS = [
   { id: 'openrouter', label: 'OpenRouter — key starts sk-or-' },
 ]
 
-export function AIKeys() {
+export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [funded, setFunded] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
@@ -218,6 +218,16 @@ export function AIKeys() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
+                      {user.githubLogin && (
+                        <button
+                          onClick={() => navigate('/apps/owner/' + encodeURIComponent(user.githubLogin))}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                          style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+                          title={`View all apps by @${user.githubLogin}`}
+                        >
+                          Apps
+                        </button>
+                      )}
                       <button
                         onClick={() => setSelectedUser(user.id)}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold"

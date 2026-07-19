@@ -9,7 +9,7 @@ import { AIKeys } from './AIKeys.tsx'
 
 type View =
   | { page: 'overview' }
-  | { page: 'apps' }
+  | { page: 'apps'; owner?: string }
   | { page: 'detail'; id: string }
   | { page: 'provision' }
   | { page: 'ai-keys' }
@@ -24,6 +24,9 @@ function parseHash(): View {
   if (hash === '/agent') return { page: 'agent-sessions' }
   const agentMatch = hash.match(/^\/agent\/(.+)$/)
   if (agentMatch) return { page: 'agent-session', id: agentMatch[1]! }
+  // All apps owned by one person — must be checked before the generic /apps/:id.
+  const ownerMatch = hash.match(/^\/apps\/owner\/(.+)$/)
+  if (ownerMatch) return { page: 'apps', owner: decodeURIComponent(ownerMatch[1]!) }
   const detailMatch = hash.match(/^\/apps\/(.+)$/)
   if (detailMatch) return { page: 'detail', id: detailMatch[1]! }
   // Legacy #/games routes → apps list
@@ -49,10 +52,10 @@ export default function App() {
       <Header navigate={navigate} view={view} />
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         {view.page === 'overview' && <Overview navigate={navigate} />}
-        {view.page === 'apps' && <AppList navigate={navigate} />}
+        {view.page === 'apps' && <AppList navigate={navigate} owner={view.owner} />}
         {view.page === 'detail' && <AppDetail id={view.id} navigate={navigate} />}
         {view.page === 'provision' && <ProvisionForm navigate={navigate} />}
-        {view.page === 'ai-keys' && <AIKeys />}
+        {view.page === 'ai-keys' && <AIKeys navigate={navigate} />}
         {view.page === 'agent-sessions' && <AgentSessions navigate={navigate} />}
         {view.page === 'agent-session' && <AgentSessionView id={view.id} navigate={navigate} />}
       </main>
