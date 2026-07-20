@@ -15,6 +15,7 @@
 //     admin Worker; owners cannot rotate it via this endpoint.
 
 import { type Context, Hono } from 'hono';
+import { APP_ID_RE } from '../lib/apps.js';
 import { type CurrentUser, HttpError, requireAdmin, requireUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -26,7 +27,6 @@ type Ctx = Context<{ Bindings: Env }>;
 const GA4_RE = /^G-[A-Z0-9]{6,12}$/i;
 const DOMAIN_RE = /^[a-z0-9][a-z0-9.-]{0,253}\.[a-z]{2,}$/i;
 const CF_TOKEN_RE = /^[a-f0-9]{32,}$/i;
-const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
 const CUSTOM_HEAD_MAX = 4096;
 
 interface AnalyticsRow {

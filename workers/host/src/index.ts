@@ -51,7 +51,8 @@ const PLATFORM_SUBDOMAINS: Record<string, PlatformDispatch> = {
   // at freeappstore.online/app/build (2026-07-18). This 301 preserves the path so
   // old builder links map 1:1: create.freeappstore.online/app/<id> →
   // freeappstore.online/app/build/app/<id>. Takes precedence over the (now inert)
-  // apps/create D1 route. Source in sites/create is retained but no longer reachable.
+  // apps/create D1 route. The old sites/create source + deploy-create.yml were
+  // deleted (2026-07-20) — the builder now lives in sites/console/web/src/builder.
   create: { type: "redirect", to: "https://freeappstore.online/app/build", status: 301 },
   // www → 301 to the apex.
   www: { type: "redirect", to: "https://freeappstore.online", status: 301 },

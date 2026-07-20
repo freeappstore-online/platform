@@ -33,8 +33,7 @@ fas/platform/
 ├── workers/agent        VibeCode AI app builder
 ├── workers/host         R2 host worker — *.freeappstore.online
 ├── workers/mcp          MCP server (12 tools) — mcp.freeappstore.online
-├── sites/console        Creator portal — freeappstore.online/app/ (proxied)
-├── sites/create         VibeCode + self-service publish — create.freeappstore.online
+├── sites/console        Creator portal + VibeCode builder (/app/build) — freeappstore.online/app/ (proxied)
 ├── brand/               Brand assets + BRAND.md / SKILLS.md
 └── ops/                 Ops docs (DR, infra, submission) + scripts
 ```
@@ -52,7 +51,7 @@ fas/platform/
 | Host | *.freeappstore.online | freeappstore-host |
 | Admin | admin.freeappstore.online | freeappstore-admin |
 | Console | freeappstore.online/app/ | R2 via host (Path B), proxied from apex `/app/*` |
-| VibeCode / Publish | create.freeappstore.online | R2 via host (Path B) |
+| VibeCode builder | freeappstore.online/app/build | Console app (create.* 301s here) |
 | Docs | docs.freeappstore.online | freeappstore-kb-host |
 | KB | kb.freeappstore.online | freeappstore-kb-host |
 | MCP | mcp.freeappstore.online | freeappstore-mcp |

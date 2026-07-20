@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { APP_ID_RE } from '../lib/apps.js';
 import { HttpError, isAdminLogin, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
@@ -25,7 +26,6 @@ interface PublishBody {
   creatorGithub?: string;
 }
 
-const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
 // GitHub username rules: 1–39 chars, alphanumeric or single hyphens (not
 // leading/trailing/doubled).
 const GITHUB_LOGIN_RE = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
