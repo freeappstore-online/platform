@@ -8,6 +8,7 @@ import {
   handleAppHealth,
   handleAppSessions,
   handleAppsAll,
+  handleDeployStatus,
 } from "./helpers";
 import { handlePublish } from "./publish";
 
@@ -508,6 +509,24 @@ export default {
         return json(await handleAppsAll(env), 200, request);
       } catch (e) {
         return json({ error: "Internal error", detail: String(e) }, 500, request);
+      }
+    }
+
+    // ── Deploy status for every app (latest GH Actions conclusion) ──
+    // Cached 5 min in the Worker cache so the Apps list can flag failed deploys
+    // without a GitHub fan-out on every load.
+    if (url.pathname === "/api/apps/deploy-status") {
+      // `caches.default` is a Cloudflare Workers extension (not in DOM CacheStorage types).
+      const cache = (caches as unknown as { default: Cache }).default;
+      const cacheKey = new Request("https://admin.internal/api/apps/deploy-status");
+      const hit = await cache.match(cacheKey);
+      if (hit) return new Response(hit.body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
+      try {
+        const body = JSON.stringify(await handleDeployStatus(env));
+        await cache.put(cacheKey, new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" } }));
+        return new Response(body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
+      } catch (e) {
+        return json({ error: String(e) }, 500, request);
       }
     }
 

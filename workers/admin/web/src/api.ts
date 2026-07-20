@@ -71,6 +71,15 @@ export interface UnifiedApp {
   updatedAt: number | null
 }
 
+// /api/apps/deploy-status → { [appId]: DeployStatus } — latest GH Actions run.
+export interface DeployStatus {
+  status: string | null
+  conclusion: string | null
+  at: string | null
+  sha: string | null
+}
+export type DeployStatusMap = Record<string, DeployStatus>
+
 // Health check from /api/apps/:id/health
 export interface AppHealth {
   id: string

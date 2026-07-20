@@ -2,6 +2,8 @@ node_modules/
 .wrangler/
 .DS_Store
 dist/
-public/
+# Build output only (web SPA compiles to workers/admin/public via vite). Anchored
+# so it does NOT also ignore the source assets in web/public/ (PWA icons, etc.).
+/public/
 *.local
 test-results/

@@ -376,13 +376,34 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
 
 function VaultChips({ user }: { user: AdminUser }) {
   if (user.keys.length === 0) return <span className="text-xs" style={{ color: 'var(--muted)' }}>none</span>
+  // "Active" provider = the vault key most recently used in a build. This is the
+  // provider the user is actually building on — paste keys for THIS one.
+  const used = user.keys.filter((k) => k.lastUsedAt)
+  const activeProvider = used.length
+    ? used.reduce((a, b) => ((b.lastUsedAt ?? 0) > (a.lastUsedAt ?? 0) ? b : a)).provider
+    : null
   return (
-    <div className="flex flex-wrap gap-2">
-      {user.keys.map((key) => (
-        <span key={key.provider} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
-          {key.provider}
-        </span>
-      ))}
+    <div className="flex flex-wrap gap-1.5">
+      {user.keys.map((key) => {
+        const isActive = key.provider === activeProvider
+        const when = key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : null
+        return (
+          <span
+            key={key.provider}
+            title={key.lastUsedAt ? `${key.provider} — last built ${when}` : `${key.provider} — in vault, never used in a build`}
+            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium"
+            style={
+              isActive
+                ? { background: 'var(--accent)', color: '#fff' }
+                : { background: 'var(--accent-soft)', color: 'var(--accent)', opacity: key.lastUsedAt ? 1 : 0.55 }
+            }
+          >
+            {isActive && <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: '#fff' }} />}
+            {key.provider}
+            {!key.lastUsedAt && <span style={{ opacity: 0.8 }}>·unused</span>}
+          </span>
+        )
+      })}
     </div>
   )
 }

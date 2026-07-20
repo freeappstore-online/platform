@@ -140,6 +140,36 @@ export async function fetchGhRuns(appId: string, env: Env) {
   }
 }
 
+export type DeployStatus = {
+  status: string | null;
+  conclusion: string | null;
+  at: string | null;
+  sha: string | null;
+};
+
+/** Latest GitHub Actions deploy conclusion for every provisioned app.
+ *  Fan-out is concurrency-limited; the caller caches the whole result (5 min)
+ *  so the Apps list can flag failed deploys at a glance without hammering GitHub. */
+export async function handleDeployStatus(env: Env): Promise<Record<string, DeployStatus>> {
+  const rows = await env.DB.prepare("SELECT id FROM apps ORDER BY id").all();
+  const ids = (rows.results ?? []).map((r) => r.id as string);
+  const result: Record<string, DeployStatus> = {};
+  const CONCURRENCY = 8;
+  for (let i = 0; i < ids.length; i += CONCURRENCY) {
+    const batch = ids.slice(i, i + CONCURRENCY);
+    await Promise.all(
+      batch.map(async (id) => {
+        const runs = await fetchGhRuns(id, env);
+        const latest = runs[0];
+        result[id] = latest
+          ? { status: latest.status ?? null, conclusion: latest.conclusion ?? null, at: latest.createdAt ?? null, sha: latest.headSha ?? null }
+          : { status: null, conclusion: null, at: null, sha: null };
+      }),
+    );
+  }
+  return result;
+}
+
 export async function handleAppsAll(env: Env) {
   const [routeRows, appRows, appsReg, gamesReg, userRows] = await Promise.all([
     env.DB.prepare("SELECT slug, zone, r2_prefix, store, hosted_on, created_at, updated_at FROM routes ORDER BY slug").all(),
