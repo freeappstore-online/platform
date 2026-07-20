@@ -95,7 +95,7 @@ Developer opens an issue in `freeappstore-online/submissions` repo using the "Ap
 
 ## Step 4: Publishing (Maintainer Workflow)
 
-> **Historical reference only.** The current workflow is **publish.freeappstore.online** (creators) or the admin API (maintainers). The recipes below remain documented for emergency manual recovery only — e.g. portal outage. Do not run them as the normal path; see [`SKILLS.md`](./SKILLS.md).
+> **Historical reference only.** The current workflow is **freeappstore.online/app/** (creators) or the admin API (maintainers). The recipes below remain documented for emergency manual recovery only — e.g. portal outage. Do not run them as the normal path; see [`SKILLS.md`](./SKILLS.md).
 
 Once approved, a maintainer runs these steps:
 

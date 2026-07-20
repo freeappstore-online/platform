@@ -107,7 +107,7 @@ People join as creators to build apps/games. The flow:
 | **SDK (connected apps)** | `@freeappstore/sdk` (auth, KV, rooms, proxy) | — || **Accent color** | Blue (#2563eb) | Emerald (#10b981) |
 | **Logo** | Free **Apps** | Free **Games** |
 | **Admin** | admin.freeappstore.online | admin.freegamestore.online |
-| **Publish portal** | publish.freeappstore.online | publish.freegamestore.online |
+| **Publish portal** | freeappstore.online/app/ | publish.freegamestore.online |
 | **Local path** | ~/dev/fas/ | ~/dev/fgs/ |
 | **Storefront repo** | ~/dev/fas/freeappstore/ | ~/dev/fgs/freegamestore/ |
 
@@ -213,7 +213,7 @@ Provisioning is done by the **platform admin** or by the creator via the **publi
 3. It auto-deploys
 
 If the user wants a new app created, direct them to:
-- **Self-service:** https://publish.freeappstore.online (sign in with GitHub, create instantly)
+- **Self-service:** https://freeappstore.online/app/ (sign in with GitHub, create instantly)
 - **Admin:** https://admin.freeappstore.online (admin only)
 
 Do NOT run curl commands against Cloudflare APIs. Do NOT use wrangler for provisioning. Do NOT ask for API tokens.

@@ -4,12 +4,11 @@
 
 | Service | URL | Source | Deploys via |
 |---------|-----|--------|-------------|
-| Agent worker | agent.freeappstore.online | `platform/agent/` | `bash scripts/deploy.sh` (safe, doesn't kill DOs) |
-| API (auth) | api.freeappstore.online | `platform/packages/backend/` | `npx wrangler deploy` |
-| Store site | freeappstore.online | `freeappstore/` | `git push` (GitHub Actions → R2) |
-| VibeCode | console.freeappstore.online/create | `create/` | `git push` (GitHub Actions → R2) |
-| Admin | admin.freeappstore.online | `platform/admin/` | `npx wrangler deploy` |
-| Publisher | publish.freeappstore.online | `platform/publisher/` | `npx wrangler deploy` |
+| Agent worker | agent.freeappstore.online | `platform/workers/agent/` | push to `main` → `deploy-agent.yml` |
+| API (auth) | api.freeappstore.online | `platform/packages/backend/` | push to `main` → `deploy-backend.yml` |
+| Store site | freeappstore.online | `freeappstore/` (separate repo) | `git push` (GitHub Actions → R2) |
+| VibeCode builder | freeappstore.online/app/build | `platform/sites/console/web/src/builder/` | push to `main` → `deploy-console.yml` |
+| Admin | admin.freeappstore.online | `platform/workers/admin/` | push to `main` → `deploy-admin.yml` |
 
 ## Deploy the agent worker
 
@@ -147,5 +146,4 @@ sign-in redirects fail with "redirect_uri not associated with this application".
 | agent.freeappstore.online | Agent worker | Workers Domains API (auto DNS) |
 | api.freeappstore.online | API worker | Custom domain in wrangler.jsonc |
 | admin.freeappstore.online | Admin worker | Route in wrangler.toml |
-| publish.freeappstore.online | Publisher worker | Route in wrangler.toml |
 | *.freeappstore.online (apps) | Host worker | R2 + D1 routes table (host.freeappstore.online) |

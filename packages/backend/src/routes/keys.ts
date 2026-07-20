@@ -205,44 +205,30 @@ keysRoutes.get('/internal/keys/grants', async (c) => {
   return c.json({ grants, funded });
 });
 
-keysRoutes.post('/internal/keys/grants', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
-  const body = await c.req
-    .json<{
-      userId?: string;
-      provider?: string;
-      model?: string;
-      note?: string;
-      expiresAt?: string | null;
-      grantedBy?: string;
-    }>()
-    .catch(() => null);
-  const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '')
-    .trim()
-    .toLowerCase();
-  const model = String(body?.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
-  const note = body?.note ? String(body.note).trim().slice(0, 200) : null;
-  const expiresAt = body?.expiresAt ? String(body.expiresAt).trim() : null;
-  const grantedBy = body?.grantedBy ? String(body.grantedBy).trim().slice(0, 120) : 'admin';
+// Shared grant upsert/revoke. Both the internal (service-binding, token-auth)
+// and the session-admin (requireAdmin) routes funnel through these so the
+// validation + SQL live in one place; only auth + `grantedBy` differ per route.
+type GrantResult = { status: 200 | 400 | 404; body: Record<string, unknown> };
+type GrantInput = { userId?: string; provider?: string; model?: string; note?: string; expiresAt?: string | null };
 
-  if (!USER_ID_RE.test(userId))
-    return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  if (!COMP_PROVIDERS.has(provider))
-    return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
-  if (!model || model.length > 128)
-    return c.json({ ok: false, error: 'valid model is required' }, 400);
-  if (expiresAt && Number.isNaN(Date.parse(expiresAt)))
-    return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
-  const funded = !!compKeyFor(c.env, provider);
+async function applyGrant(env: Env, raw: GrantInput, grantedBy: string): Promise<GrantResult> {
+  const userId = String(raw.userId ?? '').trim();
+  const provider = String(raw.provider ?? '').trim().toLowerCase();
+  const model = String(raw.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
+  const note = raw.note ? String(raw.note).trim().slice(0, 200) : null;
+  const expiresAt = raw.expiresAt ? String(raw.expiresAt).trim() : null;
 
-  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
-    .bind(userId)
-    .first<{ id: string }>();
-  if (!user) return c.json({ ok: false, error: 'user not found' }, 404);
+  if (!USER_ID_RE.test(userId)) return { status: 400, body: { ok: false, error: 'valid userId is required' } };
+  if (!COMP_PROVIDERS.has(provider)) return { status: 400, body: { ok: false, error: `unknown grant provider: ${provider}` } };
+  if (!model || model.length > 128) return { status: 400, body: { ok: false, error: 'valid model is required' } };
+  if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return { status: 400, body: { ok: false, error: 'expiresAt must be an ISO date' } };
 
-  await ensureCompSchema(c.env.DB);
-  await c.env.DB.prepare(
+  const funded = !!compKeyFor(env, provider);
+  const user = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first<{ id: string }>();
+  if (!user) return { status: 404, body: { ok: false, error: 'user not found' } };
+
+  await ensureCompSchema(env.DB);
+  await env.DB.prepare(
     `INSERT INTO complimentary_grants (user_id, provider, model, granted_by, note, created_at, expires_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
@@ -254,20 +240,30 @@ keysRoutes.post('/internal/keys/grants', async (c) => {
   )
     .bind(userId, provider, model, grantedBy, note, Date.now(), expiresAt)
     .run();
-  return c.json({ ok: true, userId, provider, model, expiresAt, funded });
+  return { status: 200, body: { ok: true, userId, provider, model, expiresAt, funded } };
+}
+
+async function revokeGrant(env: Env, rawUserId: string): Promise<GrantResult> {
+  const userId = String(rawUserId ?? '').trim();
+  if (!USER_ID_RE.test(userId)) return { status: 400, body: { ok: false, error: 'valid userId is required' } };
+  await ensureCompSchema(env.DB);
+  const result = await env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(userId).run();
+  return { status: 200, body: { ok: true, removed: (result.meta?.changes ?? 0) > 0 } };
+}
+
+keysRoutes.post('/internal/keys/grants', async (c) => {
+  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  const body = await c.req.json<GrantInput & { grantedBy?: string }>().catch(() => null);
+  const grantedBy = body?.grantedBy ? String(body.grantedBy).trim().slice(0, 120) : 'admin';
+  const r = await applyGrant(c.env, body ?? {}, grantedBy);
+  return c.json(r.body, r.status);
 });
 
 keysRoutes.post('/internal/keys/grants/delete', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json<{ userId?: string }>().catch(() => null);
-  const userId = String(body?.userId ?? '').trim();
-  if (!USER_ID_RE.test(userId))
-    return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  await ensureCompSchema(c.env.DB);
-  const result = await c.env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
-    .bind(userId)
-    .run();
-  return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
+  const r = await revokeGrant(c.env, String(body?.userId ?? ''));
+  return c.json(r.body, r.status);
 });
 
 // ── Product-session admin grant management ────────────────────────────
@@ -345,65 +341,16 @@ keysRoutes.get('/admin/ai-grants', async (c) => {
 
 keysRoutes.post('/admin/ai-grants', async (c) => {
   const admin = await requireAdmin(c);
-  const body = await c.req
-    .json<{
-      userId?: string;
-      provider?: string;
-      model?: string;
-      note?: string;
-      expiresAt?: string | null;
-    }>()
-    .catch(() => null);
-  const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '')
-    .trim()
-    .toLowerCase();
-  const model = String(body?.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
-  const note = body?.note ? String(body.note).trim().slice(0, 200) : null;
-  const expiresAt = body?.expiresAt ? String(body.expiresAt).trim() : null;
-
-  if (!USER_ID_RE.test(userId))
-    return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  if (!COMP_PROVIDERS.has(provider))
-    return c.json({ ok: false, error: `unknown grant provider: ${provider}` }, 400);
-  if (!model || model.length > 128)
-    return c.json({ ok: false, error: 'valid model is required' }, 400);
-  if (expiresAt && Number.isNaN(Date.parse(expiresAt)))
-    return c.json({ ok: false, error: 'expiresAt must be an ISO date' }, 400);
-  const funded = !!compKeyFor(c.env, provider);
-
-  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
-    .bind(userId)
-    .first<{ id: string }>();
-  if (!user) return c.json({ ok: false, error: 'user not found' }, 404);
-
-  await ensureCompSchema(c.env.DB);
-  await c.env.DB.prepare(
-    `INSERT INTO complimentary_grants (user_id, provider, model, granted_by, note, created_at, expires_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET
-       provider = excluded.provider,
-       model = excluded.model,
-       granted_by = excluded.granted_by,
-       note = excluded.note,
-       expires_at = excluded.expires_at`,
-  )
-    .bind(userId, provider, model, admin.githubLogin || admin.login, note, Date.now(), expiresAt)
-    .run();
-  return c.json({ ok: true, userId, provider, model, expiresAt, funded });
+  const body = await c.req.json<GrantInput>().catch(() => null);
+  const r = await applyGrant(c.env, body ?? {}, admin.githubLogin || admin.login);
+  return c.json(r.body, r.status);
 });
 
 keysRoutes.post('/admin/ai-grants/delete', async (c) => {
   await requireAdmin(c);
   const body = await c.req.json<{ userId?: string }>().catch(() => null);
-  const userId = String(body?.userId ?? '').trim();
-  if (!USER_ID_RE.test(userId))
-    return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  await ensureCompSchema(c.env.DB);
-  const result = await c.env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
-    .bind(userId)
-    .run();
-  return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
+  const r = await revokeGrant(c.env, String(body?.userId ?? ''));
+  return c.json(r.body, r.status);
 });
 
 keysRoutes.post('/admin/ai-keys', async (c) => {

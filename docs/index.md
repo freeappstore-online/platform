@@ -31,9 +31,9 @@ A free, open-source PWA app store. Every app gets its own subdomain (`yourapp.fr
 |----------|-----|
 | Store | [freeappstore.online](https://freeappstore.online) |
 | API | [api.freeappstore.online](https://api.freeappstore.online) |
-| VibeCode builder | [console.freeappstore.online/create](https://console.freeappstore.online/create) |
+| VibeCode builder | [freeappstore.online/app/build](https://freeappstore.online/app/build) |
 | Console | [freeappstore.online/app](https://freeappstore.online/app/) |
-| Publisher | [publish.freeappstore.online](https://publish.freeappstore.online) |
+| Publisher | [freeappstore.online/app/](https://freeappstore.online/app/) |
 | MCP | [mcp.freeappstore.online/mcp](https://mcp.freeappstore.online/mcp) |
 | GitHub | [github.com/freeappstore-online](https://github.com/freeappstore-online) |
 | npm SDK | [@freeappstore/sdk](https://www.npmjs.com/package/@freeappstore/sdk) |

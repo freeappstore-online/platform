@@ -87,7 +87,7 @@ See the full [SDK Reference](sdk.md).
 
 ## Using VibeCode (AI builder)
 
-Don't want to code? Go to [console.freeappstore.online/create](https://console.freeappstore.online/create), describe your app in plain English, and the AI builds and deploys it for you.
+Don't want to code? Go to [freeappstore.online/app/build](https://freeappstore.online/app/build), describe your app in plain English, and the AI builds and deploys it for you.
 
 ## Next steps
 

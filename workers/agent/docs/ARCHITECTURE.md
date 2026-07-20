@@ -7,7 +7,7 @@ Users describe what they want, the AI agent writes code, and deploys it — all 
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  console.freeappstore.online/create                              │
+│  freeappstore.online/app/build                              │
 │  ┌──────────────────────┐  ┌──────────────────────────┐ │
 │  │  Chat panel           │  │  Preview panel           │ │
 │  │  (SSE streaming)      │  │  (iframe of deployed app)│ │

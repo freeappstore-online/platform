@@ -261,7 +261,7 @@ The wrangler OAuth token does NOT have DNS write permission. There is no `zone:w
 
 ## How to Add a New App
 
-> **Historical reference only.** The current workflow is **publish.freeappstore.online** (creators) or the admin API (maintainers). The recipes below remain documented for emergency manual recovery only — e.g. portal outage. Do not run them as the normal path; see [`SKILLS.md`](./SKILLS.md) for the rules AI agents and creators should follow.
+> **Historical reference only.** The current workflow is **freeappstore.online/app/** (creators) or the admin API (maintainers). The recipes below remain documented for emergency manual recovery only — e.g. portal outage. Do not run them as the normal path; see [`SKILLS.md`](./SKILLS.md) for the rules AI agents and creators should follow.
 
 ### 1. Create the repo
 
