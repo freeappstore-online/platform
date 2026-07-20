@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { expect, type Page, test } from '@playwright/test';
 import type { ViewportReport } from '../../quality/src/index.js';
 
@@ -33,8 +35,33 @@ declare const process: { env: Record<string, string | undefined> };
 const FIXTURE_BASE = (
   process.env.FAS_FIXTURE_BASE ?? 'https://freegamestore.online/audit-fixture'
 ).replace(/\/+$/, '');
-/** Pinned to the version the fixture HTML imports. Bump together. */
-const REPORTER_ESM = 'https://esm.sh/@freeappstore/quality@0.1.0';
+/**
+ * The reporter this suite measures with. We inject the LOCAL built
+ * @freeappstore/quality bundle into the page instead of `import()`-ing it
+ * from esm.sh at runtime: the CDN import failed intermittently in CI
+ * ("Failed to fetch dynamically imported module") and red-lit this monitor
+ * even though prod was healthy. The dist bundle is self-contained (zero
+ * imports — see packages/quality/dist/index.js), so a Blob-URL dynamic
+ * import resolves offline with no third-party dependency in the hot path.
+ *
+ * This is the same version the spec's ViewportReport type is pinned to
+ * (../../quality/src), so the measurement and the assertions stay in lockstep
+ * automatically. The fixture HTML still imports its own copy from esm.sh to
+ * render its on-page report, but that's cosmetic — snapshot() reads the raw
+ * DOM, so a slow/failed fixture-side import can't affect our verdict.
+ */
+const REPORTER_SOURCE = readFileSync(
+  fileURLToPath(new URL('../../quality/dist/index.js', import.meta.url)),
+  'utf8',
+);
+
+// The fixture ships a strict CSP (script-src 'self' + a sha256 inline hash +
+// cloudflareinsights only). That's correct for prod, but it blocks the way we
+// load the reporter — both the old esm.sh `import()` and the Blob-URL import
+// above are refused by script-src, which is what red-lit this monitor. Disable
+// CSP enforcement for THIS suite only: we're measuring layout, not the page's
+// CSP, and the storefront suites keep CSP intact.
+test.use({ bypassCSP: true });
 
 /**
  * If the fixture host has the production *.freegamestore.online shape,
@@ -108,10 +135,15 @@ async function snapshotAt(
   // browser's own "fonts settled" signal — deterministic and faster
   // than a fixed timeout.
   await page.evaluate(() => document.fonts?.ready ?? Promise.resolve());
-  return await page.evaluate(async (esmUrl) => {
-    const m = await import(/* @vite-ignore */ esmUrl);
-    return m.snapshot() as ViewportReport;
-  }, REPORTER_ESM);
+  return await page.evaluate(async (src) => {
+    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+    try {
+      const m = await import(/* @vite-ignore */ url);
+      return m.snapshot() as ViewportReport;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }, REPORTER_SOURCE);
 }
 
 /**
