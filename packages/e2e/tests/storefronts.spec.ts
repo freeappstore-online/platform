@@ -25,7 +25,15 @@ test('freegamestore.online homepage renders the games grid', async ({ page }) =>
 test('an app detail page has the modern layout: split + phone-frame + history', async ({
   page,
 }) => {
-  await page.goto('https://freeappstore.online/apps/tip');
+  // Pick whatever app is currently listed rather than hardcoding one —
+  // apps get delisted (the old hardcoded `tip` now 404s), but the storefront
+  // detail *template* is what we're actually testing. Derive the id from the
+  // first grid card's link (it points at the app's live subdomain).
+  await page.goto('https://freeappstore.online');
+  const appHref = await page.locator('.app-card a').first().getAttribute('href');
+  const id = new URL(appHref!).hostname.split('.')[0];
+
+  await page.goto(`https://freeappstore.online/apps/${id}`);
   // The split container exists with both halves.
   await expect(page.locator('.app-split')).toBeVisible();
   await expect(page.locator('.app-split-info')).toBeVisible();
@@ -33,7 +41,7 @@ test('an app detail page has the modern layout: split + phone-frame + history', 
   // Phone-frame iframe renders the live app.
   const iframe = page.locator('.phone-frame iframe');
   await expect(iframe).toBeVisible();
-  await expect(iframe).toHaveAttribute('src', /tip\.freeappstore\.online/);
+  await expect(iframe).toHaveAttribute('src', new RegExp(`${id}\\.freeappstore\\.online`));
   // Recent updates section present.
   await expect(page.getByRole('heading', { name: 'Recent updates' })).toBeVisible();
 });
