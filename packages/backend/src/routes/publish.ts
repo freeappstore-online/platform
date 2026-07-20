@@ -231,6 +231,82 @@ publishRoutes.post('/publish', async (c) => {
   });
 });
 
+interface UnpublishBody {
+  id: string;
+  /** "apps" only — FAS serves FreeAppStore. */
+  store?: 'apps';
+  /** When true, also delete the GitHub repo (not just archive/delist). */
+  deleteRepo?: boolean;
+}
+
+/**
+ * Unpublish (deprovision) an app. Symmetric with `/publish`: session-gated on
+ * the public API, then forwarded to the CF-Access-gated admin Worker via the
+ * ADMIN service binding (which bypasses the edge, so Access doesn't run). This
+ * lets the app owner — or an admin — tear down an app through the same trusted
+ * path publish uses, without exposing admin.freeappstore.online to CI or
+ * creators directly. Admin's `/api/deprovision` removes the registry entry,
+ * D1 route, R2 objects and DNS (+ the repo when deleteRepo is set).
+ */
+publishRoutes.post('/unpublish', async (c) => {
+  let user;
+  try {
+    user = await requireUser(c);
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+
+  let body: UnpublishBody;
+  try {
+    body = (await c.req.json()) as UnpublishBody;
+  } catch {
+    return c.text('invalid json', 400);
+  }
+
+  if (!body.id || !APP_ID_RE.test(body.id)) {
+    return c.text('valid app id required', 400);
+  }
+  const store: 'apps' = (body.store ?? 'apps') as 'apps';
+  if (store !== 'apps') return c.text('store must be "apps"', 400);
+
+  // Ownership gate: only the app's owner or a platform admin may unpublish.
+  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ? AND store = ?')
+    .bind(body.id, store)
+    .first<{ owner_login: string }>();
+  if (!row) return c.json({ error: 'not_found', appId: body.id }, 404);
+  const isOwner = row.owner_login?.toLowerCase() === user.githubLogin.toLowerCase();
+  if (!isOwner && !isAdminLogin(user.githubLogin, c.env)) {
+    return c.text('only the app owner or an admin may unpublish', 403);
+  }
+
+  if (!c.env.ADMIN) {
+    return c.json({ error: 'admin_binding_not_configured' }, 503);
+  }
+
+  const adminRes = await c.env.ADMIN.fetch('https://admin/api/deprovision', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Token': c.env.ADMIN_PROVISION_TOKEN ?? '',
+    },
+    body: JSON.stringify({ id: body.id, store, deleteRepo: body.deleteRepo === true }),
+  });
+
+  const adminText = await adminRes.text();
+  let adminBody: unknown = adminText;
+  try {
+    adminBody = JSON.parse(adminText);
+  } catch {
+    // non-JSON passthrough
+  }
+  if (!adminRes.ok) {
+    return c.json({ error: 'admin_deprovision_failed', status: adminRes.status, admin: adminBody }, 502);
+  }
+
+  return c.json({ appId: body.id, store, admin: adminBody });
+});
+
 interface AdminStep {
   name: string;
   status: 'ok' | 'skip' | 'fail';

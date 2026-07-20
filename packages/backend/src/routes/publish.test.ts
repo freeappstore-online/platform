@@ -383,3 +383,142 @@ describe('POST /v1/publish', () => {
     expect(body.error).toBe('wrong_store');
   });
 });
+
+/**
+ * DB mock for the unpublish path: resolves the session user (SELECT id,
+ * github_login) AND the app-ownership lookup (SELECT owner_login FROM apps).
+ * ownerLogin=null means the app row doesn't exist.
+ */
+function unpublishDB(
+  user: { id: string; github_login: string; avatar_url: string | null } | null,
+  ownerLogin: string | null,
+): D1Database {
+  const prepare = (sql: string): D1PreparedStatement => {
+    const trimmed = sql.replace(/\s+/g, ' ').trim();
+    const stmt: Partial<D1PreparedStatement> = {
+      bind: () => stmt as D1PreparedStatement,
+      first: async <T>() => {
+        if (trimmed.startsWith('SELECT id, github_login')) return (user ?? null) as T | null;
+        if (trimmed.startsWith('SELECT owner_login FROM apps')) {
+          return (ownerLogin ? { owner_login: ownerLogin } : null) as T | null;
+        }
+        return null;
+      },
+    };
+    return stmt as D1PreparedStatement;
+  };
+  return { prepare } as unknown as D1Database;
+}
+
+describe('POST /v1/unpublish', () => {
+  it('returns 401 with no auth', async () => {
+    const res = await app.request(
+      '/v1/unpublish',
+      { method: 'POST', body: JSON.stringify({ id: 'my-app' }) },
+      baseEnv(unpublishDB(null, null)),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 for an invalid app id', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/unpublish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'Bad Id!' }),
+      },
+      baseEnv(unpublishDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, null)),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the app does not exist', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/unpublish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'ghost-app' }),
+      },
+      baseEnv(unpublishDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, null)),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 403 when the caller is neither owner nor admin', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      '/v1/unpublish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'someone-elses-app' }),
+      },
+      baseEnv(unpublishDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, 'other-owner'), {
+        ADMIN_GITHUB_LOGINS: '',
+      }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it('forwards owner unpublish to admin /api/deprovision with deleteRepo', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ ok: true, steps: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+      capture: calls,
+    });
+    const res = await app.request(
+      '/v1/unpublish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'my-app', deleteRepo: true }),
+      },
+      // caller 'me' owns the app
+      baseEnv(unpublishDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, 'me'), {
+        ADMIN: admin,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(calls).toHaveLength(1);
+    const call = calls[0]!;
+    expect(call.url).toMatch(/\/api\/deprovision$/);
+    const sentBody = JSON.parse(call.init.body as string);
+    expect(sentBody.id).toBe('my-app');
+    expect(sentBody.store).toBe('apps');
+    expect(sentBody.deleteRepo).toBe(true);
+    // Service binding carries the shared token, not CF-Access headers.
+    const headers = call.init.headers as Record<string, string>;
+    expect(headers['X-Internal-Token']).toBeDefined();
+  });
+
+  it('lets a platform admin unpublish an app they do not own', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ ok: true, steps: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    });
+    const res = await app.request(
+      '/v1/unpublish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'someone-elses-app' }),
+      },
+      baseEnv(unpublishDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, 'other-owner'), {
+        ADMIN: admin,
+        ADMIN_GITHUB_LOGINS: 'me',
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+});
