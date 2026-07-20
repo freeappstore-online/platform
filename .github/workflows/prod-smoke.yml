@@ -66,15 +66,34 @@ jobs:
             console.log('  modules:', Object.keys(fas).join(', '))
           "
 
-      - name: 3. authenticated round-trip — apps/mine
+      # Mint a FRESH session each run by exchanging a long-lived, low-privilege
+      # GitHub token — same pattern as FGS's prod-create-canary. Avoids the old
+      # PROD_SMOKE_SESSION_TOKEN, which was a 30-day session that silently expired
+      # and red-lit the monitor. FAS_E2E_GITHUB_TOKEN is a fine-grained PAT for the
+      # smoke user with read:user only (the /auth/exchange endpoint just calls
+      # GitHub /user to identify + upsert the user, then mints a fas session).
+      - name: Mint a fresh session (exchange the canary GitHub token)
         env:
-          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
+          FAS_E2E_GITHUB_TOKEN: ${{ secrets.FAS_E2E_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${SESSION_TOKEN:-}" ]; then
-            echo "::warning::PROD_SMOKE_SESSION_TOKEN secret not set — skipping auth-required steps"
+          if [ -z "${FAS_E2E_GITHUB_TOKEN:-}" ]; then
+            echo "::warning::FAS_E2E_GITHUB_TOKEN not set — authenticated smoke steps (3-6) will skip"
             exit 0
           fi
+          resp=$(curl -sS -X POST "$API_BASE/v1/auth/exchange" \
+            -H "Content-Type: application/json" \
+            --data "{\"githubToken\":\"$FAS_E2E_GITHUB_TOKEN\"}")
+          token=$(printf '%s' "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); t=d.get('sessionToken'); print(t) if t else sys.exit('exchange failed: '+str(d)[:200])")
+          login=$(printf '%s' "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user',{}).get('login','?'))")
+          echo "::add-mask::$token"
+          echo "SESSION_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "  minted a fresh session for @$login"
+
+      - name: 3. authenticated round-trip — apps/mine
+        if: env.SESSION_TOKEN != ''
+        run: |
+          set -euo pipefail
           # apps/mine returns the session-owner's app list; we just check it's a 200 + JSON object
           body=$(curl -sS -H "Authorization: Bearer $SESSION_TOKEN" "$API_BASE/v1/apps/mine")
           echo "  /apps/mine returned $(echo "$body" | wc -c) bytes"
@@ -87,8 +106,6 @@ jobs:
           PY
 
       - name: 4. KV round-trip
-        env:
-          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
         if: env.SESSION_TOKEN != ''
         run: |
           set -euo pipefail
@@ -116,8 +133,6 @@ jobs:
           test "$code" = "204"
 
       - name: 5. Proxy register + fetch + cleanup
-        env:
-          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
         if: env.SESSION_TOKEN != ''
         run: |
           set -euo pipefail
@@ -154,8 +169,6 @@ jobs:
           echo "  ✓ cleanup done"
 
       - name: 6. Rooms WebSocket round-trip via published SDK
-        env:
-          SESSION_TOKEN: ${{ secrets.PROD_SMOKE_SESSION_TOKEN }}
         if: env.SESSION_TOKEN != ''
         run: |
           set -euo pipefail
