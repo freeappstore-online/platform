@@ -37,6 +37,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # auditor-fixture.spec.ts injects the LOCAL @freeappstore/quality reporter
+      # (packages/quality/dist/index.js) into the page instead of pulling it
+      # from esm.sh at runtime. dist/ is gitignored, so build it here.
+      - name: Build quality reporter (injected by auditor-fixture spec)
+        run: pnpm --filter @freeappstore/quality build
+
       - name: Install Playwright browsers
         working-directory: packages/e2e
         run: pnpm exec playwright install --with-deps chromium webkit
