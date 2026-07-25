@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contentType, etagsMatch, type Route, r2KeyFor, resolveRoute, securityHeaders } from "../host";
+import { contentType, etagsMatch, type Route, r2KeyFor, resolveRoute, robotsTxtFor, securityHeaders, sitemapXmlFor } from "../host";
 
 // Minimal D1 stub — verifies the SQL shape and parameter binding without
 // spinning up a real D1. Real schema integration is exercised by the
@@ -204,3 +204,22 @@ describe("etagsMatch (304 Not Modified)", () => {
   });
 });
 
+describe("generated crawl documents", () => {
+  it("builds robots.txt with a matching sitemap URL", () => {
+    expect(robotsTxtFor("https://agentcoder.space")).toBe(`User-agent: *
+Allow: /
+
+Sitemap: https://agentcoder.space/sitemap.xml
+`);
+  });
+
+  it("builds a minimal sitemap for the current app origin", () => {
+    const xml = sitemapXmlFor("https://agentcoder.space");
+    expect(xml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
+    expect(xml).toContain("<loc>https://agentcoder.space/</loc>");
+  });
+
+  it("escapes XML-sensitive origin characters defensively", () => {
+    expect(sitemapXmlFor("https://example.com/?a=1&b=2")).toContain("<loc>https://example.com/?a=1&amp;b=2/</loc>");
+  });
+});

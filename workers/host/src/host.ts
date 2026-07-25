@@ -70,6 +70,29 @@ export function etagsMatch(headerValue: string | null, objectEtag: string): bool
   return trimmed.split(",").some((t) => t.trim() === objectEtag);
 }
 
+export function robotsTxtFor(origin: string): string {
+  return `User-agent: *
+Allow: /
+
+Sitemap: ${origin}/sitemap.xml
+`;
+}
+
+export function sitemapXmlFor(origin: string): string {
+  const loc = xmlEscape(`${origin}/`);
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${loc}</loc>
+  </url>
+</urlset>
+`;
+}
+
+function xmlEscape(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+
 /**
  * Build the security headers we attach to every R2-served response. Split
  * out from the index.ts respond() helper so the policy is unit-testable

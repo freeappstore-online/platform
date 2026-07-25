@@ -7,7 +7,17 @@
  * `_headers` file.
  */
 
-import { contentType, type Env, etagsMatch, type Route, r2KeyFor, resolveRoute, securityHeaders } from "./host";
+import {
+  contentType,
+  type Env,
+  etagsMatch,
+  type Route,
+  r2KeyFor,
+  resolveRoute,
+  robotsTxtFor,
+  securityHeaders,
+  sitemapXmlFor,
+} from "./host";
 
 /**
  * Platform-infra subdomains: NOT apps. The wildcard route catches them just
@@ -61,7 +71,11 @@ const PLATFORM_SUBDOMAINS: Record<string, PlatformDispatch> = {
   // only used as an email FROM address (RESEND_API_KEY, see
   // platform/packages/backend/src/lib/email.ts). Returning 404 (not 502)
   // because nothing is misconfigured — there is just no web target.
-  auth: { type: "gone", message: "auth.freeappstore.online is not a web service. Auth flows live at api.freeappstore.online/v1/auth/*; the `auth@` mailbox is for email only." },
+  auth: {
+    type: "gone",
+    message:
+      "auth.freeappstore.online is not a web service. Auth flows live at api.freeappstore.online/v1/auth/*; the `auth@` mailbox is for email only.",
+  },
 };
 
 export default {
@@ -147,6 +161,9 @@ async function serve(
     return new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } });
   }
 
+  const crawlResponse = generatedCrawlResponse(url, method);
+  if (crawlResponse) return crawlResponse;
+
   const key = r2KeyFor(route, url.pathname);
   let obj = await bucket.get(key);
   let servedKey = key;
@@ -180,6 +197,17 @@ async function serve(
   }
 
   return respond(obj, ct, method);
+}
+
+function generatedCrawlResponse(url: URL, method: string): Response | null {
+  if (url.pathname !== "/robots.txt" && url.pathname !== "/sitemap.xml") return null;
+
+  const isRobots = url.pathname === "/robots.txt";
+  const body = isRobots ? robotsTxtFor(url.origin) : sitemapXmlFor(url.origin);
+  const headers = securityHeaders({ htmlCache: true });
+  headers.set("content-type", isRobots ? "text/plain; charset=utf-8" : "application/xml; charset=utf-8");
+  headers.set("cache-control", "public, max-age=3600, must-revalidate");
+  return new Response(method === "HEAD" ? null : body, { headers });
 }
 
 function respond(obj: R2ObjectBody, ct: string, method: string): Response {
