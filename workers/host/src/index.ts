@@ -96,6 +96,13 @@ export default {
       return await dispatchPlatform(req, env, slug, host);
     }
 
+    // Cloudflare Managed robots can turn a /robots.txt redirect into a 200
+    // managed-only robots file, so serve crawl files directly on www hosts.
+    if (slug === "www" && zone !== "freeappstore.online") {
+      const crawlResponse = generatedCrawlResponse(url, req.method, `https://${zone}`);
+      if (crawlResponse) return crawlResponse;
+    }
+
     // www.customdomain → redirect to apex
     if (slug === "www" && zone !== "freeappstore.online") {
       return Response.redirect(`https://${zone}${url.pathname}${url.search}`, 301);
@@ -199,11 +206,11 @@ async function serve(
   return respond(obj, ct, method);
 }
 
-function generatedCrawlResponse(url: URL, method: string): Response | null {
+function generatedCrawlResponse(url: URL, method: string, origin = url.origin): Response | null {
   if (url.pathname !== "/robots.txt" && url.pathname !== "/sitemap.xml") return null;
 
   const isRobots = url.pathname === "/robots.txt";
-  const body = isRobots ? robotsTxtFor(url.origin) : sitemapXmlFor(url.origin);
+  const body = isRobots ? robotsTxtFor(origin) : sitemapXmlFor(origin);
   const headers = securityHeaders({ htmlCache: true });
   headers.set("content-type", isRobots ? "text/plain; charset=utf-8" : "application/xml; charset=utf-8");
   headers.set("cache-control", "public, max-age=3600, must-revalidate");
