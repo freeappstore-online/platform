@@ -79,7 +79,7 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
   const level = c.req.query('level');
   const category = c.req.query('category');
   const since = c.req.query('since');
-  const limit = Math.min(Number(c.req.query('limit') || 100), 500);
+  const limit = Math.max(1, Math.min(Number(c.req.query('limit') || 100), 500));
   const userId = c.req.query('user_id');
 
   let sql =
