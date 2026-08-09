@@ -12,6 +12,13 @@ AGENT_BASE = "https://agent.freeappstore.online"
 pattern = "mcp.freeappstore.online/*"
 zone_name = "freeappstore.online"
 
+# Secrets (set via `wrangler secret put`):
+#   SESSION_SIGNING_KEY — HMAC key for session verification + OAuth
+
+[[kv_namespaces]]
+binding = "OAUTH_KV"
+id = "89a54092cb7d41329234dbbb693324ac"
+
 [durable_objects]
 bindings = [
   { name = "MCP_OBJECT", class_name = "FasMcpAgent" }

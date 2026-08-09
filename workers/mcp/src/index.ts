@@ -1,16 +1,22 @@
+import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { fetchTemplateFiles, listRepoFiles, pushFiles, readRepoFile, type RepoFile, textToB64 } from "./github.js";
+import { AuthHandler } from "./auth-handler.js";
+import { sessionPrefix, auditLog } from "./lib.js";
+import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
 
 interface Env {
   API_BASE: string;
   GITHUB_ORG: string;
   AGENT_BASE: string;
   MCP_OBJECT: DurableObjectNamespace;
-  /** Org token with contents:write on the store org — powers the write tools
-   *  (scaffold push + update_files). Writes are gated by verified ownership. */
   GITHUB_TOKEN?: string;
+  SESSION_SIGNING_KEY?: string;
+  OAUTH_KV?: KVNamespace;
+  /** When "1", all non-read tools are disabled server-wide. */
+  MCP_READ_ONLY?: string;
 }
 
 // GitHub Actions API (public repos, no auth needed)
@@ -71,20 +77,17 @@ async function ownsApp(apiBase: string, token: string, appId: string): Promise<b
 
 const txt = (text: string) => ({ content: [{ type: "text" as const, text }] });
 
-// Scope VibeCode agent sessions to the caller. The agent worker keys its
-// Durable Object by the raw session id, with no per-user namespacing — so
-// without this a passed/guessed session_id could reach another user's build
-// session (its files + conversation). We force every session under the
-// caller's identity, so a user can only ever create/read their own.
-function sessionPrefix(userId?: string): string {
-  const u = (userId ?? "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 24) || "anon";
-  return `mcp-${u}-`;
-}
+// sessionPrefix, auditLog, decodeUid are in lib.ts for testability.
 
 export interface McpProps extends Record<string, unknown> {
   userId?: string;
   token?: string;
+  readOnly?: boolean;
+  /** MCP scopes granted by the OAuth token (null/undefined → all scopes). */
+  scopes?: string[] | null;
 }
+
+
 
 export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
   server = new McpServer({
@@ -92,20 +95,34 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     version: "0.2.0",
   });
 
-  /** Called (via DO RPC) by the worker's fetch handler before each tool-call
-   *  request is dispatched. agents@0.0.74's Streamable HTTP serve() doesn't
-   *  propagate ctx.props, so we inject the authenticated session here — in
-   *  memory (for this live instance) and storage (survives a restart). */
-  async setAuth(props: McpProps): Promise<void> {
-    this.props = props;
-    try {
-      await (this as unknown as { ctx: { storage: { put(k: string, v: unknown): Promise<void> } } }).ctx.storage.put("props", props);
-    } catch {
-      /* in-memory set is enough for the immediately-following tool call */
-    }
+  // The OAuth provider only routes authenticated requests to this handler, so
+  // props (set in completeAuthorization) are always present for tool calls.
+  declare props: McpProps;
+
+  /** Safety context for the current authenticated user — scope/permission
+   *  gating + user-scoped KV audit. See safety.ts. */
+  safety(): SafetyContext {
+    return {
+      env: this.env,
+      subject: this.props.userId,
+      scopes: this.props.scopes ?? null,
+      readOnly: this.props.readOnly,
+    };
   }
 
   async init() {
+    // ── mcp_audit_log ──────────────────────────────────────────
+    this.server.tool(
+      "mcp_audit_log",
+      "Read your recent MCP audit events for this account — every write/dry-run/denied tool action, newest first. User-scoped.",
+      { limit: z.number().int().min(1).max(200).optional().describe("Max events to return (default 50)") },
+      async ({ limit }) => {
+        const denied = await requirePermission(this.safety(), "read", "mcp_audit_log", { limit });
+        if (denied) return denied;
+        return txt(JSON.stringify(await listAuditEvents(this.safety(), limit ?? 50), null, 2));
+      },
+    );
+
     // ── list_apps ──────────────────────────────────────────────
     this.server.tool(
       "list_apps",
@@ -376,19 +393,34 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
     // ── create_app (provision + scaffold + go live) ────────────
     this.server.tool(
       "create_app",
-      "Create AND publish a brand-new app on FreeAppStore, end to end. Provisions the GitHub repo + R2 hosting + store listing (same as `fas publish`), scaffolds the chosen template, and pushes it so the app deploys live at <app_id>.freeappstore.online (~1-2 min). Then use read_file/update_files to build it out. Requires authentication.",
+      "Create AND publish a brand-new app on FreeAppStore, end to end. Provisions the GitHub repo + R2 hosting + store listing (same as `fas publish`), scaffolds the chosen template, and pushes it so the app deploys live at <app_id>.freeappstore.online (~1-2 min). Then use read_file/update_files to build it out. Requires authentication. Set dry_run=true to validate without creating.",
       {
         app_id: z.string().describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
-        category: z.string().describe("utilities, productivity, learning, lifestyle, finance, health, creative, or social"),
+        category: z.string().describe("Learning, Strategy, Discovery, Brain Training, Social, Productivity, Health & Fitness, Finance, News & Weather, Utilities, or Other"),
         oneliner: z.string().describe("One-line description shown in the store"),
         type: z.enum(["standalone", "connected"]).optional().describe("standalone (no backend, default) or connected (uses the SDK: auth/kv/rooms/etc.)"),
         description: z.string().optional().describe("Longer description (defaults to the oneliner)"),
+        dry_run: z.boolean().optional().describe("If true, validate inputs and return what would happen without actually creating the app"),
       },
-      async ({ app_id, category, oneliner, type, description }) => {
+      async ({ app_id, category, oneliner, type, description, dry_run }) => {
+        if (this.props.readOnly) return txt("Read-only mode is active. Write tools are disabled.");
         const token = this.props.token;
         if (!token) return txt("Not authenticated. Connect with a FAS session token to create apps.");
+        const denied = await requirePermission(this.safety(), "write", "create_app", { app_id, category, type });
+        if (denied) return denied;
         if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");
         const kind = type ?? "standalone";
+        auditLog("create_app", this.props.userId, { app_id, category, kind, dry_run: !!dry_run });
+        if (dry_run) {
+          await audit(this.safety(), { tool: "create_app", action: "dry_run", input: { app_id, category, kind } });
+          return txt(
+            `[DRY RUN] Would create **${app_id}** (${kind}):\n` +
+            `- Provision: GitHub repo \`${this.env.GITHUB_ORG}/${app_id}\` + R2 hosting + store listing\n` +
+            `- Scaffold: \`template-${kind}\` with APPNAME→${app_id} substitution\n` +
+            `- Deploy: push to main → GitHub Actions → live at https://${app_id}.freeappstore.online\n` +
+            `- Category: ${category}\n- Oneliner: ${oneliner}\n\nNo changes made. Remove dry_run to execute.`,
+          );
+        }
         // 1. Provision via the same backend endpoint `fas publish` uses.
         const prov = (await fasPost(this.env.API_BASE, "/v1/publish", token, {
           name: app_id, store: "apps", category, type: kind, oneliner, description: description || oneliner,
@@ -399,8 +431,9 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
           const templateRepo = kind === "connected" ? "template-connected" : "template-standalone";
           const files = await fetchTemplateFiles(this.env.GITHUB_ORG, templateRepo, this.env.GITHUB_TOKEN, app_id);
           await pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, files, `Initial ${app_id} — scaffolded via MCP`);
+          await audit(this.safety(), { tool: "create_app", action: "success", input: { app_id, category, kind }, result: { url: `https://${app_id}.freeappstore.online` } });
           return txt(
-            `✅ Created **${app_id}** (${kind}).\n` +
+            `Created **${app_id}** (${kind}).\n` +
             `Live in ~1-2 min: https://${app_id}.freeappstore.online\n` +
             `Repo: https://github.com/${this.env.GITHUB_ORG}/${app_id}\n` +
             `Listing: https://freeappstore.online/apps/${app_id}\n\n` +
@@ -449,6 +482,10 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
       async ({ prompt, provider, model, session_id }) => {
         const token = this.props.token;
         if (!token) return txt("Not authenticated. Connect with a FAS session token.");
+        const denied = await requirePermission(this.safety(), "runtime", "agent_build", { provider: provider ?? "anthropic" });
+        if (denied) return denied;
+        auditLog("agent_build", this.props.userId, { provider: provider ?? "anthropic" });
+        await audit(this.safety(), { tool: "agent_build", action: "success", input: { provider: provider ?? "anthropic" } });
         const prov = provider ?? "anthropic";
         const defaultModel: Record<string, string> = {
           anthropic: "claude-sonnet-4-6",
@@ -496,18 +533,10 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
               if (!line) continue;
               try {
                 const ev = JSON.parse(line.slice(6));
-                // The agent DO emits deploy progress as `deploy_status` (not
-                // `deploy`), and carries the URL only on the live phase — never a
-                // top-level appId. Derive the id from the live appUrl.
-                if (ev.type === "deploy_status" && ev.data) {
-                  try {
-                    const d = JSON.parse(ev.data);
-                    if (d.phase) phases.push(d.phase);
-                    if (d.phase === "live" && d.appUrl) {
-                      appId = String(d.appUrl).replace(/^https?:\/\//, "").split(".")[0];
-                    }
-                  } catch { /* */ }
+                if (ev.type === "deploy" && ev.data) {
+                  try { const d = JSON.parse(ev.data); if (d.phase) phases.push(d.phase); if (d.appId) appId = d.appId; } catch { /* */ }
                 }
+                if (ev.appId) appId = ev.appId;
               } catch { /* */ }
             }
           }
@@ -553,28 +582,81 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
       },
     );
 
+    // ── agent_activity (read your conversation with the build agent) ──
+    this.server.tool(
+      "agent_activity",
+      "Read your VibeCode conversation with the build agent for a session: your prompts, the agent's replies, and its tool actions (file writes, compliance checks, deploys). Scoped to sessions you own — the backend rejects others. Get a session_id from agent_build, or from the Console URL /create/<id>.",
+      {
+        session_id: z.string().describe("Session id — from agent_build, or the Console /create/<id> URL"),
+        limit: z.number().int().min(1).max(200).optional().describe("Max recent messages to return (default 30)"),
+      },
+      async ({ session_id, limit }) => {
+        const token = this.props.token;
+        if (!token) return txt("Not authenticated. Connect with a FAS session token.");
+        const res = await fetch(`${this.env.AGENT_BASE}/session/${encodeURIComponent(session_id)}/history`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.status === 403) return txt("That session isn't yours — agent sessions are scoped to your account.");
+        if (res.status === 404 || res.status === 400) return txt(`No session "${session_id}" found.`);
+        if (!res.ok) return txt(`History fetch failed (${res.status}).`);
+        const data = (await res.json()) as {
+          messages?: Array<{ role: string; content: string; toolCalls?: Array<{ name: string; input?: { path?: string; id?: string } }> }>;
+          appId?: string | null;
+          appName?: string | null;
+        };
+        const msgs = data.messages ?? [];
+        if (msgs.length === 0) return txt(`Session **${session_id}**${data.appId ? ` (${data.appId})` : ""}: no messages yet.`);
+        const recent = msgs.slice(-(limit ?? 30));
+        const rendered = recent
+          .map((m) => {
+            if (m.toolCalls?.length) {
+              const calls = m.toolCalls.map((tc) => `${tc.name}(${tc.input?.path ?? tc.input?.id ?? ""})`).join(", ");
+              return `[agent → tools] ${calls}`;
+            }
+            if (m.role === "tool") return `[tool result] ${m.content.slice(0, 200)}`;
+            return `**${m.role}:** ${m.content.slice(0, 1200)}`;
+          })
+          .join("\n\n");
+        return txt(`Session **${session_id}**${data.appName ? ` — ${data.appName}` : ""} (${msgs.length} messages, showing ${recent.length}):\n\n${rendered}`);
+      },
+    );
+
     // ── update_files (improve loop) ────────────────────────────
     this.server.tool(
       "update_files",
-      "Improve an app you own: write/overwrite one or more files in its repo with full new contents. The push auto-deploys to <app_id>.freeappstore.online in ~30-60s. Requires authentication + ownership.",
+      "Improve an app you own: write/overwrite one or more files in its repo with full new contents. The push auto-deploys to <app_id>.freeappstore.online in ~30-60s. Requires authentication + ownership. Set dry_run=true to validate without pushing.",
       {
         app_id: z.string().describe("App ID (must be one you published)"),
         files: z.array(z.object({ path: z.string(), content: z.string() })).describe("Files to write — each with the FULL new content. Paths relative to repo root, e.g. web/src/App.tsx"),
         message: z.string().optional().describe("Commit message"),
+        dry_run: z.boolean().optional().describe("If true, validate ownership and list files that would be written without pushing"),
       },
-      async ({ app_id, files, message }) => {
+      async ({ app_id, files, message, dry_run }) => {
         const token = this.props.token;
         if (!token) return txt("Not authenticated. Connect with a FAS session token.");
+        const denied = await requirePermission(this.safety(), "write", "update_files", { app_id, fileCount: files?.length ?? 0 });
+        if (denied) return denied;
         if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");
         if (!files?.length) return txt("No files provided.");
         if (!(await ownsApp(this.env.API_BASE, token, app_id)))
           return txt(`You don't own "${app_id}" (or it isn't published). Only the owner can update it.`);
+        auditLog("update_files", this.props.userId, { app_id, fileCount: files.length, dry_run: !!dry_run });
+        if (dry_run) {
+          await audit(this.safety(), { tool: "update_files", action: "dry_run", input: { app_id, fileCount: files.length } });
+          const listing = files.map((f) => `- ${f.path} (${f.content.length} chars)`).join("\n");
+          return txt(
+            `[DRY RUN] Would push ${files.length} file(s) to **${app_id}**:\n${listing}\n\n` +
+            `Commit: ${message || `Update ${app_id} via MCP`}\n` +
+            `Ownership: verified. No changes made. Remove dry_run to execute.`,
+          );
+        }
         const map = new Map<string, RepoFile>(
           files.map((f) => [f.path, { content: textToB64(f.content), encoding: "base64" as const }]),
         );
         try {
           const sha = await pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, map, message || `Update ${app_id} via MCP`);
-          return txt(`✅ Pushed ${files.length} file(s) to **${app_id}** (${sha.slice(0, 7)}). Auto-deploying to https://${app_id}.freeappstore.online (~30-60s). Use deploy_status to watch.`);
+          await audit(this.safety(), { tool: "update_files", action: "success", input: { app_id, fileCount: files.length }, result: { sha: sha.slice(0, 7) } });
+          return txt(`Pushed ${files.length} file(s) to **${app_id}** (${sha.slice(0, 7)}). Auto-deploying to https://${app_id}.freeappstore.online (~30-60s). Use deploy_status to watch.`);
         } catch (e) {
           return txt(`Push failed: ${String(e)}`);
         }
@@ -584,110 +666,19 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
 }
 
 // ── Auth middleware ─────────────────────────────────────────────
-// Pass the Bearer session token into the DO as a prop. We do NOT locally
-// HMAC-verify it: the FAS backend is the source of truth — every authenticated
-// tool calls it (provision, /v1/apps/mine, logs), and it rejects invalid or
-// expired tokens. The MCP doesn't hold the backend's session signing key (it's
-// never been exported), so local verification can't work anyway. We decode the
-// uid from the token payload best-effort, purely for context/logging.
-function decodeUid(token: string): string | undefined {
-  try {
-    const b64 = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
-    const json = JSON.parse(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "=")));
-    return typeof json.uid === "string" ? json.uid : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function authenticateRequest(request: Request): { userId?: string; token?: string } {
-  const auth = request.headers.get("Authorization") ?? "";
-  if (!auth.startsWith("Bearer ")) return {};
-  const token = auth.slice(7).trim();
-  if (!token) return {};
-  return { userId: decodeUid(token), token };
-}
-
-/**
- * Is this an MCP protocol client rather than a person in a browser?
- *
- * A client pointed at the origin instead of `/mcp` asks for the event stream
- * with `GET / Accept: text/event-stream` (the legacy SSE transport), or POSTs
- * JSON-RPC. Answering either with 200 and a short non-stream body tells the
- * client "stream opened" and then drops it — and the spec-correct response to a
- * dropped stream is to reconnect, so it redials ~1/sec, forever. The flood is
- * invisible: every response is a 200, nothing throws, no AI tokens are spent,
- * nothing is written to D1, and the MCP rate limiter only counts `tools/call`
- * messages carrying an account, which a bare GET has neither of.
- *
- * OPTIONS and HEAD deliberately return false so CORS preflight is unaffected.
- */
-function isProtocolClient(request: Request): boolean {
-  if (request.method === "POST") return true;
-  return (request.headers.get("accept") ?? "").includes("text/event-stream");
-}
-
-/** The JSON-RPC 405 the MCP spec requires from an endpoint with no stream to offer. */
-function wrongEndpoint(): Response {
-  return new Response(
-    JSON.stringify({
-      jsonrpc: "2.0",
-      id: null,
-      error: {
-        code: -32000,
-        message: "Method Not Allowed — the MCP endpoint is https://mcp.freeappstore.online/mcp",
-      },
-    }),
-    { status: 405, headers: { "content-type": "application/json", allow: "GET, HEAD" } }
-  );
-}
-
-export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-    const url = new URL(request.url);
-
-    if (url.pathname === "/" || url.pathname === "") {
-      if (isProtocolClient(request)) return wrongEndpoint();
-      return new Response(
-        "FreeAppStore MCP Server\n\nConnect: npx mcp-remote https://mcp.freeappstore.online/mcp\n\n" +
-          "Build it yourself (your model writes the code): create_app, update_files, read_file, list_files\n" +
-          "Let the platform agent build it (you just prompt): agent_build, agent_status\n" +
-          "Info: list_apps, deploy_status, app_info, app_logs, platform_guide, sdk_reference\n\n" +
-          "Two ways to build, both from your editor:\n" +
-          "  1. create_app → read_file/update_files to improve → deploy_status.\n" +
-          "  2. agent_build('make a X app and deploy it') → the VibeCode agent writes + ships it (uses your vaulted AI key) → agent_status.\n\n" +
-          "Auth: pass Authorization: Bearer <FAS session token> for authenticated tools.\n",
-        { headers: { "content-type": "text/plain" } }
-      );
-    }
-
-    // Authenticate and inject the session into the target MCP DO before
-    // dispatch. Streamable HTTP serve() in agents@0.0.74 drops ctx.props, so we
-    // write props straight into the DO (keyed the same way serve() keys it:
-    // `streamable-http:${mcp-session-id}`). The session id is present on every
-    // post-initialize request (i.e. all tool calls).
-    if (url.pathname.startsWith("/mcp")) {
-      const auth = authenticateRequest(request);
-      const sessionId = request.headers.get("mcp-session-id");
-      if (auth.token && sessionId) {
-        try {
-          const id = env.MCP_OBJECT.idFromName(`streamable-http:${sessionId}`);
-          const stub = env.MCP_OBJECT.get(id) as unknown as { setAuth(p: McpProps): Promise<void> };
-          await stub.setAuth({ userId: auth.userId, token: auth.token });
-        } catch {
-          /* best effort — tool will report "not authenticated" if this failed */
-        }
-      }
-      return FasMcpAgent.serve("/mcp").fetch(request, env, ctx);
-    }
-
-    // Everything else 404s rather than falling through to serve(). On
-    // agents@0.0.74 the fallthrough happened to 405, because serve() matches
-    // POST-on-basePattern only, and agents>=0.14's default streamable-http
-    // handler gates on its own basePattern too — so this was already harmless.
-    // But that is library internals, not a contract: `transport: "auto"` in
-    // agents>=0.14 dispatches a bare GET to the legacy SSE handler without
-    // re-checking the base path. Own the routing here instead.
-    return new Response("Not found — the MCP endpoint is /mcp", { status: 404 });
-  },
-};
+// OAuth 2.1 is handled by @cloudflare/workers-oauth-provider: it owns /token,
+// /register (DCR), the discovery docs, and the 401 WWW-Authenticate challenge,
+// and only forwards requests with a valid access token to the MCP apiHandler —
+// where the granted props (set in auth-handler's completeAuthorization) arrive
+// as `this.props`. The interactive login lives in AuthHandler (defaultHandler).
+export default new OAuthProvider({
+  apiRoute: "/mcp",
+  apiHandler: FasMcpAgent.serve("/mcp"),
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  defaultHandler: AuthHandler as any,
+  authorizeEndpoint: "/authorize",
+  tokenEndpoint: "/token",
+  clientRegistrationEndpoint: "/register",
+  scopesSupported: [...MCP_SCOPES],
+  accessTokenTTL: 86_400,
+});
