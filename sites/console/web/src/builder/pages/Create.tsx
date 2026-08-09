@@ -9,6 +9,7 @@ import { SettingsPanel } from "../components/studio/SettingsPanel";
 import { Toolbar } from "../components/studio/Toolbar";
 import { CopyLogButton } from "../components/studio/CopyLogButton";
 import { PublishModal } from "../components/studio/PublishModal";
+import { DeployStatusBar } from "../components/studio/DeployStatusBar";
 import type { StudioSettings } from "../components/studio/types";
 import { useAuth } from "../hooks/useAuth";
 import { useAgent, type AIConfig } from "../hooks/useAgent";
@@ -303,6 +304,14 @@ export function Create() {
               <span className="text-xs" style={{ color: "var(--muted)" }}>No preview yet</span>
             )}
           </div>
+          <DeployStatusBar
+            isStreaming={agent.isStreaming}
+            deployState={agent.deployState}
+            appId={appId}
+            onRetry={(msg, cfg) => agent.sendMessage(msg, cfg)}
+            retryConfig={{ provider, model, apiKey: getKey(provider), temperature, maxTokens: 16384 } as AIConfig}
+            onSwitchToChat={() => setMobileTab("chat")}
+          />
           {publishResult && (
             <div className="flex items-center gap-2 shrink-0 text-xs" style={{ padding: "0.35rem 0.75rem", background: "color-mix(in srgb, var(--success) 10%, var(--panel))", borderBottom: "1px solid var(--line)" }}>
               <span style={{ color: "var(--success)" }}>●</span>
