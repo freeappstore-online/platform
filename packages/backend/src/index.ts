@@ -27,6 +27,7 @@ import { roomRoutes } from './routes/rooms.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { uptimeRoutes } from './routes/uptime.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { votesRoutes } from './routes/votes.js';
 import type { Env } from './types.js';
 
 export { Room } from './do/room.js';
@@ -100,6 +101,7 @@ v1.route('/', friendsRoutes);
 v1.route('/', contentAdminRoutes);
 v1.route('/', agentSessionRoutes);
 v1.route('/', qualityRoutes);
+v1.route('/', votesRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;
