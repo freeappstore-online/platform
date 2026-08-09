@@ -6,6 +6,7 @@ import { Overview } from './Overview.tsx'
 import { AgentSessions } from './AgentSessions.tsx'
 import { AgentSessionView } from './AgentSessionView.tsx'
 import { AIKeys } from './AIKeys.tsx'
+import { ContentData } from './ContentData.tsx'
 
 type View =
   | { page: 'overview' }
@@ -13,6 +14,7 @@ type View =
   | { page: 'detail'; id: string }
   | { page: 'provision' }
   | { page: 'ai-keys' }
+  | { page: 'content-data' }
   | { page: 'agent-sessions' }
   | { page: 'agent-session'; id: string }
 
@@ -21,6 +23,7 @@ function parseHash(): View {
   if (hash === '/provision') return { page: 'provision' }
   if (hash === '/apps') return { page: 'apps' }
   if (hash === '/ai-keys') return { page: 'ai-keys' }
+  if (hash === '/content-data') return { page: 'content-data' }
   if (hash === '/agent') return { page: 'agent-sessions' }
   const agentMatch = hash.match(/^\/agent\/(.+)$/)
   if (agentMatch) return { page: 'agent-session', id: agentMatch[1]! }
@@ -56,6 +59,7 @@ export default function App() {
         {view.page === 'detail' && <AppDetail id={view.id} navigate={navigate} />}
         {view.page === 'provision' && <ProvisionForm navigate={navigate} />}
         {view.page === 'ai-keys' && <AIKeys navigate={navigate} />}
+        {view.page === 'content-data' && <ContentData />}
         {view.page === 'agent-sessions' && <AgentSessions navigate={navigate} />}
         {view.page === 'agent-session' && <AgentSessionView id={view.id} navigate={navigate} />}
       </main>
@@ -81,6 +85,7 @@ function Header({ navigate, view }: { navigate: (h: string) => void; view: View 
           <nav className="hidden sm:flex items-center gap-1">
             <NavLink label="Overview" hash="/" active={view.page === 'overview'} navigate={navigate} />
             <NavLink label="Apps" hash="/apps" active={view.page === 'apps' || view.page === 'detail'} navigate={navigate} />
+            <NavLink label="Content Data" hash="/content-data" active={view.page === 'content-data'} navigate={navigate} />
             <NavLink label="AI Grants" hash="/ai-keys" active={view.page === 'ai-keys'} navigate={navigate} />
           </nav>
         </div>

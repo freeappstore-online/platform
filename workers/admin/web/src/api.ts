@@ -190,3 +190,45 @@ export interface GrantsResponse {
   grants: ComplimentaryGrant[]
   funded: string[]
 }
+
+// Content data (KV / Collections / Counters)
+
+export interface KvEntry {
+  app_id: string
+  user_id: string
+  key: string
+  size: number
+  updated_at: number
+}
+
+export interface KvEntriesResponse {
+  entries: KvEntry[]
+}
+
+export interface KvValueResponse {
+  value: unknown
+}
+
+export interface CollectionDoc {
+  id: string
+  app_id: string
+  collection: string
+  owner_id: string
+  data: Record<string, unknown> | null
+  created_at: number
+  updated_at: number
+}
+
+export interface CollectionsResponse {
+  documents: CollectionDoc[]
+}
+
+export interface Counter {
+  app_id: string
+  name: string
+  value: number
+}
+
+export interface CountersResponse {
+  counters: Counter[]
+}

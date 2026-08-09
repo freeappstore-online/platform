@@ -13,6 +13,18 @@
  * GET  /v1/admin/agent-errors?limit=&since=&user=     — VibeCode errors across all sessions
  * GET  /v1/admin/agent-deploys?limit=&status=error    — failed deploys across all sessions
  * GET  /v1/admin/agent-sessions/:id                   — full session detail for debugging
+ *
+ * Internal routes (X-Internal-Token: ADMIN_PROVISION_TOKEN) — used by the
+ * standalone admin worker which is already behind CF Access and cannot hold a
+ * FAS user session JWT:
+ *
+ * GET    /v1/internal/admin/kv?app=&user=&prefix=&limit=
+ * GET    /v1/internal/admin/kv/value?app=&user=&key=
+ * DELETE /v1/internal/admin/kv?app=&user=&key=
+ * GET    /v1/internal/admin/collections?app=&collection=&limit=
+ * DELETE /v1/internal/admin/collections?app=&collection=&id=
+ * GET    /v1/internal/admin/counters?app=&prefix=&limit=
+ * DELETE /v1/internal/admin/counters?app=&name=
  */
 
 import { Hono } from 'hono';
@@ -611,4 +623,126 @@ contentAdminRoutes.get('/admin/stats', async (c) => {
     documents: docs?.n ?? 0,
     counters: counters?.n ?? 0,
   });
+});
+
+// ── Internal routes (X-Internal-Token) ─────────────────────────
+// Used by the standalone admin worker (behind CF Access) which cannot hold
+// a FAS user session JWT. Auth is the shared ADMIN_PROVISION_TOKEN.
+
+function requireInternalToken(c: { env: Env; req: { header: (name: string) => string | undefined } }): boolean {
+  const expected = c.env.ADMIN_PROVISION_TOKEN;
+  const provided = c.req.header('X-Internal-Token');
+  return !!expected && provided === expected;
+}
+
+contentAdminRoutes.get('/internal/admin/kv', async (c) => {
+  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  const appId = c.req.query('app') ?? '';
+  const userId = c.req.query('user') ?? '';
+  const prefix = c.req.query('prefix') ?? '';
+  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+
+  let sql = 'SELECT app_id, user_id, key, value_size_bytes as size, updated_at FROM kv WHERE 1=1';
+  const params: unknown[] = [];
+  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
+  if (userId) { sql += ' AND user_id = ?'; params.push(userId); }
+  if (prefix) { sql += ' AND key LIKE ?'; params.push(`${prefix}%`); }
+  sql += ' ORDER BY updated_at DESC LIMIT ?';
+  params.push(limit);
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json({ entries: result.results ?? [] });
+});
+
+contentAdminRoutes.get('/internal/admin/kv/value', async (c) => {
+  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  const appId = c.req.query('app');
+  const userId = c.req.query('user');
+  const key = c.req.query('key');
+  if (!appId || !userId || !key) return c.json({ error: 'app, user, key required' }, 400);
+
+  const row = await c.env.DB.prepare(
+    'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
+  )
+    .bind(appId, userId, key)
+    .first<{ value: string }>();
+
+  if (!row) return c.json({ error: 'not found' }, 404);
+  return c.json({ value: parseJsonValue(row.value) });
+});
+
+contentAdminRoutes.delete('/internal/admin/kv', async (c) => {
+  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  const appId = c.req.query('app');
+  const userId = c.req.query('user');
+  const key = c.req.query('key');
+  if (!appId || !userId || !key) return c.json({ error: 'app, user, key required' }, 400);
+
+  await c.env.DB.prepare('DELETE FROM kv WHERE app_id = ? AND user_id = ? AND key = ?')
+    .bind(appId, userId, key)
+    .run();
+  return c.json({ ok: true });
+});
+
+contentAdminRoutes.get('/internal/admin/collections', async (c) => {
+  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  const appId = c.req.query('app') ?? '';
+  const collection = c.req.query('collection') ?? '';
+  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+
+  let sql = 'SELECT id, app_id, collection, owner_id, data, created_at, updated_at FROM documents WHERE 1=1';
+  const params: unknown[] = [];
+  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
+  if (collection) { sql += ' AND collection = ?'; params.push(collection); }
+  sql += ' ORDER BY updated_at DESC LIMIT ?';
+  params.push(limit);
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const docs = (result.results ?? []).map((r: Record<string, unknown>) => ({
+    ...r,
+    data: parseJsonObject(r.data),
+  }));
+  return c.json({ documents: docs });
+});
+
+contentAdminRoutes.delete('/internal/admin/collections', async (c) => {
+  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  const appId = c.req.query('app');
+  const collection = c.req.query('collection');
+  const id = c.req.query('id');
+  if (!appId || !collection || !id) return c.json({ error: 'app, collection, id required' }, 400);
+
+  await c.env.DB.prepare('DELETE FROM documents WHERE app_id = ? AND collection = ? AND id = ?')
+    .bind(appId, collection, id)
+    .run();
+  return c.json({ ok: true });
+});
+
+contentAdminRoutes.get('/internal/admin/counters', async (c) => {
+  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  const appId = c.req.query('app') ?? '';
+  const prefix = c.req.query('prefix') ?? '';
+  const limit = Math.min(Number(c.req.query('limit') || 100), 500);
+
+  let sql = 'SELECT app_id, key as name, value FROM counters WHERE 1=1';
+  const params: unknown[] = [];
+  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
+  if (prefix) { sql += ' AND key LIKE ?'; params.push(`${prefix}%`); }
+  sql += ' ORDER BY app_id, key LIMIT ?';
+  params.push(limit);
+
+  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  return c.json({ counters: result.results ?? [] });
+});
+
+contentAdminRoutes.delete('/internal/admin/counters', async (c) => {
+  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  const appId = c.req.query('app');
+  const name = c.req.query('name');
+  if (!appId || !name) return c.json({ error: 'app, name required' }, 400);
+
+  await c.env.DB.prepare('DELETE FROM counters WHERE app_id = ? AND key = ?')
+    .bind(appId, name)
+    .run();
+  return c.json({ ok: true });
 });

@@ -359,6 +359,53 @@ export default {
       });
     }
 
+    // ── Content data (KV / Collections / Counters) ──
+    // Proxies to /v1/internal/admin/* on the backend, gated by ADMIN_PROVISION_TOKEN.
+    // The admin worker is behind CF Access so every request here is already admin-authed.
+
+    const contentPaths = [
+      "/api/content/kv",
+      "/api/content/kv/value",
+      "/api/content/collections",
+      "/api/content/counters",
+    ];
+    if (contentPaths.includes(url.pathname)) {
+      const backendToken = env.ADMIN_PROVISION_TOKEN || env.INTERNAL_TOKEN;
+      if (!env.BACKEND_FAS || !backendToken) {
+        return json({ error: "content data proxy not wired (missing BACKEND_FAS or ADMIN_PROVISION_TOKEN)" }, 500, request);
+      }
+      const method = request.method;
+      const allowedMethods: Record<string, string[]> = {
+        "/api/content/kv": ["GET", "DELETE"],
+        "/api/content/kv/value": ["GET"],
+        "/api/content/collections": ["GET", "DELETE"],
+        "/api/content/counters": ["GET", "DELETE"],
+      };
+      if (!allowedMethods[url.pathname]?.includes(method)) {
+        return json({ error: "method not allowed" }, 405, request);
+      }
+      // Map admin worker path → backend internal path
+      const internalPath = url.pathname.replace("/api/content/", "/v1/internal/admin/");
+      // Forward query string unchanged
+      const backendUrl = `https://backend${internalPath}${url.search}`;
+      const res = await env.BACKEND_FAS.fetch(backendUrl, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Token": backendToken,
+        },
+      });
+      const text = await res.text();
+      return new Response(text, {
+        status: res.status,
+        headers: {
+          "Content-Type": res.headers.get("Content-Type") || "application/json",
+          "Cache-Control": "no-store",
+          ...corsHeaders(request),
+        },
+      });
+    }
+
     // ── Stats ──
 
     if (url.pathname === "/api/stats") {
