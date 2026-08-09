@@ -12,6 +12,38 @@ const BuilderApp = lazy(() => import('./builder/BuilderApp'))
 
 const fas = initApp({ appId: 'console' })
 
+// ---------------------------------------------------------------------------
+// Text-size preference — mirrors packages/sdk/src/ui/core.tsx logic.
+// The installed SDK (0.10.x) pre-dates the useTextSize export; implement here
+// until the console is upgraded to SDK >=0.14.
+// ---------------------------------------------------------------------------
+type TextSize = 'default' | 'lg' | 'sm'
+const TEXT_SIZE_KEY = 'stores-text-size'
+
+function getTextSize(): TextSize {
+  const stored = localStorage.getItem(TEXT_SIZE_KEY)
+  if (stored === 'lg' || stored === 'sm') return stored
+  return 'default'
+}
+
+function applyTextSize(size: TextSize): void {
+  if (size === 'default') {
+    delete document.documentElement.dataset.text
+  } else {
+    document.documentElement.dataset.text = size
+  }
+}
+
+function useTextSize() {
+  const [size, setSize] = useState<TextSize>(getTextSize)
+  useEffect(() => { applyTextSize(size) }, [size])
+  const set = useCallback((next: TextSize) => {
+    setSize(next)
+    localStorage.setItem(TEXT_SIZE_KEY, next)
+  }, [])
+  return { size, setSize: set }
+}
+
 // The console is served at console.freeappstore.online/ (no prefix) AND at
 // freeappstore.online/app/ (the storefront proxy strips /app server-side but the
 // browser URL keeps it). Normalize so client-side routing works under either mount.
@@ -371,25 +403,47 @@ cd my-app && pnpm dev`}
 
 function Settings() {
   const { preference, setPreference } = useTheme()
+  const { size, setSize } = useTextSize()
   return (
     <div className="space-y-8">
       <h2 className="display-font text-2xl font-bold text-[var(--ink)]">Settings</h2>
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6">
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-4">Theme</h3>
-        <div className="flex gap-2">
-          {(['system', 'light', 'dark'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setPreference(t)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium capitalize ${
-                preference === t
-                  ? 'bg-[var(--accent)] text-white'
-                  : 'border border-[var(--line-strong)] text-[var(--muted)] hover:text-[var(--ink)]'
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 space-y-6">
+        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide">Appearance</h3>
+        <div>
+          <p className="text-xs font-medium text-[var(--muted)] mb-2">Theme</p>
+          <div className="flex gap-2">
+            {(['system', 'light', 'dark'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setPreference(t)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium capitalize ${
+                  preference === t
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'border border-[var(--line-strong)] text-[var(--muted)] hover:text-[var(--ink)]'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-[var(--muted)] mb-2">Text Size</p>
+          <div className="flex gap-2">
+            {([['sm', 'Small'], ['default', 'Default'], ['lg', 'Large']] as const).map(([val, label]) => (
+              <button
+                key={val}
+                onClick={() => setSize(val)}
+                className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  size === val
+                    ? 'bg-[var(--accent)] text-white'
+                    : 'border border-[var(--line-strong)] text-[var(--muted)] hover:text-[var(--ink)]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

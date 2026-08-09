@@ -37,5 +37,10 @@ export function useTheme() {
     });
   }, []);
 
-  return { pref, resolved: resolved(pref), cycle };
+  const set = useCallback((next: ThemePref) => {
+    localStorage.setItem(KEY, next);
+    setPref(next);
+  }, []);
+
+  return { pref, resolved: resolved(pref), cycle, set };
 }

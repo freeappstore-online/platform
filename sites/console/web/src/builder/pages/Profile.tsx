@@ -5,6 +5,8 @@ import { useAuth } from "../hooks/useAuth";
 import { useSpeech } from "../hooks/useSpeech";
 import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from "../lib/push";
 import { PROVIDERS, getDefaultProvider, getDefaultModel, fetchVaultUsage, type VaultUsage } from "../lib/ai-keys";
+import { useTheme } from "../lib/theme";
+import { useTextSize } from "../lib/text-size";
 
 const MODEL_OPTIONS: Record<string, { value: string; label: string }[]> = {
   openrouter: [
@@ -74,6 +76,8 @@ export function Profile() {
   const { user, loading, signIn, signOut } = useAuth();
   const notif = useNotificationState();
   const speech = useSpeech();
+  const { pref: themePref, set: setThemePref } = useTheme();
+  const { size: textSize, setSize: setTextSize } = useTextSize();
   const [provider, setProvider] = useState(getDefaultProvider);
   const [model, setModel] = useState(() => {
     const p = getDefaultProvider();
@@ -142,6 +146,54 @@ export function Profile() {
           </p>
         </div>
       </div>
+
+      {/* Appearance */}
+      <Section title="Appearance">
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className="text-xs font-semibold block mb-2" style={{ color: "var(--muted)" }}>Theme</label>
+            <div className="flex gap-2 flex-wrap">
+              {(["system", "light", "dark"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setThemePref(t)}
+                  className="px-4 py-1.5 rounded-lg text-sm font-semibold border capitalize"
+                  style={{
+                    background: themePref === t ? "var(--accent)" : "transparent",
+                    color: themePref === t ? "#fff" : "var(--muted)",
+                    borderColor: themePref === t ? "var(--accent)" : "var(--line)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-semibold block mb-2" style={{ color: "var(--muted)" }}>Text Size</label>
+            <div className="flex gap-2 flex-wrap">
+              {([["sm", "Small"], ["default", "Default"], ["lg", "Large"]] as const).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setTextSize(val)}
+                  className="px-4 py-1.5 rounded-lg text-sm font-semibold border"
+                  style={{
+                    background: textSize === val ? "var(--accent)" : "transparent",
+                    color: textSize === val ? "#fff" : "var(--muted)",
+                    borderColor: textSize === val ? "var(--accent)" : "var(--line)",
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Section>
 
       {/* Default AI preferences */}
       <Section title="Default AI Settings">

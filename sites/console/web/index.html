@@ -23,9 +23,22 @@
     <meta name="theme-color" content="#000000" id="theme-color" />
     <meta name="darkreader-lock" />
     <script>
-      if (matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.dataset.theme = 'dark';
-      }
+      (function () {
+        var stored = localStorage.getItem('stores-theme');
+        if (stored === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+        } else if (stored === 'light') {
+          // explicit light — leave data-theme absent
+        } else if (matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
+    <script>
+      (function () {
+        var t = localStorage.getItem('stores-text-size');
+        if (t === 'lg' || t === 'sm') document.documentElement.dataset.text = t;
+      })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

@@ -43,6 +43,14 @@
   --shadow-card: 0 12px 28px rgba(26, 41, 81, 0.08);
 }
 
+:root[data-text="lg"] {
+  font-size: 112.5%; /* 18px — scales all rem-based Tailwind utilities */
+}
+
+:root[data-text="sm"] {
+  font-size: 87.5%; /* 14px — scales all rem-based Tailwind utilities */
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   --paper: #000000;
