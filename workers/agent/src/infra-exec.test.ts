@@ -29,16 +29,54 @@ describe("applyPlaceholders", () => {
 
 const appsConfig = getConfig("apps");
 
+/**
+ * Minimal in-memory stand-in for the `apps`/`routes` D1 tables — enough to
+ * exercise the ownership checks in executeDeploy. `apps` maps id -> owner_login.
+ */
+function makeDb(apps: Map<string, string>) {
+  return {
+    prepare(sql: string) {
+      return {
+        bind(...args: unknown[]) {
+          return {
+            async first<T>(): Promise<T | null> {
+              if (sql.includes("SELECT owner_login FROM apps")) {
+                const owner = apps.get(args[0] as string);
+                return owner ? ({ owner_login: owner } as T) : null;
+              }
+              return null;
+            },
+            async run() {
+              if (sql.includes("INSERT INTO apps")) {
+                const [id, owner] = args as [string, string];
+                if (!apps.has(id)) apps.set(id, owner); // ON CONFLICT DO NOTHING
+              } else if (sql.includes("DELETE FROM apps")) {
+                const [id, owner] = args as [string, string];
+                if (apps.get(id) === owner) apps.delete(id);
+              }
+              return { success: true };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
 function makeCtx(
   overrides: Partial<{
     appId: string | null;
+    ownerLogin: string | null;
+    apps: Map<string, string>;
   }> = {},
 ) {
   return {
     appId: overrides.appId ?? null,
+    ownerLogin: overrides.ownerLogin ?? null,
     files: new Map<string, string>(),
     env: {
       GITHUB_TOKEN: "test-token",
+      ...(overrides.apps ? { DB: makeDb(overrides.apps) as never } : {}),
     },
     config: appsConfig,
     onDeployStatus: vi.fn() as (status: DeployStatus) => void,
@@ -189,8 +227,7 @@ describe("executeInfraTool — uniqueness check", () => {
     }
   });
 
-  it("allows re-deploy of same session app (skips uniqueness check)", async () => {
-    // Mock fetch — should NOT be called for uniqueness since ctx.appId is set
+  it("allows re-deploy of same session app (keeps its id rather than bumping)", async () => {
     const originalFetch = globalThis.fetch;
     const mockFetch = vi.fn().mockResolvedValue({ status: 200, json: () => Promise.resolve({ id: 123 }) }) as any;
     globalThis.fetch = mockFetch;
@@ -208,6 +245,141 @@ describe("executeInfraTool — uniqueness check", () => {
       );
       // Should not contain "already taken" — it passed uniqueness and failed at actual deploy
       expect(result).not.toContain("already taken");
+      expect(ctx.onAppDeployed).toHaveBeenCalledWith("my-app", "My App");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  // ── #29 regression coverage ───────────────────────────────────────────────
+
+  it("bumps the id on a retry turn, rather than reusing another owner's app", async () => {
+    const originalFetch = globalThis.fetch;
+    // Every repo lookup says "exists" — the state after the first user deployed.
+    globalThis.fetch = vi.fn(() => Promise.resolve({ status: 200, json: () => Promise.resolve({ id: 123 }) })) as any;
+
+    try {
+      // User A owns "asmr-boards". User B's session already set appId from a
+      // failed first attempt — the exact state that used to bypass resolution.
+      const apps = new Map([["asmr-boards", "BUDDY-KIWI-BERRY"]]);
+      const ctx = makeCtx({ appId: "asmr-boards", ownerLogin: "SASASKIA", apps });
+
+      await executeInfraTool(
+        {
+          id: "1",
+          name: "deploy",
+          input: { id: "asmr-boards", name: "ASMR", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "test" },
+        },
+        ctx,
+      );
+
+      // Never deploys under the taken id, and User A's ownership is untouched.
+      expect(ctx.onAppDeployed).not.toHaveBeenCalledWith("asmr-boards", expect.anything());
+      expect(apps.get("asmr-boards")).toBe("BUDDY-KIWI-BERRY");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("aborts instead of guessing when GitHub rate-limits the availability check", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(() => Promise.resolve({ status: 429, json: () => Promise.resolve({}) })) as any;
+
+    try {
+      const ctx = makeCtx();
+      const result = await executeInfraTool(
+        {
+          id: "1",
+          name: "deploy",
+          input: { id: "some-app", name: "Some App", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "test" },
+        },
+        ctx,
+      );
+
+      expect(result).toContain("429");
+      expect(ctx.onAppDeployed).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("claims ownership in D1 before any code is pushed", async () => {
+    const originalFetch = globalThis.fetch;
+    // 404 everywhere: the id is free. Repo creation then fails, but we only
+    // care about who owns the id at the moment the deploy is announced.
+    globalThis.fetch = vi.fn(() => Promise.resolve({ status: 404, json: () => Promise.resolve({}) })) as any;
+
+    try {
+      const apps = new Map<string, string>();
+      const ctx = makeCtx({ ownerLogin: "SASASKIA", apps });
+      let ownerAtDeployTime: string | undefined;
+      ctx.onAppDeployed = vi.fn(() => {
+        ownerAtDeployTime = apps.get("room-bloom");
+      });
+
+      await executeInfraTool(
+        {
+          id: "1",
+          name: "deploy",
+          input: { id: "room-bloom", name: "Room Bloom", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "t" },
+        },
+        ctx,
+      );
+
+      // The old code inserted the apps row only after a successful deploy, so
+      // the builder's claim did not exist while their code was being pushed.
+      expect(ownerAtDeployTime).toBe("SASASKIA");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not reuse an unclaimed id whose repo already exists, even when the session's appId matches", async () => {
+    const originalFetch = globalThis.fetch;
+    // "orphan-app" has a repo but no apps row — a legacy or abandoned deploy.
+    // Session state must not be enough to push into it.
+    globalThis.fetch = vi.fn((url: string) => {
+      const orphan = typeof url === "string" && url.endsWith("/orphan-app");
+      return Promise.resolve({ status: orphan ? 200 : 404, json: () => Promise.resolve(orphan ? { id: 123 } : {}) });
+    }) as any;
+
+    try {
+      const apps = new Map<string, string>();
+      const ctx = makeCtx({ appId: "orphan-app", ownerLogin: "SASASKIA", apps });
+      await executeInfraTool(
+        {
+          id: "1",
+          name: "deploy",
+          input: { id: "orphan-app", name: "Orphan", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "t" },
+        },
+        ctx,
+      );
+
+      expect(ctx.onAppDeployed).not.toHaveBeenCalledWith("orphan-app", expect.anything());
+      expect(apps.has("orphan-app")).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("releases a claim it just took when the deploy fails, leaving no phantom app", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(() => Promise.resolve({ status: 404, json: () => Promise.resolve({}) })) as any;
+
+    try {
+      const apps = new Map<string, string>();
+      const ctx = makeCtx({ ownerLogin: "SASASKIA", apps });
+      const result = await executeInfraTool(
+        {
+          id: "1",
+          name: "deploy",
+          input: { id: "room-bloom", name: "Room Bloom", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "t" },
+        },
+        ctx,
+      );
+
+      expect(result).toContain("Deploy FAILED");
+      expect(apps.has("room-bloom")).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }

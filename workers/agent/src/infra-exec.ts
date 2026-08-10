@@ -96,7 +96,13 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   }
 }
 
-/** True if a repo with this id already exists in the org. */
+/**
+ * True if a repo with this id already exists in the org.
+ *
+ * Only 200 and 404 are answers. A 403 (rate limit), 429 or 5xx says nothing
+ * about existence, and reporting "free" there is what let three sessions
+ * deploy under one id (#29) — so anything else aborts the deploy instead.
+ */
 async function repoExists(id: string, ctx: ExecContext): Promise<boolean> {
   const res = await fetch(`https://api.github.com/repos/${ctx.config.org}/${id}`, {
     headers: {
@@ -105,7 +111,38 @@ async function repoExists(id: string, ctx: ExecContext): Promise<boolean> {
       "User-Agent": ctx.config.agentName,
     },
   });
-  return res.status === 200;
+  if (res.status === 200) return true;
+  if (res.status === 404) return false;
+  throw new Error(
+    `GitHub returned ${res.status} while checking whether "${id}" is free. Not deploying — this would risk overwriting another ${ctx.config.noun}. Try again shortly.`,
+  );
+}
+
+/** Current owner_login for an id, or null if unclaimed / no DB binding. */
+async function appOwner(id: string, ctx: ExecContext): Promise<string | null> {
+  if (!ctx.env.DB) return null;
+  const row = await ctx.env.DB.prepare(`SELECT owner_login FROM apps WHERE id = ?`).bind(id).first<{ owner_login: string }>();
+  return row?.owner_login ?? null;
+}
+
+/**
+ * May this caller deploy into `id`?
+ *
+ * The `apps` row is the authority on ownership — not the GitHub repo, which is
+ * only a side effect of a past deploy. A repo with no `apps` row is treated as
+ * taken: we cannot prove it is ours, and pushing into it would overwrite a
+ * stranger's app.
+ */
+async function isAvailableTo(id: string, ctx: ExecContext): Promise<boolean> {
+  const owner = await appOwner(id, ctx);
+  if (owner) return owner === ctx.ownerLogin;
+  // With no ownership store there is nothing to consult, so fall back to the
+  // session's own id — a redeploy of what this session just built. Never do
+  // this when D1 *is* available: an unclaimed id whose repo exists is someone
+  // else's orphan, and session state is exactly the signal that mislead us
+  // into deploying over a stranger's app (#29).
+  if (!ctx.env.DB && ctx.appId === id) return true;
+  return !(await repoExists(id, ctx));
 }
 
 /**
@@ -115,13 +152,65 @@ async function repoExists(id: string, ctx: ExecContext): Promise<boolean> {
  * collides again. Trims the base so the suffix stays within the 58-char limit.
  */
 async function resolveAvailableId(baseId: string, ctx: ExecContext): Promise<string> {
-  if (!(await repoExists(baseId, ctx))) return baseId;
+  if (await isAvailableTo(baseId, ctx)) return baseId;
   for (let n = 2; n <= 50; n++) {
     const suffix = `-${n}`;
     const candidate = `${baseId.slice(0, 58 - suffix.length).replace(/-+$/, "")}${suffix}`;
-    if (!(await repoExists(candidate, ctx))) return candidate;
+    if (await isAvailableTo(candidate, ctx)) return candidate;
   }
   throw new Error(`Could not find an available ${ctx.config.noun} ID based on "${baseId}". Try a different name.`);
+}
+
+type Claim = { ok: true; createdNow: boolean; ownedAlready: boolean } | { ok: false; error: string };
+
+/**
+ * Take ownership of `appId` *before* any code is pushed.
+ *
+ * `INSERT … DO NOTHING` is atomic, so two sessions racing the same id cannot
+ * both win; reading the row back tells us which one did. The old code inserted
+ * with `OR IGNORE` *after* a successful deploy, so the loser silently got no
+ * ownership row and an app invisible in their console (#29).
+ */
+async function claimApp(appId: string, appName: string, tc: ToolCall, ctx: ExecContext): Promise<Claim> {
+  if (!ctx.env.DB || !ctx.ownerLogin) return { ok: true, createdNow: false, ownedAlready: false };
+
+  const priorOwner = await appOwner(appId, ctx);
+  if (priorOwner && priorOwner !== ctx.ownerLogin) {
+    return { ok: false, error: `"${appId}" already belongs to another account. Deploy under a different ID.` };
+  }
+
+  await ctx.env.DB.prepare(
+    `INSERT INTO apps (id, owner_login, created_at, category, type, oneliner, display_name, store)
+       VALUES (?, ?, ?, ?, 'standalone', ?, ?, ?)
+       ON CONFLICT (id) DO NOTHING`,
+  )
+    .bind(
+      appId,
+      ctx.ownerLogin,
+      Date.now(),
+      (tc.input.category as string) || "utilities",
+      (tc.input.description as string) || appName,
+      appName,
+      ctx.config.store,
+    )
+    .run();
+
+  // Read back: if a concurrent session won the insert, the row is theirs.
+  const owner = await appOwner(appId, ctx);
+  if (owner !== ctx.ownerLogin) {
+    return { ok: false, error: `"${appId}" was claimed by another account moments ago. Deploy under a different ID.` };
+  }
+  return { ok: true, createdNow: !priorOwner, ownedAlready: priorOwner === ctx.ownerLogin };
+}
+
+/** Undo a claim made moments ago by this call, so a failed deploy leaves no phantom app. */
+async function releaseApp(appId: string, ctx: ExecContext): Promise<void> {
+  if (!ctx.env.DB || !ctx.ownerLogin) return;
+  try {
+    await ctx.env.DB.prepare(`DELETE FROM apps WHERE id = ? AND owner_login = ?`).bind(appId, ctx.ownerLogin).run();
+  } catch {
+    /* best-effort rollback */
+  }
 }
 
 async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
@@ -130,13 +219,28 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
 
   // Always check for duplicates before choosing the id: if the requested id is
   // taken, deploy under the next available `-N` variant instead of failing.
-  let appId = requestedId;
-  if (!ctx.appId) {
-    try {
-      appId = await resolveAvailableId(requestedId, ctx);
-    } catch (e) {
-      return `Error: ${e instanceof Error ? e.message : String(e)}`;
-    }
+  // This runs unconditionally — the old `if (!ctx.appId)` guard skipped it on
+  // any turn where a previous attempt had already set the session's appId, so
+  // a retry after a failed deploy went straight into the colliding id (#29).
+  // Redeploys still keep their id: `isAvailableTo` recognises apps we own.
+  let appId: string;
+  try {
+    appId = await resolveAvailableId(requestedId, ctx);
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+
+  // Record ownership before pushing anything, so a lost race fails loudly here
+  // rather than silently producing an app its builder can never see.
+  let claim: Claim;
+  try {
+    claim = await claimApp(appId, appName, tc, ctx);
+  } catch (e) {
+    return `Error: could not record ownership of "${appId}": ${e instanceof Error ? e.message : String(e)}`;
+  }
+  if (!claim.ok) {
+    ctx.onDeployStatus({ phase: "error", error: claim.error });
+    return `Deploy FAILED: ${claim.error}`;
   }
 
   // Replace placeholders: APPNAME -> display name (or the id in package.json),
@@ -162,19 +266,32 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     (status) => {
       ctx.onDeployStatus(status);
       if (status.phase === "live") liveUrl = status.appUrl;
+      if (status.phase === "error") deployError = status.error;
     },
+    // Only reuse an existing repo when it is provably ours.
+    claim.ownedAlready || (!ctx.env.DB && ctx.appId === appId),
   ).catch((err) => {
     deployError = String(err);
   });
 
   if (deployError) {
+    // Release a claim we took moments ago only if nothing was provisioned under
+    // it — otherwise keep it, so the retry can reuse the repo it already made
+    // and no one else can take the id out from under a half-built app.
+    if (claim.createdNow && !(await repoExists(appId, ctx).catch(() => true))) {
+      await releaseApp(appId, ctx);
+    }
     ctx.onDeployStatus({ phase: "error", error: deployError });
     return `Deploy FAILED: ${deployError}`;
   }
 
   const publishError = await publishStoreListing(appId, appName, tc, ctx);
 
-  // Insert D1 hosting route so the host worker can serve this app from R2
+  // Insert D1 hosting route so the host worker can serve this app from R2.
+  // Ownership was already settled by claimApp above; the WHERE clause is a
+  // second lock on the same door — an existing route is only ever repointed
+  // when the app it serves is ours (or is unclaimed). Without it a colliding
+  // deploy would redirect a live app at another owner's URL to its own bundle.
   if (ctx.env.DB) {
     const r2Prefix = `${ctx.config.nounPlural}/${appId}`;
     try {
@@ -183,34 +300,14 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
            VALUES (?1, ?2, ?3, ?4, 'r2', ?5, ?5)
            ON CONFLICT (slug, zone) DO UPDATE SET
              r2_prefix = excluded.r2_prefix, store = excluded.store,
-             hosted_on = excluded.hosted_on, updated_at = excluded.updated_at`,
+             hosted_on = excluded.hosted_on, updated_at = excluded.updated_at
+           WHERE EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug AND apps.owner_login = ?6)
+              OR NOT EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug)`,
       )
-        .bind(appId, ctx.config.domain, r2Prefix, ctx.config.store, Date.now())
+        .bind(appId, ctx.config.domain, r2Prefix, ctx.config.store, Date.now(), ctx.ownerLogin)
         .run();
     } catch {
       /* D1 insert failed — app deploys but won't be routable until published */
-    }
-
-    // Record app ownership so /v1/apps/mine returns it in the console
-    if (ctx.ownerLogin) {
-      try {
-        await ctx.env.DB.prepare(
-          `INSERT OR IGNORE INTO apps (id, owner_login, created_at, category, type, oneliner, display_name, store)
-             VALUES (?, ?, ?, ?, 'standalone', ?, ?, ?)`,
-        )
-          .bind(
-            appId,
-            ctx.ownerLogin,
-            Date.now(),
-            (tc.input.category as string) || "utilities",
-            (tc.input.description as string) || appName,
-            appName,
-            ctx.config.store,
-          )
-          .run();
-      } catch {
-        /* ownership record is best-effort */
-      }
     }
   }
 

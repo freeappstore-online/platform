@@ -53,6 +53,10 @@ export async function deployApp(
   env: DeployEnv,
   config: StoreConfig,
   onStatus: (status: DeployStatus) => void,
+  /** Only true when the caller has proven this id is already theirs (redeploy /
+   *  retry). A pre-existing repo under any other circumstance is a collision —
+   *  pushing into it would overwrite a stranger's code (#29). */
+  allowExistingRepo = false,
 ): Promise<void> {
   const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
   const steps: DeployStep[] = [];
@@ -61,6 +65,18 @@ export async function deployApp(
   // Step 1: Create GitHub repo
   const repoCheck = await ghApi(`/repos/${config.org}/${deployConfig.id}`);
   if (repoCheck.id) {
+    if (!allowExistingRepo) {
+      // Someone else's repo (or drift). Pushing here would land this session's
+      // code on top of theirs and, once GH Actions runs, replace their live app
+      // in R2 under the same prefix. Stop before the first byte is written.
+      const detail = `${config.org}/${deployConfig.id} already exists and is not this session's ${config.noun}`;
+      steps.push({ name: "GitHub repo", status: "fail", detail });
+      onStatus({
+        phase: "error",
+        error: `Refusing to deploy into an existing ${config.noun} repo: ${detail}. Deploy under a different ID.`,
+      });
+      return;
+    }
     steps.push({ name: "GitHub repo", status: "skip", detail: `${config.org}/${deployConfig.id} already exists` });
   } else {
     const createRepo = await ghApi(`/orgs/${config.org}/repos`, "POST", {
