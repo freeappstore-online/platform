@@ -29,8 +29,14 @@
 // checks against prod:
 //   FAS_E2E_ALLOW_NO_TOKEN=1 node scripts/prod-platform-e2e.mjs
 
-const API_BASE = (process.env.FAS_API_BASE || 'https://api.freeappstore.online').replace(/\/+$/, '');
-const STORE_ORIGIN = (process.env.FAS_STORE_ORIGIN || 'https://freeappstore.online').replace(/\/+$/, '');
+const API_BASE = (process.env.FAS_API_BASE || 'https://api.freeappstore.online').replace(
+  /\/+$/,
+  '',
+);
+const STORE_ORIGIN = (process.env.FAS_STORE_ORIGIN || 'https://freeappstore.online').replace(
+  /\/+$/,
+  '',
+);
 const GITHUB_ORG = process.env.FAS_GITHUB_ORG || 'freeappstore-online';
 const APP_DOMAIN = process.env.FAS_APP_DOMAIN || 'freeappstore.online';
 const RAW_GITHUB_TOKEN = (process.env.FAS_E2E_GITHUB_TOKEN || process.env.GH_TOKEN || '').trim();
@@ -84,7 +90,9 @@ async function expectStatus(label, url, init, expected, timeoutMs = 30_000) {
   const allowed = Array.isArray(expected) ? expected : [expected];
   const { res, text } = await fetchText(url, init, timeoutMs);
   if (!allowed.includes(res.status)) {
-    fail(`${label} expected HTTP ${allowed.join('/')} but got ${res.status}: ${text.slice(0, 300)}`);
+    fail(
+      `${label} expected HTTP ${allowed.join('/')} but got ${res.status}: ${text.slice(0, 300)}`,
+    );
   }
   console.log(`  ${label}: ${res.status}`);
   return { res, text };
@@ -111,9 +119,20 @@ async function verifyPublicSurfaces(id) {
 
   // Public D1-backed creator feed (the source of truth for app ownership; the
   // storefront compiles its registry into HTML rather than serving a JSON file).
-  const creators = await expectJson('apps /v1/apps/creators', `${API_BASE}/v1/apps/creators`, {}, 200);
-  assert(creators.data.creators && typeof creators.data.creators === 'object', '/v1/apps/creators did not return a creators map');
-  assert(creators.data.creators[EXISTING_APP_ID], `/v1/apps/creators is missing the known app ${EXISTING_APP_ID}`);
+  const creators = await expectJson(
+    'apps /v1/apps/creators',
+    `${API_BASE}/v1/apps/creators`,
+    {},
+    200,
+  );
+  assert(
+    creators.data.creators && typeof creators.data.creators === 'object',
+    '/v1/apps/creators did not return a creators map',
+  );
+  assert(
+    creators.data.creators[EXISTING_APP_ID],
+    `/v1/apps/creators is missing the known app ${EXISTING_APP_ID}`,
+  );
 
   // Auth gates: these MUST reject an unauthenticated caller.
   await expectStatus('auth /v1/auth/me unauthenticated', `${API_BASE}/v1/auth/me`, {}, 401);
@@ -121,13 +140,21 @@ async function verifyPublicSurfaces(id) {
   await expectStatus(
     'publish /v1/publish unauthenticated',
     `${API_BASE}/v1/publish`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: id }) },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: id }),
+    },
     401,
   );
   await expectStatus(
     'unpublish /v1/unpublish unauthenticated',
     `${API_BASE}/v1/unpublish`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    },
     401,
   );
 }
@@ -137,7 +164,11 @@ async function verifyPublicSurfaces(id) {
 async function exchangeToken(githubToken) {
   const { res, text } = await fetchText(
     `${API_BASE}/v1/auth/exchange`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ githubToken }) },
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ githubToken }),
+    },
     30_000,
   );
   const data = parseJson(text, '/v1/auth/exchange');
@@ -150,12 +181,22 @@ async function exchangeToken(githubToken) {
 }
 
 async function verifyAuthenticatedSurfaces(token) {
-  const mine = await expectJson('apps /v1/apps/mine authenticated', `${API_BASE}/v1/apps/mine`, { headers: bearer(token) }, 200);
+  const mine = await expectJson(
+    'apps /v1/apps/mine authenticated',
+    `${API_BASE}/v1/apps/mine`,
+    { headers: bearer(token) },
+    200,
+  );
   assert(Array.isArray(mine.data.apps), '/v1/apps/mine did not return an apps array');
 }
 
 async function ownsApp(token, id) {
-  const { data } = await expectJson('apps /v1/apps/mine', `${API_BASE}/v1/apps/mine`, { headers: bearer(token) }, 200);
+  const { data } = await expectJson(
+    'apps /v1/apps/mine',
+    `${API_BASE}/v1/apps/mine`,
+    { headers: bearer(token) },
+    200,
+  );
   return Array.isArray(data.apps) && data.apps.some((a) => a?.id === id);
 }
 
@@ -172,10 +213,16 @@ async function publishApp(id, token) {
     repo: null,
     demo: null,
   };
-  const { res, text } = await fetchText(`${API_BASE}/v1/publish`, { method: 'POST', headers: bearer(token), body: JSON.stringify(payload) }, 120_000);
+  const { res, text } = await fetchText(
+    `${API_BASE}/v1/publish`,
+    { method: 'POST', headers: bearer(token), body: JSON.stringify(payload) },
+    120_000,
+  );
   const data = parseJson(text, '/v1/publish');
   if (!res.ok) {
-    fail(`publish failed (${res.status}): ${data.error || text.slice(0, 500)} ${JSON.stringify(data.failedSteps || data.admin?.steps || '')}`);
+    fail(
+      `publish failed (${res.status}): ${data.error || text.slice(0, 500)} ${JSON.stringify(data.failedSteps || data.admin?.steps || '')}`,
+    );
   }
   console.log(`  published ${id}: ${data.appUrl}`);
   return data;
@@ -184,7 +231,11 @@ async function publishApp(id, token) {
 async function unpublishApp(id, token) {
   const { res, text } = await fetchText(
     `${API_BASE}/v1/unpublish`,
-    { method: 'POST', headers: bearer(token), body: JSON.stringify({ id, store: 'apps', deleteRepo: true }) },
+    {
+      method: 'POST',
+      headers: bearer(token),
+      body: JSON.stringify({ id, store: 'apps', deleteRepo: true }),
+    },
     120_000,
   );
   if (res.status === 404) {
@@ -193,7 +244,9 @@ async function unpublishApp(id, token) {
   }
   const data = parseJson(text, '/v1/unpublish');
   if (!res.ok || data.admin?.ok === false) {
-    console.warn(`  cleanup warning: unpublish returned ${res.status}: ${(data.error || text).slice(0, 300)}`);
+    console.warn(
+      `  cleanup warning: unpublish returned ${res.status}: ${(data.error || text).slice(0, 300)}`,
+    );
     return;
   }
   console.log(`  unpublished ${id}: registry + route + R2 + DNS + repo removed`);
@@ -202,12 +255,19 @@ async function unpublishApp(id, token) {
 async function githubRepo(id) {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'fas-prod-platform-e2e' };
   if (RAW_GITHUB_TOKEN) headers.Authorization = `Bearer ${RAW_GITHUB_TOKEN}`;
-  return await fetchText(`https://api.github.com/repos/${GITHUB_ORG}/${encodeURIComponent(id)}`, { headers }, 30_000);
+  return await fetchText(
+    `https://api.github.com/repos/${GITHUB_ORG}/${encodeURIComponent(id)}`,
+    { headers },
+    30_000,
+  );
 }
 
 async function verifyRepoExists(id) {
   const { res, text } = await githubRepo(id);
-  if (res.status !== 200) fail(`expected GitHub repo ${GITHUB_ORG}/${id} to exist, got ${res.status}: ${text.slice(0, 200)}`);
+  if (res.status !== 200)
+    fail(
+      `expected GitHub repo ${GITHUB_ORG}/${id} to exist, got ${res.status}: ${text.slice(0, 200)}`,
+    );
   const data = parseJson(text, 'github repo');
   assert(data.name === id, `github repo returned wrong name: ${data.name}`);
   assert(data.private === false, `canary repo ${id} is private; app repos must be public (MIT)`);
@@ -263,10 +323,14 @@ async function main() {
 
   if (!RAW_GITHUB_TOKEN) {
     if (ALLOW_NO_TOKEN) {
-      console.log('\nFAS_E2E_GITHUB_TOKEN not set — ran public/auth-gate checks only (FAS_E2E_ALLOW_NO_TOKEN=1).');
+      console.log(
+        '\nFAS_E2E_GITHUB_TOKEN not set — ran public/auth-gate checks only (FAS_E2E_ALLOW_NO_TOKEN=1).',
+      );
       return;
     }
-    fail('FAS_E2E_GITHUB_TOKEN is required. Store a low-privilege canary creator GitHub token as a GitHub Actions secret.');
+    fail(
+      'FAS_E2E_GITHUB_TOKEN is required. Store a low-privilege canary creator GitHub token as a GitHub Actions secret.',
+    );
   }
 
   console.log('\n› authenticated pipeline');

@@ -26,8 +26,8 @@ import { rolesRoutes } from './routes/roles.js';
 import { roomRoutes } from './routes/rooms.js';
 import { secretsRoutes } from './routes/secrets.js';
 import { uptimeRoutes } from './routes/uptime.js';
-import { webhookRoutes } from './routes/webhooks.js';
 import { votesRoutes } from './routes/votes.js';
+import { webhookRoutes } from './routes/webhooks.js';
 import type { Env } from './types.js';
 
 export { Room } from './do/room.js';

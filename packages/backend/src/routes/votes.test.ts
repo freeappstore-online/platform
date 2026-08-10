@@ -18,7 +18,10 @@ function fakeDB(opts: {
         first: async () => {
           if (trimmed.includes('FROM users')) return opts.user ?? null;
           if (trimmed.includes('FROM apps')) return opts.appExists !== false ? { 1: 1 } : null;
-          if (trimmed.includes('FROM app_votes WHERE user_id') && trimmed.includes('created_at >')) {
+          if (
+            trimmed.includes('FROM app_votes WHERE user_id') &&
+            trimmed.includes('created_at >')
+          ) {
             return { cnt: opts.recentVoteCount ?? 0 };
           }
           if (trimmed.includes('FROM app_votes WHERE app_id') && trimmed.includes('user_id')) {
@@ -77,11 +80,7 @@ describe('vote routes', () => {
 
   // POST /v1/store/apps/:appId/vote — auth required
   it('POST /v1/store/apps/:appId/vote requires auth', async () => {
-    const res = await app.request(
-      '/v1/store/apps/timer/vote',
-      { method: 'POST' },
-      env(fakeDB({})),
-    );
+    const res = await app.request('/v1/store/apps/timer/vote', { method: 'POST' }, env(fakeDB({})));
     expect(res.status).toBe(401);
   });
 

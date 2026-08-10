@@ -66,7 +66,10 @@ votesRoutes.post('/store/apps/:appId/vote', async (c) => {
       .first();
 
     if (!alreadyVoted && (rateRow?.cnt ?? 0) >= RATE_LIMIT_MAX) {
-      return c.json({ error: `rate limit: max ${RATE_LIMIT_MAX} votes per ${RATE_LIMIT_WINDOW_S}s` }, 429);
+      return c.json(
+        { error: `rate limit: max ${RATE_LIMIT_MAX} votes per ${RATE_LIMIT_WINDOW_S}s` },
+        429,
+      );
     }
 
     // Idempotent insert — DO NOTHING if the row already exists.

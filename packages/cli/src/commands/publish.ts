@@ -501,7 +501,7 @@ export async function assertFreeAppStoreProject(cwd: string): Promise<string | n
     '\n' +
     (await read('.github/workflows/deploy.yml'));
   if (/@freegamestore\/games|fgs-games|freegamestore-host/.test(haystack)) {
-    return 'This looks like a FreeGameStore game (it uses @freegamestore/games or the fgs-games bucket). FreeGameStore and FreeAppStore are separate stores — publish it with `fgs publish` instead. Cross-publishing fails at R2 upload (AccessDenied) because each store\'s credentials only reach its own bucket.';
+    return "This looks like a FreeGameStore game (it uses @freegamestore/games or the fgs-games bucket). FreeGameStore and FreeAppStore are separate stores — publish it with `fgs publish` instead. Cross-publishing fails at R2 upload (AccessDenied) because each store's credentials only reach its own bucket.";
   }
   return null;
 }

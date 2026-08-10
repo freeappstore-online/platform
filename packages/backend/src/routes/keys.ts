@@ -209,22 +209,36 @@ keysRoutes.get('/internal/keys/grants', async (c) => {
 // and the session-admin (requireAdmin) routes funnel through these so the
 // validation + SQL live in one place; only auth + `grantedBy` differ per route.
 type GrantResult = { status: 200 | 400 | 404; body: Record<string, unknown> };
-type GrantInput = { userId?: string; provider?: string; model?: string; note?: string; expiresAt?: string | null };
+type GrantInput = {
+  userId?: string;
+  provider?: string;
+  model?: string;
+  note?: string;
+  expiresAt?: string | null;
+};
 
 async function applyGrant(env: Env, raw: GrantInput, grantedBy: string): Promise<GrantResult> {
   const userId = String(raw.userId ?? '').trim();
-  const provider = String(raw.provider ?? '').trim().toLowerCase();
+  const provider = String(raw.provider ?? '')
+    .trim()
+    .toLowerCase();
   const model = String(raw.model ?? DEFAULT_COMP_MODELS[provider] ?? '').trim();
   const note = raw.note ? String(raw.note).trim().slice(0, 200) : null;
   const expiresAt = raw.expiresAt ? String(raw.expiresAt).trim() : null;
 
-  if (!USER_ID_RE.test(userId)) return { status: 400, body: { ok: false, error: 'valid userId is required' } };
-  if (!COMP_PROVIDERS.has(provider)) return { status: 400, body: { ok: false, error: `unknown grant provider: ${provider}` } };
-  if (!model || model.length > 128) return { status: 400, body: { ok: false, error: 'valid model is required' } };
-  if (expiresAt && Number.isNaN(Date.parse(expiresAt))) return { status: 400, body: { ok: false, error: 'expiresAt must be an ISO date' } };
+  if (!USER_ID_RE.test(userId))
+    return { status: 400, body: { ok: false, error: 'valid userId is required' } };
+  if (!COMP_PROVIDERS.has(provider))
+    return { status: 400, body: { ok: false, error: `unknown grant provider: ${provider}` } };
+  if (!model || model.length > 128)
+    return { status: 400, body: { ok: false, error: 'valid model is required' } };
+  if (expiresAt && Number.isNaN(Date.parse(expiresAt)))
+    return { status: 400, body: { ok: false, error: 'expiresAt must be an ISO date' } };
 
   const funded = !!compKeyFor(env, provider);
-  const user = await env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first<{ id: string }>();
+  const user = await env.DB.prepare('SELECT id FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string }>();
   if (!user) return { status: 404, body: { ok: false, error: 'user not found' } };
 
   await ensureCompSchema(env.DB);
@@ -245,9 +259,12 @@ async function applyGrant(env: Env, raw: GrantInput, grantedBy: string): Promise
 
 async function revokeGrant(env: Env, rawUserId: string): Promise<GrantResult> {
   const userId = String(rawUserId ?? '').trim();
-  if (!USER_ID_RE.test(userId)) return { status: 400, body: { ok: false, error: 'valid userId is required' } };
+  if (!USER_ID_RE.test(userId))
+    return { status: 400, body: { ok: false, error: 'valid userId is required' } };
   await ensureCompSchema(env.DB);
-  const result = await env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(userId).run();
+  const result = await env.DB.prepare('DELETE FROM complimentary_grants WHERE user_id = ?')
+    .bind(userId)
+    .run();
   return { status: 200, body: { ok: true, removed: (result.meta?.changes ?? 0) > 0 } };
 }
 

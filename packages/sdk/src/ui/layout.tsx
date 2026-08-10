@@ -134,7 +134,10 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
           <button onClick={handleSignOut} style={menuItemStyle}>
             Sign out
           </button>
-          <button onClick={handleDelete} style={{ ...menuItemStyle, color: 'var(--danger, #dc2626)' }}>
+          <button
+            onClick={handleDelete}
+            style={{ ...menuItemStyle, color: 'var(--danger, #dc2626)' }}
+          >
             Delete account
           </button>
         </div>
@@ -182,18 +185,14 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
 
   if (loading) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>
-        Loading...
-      </div>
+      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading...</div>
     );
   }
 
   if (!user) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>
-          Sign in to view your profile.
-        </p>
+        <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>Sign in to view your profile.</p>
         <SignInButton app={app} />
       </div>
     );
@@ -237,9 +236,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
           >
             {user.login}
           </div>
-          <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>
-            FreeAppStore account
-          </div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>FreeAppStore account</div>
         </div>
       </div>
 
@@ -316,7 +313,12 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
         }}
       >
         <div
-          style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--danger, #dc2626)', marginBottom: '0.5rem' }}
+          style={{
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            color: 'var(--danger, #dc2626)',
+            marginBottom: '0.5rem',
+          }}
         >
           Danger zone
         </div>

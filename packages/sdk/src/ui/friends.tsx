@@ -110,7 +110,12 @@ export function AddFriendButton({ app, userId }: AddFriendButtonProps) {
       bg: 'var(--panel)',
       clickable: false,
     },
-    pending_incoming: { label: 'Accept', color: '#fff', bg: 'var(--success, #16a34a)', clickable: true },
+    pending_incoming: {
+      label: 'Accept',
+      color: '#fff',
+      bg: 'var(--success, #16a34a)',
+      clickable: true,
+    },
     accepted: {
       label: 'Friends',
       color: 'var(--muted)',
@@ -369,7 +374,10 @@ export function FriendsList({ app, onSelectFriend }: FriendsListProps) {
                     Add
                   </button>
                 ) : u.friendStatus === 'pending_incoming' ? (
-                  <button onClick={() => handleAccept(u.userId)} style={smallBtnStyle('var(--success, #16a34a)')}>
+                  <button
+                    onClick={() => handleAccept(u.userId)}
+                    style={smallBtnStyle('var(--success, #16a34a)')}
+                  >
                     Accept
                   </button>
                 ) : (

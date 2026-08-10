@@ -55,8 +55,16 @@ const badgeColors: Record<string, { bg: string; color: string; border: string }>
     color: 'var(--accent)',
     border: 'var(--accent)',
   },
-  success: { bg: 'var(--success-soft, #f0fdf4)', color: 'var(--success, #16a34a)', border: '#86efac' },
-  warning: { bg: 'var(--warning-soft, #fefce8)', color: 'var(--warning, #ca8a04)', border: '#fde047' },
+  success: {
+    bg: 'var(--success-soft, #f0fdf4)',
+    color: 'var(--success, #16a34a)',
+    border: '#86efac',
+  },
+  warning: {
+    bg: 'var(--warning-soft, #fefce8)',
+    color: 'var(--warning, #ca8a04)',
+    border: '#fde047',
+  },
   danger: { bg: 'var(--danger-soft, #fef2f2)', color: 'var(--danger, #dc2626)', border: '#fecaca' },
 };
 
@@ -234,9 +242,7 @@ export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalP
               borderBottom: '1px solid var(--line)',
             }}
           >
-            <h2
-              style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}
-            >
+            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>
               {title}
             </h2>
             <button
@@ -289,9 +295,7 @@ export function ConfirmDialog({
   const isDanger = variant === 'danger';
   return (
     <Modal open={open} onClose={onCancel} title={title} maxWidth={400}>
-      <p style={{ fontSize: '0.9rem', color: 'var(--muted)', margin: '0 0 1.25rem' }}>
-        {message}
-      </p>
+      <p style={{ fontSize: '0.9rem', color: 'var(--muted)', margin: '0 0 1.25rem' }}>{message}</p>
       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
         <button
           onClick={onCancel}
@@ -584,9 +588,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <p style={{ color: 'var(--danger, #dc2626)', fontWeight: 700, marginBottom: '0.5rem' }}>
               Something went wrong
             </p>
-            <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>
-              {this.state.error.message}
-            </p>
+            <p style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{this.state.error.message}</p>
           </div>
         )
       );

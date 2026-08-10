@@ -301,7 +301,10 @@ publishRoutes.post('/unpublish', async (c) => {
     // non-JSON passthrough
   }
   if (!adminRes.ok) {
-    return c.json({ error: 'admin_deprovision_failed', status: adminRes.status, admin: adminBody }, 502);
+    return c.json(
+      { error: 'admin_deprovision_failed', status: adminRes.status, admin: adminBody },
+      502,
+    );
   }
 
   return c.json({ appId: body.id, store, admin: adminBody });

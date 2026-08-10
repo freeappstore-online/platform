@@ -629,7 +629,10 @@ contentAdminRoutes.get('/admin/stats', async (c) => {
 // Used by the standalone admin worker (behind CF Access) which cannot hold
 // a FAS user session JWT. Auth is the shared ADMIN_PROVISION_TOKEN.
 
-function requireInternalToken(c: { env: Env; req: { header: (name: string) => string | undefined } }): boolean {
+function requireInternalToken(c: {
+  env: Env;
+  req: { header: (name: string) => string | undefined };
+}): boolean {
   const expected = c.env.ADMIN_PROVISION_TOKEN;
   const provided = c.req.header('X-Internal-Token');
   return !!expected && provided === expected;
@@ -644,13 +647,24 @@ contentAdminRoutes.get('/internal/admin/kv', async (c) => {
 
   let sql = 'SELECT app_id, user_id, key, value_size_bytes as size, updated_at FROM kv WHERE 1=1';
   const params: unknown[] = [];
-  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
-  if (userId) { sql += ' AND user_id = ?'; params.push(userId); }
-  if (prefix) { sql += ' AND key LIKE ?'; params.push(`${prefix}%`); }
+  if (appId) {
+    sql += ' AND app_id = ?';
+    params.push(appId);
+  }
+  if (userId) {
+    sql += ' AND user_id = ?';
+    params.push(userId);
+  }
+  if (prefix) {
+    sql += ' AND key LIKE ?';
+    params.push(`${prefix}%`);
+  }
   sql += ' ORDER BY updated_at DESC LIMIT ?';
   params.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...params)
+    .all();
   return c.json({ entries: result.results ?? [] });
 });
 
@@ -690,14 +704,23 @@ contentAdminRoutes.get('/internal/admin/collections', async (c) => {
   const collection = c.req.query('collection') ?? '';
   const limit = Math.min(Number(c.req.query('limit') || 50), 200);
 
-  let sql = 'SELECT id, app_id, collection, owner_id, data, created_at, updated_at FROM documents WHERE 1=1';
+  let sql =
+    'SELECT id, app_id, collection, owner_id, data, created_at, updated_at FROM documents WHERE 1=1';
   const params: unknown[] = [];
-  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
-  if (collection) { sql += ' AND collection = ?'; params.push(collection); }
+  if (appId) {
+    sql += ' AND app_id = ?';
+    params.push(appId);
+  }
+  if (collection) {
+    sql += ' AND collection = ?';
+    params.push(collection);
+  }
   sql += ' ORDER BY updated_at DESC LIMIT ?';
   params.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...params)
+    .all();
   const docs = (result.results ?? []).map((r: Record<string, unknown>) => ({
     ...r,
     data: parseJsonObject(r.data),
@@ -726,12 +749,20 @@ contentAdminRoutes.get('/internal/admin/counters', async (c) => {
 
   let sql = 'SELECT app_id, key as name, value FROM counters WHERE 1=1';
   const params: unknown[] = [];
-  if (appId) { sql += ' AND app_id = ?'; params.push(appId); }
-  if (prefix) { sql += ' AND key LIKE ?'; params.push(`${prefix}%`); }
+  if (appId) {
+    sql += ' AND app_id = ?';
+    params.push(appId);
+  }
+  if (prefix) {
+    sql += ' AND key LIKE ?';
+    params.push(`${prefix}%`);
+  }
   sql += ' ORDER BY app_id, key LIMIT ?';
   params.push(limit);
 
-  const result = await c.env.DB.prepare(sql).bind(...params).all();
+  const result = await c.env.DB.prepare(sql)
+    .bind(...params)
+    .all();
   return c.json({ counters: result.results ?? [] });
 });
 
