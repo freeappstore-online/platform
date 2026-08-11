@@ -168,28 +168,49 @@ Step-to-cause mapping:
 5. `Proxy register + fetch + cleanup` → secrets store, allowlist, or proxy injection broken.
 6. `Rooms WebSocket round-trip` → DurableObject misconfigured or upgraded incompatibly.
 
-### Renewing PROD_SMOKE_SESSION_TOKEN
+### Provisioning FAS_E2E_GITHUB_TOKEN
 
-The auth-required steps (3–6) need a long-lived session token in the repo secret `PROD_SMOKE_SESSION_TOKEN`. Tokens expire after ~30 days.
+> **`PROD_SMOKE_SESSION_TOKEN` is dead — do not renew it.** It was a 30-day
+> session token that expired on a timer and red-lit the monitor while prod was
+> fine. Replaced by `FAS_E2E_GITHUB_TOKEN` in c53f50c (2026-07-20). The old
+> secret was deleted from the repo on 2026-08-11.
 
-When prod-smoke step 3 starts failing with `401 Unauthorized` (and a fresh deploy didn't break anything), the token expired. Regenerate:
+Steps 3–6 of `prod-smoke.yml`, and the whole authenticated half of
+`prod-platform-e2e.yml`, authenticate by exchanging a **long-lived, low-privilege
+GitHub PAT** for a fresh `fas` session on every run. Nothing expires on a timer.
+
+Both workflows read the same repo secret, `FAS_E2E_GITHUB_TOKEN`. To provision:
 
 ```bash
-# 1. As yourself, sign in fresh.
-fas login
+# 1. Mint a fine-grained PAT for the canary creator account at
+#    https://github.com/settings/personal-access-tokens/new
+#    Scope: read:user ONLY. No repo access. No org access.
+#    /v1/auth/exchange only calls GitHub /user to identify + upsert the user.
 
-# 2. Copy the new token.
-jq -r .session.token ~/.fas/config.json | pbcopy
+# 2. Store it in ops (SOPS) first — see ~/dev/ops/AGENTS.md.
+cd ~/dev/ops && sops secrets.enc.yaml     # add under the fas project
 
-# 3. Update the repo secret.
-gh secret set PROD_SMOKE_SESSION_TOKEN -R freeappstore-online/platform
-# (paste from clipboard at the prompt)
+# 3. Push to the one consumer (never echo the value into your shell history).
+cd ~/dev/ops && sops -d --extract '["fas"]["FAS_E2E_GITHUB_TOKEN"]' secrets.enc.yaml \
+  | gh secret set FAS_E2E_GITHUB_TOKEN -R freeappstore-online/platform
 
-# 4. Verify.
+# 4. Verify both monitors.
 gh workflow run prod-smoke.yml -R freeappstore-online/platform
+gh workflow run prod-platform-e2e.yml -R freeappstore-online/platform
 ```
 
-If steps 3–6 are skipped (warning: `PROD_SMOKE_SESSION_TOKEN secret not set`), the secret was deleted and needs to be re-added the same way.
+**If the secret is absent, both workflows fail loudly — this is intentional.**
+`prod-smoke` used to `exit 0` with a warning instead, and because the secret was
+never created after c53f50c, steps 3–6 skipped silently for three weeks
+(2026-07-20 → 2026-08-11) while the run stayed green. A green run with no
+credential means *untested*, not *healthy*. If you see
+`FAS_E2E_GITHUB_TOKEN is not set` in a log, the fix is to provision the secret
+above — not to re-add a skip.
+
+**Before enabling `prod-platform-e2e`, note it mutates production**: every 6h it
+publishes a real `e2e-canary-*` app (GitHub repo + CF Pages + DNS + registry row)
+and then deprovisions it. A run that dies mid-flight leaks an app needing manual
+cleanup via the admin dashboard.
 
 ## Two distinct operations — don't confuse them
 

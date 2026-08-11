@@ -77,14 +77,21 @@ jobs:
       # and red-lit the monitor. FAS_E2E_GITHUB_TOKEN is a fine-grained PAT for the
       # smoke user with read:user only (the /auth/exchange endpoint just calls
       # GitHub /user to identify + upsert the user, then mints a fas session).
+      #
+      # A missing token is FATAL, deliberately. This used to `exit 0` with a
+      # warning so the run stayed green — and because the secret was never
+      # actually created, steps 3-6 skipped silently from 2026-07-20 to
+      # 2026-08-11 while the badge stayed green. Three weeks of zero
+      # authenticated coverage, reported as health. A monitor that cannot run
+      # its own checks must be red, never green.
       - name: Mint a fresh session (exchange the canary GitHub token)
         env:
           FAS_E2E_GITHUB_TOKEN: ${{ secrets.FAS_E2E_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "${FAS_E2E_GITHUB_TOKEN:-}" ]; then
-            echo "::warning::FAS_E2E_GITHUB_TOKEN not set — authenticated smoke steps (3-6) will skip"
-            exit 0
+            echo "::error::FAS_E2E_GITHUB_TOKEN is not set, so steps 3-6 (auth, KV, proxy, rooms) cannot run. Failing rather than skipping — a green run here would mean 'untested', not 'healthy'. See ops/SKILLS.md → 'Provisioning FAS_E2E_GITHUB_TOKEN'."
+            exit 1
           fi
           resp=$(curl -sS -X POST "$API_BASE/v1/auth/exchange" \
             -H "Content-Type: application/json" \
@@ -96,7 +103,6 @@ jobs:
           echo "  minted a fresh session for @$login"
 
       - name: 3. authenticated round-trip — apps/mine
-        if: env.SESSION_TOKEN != ''
         run: |
           set -euo pipefail
           # apps/mine returns the session-owner's app list; we just check it's a 200 + JSON object
@@ -111,7 +117,6 @@ jobs:
           PY
 
       - name: 4. KV round-trip
-        if: env.SESSION_TOKEN != ''
         run: |
           set -euo pipefail
           KEY="prod-smoke-$(date +%s)"
@@ -138,7 +143,6 @@ jobs:
           test "$code" = "204"
 
       - name: 5. Proxy register + fetch + cleanup
-        if: env.SESSION_TOKEN != ''
         run: |
           set -euo pipefail
           NAME="PROD_SMOKE_KEY"
@@ -174,7 +178,6 @@ jobs:
           echo "  ✓ cleanup done"
 
       - name: 6. Rooms WebSocket round-trip via published SDK
-        if: env.SESSION_TOKEN != ''
         run: |
           set -euo pipefail
           cd /tmp/smoke-sdk   # already has @freeappstore/sdk@latest from step 2
