@@ -161,11 +161,9 @@ const APP_FILES: Record<string, string> = {
   --line: #e5e7eb;
   --line-strong: #d1d5db;
   --panel: #f9fafb;
-  --glass: rgba(255, 255, 255, 0.8);
-  --dock: #ffffff;
   --success: #16a34a;
   --warning: #d97706;
-  --error: #dc2626;
+  --danger: #dc2626;
   --accent: #2563eb;
   font-family: "Manrope", system-ui, sans-serif;
 }
@@ -178,11 +176,9 @@ const APP_FILES: Record<string, string> = {
     --line: #2d2d2d;
     --line-strong: #404040;
     --panel: #1a1a1a;
-    --glass: rgba(15, 15, 15, 0.8);
-    --dock: #1a1a1a;
     --success: #22c55e;
     --warning: #fbbf24;
-    --error: #ef4444;
+    --danger: #ef4444;
   }
 }
 
@@ -226,7 +222,7 @@ export function Shell({ children }: ShellProps) {
         </header>
         <main className="flex-1 overflow-auto p-4">{children}</main>
         <nav className="flex items-center justify-around h-16 border-t shrink-0"
-          style={{ borderColor: "var(--line)", background: "var(--dock)" }} />
+          style={{ borderColor: "var(--line)", background: "var(--panel)" }} />
       </div>
     </>
   );
@@ -306,15 +302,21 @@ const GAME_FILES: Record<string, string> = {
   "web/src/index.css": `@import "tailwindcss";
 
 :root {
+  /* Games intentionally use the game token set, not the app one: both this
+     worker's checkCssVars (src/compliance.ts) and packages/compliance's
+     brand-tokens require --bg/--ink/--accent for game projects. Swapping this
+     for the app page-background token would fail every scaffolded game.
+     NB: do not name the app token in this comment — checkCssVars regexes the
+     whole file, so mentioning it here makes the check pass spuriously. */
   --bg: #0f0f0f;
-  --surface: #1a1a1a;
+  --panel: #1a1a1a;
   --ink: #f0f0f0;
   --muted: #999;
   --accent: #10b981;
-  --border: #2a2a2a;
+  --line: #2a2a2a;
   --success: #22c55e;
   --warning: #fbbf24;
-  --error: #ef4444;
+  --danger: #ef4444;
   font-family: "Manrope", system-ui, sans-serif;
 }
 
@@ -344,7 +346,7 @@ interface GameShellProps {
 export function GameShell({ title, children }: GameShellProps) {
   return (
     <div style={{ width: "100vw", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)" }}>
-      <header style={{ height: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1rem", background: "var(--surface)", borderBottom: "1px solid var(--border)", fontSize: "0.85rem" }}>
+      <header style={{ height: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1rem", background: "var(--panel)", borderBottom: "1px solid var(--line)", fontSize: "0.85rem" }}>
         <span style={{ fontWeight: 700, fontFamily: "Fraunces, serif" }}>{title}</span>
         <a href="https://freegamestore.online" target="_blank" rel="noopener noreferrer" style={{ color: "var(--muted)", fontSize: "0.75rem", textDecoration: "none" }}>
           FreeGameStore
@@ -615,7 +617,7 @@ Users describe a game idea and you build it. You write TypeScript + React code, 
 
 ## Brand Rules (mandatory)
 - Fonts: Manrope (body/UI) + Fraunces (display/headings only)
-- CSS variables: --bg, --surface, --ink, --muted, --accent, --border (defined in index.css)
+- CSS variables: --bg, --panel, --ink, --muted, --accent, --line (defined in index.css). Games use --bg for the canvas background (apps use --paper); never --surface or --border.
 - Dark theme only (games always use dark background #0f0f0f)
 - Use the GameShell component as the root layout. Build your game inside <GameShell>.
 - GameShell provides a 44px top bar + full-height game area
