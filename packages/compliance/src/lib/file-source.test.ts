@@ -125,8 +125,9 @@ describe('mapFileSource', () => {
       ['web/src/index.css', '/* Manrope Fraunces */'],
     ]);
     const results = await runChecksFromFiles(files);
-    expect(results).toHaveLength(20);
+    expect(results).toHaveLength(21);
     const names = results.map((r) => r.name);
+    expect(names).toContain('No committed build artifacts');
     expect(names).toContain('No unsafe 100vh');
     expect(names).toContain('Bundle size');
     expect(names).toContain('MIT License');

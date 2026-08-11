@@ -9,7 +9,8 @@
  *      shape changes silently).
  *   3. Source-level parity between `fsFileSource` (CLI) and
  *      `mapFileSource` (agent) — same fixture must yield identical
- *      results across both.
+ *      results across both, except for checks that are inherently
+ *      VCS-aware (see VCS_ONLY_CHECKS in the parity block).
  *   4. New checks that ship without being wired into `runChecksOn`
  *      (covered by the coverage guard at the bottom).
  *
@@ -90,6 +91,9 @@ describe('failing-app fixture', () => {
     //    at all; the `PWA manifest` check already fails loudly for that
     //    and we don't want to double-report the same root cause.
     expect(summary.pass.sort()).toEqual([
+      // The fixture lives inside this git repo and tracks no artifacts,
+      // so the VCS-aware check legitimately passes even on the "broken" app.
+      'No committed build artifacts',
       'No scroll (games only)',
       'PWA maskable icon',
       'Text selectable',
@@ -149,7 +153,19 @@ describe('FileSource parity (fs vs map)', () => {
    * Loading the same fixture both ways must produce the same check
    * results. This is the test that proves the SDK + agent stay aligned
    * even though they use different file-source implementations.
+   *
+   * One documented exception: `No committed build artifacts` asks whether
+   * a path is tracked by git. `fsFileSource` can answer (it shells out to
+   * `git ls-files`); `mapFileSource` cannot — the agent holds a virtual
+   * filesystem with no VCS behind it, so the check degrades to `warn`
+   * there and reports `pass`/`fail` on disk. That asymmetry is inherent
+   * to the question, not drift, so it is excluded here rather than papered
+   * over by weakening the check to something both sources can answer.
    */
+  const VCS_ONLY_CHECKS = new Set(['No committed build artifacts']);
+  const comparable = (results: CheckResult[]) =>
+    results.filter((r) => !VCS_ONLY_CHECKS.has(r.name));
+
   it.each([
     ['passing-app', PASSING_APP],
     ['failing-app', FAILING_APP],
@@ -157,7 +173,20 @@ describe('FileSource parity (fs vs map)', () => {
   ])('runChecksFromFiles(%s) matches runChecks(%s)', async (_name, dir) => {
     const fromDisk = await runChecks(dir);
     const fromMap = await runChecksFromFiles(await readFixtureIntoMap(dir));
-    expect(fromMap).toEqual(fromDisk);
+    expect(comparable(fromMap)).toEqual(comparable(fromDisk));
+  });
+
+  it('the excluded VCS-only check is present in both, and differs only as documented', async () => {
+    const onDisk = (await runChecks(PASSING_APP)).find((r) => VCS_ONLY_CHECKS.has(r.name));
+    const inMap = (await runChecksFromFiles(await readFixtureIntoMap(PASSING_APP))).find((r) =>
+      VCS_ONLY_CHECKS.has(r.name),
+    );
+    // Both sources must still RUN it — the exclusion above is about the
+    // result, not about letting a source silently drop the check.
+    expect(onDisk).toBeDefined();
+    expect(inMap).toBeDefined();
+    expect(onDisk?.status).toBe('pass'); // fixtures live inside this git repo
+    expect(inMap?.status).toBe('warn'); // no VCS view
   });
 });
 

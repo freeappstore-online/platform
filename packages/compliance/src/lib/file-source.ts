@@ -14,8 +14,12 @@
  *     etc.). Implementations are responsible for that filtering.
  */
 
+import { execFile as execFileCb } from 'node:child_process';
 import { readdir, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
+import { promisify } from 'node:util';
+
+const execFile = promisify(execFileCb);
 
 export interface FileSource {
   /** Yield every relevant file path. Implementations skip noise dirs. */
@@ -28,6 +32,21 @@ export interface FileSource {
   /** Names of direct children of `dir`. Returns null if dir missing.
    *  Optional — only bundle-size needs directory enumeration. */
   listDir?(dir: string): Promise<string[] | null>;
+  /**
+   * Every path tracked by version control, INCLUDING paths under SKIP_DIRS.
+   * Returns null when the source has no VCS view (Map-backed agent) or the
+   * directory isn't a git repo.
+   *
+   * Why this exists separately from `list()`: `list()` deliberately skips
+   * node_modules/, dist/ and friends, so it can never observe them — yet
+   * "is node_modules committed?" is exactly the question no-committed-artifacts
+   * has to answer. It is also a fundamentally different question: those
+   * directories existing on disk is normal and healthy (you just installed),
+   * whereas them being *tracked* is the defect. Only git can tell the two apart.
+   *
+   * Optional — only no-committed-artifacts needs it today.
+   */
+  listTracked?(): Promise<string[] | null>;
 }
 
 const SKIP_DIRS = new Set([
@@ -78,6 +97,19 @@ export function fsFileSource(repoDir: string): FileSource {
       try {
         return await readdir(join(repoDir, dir));
       } catch {
+        return null;
+      }
+    },
+    async listTracked() {
+      // -z gives NUL-separated paths, so filenames containing newlines or
+      // quotes can't corrupt the list (git otherwise quote-escapes them).
+      try {
+        const { stdout } = await execFile('git', ['-C', repoDir, 'ls-files', '-z'], {
+          maxBuffer: 64 * 1024 * 1024, // a repo with node_modules committed is huge — that's the case we're here to catch
+        });
+        return stdout.split('\0').filter(Boolean);
+      } catch {
+        // Not a git repo, git missing, or the repo is too large to buffer.
         return null;
       }
     },

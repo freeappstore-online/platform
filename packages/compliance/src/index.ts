@@ -7,6 +7,7 @@ import { checkHtmlMeta } from './checks/html-meta.js';
 import { checkLicenseMit } from './checks/license-mit.js';
 import { checkManifest } from './checks/manifest.js';
 import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
+import { checkNoCommittedArtifacts } from './checks/no-committed-artifacts.js';
 import { checkNoEnvProduction } from './checks/no-env-production.js';
 import { checkNoPlaceholders } from './checks/no-placeholders.js';
 import { checkNoScroll } from './checks/no-scroll.js';
@@ -47,6 +48,7 @@ export {
   checkManifest,
   checkMaskableIcon,
   checkNoBrandOverrides,
+  checkNoCommittedArtifacts,
   checkNoEnvProduction,
   checkNoPlaceholders,
   checkNoScroll,
@@ -82,6 +84,7 @@ export async function runChecksFromFiles(files: Map<string, string>): Promise<Ch
 async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
   return Promise.all([
     checkLicenseMit(source),
+    checkNoCommittedArtifacts(source),
     checkNoEnvProduction(source),
     checkNoPlaceholders(source),
     checkNoTracking(source),
