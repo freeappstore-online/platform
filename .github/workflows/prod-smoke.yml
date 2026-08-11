@@ -13,8 +13,9 @@ name: Prod smoke
 # the *runtime backend + SDK consumer* path.
 #
 # Frequency: every 30 minutes. Cheap (~30s per run, GH minutes free for
-# public repos). Failures open a GitHub issue; subsequent failures comment
-# on the existing issue instead of spamming.
+# public repos). Any non-success result — failed assertion, hang, cancelled
+# runner — opens a GitHub issue; subsequent ones comment on the existing issue
+# instead of spamming.
 
 on:
   schedule:
@@ -36,6 +37,10 @@ env:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    # A healthy run is ~10-30s. Without a cap the job inherits the 360m default:
+    # on 2026-08-06 two runs sat idle ~15m before infra killed them. Fail fast so
+    # the notify job reports a hang promptly instead of hours later.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -206,41 +211,92 @@ jobs:
             process.exit(0)
           "
 
-      - name: Open / update issue on failure
-        if: failure() && github.event_name == 'schedule'
+  # Deliberately a SEPARATE job, not a final step of `smoke`. It gets its own
+  # runner, so it still reports when the smoke runner never comes up. On
+  # 2026-08-06 two runs were allocated, executed ZERO steps, and were cancelled
+  # ~15m later — an in-job notifier (even guarded with `cancelled()`) could
+  # never have fired, so both incidents passed silently.
+  #
+  # `needs.smoke.result` covers failure, cancelled and skipped alike, which is
+  # what we want: anything that is not a green smoke run deserves a shout.
+  # Residual gap: if the whole workflow RUN is cancelled, this job can be torn
+  # down with it. Catching that needs an out-of-run `workflow_run` watchdog.
+  notify:
+    needs: smoke
+    if: always() && needs.smoke.result != 'success' && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Open / update the failure issue
         uses: actions/github-script@v7
+        env:
+          SMOKE_RESULT: ${{ needs.smoke.result }}
         with:
           script: |
             const issueLabel = 'prod-smoke-failure'
+            const result = process.env.SMOKE_RESULT
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const body = `Prod smoke failed at ${new Date().toISOString()}.
+
+            // `cancelled` almost always means a hang or a dead runner rather than a
+            // real prod regression — say so, so nobody hunts a backend bug that
+            // isn't there (exactly what burned us on the 2026-07 expired-token cluster).
+            const headline = result === 'cancelled'
+              ? `Prod smoke was **cancelled** at ${new Date().toISOString()} (hang or runner/infra failure — usually not a prod regression).`
+              : `Prod smoke **${result}** at ${new Date().toISOString()}.`
+
+            const body = `${headline}
 
             See run: ${runUrl}
 
             Re-run the workflow manually after fixing to verify, or comment \`/close\` once recovered.`
 
-            const { data: existing } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: issueLabel,
-              state: 'open',
-            })
+            // The GitHub API 5xxs often enough to lose an alert outright: on
+            // 2026-07-20T01:00 a real failure went unreported because this call
+            // died with "No server is currently available to service your request".
+            const retry = async (label, fn) => {
+              let lastErr
+              for (let attempt = 1; attempt <= 4; attempt++) {
+                try {
+                  return await fn()
+                } catch (err) {
+                  lastErr = err
+                  const status = err.status ?? 0
+                  // 4xx (bad token, missing scope, gone) will never heal by waiting.
+                  if (status >= 400 && status < 500 && status !== 429) throw err
+                  if (attempt === 4) break
+                  const waitMs = 2000 * 2 ** (attempt - 1)
+                  core.warning(`${label} attempt ${attempt}/4 failed (${status || 'no status'}): ${err.message} — retrying in ${waitMs}ms`)
+                  await new Promise(r => setTimeout(r, waitMs))
+                }
+              }
+              throw lastErr
+            }
+
+            const { data: existing } = await retry('listForRepo', () =>
+              github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: issueLabel,
+                state: 'open',
+              }))
 
             if (existing.length > 0) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existing[0].number,
-                body,
-              })
-              console.log(`commented on existing issue #${existing[0].number}`)
+              await retry('createComment', () =>
+                github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: existing[0].number,
+                  body,
+                }))
+              core.info(`commented on existing issue #${existing[0].number}`)
             } else {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: '🔥 prod-smoke failing',
-                labels: [issueLabel],
-                body,
-              })
-              console.log('opened new issue')
+              const { data: created } = await retry('issues.create', () =>
+                github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: '🔥 prod-smoke failing',
+                  labels: [issueLabel],
+                  body,
+                }))
+              core.info(`opened new issue #${created.number}`)
             }
