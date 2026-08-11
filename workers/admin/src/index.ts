@@ -157,6 +157,12 @@ export default {
           FAS_ZONE_ID: env.FAS_ZONE_ID,
           FGS_ZONE_ID: env.FGS_ZONE_ID,
           DB: env.DB,
+          // Required by the CF Web Analytics step to persist the minted
+          // site_tag back into the FAS backend's app_analytics table. Omitting
+          // these silently downgraded every publish to the "no FAS backend
+          // binding — paste it manually" path, so no app ever got a token.
+          BACKEND_FAS: env.BACKEND_FAS,
+          ADMIN_PROVISION_TOKEN: env.ADMIN_PROVISION_TOKEN || env.INTERNAL_TOKEN,
         });
         return json(result, result.success ? 200 : 400, request);
       } catch (e) {

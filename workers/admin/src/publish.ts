@@ -24,6 +24,19 @@ interface PublishEnv {
   /** D1 binding for the `routes` table that freeappstore-host reads to map
    *  Host header → R2 prefix. */
   DB?: D1Database;
+  /** Service binding to the FAS platform backend. The CF Web Analytics step
+   *  needs it to persist the minted site_tag into `app_analytics`.
+   *
+   *  Required-but-nullable on purpose (`Fetcher | undefined`, not `?:`). The
+   *  bug this fixes was a hand-built env literal in index.ts that simply left
+   *  the key out, so every publish fell down the "no FAS backend binding —
+   *  paste it manually" path and no app ever received a token. An optional
+   *  field would have compiled just as silently; this forces every caller to
+   *  name the key and decide. */
+  BACKEND_FAS: Fetcher | undefined;
+  /** Shared secret for admin→backend service-binding calls (X-Internal-Token).
+   *  Required-but-nullable for the same reason as BACKEND_FAS. */
+  ADMIN_PROVISION_TOKEN: string | undefined;
 }
 
 interface PublishRequest {
@@ -434,15 +447,7 @@ export async function handlePublish(req: PublishRequest, env: PublishEnv, gh?: G
  * we return the freshly-minted site_tag in the step detail so the operator
  * can paste it via the owner-protected PUT endpoint manually.
  */
-async function provisionCfWebAnalytics(
-  env: PublishEnv & {
-    BACKEND_FAS?: Fetcher;
-    ADMIN_PROVISION_TOKEN?: string;
-  },
-  req: PublishRequest,
-  config: StoreConfig,
-  subdomain: string,
-): Promise<Step> {
+async function provisionCfWebAnalytics(env: PublishEnv, req: PublishRequest, config: StoreConfig, subdomain: string): Promise<Step> {
   try {
     // Look up or create the RUM site for this host.
     const existing = await cfApi(env, `/accounts/${env.CF_ACCOUNT_ID}/rum/site_info/list`);
