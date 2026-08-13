@@ -30,7 +30,7 @@ const STORE_DOMAIN: Record<string, { domain: string; org: string }> = {
  * build them.
  */
 appsRoutes.get('/apps/mine', async (c) => {
-  let user;
+  let user: Awaited<ReturnType<typeof requireUser>> | null = null;
   try {
     user = await requireUser(c);
   } catch (err) {
@@ -38,34 +38,57 @@ appsRoutes.get('/apps/mine', async (c) => {
     throw err;
   }
 
-  const result = await c.env.DB.prepare(
-    `SELECT id, owner_login, created_at, category, type, oneliner, repo, demo, store
-     FROM apps
-     WHERE owner_login = ?
-     ORDER BY created_at DESC`,
-  )
-    .bind(user.githubLogin)
-    .all<AppRow>();
+  try {
+    const result = await c.env.DB.prepare(
+      `SELECT id, owner_login, created_at, category, type, oneliner, repo, demo, store
+       FROM apps
+       WHERE owner_login = ?
+       ORDER BY created_at DESC`,
+    )
+      .bind(user.githubLogin)
+      .all<AppRow>();
 
-  const apps = (result.results ?? []).map((r) => {
-    const store = r.store === 'games' ? 'games' : 'apps';
-    const meta = STORE_DOMAIN[store]!;
-    return {
-      id: r.id,
-      ownerLogin: r.owner_login,
-      createdAt: r.created_at,
-      store,
-      category: r.category,
-      type: r.type,
-      oneliner: r.oneliner,
-      repo: r.repo,
-      demo: r.demo,
-      appUrl: `https://${r.id}.${meta.domain}`,
-      repoUrl: r.repo ? r.repo : `https://github.com/${meta.org}/${r.id}`,
-    };
-  });
+    const apps = (result.results ?? []).map((r) => {
+      const store = r.store === 'games' ? 'games' : 'apps';
+      const meta = STORE_DOMAIN[store]!;
+      return {
+        id: r.id,
+        ownerLogin: r.owner_login,
+        createdAt: r.created_at,
+        store,
+        category: r.category,
+        type: r.type,
+        oneliner: r.oneliner,
+        repo: r.repo,
+        demo: r.demo,
+        appUrl: `https://${r.id}.${meta.domain}`,
+        repoUrl: r.repo ? r.repo : `https://github.com/${meta.org}/${r.id}`,
+      };
+    });
 
-  return c.json({ apps });
+    return c.json({ apps });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? (err.stack ?? null) : null;
+    console.error('[GET /apps/mine]', msg);
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO error_log (ts, source, user_github, context, message, stack)
+         VALUES (?, 'GET /apps/mine', ?, ?, ?, ?)`,
+      )
+        .bind(
+          Date.now(),
+          user.githubLogin || null,
+          JSON.stringify({ path: c.req.path }),
+          msg,
+          stack ? stack.slice(0, 4000) : null,
+        )
+        .run();
+    } catch {
+      // error_log write must never mask the original error
+    }
+    throw err;
+  }
 });
 
 /**

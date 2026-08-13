@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import type { Project } from "../hooks/useProjects";
+import type { Project, ProjectsLoadError } from "../hooks/useProjects";
+import { useAuth } from "../hooks/useAuth";
 import { useAppStatuses, type DevStatus } from "../hooks/useAppStatuses";
 
 export function MyAppsConsole({ projects, loading, error, onRetry, currentId, onSelect, onNewChat }: {
   projects: Project[];
   loading: boolean;
-  error: boolean;
+  error: ProjectsLoadError;
   onRetry: () => void;
   currentId: string | null;
   onSelect: (id: string) => void;
@@ -73,16 +74,22 @@ export function MyAppsConsole({ projects, loading, error, onRetry, currentId, on
           </div>
         )}
 
-        {/* Load failure — reassure, don't imply data loss */}
+        {/* Load failure — distinguish expired session from connection issues */}
         {!loading && error && projects.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-sm font-semibold mb-1">Couldn't load your apps</p>
-            <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
-              Your apps are safe on the server — this was a connection issue.
-            </p>
-            <button onClick={onRetry} className="px-5 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer" }}>
-              Retry
-            </button>
+            {error === 'auth' ? (
+              <AuthExpiredBanner />
+            ) : (
+              <>
+                <p className="text-sm font-semibold mb-1">Couldn't load your apps</p>
+                <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+                  Your apps are safe on the server — this was a connection issue.
+                </p>
+                <button onClick={onRetry} className="px-5 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer" }}>
+                  Retry
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -182,5 +189,25 @@ function AppCard({ project, status, isCurrent, onSelect }: {
         {label}
       </p>
     </button>
+  );
+}
+
+/** Shown when the sessions fetch returns 401 (session expired). */
+function AuthExpiredBanner() {
+  const { signIn } = useAuth();
+  return (
+    <>
+      <p className="text-sm font-semibold mb-1">Session expired</p>
+      <p className="text-xs mb-4" style={{ color: "var(--muted)" }}>
+        Please sign in again to load your apps.
+      </p>
+      <button
+        onClick={signIn}
+        className="px-5 py-2 rounded-lg text-sm font-semibold text-white"
+        style={{ background: "var(--accent)", border: "none", cursor: "pointer" }}
+      >
+        Sign in again
+      </button>
+    </>
   );
 }

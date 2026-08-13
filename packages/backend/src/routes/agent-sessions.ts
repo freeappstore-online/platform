@@ -18,27 +18,53 @@ export const agentSessionRoutes = new Hono<{ Bindings: Env }>();
 // ── List sessions ───────────────────────────────────────────────
 
 agentSessionRoutes.get('/agent/sessions', async (c) => {
-  const user = await requireUser(c);
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  let user: Awaited<ReturnType<typeof requireUser>> | null = null;
+  try {
+    user = await requireUser(c);
+    const limit = Math.min(Number(c.req.query('limit') || 50), 200);
 
-  const result = await c.env.DB.prepare(
-    `SELECT session_id, name, app_id, app_url, deployed, created_at, updated_at
-     FROM agent_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
-  )
-    .bind(user.id, limit)
-    .all();
+    const result = await c.env.DB.prepare(
+      `SELECT session_id, name, app_id, app_url, deployed, created_at, updated_at
+       FROM agent_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
+    )
+      .bind(user.id, limit)
+      .all();
 
-  return c.json({
-    sessions: (result.results ?? []).map((r: Record<string, unknown>) => ({
-      id: r.session_id,
-      name: r.name,
-      appId: r.app_id,
-      appUrl: r.app_url,
-      deployed: r.deployed === 1,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    })),
-  });
+    return c.json({
+      sessions: (result.results ?? []).map((r: Record<string, unknown>) => ({
+        id: r.session_id,
+        name: r.name,
+        appId: r.app_id,
+        appUrl: r.app_url,
+        deployed: r.deployed === 1,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      })),
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? (err.stack ?? null) : null;
+    // Re-throw auth errors so Hono's error handler returns the correct status.
+    // We still log them so repeated 401s are visible in error_log.
+    console.error('[GET /agent/sessions]', msg);
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO error_log (ts, source, user_github, context, message, stack)
+         VALUES (?, 'GET /agent/sessions', ?, ?, ?, ?)`,
+      )
+        .bind(
+          Date.now(),
+          user?.githubLogin ?? null,
+          JSON.stringify({ path: c.req.path, query: c.req.query() }),
+          msg,
+          stack ? stack.slice(0, 4000) : null,
+        )
+        .run();
+    } catch {
+      // error_log write must never mask the original error
+    }
+    throw err;
+  }
 });
 
 // ── Get session with messages ───────────────────────────────────

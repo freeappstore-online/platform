@@ -40,9 +40,19 @@ interface ServerSession {
   updatedAt: number;
 }
 
+function makeFetchError(status: number, endpoint: string): Error & { status: number } {
+  const err = new Error(`${endpoint} returned HTTP ${status}`) as Error & { status: number };
+  err.status = status;
+  return err;
+}
+
 async function fetchSessions(signal: AbortSignal): Promise<Project[]> {
-  const res = await fetch(`${API_URL}/v1/agent/sessions?limit=100`, { headers: authHeaders(), signal });
-  if (!res.ok) throw new Error(`fetch sessions failed: ${res.status}`);
+  const endpoint = `${API_URL}/v1/agent/sessions?limit=100`;
+  const res = await fetch(endpoint, { headers: authHeaders(), signal });
+  if (!res.ok) {
+    console.error(`[useProjects] GET ${endpoint} failed: HTTP ${res.status}`);
+    throw makeFetchError(res.status, endpoint);
+  }
   const data = (await res.json()) as { sessions: ServerSession[] };
   return data.sessions.map((s) => ({
     id: s.id,
@@ -70,11 +80,15 @@ function putSession(project: Project): void {
   }).catch(() => { /* error UI is future work */ });
 }
 
+/** False when no error; 'auth' when the session has expired (HTTP 401);
+ *  'network' for all other non-2xx / connection failures. */
+export type ProjectsLoadError = false | 'auth' | 'network';
+
 export function useProjects() {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<ProjectsLoadError>(false);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [currentId, setCurrentIdState] = useState<string | null>(() => localStorage.getItem(CURRENT_KEY));
 
@@ -130,10 +144,13 @@ export function useProjects() {
           setCurrentId(validStored ? stored : server[0].id);
         }
       })
-      .catch((err) => {
-        if (err.name !== "AbortError") {
-          console.error("Failed to load projects:", err);
-          setLoadError(true);
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.name === "AbortError") return;
+        const status = (err as { status?: number }).status;
+        if (status === 401) {
+          setLoadError('auth');
+        } else {
+          setLoadError('network');
         }
       })
       .finally(() => setLoading(false));
@@ -188,5 +205,5 @@ export function useProjects() {
     });
   }, []);
 
-  return { projects, currentId, loading, loadError, reload, create, switchTo, rename, markDeployed };
+  return { projects, currentId, loading, loadError, reload, create, switchTo, rename, markDeployed } as const;
 }

@@ -4,6 +4,7 @@ import type { User } from '@freeappstore/sdk'
 import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
 import { Avatar, SignInButton, ThemeToggle, TextSizeToggle, ProfileMenu, ProfilePage, FasShell } from '@freeappstore/sdk/ui'
 import { AppDetail } from './AppDetail'
+import { ContentAdmin } from './ContentAdmin'
 import { PublishForm } from './PublishForm'
 // Lazy — the builder is a large react-router island; keep it out of the console's
 // initial bundle and load it only when the user opens /build.
@@ -48,7 +49,7 @@ function useTextSize() {
 // browser URL keeps it). Normalize so client-side routing works under either mount.
 const BASE = (location.pathname === '/app' || location.pathname.startsWith('/app/')) ? '/app' : ''
 
-type View = 'dashboard' | 'app-detail' | 'publish' | 'settings' | 'ui-library' | 'builder'
+type View = 'dashboard' | 'app-detail' | 'publish' | 'settings' | 'ui-library' | 'content-admin' | 'builder'
 
 interface AppEntry {
   id: string
@@ -62,11 +63,15 @@ const API_BASE = 'https://api.freeappstore.online/v1'
 
 async function fetchApps(token: string | null): Promise<AppEntry[]> {
   if (!token) return []
+  const endpoint = `${API_BASE}/apps/mine`
   try {
-    const res = await fetch(`${API_BASE}/apps/mine`, {
+    const res = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    if (!res.ok) return []
+    if (!res.ok) {
+      console.error(`[App] GET ${endpoint} failed: HTTP ${res.status}`)
+      return []
+    }
     const data = (await res.json()) as { apps: { id: string; ownerLogin: string; createdAt: number; category?: string | null; oneliner?: string | null; store?: string | null }[] }
     return (data.apps ?? []).map((a) => ({
       id: a.id,
@@ -75,7 +80,8 @@ async function fetchApps(token: string | null): Promise<AppEntry[]> {
       category: a.category,
       description: a.oneliner,
     })).sort((a, b) => a.id.localeCompare(b.id))
-  } catch {
+  } catch (err) {
+    console.error(`[App] GET ${endpoint} threw:`, err)
     return []
   }
 }
@@ -90,6 +96,7 @@ function parseRoute(): { view: View; appId: string | null } {
   if (path === '/publish') return { view: 'publish', appId: null }
   if (path === '/settings') return { view: 'settings', appId: null }
   if (path === '/ui-library') return { view: 'ui-library', appId: null }
+  if (path === '/admin') return { view: 'content-admin', appId: null }
   return { view: 'dashboard', appId: null }
 }
 
@@ -102,6 +109,7 @@ function navigate(view: View, appId?: string) {
   else if (view === 'publish') path = '/publish'
   else if (view === 'settings') path = '/settings'
   else if (view === 'ui-library') path = '/ui-library'
+  else if (view === 'content-admin') path = '/admin'
   else if (view === 'builder') path = '/build'
   history.pushState(null, '', BASE + path)
   const next = parseRoute()
@@ -182,6 +190,7 @@ export default function App() {
         {view === 'publish' && <PublishView getToken={() => fas.auth.token} />}
         {view === 'settings' && <Settings />}
         {view === 'ui-library' && <UILibraryView />}
+        {view === 'content-admin' && <ContentAdmin getToken={() => fas.auth.token} />}
       </main>
     </div>
   )
@@ -219,6 +228,7 @@ const TABS: { key: View; label: string }[] = [
   { key: 'publish', label: 'Publish' },
   { key: 'settings', label: 'Settings' },
   { key: 'ui-library', label: 'UI Library' },
+  { key: 'content-admin', label: 'Admin' },
 ]
 
 function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate: (v: View) => void }) {
