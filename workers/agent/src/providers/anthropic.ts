@@ -19,16 +19,28 @@ export class AnthropicAdapter extends BaseAdapter {
     };
 
     const base = this.gateway?.baseUrl ?? "https://api.anthropic.com";
-    const res = await fetch(`${base}/v1/messages`, {
-      method: "POST",
-      headers: {
-        ...this.gateway?.headers,
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120_000); // 2-minute ceiling
+    let res: Response;
+    try {
+      res = await fetch(`${base}/v1/messages`, {
+        method: "POST",
+        headers: {
+          ...this.gateway?.headers,
+          "x-api-key": this.apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeoutId);
+      const msg = (err instanceof Error && err.name === "AbortError") ? "Anthropic API timeout: no response after 120s" : `Anthropic fetch error: ${String(err)}`;
+      yield { type: "error", data: msg };
+      return;
+    }
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       const err = await res.text();

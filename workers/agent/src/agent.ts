@@ -42,6 +42,12 @@ export interface AgentTurnResult {
   newMessages: Message[];
   /** Infra tool calls that need server-side execution by the session */
   infraRequests: InfraRequest[];
+  /**
+   * Set when the turn ended due to a non-thrown error (e.g. Anthropic API
+   * error stream event, empty-no-output).  The session must call logError and
+   * syncToD1 on this field so the failure is durable.
+   */
+  terminalError?: string;
 }
 
 export interface SessionContext {
@@ -143,6 +149,9 @@ export async function runAgentTurn(
   const messages: Message[] = [...cleaned, { role: "user", content: userMessage }];
   const newMessages: Message[] = [{ role: "user", content: userMessage }];
   const infraRequests: InfraRequest[] = [];
+  // Track whether any tool calls occurred during this turn (used to detect
+  // the empty-no-output failure: model read files then exited without writing)
+  let anyToolCallsMade = false;
 
   async function send(event: StreamEvent) {
     const line = `data: ${JSON.stringify(event)}\n\n`;
@@ -179,7 +188,7 @@ export async function runAgentTurn(
         } else if (event.type === "error") {
           const errMsg: Message = { role: "assistant", content: event.data };
           newMessages.push(errMsg);
-          return { newMessages, infraRequests };
+          return { newMessages, infraRequests, terminalError: event.data };
         }
       }
     } catch (err) {
@@ -211,6 +220,8 @@ export async function runAgentTurn(
     newMessages.push(assistantMsg);
 
     if (toolCalls.length === 0) break;
+
+    anyToolCallsMade = true;
 
     // Separate file tools (execute now) from infra tools (execute in session)
     const fileToolCalls = toolCalls.filter((tc) => !INFRA_TOOLS.has(tc.name));
@@ -261,5 +272,19 @@ export async function runAgentTurn(
   if (infraRequests.length === 0) {
     await send({ type: "done", data: "" });
   }
+
+  // Classify the turn's terminal outcome.
+  // empty-no-output: tool calls occurred (model was in agentic mode) but the
+  // turn ended with no infra requests and no write_file calls — the model read
+  // files and then stalled instead of writing/deploying.  A pure conversational
+  // reply (no tool calls at all) is valid; we only flag when the model was
+  // mid-task and failed to produce output.
+  if (infraRequests.length === 0 && anyToolCallsMade) {
+    const hasWriteFile = newMessages.some((m) => m.toolCalls?.some((tc) => tc.name === "write_file"));
+    if (!hasWriteFile) {
+      return { newMessages, infraRequests, terminalError: "empty-no-output: turn exited with tool calls but no write_file or infra requests" };
+    }
+  }
+
   return { newMessages, infraRequests };
 }

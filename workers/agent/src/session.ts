@@ -340,6 +340,13 @@ export class AgentSession implements DurableObject {
           },
         );
 
+        // Record any non-thrown terminal error from the agent loop before saving,
+        // so the failure is durable in D1 even if the session is evicted.
+        if (result.terminalError) {
+          const source = result.terminalError.startsWith("empty-no-output") ? "agent-empty" : "agent-stream";
+          this.logError(source, scrubKey(result.terminalError));
+        }
+
         session.messages = [...history, ...result.newMessages];
         // Enforce limits to prevent unbounded storage growth
         if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
@@ -443,6 +450,10 @@ export class AgentSession implements DurableObject {
               },
               this.env,
             );
+            if (followUp.terminalError) {
+              const source = followUp.terminalError.startsWith("empty-no-output") ? "agent-empty" : "agent-stream";
+              this.logError(source, scrubKey(followUp.terminalError));
+            }
             session.messages.push(...followUp.newMessages);
             if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
             session.files = Object.fromEntries(files);
