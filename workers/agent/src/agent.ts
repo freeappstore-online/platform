@@ -282,7 +282,11 @@ export async function runAgentTurn(
   if (infraRequests.length === 0 && anyToolCallsMade) {
     const hasWriteFile = newMessages.some((m) => m.toolCalls?.some((tc) => tc.name === "write_file"));
     if (!hasWriteFile) {
-      return { newMessages, infraRequests, terminalError: "empty-no-output: turn exited with tool calls but no write_file or infra requests" };
+      return {
+        newMessages,
+        infraRequests,
+        terminalError: "empty-no-output: turn exited with tool calls but no write_file or infra requests",
+      };
     }
   }
 

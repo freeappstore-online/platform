@@ -125,14 +125,15 @@ describe("runAgentTurn — terminalError surface (issue #40)", () => {
   it("successful builds with write_file do NOT set terminalError", async () => {
     // Simulate a write_file tool call (which is a file tool, not infra) followed by text
     const writeFileBlock = { type: "tool_use", id: "tu_2", name: "write_file", input: {} };
-    const writeFileSSE = [
-      `data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 20 } } })}`,
-      `data: ${JSON.stringify({ type: "content_block_start", index: 0, content_block: writeFileBlock })}`,
-      `data: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"path":"web/src/App.tsx","content":"<div/>"}' } })}`,
-      `data: ${JSON.stringify({ type: "content_block_stop", index: 0 })}`,
-      `data: ${JSON.stringify({ type: "message_delta", delta: {}, usage: { output_tokens: 10 } })}`,
-      `data: ${JSON.stringify({ type: "message_stop" })}`,
-    ].join("\n") + "\n";
+    const writeFileSSE =
+      [
+        `data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 20 } } })}`,
+        `data: ${JSON.stringify({ type: "content_block_start", index: 0, content_block: writeFileBlock })}`,
+        `data: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: '{"path":"web/src/App.tsx","content":"<div/>"}' } })}`,
+        `data: ${JSON.stringify({ type: "content_block_stop", index: 0 })}`,
+        `data: ${JSON.stringify({ type: "message_delta", delta: {}, usage: { output_tokens: 10 } })}`,
+        `data: ${JSON.stringify({ type: "message_stop" })}`,
+      ].join("\n") + "\n";
 
     let callCount = 0;
     (globalThis as any).fetch = async () => {

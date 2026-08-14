@@ -36,7 +36,10 @@ export class AnthropicAdapter extends BaseAdapter {
       });
     } catch (err) {
       clearTimeout(timeoutId);
-      const msg = (err instanceof Error && err.name === "AbortError") ? "Anthropic API timeout: no response after 120s" : `Anthropic fetch error: ${String(err)}`;
+      const msg =
+        err instanceof Error && err.name === "AbortError"
+          ? "Anthropic API timeout: no response after 120s"
+          : `Anthropic fetch error: ${String(err)}`;
       yield { type: "error", data: msg };
       return;
     }
