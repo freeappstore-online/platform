@@ -315,8 +315,10 @@ export class AgentSession implements DurableObject {
     const apiKey = body.aiConfig.apiKey;
     const scrubKey = (s: string) => (apiKey && apiKey.length > 8 ? s.replaceAll(apiKey, "[REDACTED]") : s);
 
-    // Run the agent in the background
-    (async () => {
+    // Run the agent in the background.
+    // Anchor the promise to the DO's lifetime so Cloudflare keeps the instance
+    // alive until the build completes, even if the client SSE stream closes.
+    const buildPromise = (async () => {
       const encoder = new TextEncoder();
       const sendSSE = (evt: { type: string; data: string }) => {
         const safe = evt.type === "error" || evt.type === "text" ? { ...evt, data: scrubKey(evt.data) } : evt;
@@ -519,6 +521,7 @@ export class AgentSession implements DurableObject {
         writer.close().catch(() => {});
       }
     })();
+    this.state.waitUntil(buildPromise);
 
     return new Response(readable, {
       headers: {
