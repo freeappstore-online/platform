@@ -11,8 +11,9 @@ Not published to npm — deployed as a CF Worker via `wrangler deploy`.
 | Method + path | Module | Notes |
 |---|---|---|
 | `GET /health` | — | `{ ok: true }` |
-| `GET /v1/auth/github/start?app_id=&return_to=` | auth | Redirects to GitHub. `return_to` must match the allowlist (see `lib/origins.ts`). |
-| `GET /v1/auth/github/callback?code=&state=` | auth | OAuth callback. Verifies signed state, mints session, redirects to `return_to#fas_session=…`. |
+| `GET /v1/auth/github/start?app_id=&return_to=` | auth | Redirects to GitHub. `return_to` must match the allowlist (see `lib/origins.ts`). Optional `response_mode=code` + `code_challenge` (S256) selects one-time-code delivery; PKCE is validated here, before the provider bounce. |
+| `GET /v1/auth/github/callback?code=&state=` | auth | OAuth callback. Verifies signed state, mints session, delivers it per `response_mode` (`lib/deliver-session.ts`): fragment `#fas_session=…` (default), query `?fas_session=…` (legacy), or `code` — a one-time code with a 60 s TTL and the session never in the URL. |
+| `POST /v1/auth/session/exchange` | auth | Trades `{ code, code_verifier }` from a `code`-mode flow for the session as JSON. Unauthenticated by design; the verifier is the credential. Single-use: wrong verifier, expiry and replay all burn the code and return one identical error. |
 | `GET /v1/auth/me` | auth | Returns the current user given a `Authorization: Bearer <session>` header. |
 | `GET /v1/apps/:appId/kv/:key` | kv | Per-user, per-app KV read. |
 | `PUT /v1/apps/:appId/kv/:key` | kv | KV write. Enforces per-user quotas (`lib/quota.ts`). |
