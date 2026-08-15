@@ -681,4 +681,7 @@ export default new OAuthProvider({
   clientRegistrationEndpoint: "/register",
   scopesSupported: [...MCP_SCOPES],
   accessTokenTTL: 86_400,
+  // S256 only. The library accepts `plain` by default, which makes the
+  // challenge equal to the verifier and PKCE decorative (#44).
+  allowPlainPKCE: false,
 });
