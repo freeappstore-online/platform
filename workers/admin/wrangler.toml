@@ -13,8 +13,14 @@ FAS_ZONE_ID = "ebe8a9b64cb958520b8c32114f7f06ec"
 FGS_ZONE_ID = "fd33f88109b97569f2c5d6f1e5bb62ae"
 # PAS_ZONE_ID removed 2026-05-28 (Phase 4) — proappstore-admin owns PAS.
 # PGS_ZONE_ID removed 2026-05-28 (Phase 5) — progamestore-admin owns PGS.
-CF_ACCESS_TEAM_DOMAIN = "stores-access.cloudflareaccess.com"
-CF_ACCESS_AUD = "8d453037103c6de763e09d1e9c142fdfbeeb2fbae5215c36e2885216b82e98bf"
+# CF Access DISABLED — vars commented out so isAuthenticated() (src/index.ts)
+# returns true for all requests, making the admin panel fully public. This is
+# HALF of "fully remove CF Access": the Zero Trust Access *application* on
+# admin.freeappstore.online must ALSO be deleted in the dashboard, or the edge
+# keeps 302'ing before requests reach this Worker. To re-enable auth: uncomment
+# these two lines, redeploy, and re-create the Access application.
+# CF_ACCESS_TEAM_DOMAIN = "stores-access.cloudflareaccess.com"
+# CF_ACCESS_AUD = "8d453037103c6de763e09d1e9c142fdfbeeb2fbae5215c36e2885216b82e98bf"
 
 [[routes]]
 pattern = "admin.freeappstore.online/*"
