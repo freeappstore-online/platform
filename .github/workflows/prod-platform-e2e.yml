@@ -37,6 +37,16 @@ on:
       - 'scripts/prod-platform-e2e.mjs'
       - '.github/workflows/prod-platform-e2e.yml'
 
+# This workflow MUTATES production — it provisions a real repo, CF Pages
+# project, DNS record and registry row, then removes them. Two overlapping runs
+# (schedule + push + dispatch all fire it) would each publish a canary and could
+# race each other's cleanup, which is how an app leaks. Serialise, and never
+# cancel a run mid-flight: a cancelled run is the one most likely to leave an
+# app behind.
+concurrency:
+  group: prod-platform-e2e
+  cancel-in-progress: false
+
 permissions:
   contents: read
   issues: write # open / comment on a failure issue

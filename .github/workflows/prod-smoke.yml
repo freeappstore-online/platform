@@ -101,11 +101,27 @@ jobs:
             echo "::error::FAS_E2E_GITHUB_TOKEN is not set, so steps 3-6 (auth, KV, proxy, rooms) cannot run. Failing rather than skipping — a green run here would mean 'untested', not 'healthy'. See ops/SKILLS.md → 'Provisioning FAS_E2E_GITHUB_TOKEN'."
             exit 1
           fi
+          # Capture the status separately from the body, and check it BEFORE
+          # parsing. /v1/auth/exchange answers with PLAIN TEXT on every failure
+          # path ('github token was not issued to this application', 'token
+          # exchange is not configured'), so parsing first turned a clear 401
+          # into a JSONDecodeError traceback — in the alert, at exactly the
+          # moment someone is trying to provision this secret.
           resp=$(curl -sS -X POST "$API_BASE/v1/auth/exchange" \
             -H "Content-Type: application/json" \
+            -w $'\n%{http_code}' \
             --data "{\"githubToken\":\"$FAS_E2E_GITHUB_TOKEN\"}")
-          token=$(printf '%s' "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); t=d.get('sessionToken'); print(t) if t else sys.exit('exchange failed: '+str(d)[:200])")
-          login=$(printf '%s' "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user',{}).get('login','?'))")
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          if [ "$code" != "200" ]; then
+            echo "::error::/v1/auth/exchange returned HTTP $code: ${body:0:300}"
+            if printf '%s' "$body" | grep -q 'not issued to this application'; then
+              echo "::error::FAS_E2E_GITHUB_TOKEN is the wrong KIND of token. It must be a device-flow user access token for FAS's own OAuth app (client_id Ov23liuUpYPXc1ikEFm2) — a PAT belongs to no OAuth app and is rejected. See ops/SKILLS.md → 'Provisioning FAS_E2E_GITHUB_TOKEN'."
+            fi
+            exit 1
+          fi
+          token=$(printf '%s' "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); t=d.get('sessionToken'); print(t) if t else sys.exit('exchange returned 200 but no sessionToken: '+str(d)[:200])")
+          login=$(printf '%s' "$body" | python3 -c "import sys,json; print(json.load(sys.stdin).get('user',{}).get('login','?'))")
           echo "::add-mask::$token"
           echo "SESSION_TOKEN=$token" >> "$GITHUB_ENV"
           echo "  minted a fresh session for @$login"
