@@ -74,9 +74,15 @@ jobs:
       # Mint a FRESH session each run by exchanging a long-lived, low-privilege
       # GitHub token — same pattern as FGS's prod-create-canary. Avoids the old
       # PROD_SMOKE_SESSION_TOKEN, which was a 30-day session that silently expired
-      # and red-lit the monitor. FAS_E2E_GITHUB_TOKEN is a fine-grained PAT for the
-      # smoke user with read:user only (the /auth/exchange endpoint just calls
-      # GitHub /user to identify + upsert the user, then mints a fas session).
+      # and red-lit the monitor. FAS_E2E_GITHUB_TOKEN must be a user access token
+      # issued to FAS's OWN GitHub OAuth app — i.e. minted through the device flow
+      # as the smoke user, the same way `fas login` does it.
+      #
+      # A PAT no longer works (#47): /auth/exchange now introspects the token with
+      # GitHub's app-authenticated check-token endpoint and 401s anything not
+      # issued to FAS's client_id, so a PAT — which belongs to no OAuth app — is
+      # rejected. This secret held a fine-grained PAT before that change and has
+      # to be re-minted via the device flow.
       #
       # A missing token is FATAL, deliberately. This used to `exit 0` with a
       # warning so the run stayed green — and because the secret was never

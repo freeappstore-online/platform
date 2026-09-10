@@ -19,10 +19,13 @@ name: Prod platform e2e
 #   - THIS             guards the end-to-end provisioning pipeline
 #
 # Required secret:
-#   FAS_E2E_GITHUB_TOKEN  A low-privilege canary creator GitHub token (read:user).
-#                         The backend /v1/auth/exchange verifies it against
-#                         GitHub /user and mints a fresh fas session. Without it,
-#                         the run fails loudly (set it, or delete this workflow).
+#   FAS_E2E_GITHUB_TOKEN  A low-privilege canary creator token, minted through
+#                         the GitHub device flow against FAS's own OAuth app.
+#                         /v1/auth/exchange introspects it with GitHub's
+#                         app-authenticated check-token endpoint and 401s any
+#                         token not issued to that client_id (#47), so a PAT will
+#                         NOT work here. Without it, the run fails loudly (set it,
+#                         or delete this workflow).
 
 on:
   schedule:
