@@ -45,6 +45,8 @@ jobs:
   platform-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    outputs:
+      error: ${{ steps.run.outputs.error }}
     steps:
       - uses: actions/checkout@v4
 
@@ -53,49 +55,180 @@ jobs:
           node-version: 22
 
       - name: Run production platform e2e
+        id: run
         env:
           FAS_E2E_GITHUB_TOKEN: ${{ secrets.FAS_E2E_GITHUB_TOKEN }}
-        run: node scripts/prod-platform-e2e.mjs
+        run: |
+          set -o pipefail
+          if node scripts/prod-platform-e2e.mjs 2>&1 | tee /tmp/e2e.log; then
+            exit 0
+          fi
+          # Hand the reporter the script's OWN diagnosis. The script writes to
+          # console.error, which is not a workflow annotation, so without this
+          # the alert could only ever say "process exited 1" — which is exactly
+          # what left 197 useless comments on #23.
+          {
+            echo 'error<<E2E_LOG_EOF'
+            { grep -E 'FAILED|cleanup warning' /tmp/e2e.log | tail -10; } || true
+            echo 'E2E_LOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+          exit 1
 
-      - name: Open / update issue on failure
-        if: failure() && github.event_name == 'schedule'
+  # Separate job, same reasoning as prod-smoke's: it gets its own runner, so it
+  # still reports when the e2e runner never comes up at all.
+  notify:
+    needs: platform-e2e
+    if: always() && needs.platform-e2e.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Open / update the failure issue
         uses: actions/github-script@v7
+        env:
+          E2E_RESULT: ${{ needs.platform-e2e.result }}
+          E2E_ERROR: ${{ needs.platform-e2e.outputs.error }}
         with:
           script: |
             const issueLabel = 'prod-platform-e2e-failure'
+            const result = process.env.E2E_RESULT
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const body = `Prod platform e2e failed at ${new Date().toISOString()}.
+            // Don't re-post the same diagnosis more often than this.
+            const REPEAT_AFTER_MS = 6 * 60 * 60 * 1000
 
-            See run: ${runUrl}
-
-            This exercises the real create -> provision -> deploy -> cleanup pipeline.
-            A leaked canary app (id \`e2e-canary-*\`) may need manual cleanup via the
-            admin dashboard if the run died between publish and unpublish.
-
-            Re-run the workflow manually after fixing to verify, or comment \`/close\` once recovered.`
-
-            const { data: existing } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: issueLabel,
-              state: 'open',
-            })
-
-            if (existing.length > 0) {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: existing[0].number,
-                body,
-              })
-              console.log(`commented on existing issue #${existing[0].number}`)
-            } else {
-              await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: '🔥 prod-platform-e2e failing',
-                labels: [issueLabel],
-                body,
-              })
-              console.log('opened new issue')
+            // The GitHub API 5xxs often enough to lose an alert outright.
+            const retry = async (label, fn) => {
+              let lastErr
+              for (let attempt = 1; attempt <= 4; attempt++) {
+                try {
+                  return await fn()
+                } catch (err) {
+                  lastErr = err
+                  const status = err.status ?? 0
+                  // 4xx (bad token, missing scope, gone) will never heal by waiting.
+                  if (status >= 400 && status < 500 && status !== 429) throw err
+                  if (attempt === 4) break
+                  const waitMs = 2000 * 2 ** (attempt - 1)
+                  core.warning(`${label} attempt ${attempt}/4 failed (${status || 'no status'}): ${err.message} — retrying in ${waitMs}ms`)
+                  await new Promise(r => setTimeout(r, waitMs))
+                }
+              }
+              throw lastErr
             }
+
+            // Prefer the script's own error text, captured by the run step.
+            let errorLines = (process.env.E2E_ERROR || '').trim().split('\n').filter(Boolean)
+            let failedSteps = []
+            try {
+              const { data: jobs } = await retry('listJobs', () =>
+                github.rest.actions.listJobsForWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: context.runId,
+                }))
+              for (const job of jobs.jobs ?? []) {
+                if (job.name === 'notify') continue
+                for (const step of job.steps ?? []) {
+                  if (step.conclusion === 'failure') failedSteps.push(step.name)
+                }
+                // Fall back to check-run annotations when the run step captured
+                // nothing — e.g. the runner died before the script ran.
+                if (errorLines.length) continue
+                const checkRunId = Number(String(job.check_run_url ?? '').split('/').pop())
+                if (!Number.isFinite(checkRunId)) continue
+                const { data: ann } = await retry('listAnnotations', () =>
+                  github.rest.checks.listAnnotations({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    check_run_id: checkRunId,
+                  }))
+                for (const a of ann ?? []) {
+                  if (a.annotation_level === 'failure' && a.message) errorLines.push(a.message.trim())
+                }
+              }
+            } catch (err) {
+              // Never let diagnosis-gathering cost us the alert itself.
+              core.warning(`could not collect failure detail: ${err.message}`)
+            }
+
+            const signature = [result, ...failedSteps, ...errorLines.map(l => l.slice(0, 120))].join(' | ') || result
+            // Hash, don't truncate: base64 of the raw signature sliced to 64 chars
+            // only covers the first 48 BYTES, which are the same for every
+            // failure at a given step — so two different errors collided and the
+            // second was wrongly suppressed as a repeat.
+            const crypto = require('node:crypto')
+            const marker = `<!-- prod-platform-e2e-sig: ${crypto.createHash('sha256').update(signature).digest('hex').slice(0, 32)} -->`
+
+            const headline = result === 'cancelled'
+              ? `Prod platform e2e was **cancelled** at ${new Date().toISOString()} (hang or runner/infra failure — usually not a prod regression).`
+              : `Prod platform e2e **${result}** at ${new Date().toISOString()}.`
+
+            const detail = failedSteps.length
+              ? `\n**Failed step:** ${failedSteps.join(', ')}\n`
+              : '\n_No failed step recorded — the runner may never have started._\n'
+            const errors = errorLines.length
+              ? `\n\`\`\`\n${errorLines.join('\n').slice(0, 1500)}\n\`\`\`\n`
+              : ''
+
+            const body = `${headline}\n${detail}${errors}\nSee run: ${runUrl}\n\nThis exercises the real create -> provision -> deploy -> cleanup pipeline. A leaked canary app (id \`e2e-canary-*\`) may need manual cleanup via the admin dashboard if the run died between publish and unpublish.\n\n${marker}`
+
+            const { data: existing } = await retry('listForRepo', () =>
+              github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: issueLabel,
+                state: 'open',
+              }))
+
+            if (existing.length === 0) {
+              const { data: created } = await retry('issues.create', () =>
+                github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: '🔥 prod-platform-e2e failing',
+                  labels: [issueLabel],
+                  body,
+                }))
+              core.info(`opened new issue #${created.number}`)
+              return
+            }
+
+            const issue = existing[0]
+
+            // Dedup: re-post only when the cause changes, or when the same cause
+            // has been going for another REPEAT_AFTER_MS. Commenting on every
+            // failure is what put 197 identical comments on #23.
+            let last = null
+            try {
+              const total = issue.comments ?? 0
+              const page = Math.max(1, Math.ceil(total / 100))
+              const { data: comments } = await retry('listComments', () =>
+                github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  per_page: 100,
+                  page,
+                }))
+              last = comments.length ? comments[comments.length - 1] : null
+            } catch (err) {
+              core.warning(`could not read previous comments, will comment: ${err.message}`)
+            }
+
+            if (last && last.body?.includes(marker)) {
+              const ageMs = Date.now() - new Date(last.created_at).getTime()
+              if (ageMs < REPEAT_AFTER_MS) {
+                core.info(
+                  `same failure as #${issue.number}'s last comment (${Math.round(ageMs / 60000)}m ago) — not re-commenting. Signature: ${signature.slice(0, 200)}`,
+                )
+                return
+              }
+            }
+
+            await retry('createComment', () =>
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body,
+              }))
+            core.info(`commented on existing issue #${issue.number}`)

@@ -311,7 +311,12 @@ jobs:
             // Identity of THIS failure, so a repeat is recognisable and a change
             // of cause always gets through.
             const signature = [result, ...failedSteps, ...errorLines.map(l => l.slice(0, 120))].join(' | ') || result
-            const marker = `<!-- prod-smoke-sig: ${Buffer.from(signature).toString('base64').slice(0, 64)} -->`
+            // Hash, don't truncate: base64 of the raw signature sliced to 64 chars
+            // only covers the first 48 BYTES, which are the same for every
+            // failure at a given step — so two different errors collided and the
+            // second was wrongly suppressed as a repeat.
+            const crypto = require('node:crypto')
+            const marker = `<!-- prod-smoke-sig: ${crypto.createHash('sha256').update(signature).digest('hex').slice(0, 32)} -->`
 
             const headline = result === 'cancelled'
               ? `Prod smoke was **cancelled** at ${new Date().toISOString()} (hang or runner/infra failure — usually not a prod regression).`
@@ -324,7 +329,7 @@ jobs:
               ? `\n\`\`\`\n${errorLines.join('\n').slice(0, 1500)}\n\`\`\`\n`
               : ''
 
-            const body = `${headline}\n${detail}${errors}\nSee run: ${runUrl}\n\nRe-run the workflow manually after fixing to verify, or comment \`/close\` once recovered.\n\n${marker}`
+            const body = `${headline}\n${detail}${errors}\nSee run: ${runUrl}\n\nRe-run the workflow manually after fixing to verify.\n\n${marker}`
 
             const { data: existing } = await retry('listForRepo', () =>
               github.rest.issues.listForRepo({

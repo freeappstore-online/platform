@@ -174,9 +174,17 @@ async function exchangeToken(githubToken) {
     },
     30_000,
   );
+  // Check the status BEFORE parsing. /v1/auth/exchange answers with plain text
+  // on every failure path ('github token was not issued to this application',
+  // 'token exchange is not configured', ...), so parsing first turned a clear
+  // 401 into "returned non-JSON: github token was not issued…" — the real
+  // message, wrapped in a parse error that implied the endpoint was broken.
+  if (!res.ok) {
+    fail(`token exchange failed (${res.status}): ${text.slice(0, 300)}`);
+  }
   const data = parseJson(text, '/v1/auth/exchange');
-  if (!res.ok || !data.sessionToken) {
-    fail(`token exchange failed (${res.status}): ${data.error || text.slice(0, 300)}`);
+  if (!data.sessionToken) {
+    fail(`token exchange returned no sessionToken (${res.status}): ${text.slice(0, 300)}`);
   }
   const login = data.user?.login || '?';
   console.log(`  exchanged GitHub token for fas session: @${login}`);
