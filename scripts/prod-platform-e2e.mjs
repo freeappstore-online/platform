@@ -21,9 +21,12 @@
 // reach the Cloudflare-Access-gated admin Worker directly.
 //
 // Required env (CI):
-//   FAS_E2E_GITHUB_TOKEN  Low-privilege canary creator GitHub token (read:user).
-//                         The backend /v1/auth/exchange verifies it against
-//                         GitHub /user and mints a fresh fas session.
+//   FAS_E2E_GITHUB_TOKEN  Canary creator token from GitHub's DEVICE FLOW against
+//                         FAS's own OAuth app (read:user). /v1/auth/exchange
+//                         introspects it with GitHub's app-authenticated
+//                         check-token endpoint and 401s any token not issued to
+//                         that client_id (#47) — a PAT will NOT work. See
+//                         ops/SKILLS.md -> Provisioning FAS_E2E_GITHUB_TOKEN.
 //
 // Local use without a token — run only the non-destructive public/auth-gate
 // checks against prod:
@@ -329,7 +332,7 @@ async function main() {
       return;
     }
     fail(
-      'FAS_E2E_GITHUB_TOKEN is required. Store a low-privilege canary creator GitHub token as a GitHub Actions secret.',
+      'FAS_E2E_GITHUB_TOKEN is required. It must be a device-flow token for FAS\'s OAuth app, not a PAT — see ops/SKILLS.md -> Provisioning FAS_E2E_GITHUB_TOKEN.',
     );
   }
 

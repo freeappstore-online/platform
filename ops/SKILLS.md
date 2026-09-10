@@ -175,20 +175,57 @@ Step-to-cause mapping:
 > fine. Replaced by `FAS_E2E_GITHUB_TOKEN` in c53f50c (2026-07-20). The old
 > secret was deleted from the repo on 2026-08-11.
 
+> **A PAT does NOT work any more (changed 2026-09-10, #47).** This section used
+> to say "mint a fine-grained PAT, scope `read:user`", on the rationale that
+> `/v1/auth/exchange` only called GitHub `/user` to identify the caller. That is
+> exactly the behaviour #47 removed: `/user` answers 200 for *any* valid GitHub
+> credential, so any PAT or any other app's token could be swapped for a full
+> FAS session belonging to its owner. The endpoint now introspects the token
+> against FAS's own OAuth app and rejects everything else. Following the old
+> recipe gets you `401 github token was not issued to this application`.
+
 Steps 3–6 of `prod-smoke.yml`, and the whole authenticated half of
-`prod-platform-e2e.yml`, authenticate by exchanging a **long-lived, low-privilege
-GitHub PAT** for a fresh `fas` session on every run. Nothing expires on a timer.
+`prod-platform-e2e.yml`, authenticate by exchanging a **GitHub device-flow user
+access token** for a fresh `fas` session on every run. Nothing expires on a
+timer.
+
+**What the token must be.** `POST /v1/auth/exchange` verifies the token with
+GitHub's app-authenticated check-token endpoint
+(`POST /applications/{client_id}/token`), which returns 200 **only** for tokens
+issued to FAS's own OAuth app — client_id `Ov23liuUpYPXc1ikEFm2`, OAuth App
+3576238 in the `freeappstore-online` org. So:
+
+| Token type | Works? |
+|---|---|
+| Device-flow user access token for `Ov23liuUpYPXc1ikEFm2` | ✅ this is the one |
+| Fine-grained PAT | ❌ 401 — belongs to no OAuth app |
+| Classic PAT | ❌ 401 — same |
+| GitHub App installation token | ❌ 401 — different credential class |
+| Device-flow token for some *other* OAuth app | ❌ 401 — wrong audience |
+
+Device flow is already enabled on that app: `fas login` has used it since
+before #47 (`packages/cli/src/commands/login.ts`, `packages/cli/src/lib/github.ts`).
+Nothing needs turning on.
 
 Both workflows read the same repo secret, `FAS_E2E_GITHUB_TOKEN`. To provision:
 
 ```bash
-# 1. Mint a fine-grained PAT for the canary creator account at
-#    https://github.com/settings/personal-access-tokens/new
-#    Scope: read:user ONLY. No repo access. No org access.
-#    /v1/auth/exchange only calls GitHub /user to identify + upsert the user.
+# 1. Run the device flow as the CANARY creator account — not your own. The
+#    simplest way is the CLI, which uses exactly the client_id the backend
+#    checks against and stores the raw GitHub token it received:
+#
+#      fas login          # opens github.com/login/device, enter the code
+#
+#    Then the token is at .github.accessToken in ~/.fas/config.json.
+#    Read it without printing it:
+#
+#      jq -r .github.accessToken ~/.fas/config.json | wc -c   # sanity: length only
+#
+#    (Scope is read:user. The exchange needs no more than that.)
 
-# 2. Store it in ops (SOPS) first — see ~/dev/ops/AGENTS.md.
-cd ~/dev/ops && sops secrets.enc.yaml     # add under the fas project
+# 2. Store it in ops (SOPS) first — see ~/dev/ops/AGENTS.md. Prefer `ops put`,
+#    which reads the value back and verifies it rather than trusting the write.
+ops put fas FAS_E2E_GITHUB_TOKEN
 
 # 3. Push to the one consumer (never echo the value into your shell history).
 cd ~/dev/ops && sops -d --extract '["fas"]["FAS_E2E_GITHUB_TOKEN"]' secrets.enc.yaml \
@@ -199,6 +236,12 @@ gh workflow run prod-smoke.yml -R freeappstore-online/platform
 gh workflow run prod-platform-e2e.yml -R freeappstore-online/platform
 ```
 
+**Rotation.** A device-flow user access token lives until it is revoked or the
+canary account revokes the app's authorization — it does not expire on a clock,
+which is the whole reason this replaced `PROD_SMOKE_SESSION_TOKEN`. If the
+canary revokes FAS in its GitHub settings, both monitors go red with
+`401 github token was not issued to this application`; re-run step 1.
+
 **If the secret is absent, both workflows fail loudly — this is intentional.**
 `prod-smoke` used to `exit 0` with a warning instead, and because the secret was
 never created after c53f50c, steps 3–6 skipped silently for three weeks
@@ -207,10 +250,18 @@ credential means *untested*, not *healthy*. If you see
 `FAS_E2E_GITHUB_TOKEN is not set` in a log, the fix is to provision the secret
 above — not to re-add a skip.
 
+**Status as of 2026-09-10: the secret has never existed.** It is not set on the
+repo (`gh secret list -R freeappstore-online/platform`) and not in the SOPS
+store (`ops ls fas`), so `prod-smoke` has been red on every run since 2026-08-11
+and issue #34 has accumulated one comment per failure. Provisioning it per the
+steps above is the entire fix; steps 1 and 2 of the smoke (API health, published
+SDK) pass on every run, so prod itself is not implicated.
+
 **Before enabling `prod-platform-e2e`, note it mutates production**: every 6h it
 publishes a real `e2e-canary-*` app (GitHub repo + CF Pages + DNS + registry row)
 and then deprovisions it. A run that dies mid-flight leaks an app needing manual
 cleanup via the admin dashboard.
+
 
 ## Two distinct operations — don't confuse them
 
