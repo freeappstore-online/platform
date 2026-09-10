@@ -14,8 +14,10 @@ name: Prod smoke
 #
 # Frequency: every 30 minutes. Cheap (~30s per run, GH minutes free for
 # public repos). Any non-success result — failed assertion, hang, cancelled
-# runner — opens a GitHub issue; subsequent ones comment on the existing issue
-# instead of spamming.
+# runner — opens a GitHub issue carrying the failing step and its error text.
+# A repeat of the SAME failure is suppressed for 6h; a change of cause always
+# gets through. (Before that, every run commented: a month of one missing
+# secret put 590 identical comments on #34.)
 
 on:
   schedule:
@@ -232,7 +234,7 @@ jobs:
   # down with it. Catching that needs an out-of-run `workflow_run` watchdog.
   notify:
     needs: smoke
-    if: always() && needs.smoke.result != 'success' && github.event_name == 'schedule'
+    if: always() && needs.smoke.result != 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -245,19 +247,9 @@ jobs:
             const issueLabel = 'prod-smoke-failure'
             const result = process.env.SMOKE_RESULT
             const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-
-            // `cancelled` almost always means a hang or a dead runner rather than a
-            // real prod regression — say so, so nobody hunts a backend bug that
-            // isn't there (exactly what burned us on the 2026-07 expired-token cluster).
-            const headline = result === 'cancelled'
-              ? `Prod smoke was **cancelled** at ${new Date().toISOString()} (hang or runner/infra failure — usually not a prod regression).`
-              : `Prod smoke **${result}** at ${new Date().toISOString()}.`
-
-            const body = `${headline}
-
-            See run: ${runUrl}
-
-            Re-run the workflow manually after fixing to verify, or comment \`/close\` once recovered.`
+            // Don't re-post the same diagnosis more often than this. See the
+            // dedup note below.
+            const REPEAT_AFTER_MS = 6 * 60 * 60 * 1000
 
             // The GitHub API 5xxs often enough to lose an alert outright: on
             // 2026-07-20T01:00 a real failure went unreported because this call
@@ -281,6 +273,59 @@ jobs:
               throw lastErr
             }
 
+            // Which step actually broke, and what it said. Without this the alert
+            // is just "it failed, go read a log" — which is what let a missing
+            // secret masquerade as a prod incident for a month.
+            let failedSteps = []
+            let errorLines = []
+            try {
+              const { data: jobs } = await retry('listJobs', () =>
+                github.rest.actions.listJobsForWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: context.runId,
+                }))
+              for (const job of jobs.jobs ?? []) {
+                if (job.name === 'notify') continue
+                for (const step of job.steps ?? []) {
+                  if (step.conclusion === 'failure') failedSteps.push(step.name)
+                }
+                // ::error:: lines surface as check-run annotations.
+                const checkRunId = Number(String(job.check_run_url ?? '').split('/').pop())
+                if (!Number.isFinite(checkRunId)) continue
+                const { data: ann } = await retry('listAnnotations', () =>
+                  github.rest.checks.listAnnotations({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    check_run_id: checkRunId,
+                  }))
+                for (const a of ann ?? []) {
+                  if (a.annotation_level === 'failure' && a.message) errorLines.push(a.message.trim())
+                }
+              }
+            } catch (err) {
+              // Never let diagnosis-gathering cost us the alert itself.
+              core.warning(`could not collect failure detail: ${err.message}`)
+            }
+
+            // Identity of THIS failure, so a repeat is recognisable and a change
+            // of cause always gets through.
+            const signature = [result, ...failedSteps, ...errorLines.map(l => l.slice(0, 120))].join(' | ') || result
+            const marker = `<!-- prod-smoke-sig: ${Buffer.from(signature).toString('base64').slice(0, 64)} -->`
+
+            const headline = result === 'cancelled'
+              ? `Prod smoke was **cancelled** at ${new Date().toISOString()} (hang or runner/infra failure — usually not a prod regression).`
+              : `Prod smoke **${result}** at ${new Date().toISOString()}.`
+
+            const detail = failedSteps.length
+              ? `\n**Failed step:** ${failedSteps.join(', ')}\n`
+              : '\n_No failed step recorded — the runner may never have started._\n'
+            const errors = errorLines.length
+              ? `\n\`\`\`\n${errorLines.join('\n').slice(0, 1500)}\n\`\`\`\n`
+              : ''
+
+            const body = `${headline}\n${detail}${errors}\nSee run: ${runUrl}\n\nRe-run the workflow manually after fixing to verify, or comment \`/close\` once recovered.\n\n${marker}`
+
             const { data: existing } = await retry('listForRepo', () =>
               github.rest.issues.listForRepo({
                 owner: context.repo.owner,
@@ -289,16 +334,7 @@ jobs:
                 state: 'open',
               }))
 
-            if (existing.length > 0) {
-              await retry('createComment', () =>
-                github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: existing[0].number,
-                  body,
-                }))
-              core.info(`commented on existing issue #${existing[0].number}`)
-            } else {
+            if (existing.length === 0) {
               const { data: created } = await retry('issues.create', () =>
                 github.rest.issues.create({
                   owner: context.repo.owner,
@@ -308,4 +344,48 @@ jobs:
                   body,
                 }))
               core.info(`opened new issue #${created.number}`)
+              return
             }
+
+            const issue = existing[0]
+
+            // Dedup. The old code commented on EVERY failure: a month of a
+            // missing secret put 590 identical comments on #34, which is the
+            // same as no alert at all. Re-post only when the cause changes, or
+            // when the same cause has been going for another REPEAT_AFTER_MS —
+            // so an ongoing outage still pings, just not 48 times a day.
+            let last = null
+            try {
+              const total = issue.comments ?? 0
+              const page = Math.max(1, Math.ceil(total / 100))
+              const { data: comments } = await retry('listComments', () =>
+                github.rest.issues.listComments({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  per_page: 100,
+                  page,
+                }))
+              last = comments.length ? comments[comments.length - 1] : null
+            } catch (err) {
+              core.warning(`could not read previous comments, will comment: ${err.message}`)
+            }
+
+            if (last && last.body?.includes(marker)) {
+              const ageMs = Date.now() - new Date(last.created_at).getTime()
+              if (ageMs < REPEAT_AFTER_MS) {
+                core.info(
+                  `same failure as #${issue.number}'s last comment (${Math.round(ageMs / 60000)}m ago) — not re-commenting. Signature: ${signature.slice(0, 200)}`,
+                )
+                return
+              }
+            }
+
+            await retry('createComment', () =>
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body,
+              }))
+            core.info(`commented on existing issue #${issue.number}`)
