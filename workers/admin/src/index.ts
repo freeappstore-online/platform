@@ -5,6 +5,7 @@ import {
   fetchTraffic,
   handleAgentSessionDetail,
   handleAgentSessions,
+  handleAppDeployStatus,
   handleAppHealth,
   handleAppSessions,
   handleAppsAll,
@@ -577,6 +578,29 @@ export default {
       try {
         const body = JSON.stringify(await handleDeployStatus(env));
         await cache.put(cacheKey, new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" } }));
+        return new Response(body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
+      } catch (e) {
+        return json({ error: String(e) }, 500, request);
+      }
+    }
+
+    // ── Deploy status for ONE app ──
+    // Same GitHub data as the fan-out above, scoped to a single repo so the
+    // creator console can ask about the app on screen without pulling the whole
+    // org. Cached per app, so one creator's fresh deploy isn't hidden behind
+    // the all-apps cache entry (#32).
+    const deployStatusMatch = url.pathname.match(/^\/api\/apps\/([^/]+)\/deploy-status$/);
+    if (deployStatusMatch) {
+      const appId = decodeURIComponent(deployStatusMatch[1]!);
+      const cache = (caches as unknown as { default: Cache }).default;
+      const cacheKey = new Request(`https://admin.internal/api/apps/${encodeURIComponent(appId)}/deploy-status`);
+      const hit = await cache.match(cacheKey);
+      if (hit) return new Response(hit.body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
+      try {
+        const body = JSON.stringify(await handleAppDeployStatus(appId, env));
+        // 60s, not the fan-out's 5 min: a creator watching their own deploy
+        // land needs this to move, and it is one repo per request.
+        await cache.put(cacheKey, new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } }));
         return new Response(body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
       } catch (e) {
         return json({ error: String(e) }, 500, request);

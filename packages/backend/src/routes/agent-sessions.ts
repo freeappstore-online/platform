@@ -24,7 +24,7 @@ agentSessionRoutes.get('/agent/sessions', async (c) => {
     const limit = Math.min(Number(c.req.query('limit') || 50), 200);
 
     const result = await c.env.DB.prepare(
-      `SELECT session_id, name, app_id, app_url, deployed, created_at, updated_at
+      `SELECT session_id, name, app_id, app_url, deployed, deploy_state, created_at, updated_at
        FROM agent_sessions WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
     )
       .bind(user.id, limit)
@@ -37,6 +37,10 @@ agentSessionRoutes.get('/agent/sessions', async (c) => {
         appId: r.app_id,
         appUrl: r.app_url,
         deployed: r.deployed === 1,
+        // The last deploy phase/error from this VibeCode session. The app
+        // detail page shows it so a deploy that failed inside the builder is
+        // still visible after the creator navigates away (#32).
+        deployState: parseJsonObject(r.deploy_state),
         createdAt: r.created_at,
         updatedAt: r.updated_at,
       })),

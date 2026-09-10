@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { getSession } from "../../lib/api";
+import { summarizeSteps } from "../../../deploy-status";
 
 const PUBLISH_API = "https://api.freeappstore.online/v1";
 
@@ -73,10 +74,31 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ background: "var(--panel)", borderRadius: "var(--radius-lg)", padding: "1.5rem", width: "100%", maxWidth: 420, maxHeight: "90vh", overflow: "auto", boxShadow: "var(--shadow-lg)", border: "1px solid var(--line)" }}>
-        {result?.appId ? (
+        {result?.appId ? (() => {
+          // A 200 from /publish does not mean every provisioning step worked.
+          // Show a partial failure as a failure, naming the step (#32).
+          const steps = summarizeSteps(result.admin?.steps);
+          return (
           <>
-            <h2 className="text-lg font-bold mb-2" style={{ color: "var(--success)" }}>Published!</h2>
-            <p className="text-sm mb-2">Your app is live at <a href={result.appUrl || `https://${appId}.freeappstore.online`} target="_blank" rel="noopener" className="font-semibold" style={{ color: "var(--accent)" }}>{appId}.freeappstore.online</a></p>
+            {steps.allOk ? (
+              <>
+                <h2 className="text-lg font-bold mb-2" style={{ color: "var(--success)" }}>Published!</h2>
+                <p className="text-sm mb-2">Your app is live at <a href={result.appUrl || `https://${appId}.freeappstore.online`} target="_blank" rel="noopener" className="font-semibold" style={{ color: "var(--accent)" }}>{appId}.freeappstore.online</a></p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-bold mb-2" style={{ color: "var(--danger)" }}>{steps.summary}</h2>
+                <p className="text-sm mb-2">The app was created but is not fully set up. These steps failed:</p>
+                <ul className="text-sm mb-2" style={{ paddingLeft: "1.1rem" }}>
+                  {steps.failed.map((s, i) => (
+                    <li key={i}><strong>{s.name}</strong>{s.detail ? ` — ${s.detail}` : " — no detail reported"}</li>
+                  ))}
+                </ul>
+                <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
+                  Re-run publish to retry. <a href={`https://github.com/freeappstore-online/${appId}/actions`} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>View Actions</a>
+                </p>
+              </>
+            )}
             {result.admin?.steps?.length > 0 && (
               <div className="text-xs mb-3">
                 {result.admin.steps.map((s: any, i: number) => (
@@ -89,7 +111,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
             )}
             <button onClick={onClose} className="w-full p-2 rounded-lg font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer" }}>Done</button>
           </>
-        ) : (
+          );
+        })() : (
           <>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold">Publish to Store</h2>

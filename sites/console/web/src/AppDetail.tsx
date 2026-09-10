@@ -3,6 +3,15 @@ import { RolesManager } from './RolesManager'
 import { SecretsManager } from './SecretsManager'
 import { WebhooksManager } from './WebhooksManager'
 import { LogsViewer } from './LogsViewer'
+import {
+  type AppDeployStatus,
+  type DeployRun,
+  TONE_DOT,
+  describeRun,
+  fetchAppDeployStatus,
+  formatTimeAgo,
+  formatTimestamp,
+} from './deploy-status'
 
 const API_BASE = 'https://api.freeappstore.online/v1'
 
@@ -18,21 +27,15 @@ interface AppAnalytics {
   totalEvents: number
 }
 
-interface DeployRun {
-  conclusion: string | null
-  status: string
-  updated_at: string
-  html_url: string
-  head_sha: string
-  name: string
-}
-
 type AppTab = 'overview' | 'data'
 
 export function AppDetail({ appId, appName, getToken, onBack }: Props) {
   const [appTab, setAppTab] = useState<AppTab>('overview')
   const [analytics, setAnalytics] = useState<AppAnalytics | null>(null)
-  const [deploys, setDeploys] = useState<DeployRun[]>([])
+  const [deploy, setDeploy] = useState<AppDeployStatus | null>(null)
+  const [deployError, setDeployError] = useState<string | null>(null)
+  const [deployLoading, setDeployLoading] = useState(true)
+  const [sessionDeploy, setSessionDeploy] = useState<{ phase: string; error?: string; at?: string | null } | null>(null)
   const [loading, setLoading] = useState(true)
   const appUrl = `https://${appId}.freeappstore.online`
   const repoUrl = `https://github.com/freeappstore-online/${appId}`
@@ -49,16 +52,47 @@ export function AppDetail({ appId, appName, getToken, onBack }: Props) {
       .finally(() => setLoading(false))
   }, [appId, getToken])
 
+  // Deploy history via the authenticated backend rather than a direct,
+  // unauthenticated GitHub call from the browser (#32). Failure is reported
+  // rather than swallowed — an empty section used to mean both "never
+  // deployed" and "the request failed".
   useEffect(() => {
-    fetch(`https://api.github.com/repos/freeappstore-online/${appId}/actions/runs?per_page=5`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    })
+    let cancelled = false
+    setDeployLoading(true)
+    setDeployError(null)
+    fetchAppDeployStatus(appId, getToken())
+      .then(result => {
+        if (cancelled) return
+        if (result.state === 'ok') setDeploy(result.data)
+        else setDeployError(result.message)
+      })
+      .finally(() => { if (!cancelled) setDeployLoading(false) })
+    return () => { cancelled = true }
+  }, [appId, getToken])
+
+  // The last VibeCode session for this app: its deploy phase/error outlives the
+  // builder session, so a deploy that failed in the builder is still visible
+  // here the next day (#32).
+  useEffect(() => {
+    const token = getToken()
+    if (!token) return
+    let cancelled = false
+    fetch(`${API_BASE}/agent/sessions?limit=50`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data?.workflow_runs) setDeploys(data.workflow_runs)
+      .then((data: { sessions?: { appId: string | null; updatedAt?: number; deployState?: { phase?: string; error?: string } | null }[] } | null) => {
+        if (cancelled || !data?.sessions) return
+        const match = data.sessions.find(s => s.appId === appId && s.deployState?.phase)
+        if (match?.deployState?.phase) {
+          setSessionDeploy({
+            phase: match.deployState.phase,
+            error: match.deployState.error,
+            at: match.updatedAt ? new Date(match.updatedAt).toISOString() : null,
+          })
+        }
       })
       .catch(() => {})
-  }, [appId])
+    return () => { cancelled = true }
+  }, [appId, getToken])
 
   return (
     <div className="space-y-6">
@@ -101,34 +135,76 @@ export function AppDetail({ appId, appName, getToken, onBack }: Props) {
       </div>
 
       {/* Deploy History */}
-      {deploys.length > 0 && (
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6">
-          <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-3">Recent Deploys</h3>
-          <div className="space-y-2">
-            {deploys.map((d) => (
-              <a
-                key={d.head_sha}
-                href={d.html_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg hover:bg-[var(--panel-hover)] no-underline min-h-[44px]"
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
-                    d.conclusion === 'success' ? 'bg-[var(--success)]' :
-                    d.conclusion === 'failure' ? 'bg-[var(--danger)]' :
-                    d.status === 'in_progress' ? 'bg-[var(--warning)]' : 'bg-[var(--muted)]'
-                  }`} />
-                  <span className="text-sm text-[var(--ink)] truncate">{d.name}</span>
-                </div>
-                <span className="text-xs text-[var(--muted)] whitespace-nowrap flex-shrink-0">
-                  {formatTimeAgo(new Date(d.updated_at))}
-                </span>
-              </a>
-            ))}
+      {/* Deploy history — explicit about loading, failure, and "never ran",
+          which previously all rendered as an absent section. */}
+      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6">
+        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-3">Recent Deploys</h3>
+
+        {sessionDeploy && sessionDeploy.phase === 'error' && (
+          <div className="mb-3 rounded-lg border border-[var(--danger)] bg-[var(--danger)]/10 p-3">
+            <p className="text-xs font-semibold text-[var(--danger)] uppercase tracking-wide">Last VibeCode deploy failed</p>
+            <p className="mt-1 text-sm text-[var(--ink)] break-words">{sessionDeploy.error || 'No error detail was recorded.'}</p>
+            {sessionDeploy.at && (
+              <p className="mt-1 text-xs text-[var(--muted)]">{formatTimestamp(sessionDeploy.at)}</p>
+            )}
           </div>
-        </div>
-      )}
+        )}
+
+        {deployLoading ? (
+          <p className="text-sm text-[var(--muted)]">Loading deploy history…</p>
+        ) : deployError ? (
+          <div className="rounded-lg border border-[var(--line)] p-3">
+            <p className="text-sm text-[var(--ink)]">{deployError}</p>
+            <a href={`${repoUrl}/actions`} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-[var(--accent)] font-medium hover:underline no-underline">
+              Check GitHub Actions directly &rarr;
+            </a>
+          </div>
+        ) : !deploy || deploy.runs.length === 0 ? (
+          <div>
+            <p className="text-sm text-[var(--muted)]">This app has not been deployed yet.</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">A deploy runs automatically when you push to the app's repository.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {deploy.runs.map((d: DeployRun, i: number) => {
+              const view = describeRun(d)
+              const href = d.url ?? `${repoUrl}/actions`
+              return (
+                <a
+                  key={d.id ?? `${d.headSha}-${i}`}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start justify-between gap-3 py-2 px-3 rounded-lg hover:bg-[var(--panel-hover)] no-underline min-h-[44px]"
+                >
+                  <div className="flex items-start gap-2 min-w-0">
+                    <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${TONE_DOT[view.tone]}`} />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-sm font-medium ${view.tone === 'failure' ? 'text-[var(--danger)]' : 'text-[var(--ink)]'}`}>
+                          {view.label}
+                        </span>
+                        {d.name && <span className="text-xs text-[var(--muted)] truncate">{d.name}</span>}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-2 flex-wrap text-xs text-[var(--muted)]">
+                        {d.branch && <span className="font-mono">{d.branch}</span>}
+                        {d.headSha && <span className="font-mono">{d.headSha}</span>}
+                        {d.commitMsg && <span className="truncate">{d.commitMsg}</span>}
+                      </div>
+                      {view.tone === 'failure' && (
+                        <span className="mt-0.5 inline-block text-xs text-[var(--accent)] font-medium">View logs &rarr;</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-xs text-[var(--muted)] whitespace-nowrap flex-shrink-0" title={formatTimestamp(d.createdAt)}>
+                    {d.createdAt ? formatTimeAgo(new Date(d.createdAt)) : ''}
+                  </span>
+                </a>
+              )
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Stats */}
       {!loading && analytics && (
@@ -406,17 +482,6 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
       {previewUrl && <PreviewDialog url={previewUrl} onClose={() => setPreviewUrl(null)} />}
     </div>
   )
-}
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (seconds < 60) return 'just now'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 function InfoCard({ label, value, href, mono }: { label: string; value: string; href?: string; mono?: boolean }) {

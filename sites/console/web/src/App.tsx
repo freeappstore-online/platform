@@ -4,6 +4,13 @@ import type { User } from '@freeappstore/sdk'
 import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
 import { Avatar, SignInButton, ThemeToggle, TextSizeToggle, ProfileMenu, ProfilePage, FasShell } from '@freeappstore/sdk/ui'
 import { AppDetail } from './AppDetail'
+import {
+  type DeployStatus,
+  TONE_BG,
+  deriveBadge,
+  fetchOwnedDeployStatuses,
+  formatTimeAgo,
+} from './deploy-status'
 import { PublishForm } from './PublishForm'
 // Lazy — the builder is a large react-router island; keep it out of the console's
 // initial bundle and load it only when the user opens /build.
@@ -117,6 +124,9 @@ export default function App() {
   const { user, loading } = useAuth(fas)
   const [route, setRoute] = useState(parseRoute)
   const [apps, setApps] = useState<AppEntry[]>([])
+  // undefined until the first fetch resolves, so badges render nothing rather
+  // than flashing "unavailable" on load.
+  const [deployStatuses, setDeployStatuses] = useState<Record<string, DeployStatus> | undefined>(undefined)
 
   // Register global setter + listen for browser back/forward
   useEffect(() => {
@@ -136,6 +146,9 @@ export default function App() {
 
   const reloadApps = useCallback(async () => {
     try { setApps(await fetchApps(fas.auth.token)) } catch {}
+    // One authenticated request covering every app the user owns, instead of
+    // one unauthenticated GitHub call per badge (#32).
+    try { setDeployStatuses(await fetchOwnedDeployStatuses(fas.auth.token)) } catch { setDeployStatuses({}) }
   }, [])
 
   useEffect(() => {
@@ -174,7 +187,7 @@ export default function App() {
       <Header user={user} view={view} onNavigate={setView} />
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
         {view === 'dashboard' && (
-          <Dashboard user={user} apps={apps} onOpenApp={openAppDetail} onPublish={() => setView('publish')} />
+          <Dashboard user={user} apps={apps} deployStatuses={deployStatuses} onOpenApp={openAppDetail} onPublish={() => setView('publish')} />
         )}
         {view === 'app-detail' && selectedAppId && (
           <AppDetail
@@ -281,7 +294,7 @@ function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate
   )
 }
 
-function Dashboard({ user, apps, onOpenApp, onPublish }: { user: User; apps: AppEntry[]; onOpenApp: (id: string) => void; onPublish: () => void }) {
+function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user: User; apps: AppEntry[]; deployStatuses: Record<string, DeployStatus> | undefined; onOpenApp: (id: string) => void; onPublish: () => void }) {
   return (
     <div className="space-y-8">
       <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)]">
@@ -336,7 +349,7 @@ function Dashboard({ user, apps, onOpenApp, onPublish }: { user: User; apps: App
                     {a.category && <p className="mt-0.5 text-xs text-[var(--muted)]">{a.category}</p>}
                   </div>
                 </div>
-                <DeployBadge appId={a.id} />
+                <DeployBadge status={deployStatuses === undefined ? undefined : (deployStatuses[a.id] ?? null)} />
               </button>
             ))}
           </div>
@@ -547,63 +560,48 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-interface DeployInfo {
-  status: 'success' | 'failure' | 'in_progress' | 'unknown'
-  updatedAt: string | null
-  url: string | null
-}
-
-function useDeployStatus(appId: string): DeployInfo {
-  const [info, setInfo] = useState<DeployInfo>({ status: 'unknown', updatedAt: null, url: null })
-  useEffect(() => {
-    fetch(`https://api.github.com/repos/freeappstore-online/${appId}/actions/runs?per_page=1&status=completed`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        const run = data?.workflow_runs?.[0]
-        if (run) {
-          setInfo({
-            status: run.conclusion === 'success' ? 'success' : 'failure',
-            updatedAt: run.updated_at,
-            url: run.html_url,
-          })
-        }
-      })
-      .catch(() => {})
-  }, [appId])
-  return info
-}
-
-function DeployBadge({ appId }: { appId: string }) {
-  const deploy = useDeployStatus(appId)
-  if (deploy.status === 'unknown') return null
-  const colors = {
-    success: 'bg-[var(--success)] text-white',
-    failure: 'bg-[var(--danger)] text-white',
-    in_progress: 'bg-[var(--warning)] text-white',
-  }
-  const labels = { success: 'Live', failure: 'Deploy failed', in_progress: 'Deploying' }
-  const timeAgo = deploy.updatedAt ? formatTimeAgo(new Date(deploy.updatedAt)) : ''
+/**
+ * Deploy badge for one app in the dashboard list (#32).
+ *
+ * The status is handed in rather than fetched here: the dashboard makes ONE
+ * authenticated call for every app it owns. This used to be an unauthenticated
+ * GitHub API call per badge on every render, which rate-limited on any account
+ * with a real number of apps — and when it did, the badge silently vanished
+ * rather than admitting it had no idea.
+ *
+ * `undefined` means the map hasn't arrived yet (render nothing, avoid a flash
+ * of "unavailable"); an explicit `null` means we looked and came up empty.
+ */
+function DeployBadge({ status }: { status: DeployStatus | null | undefined }) {
+  if (status === undefined) return null
+  const badge = deriveBadge(status)
+  const timeAgo = badge.at ? formatTimeAgo(new Date(badge.at)) : ''
+  const pill = (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${TONE_BG[badge.tone]}`}>
+      {badge.label}
+    </span>
+  )
   return (
     <div className="flex items-center gap-1.5 mt-1.5">
-      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${colors[deploy.status]}`}>
-        {labels[deploy.status]}
-      </span>
+      {/* A failure links straight to the run that failed, not the repo's
+          Actions tab — the creator should not have to go hunting. */}
+      {badge.tone === 'failure' && badge.href ? (
+        <a
+          href={badge.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="no-underline hover:opacity-80"
+          title="Open the failed run on GitHub"
+        >
+          {pill}
+        </a>
+      ) : (
+        pill
+      )}
       {timeAgo && <span className="text-[10px] text-[var(--muted)]">{timeAgo}</span>}
     </div>
   )
-}
-
-function formatTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (seconds < 60) return 'just now'
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
 }
 
 function GitHubIcon() {

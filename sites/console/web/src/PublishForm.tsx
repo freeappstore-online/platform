@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
+import { summarizeSteps } from './deploy-status'
 
 const API = 'https://api.freeappstore.online/v1'
 
@@ -187,19 +188,46 @@ export function PublishForm({ getToken }: Props) {
 
       {/* Result */}
       {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-      {result && (
-        <div className="flex flex-col gap-1 text-sm font-mono">
-          {result.admin?.steps?.map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className={s.status === 'ok' ? 'text-[var(--success)]' : s.status === 'skip' ? 'text-[var(--warning)]' : 'text-[var(--danger)]'}>●</span>
-              <span className="text-[var(--ink)]"><strong>{s.name}</strong>{s.detail ? `: ${s.detail}` : ''}</span>
-            </div>
-          ))}
-          <p className="mt-3 font-semibold text-[var(--success)]">
-            Published! <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)]">{result.appUrl}</a>
-          </p>
-        </div>
-      )}
+      {result && (() => {
+        // The provision POST answers 200 with a per-step report, so a run where
+        // (say) DNS succeeded and the registry write failed used to render a
+        // green "Published!". A failed step now makes the whole result read as
+        // a partial failure (#32).
+        const steps = summarizeSteps(result.admin?.steps)
+        return (
+          <div className="flex flex-col gap-1 text-sm font-mono">
+            {result.admin?.steps?.map((s, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className={s.status === 'ok' ? 'text-[var(--success)]' : s.status === 'skip' ? 'text-[var(--warning)]' : 'text-[var(--danger)]'}>●</span>
+                <span className="text-[var(--ink)]"><strong>{s.name}</strong>{s.detail ? `: ${s.detail}` : ''}</span>
+              </div>
+            ))}
+            {steps.allOk ? (
+              <p className="mt-3 font-semibold text-[var(--success)]">
+                Published! <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)]">{result.appUrl}</a>
+              </p>
+            ) : (
+              <div className="mt-3 rounded-lg border border-[var(--danger)] bg-[var(--danger)]/10 p-3 font-sans">
+                <p className="font-semibold text-[var(--danger)]">{steps.summary}</p>
+                <ul className="mt-1.5 space-y-1">
+                  {steps.failed.map((s, i) => (
+                    <li key={i} className="text-sm text-[var(--ink)]">
+                      <strong>{s.name}</strong>{s.detail ? ` — ${s.detail}` : ' — no detail reported'}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  The app exists but is not fully set up. Re-run publish, or open the app to see what is missing.
+                </p>
+                <div className="mt-2 flex gap-3">
+                  <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--accent)] no-underline">Open app &rarr;</a>
+                  <a href={`${result.repoUrl}/actions`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--accent)] no-underline">View Actions &rarr;</a>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

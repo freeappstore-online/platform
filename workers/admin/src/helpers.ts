@@ -134,6 +134,11 @@ export async function fetchGhRuns(appId: string, env: Env) {
       createdAt: r.created_at,
       headSha: r.head_sha?.slice(0, 7),
       commitMsg: r.head_commit?.message?.split("\n")[0]?.slice(0, 80),
+      // Creator-facing surfaces link to the *specific* run rather than the
+      // repo's Actions tab, and show what was being deployed (#32).
+      url: r.html_url ?? null,
+      branch: r.head_branch ?? null,
+      event: r.event ?? null,
     }));
   } catch {
     return [];
@@ -145,7 +150,46 @@ export type DeployStatus = {
   conclusion: string | null;
   at: string | null;
   sha: string | null;
+  /** Direct link to the run itself, so a failure can be opened in one click. */
+  url?: string | null;
+  branch?: string | null;
+  /** Distinguishes "never deployed" (no runs at all) from "we couldn't tell". */
+  neverDeployed?: boolean;
 };
+
+/** One app's latest deploy plus its recent history, for the app detail page. */
+export type AppDeployStatus = DeployStatus & {
+  appId: string;
+  runs: Awaited<ReturnType<typeof fetchGhRuns>>;
+};
+
+function latestOf(runs: Awaited<ReturnType<typeof fetchGhRuns>>): DeployStatus {
+  const latest = runs[0];
+  if (!latest) {
+    // No workflow runs at all: the repo exists but CI has never run. This is a
+    // real, reportable state — not the same as a GitHub error, which
+    // fetchGhRuns also surfaces as an empty list. Callers that need to tell
+    // them apart should treat `neverDeployed` as best-effort.
+    return { status: null, conclusion: null, at: null, sha: null, url: null, branch: null, neverDeployed: true };
+  }
+  return {
+    status: latest.status ?? null,
+    conclusion: latest.conclusion ?? null,
+    at: latest.createdAt ?? null,
+    sha: latest.headSha ?? null,
+    url: latest.url ?? null,
+    branch: latest.branch ?? null,
+    neverDeployed: false,
+  };
+}
+
+/** Latest deploy + recent runs for a single app. Same GitHub data as the
+ *  all-apps fan-out, scoped to one repo so the creator console can ask about
+ *  the app being viewed without pulling the whole org (#32). */
+export async function handleAppDeployStatus(appId: string, env: Env): Promise<AppDeployStatus> {
+  const runs = await fetchGhRuns(appId, env);
+  return { appId, ...latestOf(runs), runs };
+}
 
 /** Latest GitHub Actions deploy conclusion for every provisioned app.
  *  Fan-out is concurrency-limited; the caller caches the whole result (5 min)
@@ -159,11 +203,7 @@ export async function handleDeployStatus(env: Env): Promise<Record<string, Deplo
     const batch = ids.slice(i, i + CONCURRENCY);
     await Promise.all(
       batch.map(async (id) => {
-        const runs = await fetchGhRuns(id, env);
-        const latest = runs[0];
-        result[id] = latest
-          ? { status: latest.status ?? null, conclusion: latest.conclusion ?? null, at: latest.createdAt ?? null, sha: latest.headSha ?? null }
-          : { status: null, conclusion: null, at: null, sha: null };
+        result[id] = latestOf(await fetchGhRuns(id, env));
       }),
     );
   }

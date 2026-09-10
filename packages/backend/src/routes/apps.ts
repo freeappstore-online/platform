@@ -108,3 +108,89 @@ appsRoutes.get('/apps/creators', async (c) => {
   }
   return c.json({ creators }, 200, { 'Cache-Control': 'public, max-age=300' });
 });
+
+// ── Deploy status (#32) ────────────────────────────────────────────
+//
+// The console used to read GitHub's API directly from the browser, one
+// unauthenticated request per app on every dashboard render. That rate-limits
+// once a creator has more than a handful of apps, and an exhausted quota looks
+// identical to "no deploys" — the badge simply vanished. These two routes put
+// the call behind the authenticated backend, which reaches the admin Worker
+// over the service binding; admin holds the GitHub token and caches the result.
+
+/** Shape returned by admin's /api/apps/:id/deploy-status. */
+interface AdminDeployStatus {
+  status: string | null;
+  conclusion: string | null;
+  at: string | null;
+  sha: string | null;
+  url?: string | null;
+  branch?: string | null;
+  neverDeployed?: boolean;
+}
+
+async function adminFetch(env: Env, path: string): Promise<Response | null> {
+  if (!env.ADMIN) return null;
+  const res = await env.ADMIN.fetch(`https://admin${path}`, {
+    headers: { 'X-Internal-Token': env.ADMIN_PROVISION_TOKEN ?? '' },
+  });
+  if (!res.ok) return null;
+  return res;
+}
+
+/**
+ * Deploy status for every app the caller owns, in one request.
+ *
+ * Scoped to the caller's own apps deliberately: admin's fan-out covers the
+ * whole org, and proxying that wholesale would turn an authenticated endpoint
+ * into a public map of every app's CI health.
+ */
+appsRoutes.get('/apps/deploy-status', async (c) => {
+  let user: Awaited<ReturnType<typeof requireUser>>;
+  try {
+    user = await requireUser(c);
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+
+  const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_login = ?')
+    .bind(user.githubLogin)
+    .all<{ id: string }>();
+  const ids = new Set((owned.results ?? []).map((r) => r.id));
+  if (ids.size === 0) return c.json({ statuses: {} });
+
+  const res = await adminFetch(c.env, '/api/apps/deploy-status');
+  // Degrade to "unknown" rather than failing the dashboard: the badge is
+  // decoration around the app list, not the app list itself.
+  if (!res) return c.json({ statuses: {}, unavailable: true });
+
+  const all = (await res.json().catch(() => ({}))) as Record<string, AdminDeployStatus>;
+  const statuses: Record<string, AdminDeployStatus> = {};
+  for (const [id, status] of Object.entries(all)) {
+    if (ids.has(id)) statuses[id] = status;
+  }
+  return c.json({ statuses });
+});
+
+/** Latest deploy plus recent runs for one app the caller owns. */
+appsRoutes.get('/apps/:id/deploy-status', async (c) => {
+  let user: Awaited<ReturnType<typeof requireUser>>;
+  try {
+    user = await requireUser(c);
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+
+  const appId = c.req.param('id');
+  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+    .bind(appId)
+    .first<{ owner_login: string }>();
+  if (!row) return c.json({ error: 'app not found' }, 404);
+  if (row.owner_login !== user.githubLogin) return c.json({ error: 'not your app' }, 403);
+
+  const res = await adminFetch(c.env, `/api/apps/${encodeURIComponent(appId)}/deploy-status`);
+  if (!res) return c.json({ error: 'deploy status is unavailable' }, 503);
+  return c.json((await res.json().catch(() => null)) ?? { error: 'bad response' });
+});
