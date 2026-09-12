@@ -1,0 +1,35 @@
+# Dependabot configuration — #21.
+#
+# Security updates (auto-PRs for advisories) are a repo setting, not a file, and
+# are enabled; this file adds *version* updates, which is what stops the backlog
+# re-accumulating between advisories. Without it, the only thing that ever moved
+# these lockfiles was someone noticing the vulnerability banner on a push.
+#
+# One entry per manifest, because these are seven independent installs, not one
+# workspace: pnpm-workspace.yaml covers `packages/*` and `examples/*` only, and
+# every worker, the console site and the two web builds carry their own lockfile.
+# Dependabot does not discover them recursively. workers/mcp is npm, not pnpm.
+#
+# Grouped so a week's worth of dev-tooling bumps arrives as one reviewable PR per
+# tree instead of thirty. Production dependencies stay ungrouped: those are the
+# ones that ship, and they deserve to be looked at one at a time.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /
+      - /sites/console
+      - /workers/admin
+      - /workers/admin/web
+      - /workers/agent
+      - /workers/host
+      - /workers/mcp
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dev-tooling:
+        dependency-type: development
+        patterns: ['*']
+        update-types: [minor, patch]
