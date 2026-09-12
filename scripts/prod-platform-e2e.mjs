@@ -342,7 +342,9 @@ async function waitForRoute(id, wantRouted) {
     }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
-  fail(`host route did not become ${wantRouted ? 'routed' : 'unrouted'} in time: ${url} last=${last}`);
+  fail(
+    `host route did not become ${wantRouted ? 'routed' : 'unrouted'} in time: ${url} last=${last}`,
+  );
 }
 
 async function main() {
@@ -360,7 +362,7 @@ async function main() {
       return;
     }
     fail(
-      'FAS_E2E_GITHUB_TOKEN is required. It must be a device-flow token for FAS\'s OAuth app, not a PAT — see ops/SKILLS.md -> Provisioning FAS_E2E_GITHUB_TOKEN.',
+      "FAS_E2E_GITHUB_TOKEN is required. It must be a device-flow token for FAS's OAuth app, not a PAT — see ops/SKILLS.md -> Provisioning FAS_E2E_GITHUB_TOKEN.",
     );
   }
 
@@ -368,6 +370,10 @@ async function main() {
   const { token } = await exchangeToken(RAW_GITHUB_TOKEN);
   await verifyAuthenticatedSurfaces(token);
 
+  // Cleanup runs outside try/finally on purpose: a throw inside `finally`
+  // replaces whatever failed in the create path with the cleanup failure and
+  // hides what actually broke (which is how the host-live timeout stayed
+  // invisible for 100 runs). Remember the first error; rethrow it at the end.
   let created = false;
   let primary = null;
   try {
@@ -379,25 +385,23 @@ async function main() {
     console.log('  ✓ create path verified');
   } catch (e) {
     primary = e;
-    throw e;
-  } finally {
-    if (created) {
-      console.log('\n› cleanup');
-      try {
-        await unpublishApp(id, token);
-        await waitForRoute(id, false);
-        await verifyRepoGone(id);
-        assert(!(await ownsApp(token, id)), `${id} still present in /v1/apps/mine after unpublish`);
-        console.log('  ✓ cleanup verified');
-      } catch (cleanupErr) {
-        // A throw here would replace the create-path failure with the cleanup
-        // one and hide what actually broke (which is what happened for the
-        // host-live timeout). Report it; let the primary error win.
-        if (primary) console.error(`  cleanup also failed: ${cleanupErr.message}`);
-        else throw cleanupErr;
-      }
+  }
+
+  if (created) {
+    console.log('\n› cleanup');
+    try {
+      await unpublishApp(id, token);
+      await waitForRoute(id, false);
+      await verifyRepoGone(id);
+      assert(!(await ownsApp(token, id)), `${id} still present in /v1/apps/mine after unpublish`);
+      console.log('  ✓ cleanup verified');
+    } catch (cleanupErr) {
+      if (primary) console.error(`  cleanup also failed: ${cleanupErr.message}`);
+      else primary = cleanupErr;
     }
   }
+
+  if (primary) throw primary;
 
   console.log('\nprod platform e2e passed.');
 }
