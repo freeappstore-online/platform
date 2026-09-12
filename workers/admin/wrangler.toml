@@ -13,14 +13,27 @@ FAS_ZONE_ID = "ebe8a9b64cb958520b8c32114f7f06ec"
 FGS_ZONE_ID = "fd33f88109b97569f2c5d6f1e5bb62ae"
 # PAS_ZONE_ID removed 2026-05-28 (Phase 4) — proappstore-admin owns PAS.
 # PGS_ZONE_ID removed 2026-05-28 (Phase 5) — progamestore-admin owns PGS.
-# CF Access DISABLED — vars commented out so isAuthenticated() (src/index.ts)
-# returns true for all requests, making the admin panel fully public. This is
-# HALF of "fully remove CF Access": the Zero Trust Access *application* on
-# admin.freeappstore.online must ALSO be deleted in the dashboard, or the edge
-# keeps 302'ing before requests reach this Worker. To re-enable auth: uncomment
-# these two lines, redeploy, and re-create the Access application.
-# CF_ACCESS_TEAM_DOMAIN = "stores-access.cloudflareaccess.com"
-# CF_ACCESS_AUD = "8d453037103c6de763e09d1e9c142fdfbeeb2fbae5215c36e2885216b82e98bf"
+# CF Access RE-ENABLED 2026-09-12 (#46). Both halves are back: the Zero Trust
+# Access application "FAS Admin" (self-hosted, admin.freeappstore.online,
+# app id 75d082a3-b388-49ec-a618-3f995eaa7e68) gates the edge, and these two
+# vars make isAuthenticated() (src/index.ts) verify the JWT that edge injects.
+# Both must be present together — vars without the Access app 401s every
+# request, the Access app without the vars leaves the Worker trusting anything
+# that reaches it.
+#
+# The team domain is NOT "stores-access" any more. That team was renamed to
+# "ozai-digital"; stores-access.cloudflareaccess.com/cdn-cgi/access/certs now
+# 404s exactly like a team that never existed, so the pre-2026-08-30 value
+# would make fetchAccessCerts() throw and fail every verification closed. The
+# rename is the likely cause of the "redirect_uri is not associated with this
+# application" failure too: Access now sends the ozai-digital callback, and an
+# OAuth App still registered against stores-access would reject it. Unverified
+# — an OAuth App's callback list is not readable through the GitHub API, so
+# only the owner's browser can confirm it.
+# The AUD below belongs to the app created 2026-09-12; the old
+# 8d453037... AUD died with the app deleted in the emergency unblock.
+CF_ACCESS_TEAM_DOMAIN = "ozai-digital.cloudflareaccess.com"
+CF_ACCESS_AUD = "74743580a46c8d6f6ab13f18f46aefd0ef493ec9074bd1f907e78aebb1d0ffe5"
 
 [[routes]]
 pattern = "admin.freeappstore.online/*"

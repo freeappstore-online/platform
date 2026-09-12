@@ -2,7 +2,7 @@
 
 The Cloudflare Worker that handles **provisioning** for [FreeAppStore](https://freeappstore.online/contribute.html) and [FreeGameStore](https://freegamestore.online). When a creator runs `fas publish`, this worker creates the GitHub repo, the R2 hosting route, the DNS record, the custom subdomain, and the storefront registry entry — atomically, in one call.
 
-Lives at `admin.freeappstore.online`. Authenticated by Cloudflare Access (Google sign-in for humans, service tokens for the api worker's service binding).
+Lives at `admin.freeappstore.online`. Authenticated by Cloudflare Access (GitHub sign-in for humans; the api worker reaches it over a service binding instead, which never touches the Access edge).
 
 ## What it does
 
@@ -30,8 +30,8 @@ If step 2 or 3 fails, step 5 is skipped to avoid leaving dead-link entries on th
 
 ## Auth
 
-- **Humans:** Cloudflare Access policy fronting the worker's domain. Google sign-in.
-- **Service:** the api worker calls in via service binding (`env.ADMIN.fetch(...)`). Service-binding calls bypass the edge entirely, so they bypass CF Access too — both workers are trusted internal.
+- **Humans:** Cloudflare Access application fronting the whole hostname, on the `ozai-digital` Zero Trust team. GitHub sign-in; the policy allows the owner's email or membership of the `freeappstore-online` org. `isAuthenticated()` then re-verifies the JWT the edge injects, so neither half trusts the other blindly.
+- **Service:** the api worker calls in via service binding (`env.ADMIN.fetch(...)`). Service-binding calls bypass the edge entirely, so they never see CF Access; they authenticate to this Worker with `X-Internal-Token: ADMIN_PROVISION_TOKEN` instead.
 
 Secrets for GitHub + DNS + D1 calls are managed in the private SOPS repo
 `serge-ivo/secrets` (`~/dev/secrets`) and pushed to Cloudflare on rotation/touch:
