@@ -34,6 +34,7 @@ permissions:
 
 env:
   API_BASE: https://api.freeappstore.online
+  MCP_BASE: https://mcp.freeappstore.online
   TEST_APP_ID: mandarin-english   # serge-ivo's app — used as smoke-test sandbox
 
 jobs:
@@ -72,6 +73,33 @@ jobs:
             if (missing.length) { console.error('missing modules:', missing); process.exit(1) }
             console.log('  modules:', Object.keys(fas).join(', '))
           "
+
+      # The MCP origin must reject protocol clients rather than answer them
+      # with a 200 (#24). A client registered against the origin instead of
+      # /mcp opens the legacy SSE transport there; a 200 with a body that ends
+      # immediately reads as "stream opened, then dropped", and the client
+      # redials ~1/sec forever — 91,806 requests in one day on the project
+      # where this was first seen, at a 100% success rate with no AI spend, so
+      # no other check here would go red. This is asserted from outside the
+      # repo because the in-code guard has already been deleted once by a
+      # refactor (the OAuth 2.1 layer replaced the hand-written fetch() and
+      # took the guard with it on 2026-08-09; nothing noticed until 2026-09-12).
+      - name: 2b. MCP origin rejects protocol clients
+        run: |
+          set -euo pipefail
+          sse=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+            -H 'Accept: text/event-stream' "$MCP_BASE/")
+          post=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
+            -H 'Content-Type: application/json' \
+            --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$MCP_BASE/")
+          mcp=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+            -H 'Accept: text/event-stream' "$MCP_BASE/mcp")
+          echo "GET / (Accept: text/event-stream) → $sse | POST / → $post | GET /mcp → $mcp"
+          test "$sse" = "405"
+          test "$post" = "405"
+          # /mcp must still answer the OAuth challenge: 401 proves the catch-all
+          # did not swallow the real endpoint along with the wrong ones.
+          test "$mcp" = "401"
 
       # Mint a FRESH session each run by exchanging a long-lived, low-privilege
       # GitHub token — same pattern as FGS's prod-create-canary. Avoids the old

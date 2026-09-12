@@ -75,4 +75,49 @@ app.get("/callback", async (c) => {
   return c.redirect(redirectTo, 302);
 });
 
+/**
+ * Catch-all for everything the OAuth provider does not claim. The provider owns
+ * /token, /register and the discovery docs, and routes /mcp to the agent; this
+ * app owns /authorize and /callback above, and lands here for `/` and any other
+ * unmatched path.
+ *
+ * MCP protocol clients get the JSON-RPC 405 the spec asks for from an endpoint
+ * with no stream to offer. That matters because of how a client reacts to the
+ * alternative (#24): registered against the origin instead of /mcp, it opens
+ * the legacy SSE transport with `GET / Accept: text/event-stream`, and a 200
+ * carrying a body that ends immediately reads as "stream opened, then dropped".
+ * The spec-correct response to a dropped stream is to reconnect, so it redials
+ * ~1/sec, forever. The flood is invisible: every response is a 200, nothing
+ * throws, no AI tokens are spent, nothing is written to D1, and the MCP rate
+ * limiter only counts `tools/call` messages carrying an account, which a bare
+ * GET has neither of. An identical bug on another project reached 91,806
+ * requests in one day against a 50-125/day baseline before anyone noticed.
+ *
+ * This guard already existed once, in the hand-written `fetch()` (273f0ad), and
+ * the OAuth 2.1 refactor deleted it along with that handler. What replaced it
+ * answers 404, which happens to be fatal to an SSE client and so does not loop
+ * — the right behaviour by accident. Hence both the deliberate 405 here and the
+ * prod-smoke step that asserts it from outside the repo every 30 minutes.
+ *
+ * OPTIONS and HEAD fall through, so CORS preflight and link checkers are
+ * unaffected.
+ */
+app.all("*", async (c, next) => {
+  const { method, headers } = c.req.raw;
+  const wantsStream = (headers.get("accept") ?? "").includes("text/event-stream");
+  if (method !== "OPTIONS" && method !== "HEAD" && (method === "POST" || wantsStream)) {
+    const endpoint = new URL("/mcp", c.req.url).toString();
+    return c.json(
+      {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32000, message: `Method Not Allowed — the MCP endpoint is ${endpoint}` },
+      },
+      405,
+      { allow: "GET, HEAD" },
+    );
+  }
+  await next();
+});
+
 export { app as AuthHandler };
