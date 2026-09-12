@@ -35,7 +35,7 @@ permissions:
 env:
   API_BASE: https://api.freeappstore.online
   MCP_BASE: https://mcp.freeappstore.online
-  TEST_APP_ID: mandarin-english   # serge-ivo's app — used as smoke-test sandbox
+  TEST_APP_ID: smoke-sandbox      # owned by the canary account (serge-the-dev) — steps 5 requires the token owner to own this app
 
 jobs:
   smoke:

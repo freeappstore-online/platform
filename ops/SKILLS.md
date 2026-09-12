@@ -250,12 +250,16 @@ credential means *untested*, not *healthy*. If you see
 `FAS_E2E_GITHUB_TOKEN is not set` in a log, the fix is to provision the secret
 above — not to re-add a skip.
 
-**Status as of 2026-09-10: the secret has never existed.** It is not set on the
-repo (`gh secret list -R freeappstore-online/platform`) and not in the SOPS
-store (`ops ls fas`), so `prod-smoke` has been red on every run since 2026-08-11
-and issue #34 has accumulated one comment per failure. Provisioning it per the
-steps above is the entire fix; steps 1 and 2 of the smoke (API health, published
-SDK) pass on every run, so prod itself is not implicated.
+**Status as of 2026-09-12: provisioned.** The secret is a device-flow token
+for the GitHub account `serge-the-dev` (the canary creator; owns nothing else).
+It lives in `~/dev/secrets` under `fas` and on the platform repo (`ops verify fas`).
+
+**The smoke's sandbox app must be owned by the canary account.** Step 5 of
+`prod-smoke.yml` writes secrets + allowlist entries on `TEST_APP_ID`, and those
+endpoints require the exact `owner_login` — there is no collaborator concept.
+`TEST_APP_ID` is `smoke-sandbox`, published by `serge-the-dev` on 2026-09-12
+(`~/dev/stores/fas/apps/smoke-sandbox`, repo `freeappstore-online/smoke-sandbox`).
+If you rotate the canary to a different account, republish the sandbox from it.
 
 **Before enabling `prod-platform-e2e`, note it mutates production**: every 6h it
 publishes a real `e2e-canary-*` app (GitHub repo + CF Pages + DNS + registry row)
