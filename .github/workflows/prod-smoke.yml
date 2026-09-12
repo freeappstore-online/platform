@@ -94,12 +94,20 @@ jobs:
             --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$MCP_BASE/")
           mcp=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
             -H 'Accept: text/event-stream' "$MCP_BASE/mcp")
-          echo "GET / (Accept: text/event-stream) → $sse | POST / → $post | GET /mcp → $mcp"
+          # A stream request on a path that is neither / nor /mcp. Newer `agents`
+          # releases route a bare GET on ANY path into the legacy SSE handler with
+          # no base-path check (#57); OAuthProvider's apiRoute and the Hono guard
+          # are what keep that from opening a DO-backed stream. Assert it here so a
+          # future dependency bump cannot silently turn 405 into an open stream.
+          other=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+            -H 'Accept: text/event-stream' "$MCP_BASE/not-mcp")
+          echo "GET / (Accept: text/event-stream) → $sse | POST / → $post | GET /mcp → $mcp | GET /not-mcp (SSE) → $other"
           test "$sse" = "405"
           test "$post" = "405"
           # /mcp must still answer the OAuth challenge: 401 proves the catch-all
           # did not swallow the real endpoint along with the wrong ones.
           test "$mcp" = "401"
+          test "$other" = "405"
 
       # Mint a FRESH session each run by exchanging a long-lived, low-privilege
       # GitHub token — same pattern as FGS's prod-create-canary. Avoids the old

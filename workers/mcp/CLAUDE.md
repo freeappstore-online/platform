@@ -4,6 +4,10 @@ Remote MCP server for AI agents to interact with the FreeAppStore platform.
 
 - Endpoint: `mcp.freeappstore.online/mcp`
 - Dev: `npm install && npm run dev`
+- Deps: `@modelcontextprotocol/sdk` is pinned to the exact version `agents` depends on, so the
+  tree holds ONE copy (two copies make `FasMcpAgent.server` fail to type-check). When bumping
+  `agents`, re-pin the SDK to match. `.npmrc` sets `legacy-peer-deps` because `agents` declares
+  react/ai-sdk peers a Worker never needs; `npm ci` reads it too, so local and CI resolve alike.
 - Deploy: `git push origin main` (auto-deploys via GitHub Actions)
 
 ## Tools
