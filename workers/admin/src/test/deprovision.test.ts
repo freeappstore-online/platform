@@ -15,6 +15,7 @@ function mockEnv() {
     FGS_ZONE_ID: "fgs-zone-456",
     ASSETS: { fetch: () => new Response("asset") },
     DB: {
+      batch: vi.fn().mockResolvedValue([]),
       prepare: (sql: string) => ({
         bind: (..._args: unknown[]) => ({
           run: vi.fn().mockResolvedValue({ success: true }),
@@ -44,9 +45,12 @@ describe("deprovision endpoint", () => {
       const method = init?.method || "GET";
       fetchCalls.push({ url, method });
 
-      // Mock unpublish (self-call)
-      if (url.includes("/api/unpublish") && method === "POST") {
-        return new Response(JSON.stringify({ ok: true, id: "my-app" }), { status: 200 });
+      // Mock the storefront registry.json (read, then write back without the app)
+      if (url.includes("/contents/registry.json") && method === "GET") {
+        return new Response(JSON.stringify({ content: btoa(JSON.stringify({ apps: [{ id: "my-app" }, { id: "other" }] })), sha: "sha1" }));
+      }
+      if (url.includes("/contents/registry.json") && method === "PUT") {
+        return new Response(JSON.stringify({ content: { sha: "sha2" } }));
       }
       // Mock DNS list
       if (url.includes("/dns_records") && method === "GET") {
@@ -101,6 +105,13 @@ describe("deprovision endpoint", () => {
     expect(stepNames).toContain("dns");
     // No CF Pages step
     expect(stepNames).not.toContain("cf_pages");
+    // The registry step runs in-process. The old self-call to the worker's own
+    // public /api/unpublish went through CF Access and always came back as a
+    // login redirect, so every deprovision reported "Not in registry".
+    expect(fetchCalls.find((c) => c.url.includes("/api/unpublish"))).toBeUndefined();
+    expect(data.steps.find((s: any) => s.name === "registry")).toMatchObject({ status: "ok" });
+    // The `apps` ownership row goes with the route — nothing deleted it before.
+    expect(data.steps.find((s: any) => s.name === "hosting_route")).toMatchObject({ status: "ok" });
   });
 
   it("does NOT call CF Pages API", async () => {
@@ -121,19 +132,9 @@ describe("deprovision endpoint", () => {
     const deleteCall = prepareSpy.mock.calls.find((c: any[]) => typeof c[0] === "string" && c[0].includes("DELETE FROM routes"));
     expect(deleteCall).toBeDefined();
     expect(bindSpy).toHaveBeenCalledWith("my-app", "freeappstore.online");
-  });
-
-  it("deletes D1 route with correct domain for games", async () => {
-    const env = mockEnv();
-    const bindSpy = vi.fn().mockReturnValue({ run: vi.fn().mockResolvedValue({ success: true }) });
-    const prepareSpy = vi.fn().mockReturnValue({ bind: bindSpy });
-    env.DB.prepare = prepareSpy as any;
-
-    await callDeprovision({ id: "chess", store: "games" }, env);
-
-    const deleteCall = prepareSpy.mock.calls.find((c: any[]) => typeof c[0] === "string" && c[0].includes("DELETE FROM routes"));
-    expect(deleteCall).toBeDefined();
-    expect(bindSpy).toHaveBeenCalledWith("chess", "freegamestore.online");
+    const appsDelete = prepareSpy.mock.calls.find((c: any[]) => typeof c[0] === "string" && c[0].includes("DELETE FROM apps"));
+    expect(appsDelete).toBeDefined();
+    expect(bindSpy).toHaveBeenCalledWith("my-app");
   });
 
   it("deletes DNS records using correct zone for apps", async () => {
@@ -143,11 +144,13 @@ describe("deprovision endpoint", () => {
     expect(dnsListCall!.url).toContain("my-app.freeappstore.online");
   });
 
-  it("deletes DNS records using correct zone for games", async () => {
-    await callDeprovision({ id: "chess", store: "games" });
-    const dnsListCall = fetchCalls.find((c) => c.url.includes("/dns_records") && c.url.includes("fgs-zone-456") && c.method === "GET");
-    expect(dnsListCall).toBeDefined();
-    expect(dnsListCall!.url).toContain("chess.freegamestore.online");
+  it("rejects games store (moved to freegamestore-admin), same as publish", async () => {
+    const res = await callDeprovision({ id: "chess", store: "games" });
+    expect(res.status).toBe(500);
+    const data = (await res.json()) as any;
+    expect(data.ok).toBe(false);
+    expect(data.steps[0].name).toBe("validation");
+    expect(fetchCalls.find((c) => c.url.includes("fgs-zone-456"))).toBeUndefined();
   });
 
   it("deletes repo when deleteRepo=true", async () => {

@@ -6,7 +6,7 @@ name: Prod platform e2e
 #   exchange GitHub token -> fas session
 #   POST api/v1/publish   -> admin provisions repo (template-standalone) + CF
 #                            Pages + DNS + D1 route + storefront registry
-#   verify                -> GitHub repo, host live, ownership row
+#   verify                -> GitHub repo, host route answers, ownership row
 #   POST api/v1/unpublish  -> admin deprovisions everything (owner path)
 #   verify                -> host gone, ownership gone, repo gone
 #

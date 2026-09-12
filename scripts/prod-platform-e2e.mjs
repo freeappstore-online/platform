@@ -5,10 +5,19 @@
 //   exchange GitHub token -> fas session
 //   POST api/v1/publish   -> admin provisions a repo from template-standalone,
 //                            CF Pages + DNS + D1 route + storefront registry
-//   verify                -> GitHub repo exists, host goes live, ownership row
+//   verify                -> GitHub repo exists, host route answers, ownership row
 //   POST api/v1/unpublish  -> admin deprovisions (registry + route + R2 + DNS +
 //                            repo), the same owner path a creator would use
-//   verify                -> host gone, ownership gone, repo gone
+//   verify                -> host route gone, ownership gone, repo gone
+//
+// "Host route answers" is deliberately NOT "host serves the app". Provisioning
+// creates an EMPTY repo on purpose (workers/admin/src/publish.ts, step 1): the
+// creator's own `git push` is what triggers the template's deploy.yml and puts
+// files in R2. This canary never pushes code, so a 200 can never happen here —
+// the first 100 runs waited 10 minutes for one. What provisioning does promise
+// is the D1 route: freeappstore-host answers a routed-but-empty slug with
+// "has no asset at this path" and an unrouted one with "no app registered".
+// The deploy path itself is covered by smoke-sandbox (see prod-smoke.yml).
 //
 // It also probes the cheap deterministic surfaces around that flow: service
 // health, storefront + registry reads, and the auth gates (endpoints that must
@@ -255,10 +264,18 @@ async function unpublishApp(id, token) {
   }
   const data = parseJson(text, '/v1/unpublish');
   if (!res.ok || data.admin?.ok === false) {
-    console.warn(
-      `  cleanup warning: unpublish returned ${res.status}: ${(data.error || text).slice(0, 300)}`,
+    // A cleanup that leaves anything behind is a failed run, not a warning:
+    // every scheduled run would leak another repo/registry card/D1 row, and a
+    // green badge over that is exactly the "untested reported as healthy"
+    // trap prod-smoke fell into. Name the failed admin steps so the fix is
+    // obvious from the issue comment.
+    const failed = (data.admin?.steps || [])
+      .filter((s) => s.status === 'fail')
+      .map((s) => `${s.name}: ${s.detail}`)
+      .join('; ');
+    fail(
+      `unpublish returned ${res.status}: ${data.error || text.slice(0, 200)}${failed ? ` — failed steps: ${failed}` : ''}`,
     );
-    return;
   }
   console.log(`  unpublished ${id}: registry + route + R2 + DNS + repo removed`);
 }
@@ -297,32 +314,35 @@ async function verifyRepoGone(id) {
     last = String(res.status);
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
-  console.warn(`  cleanup warning: github repo ${GITHUB_ORG}/${id} still present (last ${last})`);
+  fail(`github repo ${GITHUB_ORG}/${id} still present after unpublish (last ${last})`);
 }
 
-async function waitForHost(id, wantLive) {
+// freeappstore-host answers every unknown path with 404, so the body is the
+// signal: "no app registered" = no D1 route, "has no asset" = routed but R2 is
+// empty (the state provisioning leaves a repo in), 2xx = deployed.
+async function waitForRoute(id, wantRouted) {
   const url = `https://${id}.${APP_DOMAIN}/`;
-  const deadline = Date.now() + (wantLive ? HOST_TIMEOUT_MS : HOST_CLEANUP_TIMEOUT_MS);
+  const deadline = Date.now() + (wantRouted ? HOST_TIMEOUT_MS : HOST_CLEANUP_TIMEOUT_MS);
   let last = 'not checked';
   while (Date.now() < deadline) {
     try {
       const { res, text } = await fetchText(url, { method: 'GET' }, 30_000);
-      const live = res.status === 200 || res.status === 206;
+      const routed = res.ok || (res.status === 404 && /has no asset/i.test(text));
       last = `${res.status} ${text.slice(0, 60).replace(/\s+/g, ' ')}`;
-      if (live === wantLive) {
-        console.log(`  host ${wantLive ? 'live' : 'gone'}: ${url} -> ${res.status}`);
+      if (routed === wantRouted) {
+        console.log(`  host route ${wantRouted ? 'answers' : 'gone'}: ${url} -> ${last}`);
         return;
       }
     } catch (e) {
-      if (!wantLive) {
-        console.log(`  host gone: ${url} -> ${e.message}`);
+      if (!wantRouted) {
+        console.log(`  host route gone: ${url} -> ${e.message}`);
         return;
       }
       last = e.message;
     }
     await new Promise((r) => setTimeout(r, POLL_MS));
   }
-  fail(`host did not become ${wantLive ? 'live' : 'gone'} in time: ${url} last=${last}`);
+  fail(`host route did not become ${wantRouted ? 'routed' : 'unrouted'} in time: ${url} last=${last}`);
 }
 
 async function main() {
@@ -349,21 +369,33 @@ async function main() {
   await verifyAuthenticatedSurfaces(token);
 
   let created = false;
+  let primary = null;
   try {
     await publishApp(id, token);
     created = true;
     await verifyRepoExists(id);
     assert(await ownsApp(token, id), `${id} did not appear in /v1/apps/mine after publish`);
-    await waitForHost(id, true);
+    await waitForRoute(id, true);
     console.log('  ✓ create path verified');
+  } catch (e) {
+    primary = e;
+    throw e;
   } finally {
     if (created) {
       console.log('\n› cleanup');
-      await unpublishApp(id, token);
-      await waitForHost(id, false);
-      await verifyRepoGone(id);
-      assert(!(await ownsApp(token, id)), `${id} still present in /v1/apps/mine after unpublish`);
-      console.log('  ✓ cleanup verified');
+      try {
+        await unpublishApp(id, token);
+        await waitForRoute(id, false);
+        await verifyRepoGone(id);
+        assert(!(await ownsApp(token, id)), `${id} still present in /v1/apps/mine after unpublish`);
+        console.log('  ✓ cleanup verified');
+      } catch (cleanupErr) {
+        // A throw here would replace the create-path failure with the cleanup
+        // one and hide what actually broke (which is what happened for the
+        // host-live timeout). Report it; let the primary error win.
+        if (primary) console.error(`  cleanup also failed: ${cleanupErr.message}`);
+        else throw cleanupErr;
+      }
     }
   }
 

@@ -15,7 +15,7 @@
 
 export type Store = "apps";
 
-interface PublishEnv {
+export interface PublishEnv {
   CF_ACCOUNT_ID: string;
   CF_API_TOKEN: string;
   GITHUB_TOKEN: string;
@@ -58,13 +58,13 @@ interface PublishRequest {
   proFeatures?: string[];
 }
 
-interface Step {
+export interface Step {
   name: string;
   status: "ok" | "skip" | "fail";
   detail: string;
 }
 
-interface StoreConfig {
+export interface StoreConfig {
   org: string;
   domain: string;
   storeRepo: string;
@@ -76,7 +76,7 @@ interface StoreConfig {
   zoneIdFromEnv: (env: PublishEnv) => string | undefined;
 }
 
-const STORE_CONFIG: Record<Store, StoreConfig> = {
+export const STORE_CONFIG: Record<Store, StoreConfig> = {
   apps: {
     org: "freeappstore-online",
     domain: "freeappstore.online",
@@ -114,7 +114,7 @@ async function parseJsonSafe(res: Response): Promise<any> {
   }
 }
 
-async function cfApi(env: PublishEnv, path: string, method = "GET", body?: any) {
+export async function cfApi(env: PublishEnv, path: string, method = "GET", body?: any) {
   const res = await fetch(`https://api.cloudflare.com/client/v4${path}`, {
     method,
     headers: { Authorization: `Bearer ${env.CF_API_TOKEN}`, "Content-Type": "application/json" },
@@ -127,7 +127,7 @@ async function cfApi(env: PublishEnv, path: string, method = "GET", body?: any) 
  * supply a mock to exercise retry paths without hitting the network. */
 export type GhFn = (path: string, method?: string, body?: any) => Promise<any>;
 
-async function ghApi(env: PublishEnv, path: string, method = "GET", body?: any) {
+export async function ghApi(env: PublishEnv, path: string, method = "GET", body?: any) {
   const res = await fetch(`https://api.github.com${path}`, {
     method,
     headers: {
@@ -176,12 +176,12 @@ function buildRegistryEntry(req: PublishRequest, config: StoreConfig, subdomain:
   return entry;
 }
 
-function decodeRegistry(file: any): any {
+export function decodeRegistry(file: any): any {
   const rawContent = new TextDecoder().decode(Uint8Array.from(atob(file.content.replace(/\n/g, "")), (c) => c.charCodeAt(0)));
   return JSON.parse(rawContent);
 }
 
-function encodeRegistry(content: any): string {
+export function encodeRegistry(content: any): string {
   return btoa(
     Array.from(new TextEncoder().encode(JSON.stringify(content, null, 2)))
       .map((b) => String.fromCharCode(b))

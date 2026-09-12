@@ -1,3 +1,4 @@
+import { type DeprovisionRequest, handleDeprovision } from "./deprovision";
 import {
   type AppConfig,
   type Env,
@@ -217,93 +218,20 @@ export default {
 
     if (url.pathname === "/api/deprovision" && request.method === "POST") {
       try {
-        const body = (await request.json()) as { id: string; store: "apps" | "games"; deleteRepo?: boolean };
+        const body = (await request.json()) as DeprovisionRequest;
         if (!body.id || !body.store) return json({ error: "id and store required" }, 400, request);
-        const steps: { name: string; status: string; detail: string }[] = [];
-        try {
-          const unpubRes = await fetch(new URL("/api/unpublish", request.url).toString(), {
-            method: "POST",
-            // Self-call goes out to the public hostname → through CF Access,
-            // which has no JWT for a server-side fetch. Authenticate with the
-            // provisioning token instead (same as the backend → admin path).
-            headers: { "Content-Type": "application/json", "X-Internal-Token": env.ADMIN_PROVISION_TOKEN ?? "" },
-            body: JSON.stringify({ id: body.id, store: body.store }),
-          });
-          steps.push({ name: "registry", status: unpubRes.ok ? "ok" : "skip", detail: unpubRes.ok ? "Removed" : "Not in registry" });
-        } catch (e) {
-          steps.push({ name: "registry", status: "fail", detail: String(e) });
-        }
-        // Delete hosting route from D1
-        try {
-          const domain = body.store === "apps" ? "freeappstore.online" : "freegamestore.online";
-          await env.DB.prepare("DELETE FROM routes WHERE slug = ? AND zone = ?").bind(body.id, domain).run();
-          steps.push({ name: "hosting_route", status: "ok", detail: "Route deleted" });
-        } catch (e) {
-          steps.push({ name: "hosting_route", status: "fail", detail: String(e) });
-        }
-        // Purge the app's R2 objects so storage isn't orphaned after delisting.
-        try {
-          if (env.APPS) {
-            const prefix = `${body.store}/${body.id}/`; // apps/<id>/ or games/<id>/
-            let deleted = 0;
-            let cursor: string | undefined;
-            do {
-              const listed = await env.APPS.list({ prefix, cursor });
-              if (listed.objects.length > 0) {
-                await env.APPS.delete(listed.objects.map((o) => o.key));
-                deleted += listed.objects.length;
-              }
-              cursor = listed.truncated ? listed.cursor : undefined;
-            } while (cursor);
-            steps.push({ name: "r2_objects", status: "ok", detail: `${deleted} object(s) under ${prefix}` });
-          } else {
-            steps.push({ name: "r2_objects", status: "skip", detail: "R2 binding (APPS) not available" });
-          }
-        } catch (e) {
-          steps.push({ name: "r2_objects", status: "fail", detail: String(e) });
-        }
-        const meta =
-          body.store === "apps"
-            ? { zone: env.FAS_ZONE_ID, domain: "freeappstore.online" }
-            : { zone: env.FGS_ZONE_ID, domain: "freegamestore.online" };
-        try {
-          const dnsListRes = await fetch(
-            `https://api.cloudflare.com/client/v4/zones/${meta.zone}/dns_records?type=CNAME&name=${body.id}.${meta.domain}`,
-            { headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` } },
-          );
-          const dnsList = (await dnsListRes.json()) as any;
-          for (const rec of dnsList.result ?? []) {
-            await fetch(`https://api.cloudflare.com/client/v4/zones/${meta.zone}/dns_records/${rec.id}`, {
-              method: "DELETE",
-              headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` },
-            });
-          }
-          steps.push({ name: "dns", status: "ok", detail: `${(dnsList.result ?? []).length} record(s) deleted` });
-        } catch (e) {
-          steps.push({ name: "dns", status: "fail", detail: String(e) });
-        }
-        if (body.deleteRepo) {
-          const org = body.store === "apps" ? "freeappstore-online" : "freegamestore-online";
-          try {
-            const ghDel = await fetch(`https://api.github.com/repos/${org}/${body.id}`, {
-              method: "DELETE",
-              headers: {
-                Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-                Accept: "application/vnd.github+json",
-                "User-Agent": "freeappstore-admin",
-              },
-            });
-            steps.push({
-              name: "delete_repo",
-              status: ghDel.ok || ghDel.status === 404 ? "ok" : "fail",
-              detail: ghDel.ok ? "Deleted" : `HTTP ${ghDel.status}`,
-            });
-          } catch (e) {
-            steps.push({ name: "delete_repo", status: "fail", detail: String(e) });
-          }
-        }
-        const ok = steps.every((s) => s.status !== "fail");
-        return json({ ok, id: body.id, steps }, ok ? 200 : 500, request);
+        const result = await handleDeprovision(body, {
+          CF_ACCOUNT_ID: env.CF_ACCOUNT_ID,
+          CF_API_TOKEN: env.CF_API_TOKEN,
+          GITHUB_TOKEN: env.GITHUB_TOKEN,
+          FAS_ZONE_ID: env.FAS_ZONE_ID,
+          FGS_ZONE_ID: env.FGS_ZONE_ID,
+          DB: env.DB,
+          APPS: env.APPS,
+          BACKEND_FAS: env.BACKEND_FAS,
+          ADMIN_PROVISION_TOKEN: env.ADMIN_PROVISION_TOKEN,
+        });
+        return json(result, result.ok ? 200 : 500, request);
       } catch {
         return json({ error: "Deprovision failed" }, 500, request);
       }
@@ -370,12 +298,7 @@ export default {
     // Proxies to /v1/internal/admin/* on the backend, gated by ADMIN_PROVISION_TOKEN.
     // The admin worker is behind CF Access so every request here is already admin-authed.
 
-    const contentPaths = [
-      "/api/content/kv",
-      "/api/content/kv/value",
-      "/api/content/collections",
-      "/api/content/counters",
-    ];
+    const contentPaths = ["/api/content/kv", "/api/content/kv/value", "/api/content/collections", "/api/content/counters"];
     if (contentPaths.includes(url.pathname)) {
       const backendToken = env.ADMIN_PROVISION_TOKEN || env.INTERNAL_TOKEN;
       if (!env.BACKEND_FAS || !backendToken) {
@@ -577,7 +500,10 @@ export default {
       if (hit) return new Response(hit.body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
       try {
         const body = JSON.stringify(await handleDeployStatus(env));
-        await cache.put(cacheKey, new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" } }));
+        await cache.put(
+          cacheKey,
+          new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" } }),
+        );
         return new Response(body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
       } catch (e) {
         return json({ error: String(e) }, 500, request);
@@ -600,7 +526,10 @@ export default {
         const body = JSON.stringify(await handleAppDeployStatus(appId, env));
         // 60s, not the fan-out's 5 min: a creator watching their own deploy
         // land needs this to move, and it is one repo per request.
-        await cache.put(cacheKey, new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } }));
+        await cache.put(
+          cacheKey,
+          new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=60" } }),
+        );
         return new Response(body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
       } catch (e) {
         return json({ error: String(e) }, 500, request);
