@@ -18,7 +18,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "agents": "^0.0.74",
     "hono": "^4.13.7",
-    "zod": "^3.23.8"
+    "zod": "^4.5.4"
   },
   "overrides": {
     "fast-uri": "^3.1.7",
