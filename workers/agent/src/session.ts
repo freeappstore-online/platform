@@ -7,7 +7,7 @@ import { getConfig } from "./config";
 import { corsHeaders, json } from "./cors";
 import type { DeployEnv, DeployStatus } from "./deploy";
 import type { Env } from "./index";
-import { executeInfraTool } from "./infra-exec";
+import { executeInfraTool, INFRA_ERROR_PATTERN } from "./infra-exec";
 import type { AIConfig, Message, TokenUsage } from "./providers/types";
 import { type PushSubscription, sendWebPush } from "./push";
 import { getTemplateFiles } from "./template";
@@ -393,6 +393,8 @@ export class AgentSession implements DurableObject {
                     this.sendPush("Your build is live!");
                     this.syncToD1();
                   } else if (status.phase === "error") {
+                    // deploy_log alone left the admin errors tab empty for CI failures (#11).
+                    this.logError("deploy", scrubKey(status.error));
                     this.sendPush("Build failed");
                     this.syncToD1();
                   }
@@ -429,7 +431,7 @@ export class AgentSession implements DurableObject {
 
           // Follow-up: let the AI react to infra tool results.
           // If deploy/push failed, the AI can diagnose and retry.
-          const hasError = infraResults.some((r) => /error|fail|threw/i.test(r.content));
+          const hasError = infraResults.some((r) => INFRA_ERROR_PATTERN.test(r.content));
           const followUpPrompt = hasError
             ? "The tool action above returned an error. Analyze the error, fix the issue if possible, and retry the action. Do not ask the user — just fix it."
             : "The action completed. Summarize the result briefly for the user.";
@@ -481,6 +483,7 @@ export class AgentSession implements DurableObject {
                         this.sendPush("Your build is live!");
                         this.syncToD1();
                       } else if (status.phase === "error") {
+                        this.logError("deploy", scrubKey(status.error));
                         this.sendPush("Build failed");
                         this.syncToD1();
                       }

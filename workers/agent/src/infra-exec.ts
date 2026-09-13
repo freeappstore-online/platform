@@ -2,7 +2,7 @@
 
 import { checkBuildSanity, formatSanityBlock } from "./build-sanity";
 import type { StoreConfig } from "./config";
-import type { DeployEnv, DeployStatus } from "./deploy";
+import type { DeployEnv, DeployOutcome, DeployStatus } from "./deploy";
 import { deployApp, pushUpdate, waitForGitHubDeploy } from "./deploy";
 import { checkDeployStatus, fetchUrl, getAuditResults, getBuildLogs, getCIResults, listDeployed } from "./infra";
 import type { ToolCall } from "./providers/types";
@@ -16,6 +16,19 @@ interface ExecContext {
   config: StoreConfig;
   onDeployStatus: (status: DeployStatus) => void;
   onAppDeployed: (id: string, name: string) => void;
+}
+
+/**
+ * How the session decides a tool result needs fixing: a match sends the model
+ * a "fix it and retry" follow-up instead of "summarize for the user". Result
+ * text that is not a failure — notably "still building" — must not match, or a
+ * slow build gets redeployed.
+ */
+export const INFRA_ERROR_PATTERN = /error|fail|threw/i;
+
+/** What the model is told when CI had not finished by the time we stopped waiting. */
+function stillBuildingMessage(appUrl: string): string {
+  return `CI is still building, so this is not live yet — it will be at ${appUrl} once the build finishes. Poll check_deploy_status until it reports live; if it does not go live, use get_build_logs and push_update a fix.`;
 }
 
 /** Execute a single infra tool. Returns the result string. */
@@ -249,40 +262,38 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
 
   ctx.onAppDeployed(appId, appName);
 
-  let deployError: string | null = null;
-  let liveUrl: string | null = null;
-  await deployApp(
-    {
-      id: appId,
-      name: appName,
-      category: tc.input.category as string,
-      icon: tc.input.icon as string,
-      iconBg: tc.input.iconBg as string,
-      description: tc.input.description as string,
-    },
-    ctx.files,
-    ctx.env,
-    ctx.config,
-    (status) => {
-      ctx.onDeployStatus(status);
-      if (status.phase === "live") liveUrl = status.appUrl;
-      if (status.phase === "error") deployError = status.error;
-    },
-    // Only reuse an existing repo when it is provably ours.
-    claim.ownedAlready || (!ctx.env.DB && ctx.appId === appId),
-  ).catch((err) => {
-    deployError = String(err);
-  });
+  let outcome: DeployOutcome;
+  try {
+    outcome = await deployApp(
+      {
+        id: appId,
+        name: appName,
+        category: tc.input.category as string,
+        icon: tc.input.icon as string,
+        iconBg: tc.input.iconBg as string,
+        description: tc.input.description as string,
+      },
+      ctx.files,
+      ctx.env,
+      ctx.config,
+      ctx.onDeployStatus,
+      // Only reuse an existing repo when it is provably ours.
+      claim.ownedAlready || (!ctx.env.DB && ctx.appId === appId),
+    );
+  } catch (err) {
+    // A throw never reached onDeployStatus; a returned error already did.
+    outcome = { phase: "error", detail: String(err) };
+    ctx.onDeployStatus({ phase: "error", error: outcome.detail });
+  }
 
-  if (deployError) {
+  if (outcome.phase === "error") {
     // Release a claim we took moments ago only if nothing was provisioned under
     // it — otherwise keep it, so the retry can reuse the repo it already made
     // and no one else can take the id out from under a half-built app.
     if (claim.createdNow && !(await repoExists(appId, ctx).catch(() => true))) {
       await releaseApp(appId, ctx);
     }
-    ctx.onDeployStatus({ phase: "error", error: deployError });
-    return `Deploy FAILED: ${deployError}`;
+    return `Deploy FAILED: ${outcome.detail}`;
   }
 
   const publishError = await publishStoreListing(appId, appName, tc, ctx);
@@ -311,9 +322,14 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     }
   }
 
+  // The code is pushed either way, so the listing and route above are right for
+  // a still-building deploy too. Only the claim of success depends on CI.
   const renamed = appId !== requestedId ? ` (ID "${requestedId}" was taken — deployed as "${appId}")` : "";
   const listing = publishError ? ` Store listing failed: ${publishError}` : " Store listing published.";
-  return `Deploy succeeded${renamed}. Preview: ${liveUrl || "building..."}.${listing}`;
+  if (outcome.phase === "timeout") {
+    return `Deploy pushed${renamed} — ${stillBuildingMessage(outcome.appUrl)}${listing}`;
+  }
+  return `Deploy succeeded${renamed}. Preview: ${outcome.appUrl}.${listing}`;
 }
 
 async function publishStoreListing(appId: string, appName: string, tc: ToolCall, ctx: ExecContext): Promise<string | null> {
@@ -384,8 +400,18 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string
     ctx.onDeployStatus({ phase: "error", error: result.message });
     return result.message;
   }
-  await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
-  return result.message;
+  // Report how CI actually ended. Returning the push message regardless told
+  // the model "pushed" after a failed build, so it summarized a broken update as
+  // done and never looked at the logs (#11).
+  const outcome = await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
+  switch (outcome.phase) {
+    case "live":
+      return `Update deployed and live at ${outcome.appUrl}.`;
+    case "error":
+      return `Update pushed but the build FAILED: ${outcome.detail}. Use get_build_logs, fix the issue, and push_update again.`;
+    case "timeout":
+      return `Update pushed — ${stillBuildingMessage(outcome.appUrl)}`;
+  }
 }
 
 async function executeFetchUrl(tc: ToolCall, config: StoreConfig): Promise<string> {
