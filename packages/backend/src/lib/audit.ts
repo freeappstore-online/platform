@@ -17,13 +17,24 @@
  * the next call. The Sunday cron runs once; for first-deploy
  * back-fill, hit POST /v1/audit/run multiple times until coverage
  * stabilises.
+ *
+ * Each app with a registry `repo` also costs one GitHub Trees API call
+ * (unauthenticated) for the committed-artifacts check (#19).
  */
 
-import { auditLive, type LiveAuditReport } from '@freeappstore/compliance';
+import {
+  auditLive,
+  type CheckResult,
+  checkNoCommittedArtifacts,
+  githubTreeSource,
+  type LiveAuditReport,
+} from '@freeappstore/compliance';
 
 interface RegistryItem {
   id: string;
   appUrl: string;
+  /** `owner/name` of the source repo, e.g. `freeappstore-online/tip`. */
+  repo?: string;
 }
 
 const REGISTRY_URLS = {
@@ -83,11 +94,16 @@ export async function runAudit(db: D1Database): Promise<{ scanned: number; faile
   const batch = all.slice(0, BATCH_SIZE);
 
   // Audit in parallel — each app is an independent fetch chain with
-  // its own 8s timeout in auditLive.
+  // its own 8s timeout in auditLive (and in the GitHub tree fetch).
   const reports = await Promise.all(
-    batch.map(({ store, item }) =>
-      auditLive({ appId: item.id, liveUrl: item.appUrl }).then((r) => ({ store, report: r })),
-    ),
+    batch.map(async ({ store, item }) => {
+      const [report, artifacts] = await Promise.all([
+        auditLive({ appId: item.id, liveUrl: item.appUrl }),
+        checkCommittedArtifacts(item),
+      ]);
+      if (artifacts) report.results.push(artifacts);
+      return { store, report };
+    }),
   );
 
   await persistResults(db, reports);
@@ -96,6 +112,23 @@ export async function runAudit(db: D1Database): Promise<{ scanned: number; faile
     0,
   );
   return { scanned: reports.length, failed };
+}
+
+/**
+ * Committed build artifacts (node_modules/, dist/, .DS_Store …) in the app's
+ * GitHub repo (#19). Report-only: a published app that still tracks
+ * `web/dist/` is flagged as `warn`, never `fail` — this sweep surfaces drift,
+ * it does not gate anything, and ~45 apps still track build output today.
+ *
+ * Returns null (no row written) when the registry entry has no usable
+ * `owner/name` repo, rather than guessing one from the app id.
+ */
+async function checkCommittedArtifacts(item: RegistryItem): Promise<CheckResult | null> {
+  const match = /^([\w.-]+)\/([\w.-]+)$/.exec(item.repo?.trim() ?? '');
+  if (!match) return null;
+  const [, org, repo] = match as unknown as [string, string, string];
+  const result = await checkNoCommittedArtifacts(githubTreeSource(org, repo));
+  return result.status === 'fail' ? { ...result, status: 'warn' } : result;
 }
 
 async function persistResults(

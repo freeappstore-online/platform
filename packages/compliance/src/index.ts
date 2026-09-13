@@ -20,6 +20,7 @@ import { checkTextSelectable } from './checks/text-selectable.js';
 import { checkUnsafeVh } from './checks/unsafe-vh.js';
 import { checkViewportSupport } from './checks/viewport-support.js';
 import { type FileSource, fsFileSource, mapFileSource } from './lib/file-source.js';
+import { githubTreeSource } from './lib/github-tree-source.js';
 import { isGameProject } from './lib/project-type.js';
 import type { CheckResult } from './types.js';
 
@@ -60,6 +61,7 @@ export {
   checkUnsafeVh,
   checkViewportSupport,
   fsFileSource,
+  githubTreeSource,
   isGameProject,
   mapFileSource,
 };

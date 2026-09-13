@@ -137,3 +137,111 @@ describe('runAudit', () => {
     expect(captures).toHaveLength(0);
   });
 });
+
+describe('runAudit — committed-artifacts check (#19)', () => {
+  const ARTIFACTS = 'No committed build artifacts';
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Registry with the given apps; every live-URL fetch fails; tree fetches per `trees`. */
+  function mockFetch(
+    apps: Array<{ id: string; repo?: string | undefined }>,
+    trees: Record<string, () => Response>,
+  ): string[] {
+    const treeCalls: string[] = [];
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
+      if (/freeappstore.*registry\.json/.test(url)) {
+        return new Response(
+          JSON.stringify({ apps: apps.map((a) => ({ ...a, appUrl: `https://${a.id}.example` })) }),
+          { status: 200 },
+        );
+      }
+      if (/registry\.json/.test(url)) return new Response(JSON.stringify({}), { status: 200 });
+      const tree = /api\.github\.com\/repos\/([^/]+\/[^/]+)\/git\/trees\//.exec(url);
+      if (tree) {
+        treeCalls.push(tree[1]!);
+        const respond = trees[tree[1]!];
+        return respond ? respond() : new Response('', { status: 404 });
+      }
+      throw new Error('ECONNREFUSED');
+    });
+    return treeCalls;
+  }
+
+  const rows = (captures: Captured[]) =>
+    captures.map((c) => ({
+      appId: c.binds[0],
+      check: c.binds[2],
+      status: c.binds[3],
+      detail: c.binds[4],
+    }));
+
+  it('writes committed dist/ as warn, not fail, and does not count it as a failure', async () => {
+    const treeCalls = mockFetch([{ id: 'anatomy', repo: 'freeappstore-online/anatomy' }], {
+      'freeappstore-online/anatomy': () =>
+        new Response(
+          JSON.stringify({
+            truncated: false,
+            tree: [
+              { path: 'web/dist', type: 'tree' },
+              { path: 'web/dist/index.html', type: 'blob' },
+              { path: 'web/src/App.tsx', type: 'blob' },
+            ],
+          }),
+          { status: 200 },
+        ),
+    });
+    const captures: Captured[] = [];
+    const r = await runAudit(fakeDB(captures));
+
+    expect(treeCalls).toEqual(['freeappstore-online/anatomy']);
+    const row = rows(captures).find((x) => x.check === ARTIFACTS);
+    expect(row).toMatchObject({ appId: 'anatomy', status: 'warn' });
+    expect(row?.detail).toMatch(/1 tracked artifact file.*web\/dist\/index\.html/);
+    // Only the unreachable live URL counts as a failure; the artifact warn does not.
+    expect(r.failed).toBe(1);
+  });
+
+  it('writes pass for a clean repo', async () => {
+    mockFetch([{ id: 'tip', repo: 'freeappstore-online/tip' }], {
+      'freeappstore-online/tip': () =>
+        new Response(
+          JSON.stringify({ truncated: false, tree: [{ path: 'web/src/App.tsx', type: 'blob' }] }),
+          { status: 200 },
+        ),
+    });
+    const captures: Captured[] = [];
+    await runAudit(fakeDB(captures));
+    expect(rows(captures).find((x) => x.check === ARTIFACTS)).toMatchObject({
+      appId: 'tip',
+      status: 'pass',
+    });
+  });
+
+  it('writes warn when GitHub rate-limits the tree fetch', async () => {
+    mockFetch([{ id: 'tip', repo: 'freeappstore-online/tip' }], {
+      'freeappstore-online/tip': () =>
+        new Response('{"message":"API rate limit exceeded"}', { status: 403 }),
+    });
+    const captures: Captured[] = [];
+    await runAudit(fakeDB(captures));
+    expect(rows(captures).find((x) => x.check === ARTIFACTS)).toMatchObject({ status: 'warn' });
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['not owner/name', 'https://github.com/freeappstore-online/tip'],
+    ['bare name', 'tip'],
+  ])('skips the check (no GitHub call, no row) when repo is %s', async (_label, repo) => {
+    const treeCalls = mockFetch([{ id: 'tip', repo }], {});
+    const captures: Captured[] = [];
+    await runAudit(fakeDB(captures));
+    expect(treeCalls).toHaveLength(0);
+    expect(rows(captures).some((x) => x.check === ARTIFACTS)).toBe(false);
+  });
+});

@@ -46,7 +46,8 @@ export async function checkNoCommittedArtifacts(source: FileSource): Promise<Che
     return {
       name,
       status: 'warn',
-      detail: 'not a git repository (or git unavailable) — skipping tracked-artifact check',
+      detail:
+        'tracked-file list unavailable (not a git repository, repo not found, or GitHub rate-limited) — skipping tracked-artifact check',
     };
   }
 
