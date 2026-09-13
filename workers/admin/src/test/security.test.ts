@@ -26,14 +26,3 @@ describe("Security: no secrets in source", () => {
     });
   }
 });
-
-describe("Security: SKILLS.md has no secrets", () => {
-  it("no service tokens in public docs", async () => {
-    const res = await fetch("https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/SKILLS.md");
-    const text = await res.text();
-    expect(text).not.toMatch(/CF-Access-Client-Secret/);
-    expect(text).not.toMatch(/cfk_/);
-    expect(text).not.toMatch(/cfut_/);
-    expect(text).not.toMatch(/662a28f8/);
-  });
-});

@@ -42,6 +42,27 @@ jobs:
       - name: Test
         run: pnpm test
 
+  # workers/admin is its own pnpm project (own lockfile), so the root `pnpm test`
+  # above does not reach it. Its suite otherwise only runs as the pre-deploy gate
+  # in deploy-admin.yml, i.e. after merge. It makes no network calls (#51).
+  admin-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: workers/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --ignore-workspace
+
+      - name: Test
+        run: pnpm test
+
   # Live e2e against `wrangler dev --local` (miniflare). Catches integration
   # regressions that unit tests miss: real D1, real Hono routing through the
   # Worker bundle, real WebSocket upgrade through the Durable Object.
