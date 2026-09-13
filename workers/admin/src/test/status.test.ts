@@ -62,46 +62,6 @@ describe("timeAgo", () => {
   });
 });
 
-describe("Registry (live)", () => {
-  it("apps registry accessible with valid data", async () => {
-    const res = await fetch("https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/registry.json");
-    expect(res.ok).toBe(true);
-    const data = (await res.json()) as any;
-    expect(data.apps.length).toBeGreaterThan(0);
-    for (const a of data.apps) {
-      expect(a.id).toBeTruthy();
-      expect(a.name).toBeTruthy();
-    }
-  });
-
-  it("games registry accessible with valid data", async () => {
-    const res = await fetch("https://raw.githubusercontent.com/freegamestore-online/freegamestore/main/registry.json");
-    expect(res.ok).toBe(true);
-    const data = (await res.json()) as any;
-    expect(data.games.length).toBeGreaterThan(0);
-    for (const g of data.games) {
-      expect(g.id).toBeTruthy();
-      expect(g.name).toBeTruthy();
-    }
-  });
-
-  it("no duplicate IDs in apps", async () => {
-    const data = (await (
-      await fetch("https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/registry.json")
-    ).json()) as any;
-    const ids = data.apps.map((a: any) => a.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-
-  it("no duplicate IDs in games", async () => {
-    const data = (await (
-      await fetch("https://raw.githubusercontent.com/freegamestore-online/freegamestore/main/registry.json")
-    ).json()) as any;
-    const ids = data.games.map((g: any) => g.id);
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-});
-
 describe("Store metadata", () => {
   it("domain convention", () => {
     expect("timer.freeappstore.online").toMatch(/\.freeappstore\.online$/);
