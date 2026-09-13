@@ -31,6 +31,13 @@ export type DeployStatus =
   | { phase: "live"; appUrl: string }
   | { phase: "error"; error: string };
 
+/**
+ * How a deploy actually ended, as opposed to the status stream shown to the UI.
+ * `timeout` means CI had not finished when we stopped waiting — the deploy may
+ * still go live or fail, so it must never be reported as either (#11).
+ */
+export type DeployOutcome = { phase: "live"; appUrl: string } | { phase: "error"; detail: string } | { phase: "timeout"; appUrl: string };
+
 type TreeItem = { path: string; mode: string; type: string; sha: string };
 export type PushUpdateResult = { ok: true; message: string; commitSha: string } | { ok: false; message: string };
 type WorkflowRun = { id: number; status?: string; conclusion?: string | null; head_sha?: string };
@@ -57,7 +64,7 @@ export async function deployApp(
    *  retry). A pre-existing repo under any other circumstance is a collision —
    *  pushing into it would overwrite a stranger's code (#29). */
   allowExistingRepo = false,
-): Promise<void> {
+): Promise<DeployOutcome> {
   const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
   const steps: DeployStep[] = [];
   onStatus({ phase: "provisioning", steps: [] });
@@ -71,11 +78,9 @@ export async function deployApp(
       // in R2 under the same prefix. Stop before the first byte is written.
       const detail = `${config.org}/${deployConfig.id} already exists and is not this session's ${config.noun}`;
       steps.push({ name: "GitHub repo", status: "fail", detail });
-      onStatus({
-        phase: "error",
-        error: `Refusing to deploy into an existing ${config.noun} repo: ${detail}. Deploy under a different ID.`,
-      });
-      return;
+      const error = `Refusing to deploy into an existing ${config.noun} repo: ${detail}. Deploy under a different ID.`;
+      onStatus({ phase: "error", error });
+      return { phase: "error", detail: error };
     }
     steps.push({ name: "GitHub repo", status: "skip", detail: `${config.org}/${deployConfig.id} already exists` });
   } else {
@@ -92,8 +97,9 @@ export async function deployApp(
       steps.push({ name: "GitHub repo", status: "ok", detail: `Created ${config.org}/${deployConfig.id}` });
     } else {
       steps.push({ name: "GitHub repo", status: "fail", detail: createRepo.message || "Failed" });
-      onStatus({ phase: "error", error: `GitHub repo creation failed: ${createRepo.message}` });
-      return;
+      const error = `GitHub repo creation failed: ${createRepo.message}`;
+      onStatus({ phase: "error", error });
+      return { phase: "error", detail: error };
     }
   }
   onStatus({ phase: "provisioning", steps: [...steps] });
@@ -105,7 +111,7 @@ export async function deployApp(
   onStatus({ phase: "provisioning", steps: [...steps] });
 
   // Step 3: Wait for GitHub Actions deploy
-  await waitForGitHubDeploy(deployConfig.id, env, config, onStatus);
+  return waitForGitHubDeploy(deployConfig.id, env, config, onStatus);
 }
 
 export async function waitForGitHubDeploy(
@@ -114,7 +120,7 @@ export async function waitForGitHubDeploy(
   config: StoreConfig,
   onStatus: (status: DeployStatus) => void,
   commitSha?: string,
-): Promise<void> {
+): Promise<DeployOutcome> {
   const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
   const appUrl = `https://${appId}.${config.domain}`;
   const repo = `${config.org}/${appId}`;
@@ -132,25 +138,28 @@ export async function waitForGitHubDeploy(
 
       if (latestRun.conclusion === "success") {
         onStatus({ phase: "live", appUrl });
-        return;
+        return { phase: "live", appUrl };
       }
       if (latestRun.conclusion === "failure") {
         const errorDetail = await fetchCIFailureDetails(ghApi, repo, latestRun.id, env.GITHUB_TOKEN);
         onStatus({ phase: "error", error: errorDetail });
-        return;
+        return { phase: "error", detail: errorDetail };
       }
       if (latestRun.conclusion) {
-        onStatus({
-          phase: "error",
-          error: `GitHub Actions deploy ended with ${latestRun.conclusion}. Check: https://github.com/${repo}/actions`,
-        });
-        return;
+        const error = `GitHub Actions deploy ended with ${latestRun.conclusion}. Check: https://github.com/${repo}/actions`;
+        onStatus({ phase: "error", error });
+        return { phase: "error", detail: error };
       }
     } catch {
       /* GH API transient error — retry on next poll */
     }
   }
-  onStatus({ phase: "live", appUrl }); // timeout — assume deploying
+  // Stopped waiting before CI finished. This used to report `live`, so a slow
+  // build was announced as shipped — to the UI, to push notifications, and to
+  // the model, which then told the user it worked (#11). Say what we know:
+  // still building.
+  onStatus({ phase: "building", deployUrl: appUrl });
+  return { phase: "timeout", appUrl };
 }
 
 /** Fetch detailed step-level failure info from a failed GitHub Actions run. */

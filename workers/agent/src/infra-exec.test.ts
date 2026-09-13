@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { getConfig } from "./config";
 import type { DeployStatus } from "./deploy";
-import { applyPlaceholders, executeInfraTool } from "./infra-exec";
+import { applyPlaceholders, executeInfraTool, INFRA_ERROR_PATTERN } from "./infra-exec";
 
 describe("applyPlaceholders", () => {
   it("APPID -> the slug everywhere (so the SDK proxy path matches the deployed id)", () => {
@@ -148,55 +148,153 @@ describe("executeInfraTool — ID validation", () => {
     const result = await executeInfraTool({ id: "1", name: "push_update", input: { id: "other-app", message: "update" } }, ctx);
     expect(result).toContain("you can only push_update on your own app");
   });
+});
 
-  it("waits for push_update deploy status and marks the app live", async () => {
-    vi.useFakeTimers();
-    const originalFetch = globalThis.fetch;
-    const commitSha = "abc123456789";
-    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
-      const method = init?.method || "GET";
-      if (method === "GET" && url.endsWith("/git/ref/heads/main")) {
-        return { ok: true, json: async () => ({ object: { sha: "parent-sha" } }) } as Response;
-      }
-      if (method === "POST" && url.endsWith("/git/blobs")) {
-        return { ok: true, json: async () => ({ sha: "blob-sha" }) } as Response;
-      }
-      if (method === "GET" && url.endsWith("/git/commits/parent-sha")) {
-        return { ok: true, json: async () => ({ tree: { sha: "base-tree-sha" } }) } as Response;
-      }
-      if (method === "POST" && url.endsWith("/git/trees")) {
-        return { ok: true, json: async () => ({ sha: "tree-sha" }) } as Response;
-      }
-      if (method === "POST" && url.endsWith("/git/commits")) {
-        return { ok: true, json: async () => ({ sha: commitSha }) } as Response;
-      }
-      if (method === "PATCH" && url.endsWith("/git/refs/heads/main")) {
-        return { ok: true, json: async () => ({ ref: "refs/heads/main" }) } as Response;
-      }
-      if (method === "GET" && url.endsWith("/actions/runs?per_page=10")) {
-        return {
-          ok: true,
-          json: async () => ({ workflow_runs: [{ id: 123, status: "completed", conclusion: "success", head_sha: commitSha }] }),
-        } as Response;
-      }
-      return { ok: false, status: 404, json: async () => ({ message: `Unexpected request: ${method} ${url}` }) } as Response;
-    }) as typeof fetch;
+// ── #11: tool results report how CI actually ended ─────────────────────────
 
-    try {
-      const ctx = makeCtx({ appId: "my-app" });
-      ctx.files.set("web/src/App.tsx", "export default () => <div/>");
-      const resultPromise = executeInfraTool({ id: "1", name: "push_update", input: { id: "my-app", message: "update" } }, ctx);
-      await vi.advanceTimersByTimeAsync(8000);
-      const result = await resultPromise;
+type RunOutcome = "success" | "failure" | "in_progress";
 
-      expect(result).toContain("Pushed update");
-      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "pushing", progress: "Pushing update..." });
-      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "building", deployUrl: "https://my-app.freeappstore.online" });
-      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "live", appUrl: "https://my-app.freeappstore.online" });
-    } finally {
-      globalThis.fetch = originalFetch;
-      vi.useRealTimers();
+/**
+ * A GitHub stand-in for the full deploy / push_update path: repo lookup and
+ * creation, the Git Data API push, the Actions runs list, and — for a failed
+ * run — the jobs list and the failed job's log. `run` decides how CI ends.
+ */
+function fakeGitHub(run: RunOutcome, commitSha = "abc123456789") {
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method || "GET";
+    const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body }) as Response;
+    if (method === "GET" && /\/repos\/freeappstore-online\/[^/]+$/.test(url)) return json({ message: "Not Found" }, 404);
+    if (method === "POST" && url.endsWith("/orgs/freeappstore-online/repos")) return json({ id: 1 });
+    if (method === "GET" && url.endsWith("/git/ref/heads/main")) return json({ object: { sha: "parent-sha" } });
+    if (method === "POST" && url.endsWith("/git/blobs")) return json({ sha: "blob-sha" });
+    if (method === "GET" && url.endsWith("/git/commits/parent-sha")) return json({ tree: { sha: "base-tree-sha" } });
+    if (method === "POST" && url.endsWith("/git/trees")) return json({ sha: "tree-sha" });
+    if (method === "POST" && url.endsWith("/git/commits")) return json({ sha: commitSha });
+    if (method === "PATCH" && url.endsWith("/git/refs/heads/main")) return json({ ref: "refs/heads/main" });
+    if (method === "GET" && url.endsWith("/actions/runs?per_page=10")) {
+      const status = run === "in_progress" ? "in_progress" : "completed";
+      const conclusion = run === "in_progress" ? null : run;
+      return json({ workflow_runs: [{ id: 123, status, conclusion, head_sha: commitSha }] });
     }
+    if (method === "GET" && url.endsWith("/actions/runs/123/jobs")) {
+      return json({
+        jobs: [
+          {
+            id: 9,
+            name: "deploy",
+            status: "completed",
+            conclusion: "failure",
+            steps: [{ name: "Build", status: "completed", conclusion: "failure" }],
+          },
+        ],
+      });
+    }
+    if (url.endsWith("/actions/jobs/9/logs")) {
+      return { ok: true, status: 200, text: async () => "error TS2304: Cannot find name 'Foo'." } as Response;
+    }
+    return json({ message: `Unexpected request: ${method} ${url}` }, 404);
+  }) as typeof fetch;
+}
+
+const APP_URL = "https://my-app.freeappstore.online";
+const DEPLOY_CALL = {
+  id: "1",
+  name: "deploy",
+  input: { id: "my-app", name: "My App", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "test" },
+};
+const PUSH_CALL = { id: "1", name: "push_update", input: { id: "my-app", message: "update" } };
+
+/** A context whose store listing publishes cleanly, so result text reflects only CI. */
+function deployCtx(appId: string | null) {
+  const ctx = makeCtx({ appId });
+  ctx.files.set("web/src/App.tsx", "export default () => <div/>");
+  Object.assign(ctx.env, { PLATFORM: { fetch: async () => new Response("{}", { status: 200 }) } });
+  return Object.assign(ctx, { authHeader: "Bearer test" });
+}
+
+async function runWithCI(run: RunOutcome, call: typeof DEPLOY_CALL | typeof PUSH_CALL, appId: string | null, waitMs: number) {
+  vi.useFakeTimers();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = fakeGitHub(run);
+  try {
+    const ctx = deployCtx(appId);
+    const resultPromise = executeInfraTool(call, ctx);
+    await vi.advanceTimersByTimeAsync(waitMs);
+    const result = await resultPromise;
+    const phases = vi.mocked(ctx.onDeployStatus).mock.calls.map(([status]) => status.phase);
+    return { result, ctx, phases };
+  } finally {
+    globalThis.fetch = originalFetch;
+    vi.useRealTimers();
+  }
+}
+
+// One poll is 8s; the wait gives up after 150s.
+const ONE_POLL = 8_000;
+const PAST_DEADLINE = 160_000;
+
+describe("executeInfraTool — deploy reports the true CI outcome (#11)", () => {
+  it("returns success only once the build is live", async () => {
+    const { result, ctx } = await runWithCI("success", DEPLOY_CALL, null, ONE_POLL);
+
+    expect(result).toBe(`Deploy succeeded. Preview: ${APP_URL}. Store listing published.`);
+    expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "live", appUrl: APP_URL });
+    expect(INFRA_ERROR_PATTERN.test(result)).toBe(false);
+  });
+
+  it("returns Deploy FAILED with the CI detail when the build fails", async () => {
+    const { result, ctx } = await runWithCI("failure", DEPLOY_CALL, null, ONE_POLL);
+
+    expect(result.startsWith("Deploy FAILED: ")).toBe(true);
+    expect(result).toContain("Deploy failed (run 123)");
+    expect(result).toContain("Cannot find name 'Foo'");
+    expect(ctx.onDeployStatus).toHaveBeenCalledWith(expect.objectContaining({ phase: "error" }));
+    expect(INFRA_ERROR_PATTERN.test(result)).toBe(true);
+  });
+
+  it("says CI is still building when the wait times out, and never claims live", async () => {
+    const { result, phases } = await runWithCI("in_progress", DEPLOY_CALL, null, PAST_DEADLINE);
+
+    expect(result).toContain("Deploy pushed");
+    expect(result).toContain("still building");
+    expect(result).toContain(APP_URL);
+    expect(result).not.toContain("succeeded");
+    expect(phases).not.toContain("live");
+    expect(phases.at(-1)).toBe("building");
+    // Not a failure either: the session must not tell the model to fix and redeploy.
+    expect(INFRA_ERROR_PATTERN.test(result)).toBe(false);
+  });
+});
+
+describe("executeInfraTool — push_update reports the true CI outcome (#11)", () => {
+  it("returns the live URL once the update's build is live", async () => {
+    const { result, ctx, phases } = await runWithCI("success", PUSH_CALL, "my-app", ONE_POLL);
+
+    expect(result).toBe(`Update deployed and live at ${APP_URL}.`);
+    expect(phases).toEqual(["pushing", "building", "live"]);
+    expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "live", appUrl: APP_URL });
+    expect(INFRA_ERROR_PATTERN.test(result)).toBe(false);
+  });
+
+  it("returns FAILED with the CI detail when the update's build fails, so the session asks for a fix", async () => {
+    const { result, phases } = await runWithCI("failure", PUSH_CALL, "my-app", ONE_POLL);
+
+    expect(result.startsWith("Update pushed but the build FAILED: ")).toBe(true);
+    expect(result).toContain("Cannot find name 'Foo'");
+    expect(result).toContain("Use get_build_logs, fix the issue, and push_update again.");
+    expect(phases.at(-1)).toBe("error");
+    expect(INFRA_ERROR_PATTERN.test(result)).toBe(true);
+  });
+
+  it("says CI is still building when the update's wait times out, and never claims live", async () => {
+    const { result, phases } = await runWithCI("in_progress", PUSH_CALL, "my-app", PAST_DEADLINE);
+
+    expect(result).toContain("Update pushed");
+    expect(result).toContain("still building");
+    expect(result).not.toContain("live at");
+    expect(phases).not.toContain("live");
+    expect(phases.at(-1)).toBe("building");
+    expect(INFRA_ERROR_PATTERN.test(result)).toBe(false);
   });
 });
 
