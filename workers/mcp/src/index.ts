@@ -83,7 +83,7 @@ export interface McpProps extends Record<string, unknown> {
   userId?: string;
   token?: string;
   readOnly?: boolean;
-  /** MCP scopes granted by the OAuth token (null/undefined → all scopes). */
+  /** MCP scopes granted by the OAuth token (null/undefined → read, write, runtime). */
   scopes?: string[] | null;
 }
 
