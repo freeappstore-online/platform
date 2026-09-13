@@ -274,6 +274,76 @@ jobs:
             process.exit(0)
           "
 
+      # The same #24 guard as step 2b, across every store's MCP server (#51).
+      # Nothing else watches these hostnames: a dead server or a regressed
+      # origin on another store is invisible until someone happens to connect.
+      # FAS is left out here — step 2b already asserts it, more strictly.
+      #
+      # Last in the job and `!cancelled()`, so a broken session mint or a red
+      # step 3-6 cannot hide fleet coverage, and a dead store cannot hide them.
+      # Every host is checked before failing, one ::error:: per mismatch, so a
+      # single alert names every broken server.
+      #
+      # KNOWN-DEAD entries pin the broken response #51 recorded, so the run stays
+      # green while those servers are unresolved. When one is fixed (or retired)
+      # its codes stop matching and this step goes red on purpose: move the host
+      # to the healthy expectation (405 405 401), or delete its row, in the same
+      # change as the fix.
+      - name: 7. MCP fleet rejects protocol clients
+        if: ${{ !cancelled() }}
+        run: |
+          set -uo pipefail
+          # host                        GET /  POST /  GET /mcp  note
+          # `5xx` matches any 500-599. `000` (curl timeout / no connection) never
+          # matches anything, so an unreachable host is always a failure.
+          fleet='
+          mcp.freegamestore.online      405    405     401
+          mcp.proappstore.online        405    405     401
+          mcp.prowebstore.online        405    405     401
+          mcp.proagentstore.online      405    405     401
+          mcp.freedocstore.online       405    405     401
+          mcp.freeagentstore.online     405    405     405       /mcp-answers-405
+          mcp.freewebstore.online       404    404     301       KNOWN-DEAD-#51:/mcp-redirects-to-/-which-404s
+          mcp.progamestore.online       5xx    5xx     5xx       KNOWN-DEAD-#51:no-origin-(522)
+          '
+          matches() { # matches <actual> <expected>
+            case "$2" in
+              5xx) [[ "$1" =~ ^5[0-9][0-9]$ ]] ;;
+              *)   [ "$1" = "$2" ] ;;
+            esac
+          }
+          failures=0
+          while read -r host want_get want_post want_mcp note; do
+            [ -z "${host:-}" ] && continue
+            base="https://$host"
+            get=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+              -H 'Accept: text/event-stream' "$base/" 2>/dev/null)
+            post=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
+              -H 'Content-Type: application/json' \
+              --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$base/" 2>/dev/null)
+            mcp=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+              -H 'Accept: text/event-stream' "$base/mcp" 2>/dev/null)
+            echo "  $host: GET / → $get | POST / → $post | GET /mcp → $mcp${note:+  ($note)}"
+            bad=""
+            matches "$get" "$want_get"   || bad="$bad GET / → $get (want $want_get);"
+            matches "$post" "$want_post" || bad="$bad POST / → $post (want $want_post);"
+            matches "$mcp" "$want_mcp"   || bad="$bad GET /mcp → $mcp (want $want_mcp);"
+            if [ -n "$bad" ]; then
+              bad="${bad%;}"
+              failures=$((failures + 1))
+              if [[ "${note:-}" == KNOWN-DEAD* ]]; then
+                echo "::error::$host no longer answers like the known-dead server in #51:$bad — if it was fixed or retired, update its row in prod-smoke step 7."
+              else
+                echo "::error::$host MCP origin regressed:$bad"
+              fi
+            fi
+          done <<< "$fleet"
+          if [ "$failures" -gt 0 ]; then
+            echo "$failures MCP host(s) did not match"
+            exit 1
+          fi
+          echo "  ✓ all MCP hosts answered as expected"
+
   # Deliberately a SEPARATE job, not a final step of `smoke`. It gets its own
   # runner, so it still reports when the smoke runner never comes up. On
   # 2026-08-06 two runs were allocated, executed ZERO steps, and were cancelled
