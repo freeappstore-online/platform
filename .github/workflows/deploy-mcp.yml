@@ -45,6 +45,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Gate the deploy on the worker's own suite, as deploy-admin/agent/host do.
+      # Covers the OAuth callback's nonce/state/flow-cookie binding (#44, #61).
+      - name: Tests
+        run: npm test
+
       - name: Deploy
         run: npx wrangler deploy
         env:
