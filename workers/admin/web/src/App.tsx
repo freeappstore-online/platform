@@ -7,6 +7,7 @@ import { AgentSessions } from './AgentSessions.tsx'
 import { AgentSessionView } from './AgentSessionView.tsx'
 import { AIKeys } from './AIKeys.tsx'
 import { ContentData } from './ContentData.tsx'
+import { type AdminUser, useAdminAuth } from './auth.ts'
 
 type View =
   | { page: 'overview' }
@@ -38,6 +39,7 @@ function parseHash(): View {
 }
 
 export default function App() {
+  const { user, loading, error, signIn, signOut } = useAdminAuth()
   const [view, setView] = useState<View>(parseHash)
 
   useEffect(() => {
@@ -50,9 +52,19 @@ export default function App() {
     window.location.hash = hash
   }, [])
 
+  if (loading) {
+    return (
+      <div className="min-h-[100dvh] flex items-center justify-center px-4">
+        <p className="text-sm" style={{ color: 'var(--muted)' }}>Loading...</p>
+      </div>
+    )
+  }
+
+  if (!user) return <SignIn error={error} onSignIn={signIn} />
+
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <Header navigate={navigate} view={view} />
+      <Header navigate={navigate} view={view} user={user} signOut={signOut} />
       <main className="flex-1 mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
         {view.page === 'overview' && <Overview navigate={navigate} />}
         {view.page === 'apps' && <AppList navigate={navigate} owner={view.owner} />}
@@ -67,7 +79,32 @@ export default function App() {
   )
 }
 
-function Header({ navigate, view }: { navigate: (h: string) => void; view: View }) {
+function SignIn({ error, onSignIn }: { error: string | null; onSignIn: () => void }) {
+  return (
+    <div className="min-h-[100dvh] flex items-center justify-center px-4">
+      <div className="w-full max-w-sm text-center">
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: 'var(--ink)' }}>FAS Admin</h1>
+        <p className="mt-3 text-sm" style={{ color: 'var(--muted)' }}>
+          Sign in with a FreeAppStore admin account.
+        </p>
+        {error && (
+          <p className="mt-4 rounded-md border px-3 py-2 text-sm" style={{ borderColor: 'var(--line)', color: '#fca5a5' }}>
+            {error}
+          </p>
+        )}
+        <button
+          onClick={onSignIn}
+          className="mt-6 w-full text-sm font-semibold px-4 py-2 rounded-lg"
+          style={{ background: 'var(--accent)', color: '#fff' }}
+        >
+          Sign in with GitHub
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Header({ navigate, view, user, signOut }: { navigate: (h: string) => void; view: View; user: AdminUser; signOut: () => void }) {
   return (
     <header
       className="sticky top-0 z-10 border-b px-4 sm:px-6 lg:px-8"
@@ -89,13 +126,23 @@ function Header({ navigate, view }: { navigate: (h: string) => void; view: View 
             <NavLink label="AI Grants" hash="/ai-keys" active={view.page === 'ai-keys'} navigate={navigate} />
           </nav>
         </div>
-        <button
-          onClick={() => navigate('/provision')}
-          className="text-sm font-semibold px-3.5 py-1.5 rounded-lg"
-          style={{ background: 'var(--accent)', color: '#fff' }}
-        >
-          + Provision
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="hidden sm:inline text-xs" style={{ color: 'var(--muted)' }}>{user.githubLogin || user.login}</span>
+          <button
+            onClick={() => navigate('/provision')}
+            className="text-sm font-semibold px-3.5 py-1.5 rounded-lg"
+            style={{ background: 'var(--accent)', color: '#fff' }}
+          >
+            + Provision
+          </button>
+          <button
+            onClick={signOut}
+            className="text-sm font-semibold px-3.5 py-1.5 rounded-lg"
+            style={{ background: 'var(--panel)', color: 'var(--muted)', border: '1px solid var(--line)' }}
+          >
+            Sign out
+          </button>
+        </div>
       </div>
     </header>
   )

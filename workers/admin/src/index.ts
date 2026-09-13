@@ -35,58 +35,51 @@ function corsHeaders(request: Request): Record<string, string> {
   };
 }
 
-// ── JWT verification ──
+// ── API authentication ──
 
-function base64UrlDecode(str: string): Uint8Array {
-  let b64 = str.replace(/-/g, "+").replace(/_/g, "/");
-  while (b64.length % 4 !== 0) b64 += "=";
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+interface AdminUser {
+  id: string;
+  login: string;
+  githubLogin?: string;
+  roles?: string[];
 }
 
-let cachedCerts: { keys: JsonWebKey[]; at: number } | null = null;
+type AuthResult =
+  | { ok: true; kind: "admin"; user: AdminUser }
+  | { ok: true; kind: "service" | "ci" | "local" }
+  | { ok: false; status: number; error: string };
 
-async function fetchAccessCerts(teamDomain: string): Promise<JsonWebKey[]> {
-  if (cachedCerts && Date.now() - cachedCerts.at < 3600_000) return cachedCerts.keys;
-  const res = await fetch(`https://${teamDomain}/cdn-cgi/access/certs`);
-  if (!res.ok) throw new Error("Failed to fetch CF Access certs");
-  const data = (await res.json()) as { keys: JsonWebKey[] };
-  cachedCerts = { keys: data.keys, at: Date.now() };
-  return data.keys;
-}
-
-async function verifyAccessJwt(jwt: string, teamDomain: string, aud: string): Promise<boolean> {
-  try {
-    const [headerB64, payloadB64, sigB64] = jwt.split(".");
-    if (!headerB64 || !payloadB64 || !sigB64) return false;
-    const header = JSON.parse(new TextDecoder().decode(base64UrlDecode(headerB64)));
-    const payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(payloadB64)));
-    if (!payload.aud?.includes(aud)) return false;
-    if (payload.exp && payload.exp < Date.now() / 1000) return false;
-    const certs = await fetchAccessCerts(teamDomain);
-    const jwk = certs.find((k: any) => k.kid === header.kid);
-    if (!jwk) return false;
-    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
-    const data = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-    return crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, base64UrlDecode(sigB64) as BufferSource, data);
-  } catch {
-    return false;
-  }
-}
-
-async function isAuthenticated(request: Request, env: Env): Promise<boolean> {
-  // CF Access not configured (local dev / test) — allow all requests.
-  // In production, CF_ACCESS_TEAM_DOMAIN + CF_ACCESS_AUD are always set.
-  if (!env.CF_ACCESS_TEAM_DOMAIN && !env.CF_ACCESS_AUD) return true;
+async function authenticateApiRequest(request: Request, env: Env): Promise<AuthResult> {
   // Trusted server-to-server callers (the FAS backend → /api/provision via the
-  // ADMIN service binding) present the shared ADMIN_PROVISION_TOKEN. Service-binding
-  // requests carry no CF Access JWT, so accept the token here. This securely
-  // replaces the removed Host-based bypass: a server-only secret can't be
-  // spoofed by an external client the way a Host header could.
+  // ADMIN service binding) present the shared ADMIN_PROVISION_TOKEN.
   const internalToken = request.headers.get("X-Internal-Token");
-  if (env.ADMIN_PROVISION_TOKEN && internalToken && internalToken === env.ADMIN_PROVISION_TOKEN) return true;
-  const jwt = request.headers.get("Cf-Access-Jwt-Assertion");
-  if (!jwt) return false;
-  return verifyAccessJwt(jwt, env.CF_ACCESS_TEAM_DOMAIN, env.CF_ACCESS_AUD);
+  if (env.ADMIN_PROVISION_TOKEN && internalToken && internalToken === env.ADMIN_PROVISION_TOKEN) {
+    return { ok: true, kind: "service" };
+  }
+
+  if (env.ALLOW_LOCAL_ADMIN_AUTH === "true") {
+    return { ok: true, kind: "local" };
+  }
+
+  const auth = request.headers.get("Authorization");
+  if (!auth?.startsWith("Bearer ")) return { ok: false, status: 401, error: "Unauthorized" };
+
+  if (!env.BACKEND_FAS) {
+    // Local unit tests/dev can omit the backend binding. Production has it.
+    if (!env.ADMIN_PROVISION_TOKEN) return { ok: true, kind: "local" };
+    return { ok: false, status: 500, error: "admin auth is not wired (missing BACKEND_FAS)" };
+  }
+
+  const res = await env.BACKEND_FAS.fetch("https://backend/v1/auth/me", {
+    headers: { Authorization: auth },
+  });
+  if (!res.ok) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const user = (await res.json()) as AdminUser;
+  if (!Array.isArray(user.roles) || !user.roles.includes("admin")) {
+    return { ok: false, status: 403, error: "admin only" };
+  }
+  return { ok: true, kind: "admin", user };
 }
 
 // ── Helpers ──
@@ -121,7 +114,13 @@ export default {
       !!env.CI_TOKEN &&
       request.headers.get("X-CI-Token") === env.CI_TOKEN;
 
-    if (!isCiTestReport && !(await isAuthenticated(request, env))) return json({ error: "Unauthorized" }, 401, request);
+    let apiAuth: AuthResult | null = null;
+    if (isCiTestReport) {
+      apiAuth = { ok: true, kind: "ci" };
+    } else if (url.pathname.startsWith("/api/")) {
+      apiAuth = await authenticateApiRequest(request, env);
+      if (!apiAuth.ok) return json({ error: apiAuth.error }, apiAuth.status, request);
+    }
 
     // ── Ping ──
     // Cheap authenticated round-trip target for the backend's /status probe.
@@ -134,12 +133,9 @@ export default {
     // ── Provision ──
 
     if (url.pathname === "/api/provision" && request.method === "POST") {
-      const provJwt = request.headers.get("Cf-Access-Jwt-Assertion");
-      if (provJwt) {
+      if (apiAuth?.ok && apiAuth.kind === "admin") {
         try {
-          const provPayload = JSON.parse(atob(provJwt.split(".")[1]!));
-          const provEmail = provPayload.email || provPayload.sub || "";
-          const provUser = provEmail.includes("@") ? provEmail.split("@")[0]! : provEmail;
+          const provUser = apiAuth.user.githubLogin || apiAuth.user.login || apiAuth.user.id;
           if (provUser) {
             const rlKey = `ratelimit:${provUser}:provision`;
             const rlRaw = await env.CREATORS.get(rlKey);
@@ -414,10 +410,6 @@ export default {
     }
 
     if (url.pathname === "/api/test-report" && request.method === "PUT") {
-      const ciToken = request.headers.get("X-CI-Token");
-      if ((!env.CI_TOKEN || ciToken !== env.CI_TOKEN) && !request.headers.get("Cf-Access-Jwt-Assertion")) {
-        return json({ error: "Unauthorized" }, 401, request);
-      }
       const body = await request.text();
       if (!body || body.length < 100) return json({ error: "Report body required" }, 400, request);
       if (body.length > 512_000) return json({ error: "Report too large (max 512KB)" }, 413, request);

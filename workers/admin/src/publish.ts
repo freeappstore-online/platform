@@ -577,8 +577,8 @@ export function renderProvisionForm(): string {
   "description": "Simple calendar app",
   "store": "apps"
 }</pre>
-    <p style="margin-top:1rem;color:#888;">Auth: Cloudflare Access (Google sign-in). No API tokens needed.</p>
+    <p style="margin-top:1rem;color:#888;">Auth: FAS admin session for humans; internal service token for backend automation.</p>
     <p style="margin-top:0.5rem;color:#888;">For AI agents: <code>curl -X POST https://admin.freeappstore.online/api/provision -H 'Content-Type: application/json' -d '{...}'</code></p>
-    <p style="margin-top:0.5rem;color:#f87171;">Note: API is behind Cloudflare Access. AI agents cannot call it directly — use the admin UI or the publish.sh script locally.</p>
+    <p style="margin-top:0.5rem;color:#f87171;">Note: public API calls require a FAS admin bearer session. Automation should use the platform backend, which calls this Worker over the service binding.</p>
   </div>`;
 }

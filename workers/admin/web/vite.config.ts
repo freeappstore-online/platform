@@ -12,7 +12,7 @@ export default defineConfig({
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,json}'],
-        // Admin data is dynamic + Cloudflare-Access-gated — never let the SW
+        // Admin data is dynamic + FAS-session-gated — never let the SW
         // serve a cached shell for /api or intercept API calls.
         navigateFallbackDenylist: [/^\/api\//],
       },

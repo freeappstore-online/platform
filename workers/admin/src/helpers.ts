@@ -11,8 +11,8 @@ export interface Env {
    *  own /api/unpublish self-call) that carry no CF Access JWT. Managed from
    *  the private SOPS secrets repo and synced on rotation/touch. */
   ADMIN_PROVISION_TOKEN?: string;
-  CF_ACCESS_TEAM_DOMAIN: string;
-  CF_ACCESS_AUD: string;
+  /** Test/dev-only bypass for direct local worker calls. Never set in prod. */
+  ALLOW_LOCAL_ADMIN_AUTH?: string;
   DB: D1Database;
   CREATORS: KVNamespace;
   /** Path B host bucket (fas-apps) — deprovision purges apps/<id>/* here. */

@@ -1,8 +1,15 @@
+let authToken: string | null = null
+
+export function setApiAuthToken(token: string | null) {
+  authToken = token
+}
+
 export async function api<T = unknown>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     ...opts,
     headers: {
       'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       ...opts?.headers,
     },
   })
