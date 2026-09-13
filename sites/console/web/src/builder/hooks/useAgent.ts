@@ -293,9 +293,6 @@ export function useAgent() {
             case "tool_result": {
               const tr = JSON.parse(evt.data);
               if (tr.tool === "deploy") setDeployState({ phase: "provisioning", steps: [] });
-              else if (!["write_file", "read_file", "list_files", "delete_file"].includes(tr.tool) && tr.result) {
-                setMessages((prev) => [...prev, { role: "tool", content: `${tr.tool}:\n${tr.result.slice(0, 400)}` }]);
-              }
               break;
             }
             case "usage": {
@@ -399,16 +396,19 @@ export function useAgent() {
 
 // ── Helpers ──
 
-function toolLabel(tc: { name: string; input?: Record<string, unknown> }): string {
-  const i = tc.input || {};
+// Creator-facing progress copy. Never include tool names, file paths, search
+// patterns or tool output — the builder chat is for non-technical creators (#36).
+function toolLabel(tc: { name: string }): string {
   switch (tc.name) {
-    case "deploy": return `Deploying: ${i.name || i.id || "app"}...`;
-    case "push_update": return `Pushing update to ${i.id}...`;
-    case "write_file": return `Writing ${i.path || "file"}`;
-    case "read_file": return `Reading ${i.path || "file"}`;
-    case "run_compliance_check": return "Running compliance checks...";
-    case "search_files": return `Searching for "${i.pattern}"`;
-    default: return tc.name;
+    case "deploy": return "Deploying app...";
+    case "push_update": return "Pushing update...";
+    case "write_file": return "Writing code...";
+    case "read_file": return "Reviewing the app...";
+    case "list_files": return "Checking project files...";
+    case "delete_file": return "Updating project files...";
+    case "run_compliance_check": return "Checking quality...";
+    case "search_files": return "Looking through the code...";
+    default: return "Working on it...";
   }
 }
 
@@ -421,10 +421,6 @@ function restoreMessages(serverMessages: any[]): ChatMessage[] {
     if (m.role === "assistant") {
       if (m.content) restored.push({ role: "assistant", content: m.content });
       for (const tc of m.toolCalls || []) restored.push({ role: "tool", content: toolLabel(tc) });
-    } else if (m.role === "tool_result") {
-      for (const tr of m.toolResults || []) {
-        if (tr.content) restored.push({ role: "tool", content: String(tr.content).slice(0, 400) });
-      }
     } else if (m.role === "user") {
       restored.push({ role: "user", content: m.content });
     } else if (m.role === "system") {

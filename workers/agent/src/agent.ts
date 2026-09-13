@@ -234,7 +234,9 @@ export async function runAgentTurn(
       // Truncate large results in conversation history (e.g. read_file returning full file)
       const truncated = { ...toolOutput, content: toolOutput.content.slice(0, 1500) };
       results.push(truncated);
-      await send({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name, result: toolOutput.content.slice(0, 400) }) });
+      // No `result` on the wire: tool output (file bodies, search hits) must
+      // never reach the creator chat (#36). The client only needs `tool`.
+      await send({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
     }
 
     // Collect infra tools — session will execute them and build the

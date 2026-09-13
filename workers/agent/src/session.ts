@@ -409,7 +409,7 @@ export class AgentSession implements DurableObject {
               toolResult = `Tool ${tc.name} threw an error: ${String(err)}`;
             }
 
-            sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name, result: toolResult.slice(0, 500) }) });
+            sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
             infraResults.push({ id: tc.id, content: toolResult.slice(0, 3000) });
           }
 
@@ -496,7 +496,7 @@ export class AgentSession implements DurableObject {
                 } catch (err) {
                   toolResult = `Tool ${tc.name} threw an error: ${String(err)}`;
                 }
-                sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name, result: toolResult.slice(0, 500) }) });
+                sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
                 retryResults.push({ id: tc.id, content: toolResult.slice(0, 3000) });
               }
               session.messages.push({ role: "tool_result", content: "", toolResults: retryResults });

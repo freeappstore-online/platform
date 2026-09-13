@@ -169,3 +169,33 @@ describe("runAgentTurn — terminalError surface (issue #40)", () => {
     expect(result.infraRequests).toHaveLength(0);
   });
 });
+
+describe("runAgentTurn — tool_result SSE redaction (issue #36)", () => {
+  // Invariant: tool_result events carry only { id, tool }. Tool output (file
+  // bodies, search hits, error text) must never be streamed to the builder
+  // chat. session.ts emits the same shape for infra tools.
+  it("tool_result events carry no result payload and no file content", async () => {
+    let callCount = 0;
+    (globalThis as any).fetch = async () => {
+      callCount++;
+      const body = callCount === 1 ? makeReadFileSSE() : makeTextOnlySSE("Looks good.");
+      return new Response(body, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    };
+
+    const secret = "export default function App() { return <div className='leak-marker'/>; }";
+    const { writer, events } = makeWriter();
+    const files = new Map<string, string>([["web/src/App.tsx", secret]]);
+
+    await runAgentTurn(aiConfig, [], "Update the app", files, writer, storeConfig);
+
+    const toolResults = events().filter((e) => e.type === "tool_result");
+    expect(toolResults).toHaveLength(1);
+    const payload = JSON.parse(toolResults[0].data as string);
+    expect(payload).toEqual({ id: "tu_1", tool: "read_file" });
+    expect(payload).not.toHaveProperty("result");
+    expect(toolResults[0].data).not.toContain("leak-marker");
+  });
+});
