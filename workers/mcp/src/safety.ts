@@ -30,16 +30,23 @@ export interface SafetyContext {
   readOnly?: boolean;
 }
 
-/** Parse a scope string/array; default to ALL scopes when unspecified/unknown. */
+/** Granted when a client asks for no scope, or only for scopes we don't know
+ *  (e.g. `openid`). `destructive` is never implied — it must be requested
+ *  explicitly (#61). Matches the PAGS MCP this file is vendored from. */
+const DEFAULT_SCOPES: McpScope[] = ["read", "write", "runtime"];
+
+/** Parse a scope string/array; default to DEFAULT_SCOPES when unspecified/unknown. */
 export function parseScopes(value: string | string[] | null | undefined): McpScope[] {
-  if (!value) return [...MCP_SCOPES];
+  if (!value) return [...DEFAULT_SCOPES];
   const parts = Array.isArray(value) ? value : value.split(/[,\s]+/);
   const scopes = parts.filter((part): part is McpScope =>
     (MCP_SCOPES as readonly string[]).includes(part),
   );
-  return scopes.length > 0 ? Array.from(new Set(scopes)) : [...MCP_SCOPES];
+  return scopes.length > 0 ? Array.from(new Set(scopes)) : [...DEFAULT_SCOPES];
 }
 
+/** A context with no recorded scopes (null/undefined) gets DEFAULT_SCOPES via
+ *  parseScopes — never all scopes. */
 export function hasScope(ctx: SafetyContext, scope: McpScope): boolean {
   return parseScopes(ctx.scopes ?? null).includes(scope);
 }
