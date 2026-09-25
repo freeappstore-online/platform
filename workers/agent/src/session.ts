@@ -41,6 +41,7 @@ interface DeployLogEntry {
 interface SessionState {
   messages: Message[];
   files: Record<string, string>;
+  baselineFiles: Record<string, string>;
   tokenUsage: TokenUsage;
   deployStatus: DeployStatus | null;
   deployLog: DeployLogEntry[];
@@ -125,6 +126,7 @@ interface LegacyTurnContext {
   body: ChatBody;
   session: SessionState;
   files: Map<string, string>;
+  baselineFiles: Map<string, string>;
   history: Message[];
   writer: WritableStreamDefaultWriter<Uint8Array>;
   config: StoreConfig;
@@ -186,9 +188,11 @@ export class AgentSession implements DurableObject {
 
   private freshSession(overrides?: Partial<SessionState>): SessionState {
     const archetype = overrides?.archetype;
+    const templateFiles = getTemplateFiles(this.config, archetype);
     return {
       messages: [],
-      files: { ...getTemplateFiles(this.config, archetype) },
+      files: { ...templateFiles },
+      baselineFiles: { ...templateFiles },
       tokenUsage: { input: 0, output: 0 },
       deployStatus: null,
       deployLog: [],
@@ -210,6 +214,7 @@ export class AgentSession implements DurableObject {
     if (session.archetype || session.messages.length > 0 || session.appId) return false;
     session.archetype = archetype;
     session.files = { ...getTemplateFiles(this.config, archetype) };
+    session.baselineFiles = { ...session.files };
     return true;
   }
 
@@ -231,6 +236,7 @@ export class AgentSession implements DurableObject {
     if (this.session.tokenValidatedAt === undefined) this.session.tokenValidatedAt = null;
     if (this.session.sessionId === undefined) this.session.sessionId = null;
     this.session.archetype = parseAppArchetype(this.session.archetype);
+    if (!this.session.baselineFiles) this.session.baselineFiles = { ...getTemplateFiles(this.config, this.session.archetype) };
     return this.session;
   }
 
@@ -435,6 +441,7 @@ export class AgentSession implements DurableObject {
 
     const session = await this.load();
     const files = new Map(Object.entries(session.files));
+    const baselineFiles = new Map(Object.entries(session.baselineFiles));
     const history = session.messages.slice();
     session.messages.push({ role: "user", content: body.message });
     if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
@@ -488,6 +495,7 @@ export class AgentSession implements DurableObject {
       body,
       session,
       files,
+      baselineFiles,
       history,
       writer,
       config,
@@ -593,6 +601,7 @@ export class AgentSession implements DurableObject {
     const infraResults = await this.executeLegacyInfraRequests(ctx, infraRequests);
     ctx.session.messages.push({ role: "tool_result", content: "", toolResults: infraResults });
     ctx.session.files = Object.fromEntries(ctx.files);
+    ctx.session.baselineFiles = Object.fromEntries(ctx.baselineFiles);
     await this.save();
     await this.syncToD1();
 
@@ -620,6 +629,7 @@ export class AgentSession implements DurableObject {
       const retryResults = await this.executeLegacyInfraRequests(ctx, followUp.infraRequests);
       ctx.session.messages.push({ role: "tool_result", content: "", toolResults: retryResults });
       ctx.session.files = Object.fromEntries(ctx.files);
+      ctx.session.baselineFiles = Object.fromEntries(ctx.baselineFiles);
     }
     await this.save();
     await this.syncToD1();
@@ -647,6 +657,7 @@ export class AgentSession implements DurableObject {
         ownerLogin: ctx.session.ownerLogin,
         authHeader: ctx.authHeader,
         files: ctx.files,
+        baselineFiles: ctx.baselineFiles,
         env: ctx.deployEnv,
         config: ctx.config,
         onDeployStatus: (status) => this.handleLegacyDeployStatus(ctx, status),
@@ -1051,6 +1062,7 @@ export class AgentSession implements DurableObject {
     const deployEnv = this.deployEnv();
     if (tc && deployEnv) {
       const files = new Map(Object.entries(session.files));
+      const baselineFiles = new Map(Object.entries(session.baselineFiles));
       let toolResult: string;
       try {
         toolResult = await executeInfraTool(tc, {
@@ -1058,6 +1070,7 @@ export class AgentSession implements DurableObject {
           ownerLogin: session.ownerLogin,
           authHeader: pending.authHeader,
           files,
+          baselineFiles,
           env: deployEnv,
           config: this.config,
           onDeployStatus: async (status) => {
@@ -1082,6 +1095,7 @@ export class AgentSession implements DurableObject {
         toolResult = `Tool ${tc.name} threw an error: ${String(err)}`;
       }
       session.files = Object.fromEntries(files);
+      session.baselineFiles = Object.fromEntries(baselineFiles);
       await emit({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
       pending.infraResults.push({ id: tc.id, content: toolResult.slice(0, 3000) });
       if (pending.infraResults.length < pending.infraQueue.length) return 0;
@@ -1296,6 +1310,7 @@ export class AgentSession implements DurableObject {
     }
 
     session.files = files;
+    session.baselineFiles = { ...files };
     session.appId = appId;
     session.appName = appId;
     session.deployStatus = { phase: "live", appUrl: `https://${appId}.${this.config.domain}` } as DeployStatus;

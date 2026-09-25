@@ -92,7 +92,7 @@ export function getToolDefinitions(config: StoreConfig): ToolDef[] {
     // ── Deploy + infra tools (executed server-side by the session) ──
     {
       name: "deploy",
-      description: `Full deploy: provision GitHub repo, then push all project files. GitHub Actions will deploy to R2. Use this for the FIRST deploy of a new ${noun}. Call only when the user explicitly asks to deploy.`,
+      description: `Full deploy: provision the GitHub repo with the platform scaffold, then push only agent-authored changes. GitHub Actions will deploy to R2. Use this for the FIRST deploy of a new ${noun}. Call only when the user explicitly asks to deploy.`,
       parameters: {
         type: "object",
         properties: {
@@ -108,7 +108,7 @@ export function getToolDefinitions(config: StoreConfig): ToolDef[] {
     },
     {
       name: "push_update",
-      description: `Push updated files to an existing deployed ${noun}'s GitHub repo. Use this when the ${noun} is already deployed and the user wants to update it. Creates a new commit with changed files.`,
+      description: `Push agent-authored changes to an existing deployed ${noun}'s GitHub repo while preserving platform scaffold files. Use this when the ${noun} is already deployed and the user wants to update it. Creates a new commit only when files changed.`,
       parameters: {
         type: "object",
         properties: {

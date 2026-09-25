@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "./config";
-// We can't import deployApp/pushUpdate directly (they make real API calls)
-// but we can test the makeGhApi pattern and the deploy flow logic by
-// testing executeInfraTool which wraps them.
+import { computeFileDelta, deployApp, pushUpdate } from "./deploy";
+// Most deploy flow tests exercise executeInfraTool, which wraps the GitHub
+// helpers; the baseline/delta tests below mock fetch at the Git API boundary.
 import { executeInfraTool } from "./infra-exec";
 
 const appsConfig = getConfig("apps");
@@ -231,5 +231,213 @@ describe("infra tool authorization", () => {
       { appId: null, files: new Map(), env: mockEnv, config: gamesConfig, onDeployStatus: vi.fn(), onAppDeployed: vi.fn() },
     );
     expect(result).toContain("no game deployed yet");
+  });
+});
+
+describe("baseline/delta deploy protection", () => {
+  function baseline() {
+    return new Map<string, string>([
+      ["web/src/App.tsx", "export default function App() { return <main>Template</main>; }"],
+      ["web/src/main.tsx", "platform main"],
+      ["web/package.json", '{"dependencies":{"@freeappstore/sdk":"^0.14.25"}}'],
+      [".github/workflows/deploy.yml", "platform workflow"],
+      ["pnpm-lock.yaml", "platform lockfile"],
+    ]);
+  }
+
+  it("empty-delta: reports no files when generated files match the baseline", () => {
+    const files = baseline();
+    expect([...computeFileDelta(files, baseline()).entries()]).toEqual([]);
+  });
+
+  it("edit: includes only an edited app source file", () => {
+    const files = baseline();
+    files.set("web/src/App.tsx", "export default function App() { return <main>Agent edit</main>; }");
+    expect([...computeFileDelta(files, baseline()).entries()]).toEqual([
+      ["web/src/App.tsx", "export default function App() { return <main>Agent edit</main>; }"],
+    ]);
+  });
+
+  it("new-file: includes new agent-authored files", () => {
+    const files = baseline();
+    files.set("web/src/components/Widget.tsx", "export function Widget() { return null; }");
+    expect([...computeFileDelta(files, baseline()).entries()]).toEqual([
+      ["web/src/components/Widget.tsx", "export function Widget() { return null; }"],
+    ]);
+  });
+
+  it("package: includes an explicit package change without pulling in unchanged scaffold", () => {
+    const files = baseline();
+    files.set("web/package.json", '{"dependencies":{"@freeappstore/sdk":"^0.14.25","three":"^0.180.0"}}');
+    const delta = computeFileDelta(files, baseline());
+    expect([...delta.keys()]).toEqual(["web/package.json"]);
+    expect(delta.get("web/package.json")).toContain("three");
+  });
+
+  it("workflow: preserves the platform workflow when it was not agent-authored", () => {
+    const files = baseline();
+    files.set("web/src/App.tsx", "changed");
+    const delta = computeFileDelta(files, baseline());
+    expect(delta.has(".github/workflows/deploy.yml")).toBe(false);
+  });
+
+  it("lockfile: preserves the platform lockfile when it was not agent-authored", () => {
+    const files = baseline();
+    files.set("web/src/App.tsx", "changed");
+    const delta = computeFileDelta(files, baseline());
+    expect(delta.has("pnpm-lock.yaml")).toBe(false);
+  });
+
+  it("base-tree: push_update merges only the delta onto the current repo tree", async () => {
+    const originalFetch = globalThis.fetch;
+    const treeBodies: any[] = [];
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method || "GET";
+      if (method === "GET" && url.endsWith("/git/ref/heads/main")) {
+        return { json: async () => ({ object: { sha: "parent-sha" } }) } as Response;
+      }
+      if (method === "POST" && url.endsWith("/git/blobs")) {
+        return { json: async () => ({ sha: "blob-sha" }) } as Response;
+      }
+      if (method === "GET" && url.endsWith("/git/commits/parent-sha")) {
+        return { json: async () => ({ tree: { sha: "base-tree-sha" } }) } as Response;
+      }
+      if (method === "POST" && url.endsWith("/git/trees")) {
+        treeBodies.push(JSON.parse(String(init?.body)));
+        return { json: async () => ({ sha: "tree-sha" }) } as Response;
+      }
+      if (method === "POST" && url.endsWith("/git/commits")) {
+        return { json: async () => ({ sha: "commit-sha" }) } as Response;
+      }
+      if (method === "PATCH" && url.endsWith("/git/refs/heads/main")) {
+        return { json: async () => ({ ref: "refs/heads/main" }) } as Response;
+      }
+      return { json: async () => ({ message: `Unexpected request: ${method} ${url}` }) } as Response;
+    }) as typeof fetch;
+
+    try {
+      const files = baseline();
+      files.set("web/src/App.tsx", "changed");
+      const result = await pushUpdate("my-app", files, baseline(), "Update app", mockEnv, appsConfig);
+
+      expect(result.ok).toBe(true);
+      expect(treeBodies).toHaveLength(1);
+      expect(treeBodies[0].base_tree).toBe("base-tree-sha");
+      expect(treeBodies[0].tree).toEqual([{ path: "web/src/App.tsx", mode: "100644", type: "blob", sha: "blob-sha" }]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("first deploy seeds the platform scaffold, then pushes only the agent delta via base_tree", async () => {
+    vi.useFakeTimers();
+    const originalFetch = globalThis.fetch;
+    const treeBodies: any[] = [];
+    const repoCreateBodies: any[] = [];
+    let blobCount = 0;
+    let commitCount = 0;
+    const routes: {
+      method: string;
+      suffix: string;
+      json: (init?: RequestInit) => unknown;
+    }[] = [
+      { method: "GET", suffix: "/repos/freeappstore-online/my-app", json: () => ({}) },
+      {
+        method: "POST",
+        suffix: "/orgs/freeappstore-online/repos",
+        json: (init) => {
+          repoCreateBodies.push(JSON.parse(String(init?.body)));
+          return { id: 123 };
+        },
+      },
+      {
+        method: "GET",
+        suffix: "/git/ref/heads/main",
+        json: () => (commitCount > 0 ? { object: { sha: "scaffold-sha" } } : {}),
+      },
+      {
+        method: "POST",
+        suffix: "/git/blobs",
+        json: () => {
+          blobCount += 1;
+          return { sha: `blob-${blobCount}` };
+        },
+      },
+      {
+        method: "POST",
+        suffix: "/git/trees",
+        json: (init) => {
+          treeBodies.push(JSON.parse(String(init?.body)));
+          return { sha: treeBodies.length === 1 ? "scaffold-tree" : "delta-tree" };
+        },
+      },
+      {
+        method: "POST",
+        suffix: "/git/commits",
+        json: () => {
+          commitCount += 1;
+          return { sha: commitCount === 1 ? "scaffold-sha" : "delta-sha" };
+        },
+      },
+      { method: "POST", suffix: "/git/refs", json: () => ({ ref: "refs/heads/main" }) },
+      { method: "GET", suffix: "/git/commits/scaffold-sha", json: () => ({ tree: { sha: "scaffold-tree" } }) },
+      { method: "PATCH", suffix: "/git/refs/heads/main", json: () => ({ ref: "refs/heads/main" }) },
+      {
+        method: "GET",
+        suffix: "/actions/runs?per_page=10",
+        json: () => ({ workflow_runs: [{ id: 1, status: "completed", conclusion: "success", head_sha: "delta-sha" }] }),
+      },
+    ];
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method || "GET";
+      const route = routes.find((candidate) => candidate.method === method && url.endsWith(candidate.suffix));
+      return { json: async () => (route ? route.json(init) : { message: `Unexpected request: ${method} ${url}` }) } as Response;
+    }) as typeof fetch;
+
+    try {
+      const base = baseline();
+      const files = baseline();
+      files.set("web/src/App.tsx", "changed");
+      const status = vi.fn();
+      const result = deployApp(
+        { id: "my-app", name: "My App", category: "utilities", icon: "x", iconBg: "#fff", description: "test" },
+        files,
+        mockEnv,
+        appsConfig,
+        status,
+        false,
+        base,
+      );
+      await vi.advanceTimersByTimeAsync(8000);
+      await result;
+
+      expect(repoCreateBodies[0]).toMatchObject({ name: "my-app", auto_init: false });
+      expect(treeBodies).toHaveLength(2);
+      expect(treeBodies[0].base_tree).toBeUndefined();
+      expect(treeBodies[0].tree.map((entry: { path: string }) => entry.path).sort()).toEqual([...base.keys()].sort());
+      expect(treeBodies[1].base_tree).toBe("scaffold-tree");
+      expect(treeBodies[1].tree).toEqual([{ path: "web/src/App.tsx", mode: "100644", type: "blob", sha: "blob-6" }]);
+      expect(status).toHaveBeenCalledWith({ phase: "live", appUrl: "https://my-app.freeappstore.online" });
+    } finally {
+      globalThis.fetch = originalFetch;
+      vi.useRealTimers();
+    }
+  });
+
+  it("status message: empty push_update is a successful no-op", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
+    try {
+      const result = await pushUpdate("my-app", baseline(), baseline(), "Update app", mockEnv, appsConfig);
+      expect(result).toEqual({
+        ok: true,
+        skipped: true,
+        message: "No agent-authored changes to push for freeappstore-online/my-app; platform scaffold and current app files are unchanged.",
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

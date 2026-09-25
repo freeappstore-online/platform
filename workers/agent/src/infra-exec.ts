@@ -12,6 +12,7 @@ interface ExecContext {
   ownerLogin: string | null;
   authHeader?: string;
   files: Map<string, string>;
+  baselineFiles?: Map<string, string>;
   env: DeployEnv;
   config: StoreConfig;
   /** Awaited at every call site so the session's storage write settles before
@@ -248,6 +249,7 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
   // Replace placeholders: APPNAME -> display name (or the id in package.json),
   // APPID -> the lowercase app id everywhere (used by the SDK: initApp({ appId: "APPID" })).
   applyPlaceholders(ctx.files, appId, appName);
+  if (ctx.baselineFiles) applyPlaceholders(ctx.baselineFiles, appId, appName);
 
   await ctx.onAppDeployed(appId, appName);
 
@@ -272,6 +274,7 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     },
     // Only reuse an existing repo when it is provably ours.
     claim.ownedAlready || (!ctx.env.DB && ctx.appId === appId),
+    ctx.baselineFiles,
   ).catch((err) => {
     deployError = String(err);
   });
@@ -380,10 +383,22 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string
   // Post-deploy edits may reintroduce the APPID placeholder (e.g. the SDK
   // initApp call). Resolve it against the deployed id before pushing.
   if (ctx.appId) applyPlaceholders(ctx.files, ctx.appId, ctx.appId);
+  if (ctx.appId && ctx.baselineFiles) applyPlaceholders(ctx.baselineFiles, ctx.appId, ctx.appId);
   await ctx.onDeployStatus({ phase: "pushing", progress: "Pushing update..." });
-  const result = await pushUpdate(tc.input.id as string, ctx.files, (tc.input.message as string) || "Update", ctx.env, ctx.config);
+  const result = await pushUpdate(
+    tc.input.id as string,
+    ctx.files,
+    ctx.baselineFiles ?? new Map(),
+    (tc.input.message as string) || "Update",
+    ctx.env,
+    ctx.config,
+  );
   if (!result.ok) {
     await ctx.onDeployStatus({ phase: "error", error: result.message });
+    return result.message;
+  }
+  if (result.skipped) {
+    await ctx.onDeployStatus({ phase: "live", appUrl: `https://${tc.input.id as string}.${ctx.config.domain}` });
     return result.message;
   }
   await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
