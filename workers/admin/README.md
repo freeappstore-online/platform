@@ -22,9 +22,31 @@ If step 2 or 3 fails, step 5 is skipped to avoid leaving dead-link entries on th
 
 `GET /docs` — public-facing API reference (the page rendered at `admin.freeappstore.online/docs`).
 
+## Which APIs live here vs the backend
+
+The rule: **this worker owns provisioning and anything that needs its privileged credentials** (GitHub org token, CF DNS/RUM token, the `fas-apps` R2 bucket). **Everything else a browser admin console needs belongs in the backend**, at `packages/backend/src/routes/content-admin.ts` behind platform session auth. Do not add new browser-facing read APIs here.
+
+| Route module (`src/routes/`) | Paths | Belongs here? |
+|---|---|---|
+| `ping.ts` | `GET /api/ping` | Yes — backend `/status` probe of the service-binding auth path. |
+| `provision.ts` | `POST /api/provision` | Yes — creates repos, routes, DNS, registry entries. |
+| `deprovision.ts` | `POST /api/unpublish`, `POST /api/deprovision` | Yes — the inverse of provision. |
+| `dns.ts` | `POST /api/fix-dns` | Yes — needs the CF DNS token. |
+| `reports.ts` | `PUT /api/test-report` (CI), `GET /test-report` | Yes — CI upload with `X-CI-Token`. |
+| `apps.ts` | `/api/apps/all`, `/api/apps/deploy-status`, `/api/apps/:id/{deploy-status,health,sessions}` | Yes for deploy-status (uses the org GitHub token; the backend proxies it to creators). The rest are admin-console reads. |
+| `ai-keys-proxy.ts` | `/api/ai-keys/*`, `/api/ai-grants*` | Transitional — a thin proxy to backend `/v1/internal/keys/*`. |
+| `content-proxy.ts` | `/api/content/{kv,kv/value,collections,counters}` | Transitional — proxy to backend `/v1/internal/admin/*`; the backend already serves `/v1/admin/{kv,collections,counters}` directly. |
+| `stats.ts` | `GET /api/stats` | Migrate — backend has `/v1/admin/stats`. |
+| `creators.ts` | `GET /api/users`, `GET /api/creators` | Migrate `/api/users` (backend has `/v1/admin/users`). `/api/creators` stays: the backend's `/v1/admin/creators` reads it over the `ADMIN` binding. |
+| `agent-sessions.ts` | `/api/agent/sessions`, `/api/agent/sessions/:id` | Migrate — backend has `/v1/admin/agent-sessions[/:id]`. |
+
+"Migrate" routes are still called by the admin SPA in `web/src/` (Overview, AgentSessions, AgentSessionView, ContentData), so removing them here means pointing those screens at the backend first. Until then they stay, unchanged.
+
+`src/index.ts` is only the shell: CORS preflight, the single `/api/*` auth gate (`src/auth.ts`), and an ordered list of route modules — each returns a `Response` if it owns the request, or `null` to pass. Add a route by adding a module and listing it in `ROUTES`; tests for each module live in `src/test/routes.test.ts`.
+
 ## Stack
 
-- Cloudflare Workers (Hono-style routing, but vanilla `fetch` handler).
+- Cloudflare Workers, vanilla `fetch` handler dispatching to route modules in `src/routes/`.
 - TypeScript, vitest for tests.
 - No build step — `wrangler deploy` bundles directly from `src/`.
 
@@ -47,7 +69,7 @@ SECRETS_PROJECT=fas bash scripts/sync-worker-secrets.sh workers/admin
 
 ```bash
 pnpm install
-pnpm test                              # 35 unit + integration tests
+pnpm test                              # unit + integration tests (vitest)
 npx wrangler dev                       # local Worker; uses .dev.vars for secrets
 ```
 
