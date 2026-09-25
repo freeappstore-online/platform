@@ -4,8 +4,16 @@ import { Nav } from "../components/Nav";
 import { Markdown } from "../components/Markdown";
 import { useAuth } from "../hooks/useAuth";
 import { API_URL, getSession } from "../lib/api";
+import {
+  buildFailingDeployRows,
+  deployStatusForApp,
+  githubActionsUrl,
+  type AdminGithubDeployStatus,
+  type FailingDeployRow,
+} from "../lib/adminDeployFailures";
 
 const ADMIN_ACCESS_MESSAGE = "Platform admin access required. Sign out and back in if your admin role was just added.";
+const ADMIN_WORKER_URL = "https://admin.freeappstore.online";
 
 function authHeaders(): Record<string, string> {
   const session = getSession();
@@ -98,7 +106,7 @@ interface AgentSession {
   appId: string | null;
   appUrl: string | null;
   deployed: boolean;
-  deployState: { phase?: string } | null;
+  deployState: { phase?: string; error?: string | null } | null;
   updatedAt: number;
 }
 
@@ -139,6 +147,12 @@ interface AgentSessionDetail extends Omit<AgentSession, "sessionId"> {
   deployLog: AgentDeployLogEntry[];
   errors: AgentErrorEntry[];
   createdAt?: number;
+}
+
+interface AgentDeployFailure extends Pick<AgentSession, "sessionId" | "userId" | "name" | "appId" | "deployState" | "updatedAt"> {
+  userLogin?: string | null;
+  userDisplayName?: string | null;
+  deployLog?: AgentDeployLogEntry[];
 }
 
 interface GrantUser {
@@ -215,6 +229,7 @@ function SessionsTab() {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [failedOnly, setFailedOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<AgentSession | null>(null);
@@ -233,19 +248,35 @@ function SessionsTab() {
       .finally(() => setLoading(false));
   }, [search]);
 
+  const visibleSessions = failedOnly ? sessions.filter((s) => s.deployState?.phase === "error") : sessions;
+
   return (
     <>
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          {total} total VibeCode sessions
+          {failedOnly ? `${visibleSessions.length} failed deploy sessions` : `${total} total VibeCode sessions`}
         </p>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search sessions..."
-          className="p-2 rounded-lg border text-sm"
-          style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)", width: 260 }}
-        />
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setFailedOnly((v) => !v)}
+            className="px-3 py-2 rounded-lg text-sm font-semibold border"
+            style={{
+              background: failedOnly ? "color-mix(in srgb, var(--danger) 15%, var(--panel))" : "var(--panel)",
+              borderColor: failedOnly ? "var(--danger)" : "var(--line)",
+              color: failedOnly ? "var(--danger)" : "var(--muted)",
+              cursor: "pointer",
+            }}
+          >
+            Failed deploys
+          </button>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search sessions..."
+            className="p-2 rounded-lg border text-sm"
+            style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)", width: 260 }}
+          />
+        </div>
       </div>
       {error && <AdminAccessError message={error} />}
       {loading ? (
@@ -276,7 +307,7 @@ function SessionsTab() {
               </tr>
             </thead>
             <tbody>
-              {sessions.map((s) => (
+              {visibleSessions.map((s) => (
                 <tr key={s.sessionId} style={{ borderBottom: "1px solid var(--line)" }}>
                   <td className="p-2">
                     <strong>{s.name}</strong>
@@ -292,7 +323,7 @@ function SessionsTab() {
                   </td>
                   <td className="p-2 text-xs">
                     {s.appUrl ? (
-                      <a href={s.appUrl} target="_blank" style={{ color: "var(--accent)" }}>
+                      <a href={s.appUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
                         {s.appId || s.appUrl}
                       </a>
                     ) : (
@@ -326,6 +357,11 @@ function SessionsTab() {
           {sessions.length === 0 && (
             <p className="py-8 text-center" style={{ color: "var(--muted)" }}>
               No sessions found.
+            </p>
+          )}
+          {sessions.length > 0 && visibleSessions.length === 0 && (
+            <p className="py-8 text-center" style={{ color: "var(--muted)" }}>
+              No failed deploy sessions match this search.
             </p>
           )}
         </div>
@@ -375,6 +411,9 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
   );
   const errors = detail?.errors || [];
   const deployLog = detail?.deployLog || [];
+  const deployState = detail?.deployState || summary.deployState;
+  const appId = detail?.appId || summary.appId;
+  const appActionsUrl = githubActionsUrl(appId);
 
   return (
     <div
@@ -418,8 +457,22 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
                 <>
                   {" "}
                   ·{" "}
-                  <a href={detail?.appUrl || summary.appUrl || "#"} target="_blank" style={{ color: "var(--accent)" }}>
-                    {detail?.appId || summary.appId || "live app"}
+                  <a
+                    href={detail?.appUrl || summary.appUrl || "#"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    {appId || "live app"}
+                  </a>
+                </>
+              ) : null}
+              {appActionsUrl ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <a href={appActionsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+                    GitHub Actions
                   </a>
                 </>
               ) : null}
@@ -505,8 +558,16 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
           {!loading &&
             !error &&
             view === "deploy" &&
-            (deployLog.length ? (
+            (deployLog.length || deployState ? (
               <div className="grid gap-3">
+                {deployState && (
+                  <div className="rounded-lg border p-3" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+                    <div className="text-xs font-bold uppercase mb-1" style={{ color: "var(--muted)" }}>
+                      Final deploy phase
+                    </div>
+                    <StatusDot status={deployState.phase || "unknown"} />
+                  </div>
+                )}
                 {deployLog.map((entry, i) => (
                   <LogBlock
                     key={i}
@@ -516,6 +577,9 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
                     body={entry.detail || ""}
                   />
                 ))}
+                {!deployLog.length && deployState?.phase === "error" && (
+                  <LogBlock tone="error" title="Build failed" body={deployState.error || "No deploy error detail was saved."} />
+                )}
               </div>
             ) : (
               <p style={{ color: "var(--muted)" }}>No deploy log entries saved yet.</p>
@@ -1004,6 +1068,8 @@ function OverviewTab() {
 
   return (
     <>
+      <FailingDeploysPanel />
+
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <StatCard label="Apps" value={stats.apps} color="var(--accent)" />
@@ -1017,6 +1083,154 @@ function OverviewTab() {
         <TrafficCard title="FreeAppStore" totals={fasT ?? null} days={stats.traffic?.fas?.days} />
       </div>
     </>
+  );
+}
+
+function FailingDeploysPanel() {
+  const [rows, setRows] = useState<FailingDeployRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError("");
+    try {
+      const [agentDeploys, ghStatuses, appsData] = await Promise.all([
+        adminFetchJson<{ sessions?: AgentDeployFailure[] }>(`${API_URL}/v1/admin/agent-deploys?status=error&limit=200`),
+        adminFetchJson<Record<string, AdminGithubDeployStatus>>(`${ADMIN_WORKER_URL}/api/apps/deploy-status`, {
+          credentials: "include",
+        }),
+        adminFetchJson<{ apps?: AdminApp[] }>(`${API_URL}/v1/admin/apps`),
+      ]);
+      setRows(
+        buildFailingDeployRows({
+          sessions: agentDeploys.sessions || [],
+          statuses: ghStatuses || {},
+          apps: (appsData.apps || []).filter(isFreeAppStoreApp),
+        }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  return (
+    <section className="mb-8">
+      <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold">Failing Deploys</h2>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            Apps and sessions whose latest deploy signal needs admin triage.
+          </p>
+        </div>
+        <button
+          onClick={() => void load()}
+          disabled={loading}
+          className="px-3 py-2 rounded-lg text-sm font-semibold border"
+          style={{
+            background: "var(--panel)",
+            borderColor: "var(--line)",
+            color: "var(--ink)",
+            cursor: loading ? "wait" : "pointer",
+            opacity: loading ? 0.65 : 1,
+          }}
+        >
+          Reload
+        </button>
+      </div>
+
+      <div className="rounded-xl border overflow-hidden" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+        {error ? (
+          <div className="p-4">
+            <p className="text-sm" style={{ color: "var(--danger)" }}>
+              Failed to load deploy failures: {error}
+            </p>
+          </div>
+        ) : loading ? (
+          <p className="p-4 text-sm" style={{ color: "var(--muted)" }}>
+            Loading deploy failures...
+          </p>
+        ) : rows.length ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                    App
+                  </th>
+                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                    Owner
+                  </th>
+                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                    Error
+                  </th>
+                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                    Last failure
+                  </th>
+                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                    Run
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.key} style={{ borderBottom: "1px solid var(--line)" }}>
+                    <td className="p-2">
+                      {row.appUrl ? (
+                        <a href={row.appUrl} target="_blank" rel="noopener noreferrer" className="font-semibold" style={{ color: "var(--accent)" }}>
+                          {row.appId}
+                        </a>
+                      ) : (
+                        <strong>{row.appId}</strong>
+                      )}
+                      <div className="text-xs" style={{ color: "var(--muted)" }}>
+                        {row.appLabel}
+                      </div>
+                    </td>
+                    <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>
+                      {row.ownerLogin}
+                    </td>
+                    <td className="p-2">
+                      <div style={{ color: "var(--danger)" }}>{row.errorSummary}</div>
+                      {row.sessionId && (
+                        <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                          {row.source === "github" ? "Session detail available" : row.sessionId}
+                        </div>
+                      )}
+                    </td>
+                    <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
+                      {row.failedAt ? timeAgo(row.failedAt) : "unknown"}
+                    </td>
+                    <td className="p-2">
+                      {row.actionsUrl ? (
+                        <a href={row.actionsUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+                          Open Actions
+                        </a>
+                      ) : (
+                        <span className="text-xs" style={{ color: "var(--muted)" }}>
+                          No app repo
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="p-4 text-sm" style={{ color: "var(--success)" }}>
+            No failing deploys found.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -1115,6 +1329,7 @@ function TrafficCard({
 
 function AppsTab() {
   const [apps, setApps] = useState<AdminApp[]>([]);
+  const [deployStatuses, setDeployStatuses] = useState<Record<string, AdminGithubDeployStatus>>({});
   const [loadingApps, setLoadingApps] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -1122,13 +1337,20 @@ function AppsTab() {
   useEffect(() => {
     setLoadingApps(true);
     setError(null);
-    adminFetchJson<{ apps?: AdminApp[] }>(`${API_URL}/v1/admin/apps`)
-      .then((data) => {
+    Promise.all([
+      adminFetchJson<{ apps?: AdminApp[] }>(`${API_URL}/v1/admin/apps`),
+      adminFetchJson<Record<string, AdminGithubDeployStatus>>(`${ADMIN_WORKER_URL}/api/apps/deploy-status`, {
+        credentials: "include",
+      }).catch(() => ({})),
+    ])
+      .then(([data, statuses]) => {
         setApps((data.apps || []).filter(isFreeAppStoreApp));
+        setDeployStatuses(statuses);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : String(err));
         setApps([]);
+        setDeployStatuses({});
       })
       .finally(() => setLoadingApps(false));
   }, []);
@@ -1191,9 +1413,7 @@ function AppsTab() {
               {filtered.map((app) => {
                 const url = app.appUrl || (app.domain ? `https://${app.domain}` : "#");
                 const repoUrl = githubRepoUrl(app.repo, app.id);
-                const latestPhase = app.latestSession?.deployed
-                  ? "deployed"
-                  : app.latestSession?.deployState?.phase || (app.sessionCount ? "draft" : "none");
+                const latestPhase = deployStatusForApp(app, deployStatuses);
                 return (
                   <tr key={app.id} style={{ borderBottom: "1px solid var(--line)" }}>
                     <td className="p-2">
@@ -1226,12 +1446,13 @@ function AppsTab() {
                       {app.updatedAt ? timeAgo(app.updatedAt) : "—"}
                     </td>
                     <td className="p-2 flex gap-2 flex-wrap">
-                      <a href={url} target="_blank" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
                         Visit
                       </a>
                       <a
                         href={repoUrl}
                         target="_blank"
+                        rel="noopener noreferrer"
                         className="text-xs font-semibold"
                         style={{ color: "var(--accent)" }}
                       >
@@ -1396,7 +1617,7 @@ function CreatorsTab() {
           <div key={c.github} className="p-4 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <a href={`https://github.com/${c.github}`} target="_blank" className="font-semibold" style={{ color: "var(--accent)" }}>
+                <a href={`https://github.com/${c.github}`} target="_blank" rel="noopener noreferrer" className="font-semibold" style={{ color: "var(--accent)" }}>
                   @{c.github}
                 </a>
                 {c.banned && (
@@ -1431,11 +1652,14 @@ function CreatorsTab() {
 // ── Shared helpers ──
 
 function StatusDot({ status }: { status: string | undefined }) {
-  const color = !status
+  const normalized = status?.toLowerCase();
+  const color = !normalized
     ? "var(--muted)"
-    : ["active", "success", "completed", "deployed", "live", "ok"].includes(status)
+    : ["active", "success", "completed", "deployed", "live", "ok"].includes(normalized)
       ? "var(--success)"
-      : ["pending", "in_progress", "draft", "building", "pushing", "provisioning"].includes(status)
+      : ["pending", "in_progress", "queued", "waiting", "draft", "building", "pushing", "provisioning", "unknown", "none", "not deployed", "cancelled"].includes(
+            normalized,
+          )
         ? "var(--warning)"
         : "var(--danger)";
   return (
