@@ -1,5 +1,4 @@
 import type { FileSource } from '../lib/file-source.js';
-import { isGameProject } from '../lib/project-type.js';
 import type { CheckResult } from '../types.js';
 
 /**
@@ -8,21 +7,17 @@ import type { CheckResult } from '../types.js';
  * one ensures the tokens haven't been redefined elsewhere, the other
  * ensures they exist in the first place.
  *
- *   - apps  → must define `--paper`, `--ink`, `--accent`
- *   - games → must define `--bg`,    `--ink`, `--accent`
- *
- * Different surface tokens reflect intent: apps live on a paper-toned
- * neutral; games live on a bg-toned canvas (often dark). The shared
- * `--ink` and `--accent` keep typography + interactive states
- * consistent across both stores.
+ * Apps and games alike must define `--paper`, `--ink`, `--accent`. Games
+ * used to require `--bg` instead, but DESIGN-SYSTEM.md bans `--bg` as an
+ * alias of `--paper` in every store, so no game could satisfy both (#64).
+ * A game's canvas is still dark — only the token name is shared.
  *
  * We scan all CSS / SCSS files (not just the canonical theme path) so
  * the check passes whether the creator's tokens live in `index.css`,
  * `main.css`, or some other theme file.
  */
 export async function checkBrandTokens(source: FileSource): Promise<CheckResult> {
-  const isGame = await isGameProject(source);
-  const required = isGame ? ['--bg', '--ink', '--accent'] : ['--paper', '--ink', '--accent'];
+  const required = ['--paper', '--ink', '--accent'];
   const found = new Set<string>();
 
   for await (const path of source.list()) {
@@ -47,7 +42,7 @@ export async function checkBrandTokens(source: FileSource): Promise<CheckResult>
     detail: `missing CSS tokens: ${missing.join(', ')}`,
     suggestions: [
       `Define ${missing.join(', ')} in your theme CSS (typically web/src/index.css).`,
-      `Apps use --paper / --ink / --accent; games use --bg / --ink / --accent.`,
+      `Apps and games both use --paper / --ink / --accent (--bg is a banned alias of --paper).`,
     ],
   };
 }

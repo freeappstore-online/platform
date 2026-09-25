@@ -1,5 +1,9 @@
 import type { FileSource } from './file-source.js';
 
+/** `import { GameShell } from "<anything>"`, including `type` and aliased forms. */
+const GAME_SHELL_IMPORT =
+  /import\s*(?:type\s*)?\{[^}]*\bGameShell\b[^}]*\}\s*from\s*['"][^'"]+['"]/;
+
 /**
  * "Is this a game project?" — used by checks that diverge between apps
  * (FreeAppStore) and games (FreeGameStore). Apps run inside a sidebar+
@@ -10,9 +14,13 @@ import type { FileSource } from './file-source.js';
  * Detection signals (any one is sufficient):
  *   - `@freeappstore/games` listed in any package.json
  *   - A TS/JS source file imports from `@freeappstore/games`
+ *   - A TS/JS source file imports `GameShell` from anywhere — FAS-generated
+ *     games (workers/agent/src/template.ts) ship their own local GameShell
+ *     and depend only on `@freeappstore/sdk`, so neither signal above
+ *     fires for them (#64)
  *
- * Both signals exist because workspace hoisting can put the dep in the
- * root package.json (where a per-app scan would miss it) and template
+ * The package signals exist because workspace hoisting can put the dep in
+ * the root package.json (where a per-app scan would miss it) and template
  * scaffolds put the import in app source.
  */
 export async function isGameProject(source: FileSource): Promise<boolean> {
@@ -26,6 +34,7 @@ export async function isGameProject(source: FileSource): Promise<boolean> {
     if (!path.endsWith('.ts') && !path.endsWith('.tsx')) continue;
     const content = await source.read(path);
     if (content && /from\s+['"]@freeappstore\/games['"]/.test(content)) return true;
+    if (content && GAME_SHELL_IMPORT.test(content)) return true;
   }
   return false;
 }

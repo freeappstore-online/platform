@@ -1,6 +1,6 @@
-/* Game tokens: --bg / --ink / --accent. Brand fonts in name. */
+/* Game tokens: --paper / --ink / --accent (same names as apps). Brand fonts in name. */
 :root {
-  --bg: #050912;
+  --paper: #050912;
   --ink: #f7f7f0;
   --accent: #00ffaa;
 }
@@ -10,7 +10,7 @@ body,
 #root {
   margin: 0;
   height: 100svh;
-  background: var(--bg);
+  background: var(--paper);
   color: var(--ink);
   font-family: Manrope, system-ui, sans-serif;
   overflow: hidden;

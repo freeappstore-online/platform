@@ -26,23 +26,23 @@ describe('checkBrandTokens', () => {
     expect(r.detail).toMatch(/--accent/);
   });
 
-  it('passes for a game defining --bg, --ink, --accent', async () => {
+  it('passes for a game defining --paper, --ink, --accent (#64)', async () => {
     const files = new Map([
       ['package.json', '{"dependencies":{"@freeappstore/games":"^0.1"}}'],
-      ['web/src/index.css', ':root { --bg: #000; --ink: #fff; --accent: lime; }'],
+      ['web/src/index.css', ':root { --paper: #000; --ink: #fff; --accent: lime; }'],
     ]);
     const r = await checkBrandTokens(mapFileSource(files));
     expect(r.status).toBe('pass');
   });
 
-  it('fails for a game that defines --paper instead of --bg', async () => {
+  it('fails for a game that defines the banned --bg alias instead of --paper (#64)', async () => {
     const files = new Map([
       ['package.json', '{"dependencies":{"@freeappstore/games":"^0.1"}}'],
-      ['web/src/index.css', ':root { --paper: white; --ink: #fff; --accent: lime; }'],
+      ['web/src/index.css', ':root { --bg: #000; --ink: #fff; --accent: lime; }'],
     ]);
     const r = await checkBrandTokens(mapFileSource(files));
     expect(r.status).toBe('fail');
-    expect(r.detail).toMatch(/--bg/);
+    expect(r.detail).toMatch(/--paper/);
   });
 
   it('does not match var(--paper) usage as a definition', async () => {
