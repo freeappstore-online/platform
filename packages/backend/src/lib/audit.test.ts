@@ -181,7 +181,7 @@ describe('runAudit — committed-artifacts check (#19)', () => {
       detail: c.binds[4],
     }));
 
-  it('writes committed dist/ as warn, not fail, and does not count it as a failure', async () => {
+  it('writes committed dist/ as fail and counts it as a failure', async () => {
     const treeCalls = mockFetch([{ id: 'anatomy', repo: 'freeappstore-online/anatomy' }], {
       'freeappstore-online/anatomy': () =>
         new Response(
@@ -201,10 +201,10 @@ describe('runAudit — committed-artifacts check (#19)', () => {
 
     expect(treeCalls).toEqual(['freeappstore-online/anatomy']);
     const row = rows(captures).find((x) => x.check === ARTIFACTS);
-    expect(row).toMatchObject({ appId: 'anatomy', status: 'warn' });
+    expect(row).toMatchObject({ appId: 'anatomy', status: 'fail' });
     expect(row?.detail).toMatch(/1 tracked artifact file.*web\/dist\/index\.html/);
-    // Only the unreachable live URL counts as a failure; the artifact warn does not.
-    expect(r.failed).toBe(1);
+    // The unreachable live URL and the tracked artifact are both failures.
+    expect(r.failed).toBe(2);
   });
 
   it('writes pass for a clean repo', async () => {
