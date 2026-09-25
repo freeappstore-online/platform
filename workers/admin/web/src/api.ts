@@ -31,8 +31,9 @@ export interface AppConfig {
 }
 
 export interface PlatformStats {
-  apps: number
-  games: number
+  /** null when the registry couldn't be read — see `errors`. */
+  apps: number | null
+  games: number | null
   users: number
   creators: number
   routes: number
@@ -41,6 +42,7 @@ export interface PlatformStats {
     fas: { totals: { requests: number; pageViews: number; visitors: number } } | null
     fgs: { totals: { requests: number; pageViews: number; visitors: number } } | null
   } | null
+  errors?: { apps?: string; games?: string }
 }
 
 export interface ProvisionStep {
@@ -84,6 +86,8 @@ export interface DeployStatus {
   conclusion: string | null
   at: string | null
   sha: string | null
+  /** GitHub couldn't be read for this app; the other fields are null. */
+  error?: string
 }
 export type DeployStatusMap = Record<string, DeployStatus>
 
@@ -95,7 +99,9 @@ export interface AppHealth {
   hasRoute: boolean
   httpStatus: number
   reachable: boolean
-  ghActions: GhRun[]
+  /** null when GitHub couldn't be read — see `ghActionsError`. */
+  ghActions: GhRun[] | null
+  ghActionsError: string | null
 }
 
 export interface GhRun {
