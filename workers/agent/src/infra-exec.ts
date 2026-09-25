@@ -14,8 +14,10 @@ interface ExecContext {
   files: Map<string, string>;
   env: DeployEnv;
   config: StoreConfig;
-  onDeployStatus: (status: DeployStatus) => void;
-  onAppDeployed: (id: string, name: string) => void;
+  /** Awaited at every call site so the session's storage write settles before
+   *  the deploy moves on (#41). */
+  onDeployStatus: (status: DeployStatus) => void | Promise<void>;
+  onAppDeployed: (id: string, name: string) => void | Promise<void>;
 }
 
 /** Execute a single infra tool. Returns the result string. */
@@ -65,7 +67,7 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   if (tc.name === "deploy" || tc.name === "push_update") {
     const findings = checkBuildSanity(ctx.files);
     if (findings.length) {
-      ctx.onDeployStatus({
+      await ctx.onDeployStatus({
         phase: "error",
         error: `Build check failed: ${findings.map((finding) => finding.file).join(", ")}`,
       });
@@ -239,7 +241,7 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     return `Error: could not record ownership of "${appId}": ${e instanceof Error ? e.message : String(e)}`;
   }
   if (!claim.ok) {
-    ctx.onDeployStatus({ phase: "error", error: claim.error });
+    await ctx.onDeployStatus({ phase: "error", error: claim.error });
     return `Deploy FAILED: ${claim.error}`;
   }
 
@@ -247,7 +249,7 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
   // APPID -> the lowercase app id everywhere (used by the SDK: initApp({ appId: "APPID" })).
   applyPlaceholders(ctx.files, appId, appName);
 
-  ctx.onAppDeployed(appId, appName);
+  await ctx.onAppDeployed(appId, appName);
 
   let deployError: string | null = null;
   let liveUrl: string | null = null;
@@ -263,8 +265,8 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     ctx.files,
     ctx.env,
     ctx.config,
-    (status) => {
-      ctx.onDeployStatus(status);
+    async (status) => {
+      await ctx.onDeployStatus(status);
       if (status.phase === "live") liveUrl = status.appUrl;
       if (status.phase === "error") deployError = status.error;
     },
@@ -281,7 +283,7 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     if (claim.createdNow && !(await repoExists(appId, ctx).catch(() => true))) {
       await releaseApp(appId, ctx);
     }
-    ctx.onDeployStatus({ phase: "error", error: deployError });
+    await ctx.onDeployStatus({ phase: "error", error: deployError });
     return `Deploy FAILED: ${deployError}`;
   }
 
@@ -378,10 +380,10 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string
   // Post-deploy edits may reintroduce the APPID placeholder (e.g. the SDK
   // initApp call). Resolve it against the deployed id before pushing.
   if (ctx.appId) applyPlaceholders(ctx.files, ctx.appId, ctx.appId);
-  ctx.onDeployStatus({ phase: "pushing", progress: "Pushing update..." });
+  await ctx.onDeployStatus({ phase: "pushing", progress: "Pushing update..." });
   const result = await pushUpdate(tc.input.id as string, ctx.files, (tc.input.message as string) || "Update", ctx.env, ctx.config);
   if (!result.ok) {
-    ctx.onDeployStatus({ phase: "error", error: result.message });
+    await ctx.onDeployStatus({ phase: "error", error: result.message });
     return result.message;
   }
   await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);

@@ -21,6 +21,10 @@ export interface Env {
   AI_GATEWAY_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
   AI_GATEWAY_TOKEN?: string;
+  /** "true" → chat turns run as a Durable Object alarm-driven state machine
+   *  (one step per alarm, persisted between steps). Anything else → the
+   *  legacy single-invocation loop. See session.ts (#41). */
+  ALARM_LOOP?: string;
 }
 
 /** Map VibeCode provider names to platform key vault provider IDs. */

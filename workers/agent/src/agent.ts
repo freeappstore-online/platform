@@ -57,28 +57,21 @@ export interface SessionContext {
   fileList: string;
 }
 
-/**
- * Run one user turn through the agent loop.
- * Streams events via the writer, handles file tool calls internally.
- * Infra tools (deploy, push_update, etc.) are collected and returned
- * for the session to execute with env access.
- */
-export async function runAgentTurn(
+/** Everything a turn needs before its first model call: the system prompt with
+ *  session context, and the trimmed history with the user message appended. */
+export interface PreparedTurn {
+  systemPrompt: string;
+  /** Messages sent to the model: cleaned history + the user message. */
+  messages: Message[];
+}
+
+export function prepareTurn(
   config: AIConfig,
   conversationHistory: Message[],
   userMessage: string,
-  files: Map<string, string>,
-  writer: WritableStreamDefaultWriter<Uint8Array>,
   storeConfig: StoreConfig,
   ctx?: SessionContext,
-  /** AI Gateway env (AI_GATEWAY_*). Omit/empty → direct provider calls. */
-  gatewayEnv: GatewayEnv = {},
-): Promise<AgentTurnResult> {
-  const encoder = new TextEncoder();
-  const adapter = createAdapter(config, gatewayEnv);
-  const MAX_LOOPS = 25;
-  const toolDefinitions = getToolDefinitions(storeConfig);
-
+): PreparedTurn {
   // Build dynamic system prompt with session context
   let systemPrompt = getSystemPrompt(storeConfig);
   if (ctx) {
@@ -146,151 +139,196 @@ export async function runAgentTurn(
     }
   }
 
-  const messages: Message[] = [...cleaned, { role: "user", content: userMessage }];
+  return { systemPrompt, messages: [...cleaned, { role: "user", content: userMessage }] };
+}
+
+export type Emit = (event: StreamEvent) => Promise<void>;
+
+/** What one model round-trip produced. `appended` messages belong on both the
+ *  model's message list and the turn's new messages, in order. */
+export type StepOutcome =
+  /** Rate limited before any output; retry the same step after a backoff. */
+  | { kind: "rate_limited" }
+  /** The provider streamed an error event: the turn ends with that error. */
+  | { kind: "stream_error"; message: string }
+  /** The provider call threw; an error event has already been emitted. */
+  | { kind: "threw" }
+  /** The model answered without tool calls: the turn is complete. */
+  | { kind: "final"; appended: Message[] }
+  /** File tools ran; loop again. */
+  | { kind: "continue"; appended: Message[] }
+  /** Infra tools requested; the session must execute them. */
+  | { kind: "infra"; appended: Message[]; infraRequests: InfraRequest[] };
+
+/**
+ * One iteration of the agent loop: a single model call, then any file tools it
+ * asked for. No delays, retries or loop bookkeeping — callers own those, so the
+ * same step can run inside the legacy loop or one alarm at a time (#41).
+ */
+export async function runAgentStep(
+  config: AIConfig,
+  prepared: PreparedTurn,
+  files: Map<string, string>,
+  storeConfig: StoreConfig,
+  emit: Emit,
+  gatewayEnv: GatewayEnv = {},
+): Promise<StepOutcome> {
+  const adapter = createAdapter(config, gatewayEnv);
+  const toolDefinitions = getToolDefinitions(storeConfig);
+  let assistantText = "";
+  const toolCalls: ToolCall[] = [];
+
+  try {
+    for await (const event of adapter.run(prepared.systemPrompt, prepared.messages, toolDefinitions)) {
+      if (event.type === "done") continue;
+      // Catch rate limit errors and retry after delay
+      if (event.type === "error" && (event.data.includes("429") || event.data.includes("Rate limited"))) {
+        return { kind: "rate_limited" };
+      }
+      await emit(event);
+      if (event.type === "text") {
+        assistantText += event.data;
+      } else if (event.type === "tool_call") {
+        toolCalls.push(JSON.parse(event.data));
+      } else if (event.type === "error") {
+        return { kind: "stream_error", message: event.data };
+      }
+    }
+  } catch (err) {
+    await emit({ type: "error", data: String(err) });
+    return { kind: "threw" };
+  }
+
+  const assistantMsg: Message = {
+    role: "assistant",
+    content: assistantText,
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+  };
+  if (toolCalls.length === 0) return { kind: "final", appended: [assistantMsg] };
+
+  // Separate file tools (execute now) from infra tools (execute in session)
+  const fileToolCalls = toolCalls.filter((tc) => !INFRA_TOOLS.has(tc.name));
+  const infraToolCalls = toolCalls.filter((tc) => INFRA_TOOLS.has(tc.name));
+
+  // Execute file tools
+  const results: ToolResult[] = [];
+  for (const tc of fileToolCalls) {
+    const toolOutput = executeTool(tc, files, storeConfig);
+    // Truncate large results in conversation history (e.g. read_file returning full file)
+    const truncated = { ...toolOutput, content: toolOutput.content.slice(0, 1500) };
+    results.push(truncated);
+    // No `result` on the wire: tool output (file bodies, search hits) must
+    // never reach the creator chat (#36). The client only needs `tool`.
+    await emit({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
+  }
+
+  if (infraToolCalls.length > 0) {
+    // Don't add the infra tool_result yet — the session builds it with real
+    // results. File tool results (if any) go in now.
+    const appended: Message[] = [assistantMsg];
+    if (fileToolCalls.length > 0) appended.push({ role: "tool_result", content: "", toolResults: results });
+    return { kind: "infra", appended, infraRequests: infraToolCalls.map((toolCall) => ({ toolCall })) };
+  }
+
+  // All tools were file tools — add results and continue the loop
+  return { kind: "continue", appended: [assistantMsg, { role: "tool_result", content: "", toolResults: results }] };
+}
+
+/**
+ * empty-no-output: tool calls occurred (model was in agentic mode) but the turn
+ * ended with no infra requests and no write_file calls — the model read files
+ * and then stalled instead of writing/deploying. A pure conversational reply
+ * (no tool calls at all) is valid; we only flag when the model was mid-task
+ * and failed to produce output.
+ */
+export function emptyNoOutputError(newMessages: Message[], infraRequests: InfraRequest[], anyToolCallsMade: boolean): string | undefined {
+  if (infraRequests.length > 0 || !anyToolCallsMade) return undefined;
+  const hasWriteFile = newMessages.some((m) => m.toolCalls?.some((tc) => tc.name === "write_file"));
+  return hasWriteFile ? undefined : "empty-no-output: turn exited with tool calls but no write_file or infra requests";
+}
+
+export const MAX_LOOPS = 25;
+export const MAX_RATE_LIMIT_RETRIES = 3;
+
+/** Delay before loop iteration > 0, to stagger API calls under rate limits. */
+export function stepDelayMs(config: AIConfig): number {
+  return config.provider === "github" ? 2000 : 500;
+}
+
+/**
+ * Run one user turn through the agent loop in a single invocation (the legacy
+ * path, used when ALARM_LOOP is off). Streams events via the writer, handles
+ * file tool calls internally. Infra tools (deploy, push_update, etc.) are
+ * collected and returned for the session to execute with env access.
+ */
+export async function runAgentTurn(
+  config: AIConfig,
+  conversationHistory: Message[],
+  userMessage: string,
+  files: Map<string, string>,
+  writer: WritableStreamDefaultWriter<Uint8Array>,
+  storeConfig: StoreConfig,
+  ctx?: SessionContext,
+  /** AI Gateway env (AI_GATEWAY_*). Omit/empty → direct provider calls. */
+  gatewayEnv: GatewayEnv = {},
+): Promise<AgentTurnResult> {
+  const encoder = new TextEncoder();
+  const prepared = prepareTurn(config, conversationHistory, userMessage, storeConfig, ctx);
   const newMessages: Message[] = [{ role: "user", content: userMessage }];
   const infraRequests: InfraRequest[] = [];
   // Track whether any tool calls occurred during this turn (used to detect
   // the empty-no-output failure: model read files then exited without writing)
   let anyToolCallsMade = false;
 
-  async function send(event: StreamEvent) {
-    const line = `data: ${JSON.stringify(event)}\n\n`;
-    await writer.write(encoder.encode(line));
-  }
+  const send: Emit = async (event) => {
+    await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+  };
 
   let retries = 0;
-  const MAX_RETRIES = 3;
 
   for (let loop = 0; loop < MAX_LOOPS; loop++) {
     // Stagger API calls — wait between rounds to avoid rate limits
-    if (loop > 0) {
-      const delay = config.provider === "github" ? 2000 : 500;
-      await new Promise((r) => setTimeout(r, delay));
+    if (loop > 0) await new Promise((r) => setTimeout(r, stepDelayMs(config)));
+
+    const step = await runAgentStep(config, prepared, files, storeConfig, send, gatewayEnv);
+
+    if (step.kind === "threw") break;
+    if (step.kind === "stream_error") {
+      newMessages.push({ role: "assistant", content: step.message });
+      return { newMessages, infraRequests, terminalError: step.message };
     }
-
-    let assistantText = "";
-    const toolCalls: ToolCall[] = [];
-    let rateLimited = false;
-
-    try {
-      for await (const event of adapter.run(systemPrompt, messages, toolDefinitions)) {
-        if (event.type === "done") continue;
-        // Catch rate limit errors and retry after delay
-        if (event.type === "error" && (event.data.includes("429") || event.data.includes("Rate limited"))) {
-          rateLimited = true;
-          break;
-        }
-        await send(event);
-        if (event.type === "text") {
-          assistantText += event.data;
-        } else if (event.type === "tool_call") {
-          toolCalls.push(JSON.parse(event.data));
-        } else if (event.type === "error") {
-          const errMsg: Message = { role: "assistant", content: event.data };
-          newMessages.push(errMsg);
-          return { newMessages, infraRequests, terminalError: event.data };
-        }
-      }
-    } catch (err) {
-      await send({ type: "error", data: String(err) });
-      break;
-    }
-
     // Auto-retry on rate limit with exponential backoff
-    if (rateLimited) {
+    if (step.kind === "rate_limited") {
       retries++;
-      if (retries > MAX_RETRIES) {
+      if (retries > MAX_RATE_LIMIT_RETRIES) {
         await send({ type: "error", data: "Rate limited after 3 retries. Wait a minute or switch to a BYOK provider (gear icon)." });
         break;
       }
       const retryDelay = 5000 * retries; // 5s, 10s, 15s
-      await send({ type: "text", data: `\n_Rate limited — retrying in ${retryDelay / 1000}s (attempt ${retries}/${MAX_RETRIES})..._\n` });
+      await send({
+        type: "text",
+        data: `\n_Rate limited — retrying in ${retryDelay / 1000}s (attempt ${retries}/${MAX_RATE_LIMIT_RETRIES})..._\n`,
+      });
       await new Promise((r) => setTimeout(r, retryDelay));
       loop--; // retry same iteration
       continue;
     }
     retries = 0; // reset on success
 
-    const assistantMsg: Message = {
-      role: "assistant",
-      content: assistantText,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    };
-    messages.push(assistantMsg);
-    newMessages.push(assistantMsg);
-
-    if (toolCalls.length === 0) break;
-
+    prepared.messages.push(...step.appended);
+    newMessages.push(...step.appended);
+    if (step.kind === "final") break;
     anyToolCallsMade = true;
-
-    // Separate file tools (execute now) from infra tools (execute in session)
-    const fileToolCalls = toolCalls.filter((tc) => !INFRA_TOOLS.has(tc.name));
-    const infraToolCalls = toolCalls.filter((tc) => INFRA_TOOLS.has(tc.name));
-
-    // Execute file tools
-    const results: ToolResult[] = [];
-    for (const tc of fileToolCalls) {
-      const toolOutput = executeTool(tc, files, storeConfig);
-      // Truncate large results in conversation history (e.g. read_file returning full file)
-      const truncated = { ...toolOutput, content: toolOutput.content.slice(0, 1500) };
-      results.push(truncated);
-      // No `result` on the wire: tool output (file bodies, search hits) must
-      // never reach the creator chat (#36). The client only needs `tool`.
-      await send({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
-    }
-
-    // Collect infra tools — session will execute them and build the
-    // complete tool_result message (with real results, not acks)
-    for (const tc of infraToolCalls) {
-      infraRequests.push({ toolCall: tc });
-    }
-
-    if (infraToolCalls.length > 0) {
-      // Don't add a tool_result to conversation yet — session will
-      // build it with real results and add it to messages
-      if (fileToolCalls.length > 0) {
-        // Add file tool results only (infra results come from session)
-        const fileResultMsg: Message = {
-          role: "tool_result",
-          content: "",
-          toolResults: results,
-        };
-        messages.push(fileResultMsg);
-        newMessages.push(fileResultMsg);
-      }
+    if (step.kind === "infra") {
+      infraRequests.push(...step.infraRequests);
       break;
     }
-
-    // All tools were file tools — add results and continue the loop
-    const toolResultMsg: Message = {
-      role: "tool_result",
-      content: "",
-      toolResults: results,
-    };
-    messages.push(toolResultMsg);
-    newMessages.push(toolResultMsg);
   }
 
   if (infraRequests.length === 0) {
     await send({ type: "done", data: "" });
   }
 
-  // Classify the turn's terminal outcome.
-  // empty-no-output: tool calls occurred (model was in agentic mode) but the
-  // turn ended with no infra requests and no write_file calls — the model read
-  // files and then stalled instead of writing/deploying.  A pure conversational
-  // reply (no tool calls at all) is valid; we only flag when the model was
-  // mid-task and failed to produce output.
-  if (infraRequests.length === 0 && anyToolCallsMade) {
-    const hasWriteFile = newMessages.some((m) => m.toolCalls?.some((tc) => tc.name === "write_file"));
-    if (!hasWriteFile) {
-      return {
-        newMessages,
-        infraRequests,
-        terminalError: "empty-no-output: turn exited with tool calls but no write_file or infra requests",
-      };
-    }
-  }
-
-  return { newMessages, infraRequests };
+  const terminalError = emptyNoOutputError(newMessages, infraRequests, anyToolCallsMade);
+  return terminalError ? { newMessages, infraRequests, terminalError } : { newMessages, infraRequests };
 }

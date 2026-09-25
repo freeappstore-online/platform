@@ -52,7 +52,7 @@ export async function deployApp(
   files: Map<string, string>,
   env: DeployEnv,
   config: StoreConfig,
-  onStatus: (status: DeployStatus) => void,
+  onStatus: (status: DeployStatus) => void | Promise<void>,
   /** Only true when the caller has proven this id is already theirs (redeploy /
    *  retry). A pre-existing repo under any other circumstance is a collision —
    *  pushing into it would overwrite a stranger's code (#29). */
@@ -60,7 +60,7 @@ export async function deployApp(
 ): Promise<void> {
   const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
   const steps: DeployStep[] = [];
-  onStatus({ phase: "provisioning", steps: [] });
+  await onStatus({ phase: "provisioning", steps: [] });
 
   // Step 1: Create GitHub repo
   const repoCheck = await ghApi(`/repos/${config.org}/${deployConfig.id}`);
@@ -71,7 +71,7 @@ export async function deployApp(
       // in R2 under the same prefix. Stop before the first byte is written.
       const detail = `${config.org}/${deployConfig.id} already exists and is not this session's ${config.noun}`;
       steps.push({ name: "GitHub repo", status: "fail", detail });
-      onStatus({
+      await onStatus({
         phase: "error",
         error: `Refusing to deploy into an existing ${config.noun} repo: ${detail}. Deploy under a different ID.`,
       });
@@ -92,17 +92,17 @@ export async function deployApp(
       steps.push({ name: "GitHub repo", status: "ok", detail: `Created ${config.org}/${deployConfig.id}` });
     } else {
       steps.push({ name: "GitHub repo", status: "fail", detail: createRepo.message || "Failed" });
-      onStatus({ phase: "error", error: `GitHub repo creation failed: ${createRepo.message}` });
+      await onStatus({ phase: "error", error: `GitHub repo creation failed: ${createRepo.message}` });
       return;
     }
   }
-  onStatus({ phase: "provisioning", steps: [...steps] });
+  await onStatus({ phase: "provisioning", steps: [...steps] });
 
   // Step 2: Push files to GitHub → GitHub Actions will deploy to R2
-  onStatus({ phase: "pushing", progress: "Creating file tree..." });
+  await onStatus({ phase: "pushing", progress: "Creating file tree..." });
   await pushFilesToGitHub(deployConfig.id, files, env.GITHUB_TOKEN, config);
   steps.push({ name: "Pushing code", status: "ok", detail: "Code pushed" });
-  onStatus({ phase: "provisioning", steps: [...steps] });
+  await onStatus({ phase: "provisioning", steps: [...steps] });
 
   // Step 3: Wait for GitHub Actions deploy
   await waitForGitHubDeploy(deployConfig.id, env, config, onStatus);
@@ -112,13 +112,13 @@ export async function waitForGitHubDeploy(
   appId: string,
   env: DeployEnv,
   config: StoreConfig,
-  onStatus: (status: DeployStatus) => void,
+  onStatus: (status: DeployStatus) => void | Promise<void>,
   commitSha?: string,
 ): Promise<void> {
   const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
   const appUrl = `https://${appId}.${config.domain}`;
   const repo = `${config.org}/${appId}`;
-  onStatus({ phase: "building", deployUrl: appUrl });
+  await onStatus({ phase: "building", deployUrl: appUrl });
 
   const deadline = Date.now() + 150_000; // 2.5 min
   while (Date.now() < deadline) {
@@ -131,16 +131,16 @@ export async function waitForGitHubDeploy(
       if (latestRun.status !== "completed") continue;
 
       if (latestRun.conclusion === "success") {
-        onStatus({ phase: "live", appUrl });
+        await onStatus({ phase: "live", appUrl });
         return;
       }
       if (latestRun.conclusion === "failure") {
         const errorDetail = await fetchCIFailureDetails(ghApi, repo, latestRun.id, env.GITHUB_TOKEN);
-        onStatus({ phase: "error", error: errorDetail });
+        await onStatus({ phase: "error", error: errorDetail });
         return;
       }
       if (latestRun.conclusion) {
-        onStatus({
+        await onStatus({
           phase: "error",
           error: `GitHub Actions deploy ended with ${latestRun.conclusion}. Check: https://github.com/${repo}/actions`,
         });
@@ -150,7 +150,7 @@ export async function waitForGitHubDeploy(
       /* GH API transient error — retry on next poll */
     }
   }
-  onStatus({ phase: "live", appUrl }); // timeout — assume deploying
+  await onStatus({ phase: "live", appUrl }); // timeout — assume deploying
 }
 
 /** Fetch detailed step-level failure info from a failed GitHub Actions run. */

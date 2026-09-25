@@ -1,14 +1,24 @@
 /** Durable Object: one instance per agent session.
  *  Stores conversation history, virtual filesystem, token usage, deploy status. */
 
-import { runAgentTurn } from "./agent";
+import {
+  emptyNoOutputError,
+  MAX_LOOPS,
+  MAX_RATE_LIMIT_RETRIES,
+  type PreparedTurn,
+  prepareTurn,
+  runAgentStep,
+  runAgentTurn,
+  type SessionContext,
+  stepDelayMs,
+} from "./agent";
 import type { StoreConfig } from "./config";
 import { getConfig } from "./config";
 import { corsHeaders, json } from "./cors";
 import type { DeployEnv, DeployStatus } from "./deploy";
 import type { Env } from "./index";
 import { executeInfraTool } from "./infra-exec";
-import type { AIConfig, Message, TokenUsage } from "./providers/types";
+import type { AIConfig, Message, TokenUsage, ToolCall } from "./providers/types";
 import { type PushSubscription, sendWebPush } from "./push";
 import { getTemplateFiles } from "./template";
 
@@ -46,6 +56,75 @@ interface SessionState {
 
 const TOKEN_REVALIDATE_MS = 30 * 60 * 1000; // Re-verify token every 30 min
 
+// ── Alarm-driven build loop (#41) ──
+//
+// With ALARM_LOOP=true a chat turn no longer runs as one long invocation.
+// /chat persists a PendingTurn and arms an alarm; each alarm() runs ONE step
+// (one model round-trip, or one infra tool), persists the result, and re-arms.
+// A closed tab, an evicted DO or a transient upstream error loses at most the
+// step in flight. Events go to a storage-backed log that the /chat stream
+// relays, so a connected client still sees the build live.
+
+/** An LLM step with no progress for this long is a stall (hung upstream). */
+export const STALL_THRESHOLD_MS = 180_000;
+/** Infra steps poll a GitHub Actions deploy for up to ~2.5 min on their own,
+ *  so they get a longer budget before being called stalled. */
+export const INFRA_STALL_THRESHOLD_MS = 600_000;
+/** How long a /chat stream keeps relaying events before handing off to polling. */
+const RELAY_MAX_MS = 15 * 60 * 1000;
+const RELAY_POLL_MS = 300;
+const MAX_TURN_EVENTS = 1000;
+
+type TurnPhase = "main" | "main-infra" | "followup" | "followup-infra";
+
+export interface PendingTurn {
+  turnId: string;
+  message: string;
+  /** Includes the resolved API key; the record is deleted when the turn ends. */
+  aiConfig: AIConfig;
+  /** Caller's bearer token, needed by infra tools; deleted with the turn. */
+  authHeader?: string;
+  phase: TurnPhase;
+  /** Which MAX_LOOPS iteration of the current LLM phase runs next. */
+  loopIndex: number;
+  retries: number;
+  /** Index in session.messages where the current LLM phase's messages begin. */
+  messagesCursor: number;
+  /** Model-facing message list for the current LLM phase. */
+  prepared: PreparedTurn | null;
+  /** Messages produced by the current LLM phase (starts with its user prompt). */
+  newMessages: Message[];
+  anyToolCalls: boolean;
+  infraQueue: ToolCall[];
+  infraResults: { id: string; content: string }[];
+  /** True once the main phase's messages are committed (mirrors the legacy path). */
+  turnSaved: boolean;
+  /** Date.now() at the last completed step. */
+  heartbeat: number;
+  startedAt: number;
+}
+
+interface TurnEventLog {
+  turnId: string;
+  nextSeq: number;
+  events: { seq: number; type: string; data: string }[];
+}
+
+/** A provider StreamEvent, or a session-level event such as deploy_status. */
+type TurnEvent = { type: string; data: string };
+
+class StallError extends Error {}
+
+function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new StallError(message)), ms);
+  });
+  return Promise.race([p, timeout]).finally(() => {
+    if (timer !== null) clearTimeout(timer);
+  });
+}
+
 /** Extract a human-readable detail string from a deploy status event. */
 function deployStatusDetail(status: DeployStatus): string {
   switch (status.phase) {
@@ -70,6 +149,8 @@ export class AgentSession implements DurableObject {
   private config: StoreConfig;
   private session: SessionState | null = null;
   private chatInProgress = false;
+  /** Alarm path: events emitted since the last flush to storage. */
+  private eventBuffer: { turnId: string; events: TurnEvent[]; lastFlush: number } | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -252,7 +333,7 @@ export class AgentSession implements DurableObject {
 
   /** POST /chat — stream an agent turn via SSE */
   private async handleChat(request: Request): Promise<Response> {
-    if (this.chatInProgress) {
+    if (this.chatInProgress || (await this.activePendingTurn())) {
       return json({ error: "A chat request is already in progress. Wait for it to finish." }, 429, request, this.config.domain);
     }
     // Validate BEFORE setting chatInProgress (early returns must not lock the session)
@@ -291,6 +372,8 @@ export class AgentSession implements DurableObject {
 
     // All validation passed — lock the session for this chat turn
     this.chatInProgress = true;
+
+    if (this.env.ALARM_LOOP === "true") return this.startAlarmTurn(request, body);
 
     const session = await this.load();
     const files = new Map(Object.entries(session.files));
@@ -384,10 +467,10 @@ export class AgentSession implements DurableObject {
                 files,
                 env: deployEnv,
                 config,
-                onDeployStatus: (status) => {
+                onDeployStatus: async (status) => {
                   session.deployStatus = status;
                   this.logDeploy(status.phase, deployStatusDetail(status));
-                  this.state.storage.put("session", session);
+                  await this.state.storage.put("session", session);
                   sendSSE({ type: "deploy_status", data: JSON.stringify(status) });
                   if (status.phase === "live") {
                     this.sendPush("Your build is live!");
@@ -397,12 +480,12 @@ export class AgentSession implements DurableObject {
                     this.syncToD1();
                   }
                 },
-                onAppDeployed: (id, name) => {
+                onAppDeployed: async (id, name) => {
                   session.appId = id;
                   session.appName = name;
                   session.deployStatus = { phase: "provisioning", steps: [] };
                   this.logDeploy("provisioning", `Starting deploy for ${name} (${id})`);
-                  this.state.storage.put("session", session);
+                  await this.state.storage.put("session", session);
                 },
               });
             } catch (err) {
@@ -472,10 +555,10 @@ export class AgentSession implements DurableObject {
                     files,
                     env: deployEnv,
                     config,
-                    onDeployStatus: (status) => {
+                    onDeployStatus: async (status) => {
                       session.deployStatus = status;
                       this.logDeploy(status.phase, deployStatusDetail(status));
-                      this.state.storage.put("session", session);
+                      await this.state.storage.put("session", session);
                       sendSSE({ type: "deploy_status", data: JSON.stringify(status) });
                       if (status.phase === "live") {
                         this.sendPush("Your build is live!");
@@ -485,12 +568,12 @@ export class AgentSession implements DurableObject {
                         this.syncToD1();
                       }
                     },
-                    onAppDeployed: (id, name) => {
+                    onAppDeployed: async (id, name) => {
                       session.appId = id;
                       session.appName = name;
                       session.deployStatus = { phase: "provisioning", steps: [] };
                       this.logDeploy("provisioning", `Starting deploy for ${name} (${id})`);
-                      this.state.storage.put("session", session);
+                      await this.state.storage.put("session", session);
                     },
                   });
                 } catch (err) {
@@ -544,9 +627,388 @@ export class AgentSession implements DurableObject {
     });
   }
 
+  // ── Alarm-driven turn (ALARM_LOOP=true) ──
+
+  /** The persisted turn, if one is running. A turn whose heartbeat is older
+   *  than any step budget is stale (its alarm was lost): fail it so it can't
+   *  lock the session forever. */
+  private async activePendingTurn(): Promise<PendingTurn | null> {
+    const pending = await this.state.storage.get<PendingTurn>("pendingTurn");
+    if (!pending) return null;
+    if (Date.now() - pending.heartbeat > INFRA_STALL_THRESHOLD_MS) {
+      await this.load();
+      await this.failTurn(pending, `Build stalled — no progress for >${INFRA_STALL_THRESHOLD_MS / 1000}s`, "alarm", true);
+      return null;
+    }
+    return pending;
+  }
+
+  private sessionContext(session: SessionState): SessionContext {
+    const names = Object.keys(session.files);
+    return { appId: session.appId, appName: session.appName, fileCount: names.length, fileList: names.sort().join(", ") };
+  }
+
+  /** /chat under ALARM_LOOP: persist the turn, arm the alarm, relay events. */
+  private async startAlarmTurn(request: Request, body: { message: string; aiConfig: AIConfig }): Promise<Response> {
+    const session = await this.load();
+    const history = session.messages.slice();
+    session.messages.push({ role: "user", content: body.message });
+    if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    await this.save();
+    await this.syncToD1();
+
+    const now = Date.now();
+    const pending: PendingTurn = {
+      turnId: crypto.randomUUID(),
+      message: body.message,
+      aiConfig: body.aiConfig,
+      authHeader: request.headers.get("Authorization") || undefined,
+      phase: "main",
+      loopIndex: 0,
+      retries: 0,
+      messagesCursor: session.messages.length - 1,
+      prepared: prepareTurn(body.aiConfig, history, body.message, this.config, this.sessionContext(session)),
+      newMessages: [{ role: "user", content: body.message }],
+      anyToolCalls: false,
+      infraQueue: [],
+      infraResults: [],
+      turnSaved: false,
+      heartbeat: now,
+      startedAt: now,
+    };
+    await this.state.storage.put("pendingTurn", pending);
+    await this.state.storage.put("turnEvents", { turnId: pending.turnId, nextSeq: 1, events: [] } satisfies TurnEventLog);
+    await this.state.storage.setAlarm(now);
+
+    const { readable, writable } = new TransformStream<Uint8Array>();
+    // Not awaited: the relay lives as long as the client reads. If the client
+    // goes away the write fails and the relay stops; the alarm carries on.
+    void this.relayTurnEvents(pending.turnId, writable.getWriter());
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        ...corsHeaders(request, this.config.domain),
+      },
+    });
+  }
+
+  /** Stream a turn's persisted events to one SSE client until the turn ends. */
+  private async relayTurnEvents(turnId: string, writer: WritableStreamDefaultWriter<Uint8Array>): Promise<void> {
+    const encoder = new TextEncoder();
+    let seen = 0;
+    const deadline = Date.now() + RELAY_MAX_MS;
+    // A cancelled stream rejects `closed` even when nothing is being written.
+    let gone = false;
+    writer.closed.catch(() => {
+      gone = true;
+    });
+    try {
+      for (;;) {
+        if (gone) break;
+        const pending = await this.state.storage.get<PendingTurn>("pendingTurn");
+        const log = await this.state.storage.get<TurnEventLog>("turnEvents");
+        if (log?.turnId === turnId) {
+          for (const e of log.events) {
+            if (e.seq <= seen) continue;
+            await writer.write(encoder.encode(`data: ${JSON.stringify({ type: e.type, data: e.data })}\n\n`));
+            seen = e.seq;
+          }
+        }
+        // Events are flushed before pendingTurn is deleted, so this read saw them all.
+        if (!pending || pending.turnId !== turnId || Date.now() > deadline) break;
+        await new Promise((r) => setTimeout(r, RELAY_POLL_MS));
+      }
+    } catch {
+      /* client disconnected — the alarm loop is unaffected */
+    } finally {
+      writer.close().catch(() => {});
+    }
+  }
+
+  /** Emits provider stream events plus session events (deploy_status). */
+  private emitter(pending: PendingTurn): (event: TurnEvent) => Promise<void> {
+    const apiKey = pending.aiConfig.apiKey;
+    const scrub = (s: string) => (apiKey && apiKey.length > 8 ? s.replaceAll(apiKey, "[REDACTED]") : s);
+    return async (event) => {
+      const safe = event.type === "error" || event.type === "text" ? { ...event, data: scrub(event.data) } : event;
+      if (!this.eventBuffer || this.eventBuffer.turnId !== pending.turnId) {
+        this.eventBuffer = { turnId: pending.turnId, events: [], lastFlush: Date.now() };
+      }
+      this.eventBuffer.events.push(safe);
+      if (this.eventBuffer.events.length >= 20 || Date.now() - this.eventBuffer.lastFlush >= 250) await this.flushEvents();
+    };
+  }
+
+  private async flushEvents(): Promise<void> {
+    const buf = this.eventBuffer;
+    if (!buf || buf.events.length === 0) return;
+    const pending = buf.events.splice(0);
+    buf.lastFlush = Date.now();
+    const stored = await this.state.storage.get<TurnEventLog>("turnEvents");
+    const log: TurnEventLog = stored?.turnId === buf.turnId ? stored : { turnId: buf.turnId, nextSeq: 1, events: [] };
+    for (const e of pending) {
+      // Coalesce streamed text deltas so a long answer is a handful of entries.
+      const last = log.events[log.events.length - 1];
+      if (e.type === "text" && last?.type === "text") {
+        last.data += e.data;
+        last.seq = log.nextSeq++;
+      } else {
+        log.events.push({ seq: log.nextSeq++, type: e.type, data: e.data });
+      }
+    }
+    if (log.events.length > MAX_TURN_EVENTS) log.events = log.events.slice(-MAX_TURN_EVENTS);
+    await this.state.storage.put("turnEvents", log);
+  }
+
+  /** Write the current LLM phase's messages into session.messages. */
+  private commitPhaseMessages(session: SessionState, pending: PendingTurn): void {
+    let all = [...session.messages.slice(0, pending.messagesCursor), ...pending.newMessages];
+    if (all.length > MAX_MESSAGES) {
+      const drop = all.length - MAX_MESSAGES;
+      all = all.slice(drop);
+      pending.messagesCursor = Math.max(0, pending.messagesCursor - drop);
+    }
+    session.messages = all;
+  }
+
+  private trimFiles(session: SessionState): void {
+    const fileKeys = Object.keys(session.files);
+    if (fileKeys.length > MAX_FILES) {
+      const keep = new Set(fileKeys.slice(-MAX_FILES));
+      for (const k of fileKeys) if (!keep.has(k)) delete session.files[k];
+    }
+  }
+
+  /** Durable Object alarm: run one step of the pending turn, persist, re-arm. */
+  async alarm(): Promise<void> {
+    const pending = await this.state.storage.get<PendingTurn>("pendingTurn");
+    if (!pending) return;
+    const session = await this.load();
+    this.chatInProgress = true;
+
+    const budget = pending.phase.endsWith("infra") ? INFRA_STALL_THRESHOLD_MS : STALL_THRESHOLD_MS;
+    if (Date.now() - pending.heartbeat > budget) {
+      await this.failTurn(
+        pending,
+        `Build stalled — no progress for >${budget / 1000}s (${pending.phase}, step ${pending.loopIndex})`,
+        "alarm",
+        true,
+      );
+      return;
+    }
+
+    let next: number | "done";
+    try {
+      next = await withTimeout(
+        this.runTurnStep(session, pending),
+        budget,
+        `Build stalled — no progress for >${budget / 1000}s (${pending.phase}, step ${pending.loopIndex})`,
+      );
+    } catch (err) {
+      if (err instanceof StallError) {
+        await this.failTurn(pending, err.message, "alarm", true);
+      } else if (pending.phase.startsWith("followup")) {
+        // Follow-up failed — not critical, the infra action already completed.
+        this.logError("follow-up", String(err));
+        await this.completeTurn(pending);
+      } else {
+        await this.failTurn(pending, String(err), "chat", false);
+      }
+      return;
+    }
+
+    if (next === "done") {
+      await this.completeTurn(pending);
+      return;
+    }
+    pending.heartbeat = Date.now();
+    await this.flushEvents();
+    await this.save();
+    await this.state.storage.put("pendingTurn", pending);
+    await this.state.storage.setAlarm(Date.now() + next);
+  }
+
+  /** One step. Returns the delay before the next alarm, or "done". */
+  private async runTurnStep(session: SessionState, pending: PendingTurn): Promise<number | "done"> {
+    if (pending.phase === "main-infra" || pending.phase === "followup-infra") return this.runInfraStep(session, pending);
+
+    const emit = this.emitter(pending);
+    if (pending.loopIndex >= MAX_LOOPS || !pending.prepared) return this.finishLlmPhase(session, pending);
+
+    const files = new Map(Object.entries(session.files));
+    const step = await runAgentStep(pending.aiConfig, pending.prepared, files, this.config, emit, this.env);
+
+    switch (step.kind) {
+      case "threw":
+        return this.finishLlmPhase(session, pending);
+      case "stream_error":
+        pending.newMessages.push({ role: "assistant", content: step.message });
+        return this.finishLlmPhase(session, pending, step.message);
+      case "rate_limited": {
+        pending.retries++;
+        if (pending.retries > MAX_RATE_LIMIT_RETRIES) {
+          await emit({ type: "error", data: "Rate limited after 3 retries. Wait a minute or switch to a BYOK provider (gear icon)." });
+          return this.finishLlmPhase(session, pending);
+        }
+        const retryDelay = 5000 * pending.retries;
+        await emit({
+          type: "text",
+          data: `\n_Rate limited — retrying in ${retryDelay / 1000}s (attempt ${pending.retries}/${MAX_RATE_LIMIT_RETRIES})..._\n`,
+        });
+        return retryDelay; // same loopIndex
+      }
+    }
+
+    pending.retries = 0;
+    pending.prepared.messages.push(...step.appended);
+    pending.newMessages.push(...step.appended);
+    session.files = Object.fromEntries(files);
+    this.commitPhaseMessages(session, pending);
+    if (step.kind === "final") return this.finishLlmPhase(session, pending);
+    pending.anyToolCalls = true;
+    if (step.kind === "infra") {
+      pending.infraQueue = step.infraRequests.map((r) => r.toolCall);
+      return this.finishLlmPhase(session, pending);
+    }
+    pending.loopIndex++;
+    return stepDelayMs(pending.aiConfig);
+  }
+
+  /** End of an LLM phase: record terminal errors, commit, then infra or done. */
+  private async finishLlmPhase(session: SessionState, pending: PendingTurn, streamError?: string): Promise<number | "done"> {
+    const terminal =
+      streamError ??
+      emptyNoOutputError(
+        pending.newMessages,
+        pending.infraQueue.map((toolCall) => ({ toolCall })),
+        pending.anyToolCalls,
+      );
+    if (terminal) this.logError(terminal.startsWith("empty-no-output") ? "agent-empty" : "agent-stream", terminal);
+    this.commitPhaseMessages(session, pending);
+    if (session.errors.length > MAX_ERRORS) session.errors = session.errors.slice(-MAX_ERRORS);
+    this.trimFiles(session);
+    if (pending.phase === "main") pending.turnSaved = true;
+    await this.save();
+    await this.syncToD1();
+
+    if (pending.infraQueue.length === 0) return "done";
+    if (!this.deployEnv()) {
+      await this.emitter(pending)({ type: "error", data: "Server configuration error: deploy environment not available." });
+      return "done";
+    }
+    pending.phase = pending.phase === "main" ? "main-infra" : "followup-infra";
+    pending.infraResults = [];
+    return 0;
+  }
+
+  private deployEnv(): DeployEnv | null {
+    return this.env.GITHUB_TOKEN ? { GITHUB_TOKEN: this.env.GITHUB_TOKEN, PLATFORM: this.env.PLATFORM, DB: this.env.DB } : null;
+  }
+
+  /** Execute the next queued infra tool (one per alarm). */
+  private async runInfraStep(session: SessionState, pending: PendingTurn): Promise<number | "done"> {
+    const emit = this.emitter(pending);
+    const tc = pending.infraQueue[pending.infraResults.length];
+    const deployEnv = this.deployEnv();
+    if (tc && deployEnv) {
+      const files = new Map(Object.entries(session.files));
+      let toolResult: string;
+      try {
+        toolResult = await executeInfraTool(tc, {
+          appId: session.appId,
+          ownerLogin: session.ownerLogin,
+          authHeader: pending.authHeader,
+          files,
+          env: deployEnv,
+          config: this.config,
+          onDeployStatus: async (status) => {
+            session.deployStatus = status;
+            this.logDeploy(status.phase, deployStatusDetail(status));
+            await this.state.storage.put("session", session);
+            await emit({ type: "deploy_status", data: JSON.stringify(status) });
+            if (status.phase === "live" || status.phase === "error") {
+              await this.sendPush(status.phase === "live" ? "Your build is live!" : "Build failed");
+              await this.syncToD1();
+            }
+          },
+          onAppDeployed: async (id, name) => {
+            session.appId = id;
+            session.appName = name;
+            session.deployStatus = { phase: "provisioning", steps: [] };
+            this.logDeploy("provisioning", `Starting deploy for ${name} (${id})`);
+            await this.state.storage.put("session", session);
+          },
+        });
+      } catch (err) {
+        toolResult = `Tool ${tc.name} threw an error: ${String(err)}`;
+      }
+      session.files = Object.fromEntries(files);
+      await emit({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
+      pending.infraResults.push({ id: tc.id, content: toolResult.slice(0, 3000) });
+      if (pending.infraResults.length < pending.infraQueue.length) return 0;
+    }
+
+    // All infra tools done: one tool_result message matching the assistant's calls.
+    session.messages.push({ role: "tool_result", content: "", toolResults: pending.infraResults });
+    if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    await this.save();
+    await this.syncToD1();
+    if (pending.phase === "followup-infra") return "done";
+
+    // Follow-up: let the AI react to the infra results (retry on error, else summarise).
+    const hasError = pending.infraResults.some((r) => /error|fail|threw/i.test(r.content));
+    const followUpPrompt = hasError
+      ? "The tool action above returned an error. Analyze the error, fix the issue if possible, and retry the action. Do not ask the user — just fix it."
+      : "The action completed. Summarize the result briefly for the user.";
+    pending.phase = "followup";
+    pending.loopIndex = 0;
+    pending.retries = 0;
+    pending.anyToolCalls = false;
+    pending.infraQueue = [];
+    pending.infraResults = [];
+    pending.messagesCursor = session.messages.length;
+    pending.prepared = prepareTurn(pending.aiConfig, session.messages, followUpPrompt, this.config, this.sessionContext(session));
+    pending.newMessages = [{ role: "user", content: followUpPrompt }];
+    return 0;
+  }
+
+  private async completeTurn(pending: PendingTurn): Promise<void> {
+    await this.emitter(pending)({ type: "done", data: "" });
+    await this.flushEvents();
+    await this.state.storage.delete("pendingTurn");
+    this.chatInProgress = false;
+    await this.save();
+    await this.syncToD1();
+  }
+
+  /** End a turn with an error that is durable in session.errors and D1. */
+  private async failTurn(pending: PendingTurn, message: string, source: string, stalled: boolean): Promise<void> {
+    const apiKey = pending.aiConfig.apiKey;
+    const safe = apiKey && apiKey.length > 8 ? message.replaceAll(apiKey, "[REDACTED]") : message;
+    const session = await this.load();
+    this.logError(source, safe);
+    await this.emitter(pending)({ type: "error", data: safe });
+    // Legacy parity: a turn that failed before its first save gets the error
+    // appended to the saved user message. A stall always gets one, so the chat
+    // shows why the build stopped instead of just going quiet.
+    if (stalled || !pending.turnSaved) {
+      if (pending.phase === "main" && !pending.turnSaved) this.commitPhaseMessages(session, pending);
+      session.messages.push({ role: "assistant", content: `Error: ${safe}` });
+      if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    }
+    await this.flushEvents();
+    await this.state.storage.delete("pendingTurn");
+    this.chatInProgress = false;
+    await this.save();
+    await this.syncToD1();
+  }
+
   /** GET /status — current session state */
   private async handleStatus(request: Request): Promise<Response> {
     const session = await this.load();
+    const turnActive = this.chatInProgress || !!(await this.state.storage.get<PendingTurn>("pendingTurn"));
     return json(
       {
         messageCount: session.messages.length,
@@ -555,7 +1017,7 @@ export class AgentSession implements DurableObject {
         deployStatus: session.deployStatus,
         appId: session.appId,
         appUrl: session.deployStatus?.phase === "live" ? session.deployStatus.appUrl : null,
-        devStatus: this.computeDevStatus(session),
+        devStatus: this.computeDevStatus(session, turnActive),
       },
       200,
       request,
@@ -569,14 +1031,15 @@ export class AgentSession implements DurableObject {
    *   deploying — provisioning/building/pushing
    *   error     — last deploy failed (red)
    *   idle      — finished / never started / disconnected (blank)
-   * `working` reflects chatInProgress, which stays true while the turn runs
-   * server-side even after the client disconnects — so the list shows the
-   * agent is still building after you've switched apps.
+   * `working` reflects an active turn (in memory, or a persisted alarm-loop
+   * turn), which stays true while the turn runs server-side even after the
+   * client disconnects — so the list shows the agent is still building after
+   * you've switched apps.
    */
-  private computeDevStatus(session: SessionState): { state: string; detail: string } {
+  private computeDevStatus(session: SessionState, turnActive: boolean): { state: string; detail: string } {
     const phase = session.deployStatus?.phase;
     const deploying = !!phase && !["live", "error"].includes(phase);
-    if (this.chatInProgress) return { state: "working", detail: "Building…" };
+    if (turnActive) return { state: "working", detail: "Building…" };
     if (deploying) return { state: "deploying", detail: `Deploying — ${phase}` };
     if (phase === "error") {
       return { state: "error", detail: (session.deployStatus?.error || "Build failed").slice(0, 80) };
@@ -701,6 +1164,9 @@ export class AgentSession implements DurableObject {
 
   /** POST /reset — start over */
   private async handleReset(request: Request): Promise<Response> {
+    await this.state.storage.delete(["pendingTurn", "turnEvents"]);
+    await this.state.storage.deleteAlarm();
+    this.chatInProgress = false;
     this.session = this.freshSession({
       ownerId: this.session?.ownerId ?? null,
       tokenHash: this.session?.tokenHash ?? null,

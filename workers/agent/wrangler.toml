@@ -29,6 +29,10 @@ database_id = "a32701c0-5a56-4a12-810d-485166202e39"
 
 [vars]
 STORE = "apps"
+# "true" runs chat turns as a Durable Object alarm-driven state machine: one
+# step per alarm, persisted between steps, with stall detection (#41). Anything
+# else keeps the legacy single-invocation loop. Off until rolled out.
+ALARM_LOOP = "false"
 VAPID_PUBLIC_KEY = "BB9nIKmrVFJQJWZ4MiXzv3eN2UfGtuXESqVlQMobPiZiTmS8cQuldiXNreIV03dCo3Jkkflk6UDoAzWMvhNXCuw"
 
 # Cloudflare AI Gateway (opt-in). Account is shared with PAS. Routing only
