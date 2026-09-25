@@ -289,6 +289,11 @@ jobs:
       # its codes stop matching and this step goes red on purpose: move the host
       # to the healthy expectation (405 405 401), or delete its row, in the same
       # change as the fix.
+      #
+      # REDIRECT=<url> entries are hosts that hand MCP off to another origin.
+      # A 308 alone proves nothing about the target, so for these the step also
+      # checks that GET /mcp redirects to exactly <url> and that <url> answers
+      # an unauthenticated client with 401 (the OAuth challenge).
       - name: 7. MCP fleet rejects protocol clients
         if: ${{ !cancelled() }}
         run: |
@@ -303,7 +308,7 @@ jobs:
           mcp.proagentstore.online      405    405     401
           mcp.freedocstore.online       405    405     401
           mcp.freeagentstore.online     405    405     405       /mcp-answers-405
-          mcp.freewebstore.online       404    404     301       KNOWN-DEAD-#51:/mcp-redirects-to-/-which-404s
+          mcp.freewebstore.online       308    308     308       REDIRECT=https://agent.freewebstore.online/mcp
           mcp.progamestore.online       5xx    5xx     5xx       KNOWN-DEAD-#51:no-origin-(522)
           '
           matches() { # matches <actual> <expected>
@@ -321,13 +326,23 @@ jobs:
             post=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
               -H 'Content-Type: application/json' \
               --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' "$base/" 2>/dev/null)
-            mcp=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+            mcp_out=$(curl -sS -o /dev/null -w "%{http_code} %{redirect_url}" --max-time 10 \
               -H 'Accept: text/event-stream' "$base/mcp" 2>/dev/null)
+            mcp=${mcp_out%% *}
             echo "  $host: GET / → $get | POST / → $post | GET /mcp → $mcp${note:+  ($note)}"
             bad=""
             matches "$get" "$want_get"   || bad="$bad GET / → $get (want $want_get);"
             matches "$post" "$want_post" || bad="$bad POST / → $post (want $want_post);"
             matches "$mcp" "$want_mcp"   || bad="$bad GET /mcp → $mcp (want $want_mcp);"
+            if [[ "${note:-}" == REDIRECT=* ]]; then
+              target=${note#REDIRECT=}
+              location=${mcp_out#* }
+              [ "$location" = "$target" ] || bad="$bad GET /mcp redirects to '${location}' (want $target);"
+              tcode=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 10 \
+                -H 'Accept: text/event-stream' "$target" 2>/dev/null)
+              echo "    ↳ $target → $tcode"
+              [ "$tcode" = "401" ] || bad="$bad redirect target $target → $tcode (want 401);"
+            fi
             if [ -n "$bad" ]; then
               bad="${bad%;}"
               failures=$((failures + 1))
