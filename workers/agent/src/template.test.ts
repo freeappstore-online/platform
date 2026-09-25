@@ -23,8 +23,11 @@ describe("getTemplateFiles", () => {
     expect(appsFiles["web/src/index.css"]).toContain("--paper");
   });
 
-  it("games template uses --bg CSS variable", () => {
-    expect(gamesFiles["web/src/index.css"]).toContain("--bg");
+  it("games template uses --paper, never the banned --bg alias (#64)", () => {
+    expect(gamesFiles["web/src/index.css"]).toContain("--paper:");
+    const banned = /var\(--bg\)|--bg\s*:/;
+    expect(gamesFiles["web/src/index.css"]).not.toMatch(banned);
+    expect(gamesFiles["web/src/components/GameShell.tsx"]).not.toMatch(banned);
   });
 
   it("apps template has light/dark theme", () => {

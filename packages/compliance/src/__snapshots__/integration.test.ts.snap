@@ -26,7 +26,7 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     "status": "fail",
     "suggestions": [
       "Define --paper, --ink in your theme CSS (typically web/src/index.css).",
-      "Apps use --paper / --ink / --accent; games use --bg / --ink / --accent.",
+      "Apps and games both use --paper / --ink / --accent (--bg is a banned alias of --paper).",
     ],
   },
   {

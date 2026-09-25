@@ -140,11 +140,11 @@ describe('passing-game fixture', () => {
     expect(dark?.detail).toMatch(/skipped/);
   });
 
-  it('uses --bg / --ink / --accent for game brand tokens (not --paper)', async () => {
+  it('uses --paper / --ink / --accent for game brand tokens, same as apps (#64)', async () => {
     const results = await runChecks(PASSING_GAME);
     const tokens = results.find((r) => r.name === 'Brand tokens defined');
     expect(tokens?.status).toBe('pass');
-    expect(tokens?.detail).toMatch(/--bg/);
+    expect(tokens?.detail).toMatch(/--paper/);
   });
 });
 
