@@ -2,6 +2,10 @@
 
 import type { StoreConfig } from "./config";
 
+export type AppArchetype = "dashboard" | "tracker" | "calculator" | "generic";
+
+export const APP_ARCHETYPES: readonly AppArchetype[] = ["dashboard", "tracker", "calculator", "generic"];
+
 // ── Shared template files (identical for apps and games) ──
 
 const SHARED_FILES: Record<string, string> = {
@@ -266,6 +270,290 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`,
 };
 
+const DASHBOARD_FILES: Record<string, string> = {
+  "web/src/components/Dashboard.tsx": `const stats = [
+  { label: "Revenue", value: "$24.8k", delta: "+12%" },
+  { label: "Active users", value: "1,284", delta: "+8%" },
+  { label: "Conversion", value: "6.2%", delta: "+1.4%" },
+  { label: "Open tasks", value: "17", delta: "-3" },
+];
+
+export function Dashboard() {
+  return (
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold" style={{ fontFamily: "Fraunces, serif" }}>
+          Dashboard
+        </h2>
+        <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+          Track the signals that matter most.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => (
+          <article
+            key={stat.label}
+            className="rounded-2xl border p-4"
+            style={{ borderColor: "var(--line)", background: "var(--panel)" }}
+          >
+            <p className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+              {stat.label}
+            </p>
+            <div className="mt-3 flex items-end justify-between gap-3">
+              <strong className="text-2xl">{stat.value}</strong>
+              <span className="rounded-full px-2 py-1 text-xs font-semibold" style={{ color: "var(--success)", background: "var(--paper)" }}>
+                {stat.delta}
+              </span>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        <article className="min-h-72 rounded-2xl border p-5" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold">Trend overview</h3>
+            <span className="text-sm" style={{ color: "var(--muted)" }}>Last 30 days</span>
+          </div>
+          <div className="mt-8 flex h-44 items-end gap-3">
+            {[42, 68, 52, 76, 64, 86, 72, 94].map((height, index) => (
+              <div key={index} className="flex-1 rounded-t-xl" style={{ height: height + "%", background: "var(--accent)" }} />
+            ))}
+          </div>
+        </article>
+        <article className="rounded-2xl border p-5" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <h3 className="font-semibold">Next actions</h3>
+          <ul className="mt-4 space-y-3 text-sm">
+            {["Review weekly progress", "Prioritize stalled work", "Share update"].map((item) => (
+              <li key={item} className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--paper)" }}>
+                {item}
+              </li>
+            ))}
+          </ul>
+        </article>
+      </div>
+    </section>
+  );
+}
+`,
+};
+
+const TRACKER_FILES: Record<string, string> = {
+  "web/src/components/Tracker.tsx": `import { useMemo, useState } from "react";
+
+interface Item {
+  id: string;
+  title: string;
+  done: boolean;
+}
+
+const initialItems: Item[] = [
+  { id: "welcome", title: "Define the first thing to track", done: false },
+  { id: "sample", title: "Mark an item complete", done: true },
+];
+
+export function Tracker() {
+  const [items, setItems] = useState<Item[]>(initialItems);
+  const [draft, setDraft] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const remaining = useMemo(() => items.filter((item) => !item.done).length, [items]);
+  const editingItem = items.find((item) => item.id === editingId);
+
+  function saveItem() {
+    const title = draft.trim();
+    if (!title) return;
+    if (editingId) {
+      setItems((current) => current.map((item) => (item.id === editingId ? { ...item, title } : item)));
+      setEditingId(null);
+    } else {
+      setItems((current) => [{ id: crypto.randomUUID(), title, done: false }, ...current]);
+    }
+    setDraft("");
+  }
+
+  function startEdit(item: Item) {
+    setEditingId(item.id);
+    setDraft(item.title);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft("");
+  }
+
+  return (
+    <section className="space-y-5">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold" style={{ fontFamily: "Fraunces, serif" }}>
+            Tracker
+          </h2>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>
+            {remaining} open item{remaining === 1 ? "" : "s"}
+          </p>
+        </div>
+      </div>
+      <div className="rounded-2xl border p-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <label className="text-sm font-semibold" htmlFor="tracker-item">
+          {editingItem ? "Edit item" : "Add item"}
+        </label>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            id="tracker-item"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") saveItem();
+              if (event.key === "Escape") cancelEdit();
+            }}
+            placeholder="What needs tracking?"
+            className="min-h-11 flex-1 rounded-xl border px-3 outline-none"
+            style={{ borderColor: "var(--line)", background: "var(--paper)", color: "var(--ink)" }}
+          />
+          <button type="button" onClick={saveItem} className="min-h-11 rounded-xl px-4 font-semibold text-white" style={{ background: "var(--accent)" }}>
+            {editingItem ? "Save" : "Add"}
+          </button>
+          {editingItem && (
+            <button type="button" onClick={cancelEdit} className="min-h-11 rounded-xl border px-4 font-semibold" style={{ borderColor: "var(--line)" }}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+      <ul className="space-y-3">
+        {items.map((item) => (
+          <li key={item.id} className="rounded-2xl border p-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <label className="flex flex-1 items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={item.done}
+                  onChange={() => setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, done: !entry.done } : entry)))}
+                  className="size-5"
+                />
+                <span className={item.done ? "line-through" : ""} style={{ color: item.done ? "var(--muted)" : "var(--ink)" }}>
+                  {item.title}
+                </span>
+              </label>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => startEdit(item)} className="rounded-xl border px-3 py-2 text-sm font-semibold" style={{ borderColor: "var(--line)" }}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setItems((current) => current.filter((entry) => entry.id !== item.id))}
+                  className="rounded-xl border px-3 py-2 text-sm font-semibold"
+                  style={{ borderColor: "var(--line)", color: "var(--danger)" }}
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+`,
+};
+
+const CALCULATOR_FILES: Record<string, string> = {
+  "web/src/components/Calculator.tsx": `import { useMemo, useState } from "react";
+
+const buttons = ["7", "8", "9", "/", "4", "5", "6", "*", "1", "2", "3", "-", "0", ".", "=", "+"];
+
+function evaluateExpression(expression: string): string {
+  if (!/^[0-9+\\-*/. ()]+$/.test(expression)) return "Error";
+  try {
+    const value = Function('"use strict"; return (' + expression + ')')();
+    return Number.isFinite(value) ? String(Number(value.toFixed(8))) : "Error";
+  } catch {
+    return "Error";
+  }
+}
+
+export function Calculator() {
+  const [display, setDisplay] = useState("0");
+  const isError = display === "Error";
+  const preview = useMemo(() => {
+    if (isError || display === "0" || /[+\\-*/.]$/.test(display)) return "";
+    const result = evaluateExpression(display);
+    return result !== "Error" && result !== display ? result : "";
+  }, [display, isError]);
+
+  function press(key: string) {
+    if (key === "=") {
+      setDisplay((current) => evaluateExpression(current));
+      return;
+    }
+    setDisplay((current) => (current === "0" || current === "Error" ? key : current + key));
+  }
+
+  return (
+    <section className="mx-auto max-w-sm space-y-4">
+      <div>
+        <h2 className="text-2xl font-bold" style={{ fontFamily: "Fraunces, serif" }}>
+          Calculator
+        </h2>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          A compact expression calculator.
+        </p>
+      </div>
+      <div className="rounded-2xl border p-4 shadow-sm" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <div className="min-h-28 rounded-2xl border p-4 text-right" style={{ borderColor: "var(--line)", background: "var(--paper)" }}>
+          <div className="break-all text-3xl font-bold">{display}</div>
+          <div className="mt-2 min-h-5 text-sm" style={{ color: "var(--muted)" }}>
+            {preview}
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-4 gap-2">
+          <button
+            type="button"
+            onClick={() => setDisplay("0")}
+            className="col-span-2 min-h-12 rounded-xl border font-semibold"
+            style={{ borderColor: "var(--line)" }}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={() => setDisplay((current) => (current.length > 1 && current !== "Error" ? current.slice(0, -1) : "0"))}
+            className="col-span-2 min-h-12 rounded-xl border font-semibold"
+            style={{ borderColor: "var(--line)" }}
+          >
+            Back
+          </button>
+          {buttons.map((button) => (
+            <button
+              key={button}
+              type="button"
+              onClick={() => press(button)}
+              className="min-h-12 rounded-xl border text-lg font-semibold"
+              style={{
+                borderColor: "var(--line)",
+                background: button === "=" ? "var(--accent)" : "var(--paper)",
+                color: button === "=" ? "#fff" : "var(--ink)",
+              }}
+            >
+              {button}
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+`,
+};
+
+const APP_ARCHETYPE_FILES: Record<AppArchetype, Record<string, string>> = {
+  dashboard: DASHBOARD_FILES,
+  tracker: TRACKER_FILES,
+  calculator: CALCULATOR_FILES,
+  generic: {},
+};
+
 // ── Games-specific template files ──
 
 const GAME_FILES: Record<string, string> = {
@@ -458,10 +746,16 @@ jobs:
 
 // ── Public API ──
 
-export function getTemplateFiles(config: StoreConfig): Record<string, string> {
+export function getArchetypeFiles(archetype: AppArchetype): Record<string, string> {
+  return APP_ARCHETYPE_FILES[archetype];
+}
+
+export function getTemplateFiles(config: StoreConfig, archetype?: AppArchetype): Record<string, string> {
+  const appArchetypeFiles = config.store === "games" ? {} : getArchetypeFiles(archetype ?? "generic");
   return {
     ...SHARED_FILES,
     ...(config.store === "games" ? GAME_FILES : APP_FILES),
+    ...appArchetypeFiles,
     ".github/workflows/deploy.yml": deployWorkflow(config),
   };
 }

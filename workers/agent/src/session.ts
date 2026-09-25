@@ -20,7 +20,7 @@ import type { Env } from "./index";
 import { executeInfraTool } from "./infra-exec";
 import type { AIConfig, Message, TokenUsage, ToolCall } from "./providers/types";
 import { type PushSubscription, sendWebPush } from "./push";
-import { getTemplateFiles } from "./template";
+import { APP_ARCHETYPES, type AppArchetype, getTemplateFiles } from "./template";
 
 interface ErrorEntry {
   timestamp: string;
@@ -52,6 +52,7 @@ interface SessionState {
   tokenHash: string | null;
   tokenValidatedAt: number | null;
   sessionId: string | null;
+  archetype?: AppArchetype;
 }
 
 const TOKEN_REVALIDATE_MS = 30 * 60 * 1000; // Re-verify token every 30 min
@@ -116,6 +117,10 @@ type TurnEvent = { type: string; data: string };
 
 class StallError extends Error {}
 
+function parseAppArchetype(value: unknown): AppArchetype | undefined {
+  return typeof value === "string" && APP_ARCHETYPES.includes(value as AppArchetype) ? (value as AppArchetype) : undefined;
+}
+
 function turnEventsKey(turnId: string): string {
   return `turnEvents:${turnId}`;
 }
@@ -164,9 +169,10 @@ export class AgentSession implements DurableObject {
   }
 
   private freshSession(overrides?: Partial<SessionState>): SessionState {
+    const archetype = overrides?.archetype;
     return {
       messages: [],
-      files: { ...getTemplateFiles(this.config) },
+      files: { ...getTemplateFiles(this.config, archetype) },
       tokenUsage: { input: 0, output: 0 },
       deployStatus: null,
       deployLog: [],
@@ -178,8 +184,17 @@ export class AgentSession implements DurableObject {
       tokenHash: null,
       tokenValidatedAt: null,
       sessionId: null,
+      archetype,
       ...overrides,
     };
+  }
+
+  private applyArchetypeToEmptySession(session: SessionState, archetype: AppArchetype | undefined): boolean {
+    if (!archetype || this.config.store === "games") return false;
+    if (session.archetype || session.messages.length > 0 || session.appId) return false;
+    session.archetype = archetype;
+    session.files = { ...getTemplateFiles(this.config, archetype) };
+    return true;
   }
 
   private async load(): Promise<SessionState> {
@@ -199,6 +214,7 @@ export class AgentSession implements DurableObject {
     if (this.session.tokenHash === undefined) this.session.tokenHash = null;
     if (this.session.tokenValidatedAt === undefined) this.session.tokenValidatedAt = null;
     if (this.session.sessionId === undefined) this.session.sessionId = null;
+    this.session.archetype = parseAppArchetype(this.session.archetype);
     return this.session;
   }
 
@@ -277,11 +293,15 @@ export class AgentSession implements DurableObject {
     // Capture session ID from the worker entry (needed for D1 writes)
     const headerSessionId = request.headers.get("X-Session-Id");
     if (headerSessionId) {
+      const requestedArchetype = parseAppArchetype(request.headers.get("X-App-Archetype") ?? url.searchParams.get("archetype"));
       const session = await this.load();
+      let changed = false;
       if (!session.sessionId) {
         session.sessionId = headerSessionId;
-        await this.save();
+        changed = true;
       }
+      changed = this.applyArchetypeToEmptySession(session, requestedArchetype) || changed;
+      if (changed) await this.save();
     }
 
     try {
@@ -359,6 +379,7 @@ export class AgentSession implements DurableObject {
     const body = await request.json<{
       message: string;
       aiConfig: AIConfig;
+      archetype?: AppArchetype;
     }>();
 
     if (!body.message || !body.aiConfig?.provider || !body.aiConfig?.model) {
@@ -382,6 +403,11 @@ export class AgentSession implements DurableObject {
     // Truncate message to prevent storage abuse
     if (body.message.length > 50_000) {
       body.message = body.message.slice(0, 50_000);
+    }
+    const requestedArchetype = parseAppArchetype(body.archetype);
+    if (requestedArchetype) {
+      const session = await this.load();
+      if (this.applyArchetypeToEmptySession(session, requestedArchetype)) await this.save();
     }
 
     // All validation passed — lock the session for this chat turn
@@ -1084,6 +1110,7 @@ export class AgentSession implements DurableObject {
         tokenUsage: session.tokenUsage,
         deployStatus: session.deployStatus,
         appId: session.appId,
+        archetype: session.archetype ?? "generic",
         appUrl: session.deployStatus?.phase === "live" ? session.deployStatus.appUrl : null,
         devStatus: this.computeDevStatus(session, turnActive),
       },
@@ -1192,6 +1219,7 @@ export class AgentSession implements DurableObject {
         deployLog: session.deployLog,
         errors: session.errors,
         tokenUsage: session.tokenUsage,
+        archetype: session.archetype ?? "generic",
         fileCount: Object.keys(session.files).length,
       },
       200,
@@ -1245,6 +1273,7 @@ export class AgentSession implements DurableObject {
       ownerId: this.session?.ownerId ?? null,
       tokenHash: this.session?.tokenHash ?? null,
       tokenValidatedAt: this.session?.tokenValidatedAt ?? null,
+      archetype: this.session?.archetype,
     });
     await this.save();
     return json({ ok: true }, 200, request, this.config.domain);

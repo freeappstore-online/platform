@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getConfig } from "./config";
-import { getSystemPrompt, getTemplateFiles } from "./template";
+import { getArchetypeFiles, getSystemPrompt, getTemplateFiles } from "./template";
 
 const appsConfig = getConfig("apps");
 const gamesConfig = getConfig("games");
@@ -89,6 +89,53 @@ describe("getTemplateFiles", () => {
   it("both templates have a reasonable number of files", () => {
     expect(Object.keys(appsFiles).length).toBeGreaterThanOrEqual(15);
     expect(Object.keys(gamesFiles).length).toBeGreaterThanOrEqual(15);
+  });
+
+  it("apps template includes dashboard archetype files", () => {
+    const files = getTemplateFiles(appsConfig, "dashboard");
+    expect(files).toHaveProperty("web/src/components/Dashboard.tsx");
+  });
+
+  it("apps template includes tracker archetype files", () => {
+    const files = getTemplateFiles(appsConfig, "tracker");
+    expect(files).toHaveProperty("web/src/components/Tracker.tsx");
+  });
+
+  it("apps template includes calculator archetype files", () => {
+    const files = getTemplateFiles(appsConfig, "calculator");
+    expect(files).toHaveProperty("web/src/components/Calculator.tsx");
+  });
+
+  it("apps template works unchanged without an archetype", () => {
+    const files = getTemplateFiles(appsConfig);
+    expect(files).toEqual(appsFiles);
+    expect(files).not.toHaveProperty("web/src/components/Dashboard.tsx");
+    expect(files).not.toHaveProperty("web/src/components/Tracker.tsx");
+    expect(files).not.toHaveProperty("web/src/components/Calculator.tsx");
+  });
+});
+
+describe("getArchetypeFiles", () => {
+  it("dashboard returns Dashboard component files", () => {
+    const files = getArchetypeFiles("dashboard");
+    expect(Object.keys(files).length).toBeGreaterThan(0);
+    expect(Object.keys(files).some((path) => path.includes("Dashboard"))).toBe(true);
+  });
+
+  it("tracker returns Tracker component files", () => {
+    const files = getArchetypeFiles("tracker");
+    expect(Object.keys(files).length).toBeGreaterThan(0);
+    expect(Object.keys(files).some((path) => path.includes("Tracker"))).toBe(true);
+  });
+
+  it("calculator returns Calculator component files", () => {
+    const files = getArchetypeFiles("calculator");
+    expect(Object.keys(files).length).toBeGreaterThan(0);
+    expect(Object.keys(files).some((path) => path.includes("Calculator"))).toBe(true);
+  });
+
+  it("generic returns no extra files", () => {
+    expect(getArchetypeFiles("generic")).toEqual({});
   });
 });
 
