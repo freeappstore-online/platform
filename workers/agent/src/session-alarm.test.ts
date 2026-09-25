@@ -92,6 +92,28 @@ async function pendingOf(store: Map<string, unknown>) {
   return store.get("pendingTurn") as PendingTurn | undefined;
 }
 
+function latestTurnLog(store: Map<string, unknown>) {
+  const turnId = store.get("latestTurnId") as string | undefined;
+  return turnId ? (store.get(`turnEvents:${turnId}`) as any) : undefined;
+}
+
+function parseSSE(body: string) {
+  return body
+    .trim()
+    .split(/\n\n/)
+    .filter(Boolean)
+    .map((block) => {
+      let id: string | undefined;
+      let data = "";
+      for (const rawLine of block.split("\n")) {
+        const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+        if (line.startsWith("id:")) id = line.slice(3).trim();
+        if (line.startsWith("data:")) data = line.slice(5).trim();
+      }
+      return { id, data: JSON.parse(data) };
+    });
+}
+
 /** Run alarms until the turn ends (or a safety cap). Returns alarms fired. */
 async function drain(session: AgentSession, store: Map<string, unknown>, cap = 50) {
   let n = 0;
@@ -136,7 +158,8 @@ describe("ALARM_LOOP=true: /chat", () => {
     await first.body?.cancel();
     // New instance = evicted DO: the in-memory flag is gone, storage is not.
     const second = await new AgentSession(state, env).fetch(chatRequest("again"));
-    expect(second.status).toBe(429);
+    expect(second.status).toBe(409);
+    expect(second.headers.get("Last-Event-ID")).toBe("0");
   });
 });
 
@@ -173,7 +196,7 @@ describe("ALARM_LOOP=true: alarm()", () => {
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "tool_result", "assistant"]);
     expect(msgs.at(-1)!.content).toBe("Done — your timer is ready.");
     expect(d1Writes.at(-1)!.messages).toHaveLength(4);
-    const events = (store.get("turnEvents") as any).events;
+    const events = latestTurnLog(store).events;
     expect(events.at(-1).type).toBe("done");
   });
 
@@ -306,9 +329,73 @@ describe("ALARM_LOOP=true: alarm()", () => {
     expect(msgs[2]!.toolResults).toEqual([{ id: "d1", content: "Deployed timer" }]);
     expect(msgs[3]!.content).toMatch(/Summarize the result/);
     expect((store.get("session") as any).appId).toBe("timer");
-    const types = (store.get("turnEvents") as any).events.map((e: any) => e.type);
+    const types = latestTurnLog(store).events.map((e: any) => e.type);
     expect(types).toContain("deploy_status");
     expect(types.at(-1)).toBe("done");
+  });
+
+  it("assigns sequential SSE event ids", async () => {
+    const { state, store } = fakeState();
+    const session = new AgentSession(state, fakeEnv().env);
+    const res = await session.fetch(chatRequest());
+
+    scriptSteps(async (_files, emit) => {
+      await emit({ type: "text", data: "first" });
+      await emit({ type: "text", data: "second" });
+      return { kind: "final", appended: [assistant("firstsecond")] };
+    });
+    await drain(session, store);
+
+    const events = parseSSE(await res.text());
+    expect(events.map((e) => e.id)).toEqual(["1", "2", "3"]);
+    expect(events.map((e) => e.data.type)).toEqual(["text", "text", "done"]);
+    expect(latestTurnLog(store).events.map((e: any) => e.seq)).toEqual([1, 2, 3]);
+  });
+
+  it("reconnects with Last-Event-ID and replays only missed events", async () => {
+    const { state, store } = fakeState();
+    const session = new AgentSession(state, fakeEnv().env);
+    const res = await session.fetch(chatRequest());
+    await res.body?.cancel();
+
+    scriptSteps(async (_files, emit) => {
+      await emit({ type: "text", data: "one" });
+      await emit({ type: "text", data: "two" });
+      return { kind: "final", appended: [assistant("onetwo")] };
+    });
+    await drain(session, store);
+
+    const live = await session.fetch(
+      new Request("https://agent/live", {
+        headers: { Authorization: "Bearer tok", "Last-Event-ID": "1" },
+      }),
+    );
+
+    const events = parseSSE(await live.text());
+    expect(live.status).toBe(200);
+    expect(events.map((e) => e.id)).toEqual(["2", "3"]);
+    expect(events.map((e) => e.data.type)).toEqual(["text", "done"]);
+    expect(events[0]!.data.data).toBe("two");
+  });
+
+  it("reconnects after completion and replays the full completed turn", async () => {
+    const { state, store } = fakeState();
+    const session = new AgentSession(state, fakeEnv().env);
+    const res = await session.fetch(chatRequest());
+    await res.body?.cancel();
+
+    scriptSteps(async (_files, emit) => {
+      await emit({ type: "text", data: "complete" });
+      return { kind: "final", appended: [assistant("complete")] };
+    });
+    await drain(session, store);
+
+    const live = await session.fetch(new Request("https://agent/live", { headers: { Authorization: "Bearer tok" } }));
+    const events = parseSSE(await live.text());
+    expect(live.status).toBe(200);
+    expect(events.map((e) => e.id)).toEqual(["1", "2"]);
+    expect(events.map((e) => e.data.type)).toEqual(["text", "done"]);
+    expect(events[0]!.data.data).toBe("complete");
   });
 
   it("relays persisted events to a connected client, scrubbing the API key", async () => {
@@ -324,9 +411,11 @@ describe("ALARM_LOOP=true: alarm()", () => {
 
     const body = await res.text();
     expect(body).toContain('"type":"text"');
+    expect(body).toContain("id: 1");
     expect(body).toContain("[REDACTED]");
     expect(body).not.toContain(API_KEY);
-    expect(body.trim().endsWith('data: {"type":"done","data":""}')).toBe(true);
+    const events = parseSSE(body);
+    expect(events.at(-1)).toMatchObject({ id: "2", data: { type: "done", data: "" } });
   });
 
   it("reset cancels a persisted turn and its alarm", async () => {
@@ -371,7 +460,8 @@ describe("ALARM_LOOP off: legacy path", () => {
     );
     const first = await session.fetch(chatRequest());
     const second = await session.fetch(chatRequest("again"));
-    expect(second.status).toBe(429);
+    expect(second.status).toBe(409);
+    expect(second.headers.get("Last-Event-ID")).toBe("0");
     release();
     await first.text();
   });

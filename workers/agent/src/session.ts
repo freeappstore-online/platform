@@ -73,7 +73,8 @@ export const INFRA_STALL_THRESHOLD_MS = 600_000;
 /** How long a /chat stream keeps relaying events before handing off to polling. */
 const RELAY_MAX_MS = 15 * 60 * 1000;
 const RELAY_POLL_MS = 300;
-const MAX_TURN_EVENTS = 1000;
+const MAX_TURN_EVENTS = 200;
+const LATEST_TURN_ID_KEY = "latestTurnId";
 
 type TurnPhase = "main" | "main-infra" | "followup" | "followup-infra";
 
@@ -114,6 +115,10 @@ interface TurnEventLog {
 type TurnEvent = { type: string; data: string };
 
 class StallError extends Error {}
+
+function turnEventsKey(turnId: string): string {
+  return `turnEvents:${turnId}`;
+}
 
 function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -288,6 +293,9 @@ export class AgentSession implements DurableObject {
       if (path === "/chat" && request.method === "POST") {
         return this.handleChat(request);
       }
+      if (path === "/live" && request.method === "GET") {
+        return this.handleLive(request);
+      }
       if (path === "/status" && request.method === "GET") {
         return this.handleStatus(request);
       }
@@ -333,8 +341,14 @@ export class AgentSession implements DurableObject {
 
   /** POST /chat — stream an agent turn via SSE */
   private async handleChat(request: Request): Promise<Response> {
-    if (this.chatInProgress || (await this.activePendingTurn())) {
-      return json({ error: "A chat request is already in progress. Wait for it to finish." }, 429, request, this.config.domain);
+    const active = await this.activePendingTurn();
+    if (this.chatInProgress || active) {
+      return this.jsonWithLastEventId(
+        { error: "A chat request is already in progress. Reconnect to the live stream to resume it." },
+        409,
+        request,
+        active?.turnId,
+      );
     }
     // Validate BEFORE setting chatInProgress (early returns must not lock the session)
     const contentLength = parseInt(request.headers.get("Content-Length") || "0", 10);
@@ -676,28 +690,88 @@ export class AgentSession implements DurableObject {
       heartbeat: now,
       startedAt: now,
     };
+    const previousTurnId = await this.state.storage.get<string>(LATEST_TURN_ID_KEY);
+    if (previousTurnId && previousTurnId !== pending.turnId) await this.state.storage.delete(turnEventsKey(previousTurnId));
     await this.state.storage.put("pendingTurn", pending);
-    await this.state.storage.put("turnEvents", { turnId: pending.turnId, nextSeq: 1, events: [] } satisfies TurnEventLog);
+    await this.state.storage.put(LATEST_TURN_ID_KEY, pending.turnId);
+    await this.state.storage.put(turnEventsKey(pending.turnId), { turnId: pending.turnId, nextSeq: 1, events: [] } satisfies TurnEventLog);
+    await this.state.storage.delete("turnEvents"); // pre-#43 compatibility key; do not replay stale turns.
     await this.state.storage.setAlarm(now);
 
     const { readable, writable } = new TransformStream<Uint8Array>();
     // Not awaited: the relay lives as long as the client reads. If the client
     // goes away the write fails and the relay stops; the alarm carries on.
-    void this.relayTurnEvents(pending.turnId, writable.getWriter());
+    void this.relayTurnEvents(pending.turnId, writable.getWriter(), this.parseLastEventId(request));
     return new Response(readable, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         Connection: "keep-alive",
+        "Last-Event-ID": "0",
+        ...corsHeaders(request, this.config.domain),
+      },
+    });
+  }
+
+  /** GET /live — reconnect to the current or most recent turn event log. */
+  private async handleLive(request: Request): Promise<Response> {
+    const latestTurnId = await this.state.storage.get<string>(LATEST_TURN_ID_KEY);
+    const log = latestTurnId ? await this.loadTurnLog(latestTurnId) : await this.loadTurnLog();
+    if (!log) {
+      return json({ error: "No live turn is available." }, 404, request, this.config.domain);
+    }
+
+    const { readable, writable } = new TransformStream<Uint8Array>();
+    void this.relayTurnEvents(log.turnId, writable.getWriter(), this.parseLastEventId(request));
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+        "Last-Event-ID": String(Math.max(0, log.nextSeq - 1)),
+        ...corsHeaders(request, this.config.domain),
+      },
+    });
+  }
+
+  private parseLastEventId(request: Request): number {
+    const raw = request.headers.get("Last-Event-ID");
+    if (!raw) return 0;
+    const n = Number.parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }
+
+  private async loadTurnLog(turnId?: string): Promise<TurnEventLog | undefined> {
+    if (turnId) return this.state.storage.get<TurnEventLog>(turnEventsKey(turnId));
+    const latestTurnId = await this.state.storage.get<string>(LATEST_TURN_ID_KEY);
+    if (latestTurnId) return this.state.storage.get<TurnEventLog>(turnEventsKey(latestTurnId));
+    return this.state.storage.get<TurnEventLog>("turnEvents");
+  }
+
+  private async putTurnLog(log: TurnEventLog): Promise<void> {
+    await this.state.storage.put(turnEventsKey(log.turnId), log);
+  }
+
+  private async currentEventSeq(turnId?: string): Promise<number> {
+    const log = await this.loadTurnLog(turnId);
+    return log ? Math.max(0, log.nextSeq - 1) : 0;
+  }
+
+  private async jsonWithLastEventId(data: unknown, status: number, request: Request, turnId?: string): Promise<Response> {
+    return new Response(JSON.stringify(data), {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Last-Event-ID": String(await this.currentEventSeq(turnId)),
         ...corsHeaders(request, this.config.domain),
       },
     });
   }
 
   /** Stream a turn's persisted events to one SSE client until the turn ends. */
-  private async relayTurnEvents(turnId: string, writer: WritableStreamDefaultWriter<Uint8Array>): Promise<void> {
+  private async relayTurnEvents(turnId: string, writer: WritableStreamDefaultWriter<Uint8Array>, afterSeq = 0): Promise<void> {
     const encoder = new TextEncoder();
-    let seen = 0;
+    let seen = afterSeq;
     const deadline = Date.now() + RELAY_MAX_MS;
     // A cancelled stream rejects `closed` even when nothing is being written.
     let gone = false;
@@ -708,11 +782,11 @@ export class AgentSession implements DurableObject {
       for (;;) {
         if (gone) break;
         const pending = await this.state.storage.get<PendingTurn>("pendingTurn");
-        const log = await this.state.storage.get<TurnEventLog>("turnEvents");
+        const log = await this.loadTurnLog(turnId);
         if (log?.turnId === turnId) {
           for (const e of log.events) {
             if (e.seq <= seen) continue;
-            await writer.write(encoder.encode(`data: ${JSON.stringify({ type: e.type, data: e.data })}\n\n`));
+            await writer.write(encoder.encode(`id: ${e.seq}\ndata: ${JSON.stringify({ type: e.type, data: e.data })}\n\n`));
             seen = e.seq;
           }
         }
@@ -746,20 +820,14 @@ export class AgentSession implements DurableObject {
     if (!buf || buf.events.length === 0) return;
     const pending = buf.events.splice(0);
     buf.lastFlush = Date.now();
-    const stored = await this.state.storage.get<TurnEventLog>("turnEvents");
+    const stored = await this.loadTurnLog(buf.turnId);
     const log: TurnEventLog = stored?.turnId === buf.turnId ? stored : { turnId: buf.turnId, nextSeq: 1, events: [] };
     for (const e of pending) {
-      // Coalesce streamed text deltas so a long answer is a handful of entries.
-      const last = log.events[log.events.length - 1];
-      if (e.type === "text" && last?.type === "text") {
-        last.data += e.data;
-        last.seq = log.nextSeq++;
-      } else {
-        log.events.push({ seq: log.nextSeq++, type: e.type, data: e.data });
-      }
+      log.events.push({ seq: log.nextSeq++, type: e.type, data: e.data });
     }
     if (log.events.length > MAX_TURN_EVENTS) log.events = log.events.slice(-MAX_TURN_EVENTS);
-    await this.state.storage.put("turnEvents", log);
+    await this.state.storage.put(LATEST_TURN_ID_KEY, log.turnId);
+    await this.putTurnLog(log);
   }
 
   /** Write the current LLM phase's messages into session.messages. */
@@ -1164,7 +1232,13 @@ export class AgentSession implements DurableObject {
 
   /** POST /reset — start over */
   private async handleReset(request: Request): Promise<Response> {
-    await this.state.storage.delete(["pendingTurn", "turnEvents"]);
+    const latestTurnId = await this.state.storage.get<string>(LATEST_TURN_ID_KEY);
+    await this.state.storage.delete([
+      "pendingTurn",
+      "turnEvents",
+      LATEST_TURN_ID_KEY,
+      ...(latestTurnId ? [turnEventsKey(latestTurnId)] : []),
+    ]);
     await this.state.storage.deleteAlarm();
     this.chatInProgress = false;
     this.session = this.freshSession({

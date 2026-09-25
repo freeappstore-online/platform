@@ -28,6 +28,11 @@ export interface AIConfig {
   maxTokens: number;
 }
 
+interface AgentStreamEvent {
+  type: string;
+  data: string;
+}
+
 function agentAuthHeaders(): Record<string, string> {
   const s = getSession();
   return s?.token ? { Authorization: `Bearer ${s.token}` } : {};
@@ -231,7 +236,7 @@ export function useAgent() {
     setIsStreaming(true);
     setMessages((prev) => [...prev, { role: "user", content: message }, { role: "assistant", content: "" }]);
     let assistantText = "";
-    let retryCount = 0;
+    let lastEventId: string | null = null;
 
     // Update the LAST assistant message in the array
     const updateAssistant = (content: string) => {
@@ -247,6 +252,94 @@ export function useAgent() {
       });
     };
 
+    const handleStreamEvent = (evt: AgentStreamEvent) => {
+      switch (evt.type) {
+        case "text":
+          assistantText += evt.data;
+          updateAssistant(assistantText);
+          break;
+        case "tool_call": {
+          const tc = JSON.parse(evt.data);
+          setMessages((prev) => [...prev, { role: "tool", content: toolLabel(tc) }]);
+          break;
+        }
+        case "tool_result": {
+          const tr = JSON.parse(evt.data);
+          if (tr.tool === "deploy") setDeployState({ phase: "provisioning", steps: [] });
+          break;
+        }
+        case "usage": {
+          const u = JSON.parse(evt.data);
+          if (u.input) setTokensIn((p) => p + u.input);
+          if (u.output) setTokensOut((p) => p + u.output);
+          break;
+        }
+        case "deploy_status": {
+          const ds = JSON.parse(evt.data);
+          setDeployState(ds);
+          if (ds.phase === "live" && ds.appUrl && sessionId) {
+            const host = ds.appUrl.replace("https://", "").split("/")[0].split(".")[0];
+            projectsMgr.markDeployed(sessionId, host, ds.appUrl);
+            if (document.hidden && Notification.permission === "granted") {
+              new Notification("Build complete!", { body: ds.appUrl, icon: "/icons/icon-192.png" });
+            }
+          }
+          if (ds.phase === "error" && document.hidden && Notification.permission === "granted") {
+            new Notification("Build failed", { body: ds.error?.slice(0, 100) || "Check VibeCode for details", icon: "/icons/icon-192.png" });
+          }
+          break;
+        }
+        case "error":
+          assistantText += `\nError: ${evt.data}`;
+          updateAssistant(assistantText);
+          break;
+      }
+    };
+
+    const readAgentStream = async (res: Response) => {
+      if (!res.body) throw new Error("Empty response body");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      const processBlock = (block: string) => {
+        let id: string | null = null;
+        const data: string[] = [];
+        for (const rawLine of block.split("\n")) {
+          const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+          if (line.startsWith("id:")) id = line.slice(3).trim();
+          else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+        }
+        if (data.length === 0) return;
+        let evt: AgentStreamEvent;
+        try {
+          evt = JSON.parse(data.join("\n"));
+        } catch {
+          return;
+        }
+        if (id) lastEventId = id;
+        handleStreamEvent(evt);
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const blocks = buf.split(/\n\n/);
+        buf = blocks.pop() || "";
+        for (const block of blocks) processBlock(block);
+      }
+      if (buf.trim()) processBlock(buf);
+    };
+
+    const reconnectLive = async () => {
+      const headers: Record<string, string> = { ...agentAuthHeaders() };
+      if (lastEventId) headers["Last-Event-ID"] = lastEventId;
+      const res = await fetch(`${AGENT_URL}/session/${sessionId}/live`, { method: "GET", headers });
+      if (!res.ok) throw new Error(`Live reconnect failed (${res.status})`);
+      await readAgentStream(res);
+    };
+
     try {
       const res = await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
         method: "POST",
@@ -254,6 +347,10 @@ export function useAgent() {
         body: JSON.stringify({ message, aiConfig }),
       });
       if (!res.ok) {
+        if (res.status === 409) {
+          await reconnectLive();
+          return;
+        }
         // The endpoint returns JSON ({error|hint}) on validation failures —
         // show the clean message, not the raw envelope. Matches what the
         // server records via recordErrorTurn so reload looks identical.
@@ -264,65 +361,7 @@ export function useAgent() {
         return;
       }
 
-      const reader = res.body!.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          let evt;
-          try { evt = JSON.parse(line.slice(6).trim()); } catch { continue; }
-
-          switch (evt.type) {
-            case "text":
-              assistantText += evt.data;
-              updateAssistant(assistantText);
-              break;
-            case "tool_call": {
-              const tc = JSON.parse(evt.data);
-              setMessages((prev) => [...prev, { role: "tool", content: toolLabel(tc) }]);
-              break;
-            }
-            case "tool_result": {
-              const tr = JSON.parse(evt.data);
-              if (tr.tool === "deploy") setDeployState({ phase: "provisioning", steps: [] });
-              break;
-            }
-            case "usage": {
-              const u = JSON.parse(evt.data);
-              if (u.input) setTokensIn((p) => p + u.input);
-              if (u.output) setTokensOut((p) => p + u.output);
-              break;
-            }
-            case "deploy_status": {
-              const ds = JSON.parse(evt.data);
-              setDeployState(ds);
-              if (ds.phase === "live" && ds.appUrl && sessionId) {
-                const host = ds.appUrl.replace("https://", "").split("/")[0].split(".")[0];
-                projectsMgr.markDeployed(sessionId, host, ds.appUrl);
-                if (document.hidden && Notification.permission === "granted") {
-                  new Notification("Build complete!", { body: ds.appUrl, icon: "/icons/icon-192.png" });
-                }
-              }
-              if (ds.phase === "error" && document.hidden && Notification.permission === "granted") {
-                new Notification("Build failed", { body: ds.error?.slice(0, 100) || "Check VibeCode for details", icon: "/icons/icon-192.png" });
-              }
-              break;
-            }
-            case "error":
-              assistantText += `\nError: ${evt.data}`;
-              updateAssistant(assistantText);
-              break;
-          }
-        }
-      }
+      await readAgentStream(res);
       if (!assistantText) updateAssistant("(No response)");
       // Notify when AI response completes while tab is backgrounded
       if (assistantText && document.hidden && Notification.permission === "granted") {
@@ -331,60 +370,23 @@ export function useAgent() {
     } catch (err) {
       const errMsg = (err as Error).message || String(err);
       const isTransient = errMsg.includes("reset") || errMsg.includes("network") || errMsg.includes("Failed to fetch") || errMsg.includes("aborted") || errMsg.includes("ECONNRESET");
-      if (isTransient && retryCount < 2) {
-        retryCount++;
-        const delay = retryCount * 3000;
-        updateAssistant(`${assistantText}\n\n_Connection lost — retrying in ${delay / 1000}s (attempt ${retryCount}/2)..._`);
-        await new Promise(r => setTimeout(r, delay));
-        // Retry the same message
+      if (isTransient) {
+        updateAssistant(`${assistantText}\n\n_Connection lost — reconnecting..._`);
+        await new Promise(r => setTimeout(r, 1000));
         try {
-          const retryRes = await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...agentAuthHeaders() },
-            body: JSON.stringify({ message: retryCount === 1 ? message : "continue where you left off", aiConfig }),
-          });
-          if (retryRes.ok) {
-            const retryReader = retryRes.body!.getReader();
-            const retryDecoder = new TextDecoder();
-            let retryBuf = "";
-            while (true) {
-              const { done, value } = await retryReader.read();
-              if (done) break;
-              retryBuf += retryDecoder.decode(value, { stream: true });
-              const retryLines = retryBuf.split("\n");
-              retryBuf = retryLines.pop() || "";
-              for (const line of retryLines) {
-                if (!line.startsWith("data: ")) continue;
-                let evt;
-                try { evt = JSON.parse(line.slice(6).trim()); } catch { continue; }
-                if (evt.type === "text") { assistantText += evt.data; updateAssistant(assistantText); }
-                else if (evt.type === "deploy_status") {
-                  const ds = JSON.parse(evt.data);
-                  setDeployState(ds);
-                  if (ds.phase === "live" && ds.appUrl && sessionId) {
-                    const host = ds.appUrl.replace("https://", "").split("/")[0].split(".")[0];
-                    projectsMgr.markDeployed(sessionId, host, ds.appUrl);
-                  }
-                }
-                else if (evt.type === "error") { assistantText += `\nError: ${evt.data}`; updateAssistant(assistantText); }
-              }
-            }
-            if (!assistantText) updateAssistant("(No response)");
-          } else {
-            updateAssistant(`${assistantText}\n\n⚠️ Retry failed. Say "continue" to resume.`);
-          }
+          await reconnectLive();
+          if (!assistantText) updateAssistant("(No response)");
         } catch {
-          updateAssistant(`${assistantText}\n\n⚠️ Connection interrupted. Say "continue" or "deploy" to resume.`);
+          await loadHistory();
+          updateAssistant(`${assistantText}\n\nConnection interrupted. Reopen this project to resume from the saved build state.`);
         }
-      } else if (isTransient) {
-        updateAssistant(`${assistantText}\n\n⚠️ Connection interrupted after retries. Say "continue" to resume.`);
       } else {
         updateAssistant(`Connection error: ${errMsg}`);
       }
     } finally {
       setIsStreaming(false);
     }
-  }, [sessionId, isStreaming, projectsMgr]);
+  }, [sessionId, isStreaming, subscribePush, projectsMgr, loadHistory]);
 
   return {
     messages, isStreaming, isLoadingHistory, historyError, tokensIn, tokensOut, deployState,
