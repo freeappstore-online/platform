@@ -10,7 +10,7 @@ export function runComplianceCheck(files: Map<string, string>, config: StoreConf
   checkEnvProduction(files, pass, fail);
   checkTracking(files, pass, fail);
   checkBrandFonts(files, pass, fail);
-  checkCssVars(files, config, pass, fail);
+  checkCssVars(files, pass, fail);
   checkHtmlMeta(files, pass, fail);
   checkPwaManifest(files, pass, fail);
   checkPwaMeta(files, pass, fail);
@@ -60,15 +60,12 @@ function checkBrandFonts(files: Map<string, string>, pass: Pass, fail: Fail) {
   else fail("Brand fonts", `Missing: ${!hasManrope ? "Manrope" : ""} ${!hasFraunces ? "Fraunces" : ""}`.trim());
 }
 
-function checkCssVars(files: Map<string, string>, config: StoreConfig, pass: Pass, fail: Fail) {
+// Apps and games share the canonical token names (DESIGN-SYSTEM.md bans the
+// old --bg alias in every store), so there is one rule for both (#64).
+function checkCssVars(files: Map<string, string>, pass: Pass, fail: Fail) {
   const css = files.get("web/src/index.css") || "";
-  if (config.store === "games") {
-    if (/--bg/.test(css) && /--ink/.test(css) && /--accent/.test(css)) pass("CSS variables (--bg, --ink, --accent)");
-    else fail("CSS variables", "Missing --bg, --ink, or --accent in index.css");
-  } else {
-    if (/--paper/.test(css) && /--ink/.test(css) && /--accent/.test(css)) pass("CSS variables (--paper, --ink, --accent)");
-    else fail("CSS variables", "Missing --paper, --ink, or --accent in index.css");
-  }
+  if (/--paper/.test(css) && /--ink/.test(css) && /--accent/.test(css)) pass("CSS variables (--paper, --ink, --accent)");
+  else fail("CSS variables", "Missing --paper, --ink, or --accent in index.css");
 }
 
 function checkHtmlMeta(files: Map<string, string>, pass: Pass, fail: Fail) {

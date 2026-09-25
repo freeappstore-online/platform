@@ -302,13 +302,9 @@ const GAME_FILES: Record<string, string> = {
   "web/src/index.css": `@import "tailwindcss";
 
 :root {
-  /* Games intentionally use the game token set, not the app one: both this
-     worker's checkCssVars (src/compliance.ts) and packages/compliance's
-     brand-tokens require --bg/--ink/--accent for game projects. Swapping this
-     for the app page-background token would fail every scaffolded game.
-     NB: do not name the app token in this comment — checkCssVars regexes the
-     whole file, so mentioning it here makes the check pass spuriously. */
-  --bg: #0f0f0f;
+  /* Games use the same canonical token names as apps (DESIGN-SYSTEM.md bans
+     the old background alias everywhere); only the values are game-dark. */
+  --paper: #0f0f0f;
   --panel: #1a1a1a;
   --ink: #f0f0f0;
   --muted: #999;
@@ -322,7 +318,7 @@ const GAME_FILES: Record<string, string> = {
 
 body {
   margin: 0;
-  background: var(--bg);
+  background: var(--paper);
   color: var(--ink);
   overflow: hidden;
 }
@@ -345,7 +341,7 @@ interface GameShellProps {
  *  The children fill the remaining viewport height. */
 export function GameShell({ title, children }: GameShellProps) {
   return (
-    <div style={{ width: "100vw", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg)" }}>
+    <div style={{ width: "100vw", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--paper)" }}>
       <header style={{ height: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1rem", background: "var(--panel)", borderBottom: "1px solid var(--line)", fontSize: "0.85rem" }}>
         <span style={{ fontWeight: 700, fontFamily: "Fraunces, serif" }}>{title}</span>
         <a href="https://freegamestore.online" target="_blank" rel="noopener noreferrer" style={{ color: "var(--muted)", fontSize: "0.75rem", textDecoration: "none" }}>
@@ -617,7 +613,7 @@ Users describe a game idea and you build it. You write TypeScript + React code, 
 
 ## Brand Rules (mandatory)
 - Fonts: Manrope (body/UI) + Fraunces (display/headings only)
-- CSS variables: --bg, --panel, --ink, --muted, --accent, --line (defined in index.css). Games use --bg for the canvas background (apps use --paper); never --surface or --border.
+- CSS variables: --paper, --panel, --ink, --muted, --accent, --line (defined in index.css). Use --paper for the canvas background; never --bg, --surface or --border.
 - Dark theme only (games always use dark background #0f0f0f)
 - Use the GameShell component as the root layout. Build your game inside <GameShell>.
 - GameShell provides a 44px top bar + full-height game area

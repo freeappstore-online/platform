@@ -58,12 +58,12 @@ describe("runComplianceCheck", () => {
     const output = runComplianceCheck(
       makeFiles({
         "web/src/index.css":
-          "@import url(manrope); @import url(fraunces); :root { --bg: #000; --ink: #fff; --accent: red; } body { overflow: hidden; }",
+          "@import url(manrope); @import url(fraunces); :root { --paper: #000; --ink: #fff; --accent: red; } body { overflow: hidden; }",
       }),
       gamesConfig,
     );
     expect(output).toContain("PASS: Overflow hidden");
-    expect(output).toContain("PASS: CSS variables (--bg, --ink, --accent)");
+    expect(output).toContain("PASS: CSS variables (--paper, --ink, --accent)");
   });
 
   it("detects APPNAME placeholder", () => {

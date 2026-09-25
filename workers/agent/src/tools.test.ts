@@ -273,7 +273,7 @@ describe("run_compliance_check", () => {
     const files = new Map(Object.entries(getTemplateFiles(gamesConfig)));
     const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
     expect(result.content).toContain("PASS: MIT License");
-    expect(result.content).toContain("PASS: CSS variables (--bg, --ink, --accent)");
+    expect(result.content).toContain("PASS: CSS variables (--paper, --ink, --accent)");
     expect(result.content).toContain("PASS: Overflow hidden");
     expect(result.content).toContain("PASS: FreeGameStore link");
     expect(result.content).toContain("PASS: pnpm workspace");
@@ -283,17 +283,17 @@ describe("run_compliance_check", () => {
     expect(result.content).toContain("10 pass, 2 fail");
   });
 
-  it("apps template would fail games compliance (--bg)", () => {
+  it("apps template would fail games compliance (overflow)", () => {
     const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
     const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
-    expect(result.content).toContain("FAIL: CSS variables");
+    // Token names are shared since #64, so only the game-specific rules differ.
+    expect(result.content).toContain("PASS: CSS variables (--paper, --ink, --accent)");
     expect(result.content).toContain("FAIL: Overflow hidden");
   });
 
-  it("games template would fail apps compliance (--paper)", () => {
+  it("games template would fail apps compliance (store link)", () => {
     const files = new Map(Object.entries(getTemplateFiles(gamesConfig)));
     const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
-    expect(result.content).toContain("FAIL: CSS variables");
     expect(result.content).toContain("FAIL: FreeAppStore link");
   });
 
