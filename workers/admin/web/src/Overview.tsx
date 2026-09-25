@@ -22,8 +22,8 @@ export function Overview({ navigate }: { navigate: (h: string) => void }) {
     <div>
       <h1 className="text-2xl font-bold mb-6">Platform Overview</h1>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
-        <StatCard label="Apps" value={stats?.apps ?? 0} onClick={() => navigate('/apps')} />
-        <StatCard label="Games (FGS)" value={stats?.games ?? 0} />
+        <StatCard label="Apps" value={stats?.errors?.registryApps ? 'Error' : stats?.apps ?? 0} onClick={() => navigate('/apps')} />
+        <StatCard label="Games (FGS)" value={stats?.errors?.registryGames ? 'Error' : stats?.games ?? 0} />
         <StatCard label="Routes" value={stats?.routes ?? 0} onClick={() => navigate('/apps')} />
         <StatCard label="Users" value={stats?.users ?? 0} />
         <StatCard label="Creators" value={stats?.creators ?? 0} />
@@ -40,7 +40,7 @@ export function Overview({ navigate }: { navigate: (h: string) => void }) {
   )
 }
 
-function StatCard({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
+function StatCard({ label, value, onClick }: { label: string; value: number | string; onClick?: () => void }) {
   const Tag = onClick ? 'button' : 'div'
   return (
     <Tag
@@ -49,7 +49,7 @@ function StatCard({ label, value, onClick }: { label: string; value: number; onC
       style={{ background: 'var(--panel)', border: '1px solid var(--line)', cursor: onClick ? 'pointer' : 'default' }}
     >
       <p className="text-sm font-medium" style={{ color: 'var(--muted)' }}>{label}</p>
-      <p className="text-3xl font-bold mt-1" style={{ color: 'var(--ink)' }}>{value.toLocaleString()}</p>
+      <p className="text-3xl font-bold mt-1" style={{ color: 'var(--ink)' }}>{typeof value === 'number' ? value.toLocaleString() : value}</p>
     </Tag>
   )
 }

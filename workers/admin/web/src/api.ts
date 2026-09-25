@@ -41,6 +41,7 @@ export interface PlatformStats {
     fas: { totals: { requests: number; pageViews: number; visitors: number } } | null
     fgs: { totals: { requests: number; pageViews: number; visitors: number } } | null
   } | null
+  errors?: Partial<Record<'registryApps' | 'registryGames', { message: string; status: number; upstream: string }>>
 }
 
 export interface ProvisionStep {

@@ -11,10 +11,22 @@ import {
   handleAppSessions,
   handleAppsAll,
   handleDeployStatus,
+  UpstreamFetchError,
 } from "./helpers";
 import { handlePublish } from "./publish";
 
 export type { AppConfig, Env };
+
+function errorMessage(reason: unknown): string {
+  if (reason instanceof Error) return reason.message;
+  return String(reason);
+}
+
+function upstreamUnavailable(reason: unknown) {
+  return reason instanceof UpstreamFetchError
+    ? { message: reason.message, status: reason.status, upstream: reason.upstream }
+    : { message: errorMessage(reason), status: 503, upstream: "unknown" };
+}
 
 // ── CORS ──
 
@@ -344,15 +356,20 @@ export default {
         env.DB.prepare("SELECT COUNT(*) as count FROM routes").first<{ count: number }>(),
         env.DB.prepare("SELECT COUNT(*) as count FROM agent_sessions").first<{ count: number }>(),
       ]);
+      const errors = {
+        ...(appsReg.status === "rejected" ? { registryApps: upstreamUnavailable(appsReg.reason) } : {}),
+        ...(gamesReg.status === "rejected" ? { registryGames: upstreamUnavailable(gamesReg.reason) } : {}),
+      };
       return json(
         {
-          apps: appsReg.status === "fulfilled" ? appsReg.value.length : 0,
-          games: gamesReg.status === "fulfilled" ? gamesReg.value.length : 0,
+          apps: appsReg.status === "fulfilled" ? appsReg.value.length : -1,
+          games: gamesReg.status === "fulfilled" ? gamesReg.value.length : -1,
           users: userCount.status === "fulfilled" ? userCount.value?.count || 0 : 0,
           creators: creatorList.status === "fulfilled" ? creatorList.value.keys.length : 0,
           routes: routeCount.status === "fulfilled" ? routeCount.value?.count || 0 : 0,
           agentSessions: sessionCount.status === "fulfilled" ? sessionCount.value?.count || 0 : 0,
           traffic: traffic.status === "fulfilled" ? traffic.value : null,
+          errors,
         },
         200,
         request,

@@ -5,6 +5,7 @@ import { z } from "zod";
 import { fetchTemplateFiles, listRepoFiles, pushFiles, readRepoFile, type RepoFile, textToB64 } from "./github.js";
 import { AuthHandler } from "./auth-handler.js";
 import { sessionPrefix, auditLog } from "./lib.js";
+import { ownsApp, ownershipGateText } from "./ownership.js";
 import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
 
 interface Env {
@@ -68,14 +69,8 @@ async function fasPost(apiBase: string, path: string, token: string, body: unkno
   return json;
 }
 
-// Ownership gate for write tools: does the session user own this published app?
-async function ownsApp(apiBase: string, token: string, appId: string): Promise<boolean> {
-  const data = (await fasApi(apiBase, "/v1/apps/mine", token)) as { apps?: Array<{ id: string }>; error?: string };
-  if (data.error) return false;
-  return (data.apps ?? []).some((a) => a.id === appId);
-}
-
 const txt = (text: string) => ({ content: [{ type: "text" as const, text }] });
+const toolError = (text: string) => ({ ...txt(text), isError: true });
 
 // sessionPrefix, auditLog, decodeUid are in lib.ts for testability.
 
@@ -638,8 +633,8 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
         if (denied) return denied;
         if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");
         if (!files?.length) return txt("No files provided.");
-        if (!(await ownsApp(this.env.API_BASE, token, app_id)))
-          return txt(`You don't own "${app_id}" (or it isn't published). Only the owner can update it.`);
+        const ownershipFailure = ownershipGateText(app_id, await ownsApp(this.env.API_BASE, token, app_id));
+        if (ownershipFailure) return ownershipFailure.startsWith("Ownership check failed") ? toolError(ownershipFailure) : txt(ownershipFailure);
         auditLog("update_files", this.props.userId, { app_id, fileCount: files.length, dry_run: !!dry_run });
         if (dry_run) {
           await audit(this.safety(), { tool: "update_files", action: "dry_run", input: { app_id, fileCount: files.length } });

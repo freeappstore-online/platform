@@ -39,6 +39,17 @@ export interface AppConfig {
   repo?: string;
 }
 
+export class UpstreamFetchError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly upstream: string,
+  ) {
+    super(message);
+    this.name = "UpstreamFetchError";
+  }
+}
+
 function safeJson(raw: unknown): any {
   if (!raw || typeof raw !== "string") return null;
   try {
@@ -58,9 +69,28 @@ const STORE_META = {
   games: { org: "freegamestore-online", domain: "freegamestore.online" },
 };
 
+async function responseErrorDetail(res: Response): Promise<string> {
+  const text = await res.text().catch(() => "");
+  if (!text) return res.statusText || `HTTP ${res.status}`;
+  const parsed = safeJson(text);
+  return parsed?.message ?? parsed?.error ?? parsed?.detail ?? text.slice(0, 200);
+}
+
 export async function fetchRegistry(store: "apps" | "games"): Promise<AppConfig[]> {
-  const res = await fetch(REGISTRY_URLS[store], { headers: { "User-Agent": "freeappstore-admin" } });
-  if (!res.ok) return [];
+  let res: Response;
+  try {
+    res = await fetch(REGISTRY_URLS[store], { headers: { "User-Agent": "freeappstore-admin" } });
+  } catch (e) {
+    throw new UpstreamFetchError(`Registry ${store} request failed: ${String(e)}`, 503, `registry:${store}`);
+  }
+  if (res.status === 404) return [];
+  if (!res.ok) {
+    throw new UpstreamFetchError(
+      `Registry ${store} fetch failed (${res.status}): ${await responseErrorDetail(res)}`,
+      res.status,
+      `registry:${store}`,
+    );
+  }
   const data = (await res.json()) as any;
   const key = store === "apps" ? "apps" : "games";
   const items = data[key] || [];
@@ -124,7 +154,14 @@ export async function fetchGhRuns(appId: string, env: Env) {
       },
       signal: AbortSignal.timeout(8000),
     });
-    if (!res.ok) return [];
+    if (res.status === 404) return [];
+    if (!res.ok) {
+      throw new UpstreamFetchError(
+        `GitHub Actions fetch failed for ${appId} (${res.status}): ${await responseErrorDetail(res)}`,
+        res.status,
+        "github:actions",
+      );
+    }
     const data = (await res.json()) as any;
     return (data.workflow_runs ?? []).map((r: any) => ({
       id: r.id,
@@ -140,8 +177,9 @@ export async function fetchGhRuns(appId: string, env: Env) {
       branch: r.head_branch ?? null,
       event: r.event ?? null,
     }));
-  } catch {
-    return [];
+  } catch (e) {
+    if (e instanceof UpstreamFetchError) throw e;
+    throw new UpstreamFetchError(`GitHub Actions request failed for ${appId}: ${String(e)}`, 503, "github:actions");
   }
 }
 
@@ -167,9 +205,7 @@ function latestOf(runs: Awaited<ReturnType<typeof fetchGhRuns>>): DeployStatus {
   const latest = runs[0];
   if (!latest) {
     // No workflow runs at all: the repo exists but CI has never run. This is a
-    // real, reportable state — not the same as a GitHub error, which
-    // fetchGhRuns also surfaces as an empty list. Callers that need to tell
-    // them apart should treat `neverDeployed` as best-effort.
+    // real, reportable state. GitHub API failures are thrown by fetchGhRuns.
     return { status: null, conclusion: null, at: null, sha: null, url: null, branch: null, neverDeployed: true };
   }
   return {
