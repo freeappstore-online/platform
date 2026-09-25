@@ -39,6 +39,10 @@ export interface AppConfig {
   repo?: string;
 }
 
+export function errorMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 function safeJson(raw: unknown): any {
   if (!raw || typeof raw !== "string") return null;
   try {
@@ -58,12 +62,16 @@ const STORE_META = {
   games: { org: "freegamestore-online", domain: "freegamestore.online" },
 };
 
+/** Throws on a non-2xx, a network failure or a malformed body. An empty array
+ *  means the registry was read and lists nothing — never "we couldn't read it"
+ *  (#72). */
 export async function fetchRegistry(store: "apps" | "games"): Promise<AppConfig[]> {
   const res = await fetch(REGISTRY_URLS[store], { headers: { "User-Agent": "freeappstore-admin" } });
-  if (!res.ok) return [];
+  if (!res.ok) throw new Error(`${store} registry unavailable: HTTP ${res.status}`);
   const data = (await res.json()) as any;
   const key = store === "apps" ? "apps" : "games";
-  const items = data[key] || [];
+  const items = data?.[key];
+  if (!Array.isArray(items)) throw new Error(`${store} registry is malformed: no "${key}" array`);
   const meta = STORE_META[store];
   return items.map((item: any) => ({
     id: item.id,
@@ -114,35 +122,35 @@ export async function fetchTraffic(env: Env): Promise<{ fas: any; fgs: any } | n
   return { fas, fgs };
 }
 
+/** Recent workflow runs for one app repo. Throws on a non-2xx or network
+ *  failure, so an empty array only ever means "GitHub answered: no runs" —
+ *  a GitHub outage or rate limit is not reported as "never deployed" (#72). */
 export async function fetchGhRuns(appId: string, env: Env) {
-  try {
-    const res = await fetch(`https://api.github.com/repos/freeappstore-online/${appId}/actions/runs?per_page=5`, {
-      headers: {
-        Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-        Accept: "application/vnd.github+json",
-        "User-Agent": "freeappstore-admin",
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as any;
-    return (data.workflow_runs ?? []).map((r: any) => ({
-      id: r.id,
-      name: r.name,
-      status: r.status,
-      conclusion: r.conclusion,
-      createdAt: r.created_at,
-      headSha: r.head_sha?.slice(0, 7),
-      commitMsg: r.head_commit?.message?.split("\n")[0]?.slice(0, 80),
-      // Creator-facing surfaces link to the *specific* run rather than the
-      // repo's Actions tab, and show what was being deployed (#32).
-      url: r.html_url ?? null,
-      branch: r.head_branch ?? null,
-      event: r.event ?? null,
-    }));
-  } catch {
-    return [];
-  }
+  const res = await fetch(`https://api.github.com/repos/freeappstore-online/${appId}/actions/runs?per_page=5`, {
+    headers: {
+      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "User-Agent": "freeappstore-admin",
+    },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`GitHub runs for ${appId} unavailable: HTTP ${res.status}`);
+  const data = (await res.json()) as any;
+  if (!Array.isArray(data?.workflow_runs)) throw new Error(`GitHub runs for ${appId}: malformed response`);
+  return data.workflow_runs.map((r: any) => ({
+    id: r.id,
+    name: r.name,
+    status: r.status,
+    conclusion: r.conclusion,
+    createdAt: r.created_at,
+    headSha: r.head_sha?.slice(0, 7),
+    commitMsg: r.head_commit?.message?.split("\n")[0]?.slice(0, 80),
+    // Creator-facing surfaces link to the *specific* run rather than the
+    // repo's Actions tab, and show what was being deployed (#32).
+    url: r.html_url ?? null,
+    branch: r.head_branch ?? null,
+    event: r.event ?? null,
+  }));
 }
 
 export type DeployStatus = {
@@ -155,6 +163,8 @@ export type DeployStatus = {
   branch?: string | null;
   /** Distinguishes "never deployed" (no runs at all) from "we couldn't tell". */
   neverDeployed?: boolean;
+  /** Set when GitHub could not be read; every other field is then null. */
+  error?: string;
 };
 
 /** One app's latest deploy plus its recent history, for the app detail page. */
@@ -166,10 +176,8 @@ export type AppDeployStatus = DeployStatus & {
 function latestOf(runs: Awaited<ReturnType<typeof fetchGhRuns>>): DeployStatus {
   const latest = runs[0];
   if (!latest) {
-    // No workflow runs at all: the repo exists but CI has never run. This is a
-    // real, reportable state — not the same as a GitHub error, which
-    // fetchGhRuns also surfaces as an empty list. Callers that need to tell
-    // them apart should treat `neverDeployed` as best-effort.
+    // No workflow runs at all: GitHub answered and CI has never run. A GitHub
+    // error never reaches here — fetchGhRuns throws instead (#72).
     return { status: null, conclusion: null, at: null, sha: null, url: null, branch: null, neverDeployed: true };
   }
   return {
@@ -185,7 +193,8 @@ function latestOf(runs: Awaited<ReturnType<typeof fetchGhRuns>>): DeployStatus {
 
 /** Latest deploy + recent runs for a single app. Same GitHub data as the
  *  all-apps fan-out, scoped to one repo so the creator console can ask about
- *  the app being viewed without pulling the whole org (#32). */
+ *  the app being viewed without pulling the whole org (#32). Throws when
+ *  GitHub can't be read, so the route answers with an error, not "no runs". */
 export async function handleAppDeployStatus(appId: string, env: Env): Promise<AppDeployStatus> {
   const runs = await fetchGhRuns(appId, env);
   return { appId, ...latestOf(runs), runs };
@@ -193,7 +202,9 @@ export async function handleAppDeployStatus(appId: string, env: Env): Promise<Ap
 
 /** Latest GitHub Actions deploy conclusion for every provisioned app.
  *  Fan-out is concurrency-limited; the caller caches the whole result (5 min)
- *  so the Apps list can flag failed deploys at a glance without hammering GitHub. */
+ *  so the Apps list can flag failed deploys at a glance without hammering GitHub.
+ *  One repo failing doesn't sink the rest: that app's entry carries `error`
+ *  instead of a fabricated "never deployed" (#72). */
 export async function handleDeployStatus(env: Env): Promise<Record<string, DeployStatus>> {
   const rows = await env.DB.prepare("SELECT id FROM apps ORDER BY id").all();
   const ids = (rows.results ?? []).map((r) => r.id as string);
@@ -203,13 +214,19 @@ export async function handleDeployStatus(env: Env): Promise<Record<string, Deplo
     const batch = ids.slice(i, i + CONCURRENCY);
     await Promise.all(
       batch.map(async (id) => {
-        result[id] = latestOf(await fetchGhRuns(id, env));
+        try {
+          result[id] = latestOf(await fetchGhRuns(id, env));
+        } catch (e) {
+          result[id] = { status: null, conclusion: null, at: null, sha: null, url: null, branch: null, error: errorMessage(e) };
+        }
       }),
     );
   }
   return result;
 }
 
+/** Registry reads throw on failure, so a registry outage fails the whole list
+ *  rather than marking every app "unlisted" (#72). */
 export async function handleAppsAll(env: Env) {
   const [routeRows, appRows, appsReg, gamesReg, userRows] = await Promise.all([
     env.DB.prepare("SELECT slug, zone, r2_prefix, store, hosted_on, created_at, updated_at FROM routes ORDER BY slug").all(),
@@ -282,7 +299,12 @@ export async function handleAppsAll(env: Env) {
 export async function handleAppHealth(appId: string, env: Env) {
   const [routeRow, ghRuns] = await Promise.all([
     env.DB.prepare("SELECT slug, zone, hosted_on FROM routes WHERE slug = ?").bind(appId).first(),
-    fetchGhRuns(appId, env),
+    // Health is a composite: a GitHub failure shouldn't hide the HTTP probe,
+    // but it must not read as "no runs" either (#72).
+    fetchGhRuns(appId, env).then(
+      (runs) => ({ runs, error: null as string | null }),
+      (e) => ({ runs: null, error: errorMessage(e) }),
+    ),
   ]);
 
   const domain = routeRow ? `${routeRow.slug}.${routeRow.zone}` : `${appId}.freeappstore.online`;
@@ -306,7 +328,8 @@ export async function handleAppHealth(appId: string, env: Env) {
     hasRoute: !!routeRow,
     httpStatus,
     reachable: httpStatus >= 200 && httpStatus < 400,
-    ghActions: ghRuns,
+    ghActions: ghRuns.runs,
+    ghActionsError: ghRuns.error,
   };
 }
 

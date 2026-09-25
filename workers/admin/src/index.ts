@@ -2,6 +2,7 @@ import { type DeprovisionRequest, handleDeprovision } from "./deprovision";
 import {
   type AppConfig,
   type Env,
+  errorMessage,
   fetchRegistry,
   fetchTraffic,
   handleAgentSessionDetail,
@@ -344,15 +345,21 @@ export default {
         env.DB.prepare("SELECT COUNT(*) as count FROM routes").first<{ count: number }>(),
         env.DB.prepare("SELECT COUNT(*) as count FROM agent_sessions").first<{ count: number }>(),
       ]);
+      // A registry that couldn't be read is `null` with the reason in `errors`,
+      // not a count of 0 — "no apps" and "registry down" must look different (#72).
+      const errors: Record<string, string> = {};
+      if (appsReg.status === "rejected") errors.apps = errorMessage(appsReg.reason);
+      if (gamesReg.status === "rejected") errors.games = errorMessage(gamesReg.reason);
       return json(
         {
-          apps: appsReg.status === "fulfilled" ? appsReg.value.length : 0,
-          games: gamesReg.status === "fulfilled" ? gamesReg.value.length : 0,
+          apps: appsReg.status === "fulfilled" ? appsReg.value.length : null,
+          games: gamesReg.status === "fulfilled" ? gamesReg.value.length : null,
           users: userCount.status === "fulfilled" ? userCount.value?.count || 0 : 0,
           creators: creatorList.status === "fulfilled" ? creatorList.value.keys.length : 0,
           routes: routeCount.status === "fulfilled" ? routeCount.value?.count || 0 : 0,
           agentSessions: sessionCount.status === "fulfilled" ? sessionCount.value?.count || 0 : 0,
           traffic: traffic.status === "fulfilled" ? traffic.value : null,
+          ...(Object.keys(errors).length ? { errors } : {}),
         },
         200,
         request,
@@ -491,11 +498,15 @@ export default {
       const hit = await cache.match(cacheKey);
       if (hit) return new Response(hit.body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
       try {
-        const body = JSON.stringify(await handleDeployStatus(env));
-        await cache.put(
-          cacheKey,
-          new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" } }),
-        );
+        const statuses = await handleDeployStatus(env);
+        const body = JSON.stringify(statuses);
+        // Don't pin a GitHub outage in the cache for 5 min: only cache a clean read.
+        if (!Object.values(statuses).some((s) => s.error)) {
+          await cache.put(
+            cacheKey,
+            new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=300" } }),
+          );
+        }
         return new Response(body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
       } catch (e) {
         return json({ error: String(e) }, 500, request);
