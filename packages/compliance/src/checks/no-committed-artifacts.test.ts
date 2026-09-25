@@ -47,13 +47,20 @@ describe('checkNoCommittedArtifacts', () => {
     expect(r.detail).toMatch(/node_modules\//);
   });
 
-  it('fails on tracked dist/ and .DS_Store', async () => {
+  it('fails when dist is tracked', async () => {
     const r = await checkNoCommittedArtifacts(
-      trackedSource(['dist/index.js', '.DS_Store', 'web/.DS_Store']),
+      trackedSource(['dist/index.js', 'web/dist/assets/app.js']),
     );
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/dist\//);
+    expect(r.detail).toMatch(/2 tracked artifact file/);
+  });
+
+  it('fails when .DS_Store is tracked', async () => {
+    const r = await checkNoCommittedArtifacts(trackedSource(['.DS_Store', 'web/.DS_Store']));
+    expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/\.DS_Store/);
+    expect(r.detail).toMatch(/2 tracked artifact file/);
   });
 
   it('summarises instead of listing thousands of paths', async () => {

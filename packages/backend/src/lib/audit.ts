@@ -116,9 +116,8 @@ export async function runAudit(db: D1Database): Promise<{ scanned: number; faile
 
 /**
  * Committed build artifacts (node_modules/, dist/, .DS_Store …) in the app's
- * GitHub repo (#19). Report-only: a published app that still tracks
- * `web/dist/` is flagged as `warn`, never `fail` — this sweep surfaces drift,
- * it does not gate anything, and ~45 apps still track build output today.
+ * GitHub repo (#19). A published app that still tracks generated output should
+ * fail the weekly audit just like it fails the CLI compliance check.
  *
  * Returns null (no row written) when the registry entry has no usable
  * `owner/name` repo, rather than guessing one from the app id.
@@ -127,8 +126,7 @@ async function checkCommittedArtifacts(item: RegistryItem): Promise<CheckResult 
   const match = /^([\w.-]+)\/([\w.-]+)$/.exec(item.repo?.trim() ?? '');
   if (!match) return null;
   const [, org, repo] = match as unknown as [string, string, string];
-  const result = await checkNoCommittedArtifacts(githubTreeSource(org, repo));
-  return result.status === 'fail' ? { ...result, status: 'warn' } : result;
+  return checkNoCommittedArtifacts(githubTreeSource(org, repo));
 }
 
 async function persistResults(
