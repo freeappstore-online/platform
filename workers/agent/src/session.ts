@@ -78,10 +78,13 @@ const MAX_TURN_EVENTS = 200;
 const LATEST_TURN_ID_KEY = "latestTurnId";
 
 type TurnPhase = "main" | "main-infra" | "followup" | "followup-infra";
+type ChatBody = { message: string; aiConfig: AIConfig; archetype?: AppArchetype };
+type AgentTurnResult = Awaited<ReturnType<typeof runAgentTurn>>;
 
 export interface PendingTurn {
   turnId: string;
   message: string;
+  mode?: "alarm" | "legacy";
   /** Includes the resolved API key; the record is deleted when the turn ends. */
   aiConfig: AIConfig;
   /** Caller's bearer token, needed by infra tools; deleted with the turn. */
@@ -116,6 +119,20 @@ interface TurnEventLog {
 type TurnEvent = { type: string; data: string };
 
 class StallError extends Error {}
+
+interface LegacyTurnContext {
+  pending: PendingTurn;
+  body: ChatBody;
+  session: SessionState;
+  files: Map<string, string>;
+  history: Message[];
+  writer: WritableStreamDefaultWriter<Uint8Array>;
+  config: StoreConfig;
+  deployEnv: DeployEnv | null;
+  authHeader?: string;
+  sendSSE: (evt: TurnEvent) => Promise<void>;
+  scrubKey: (s: string) => string;
+}
 
 function parseAppArchetype(value: unknown): AppArchetype | undefined {
   return typeof value === "string" && APP_ARCHETYPES.includes(value as AppArchetype) ? (value as AppArchetype) : undefined;
@@ -158,7 +175,6 @@ export class AgentSession implements DurableObject {
   private env: Env;
   private config: StoreConfig;
   private session: SessionState | null = null;
-  private chatInProgress = false;
   /** Alarm path: events emitted since the last flush to storage. */
   private eventBuffer: { turnId: string; events: TurnEvent[]; lastFlush: number } | null = null;
 
@@ -290,7 +306,18 @@ export class AgentSession implements DurableObject {
       return new Response(null, { status: 204, headers: corsHeaders(request, this.config.domain) });
     }
 
-    // Capture session ID from the worker entry (needed for D1 writes)
+    await this.captureSessionMetadata(request, url);
+
+    try {
+      return await this.routeRequest(request, path);
+    } catch (err) {
+      console.error("Session error:", err);
+      return json({ error: "Internal server error" }, 500, request, this.config.domain);
+    }
+  }
+
+  // Capture session ID from the worker entry (needed for D1 writes)
+  private async captureSessionMetadata(request: Request, url: URL): Promise<void> {
     const headerSessionId = request.headers.get("X-Session-Id");
     if (headerSessionId) {
       const requestedArchetype = parseAppArchetype(request.headers.get("X-App-Archetype") ?? url.searchParams.get("archetype"));
@@ -303,44 +330,35 @@ export class AgentSession implements DurableObject {
       changed = this.applyArchetypeToEmptySession(session, requestedArchetype) || changed;
       if (changed) await this.save();
     }
+  }
 
-    try {
-      // Require auth on all endpoints that expose session data; only /status is public
-      const isPublic = path === "/status";
-      const auth = await this.validateAuth(request, !isPublic);
-      if (auth.error) return auth.error;
+  private async routeRequest(request: Request, path: string): Promise<Response> {
+    // Require auth on all endpoints that expose session data; only /status is public
+    const auth = await this.validateAuth(request, path !== "/status");
+    if (auth.error) return auth.error;
 
-      if (path === "/chat" && request.method === "POST") {
+    const route = `${request.method} ${path}`;
+    switch (route) {
+      case "POST /chat":
         return this.handleChat(request);
-      }
-      if (path === "/live" && request.method === "GET") {
+      case "GET /live":
         return this.handleLive(request);
-      }
-      if (path === "/status" && request.method === "GET") {
+      case "GET /status":
         return this.handleStatus(request);
-      }
-      if (path === "/files" && request.method === "GET") {
+      case "GET /files":
         return this.handleListFiles(request);
-      }
-      if (path === "/history" && request.method === "GET") {
+      case "GET /history":
         return this.handleHistory(request);
-      }
-      if (path === "/errors" && request.method === "GET") {
+      case "GET /errors":
         return this.handleErrors(request);
-      }
-      if (path === "/import" && request.method === "POST") {
+      case "POST /import":
         return this.handleImport(request);
-      }
-      if (path === "/reset" && request.method === "POST") {
+      case "POST /reset":
         return this.handleReset(request);
-      }
-      if (path === "/push-subscribe" && request.method === "POST") {
+      case "POST /push-subscribe":
         return this.handlePushSubscribe(request);
-      }
-      return json({ error: "not found" }, 404, request, this.config.domain);
-    } catch (err) {
-      console.error("Session error:", err);
-      return json({ error: "Internal server error" }, 500, request, this.config.domain);
+      default:
+        return json({ error: "not found" }, 404, request, this.config.domain);
     }
   }
 
@@ -362,25 +380,28 @@ export class AgentSession implements DurableObject {
   /** POST /chat — stream an agent turn via SSE */
   private async handleChat(request: Request): Promise<Response> {
     const active = await this.activePendingTurn();
-    if (this.chatInProgress || active) {
+    if (active) {
+      const session = await this.load();
       return this.jsonWithLastEventId(
-        { error: "A chat request is already in progress. Reconnect to the live stream to resume it." },
+        {
+          error: "A build is already in progress.",
+          turnId: active.turnId,
+          status: this.computeDevStatus(session, true),
+          liveUrl: "/live",
+        },
         409,
         request,
         active?.turnId,
+        { "Retry-After": "2" },
       );
     }
-    // Validate BEFORE setting chatInProgress (early returns must not lock the session)
+    // Validate before writing pendingTurn (early returns must not lock the session).
     const contentLength = parseInt(request.headers.get("Content-Length") || "0", 10);
     if (contentLength > 200_000) {
       return json({ error: "Request too large (max 200KB)" }, 413, request, this.config.domain);
     }
 
-    const body = await request.json<{
-      message: string;
-      aiConfig: AIConfig;
-      archetype?: AppArchetype;
-    }>();
+    const body = await request.json<ChatBody>();
 
     if (!body.message || !body.aiConfig?.provider || !body.aiConfig?.model) {
       return json({ error: "message, aiConfig.provider, and aiConfig.model are required" }, 400, request, this.config.domain);
@@ -410,9 +431,6 @@ export class AgentSession implements DurableObject {
       if (this.applyArchetypeToEmptySession(session, requestedArchetype)) await this.save();
     }
 
-    // All validation passed — lock the session for this chat turn
-    this.chatInProgress = true;
-
     if (this.env.ALARM_LOOP === "true") return this.startAlarmTurn(request, body);
 
     const session = await this.load();
@@ -427,234 +445,57 @@ export class AgentSession implements DurableObject {
     const writer = writable.getWriter();
 
     // Build deploy env directly from DO's env bindings (no header passing)
-    const deployEnv: DeployEnv | null = this.env.GITHUB_TOKEN
-      ? { GITHUB_TOKEN: this.env.GITHUB_TOKEN, PLATFORM: this.env.PLATFORM, DB: this.env.DB }
-      : null;
-
+    const deployEnv = this.deployEnv();
     const config = this.config;
     const authHeader = request.headers.get("Authorization") || undefined;
+    const now = Date.now();
+    const pending: PendingTurn = {
+      turnId: crypto.randomUUID(),
+      message: body.message,
+      mode: "legacy",
+      aiConfig: body.aiConfig,
+      authHeader,
+      phase: "main",
+      loopIndex: 0,
+      retries: 0,
+      messagesCursor: session.messages.length - 1,
+      prepared: null,
+      newMessages: [{ role: "user", content: body.message }],
+      anyToolCalls: false,
+      infraQueue: [],
+      infraResults: [],
+      turnSaved: false,
+      heartbeat: now,
+      startedAt: now,
+    };
+    const previousTurnId = await this.state.storage.get<string>(LATEST_TURN_ID_KEY);
+    if (previousTurnId && previousTurnId !== pending.turnId) await this.state.storage.delete(turnEventsKey(previousTurnId));
+    await this.state.storage.put("pendingTurn", pending);
+    await this.state.storage.put(LATEST_TURN_ID_KEY, pending.turnId);
+    await this.state.storage.put(turnEventsKey(pending.turnId), { turnId: pending.turnId, nextSeq: 1, events: [] } satisfies TurnEventLog);
+    await this.state.storage.delete("turnEvents");
 
     // Scrub the user's API key from any error messages before streaming
     const apiKey = body.aiConfig.apiKey;
     const scrubKey = (s: string) => (apiKey && apiKey.length > 8 ? s.replaceAll(apiKey, "[REDACTED]") : s);
+    const sendSSE = this.createLegacySseSender(writer, pending, scrubKey);
 
     // Run the agent in the background.
     // Anchor the promise to the DO's lifetime so Cloudflare keeps the instance
     // alive until the build completes, even if the client SSE stream closes.
-    const buildPromise = (async () => {
-      const encoder = new TextEncoder();
-      const sendSSE = (evt: { type: string; data: string }) => {
-        const safe = evt.type === "error" || evt.type === "text" ? { ...evt, data: scrubKey(evt.data) } : evt;
-        writer.write(encoder.encode(`data: ${JSON.stringify(safe)}\n\n`)).catch(() => {});
-      };
-      let turnSaved = false;
-
-      try {
-        const sessionCtx = {
-          appId: session.appId,
-          appName: session.appName,
-          fileCount: files.size,
-          fileList: [...files.keys()].sort().join(", "),
-        };
-        const result = await runAgentTurn(body.aiConfig, history, body.message, files, writer, config, sessionCtx, this.env).catch(
-          (err) => {
-            this.logError("agent", String(err));
-            throw err;
-          },
-        );
-
-        // Record any non-thrown terminal error from the agent loop before saving,
-        // so the failure is durable in D1 even if the session is evicted.
-        if (result.terminalError) {
-          const source = result.terminalError.startsWith("empty-no-output") ? "agent-empty" : "agent-stream";
-          this.logError(source, scrubKey(result.terminalError));
-        }
-
-        session.messages = [...history, ...result.newMessages];
-        // Enforce limits to prevent unbounded storage growth
-        if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
-        if (session.errors.length > MAX_ERRORS) session.errors = session.errors.slice(-MAX_ERRORS);
-        const fileKeys = Object.keys(files);
-        if (fileKeys.length > MAX_FILES) {
-          const keep = new Set(fileKeys.slice(-MAX_FILES));
-          for (const k of fileKeys) {
-            if (!keep.has(k)) files.delete(k);
-          }
-        }
-        session.files = Object.fromEntries(files);
-        await this.save();
-        await this.syncToD1();
-        turnSaved = true;
-
-        // Execute infra tools server-side and feed results back to agent
-        if (result.infraRequests.length > 0) {
-          if (!deployEnv) {
-            sendSSE({ type: "error", data: "Server configuration error: deploy environment not available." });
-            sendSSE({ type: "done", data: "" });
-            return;
-          }
-
-          const infraResults: { id: string; content: string }[] = [];
-          for (const req of result.infraRequests) {
-            const tc = req.toolCall;
-            let toolResult: string;
-
-            try {
-              toolResult = await executeInfraTool(tc, {
-                appId: session.appId,
-                ownerLogin: session.ownerLogin,
-                authHeader,
-                files,
-                env: deployEnv,
-                config,
-                onDeployStatus: async (status) => {
-                  session.deployStatus = status;
-                  this.logDeploy(status.phase, deployStatusDetail(status));
-                  await this.state.storage.put("session", session);
-                  sendSSE({ type: "deploy_status", data: JSON.stringify(status) });
-                  if (status.phase === "live") {
-                    this.sendPush("Your build is live!");
-                    this.syncToD1();
-                  } else if (status.phase === "error") {
-                    this.sendPush("Build failed");
-                    this.syncToD1();
-                  }
-                },
-                onAppDeployed: async (id, name) => {
-                  session.appId = id;
-                  session.appName = name;
-                  session.deployStatus = { phase: "provisioning", steps: [] };
-                  this.logDeploy("provisioning", `Starting deploy for ${name} (${id})`);
-                  await this.state.storage.put("session", session);
-                },
-              });
-            } catch (err) {
-              toolResult = `Tool ${tc.name} threw an error: ${String(err)}`;
-            }
-
-            sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
-            infraResults.push({ id: tc.id, content: toolResult.slice(0, 3000) });
-          }
-
-          // Build a single tool_result message with all infra results
-          // (matches the assistant message that had the tool calls)
-          const infraResultMsg: Message = {
-            role: "tool_result",
-            content: "",
-            toolResults: infraResults,
-          };
-          session.messages.push(infraResultMsg);
-
-          // Persist state after all infra tools complete
-          session.files = Object.fromEntries(files);
-          await this.save();
-          await this.syncToD1();
-
-          // Follow-up: let the AI react to infra tool results.
-          // If deploy/push failed, the AI can diagnose and retry.
-          const hasError = infraResults.some((r) => /error|fail|threw/i.test(r.content));
-          const followUpPrompt = hasError
-            ? "The tool action above returned an error. Analyze the error, fix the issue if possible, and retry the action. Do not ask the user — just fix it."
-            : "The action completed. Summarize the result briefly for the user.";
-
-          try {
-            const followUp = await runAgentTurn(
-              body.aiConfig,
-              session.messages,
-              followUpPrompt,
-              files,
-              writer,
-              config,
-              {
-                appId: session.appId,
-                appName: session.appName,
-                fileCount: files.size,
-                fileList: [...files.keys()].sort().join(", "),
-              },
-              this.env,
-            );
-            if (followUp.terminalError) {
-              const source = followUp.terminalError.startsWith("empty-no-output") ? "agent-empty" : "agent-stream";
-              this.logError(source, scrubKey(followUp.terminalError));
-            }
-            session.messages.push(...followUp.newMessages);
-            if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
-            session.files = Object.fromEntries(files);
-
-            // If the follow-up itself produced more infra requests, execute them too
-            if (followUp.infraRequests.length > 0) {
-              const retryResults: { id: string; content: string }[] = [];
-              for (const req of followUp.infraRequests) {
-                const tc = req.toolCall;
-                let toolResult: string;
-                try {
-                  toolResult = await executeInfraTool(tc, {
-                    appId: session.appId,
-                    ownerLogin: session.ownerLogin,
-                    authHeader,
-                    files,
-                    env: deployEnv,
-                    config,
-                    onDeployStatus: async (status) => {
-                      session.deployStatus = status;
-                      this.logDeploy(status.phase, deployStatusDetail(status));
-                      await this.state.storage.put("session", session);
-                      sendSSE({ type: "deploy_status", data: JSON.stringify(status) });
-                      if (status.phase === "live") {
-                        this.sendPush("Your build is live!");
-                        this.syncToD1();
-                      } else if (status.phase === "error") {
-                        this.sendPush("Build failed");
-                        this.syncToD1();
-                      }
-                    },
-                    onAppDeployed: async (id, name) => {
-                      session.appId = id;
-                      session.appName = name;
-                      session.deployStatus = { phase: "provisioning", steps: [] };
-                      this.logDeploy("provisioning", `Starting deploy for ${name} (${id})`);
-                      await this.state.storage.put("session", session);
-                    },
-                  });
-                } catch (err) {
-                  toolResult = `Tool ${tc.name} threw an error: ${String(err)}`;
-                }
-                sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
-                retryResults.push({ id: tc.id, content: toolResult.slice(0, 3000) });
-              }
-              session.messages.push({ role: "tool_result", content: "", toolResults: retryResults });
-              session.files = Object.fromEntries(files);
-            }
-            await this.save();
-            await this.syncToD1();
-          } catch (followUpErr) {
-            this.logError("follow-up", scrubKey(String(followUpErr)));
-            await this.syncToD1();
-            // Follow-up failed — not critical, the infra action already completed
-          }
-        }
-
-        sendSSE({ type: "done", data: "" });
-      } catch (err) {
-        this.logError("chat", scrubKey(String(err)));
-        sendSSE({ type: "error", data: String(err) });
-        // If the turn threw before the final save, append the error to the
-        // provisional user message saved at turn start.
-        if (!turnSaved) {
-          try {
-            session.messages.push({ role: "assistant", content: `Error: ${scrubKey(String(err))}` });
-            if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
-            await this.save();
-          } catch {
-            /* best effort */
-          }
-        }
-        await this.syncToD1();
-      } finally {
-        this.chatInProgress = false;
-        writer.close().catch(() => {});
-      }
-    })();
+    const buildPromise = this.runLegacyTurn({
+      pending,
+      body,
+      session,
+      files,
+      history,
+      writer,
+      config,
+      deployEnv,
+      authHeader,
+      sendSSE,
+      scrubKey,
+    });
     this.state.waitUntil(buildPromise);
 
     return new Response(readable, {
@@ -667,6 +508,201 @@ export class AgentSession implements DurableObject {
     });
   }
 
+  private createLegacySseSender(
+    writer: WritableStreamDefaultWriter<Uint8Array>,
+    pending: PendingTurn,
+    scrubKey: (s: string) => string,
+  ): (evt: TurnEvent) => Promise<void> {
+    const encoder = new TextEncoder();
+    const emitLegacy = this.emitter(pending);
+    return async (evt) => {
+      const safe = evt.type === "error" || evt.type === "text" ? { ...evt, data: scrubKey(evt.data) } : evt;
+      await emitLegacy(safe);
+      await this.flushEvents();
+      await writer.write(encoder.encode(`data: ${JSON.stringify(safe)}\n\n`)).catch(() => {});
+    };
+  }
+
+  private async runLegacyTurn(ctx: LegacyTurnContext): Promise<void> {
+    let turnSaved = false;
+    try {
+      const result = await this.runLegacyAgentTurn(ctx, ctx.history, ctx.body.message);
+      await this.persistLegacyAgentResult(ctx, result);
+      turnSaved = true;
+      ctx.pending.turnSaved = true;
+
+      if (result.infraRequests.length > 0) await this.runLegacyInfraAndFollowup(ctx, result.infraRequests);
+      await ctx.sendSSE({ type: "done", data: "" });
+    } catch (err) {
+      this.logError("chat", ctx.scrubKey(String(err)));
+      await ctx.sendSSE({ type: "error", data: String(err) });
+      if (!turnSaved) await this.appendLegacyFailure(ctx, err);
+      await this.syncToD1();
+    } finally {
+      await this.flushEvents();
+      await this.clearPendingTurn(ctx.pending.turnId);
+      ctx.writer.close().catch(() => {});
+    }
+  }
+
+  private async runLegacyAgentTurn(ctx: LegacyTurnContext, history: Message[], message: string): Promise<AgentTurnResult> {
+    try {
+      return await runAgentTurn(
+        ctx.body.aiConfig,
+        history,
+        message,
+        ctx.files,
+        ctx.writer,
+        ctx.config,
+        this.fileMapContext(ctx.session, ctx.files),
+        this.env,
+      );
+    } catch (err) {
+      this.logError("agent", String(err));
+      throw err;
+    }
+  }
+
+  private async persistLegacyAgentResult(ctx: LegacyTurnContext, result: AgentTurnResult): Promise<void> {
+    this.logTerminalError(result.terminalError, ctx.scrubKey);
+    ctx.session.messages = [...ctx.history, ...result.newMessages];
+    if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
+    if (ctx.session.errors.length > MAX_ERRORS) ctx.session.errors = ctx.session.errors.slice(-MAX_ERRORS);
+    this.trimFileMap(ctx.files);
+    ctx.session.files = Object.fromEntries(ctx.files);
+    await this.save();
+    await this.syncToD1();
+  }
+
+  private async appendLegacyFailure(ctx: LegacyTurnContext, err: unknown): Promise<void> {
+    try {
+      ctx.session.messages.push({ role: "assistant", content: `Error: ${ctx.scrubKey(String(err))}` });
+      if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
+      await this.save();
+    } catch {
+      /* best effort */
+    }
+  }
+
+  private async runLegacyInfraAndFollowup(ctx: LegacyTurnContext, infraRequests: AgentTurnResult["infraRequests"]): Promise<void> {
+    if (!ctx.deployEnv) {
+      await ctx.sendSSE({ type: "error", data: "Server configuration error: deploy environment not available." });
+      return;
+    }
+
+    const infraResults = await this.executeLegacyInfraRequests(ctx, infraRequests);
+    ctx.session.messages.push({ role: "tool_result", content: "", toolResults: infraResults });
+    ctx.session.files = Object.fromEntries(ctx.files);
+    await this.save();
+    await this.syncToD1();
+
+    try {
+      await this.runLegacyFollowup(ctx, infraResults);
+    } catch (followUpErr) {
+      this.logError("follow-up", ctx.scrubKey(String(followUpErr)));
+      await this.syncToD1();
+    }
+  }
+
+  private async runLegacyFollowup(ctx: LegacyTurnContext, infraResults: { id: string; content: string }[]): Promise<void> {
+    const hasError = infraResults.some((r) => /error|fail|threw/i.test(r.content));
+    const followUpPrompt = hasError
+      ? "The tool action above returned an error. Analyze the error, fix the issue if possible, and retry the action. Do not ask the user — just fix it."
+      : "The action completed. Summarize the result briefly for the user.";
+    const followUp = await this.runLegacyAgentTurn(ctx, ctx.session.messages, followUpPrompt);
+
+    this.logTerminalError(followUp.terminalError, ctx.scrubKey);
+    ctx.session.messages.push(...followUp.newMessages);
+    if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
+    ctx.session.files = Object.fromEntries(ctx.files);
+
+    if (followUp.infraRequests.length > 0) {
+      const retryResults = await this.executeLegacyInfraRequests(ctx, followUp.infraRequests);
+      ctx.session.messages.push({ role: "tool_result", content: "", toolResults: retryResults });
+      ctx.session.files = Object.fromEntries(ctx.files);
+    }
+    await this.save();
+    await this.syncToD1();
+  }
+
+  private async executeLegacyInfraRequests(
+    ctx: LegacyTurnContext,
+    infraRequests: AgentTurnResult["infraRequests"],
+  ): Promise<{ id: string; content: string }[]> {
+    const results: { id: string; content: string }[] = [];
+    for (const req of infraRequests) {
+      const tc = req.toolCall;
+      const toolResult = await this.executeLegacyInfraTool(ctx, tc);
+      await ctx.sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
+      results.push({ id: tc.id, content: toolResult.slice(0, 3000) });
+    }
+    return results;
+  }
+
+  private async executeLegacyInfraTool(ctx: LegacyTurnContext, tc: ToolCall): Promise<string> {
+    if (!ctx.deployEnv) return "Server configuration error: deploy environment not available.";
+    try {
+      return await executeInfraTool(tc, {
+        appId: ctx.session.appId,
+        ownerLogin: ctx.session.ownerLogin,
+        authHeader: ctx.authHeader,
+        files: ctx.files,
+        env: ctx.deployEnv,
+        config: ctx.config,
+        onDeployStatus: (status) => this.handleLegacyDeployStatus(ctx, status),
+        onAppDeployed: (id, name) => this.handleLegacyAppDeployed(ctx, id, name),
+      });
+    } catch (err) {
+      return `Tool ${tc.name} threw an error: ${String(err)}`;
+    }
+  }
+
+  private async handleLegacyDeployStatus(ctx: LegacyTurnContext, status: DeployStatus): Promise<void> {
+    ctx.session.deployStatus = status;
+    this.logDeploy(status.phase, deployStatusDetail(status));
+    await this.state.storage.put("session", ctx.session);
+    await ctx.sendSSE({ type: "deploy_status", data: JSON.stringify(status) });
+    if (status.phase === "live") {
+      this.sendPush("Your build is live!");
+      this.syncToD1();
+    } else if (status.phase === "error") {
+      this.sendPush("Build failed");
+      this.syncToD1();
+    }
+  }
+
+  private async handleLegacyAppDeployed(ctx: LegacyTurnContext, id: string, name: string): Promise<void> {
+    ctx.session.appId = id;
+    ctx.session.appName = name;
+    ctx.session.deployStatus = { phase: "provisioning", steps: [] };
+    this.logDeploy("provisioning", `Starting deploy for ${name} (${id})`);
+    await this.state.storage.put("session", ctx.session);
+  }
+
+  private fileMapContext(session: SessionState, files: Map<string, string>): SessionContext {
+    return {
+      appId: session.appId,
+      appName: session.appName,
+      fileCount: files.size,
+      fileList: [...files.keys()].sort().join(", "),
+    };
+  }
+
+  private logTerminalError(terminalError: string | undefined, scrubKey: (s: string) => string): void {
+    if (!terminalError) return;
+    const source = terminalError.startsWith("empty-no-output") ? "agent-empty" : "agent-stream";
+    this.logError(source, scrubKey(terminalError));
+  }
+
+  private trimFileMap(files: Map<string, string>): void {
+    const fileKeys = [...files.keys()];
+    if (fileKeys.length <= MAX_FILES) return;
+    const keep = new Set(fileKeys.slice(-MAX_FILES));
+    for (const k of fileKeys) {
+      if (!keep.has(k)) files.delete(k);
+    }
+  }
+
   // ── Alarm-driven turn (ALARM_LOOP=true) ──
 
   /** The persisted turn, if one is running. A turn whose heartbeat is older
@@ -675,7 +711,7 @@ export class AgentSession implements DurableObject {
   private async activePendingTurn(): Promise<PendingTurn | null> {
     const pending = await this.state.storage.get<PendingTurn>("pendingTurn");
     if (!pending) return null;
-    if (Date.now() - pending.heartbeat > INFRA_STALL_THRESHOLD_MS) {
+    if (pending.mode !== "legacy" && Date.now() - pending.heartbeat > INFRA_STALL_THRESHOLD_MS) {
       await this.load();
       await this.failTurn(pending, `Build stalled — no progress for >${INFRA_STALL_THRESHOLD_MS / 1000}s`, "alarm", true);
       return null;
@@ -701,6 +737,7 @@ export class AgentSession implements DurableObject {
     const pending: PendingTurn = {
       turnId: crypto.randomUUID(),
       message: body.message,
+      mode: "alarm",
       aiConfig: body.aiConfig,
       authHeader: request.headers.get("Authorization") || undefined,
       phase: "main",
@@ -783,12 +820,19 @@ export class AgentSession implements DurableObject {
     return log ? Math.max(0, log.nextSeq - 1) : 0;
   }
 
-  private async jsonWithLastEventId(data: unknown, status: number, request: Request, turnId?: string): Promise<Response> {
+  private async jsonWithLastEventId(
+    data: unknown,
+    status: number,
+    request: Request,
+    turnId?: string,
+    extraHeaders?: Record<string, string>,
+  ): Promise<Response> {
     return new Response(JSON.stringify(data), {
       status,
       headers: {
         "Content-Type": "application/json",
         "Last-Event-ID": String(await this.currentEventSeq(turnId)),
+        ...extraHeaders,
         ...corsHeaders(request, this.config.domain),
       },
     });
@@ -880,7 +924,6 @@ export class AgentSession implements DurableObject {
     const pending = await this.state.storage.get<PendingTurn>("pendingTurn");
     if (!pending) return;
     const session = await this.load();
-    this.chatInProgress = true;
 
     const budget = pending.phase.endsWith("infra") ? INFRA_STALL_THRESHOLD_MS : STALL_THRESHOLD_MS;
     if (Date.now() - pending.heartbeat > budget) {
@@ -1071,8 +1114,7 @@ export class AgentSession implements DurableObject {
   private async completeTurn(pending: PendingTurn): Promise<void> {
     await this.emitter(pending)({ type: "done", data: "" });
     await this.flushEvents();
-    await this.state.storage.delete("pendingTurn");
-    this.chatInProgress = false;
+    await this.clearPendingTurn(pending.turnId);
     await this.save();
     await this.syncToD1();
   }
@@ -1093,16 +1135,20 @@ export class AgentSession implements DurableObject {
       if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
     }
     await this.flushEvents();
-    await this.state.storage.delete("pendingTurn");
-    this.chatInProgress = false;
+    await this.clearPendingTurn(pending.turnId);
     await this.save();
     await this.syncToD1();
+  }
+
+  private async clearPendingTurn(turnId: string): Promise<void> {
+    const current = await this.state.storage.get<PendingTurn>("pendingTurn");
+    if (current?.turnId === turnId) await this.state.storage.delete("pendingTurn");
   }
 
   /** GET /status — current session state */
   private async handleStatus(request: Request): Promise<Response> {
     const session = await this.load();
-    const turnActive = this.chatInProgress || !!(await this.state.storage.get<PendingTurn>("pendingTurn"));
+    const turnActive = !!(await this.activePendingTurn());
     return json(
       {
         messageCount: session.messages.length,
@@ -1268,7 +1314,6 @@ export class AgentSession implements DurableObject {
       ...(latestTurnId ? [turnEventsKey(latestTurnId)] : []),
     ]);
     await this.state.storage.deleteAlarm();
-    this.chatInProgress = false;
     this.session = this.freshSession({
       ownerId: this.session?.ownerId ?? null,
       tokenHash: this.session?.tokenHash ?? null,

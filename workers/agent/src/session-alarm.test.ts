@@ -152,14 +152,51 @@ describe("ALARM_LOOP=true: /chat", () => {
   });
 
   it("rejects a second /chat while a turn is persisted, even after eviction", async () => {
-    const { state } = fakeState();
+    const { state, store } = fakeState();
     const { env } = fakeEnv();
     const first = await new AgentSession(state, env).fetch(chatRequest());
     await first.body?.cancel();
     // New instance = evicted DO: the in-memory flag is gone, storage is not.
     const second = await new AgentSession(state, env).fetch(chatRequest("again"));
+    const body = (await second.json()) as any;
     expect(second.status).toBe(409);
+    expect(second.headers.get("Retry-After")).toBe("2");
     expect(second.headers.get("Last-Event-ID")).toBe("0");
+    expect(body).toMatchObject({
+      error: "A build is already in progress.",
+      turnId: (store.get("pendingTurn") as PendingTurn).turnId,
+      liveUrl: "/live",
+      status: { state: "working", detail: "Building…" },
+    });
+  });
+
+  it("reports working status from pendingTurn after a cold start", async () => {
+    const { state } = fakeState();
+    const { env } = fakeEnv();
+    const first = await new AgentSession(state, env).fetch(chatRequest());
+    await first.body?.cancel();
+
+    const status = await new AgentSession(state, env).fetch(new Request("https://agent/status"));
+    expect(status.status).toBe(200);
+    expect(((await status.json()) as any).devStatus).toEqual({ state: "working", detail: "Building…" });
+  });
+
+  it("returns the current event cursor so a conflicting chat can reconnect without replaying seen events", async () => {
+    const { state, store } = fakeState();
+    const { env } = fakeEnv();
+    const session = new AgentSession(state, env);
+    const first = await session.fetch(chatRequest());
+    await first.body?.cancel();
+
+    scriptSteps({ kind: "rate_limited" });
+    await session.alarm();
+    expect(latestTurnLog(store).events).toHaveLength(1);
+
+    const second = await new AgentSession(state, env).fetch(chatRequest("again"));
+    const body = (await second.json()) as any;
+    expect(second.status).toBe(409);
+    expect(second.headers.get("Last-Event-ID")).toBe("1");
+    expect(body.turnId).toBe((store.get("pendingTurn") as PendingTurn).turnId);
   });
 });
 
@@ -448,9 +485,10 @@ describe("ALARM_LOOP off: legacy path", () => {
     expect((store.get("session") as any).messages.at(-1).content).toBe("legacy reply");
   });
 
-  it("keeps the in-memory concurrency guard", async () => {
-    const { state } = fakeState();
-    const session = new AgentSession(state, fakeEnv("false").env);
+  it("uses pendingTurn as the concurrency guard even after eviction", async () => {
+    const { state, store } = fakeState();
+    const { env } = fakeEnv("false");
+    const session = new AgentSession(state, env);
     let release!: () => void;
     turnMock.mockImplementation(
       () =>
@@ -459,10 +497,51 @@ describe("ALARM_LOOP off: legacy path", () => {
         }),
     );
     const first = await session.fetch(chatRequest());
-    const second = await session.fetch(chatRequest("again"));
+    const pending = store.get("pendingTurn") as PendingTurn;
+    const second = await new AgentSession(state, env).fetch(chatRequest("again"));
+    const body = (await second.json()) as any;
     expect(second.status).toBe(409);
+    expect(second.headers.get("Retry-After")).toBe("2");
     expect(second.headers.get("Last-Event-ID")).toBe("0");
+    expect(body).toMatchObject({ error: "A build is already in progress.", turnId: pending.turnId });
     release();
     await first.text();
+  });
+
+  it("clears pendingTurn on success so the next legacy chat is accepted", async () => {
+    const { state, store } = fakeState();
+    const session = new AgentSession(state, fakeEnv("false").env);
+    turnMock
+      .mockResolvedValueOnce({ newMessages: [{ role: "user", content: "build me a timer" }, assistant("first done")], infraRequests: [] })
+      .mockResolvedValueOnce({ newMessages: [{ role: "user", content: "second" }, assistant("second done")], infraRequests: [] });
+
+    const first = await session.fetch(chatRequest());
+    await first.text();
+    expect(store.has("pendingTurn")).toBe(false);
+
+    const second = await new AgentSession(state, fakeEnv("false").env).fetch(chatRequest("second"));
+    await second.text();
+    expect(second.status).toBe(200);
+    expect(store.has("pendingTurn")).toBe(false);
+    expect((store.get("session") as any).messages.at(-1).content).toBe("second done");
+  });
+
+  it("clears pendingTurn on terminal error so the next legacy chat is accepted", async () => {
+    const { state, store } = fakeState();
+    const session = new AgentSession(state, fakeEnv("false").env);
+    turnMock
+      .mockRejectedValueOnce(new Error("model exploded"))
+      .mockResolvedValueOnce({ newMessages: [{ role: "user", content: "retry" }, assistant("retry done")], infraRequests: [] });
+
+    const first = await session.fetch(chatRequest());
+    const body = await first.text();
+    expect(body).toContain("model exploded");
+    expect(store.has("pendingTurn")).toBe(false);
+
+    const second = await new AgentSession(state, fakeEnv("false").env).fetch(chatRequest("retry"));
+    await second.text();
+    expect(second.status).toBe(200);
+    expect(store.has("pendingTurn")).toBe(false);
+    expect((store.get("session") as any).messages.at(-1).content).toBe("retry done");
   });
 });
