@@ -20,6 +20,8 @@ interface Props {
   appName: string
   getToken: () => string | null
   onBack: () => void
+  /** Continue building this app in VibeCode, starting from its real code (#12). */
+  onOpenInVibeCode: () => void
 }
 
 interface AppAnalytics {
@@ -29,7 +31,7 @@ interface AppAnalytics {
 
 type AppTab = 'overview' | 'data'
 
-export function AppDetail({ appId, appName, getToken, onBack }: Props) {
+export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }: Props) {
   const [appTab, setAppTab] = useState<AppTab>('overview')
   const [analytics, setAnalytics] = useState<AppAnalytics | null>(null)
   const [deploy, setDeploy] = useState<AppDeployStatus | null>(null)
@@ -131,6 +133,9 @@ export function AppDetail({ appId, appName, getToken, onBack }: Props) {
           <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--panel-hover)] no-underline min-h-[44px]">
             Source
           </a>
+          <button type="button" onClick={onOpenInVibeCode} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--panel-hover)] min-h-[44px] bg-transparent cursor-pointer">
+            Open in VibeCode
+          </button>
         </div>
       </div>
 

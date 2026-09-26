@@ -208,6 +208,29 @@ export function useAgent() {
     resetUI();
   }, [projectsMgr, resetUI]);
 
+  /** Open an existing app in VibeCode (#12): switch to a project already bound
+   *  to it, else import the app's repo into a new session. The agent only allows
+   *  the app's owner or a platform admin. Resolves to the project id; rejects
+   *  with the agent's reason. */
+  const openApp = useCallback(async (appId: string): Promise<string> => {
+    const existing = projectsMgr.projects.find((p) => p.appId === appId);
+    if (existing) {
+      switchProject(existing.id);
+      return existing.id;
+    }
+    const id = crypto.randomUUID();
+    const res = await fetch(`${AGENT_URL}/session/${id}/import`, {
+      method: "POST",
+      headers: { ...agentAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify({ appId }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { error?: string; appUrl?: string; appName?: string };
+    if (!res.ok) throw new Error(data.error || `Could not open ${appId} (HTTP ${res.status})`);
+    projectsMgr.addImported(id, appId, data.appUrl || `https://${appId}.freeappstore.online`, data.appName || appId);
+    resetUI();
+    return id;
+  }, [projectsMgr, switchProject, resetUI]);
+
   // Subscribe to push notifications on first interaction
   const pushAsked = useRef(false);
   const subscribePush = useCallback(async () => {
@@ -392,7 +415,7 @@ export function useAgent() {
     messages, isStreaming, isLoadingHistory, historyError, tokensIn, tokensOut, deployState,
     projects: projectsMgr.projects, currentProjectId: projectsMgr.currentId,
     projectsLoading: projectsMgr.loading, projectsError: projectsMgr.loadError, reloadProjects: projectsMgr.reload,
-    sendMessage, createProject, switchProject, retryHistory: loadHistory,
+    sendMessage, createProject, switchProject, openApp, retryHistory: loadHistory,
   };
 }
 

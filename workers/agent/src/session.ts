@@ -20,9 +20,10 @@ import { getConfig } from "./config";
 import { corsHeaders, json } from "./cors";
 import type { DeployEnv, DeployStatus } from "./deploy";
 import type { Env } from "./index";
-import { executeInfraTool } from "./infra-exec";
+import { editAccess, executeInfraTool, readAppOwner } from "./infra-exec";
 import type { AIConfig, Message, TokenUsage, ToolCall } from "./providers/types";
 import { type PushSubscription, sendWebPush } from "./push";
+import { fetchRepoFiles } from "./repo-import";
 import { APP_ARCHETYPES, type AppArchetype, getTemplateFiles } from "./template";
 
 interface ErrorEntry {
@@ -32,7 +33,9 @@ interface ErrorEntry {
 }
 
 const MAX_MESSAGES = 200;
-const MAX_FILES = 100;
+/** Files a session tracks. Matches the import cap (IMPORT_MAX_FILES); storage
+ *  is bounded by the import byte cap, not by this count. */
+const MAX_FILES = 200;
 const MAX_ERRORS = 50;
 
 interface DeployLogEntry {
@@ -52,7 +55,10 @@ interface SessionState {
   appName: string | null;
   errors: ErrorEntry[];
   ownerId: string | null;
+  /** GitHub login: the identity `apps.owner_login` is checked against. */
   ownerLogin: string | null;
+  /** Holds the platform `admin` role, which may open and update any app (#12). */
+  ownerIsAdmin?: boolean;
   tokenHash: string | null;
   tokenValidatedAt: number | null;
   sessionId: string | null;
@@ -293,7 +299,7 @@ export class AgentSession implements DurableObject {
       return { userId: null, error: json({ error: "Invalid auth token" }, 401, request, this.config.domain) };
     }
 
-    const user = (await res.json()) as { id: string; login: string };
+    const user = (await res.json()) as { id: string; login: string; githubLogin?: string; roles?: string[] };
 
     if (session.ownerId && session.ownerId !== user.id) {
       return { userId: null, error: json({ error: "Session belongs to another user" }, 403, request, this.config.domain) };
@@ -301,7 +307,10 @@ export class AgentSession implements DurableObject {
 
     // Bind or refresh session auth
     session.ownerId = user.id;
-    session.ownerLogin = user.login;
+    // The backend checks app ownership against githubLogin everywhere; `login`
+    // is the display name for Google/Apple/email users, which they choose (#12).
+    session.ownerLogin = user.githubLogin || user.login;
+    session.ownerIsAdmin = user.roles?.includes("admin") ?? false;
     session.tokenHash = await hashToken(token);
     session.tokenValidatedAt = Date.now();
     await this.save();
@@ -581,8 +590,9 @@ export class AgentSession implements DurableObject {
     ctx.session.messages = [...ctx.history, ...result.newMessages];
     if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
     if (ctx.session.errors.length > MAX_ERRORS) ctx.session.errors = ctx.session.errors.slice(-MAX_ERRORS);
-    this.trimFileMap(ctx.files);
+    this.trimFileMap(ctx.files, ctx.baselineFiles);
     ctx.session.files = Object.fromEntries(ctx.files);
+    ctx.session.baselineFiles = Object.fromEntries(ctx.baselineFiles);
     await this.save();
     await this.syncToD1();
   }
@@ -665,6 +675,7 @@ export class AgentSession implements DurableObject {
         baselineFiles: ctx.baselineFiles,
         env: ctx.deployEnv,
         config: ctx.config,
+        isAdmin: ctx.session.ownerIsAdmin ?? false,
         deployStatus: ctx.session.deployStatus,
         onDeployStatus: (status) => this.handleLegacyDeployStatus(ctx, status),
         onAppDeployed: (id, name) => this.handleLegacyAppDeployed(ctx, id, name),
@@ -712,12 +723,17 @@ export class AgentSession implements DurableObject {
     this.logError(source, scrubKey(terminalError));
   }
 
-  private trimFileMap(files: Map<string, string>): void {
+  /** Stop tracking the oldest files past MAX_FILES, in the baseline too: a file
+   *  missing only from the working set would be pushed as a deletion
+   *  (computeFileDelta), while an untracked one is left alone in the repo. */
+  private trimFileMap(files: Map<string, string>, baselineFiles: Map<string, string>): void {
     const fileKeys = [...files.keys()];
     if (fileKeys.length <= MAX_FILES) return;
     const keep = new Set(fileKeys.slice(-MAX_FILES));
     for (const k of fileKeys) {
-      if (!keep.has(k)) files.delete(k);
+      if (keep.has(k)) continue;
+      files.delete(k);
+      baselineFiles.delete(k);
     }
   }
 
@@ -929,11 +945,16 @@ export class AgentSession implements DurableObject {
     session.messages = all;
   }
 
+  /** Alarm-path twin of trimFileMap: untrack in both, never push a deletion. */
   private trimFiles(session: SessionState): void {
     const fileKeys = Object.keys(session.files);
     if (fileKeys.length > MAX_FILES) {
       const keep = new Set(fileKeys.slice(-MAX_FILES));
-      for (const k of fileKeys) if (!keep.has(k)) delete session.files[k];
+      for (const k of fileKeys) {
+        if (keep.has(k)) continue;
+        delete session.files[k];
+        delete session.baselineFiles[k];
+      }
     }
   }
 
@@ -1095,6 +1116,7 @@ export class AgentSession implements DurableObject {
           baselineFiles,
           env: deployEnv,
           config: this.config,
+          isAdmin: session.ownerIsAdmin ?? false,
           deployStatus: session.deployStatus,
           onDeployStatus: async (status) => {
             session.deployStatus = status;
@@ -1313,35 +1335,40 @@ export class AgentSession implements DurableObject {
     );
   }
 
-  /** POST /import — load files from an existing GitHub repo into this session.
-   *  Body: { appId: string }. Fetches the repo tree + file contents from
-   *  GitHub and replaces the session's files so the agent can see and edit
-   *  the existing code. */
+  /** POST /import — open an existing app in this session (#12). Body: { appId }.
+   *  Only the app's owner (by apps.owner_login) or a platform admin may, and a
+   *  session bound to another app can't be re-pointed. The repo's files become
+   *  both the session's files and its baseline, so a later push_update sends
+   *  only real edits instead of overwriting the app with a scaffold. */
   private async handleImport(request: Request): Promise<Response> {
-    const body = await request.json<{ appId?: string }>();
+    const reply = (body: unknown, status: number) => json(body, status, request, this.config.domain);
+    const body = await request.json<{ appId?: string }>().catch(() => null);
     const appId = body?.appId;
-    if (!appId || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(appId)) {
-      return json({ error: "valid appId required" }, 400, request, this.config.domain);
-    }
+    if (!appId || !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(appId)) return reply({ error: "valid appId required" }, 400);
+
     const session = await this.load();
-    if (session.appId && session.appId !== appId) {
-      return json({ error: "session already linked to a different app" }, 409, request, this.config.domain);
-    }
+    if (session.appId && session.appId !== appId) return reply({ error: "session already linked to a different app" }, 409);
 
-    const repo = `${this.config.org}/${appId}`;
-    const files = await fetchRepoFiles(repo, this.config.agentName, this.env.GITHUB_TOKEN);
-    if (!files) {
-      return json({ error: `Could not read repo ${repo}` }, 404, request, this.config.domain);
-    }
+    const isAdmin = session.ownerIsAdmin ?? false;
+    if (!this.env.DB && !isAdmin) return reply({ error: "cannot verify app ownership right now" }, 503);
+    const owner = this.env.DB ? await readAppOwner(this.env.DB, appId) : null;
+    const access = editAccess(owner, session.ownerLogin, isAdmin);
+    if (access === "unknown_app") return reply({ error: `no ${this.config.noun} "${appId}"` }, 404);
+    if (access === "not_owner") return reply({ error: `you do not own "${appId}"` }, 403);
 
-    session.files = files;
-    session.baselineFiles = { ...files };
+    const imported = await fetchRepoFiles(`${this.config.org}/${appId}`, this.config.agentName, this.env.GITHUB_TOKEN);
+    if (!imported.ok) return reply({ error: imported.error }, imported.status);
+
+    const appUrl = `https://${appId}.${this.config.domain}`;
+    session.files = imported.files;
+    session.baselineFiles = { ...imported.files };
     session.appId = appId;
-    session.appName = appId;
-    session.deployStatus = { phase: "live", appUrl: `https://${appId}.${this.config.domain}` } as DeployStatus;
+    session.appName = owner?.display_name || appId;
+    session.deployStatus = { phase: "live", appUrl };
+    this.logDeploy("live", `Imported ${Object.keys(imported.files).length} files from ${this.config.org}/${appId}`);
     await this.save();
 
-    return json({ ok: true, fileCount: Object.keys(files).length }, 200, request, this.config.domain);
+    return reply({ ok: true, appId, appUrl, appName: session.appName, fileCount: Object.keys(imported.files).length }, 200);
   }
 
   /** POST /reset — start over */
@@ -1409,41 +1436,4 @@ async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-}
-
-const IMPORTABLE_EXTS = new Set(["ts", "tsx", "js", "jsx", "json", "html", "css", "md", "yaml", "yml", "toml", "txt", "svg", "sh"]);
-const SKIP_PATHS = ["node_modules/", "dist/"];
-const SKIP_FILES = new Set(["pnpm-lock.yaml", "package-lock.json"]);
-
-function isImportable(e: { path: string; type: string; size?: number }): boolean {
-  if (e.type !== "blob") return false;
-  if (e.path.startsWith(".") || SKIP_PATHS.some((p) => e.path.includes(p))) return false;
-  if (SKIP_FILES.has(e.path)) return false;
-  const ext = e.path.split(".").pop()?.toLowerCase() ?? "";
-  return IMPORTABLE_EXTS.has(ext) && (e.size ?? 0) <= 100_000;
-}
-
-async function fetchRepoFiles(repo: string, agentName: string, token?: string): Promise<Record<string, string> | null> {
-  const ghHeaders: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": agentName };
-  if (token) ghHeaders.Authorization = `Bearer ${token}`;
-
-  const treeRes = await fetch(`https://api.github.com/repos/${repo}/git/trees/main?recursive=1`, { headers: ghHeaders });
-  if (!treeRes.ok) return null;
-  const treeData = (await treeRes.json()) as { tree: { path: string; type: string; size?: number }[] };
-  const candidates = treeData.tree.filter(isImportable).slice(0, 80);
-  if (candidates.length === 0) return null;
-
-  const files: Record<string, string> = {};
-  const rawHeaders = { ...ghHeaders, Accept: "application/vnd.github.raw+json" };
-  for (let i = 0; i < candidates.length; i += 10) {
-    const batch = candidates.slice(i, i + 10);
-    const results = await Promise.all(
-      batch.map(async (f) => {
-        const fileRes = await fetch(`https://api.github.com/repos/${repo}/contents/${f.path}?ref=main`, { headers: rawHeaders });
-        return fileRes.ok ? { path: f.path, content: await fileRes.text() } : null;
-      }),
-    );
-    for (const r of results) if (r) files[r.path] = r.content;
-  }
-  return files;
 }

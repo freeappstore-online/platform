@@ -120,6 +120,12 @@ function navigate(view: View, appId?: string) {
   if (_setRoute) _setRoute(next)
 }
 
+/** Open an existing app in the VibeCode builder, which imports its repo (#12). */
+function openInVibeCode(appId: string) {
+  history.pushState(null, '', `${BASE}/build?app=${encodeURIComponent(appId)}`)
+  if (_setRoute) _setRoute(parseRoute())
+}
+
 export default function App() {
   const { user, loading } = useAuth(fas)
   const [route, setRoute] = useState(parseRoute)
@@ -195,6 +201,7 @@ export default function App() {
             appName={apps.find((a) => a.id === selectedAppId)?.name ?? selectedAppId}
             getToken={() => fas.auth.token}
             onBack={() => navigate('dashboard')}
+            onOpenInVibeCode={() => openInVibeCode(selectedAppId)}
           />
         )}
         {view === 'publish' && <PublishView getToken={() => fas.auth.token} />}

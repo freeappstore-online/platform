@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StepOutcome } from "./agent";
 import { runAgentStep, runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
+import { computeFileDelta } from "./deploy";
 import { executeInfraTool } from "./infra-exec";
 import type { Message } from "./providers/types";
 import { AgentSession, INFRA_STALL_THRESHOLD_MS, type PendingTurn, STALL_THRESHOLD_MS } from "./session";
@@ -684,5 +685,50 @@ describe("deploy failures are persisted for the session and admin (#11)", () => 
     await res.text();
 
     expectFailureRecorded(store, d1Writes);
+  });
+});
+
+describe("trimming past MAX_FILES never becomes a deletion (#12)", () => {
+  // 205 imported files, all in the baseline. Trimming to 200 must stop
+  // tracking the extra 5, not push them as deletions of the live app's files.
+  const many = Object.fromEntries(Array.from({ length: 205 }, (_, i) => [`src/f${i}.ts`, "x"]));
+
+  function seed(store: Map<string, unknown>) {
+    const saved = store.get("session") as any;
+    saved.files = { ...many };
+    saved.baselineFiles = { ...many };
+    store.set("session", saved);
+  }
+
+  function expectNoDeletions(store: Map<string, unknown>) {
+    const after = store.get("session") as any;
+    expect(Object.keys(after.files)).toHaveLength(200);
+    const delta = computeFileDelta(new Map(Object.entries(after.files)), new Map(Object.entries(after.baselineFiles)));
+    expect([...delta.entries()].filter(([, v]) => v === null)).toEqual([]);
+  }
+
+  it("alarm loop", async () => {
+    const { state, store } = fakeState();
+    const { env } = fakeEnv();
+    const res = await new AgentSession(state, env).fetch(chatRequest());
+    await res.body?.cancel();
+    seed(store);
+    scriptSteps({ kind: "final", appended: [assistant("ok")] });
+
+    await drain(new AgentSession(state, env), store);
+
+    expectNoDeletions(store);
+  });
+
+  it("legacy loop", async () => {
+    const { state, store } = fakeState();
+    const { env } = fakeEnv("false");
+    turnMock.mockResolvedValue({ newMessages: [assistant("ok")], infraRequests: [] });
+    await (await new AgentSession(state, env).fetch(chatRequest())).text();
+    seed(store);
+
+    await (await new AgentSession(state, env).fetch(chatRequest("again"))).text();
+
+    expectNoDeletions(store);
   });
 });

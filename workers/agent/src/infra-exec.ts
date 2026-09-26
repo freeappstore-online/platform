@@ -10,6 +10,8 @@ import type { ToolCall } from "./providers/types";
 interface ExecContext {
   appId: string | null;
   ownerLogin: string | null;
+  /** Platform admin: may update any app (#12). */
+  isAdmin?: boolean;
   authHeader?: string;
   files: Map<string, string>;
   baselineFiles?: Map<string, string>;
@@ -74,6 +76,11 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
     }
   }
 
+  if (tc.name === "push_update") {
+    const denied = await pushUpdateDenied((targetId ?? ctx.appId) as string, ctx);
+    if (denied) return denied;
+  }
+
   if (tc.name === "deploy" || tc.name === "push_update") {
     const findings = checkBuildSanity(ctx.files);
     if (findings.length) {
@@ -128,6 +135,37 @@ async function repoExists(id: string, ctx: ExecContext): Promise<boolean> {
   throw new Error(
     `GitHub returned ${res.status} while checking whether "${id}" is free. Not deploying — this would risk overwriting another ${ctx.config.noun}. Try again shortly.`,
   );
+}
+
+/** The `apps` row fields that decide who may change an app. */
+export interface AppOwnerRow {
+  owner_login: string;
+  display_name: string | null;
+}
+
+export async function readAppOwner(db: D1Database, id: string): Promise<AppOwnerRow | null> {
+  return db.prepare(`SELECT owner_login, display_name FROM apps WHERE id = ?`).bind(id).first<AppOwnerRow>();
+}
+
+/**
+ * May this caller change an existing app (#12)? Its owner by `apps.owner_login`
+ * (the same authority deploy claims against; GitHub logins compare
+ * case-insensitively) or a platform admin. An app with no row is unknown: we
+ * cannot prove whose it is, so only an admin gets in.
+ */
+export function editAccess(row: AppOwnerRow | null, login: string | null, isAdmin: boolean): "ok" | "not_owner" | "unknown_app" {
+  if (isAdmin) return "ok";
+  if (!row) return "unknown_app";
+  return login && row.owner_login.toLowerCase() === login.toLowerCase() ? "ok" : "not_owner";
+}
+
+/** Refuse push_update into an app the caller doesn't own, whatever the session is bound to. */
+async function pushUpdateDenied(appId: string, ctx: ExecContext): Promise<string | null> {
+  if (ctx.isAdmin) return null;
+  if (!ctx.env.DB) return `Error: cannot verify ownership of "${appId}" right now, so push_update is refused.`;
+  const access = editAccess(await readAppOwner(ctx.env.DB, appId), ctx.ownerLogin, false);
+  if (access === "ok") return null;
+  return `Error: you do not own the ${ctx.config.noun} "${appId}", so push_update is refused.`;
 }
 
 /** Current owner_login for an id, or null if unclaimed / no DB binding. */

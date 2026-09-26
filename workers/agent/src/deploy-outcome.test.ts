@@ -32,7 +32,7 @@ function makeDb(apps: Map<string, string>) {
         bind(...args: unknown[]) {
           return {
             async first<T>(): Promise<T | null> {
-              const owner = sql.includes("SELECT owner_login FROM apps") ? apps.get(args[0] as string) : undefined;
+              const owner = sql.includes("FROM apps WHERE id") ? apps.get(args[0] as string) : undefined;
               return owner ? ({ owner_login: owner } as T) : null;
             },
             async run() {
@@ -50,7 +50,8 @@ function makeDb(apps: Map<string, string>) {
 }
 
 function makeCtx(overrides: { appId?: string | null; deployStatus?: DeployStatus | null } = {}) {
-  const apps = new Map<string, string>();
+  // A session bound to an app is working on alice's own app.
+  const apps = new Map<string, string>(overrides.appId ? [[overrides.appId, "alice"]] : []);
   const { db, ran } = makeDb(apps);
   const published: string[] = [];
   const PLATFORM = {
@@ -216,5 +217,38 @@ describe("check_deploy_status settles a build that finished after the wait (#11)
     const again = makeCtx({ appId: "dict", deployStatus: { phase: "error", error: BUILD_ERROR } });
     await executeInfraTool(checkCall, again.ctx);
     expect(again.statuses).toEqual([]);
+  });
+});
+
+describe("push_update ownership guard (#12)", () => {
+  it("refuses a non-owner before anything is pushed, even when the session is bound to the app", async () => {
+    const { ctx, apps } = makeCtx({ appId: "dict" });
+    apps.set("dict", "someone-else");
+
+    const result = await executeInfraTool(pushCall, ctx);
+
+    expect(result).toBe('Error: you do not own the app "dict", so push_update is refused.');
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
+  it("lets a platform admin update an app they don't own", async () => {
+    pushMock.mockResolvedValue({ ok: true, message: "Pushed update.", commitSha: "abc1234" });
+    waitMock.mockResolvedValue({ phase: "live", appUrl: APP_URL });
+    const { ctx, apps } = makeCtx({ appId: "dict" });
+    apps.set("dict", "someone-else");
+
+    const result = await executeInfraTool(pushCall, { ...ctx, isAdmin: true });
+
+    expect(result).toContain("LIVE");
+    expect(pushMock).toHaveBeenCalledOnce();
+  });
+
+  it("refuses when ownership can't be checked (no D1)", async () => {
+    const { ctx } = makeCtx({ appId: "dict" });
+
+    const result = await executeInfraTool(pushCall, { ...ctx, env: { ...ctx.env, DB: undefined } });
+
+    expect(result).toMatch(/cannot verify ownership/);
+    expect(pushMock).not.toHaveBeenCalled();
   });
 });

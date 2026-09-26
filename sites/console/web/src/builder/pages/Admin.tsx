@@ -467,6 +467,15 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
                   </a>
                 </>
               ) : null}
+              {appId ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <Link to={`/?app=${encodeURIComponent(appId)}`} style={{ color: "var(--accent)" }}>
+                    Open in VibeCode
+                  </Link>
+                </>
+              ) : null}
               {appActionsUrl ? (
                 <>
                   {" "}
@@ -1458,6 +1467,9 @@ function AppsTab() {
                       >
                         Code
                       </a>
+                      <Link to={`/?app=${encodeURIComponent(app.id)}`} className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+                        Open in VibeCode
+                      </Link>
                     </td>
                   </tr>
                 );

@@ -174,6 +174,15 @@ export function useProjects() {
     return id;
   }, [setCurrentId]);
 
+  /** Record a session that already holds an imported app (#12). Added only
+   *  after the import succeeded, so a refused import leaves no empty project. */
+  const addImported = useCallback((id: string, appId: string, appUrl: string, name: string) => {
+    const project: Project = { id, name, createdAt: new Date().toISOString(), updatedAt: Date.now(), appId, appUrl, deployed: true };
+    setProjects((prev) => [project, ...prev]);
+    setCurrentId(id);
+    putSession(project);
+  }, [setCurrentId]);
+
   const switchTo = useCallback((id: string) => {
     setCurrentId(id);
   }, [setCurrentId]);
@@ -205,5 +214,5 @@ export function useProjects() {
     });
   }, []);
 
-  return { projects, currentId, loading, loadError, reload, create, switchTo, rename, markDeployed } as const;
+  return { projects, currentId, loading, loadError, reload, create, addImported, switchTo, rename, markDeployed } as const;
 }

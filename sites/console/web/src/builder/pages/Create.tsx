@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Nav } from "../components/Nav";
 import { ChatMessage } from "../components/ChatMessage";
 import { DeployLog } from "../components/DeployLog";
@@ -22,6 +22,10 @@ export function Create() {
   const speech = useSpeech();
   const navigate = useNavigate();
   const { id: routeId } = useParams();
+  const [searchParams] = useSearchParams();
+  const openAppId = searchParams.get("app");
+  const [openError, setOpenError] = useState<string | null>(null);
+  const openingRef = useRef<string | null>(null);
   // The URL is the source of truth for which view: /app/:id → that app's chat,
   // bare / → the My Apps console. Pinning /app/:id to the home screen opens
   // straight into one app (iOS captures the current URL on Add to Home Screen).
@@ -116,6 +120,22 @@ export function Create() {
   useEffect(() => { localStorage.setItem("fas_provider", provider); }, [provider]);
   useEffect(() => { localStorage.setItem("fas_model", model); }, [model]);
 
+  // ?app=<id> (from "Open in VibeCode"): open that existing app, importing its
+  // repo unless a project is already bound to it (#12). Waits for the project
+  // list so an existing binding is found rather than duplicated.
+  useEffect(() => {
+    if (!user || !openAppId || agent.projectsLoading || openingRef.current === openAppId) return;
+    openingRef.current = openAppId;
+    setOpenError(null);
+    agent
+      .openApp(openAppId)
+      .then((id) => navigate(`/app/${id}`, { replace: true }))
+      .catch((err: unknown) => {
+        setOpenError(`Couldn't open ${openAppId}: ${err instanceof Error ? err.message : String(err)}`);
+        navigate("/", { replace: true });
+      });
+  }, [user?.id, openAppId, agent.projectsLoading]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center" style={{ height: "100dvh" }}>
@@ -168,6 +188,11 @@ export function Create() {
     return (
       <div className="flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
         <div className="shrink-0"><Nav /></div>
+        {(openAppId || openError) && (
+          <p role="status" className="shrink-0 text-sm px-4 py-2" style={{ color: openError ? "var(--danger)" : "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+            {openError ?? `Opening ${openAppId}…`}
+          </p>
+        )}
         <MyAppsConsole
           projects={agent.projects}
           loading={agent.projectsLoading}

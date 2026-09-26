@@ -40,7 +40,7 @@ function makeDb(apps: Map<string, string>) {
         bind(...args: unknown[]) {
           return {
             async first<T>(): Promise<T | null> {
-              if (sql.includes("SELECT owner_login FROM apps")) {
+              if (sql.includes("FROM apps WHERE id")) {
                 const owner = apps.get(args[0] as string);
                 return owner ? ({ owner_login: owner } as T) : null;
               }
@@ -183,7 +183,7 @@ describe("executeInfraTool — ID validation", () => {
     }) as typeof fetch;
 
     try {
-      const ctx = makeCtx({ appId: "my-app" });
+      const ctx = makeCtx({ appId: "my-app", ownerLogin: "alice", apps: new Map([["my-app", "alice"]]) });
       ctx.files.set("web/src/App.tsx", "export default () => <div/>");
       const resultPromise = executeInfraTool({ id: "1", name: "push_update", input: { id: "my-app", message: "update" } }, ctx);
       await vi.advanceTimersByTimeAsync(8000);
@@ -419,7 +419,7 @@ describe("executeInfraTool — build sanity preflight", () => {
     globalThis.fetch = fetchSpy;
 
     try {
-      const ctx = makeCtx({ appId: "my-app" });
+      const ctx = makeCtx({ appId: "my-app", ownerLogin: "alice", apps: new Map([["my-app", "alice"]]) });
       ctx.files.set("web/src/App.tsx", "export default function A() { return null; }\nexport default function B() { return null; }");
       const result = await executeInfraTool({ id: "1", name: "push_update", input: { id: "my-app", message: "update" } }, ctx);
 
