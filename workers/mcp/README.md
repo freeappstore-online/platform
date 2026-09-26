@@ -52,6 +52,8 @@ Cloudflare Worker with a SQLite-backed Durable Object (`FasMcpAgent`), using the
 
 Every request passes a per-IP rate limit (`MCP_RATE_LIMIT`, 120 requests / 60 s, `src/ratelimit.ts`) before OAuth or routing; over the limit it returns `429` with `Retry-After`. It is enforced under `wrangler dev`, but was not observed tripping in production as of 2026-09-26. It also cannot cap Workers request usage, since the Worker still runs; that needs an edge WAF rule on `mcp.*` (#68).
 
+Sign-in is OAuth 2.1 to MCP clients and a PKCE `response_mode=code` login against the FAS backend: see [docs/oauth-pkce-setup.md](docs/oauth-pkce-setup.md), which also covers scopes and how another store can copy the pattern.
+
 ## Development
 
 ```bash
