@@ -2,14 +2,17 @@
  *  Stores conversation history, virtual filesystem, token usage, deploy status. */
 
 import {
+  appendStallNudge,
   emptyNoOutputError,
   MAX_LOOPS,
   MAX_RATE_LIMIT_RETRIES,
   type PreparedTurn,
   prepareTurn,
+  readOnlyStallAction,
   runAgentStep,
   runAgentTurn,
   type SessionContext,
+  STALL_VISIBLE_ERROR,
   stepDelayMs,
 } from "./agent";
 import type { StoreConfig } from "./config";
@@ -101,6 +104,8 @@ export interface PendingTurn {
   /** Messages produced by the current LLM phase (starts with its user prompt). */
   newMessages: Message[];
   anyToolCalls: boolean;
+  /** Set once the #37 read-only-stall nudge has been sent in this LLM phase. */
+  nudged?: boolean;
   infraQueue: ToolCall[];
   infraResults: { id: string; content: string }[];
   /** True once the main phase's messages are committed (mirrors the legacy path). */
@@ -1013,8 +1018,23 @@ export class AgentSession implements DurableObject {
     pending.prepared.messages.push(...step.appended);
     pending.newMessages.push(...step.appended);
     session.files = Object.fromEntries(files);
+    if (step.kind === "final") {
+      const stall = readOnlyStallAction(pending.newMessages, pending.anyToolCalls, session.appId, pending.nudged ?? false);
+      if (stall === "nudge") {
+        pending.nudged = true;
+        appendStallNudge(pending.prepared.messages, pending.newMessages);
+        this.commitPhaseMessages(session, pending);
+        pending.loopIndex++;
+        return stepDelayMs(pending.aiConfig);
+      }
+      if (stall === "give_up") {
+        await emit({ type: "error", data: STALL_VISIBLE_ERROR });
+        pending.newMessages.push({ role: "assistant", content: STALL_VISIBLE_ERROR });
+      }
+      this.commitPhaseMessages(session, pending);
+      return this.finishLlmPhase(session, pending);
+    }
     this.commitPhaseMessages(session, pending);
-    if (step.kind === "final") return this.finishLlmPhase(session, pending);
     pending.anyToolCalls = true;
     if (step.kind === "infra") {
       pending.infraQueue = step.infraRequests.map((r) => r.toolCall);
@@ -1117,6 +1137,7 @@ export class AgentSession implements DurableObject {
     pending.loopIndex = 0;
     pending.retries = 0;
     pending.anyToolCalls = false;
+    pending.nudged = false;
     pending.infraQueue = [];
     pending.infraResults = [];
     pending.messagesCursor = session.messages.length;

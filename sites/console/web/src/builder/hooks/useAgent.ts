@@ -424,7 +424,8 @@ function restoreMessages(serverMessages: any[]): ChatMessage[] {
       if (m.content) restored.push({ role: "assistant", content: m.content });
       for (const tc of m.toolCalls || []) restored.push({ role: "tool", content: toolLabel(tc) });
     } else if (m.role === "user") {
-      restored.push({ role: "user", content: m.content });
+      // Platform-authored prompts (the #37 stall nudge) are not the creator's words.
+      if (!m.internal) restored.push({ role: "user", content: m.content });
     } else if (m.role === "system") {
       restored.push({ role: "system", content: m.content });
     }

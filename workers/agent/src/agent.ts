@@ -247,6 +247,41 @@ export function emptyNoOutputError(newMessages: Message[], infraRequests: InfraR
   return hasWriteFile ? undefined : "empty-no-output: turn exited with tool calls but no write_file or infra requests";
 }
 
+/** Sent once when a not-yet-deployed app's turn stalls after only reading (#37). */
+export const STALL_NUDGE = "Now write all the project files using write_file, then call deploy.";
+/** Shown to the creator when the build still stalls after the nudge (#37). */
+export const STALL_VISIBLE_ERROR = "The build stopped before writing any files — please try again.";
+
+/**
+ * What to do when an LLM phase ends in a final answer (#37). A turn on an app
+ * that isn't deployed yet, which read files and then answered without writing
+ * or requesting infra, is the stall from #37: nudge the model once, and if it
+ * stalls again, give up visibly. Deployed apps are left alone, since a
+ * read-then-answer turn there is usually a legitimate question.
+ */
+export function readOnlyStallAction(
+  newMessages: Message[],
+  anyToolCallsMade: boolean,
+  appId: string | null | undefined,
+  alreadyNudged: boolean,
+): "nudge" | "give_up" | undefined {
+  if (appId || !emptyNoOutputError(newMessages, [], anyToolCallsMade)) return undefined;
+  return alreadyNudged ? "give_up" : "nudge";
+}
+
+/**
+ * Append the stall nudge to both the model's messages and the turn's new
+ * messages. A stalled final answer can be completely empty; providers reject an
+ * empty assistant message before a user one, so that one is dropped first.
+ */
+export function appendStallNudge(modelMessages: Message[], newMessages: Message[]): void {
+  for (const list of [modelMessages, newMessages]) {
+    const last = list[list.length - 1];
+    if (last?.role === "assistant" && !last.content && !last.toolCalls?.length) list.pop();
+    list.push({ role: "user", content: STALL_NUDGE, internal: true });
+  }
+}
+
 export const MAX_LOOPS = 25;
 export const MAX_RATE_LIMIT_RETRIES = 3;
 
@@ -279,6 +314,7 @@ export async function runAgentTurn(
   // Track whether any tool calls occurred during this turn (used to detect
   // the empty-no-output failure: model read files then exited without writing)
   let anyToolCallsMade = false;
+  let nudged = false;
 
   const send: Emit = async (event) => {
     await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
@@ -317,7 +353,19 @@ export async function runAgentTurn(
 
     prepared.messages.push(...step.appended);
     newMessages.push(...step.appended);
-    if (step.kind === "final") break;
+    if (step.kind === "final") {
+      const stall = readOnlyStallAction(newMessages, anyToolCallsMade, ctx?.appId, nudged);
+      if (stall === "nudge") {
+        nudged = true;
+        appendStallNudge(prepared.messages, newMessages);
+        continue;
+      }
+      if (stall === "give_up") {
+        await send({ type: "error", data: STALL_VISIBLE_ERROR });
+        newMessages.push({ role: "assistant", content: STALL_VISIBLE_ERROR });
+      }
+      break;
+    }
     anyToolCallsMade = true;
     if (step.kind === "infra") {
       infraRequests.push(...step.infraRequests);

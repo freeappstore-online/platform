@@ -52,4 +52,7 @@ export interface Message {
   toolResults?: ToolResult[];
   /** Only for assistant messages that include tool calls */
   toolCalls?: ToolCall[];
+  /** Platform-authored prompt (e.g. the #37 stall nudge): sent to the model,
+   *  never shown to the creator as something they typed. */
+  internal?: boolean;
 }

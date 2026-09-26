@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StepOutcome } from "./agent";
-import { runAgentStep, runAgentTurn } from "./agent";
+import { runAgentStep, runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
 import { executeInfraTool } from "./infra-exec";
 import type { Message } from "./providers/types";
 import { AgentSession, INFRA_STALL_THRESHOLD_MS, type PendingTurn, STALL_THRESHOLD_MS } from "./session";
@@ -243,9 +243,10 @@ describe("ALARM_LOOP=true: alarm()", () => {
     const res = await new AgentSession(state, env).fetch(chatRequest());
     await res.body?.cancel();
 
+    // A write, not a read: read-then-final on a new app is the #37 stall and gets nudged.
     scriptSteps({
       kind: "continue",
-      appended: [assistant("", [{ id: "a", name: "read_file", input: {} }]), { role: "tool_result", content: "", toolResults: [] }],
+      appended: [assistant("", [{ id: "a", name: "write_file", input: {} }]), { role: "tool_result", content: "", toolResults: [] }],
     });
     await new AgentSession(state, env).alarm();
 
@@ -543,5 +544,82 @@ describe("ALARM_LOOP off: legacy path", () => {
     expect(second.status).toBe(200);
     expect(store.has("pendingTurn")).toBe(false);
     expect((store.get("session") as any).messages.at(-1).content).toBe("retry done");
+  });
+});
+
+describe("ALARM_LOOP=true: read-only stall nudge (#37)", () => {
+  const readStep: StepOutcome = {
+    kind: "continue",
+    appended: [
+      assistant("", [{ id: "r1", name: "read_file", input: { path: "web/src/index.css" } }]),
+      { role: "tool_result", content: "", toolResults: [{ id: "r1", content: ":root{}" }] },
+    ],
+  };
+
+  /** Script steps and snapshot the model-facing messages each step was sent. */
+  function scriptWithSnapshots(...steps: Array<StepOutcome | ((files: Map<string, string>) => StepOutcome)>) {
+    const sent: Message[][] = [];
+    stepMock.mockImplementation(async (_cfg, prepared, files) => {
+      sent.push(structuredClone(prepared.messages));
+      const next = steps.shift();
+      if (!next) throw new Error("runAgentStep called more times than scripted");
+      return typeof next === "function" ? next(files) : next;
+    });
+    return sent;
+  }
+
+  async function startTurn() {
+    const { state, store } = fakeState();
+    const { env } = fakeEnv();
+    const session = new AgentSession(state, env);
+    const res = await session.fetch(chatRequest("chinese dictionary app"));
+    await res.body?.cancel();
+    return { session, store };
+  }
+
+  it("nudges once after a read-only stall, and the build continues to write files", async () => {
+    const { session, store } = await startTurn();
+    const sent = scriptWithSnapshots(
+      readStep,
+      { kind: "final", appended: [assistant("Let me start building it!")] },
+      (files) => {
+        files.set("web/src/App.tsx", "<main/>");
+        const call = { id: "w1", name: "write_file", input: { path: "web/src/App.tsx" } };
+        return {
+          kind: "continue",
+          appended: [assistant("", [call]), { role: "tool_result", content: "", toolResults: [{ id: "w1", content: "ok" }] }],
+        };
+      },
+      { kind: "final", appended: [assistant("Done.")] },
+    );
+
+    await drain(session, store);
+
+    expect(sent).toHaveLength(4);
+    expect(sent[2].at(-1)).toMatchObject({ role: "user", content: STALL_NUDGE });
+    const saved = store.get("session") as any;
+    expect(saved.files["web/src/App.tsx"]).toBe("<main/>");
+    expect(saved.messages).toContainEqual({ role: "user", content: STALL_NUDGE, internal: true });
+    expect(saved.errors.some((e: any) => e.source === "agent-empty")).toBe(false);
+    expect(latestTurnLog(store).events.some((e: any) => e.type === "error")).toBe(false);
+  });
+
+  it("gives up visibly when the model stalls again after the nudge", async () => {
+    const { session, store } = await startTurn();
+    const sent = scriptWithSnapshots(
+      readStep,
+      { kind: "final", appended: [assistant("Let me start building it!")] },
+      { kind: "final", appended: [assistant("On it!")] },
+    );
+
+    await drain(session, store);
+
+    expect(sent).toHaveLength(3); // exactly one nudge, no loop
+    const saved = store.get("session") as any;
+    expect(saved.messages.at(-1)).toEqual({ role: "assistant", content: STALL_VISIBLE_ERROR });
+    expect(saved.errors.at(-1)).toMatchObject({ source: "agent-empty" });
+    const events = latestTurnLog(store).events;
+    expect(events).toContainEqual(expect.objectContaining({ type: "error", data: STALL_VISIBLE_ERROR }));
+    expect(store.has("pendingTurn")).toBe(false);
   });
 });

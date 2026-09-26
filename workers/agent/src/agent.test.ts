@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { runAgentTurn } from "./agent";
+import { runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
 import { getConfig } from "./config";
 import type { AIConfig, StreamEvent } from "./providers/types";
 
@@ -197,5 +197,100 @@ describe("runAgentTurn — tool_result SSE redaction (issue #36)", () => {
     expect(payload).toEqual({ id: "tu_1", tool: "read_file" });
     expect(payload).not.toHaveProperty("result");
     expect(toolResults[0].data).not.toContain("leak-marker");
+  });
+});
+
+/** An Anthropic SSE body with one tool call. */
+function makeToolSSE(name: string, input: Record<string, unknown>): string {
+  const block = { type: "tool_use", id: `tu_${name}`, name, input: {} };
+  return (
+    [
+      `data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 20 } } })}`,
+      `data: ${JSON.stringify({ type: "content_block_start", index: 0, content_block: block })}`,
+      `data: ${JSON.stringify({ type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } })}`,
+      `data: ${JSON.stringify({ type: "content_block_stop", index: 0 })}`,
+      `data: ${JSON.stringify({ type: "message_delta", delta: {}, usage: { output_tokens: 10 } })}`,
+      `data: ${JSON.stringify({ type: "message_stop" })}`,
+    ].join("\n") + "\n"
+  );
+}
+
+/** An Anthropic SSE body that ends without any content block. */
+function makeEmptySSE(): string {
+  return (
+    [
+      `data: ${JSON.stringify({ type: "message_start", message: { usage: { input_tokens: 20 } } })}`,
+      `data: ${JSON.stringify({ type: "message_delta", delta: {}, usage: { output_tokens: 0 } })}`,
+      `data: ${JSON.stringify({ type: "message_stop" })}`,
+    ].join("\n") + "\n"
+  );
+}
+
+/** Serve `bodies` in order and record each request's messages. */
+function scriptFetch(bodies: string[]) {
+  const requests: Array<Array<{ role: string; content: unknown }>> = [];
+  (globalThis as any).fetch = async (_url: string, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)).messages);
+    const body = bodies[requests.length - 1] ?? makeTextOnlySSE("(unexpected extra call)");
+    return new Response(body, { status: 200, headers: { "content-type": "text/event-stream" } });
+  };
+  return requests;
+}
+
+const readFile = () => makeToolSSE("read_file", { path: "web/src/index.css" });
+const writeFile = () => makeToolSSE("write_file", { path: "web/src/App.tsx", content: "<main/>" });
+const newApp = { appId: null, appName: null, fileCount: 1, fileList: "web/src/index.css" };
+
+describe("runAgentTurn — read-only stall nudge (issue #37)", () => {
+  it("nudges once after a read-only stall, and the build continues to write files", async () => {
+    const requests = scriptFetch([readFile(), makeTextOnlySSE("Let me start building it!"), writeFile(), makeTextOnlySSE("Done.")]);
+    const { writer, events } = makeWriter();
+    const files = new Map([["web/src/index.css", ":root{}"]]);
+
+    const result = await runAgentTurn(aiConfig, [], "chinese dictionary app", files, writer, storeConfig, newApp);
+
+    expect(requests).toHaveLength(4);
+    // The third model call carries the nudge as its latest user message.
+    expect(requests[2].at(-1)).toEqual({ role: "user", content: STALL_NUDGE });
+    expect(files.get("web/src/App.tsx")).toBe("<main/>");
+    expect(result.terminalError).toBeUndefined();
+    // Persisted, but flagged so the console never shows it as the creator's words.
+    expect(result.newMessages).toContainEqual({ role: "user", content: STALL_NUDGE, internal: true });
+    expect(events().some((e) => e.type === "error")).toBe(false);
+  });
+
+  it("gives up visibly when the model stalls again after the nudge", async () => {
+    const requests = scriptFetch([readFile(), makeTextOnlySSE("Let me start building it!"), makeTextOnlySSE("On it!")]);
+    const { writer, events } = makeWriter();
+
+    const result = await runAgentTurn(aiConfig, [], "chinese dictionary app", new Map(), writer, storeConfig, newApp);
+
+    expect(requests).toHaveLength(3); // exactly one nudge, no loop
+    expect(result.terminalError).toContain("empty-no-output");
+    expect(events()).toContainEqual({ type: "error", data: STALL_VISIBLE_ERROR });
+    expect(result.newMessages.at(-1)).toEqual({ role: "assistant", content: STALL_VISIBLE_ERROR });
+  });
+
+  it("does not nudge a deployed app, where read-then-answer is a normal question", async () => {
+    const requests = scriptFetch([readFile(), makeTextOnlySSE("Your app stores entries in KV.")]);
+    const { writer, events } = makeWriter();
+    const deployed = { ...newApp, appId: "dict", appName: "Dict" };
+
+    await runAgentTurn(aiConfig, [], "how does my app store data?", new Map(), writer, storeConfig, deployed);
+
+    expect(requests).toHaveLength(2);
+    expect(events().some((e) => e.type === "error")).toBe(false);
+  });
+
+  it("drops an empty stalled answer so the nudge request stays valid", async () => {
+    const requests = scriptFetch([readFile(), makeEmptySSE(), writeFile(), makeTextOnlySSE("Done.")]);
+    const { writer } = makeWriter();
+
+    const result = await runAgentTurn(aiConfig, [], "chinese dictionary app", new Map(), writer, storeConfig, newApp);
+
+    const nudgeRequest = requests[2];
+    expect(nudgeRequest.at(-1)).toEqual({ role: "user", content: STALL_NUDGE });
+    expect(nudgeRequest.at(-2)?.role).not.toBe("assistant"); // no empty assistant turn before the nudge
+    expect(result.terminalError).toBeUndefined();
   });
 });
