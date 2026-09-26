@@ -285,7 +285,9 @@ jobs:
       # single alert names every broken server.
       #
       # KNOWN-DEAD entries pin the broken response #51 recorded, so the run stays
-      # green while those servers are unresolved. When one is fixed (or retired)
+      # green while those servers are unresolved. The fix-or-retire decision
+      # for each is tracked in #68 and needs work in that store's repos, not
+      # here. When one is fixed (or retired)
       # its codes stop matching and this step goes red on purpose: move the host
       # to the healthy expectation (405 405 401), or delete its row, in the same
       # change as the fix.
@@ -309,7 +311,7 @@ jobs:
           mcp.freedocstore.online       405    405     401
           mcp.freeagentstore.online     405    405     405       /mcp-answers-405
           mcp.freewebstore.online       308    308     308       REDIRECT=https://agent.freewebstore.online/mcp
-          mcp.progamestore.online       5xx    5xx     5xx       KNOWN-DEAD-#51:no-origin-(522)
+          mcp.progamestore.online       5xx    5xx     5xx       KNOWN-DEAD-#68:no-origin-(522)
           '
           matches() { # matches <actual> <expected>
             case "$2" in
@@ -347,7 +349,7 @@ jobs:
               bad="${bad%;}"
               failures=$((failures + 1))
               if [[ "${note:-}" == KNOWN-DEAD* ]]; then
-                echo "::error::$host no longer answers like the known-dead server in #51:$bad — if it was fixed or retired, update its row in prod-smoke step 7."
+                echo "::error::$host no longer answers like the known-dead server tracked in #68:$bad — if it was fixed or retired, update its row in prod-smoke step 7."
               else
                 echo "::error::$host MCP origin regressed:$bad"
               fi
