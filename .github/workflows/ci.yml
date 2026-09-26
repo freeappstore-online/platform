@@ -63,6 +63,32 @@ jobs:
       - name: Test
         run: pnpm test
 
+  # The agent, host and admin Workers in workerd (@cloudflare/vitest-pool-workers)
+  # with real D1 (real migrations), R2, KV and Durable Objects, and stand-ins for
+  # the service bindings and the internet (#7). Each Worker is its own pnpm
+  # project, so none of this is reached by the root `pnpm test`.
+  runtime-integration:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: [agent, host, admin]
+    defaults:
+      run:
+        working-directory: workers/${{ matrix.worker }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: pnpm install --frozen-lockfile --ignore-workspace
+
+      - name: Runtime integration tests
+        run: pnpm test:runtime
+
   # Live e2e against `wrangler dev --local` (miniflare). Catches integration
   # regressions that unit tests miss: real D1, real Hono routing through the
   # Worker bundle, real WebSocket upgrade through the Durable Object.

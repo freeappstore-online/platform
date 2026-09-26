@@ -144,7 +144,17 @@ export interface AppOwnerRow {
 }
 
 export async function readAppOwner(db: D1Database, id: string): Promise<AppOwnerRow | null> {
-  return db.prepare(`SELECT owner_login, display_name FROM apps WHERE id = ?`).bind(id).first<AppOwnerRow>();
+  const row = await db.prepare(`SELECT owner_login FROM apps WHERE id = ?`).bind(id).first<{ owner_login: string }>();
+  if (!row) return null;
+  // apps.display_name isn't created by the backend's migrations, so on a
+  // database built from them selecting it fails the whole query (found by the
+  // runtime suite, #7). Read it separately and treat it as optional.
+  const named = await db
+    .prepare(`SELECT display_name FROM apps WHERE id = ?`)
+    .bind(id)
+    .first<{ display_name: string | null }>()
+    .catch(() => null);
+  return { owner_login: row.owner_login, display_name: named?.display_name ?? null };
 }
 
 /**

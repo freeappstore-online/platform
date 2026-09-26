@@ -12,12 +12,14 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:runtime": "vitest run --config vitest.runtime.ts",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^4.20260702.1",
     "@vitest/coverage-v8": "^4.1.11",
     "knip": "^6.35.1",

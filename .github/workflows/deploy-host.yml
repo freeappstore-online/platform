@@ -41,6 +41,11 @@ jobs:
       - name: Tests
         run: pnpm test
 
+      # The real Worker in workerd with real D1/R2/Durable Objects and stub
+      # service bindings (#7): the wiring the unit tests mock.
+      - name: Runtime integration tests
+        run: pnpm test:runtime
+
       - name: Deploy
         run: pnpm exec wrangler deploy
         env:

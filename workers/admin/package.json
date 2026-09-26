@@ -9,12 +9,14 @@
   },
   "scripts": {
     "test": "vitest run",
+    "test:runtime": "vitest run --config vitest.runtime.mts",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.13",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^4.20260702.1",
     "@types/node": "^25.9.6",
     "@vitest/coverage-v8": "^4.1.11",
