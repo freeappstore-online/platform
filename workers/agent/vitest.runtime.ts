@@ -36,8 +36,55 @@ const REPO: Record<string, string> = {
   "web/src/App.tsx": "export default function App() { return <main>Dictionary</main>; }",
   "package.json": '{ "name": "dict" }',
 };
+/** One Anthropic SSE body: `blocks` are the content blocks, with usage. */
+function anthropicSSE(blocks: Array<{ type: "text"; text: string } | { type: "tool_use"; id: string; name: string; input: unknown }>): Response {
+  const events: unknown[] = [{ type: "message_start", message: { usage: { input_tokens: 100 } } }];
+  blocks.forEach((block, index) => {
+    if (block.type === "text") {
+      events.push({ type: "content_block_start", index, content_block: { type: "text", text: "" } });
+      events.push({ type: "content_block_delta", index, delta: { type: "text_delta", text: block.text } });
+    } else {
+      events.push({ type: "content_block_start", index, content_block: { type: "tool_use", id: block.id, name: block.name, input: {} } });
+      events.push({ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input) } });
+    }
+    events.push({ type: "content_block_stop", index });
+  });
+  events.push({ type: "message_delta", delta: {}, usage: { output_tokens: 20 } }, { type: "message_stop" });
+  return new Response(events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join(""), { headers: { "content-type": "text/event-stream" } });
+}
+
+/**
+ * A scripted model. The first user message names the script:
+ *   "build ..."      → write web/src/App.tsx, then answer once it sees the tool result
+ *   "overloaded ..." → Anthropic's 529
+ *   "hold ..."       → the first call doesn't answer until the test fetches
+ *                      https://control.test/release, so a step is reliably in flight
+ */
+const held: Array<() => void> = [];
+async function anthropic(req: Request): Promise<Response> {
+  if (req.headers.get("x-api-key") !== "sk-test") return Response.json({ type: "error", error: { type: "authentication_error" } }, { status: 401 });
+  const body = (await req.json()) as { messages: Array<{ role: string; content: unknown }> };
+  const first = JSON.stringify(body.messages.find((m) => m.role === "user")?.content ?? "");
+  if (first.includes("overloaded")) return Response.json({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }, { status: 529 });
+  const sawToolResult = JSON.stringify(body.messages).includes("tool_result");
+  if (first.includes("hold") && !sawToolResult) await new Promise<void>((release) => held.push(release));
+  if (!sawToolResult) {
+    return anthropicSSE([
+      { type: "text", text: "Building it." },
+      { type: "tool_use", id: "tu_1", name: "write_file", input: { path: "web/src/App.tsx", content: "export default function App() { return <main>Built</main>; }" } },
+    ]);
+  }
+  return anthropicSSE([{ type: "text", text: "Done — built it." }]);
+}
+
 async function internet(req: Request): Promise<Response> {
   const url = new URL(req.url);
+  if (url.hostname === "api.anthropic.com" && url.pathname === "/v1/messages") return anthropic(req);
+  if (url.hostname === "control.test" && url.pathname === "/release") {
+    const n = held.length;
+    for (const release of held.splice(0)) release();
+    return Response.json({ released: n });
+  }
   if (url.hostname === "api.github.com") {
     if (url.pathname === "/repos/freeappstore-online/dict/git/trees/main") {
       return Response.json({ tree: Object.entries(REPO).map(([p, c]) => ({ path: p, type: "blob", size: c.length })) });
