@@ -6,6 +6,7 @@ import { fetchTemplateFiles, listRepoFiles, pushFiles, readRepoFile, type RepoFi
 import { AuthHandler } from "./auth-handler.js";
 import { sessionPrefix, auditLog } from "./lib.js";
 import { ownsApp, ownershipGateText } from "./ownership.js";
+import { type RateLimiter, withRateLimit } from "./ratelimit.js";
 import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
 
 interface Env {
@@ -18,6 +19,8 @@ interface Env {
   OAUTH_KV?: KVNamespace;
   /** When "1", all non-read tools are disabled server-wide. */
   MCP_READ_ONLY?: string;
+  /** Per-IP request limit, applied before routing (see ratelimit.ts). */
+  MCP_RATE_LIMIT?: RateLimiter;
 }
 
 // GitHub Actions API (public repos, no auth needed)
@@ -666,7 +669,7 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
 // and only forwards requests with a valid access token to the MCP apiHandler —
 // where the granted props (set in auth-handler's completeAuthorization) arrive
 // as `this.props`. The interactive login lives in AuthHandler (defaultHandler).
-export default new OAuthProvider({
+const oauthProvider = new OAuthProvider({
   apiRoute: "/mcp",
   apiHandler: FasMcpAgent.serve("/mcp"),
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -680,3 +683,6 @@ export default new OAuthProvider({
   // challenge equal to the verifier and PKCE decorative (#44).
   allowPlainPKCE: false,
 });
+
+// Every request is rate-limited per IP before the OAuth provider sees it (#68).
+export default { fetch: withRateLimit<Env>((request, env, ctx) => oauthProvider.fetch(request, env, ctx)) };

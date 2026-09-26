@@ -15,6 +15,16 @@ zone_name = "freeappstore.online"
 # Secrets (set via `wrangler secret put`):
 #   SESSION_SIGNING_KEY — HMAC key for session verification + OAuth
 
+# Per-IP request limit on every route, checked in src/ratelimit.ts (#68).
+# 120 requests / 60 seconds / IP. period must match RATE_LIMIT_PERIOD_SECONDS.
+# namespace_id is account-wide; PWS uses 0, 2 and 1001.
+# Same Workers Rate Limiting binding PWS declares under [[unsafe.bindings]];
+# [[ratelimits]] is its stable config form.
+[[ratelimits]]
+name = "MCP_RATE_LIMIT"
+namespace_id = "1101"
+simple = { limit = 120, period = 60 }
+
 [[kv_namespaces]]
 binding = "OAUTH_KV"
 id = "89a54092cb7d41329234dbbb693324ac"
