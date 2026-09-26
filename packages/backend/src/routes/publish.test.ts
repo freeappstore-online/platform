@@ -99,6 +99,35 @@ describe('POST /v1/publish', () => {
     expect(res.status).toBe(400);
   });
 
+  it.each([
+    'platform',
+    'admin',
+    'agent',
+    'mcp',
+    'host',
+    'console',
+    'create',
+    'publisher',
+    'template-standalone',
+    'template-x',
+  ])('rejects the reserved platform repo name %s without calling admin (#9)', async (name) => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({ response: new Response('{}', { status: 200 }), capture: calls });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, name }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain('reserved');
+    expect(calls).toHaveLength(0);
+  });
+
   it('returns 400 for invalid type', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
     const res = await app.request(

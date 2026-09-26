@@ -141,13 +141,37 @@ export async function ghApi(env: PublishEnv, path: string, method = "GET", body?
   return parseJsonSafe(res);
 }
 
+/**
+ * Repos the platform itself lives in (#9). An app may never take one of these
+ * names: the repo already exists, so publishing would skip creating it and
+ * then grant the creator push access to platform code. Vendored in the
+ * backend's lib/apps.ts (RESERVED_APP_IDS); keep the two in sync.
+ */
+const RESERVED_IDS = new Set(["platform", "admin", "agent", "mcp", "host", "console", "create", "publisher", "freeappstore"]);
+
+export function isReservedId(id: string): boolean {
+  const lower = id.toLowerCase();
+  return RESERVED_IDS.has(lower) || lower.startsWith("template-");
+}
+
 function validateId(id: string): string | null {
   if (!id) return "ID is required";
+  if (isReservedId(id)) return `"${id}" is reserved for the platform`;
   if (id.length > 58) return "ID must be 58 characters or less";
   if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(id))
     return "ID must be lowercase letters, numbers, and dashes only. Cannot start/end with a dash.";
   if (id.startsWith("free") || id.startsWith("pro")) return "ID must not start with 'free' or 'pro'";
   return null;
+}
+
+/** `apps.owner_login` for an id, or null when there's no row or no DB to ask. */
+async function recordedOwner(env: PublishEnv, id: string): Promise<string | null> {
+  if (!env.DB) return null;
+  const row = await env.DB.prepare("SELECT owner_login FROM apps WHERE id = ?")
+    .bind(id)
+    .first<{ owner_login: string }>()
+    .catch(() => null);
+  return row?.owner_login ?? null;
 }
 
 /** Build the registry entry that ships into the storefront's registry.json. */
@@ -316,6 +340,48 @@ export async function insertHostRoute(env: PublishEnv, req: PublishRequest, conf
   }
 }
 
+/**
+ * The app's repo. Creates an EMPTY one for a new app; an existing repo is
+ * only re-published by the app's recorded owner (#9) — anything else (someone
+ * else's app, or a repo with no ownership row) fails here, before the
+ * collaborator grant.
+ */
+async function ensureRepo(req: PublishRequest, config: StoreConfig, env: PublishEnv, ghCall: GhFn): Promise<Step> {
+  // Why not "generate from template"? The template has APPNAME placeholders
+  // that need substituting per app. Server-side substitution would mean
+  // reading every file in the generated repo, replacing, and committing
+  // back — fragile (binary files, encoding) and doubles the GH API calls.
+  // Instead: the user's local `fas init` already substitutes correctly, so
+  // we create an empty repo here and let `git push` make their substituted
+  // local code the canonical source from the very first commit.
+  //
+  // auto_init: false — no initial README. GitHub Actions deploy won't run
+  // until the user pushes their first commit, which is exactly what we tell
+  // them to do in the fas publish "Push your code:" instructions.
+  const repoCheck = await ghCall(`/repos/${config.org}/${req.id}`);
+  if (repoCheck.id) {
+    const owner = await recordedOwner(env, req.id);
+    const publisher = req.creatorGithub || config.org;
+    if (!owner || owner.toLowerCase() !== publisher.toLowerCase()) {
+      return { name: "GitHub repo", status: "fail", detail: `${config.org}/${req.id} already exists and isn't yours to publish` };
+    }
+    return { name: "GitHub repo", status: "skip", detail: `${config.org}/${req.id} already exists` };
+  }
+  const createRepo = await ghCall(`/orgs/${config.org}/repos`, "POST", {
+    name: req.id,
+    private: false,
+    description: req.description,
+    auto_init: false,
+    has_issues: true,
+    has_projects: false,
+    has_wiki: false,
+  });
+  if (createRepo.id) {
+    return { name: "GitHub repo", status: "ok", detail: `Created empty ${config.org}/${req.id} (push your local code to populate)` };
+  }
+  return { name: "GitHub repo", status: "fail", detail: createRepo.message || "Failed to create repo" };
+}
+
 export async function handlePublish(req: PublishRequest, env: PublishEnv, gh?: GhFn): Promise<{ steps: Step[]; success: boolean }> {
   const steps: Step[] = [];
   const ghCall: GhFn = gh ?? ((path, method, body) => ghApi(env, path, method, body));
@@ -338,43 +404,10 @@ export async function handlePublish(req: PublishRequest, env: PublishEnv, gh?: G
   const config = STORE_CONFIG[req.store];
   const subdomain = `${req.id}.${config.domain}`;
 
-  // Step 1: Create an EMPTY GitHub repo in the org.
-  //
-  // Why not "generate from template"? The template has APPNAME placeholders
-  // that need substituting per app. Server-side substitution would mean
-  // reading every file in the generated repo, replacing, and committing
-  // back — fragile (binary files, encoding) and doubles the GH API calls.
-  // Instead: the user's local `fas init` already substitutes correctly, so
-  // we create an empty repo here and let `git push` make their substituted
-  // local code the canonical source from the very first commit.
-  //
-  // auto_init: false — no initial README. GitHub Actions deploy won't run
-  // until the user pushes their first commit, which is exactly what we tell
-  // them to do in the fas publish "Push your code:" instructions.
-  const repoCheck = await ghCall(`/repos/${config.org}/${req.id}`);
-  if (repoCheck.id) {
-    steps.push({ name: "GitHub repo", status: "skip", detail: `${config.org}/${req.id} already exists` });
-  } else {
-    const createRepo = await ghCall(`/orgs/${config.org}/repos`, "POST", {
-      name: req.id,
-      private: false,
-      description: req.description,
-      auto_init: false,
-      has_issues: true,
-      has_projects: false,
-      has_wiki: false,
-    });
-    if (createRepo.id) {
-      steps.push({
-        name: "GitHub repo",
-        status: "ok",
-        detail: `Created empty ${config.org}/${req.id} (push your local code to populate)`,
-      });
-    } else {
-      steps.push({ name: "GitHub repo", status: "fail", detail: createRepo.message || "Failed to create repo" });
-      return { steps, success: false };
-    }
-  }
+  // Step 1: an empty repo for a new app, or the publisher's own existing one.
+  const repoStep = await ensureRepo(req, config, env, ghCall);
+  steps.push(repoStep);
+  if (repoStep.status === "fail") return { steps, success: false };
 
   // Step 1b: Add creator as collaborator with push access
   if (req.creatorGithub) {

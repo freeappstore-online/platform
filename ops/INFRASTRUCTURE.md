@@ -1,5 +1,7 @@
 # FreeAppStore Infrastructure
 
+> Who may access the GitHub org and repos, and how to audit it: [ACCESS.md](./ACCESS.md).
+
 Private documentation for AI agents and maintainers. Covers how publishing, DNS, and deployments work.
 
 ## App Types

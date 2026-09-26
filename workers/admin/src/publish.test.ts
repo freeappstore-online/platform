@@ -8,9 +8,17 @@ interface StmtCapture {
   binds: unknown[];
 }
 
-function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[] }) {
+/** `owner`: the apps.owner_login an existing repo is recorded under (default: the test creator). */
+function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?: string | null }) {
+  const owner = opts?.owner === undefined ? "testuser" : opts.owner;
   const makeStmt = (sql: string) => {
-    const stmt: { sql: string; binds: unknown[]; bind: (...a: unknown[]) => unknown; run: () => Promise<unknown> } = {
+    const stmt: {
+      sql: string;
+      binds: unknown[];
+      bind: (...a: unknown[]) => unknown;
+      run: () => Promise<unknown>;
+      first: () => Promise<unknown>;
+    } = {
       sql: sql.replace(/\s+/g, " ").trim(),
       binds: [],
       bind: (...args: unknown[]) => {
@@ -21,6 +29,7 @@ function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[] }) {
         if (opts?.shouldThrow) throw new Error("D1 constraint error");
         return { meta: { changes: 1 } };
       },
+      first: async () => (sql.includes("SELECT owner_login FROM apps") && owner ? { owner_login: owner } : null),
     };
     return stmt;
   };
@@ -123,7 +132,15 @@ describe("insertHostRoute", () => {
   it("writes the routes row AND the apps ownership row in one atomic batch", async () => {
     const capture: StmtCapture[] = [];
     const env = baseEnv({ DB: fakeDB({ capture }) });
-    const req = baseReq({ id: "kanban", creatorGithub: "abid8195", category: "Productivity", type: "connected", description: "Boards", repo: "abid8195/kanban", demo: "https://demo.example" });
+    const req = baseReq({
+      id: "kanban",
+      creatorGithub: "abid8195",
+      category: "Productivity",
+      type: "connected",
+      description: "Boards",
+      repo: "abid8195/kanban",
+      demo: "https://demo.example",
+    });
     const config = { org: "freeappstore-online", domain: "freeappstore.online", registryKey: "apps" } as any;
     const result = await insertHostRoute(env, req, config);
     expect(result.status).toBe("ok");
@@ -245,7 +262,10 @@ describe("handlePublish", () => {
   });
 
   it("skips registry when hosting route fails (no DB)", async () => {
-    const result = await handlePublish(baseReq(), baseEnv({ DB: undefined }), successGh());
+    // A new repo: an existing one can't be re-published without an ownership record (#9).
+    const newRepo: GhFn = async (path, method, body) =>
+      path.includes("/repos/freeappstore-online/testapp") && !method ? { message: "Not Found" } : successGh()(path, method, body);
+    const result = await handlePublish(baseReq(), baseEnv({ DB: undefined }), newRepo);
     expect(result.success).toBe(false);
     const hostStep = result.steps.find((s) => s.name === "Hosting route");
     expect(hostStep?.status).toBe("fail");
@@ -302,5 +322,78 @@ describe("handlePublish", () => {
     expect(result.success).toBe(false);
     expect(result.steps[0]?.name).toBe("Validation");
     expect(result.steps[0]?.detail).toContain("store must be one of");
+  });
+});
+
+describe("handlePublish never grants access to a repo that isn't the publisher's (#9)", () => {
+  /** successGh, recording every call so tests can prove the grant never happened. */
+  function recordingGh() {
+    const calls: string[] = [];
+    const inner = successGh();
+    const gh: GhFn = async (path, method, body) => {
+      calls.push(`${method ?? "GET"} ${path}`);
+      return inner(path, method, body);
+    };
+    const granted = () => calls.some((c) => c.startsWith("PUT") && c.includes("/collaborators/"));
+    return { gh, calls, granted };
+  }
+
+  it.each([
+    "platform",
+    "admin",
+    "agent",
+    "mcp",
+    "host",
+    "console",
+    "create",
+    "publisher",
+    "template-standalone",
+    "template-connected",
+    "template-anything",
+  ])("rejects the reserved platform repo name %s before touching GitHub", async (id) => {
+    const { gh, calls } = recordingGh();
+    const result = await handlePublish(baseReq({ id }), baseEnv(), gh);
+    expect(result.success).toBe(false);
+    expect(result.steps[0]).toMatchObject({ name: "Validation", status: "fail" });
+    expect(result.steps[0]?.detail).toContain("reserved");
+    expect(calls).toEqual([]);
+  });
+
+  it("rejects reserved names case-insensitively", async () => {
+    const result = await handlePublish(baseReq({ id: "Platform" }), baseEnv(), recordingGh().gh);
+    expect(result.success).toBe(false);
+    expect(result.steps[0]?.detail).toContain("reserved");
+  });
+
+  it("refuses someone else's existing app, and grants nothing", async () => {
+    const { gh, granted } = recordingGh();
+    const result = await handlePublish(baseReq({ creatorGithub: "mallory" }), baseEnv({ DB: fakeDB({ owner: "alice" }) }), gh);
+    expect(result.success).toBe(false);
+    expect(result.steps.find((s) => s.name === "GitHub repo")).toMatchObject({ status: "fail" });
+    expect(result.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("isn't yours");
+    expect(granted()).toBe(false);
+    expect(result.steps.map((s) => s.name)).not.toContain("Collaborator");
+  });
+
+  it("refuses an existing repo with no ownership record, and grants nothing", async () => {
+    const { gh, granted } = recordingGh();
+    const result = await handlePublish(baseReq(), baseEnv({ DB: fakeDB({ owner: null }) }), gh);
+    expect(result.success).toBe(false);
+    expect(granted()).toBe(false);
+  });
+
+  it("refuses an existing repo when ownership can't be checked (no DB)", async () => {
+    const { gh, granted } = recordingGh();
+    const result = await handlePublish(baseReq(), baseEnv({ DB: undefined }), gh);
+    expect(result.success).toBe(false);
+    expect(granted()).toBe(false);
+  });
+
+  it("lets the recorded owner re-publish their own app (owner match is case-insensitive)", async () => {
+    const { gh, granted } = recordingGh();
+    const result = await handlePublish(baseReq({ creatorGithub: "Alice" }), baseEnv({ DB: fakeDB({ owner: "alice" }) }), gh);
+    expect(result.success).toBe(true);
+    expect(result.steps.find((s) => s.name === "GitHub repo")).toMatchObject({ status: "skip" });
+    expect(granted()).toBe(true);
   });
 });

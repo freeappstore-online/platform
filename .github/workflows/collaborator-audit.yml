@@ -1,0 +1,63 @@
+name: Collaborator audit
+
+# Weekly check that no one has direct access to the platform repos (#9). Access
+# to these repos comes only from org ownership; any direct collaborator or
+# pending invitation is a finding. See ops/ACCESS.md.
+#
+# Token: GH_AUDIT_TOKEN must be a fine-grained personal access token owned by
+# the freeappstore-online org, with repository access to the repos below and
+# only these READ permissions:
+#   - Metadata: read        (list collaborators)
+#   - Administration: read  (list pending invitations)
+# The built-in GITHUB_TOKEN can't read other repos' collaborators. Until the
+# secret exists, this workflow warns and exits 0 instead of failing.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Direct collaborators and invitations on platform repos
+        env:
+          GH_TOKEN: ${{ secrets.GH_AUDIT_TOKEN }}
+          ORG: freeappstore-online
+        run: |
+          set -uo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::GH_AUDIT_TOKEN is not set, so the collaborator audit was skipped. Provision a read-only org token (see this workflow's header)."
+            exit 0
+          fi
+
+          templates=$(gh api "orgs/$ORG/repos?per_page=100" --paginate --jq '.[].name | select(startswith("template-"))') || {
+            echo "::error::Could not list $ORG repos with GH_AUDIT_TOKEN."; exit 1; }
+          repos="platform admin agent mcp host console create publisher freeappstore $templates"
+
+          findings=0
+          for repo in $repos; do
+            collaborators=$(gh api "repos/$ORG/$repo/collaborators?affiliation=direct&per_page=100" --jq '[.[] | "\(.login) (\(.role_name))"] | join(", ")') || {
+              echo "::error::Could not read collaborators on $ORG/$repo."; findings=$((findings + 1)); continue; }
+            invitations=$(gh api "repos/$ORG/$repo/invitations?per_page=100" --jq '[.[] | "\(.invitee.login) (\(.permissions))"] | join(", ")') || {
+              echo "::error::Could not read invitations on $ORG/$repo."; findings=$((findings + 1)); continue; }
+            echo "$repo: collaborators=[${collaborators}] invitations=[${invitations}]"
+            if [ -n "$collaborators" ]; then
+              echo "::error::$ORG/$repo has direct collaborators: $collaborators"
+              findings=$((findings + 1))
+            fi
+            if [ -n "$invitations" ]; then
+              echo "::error::$ORG/$repo has pending invitations: $invitations"
+              findings=$((findings + 1))
+            fi
+          done
+
+          if [ "$findings" -gt 0 ]; then
+            echo "$findings finding(s). Platform repos are owner-only; remove the grants (ops/ACCESS.md)."
+            exit 1
+          fi
+          echo "No direct collaborators or pending invitations on platform repos."

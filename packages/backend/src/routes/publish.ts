@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { APP_ID_RE } from '../lib/apps.js';
+import { APP_ID_RE, isReservedAppId } from '../lib/apps.js';
 import { HttpError, isAdminLogin, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
@@ -79,6 +79,11 @@ publishRoutes.post('/publish', async (c) => {
 
   if (!APP_ID_RE.test(body.name)) {
     return c.text('app name must be lowercase letters, digits, or hyphens (2-31 chars)', 400);
+  }
+  // Before anything reaches the admin Worker, which would otherwise grant the
+  // publisher access to an existing platform repo of the same name (#9).
+  if (isReservedAppId(body.name)) {
+    return c.text(`"${body.name}" is reserved for the platform; choose another app name`, 400);
   }
   // FAS platform now serves only FreeAppStore. Reject games and pro stores
   // explicitly with a redirect message so callers know where to go.

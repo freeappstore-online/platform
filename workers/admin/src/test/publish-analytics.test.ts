@@ -38,7 +38,8 @@ function fakeDB() {
   const stmt = {
     bind: () => stmt,
     run: async () => ({ meta: { changes: 1 } }),
-    first: async () => null,
+    // The existing repo is recorded as the publisher's own app (#9 ownership check).
+    first: async () => ({ owner_login: "someone" }),
     all: async () => ({ results: [] }),
   };
   return { prepare: () => stmt, batch: async (s: unknown[]) => s.map(() => ({ meta: { changes: 1 } })) } as unknown as D1Database;
