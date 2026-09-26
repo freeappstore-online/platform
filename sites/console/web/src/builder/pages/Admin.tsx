@@ -109,6 +109,9 @@ interface AgentSession {
   appUrl: string | null;
   deployed: boolean;
   deployState: { phase?: string; error?: string | null } | null;
+  repoUrl?: string | null;
+  errorCount?: number;
+  lastErrorSummary?: string | null;
   inputTokens?: number;
   outputTokens?: number;
   aiProvider?: string | null;
@@ -135,6 +138,15 @@ const FUNDED_BY_OPTIONS: { value: string; label: string }[] = [
   { value: "user_key", label: "User key" },
   { value: "browser_key", label: "Browser key" },
   { value: "none", label: "No key" },
+];
+
+/** Server-side session filters (#15); each is a `?<key>=true` on /v1/admin/agent-sessions. */
+const SESSION_FILTERS: { key: string; label: string; danger?: boolean }[] = [
+  { key: "failed_deploy", label: "Failed deploys", danger: true },
+  { key: "has_errors", label: "Has errors", danger: true },
+  { key: "active_recently", label: "Active (24h)" },
+  { key: "deployed", label: "Deployed" },
+  { key: "draft", label: "Draft" },
 ];
 
 function formatTokens(n: number | undefined): string {
@@ -220,6 +232,17 @@ interface GrantUser {
 export function Admin() {
   const { user, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
+  // Deep links from the session inspector (#15): which user the Users or
+  // Grants tab should open on.
+  const [focusUserId, setFocusUserId] = useState<string | null>(null);
+  const openUser = (userId: string) => {
+    setFocusUserId(userId);
+    setTab("users");
+  };
+  const openGrant = (userId: string) => {
+    setFocusUserId(userId);
+    setTab("grants");
+  };
 
   if (loading)
     return (
@@ -268,9 +291,9 @@ export function Admin() {
 
         {tab === "overview" && <OverviewTab />}
         {tab === "apps" && <AppsTab />}
-        {tab === "users" && <UsersTab />}
-        {tab === "sessions" && <SessionsTab />}
-        {tab === "grants" && <GrantsTab />}
+        {tab === "users" && <UsersTab focusUserId={focusUserId} onClearFocus={() => setFocusUserId(null)} />}
+        {tab === "sessions" && <SessionsTab onOpenUser={openUser} onOpenGrant={openGrant} />}
+        {tab === "grants" && <GrantsTab focusUserId={focusUserId} />}
         {tab === "creators" && <CreatorsTab />}
       </main>
     </>
@@ -279,11 +302,11 @@ export function Admin() {
 
 // ── VibeCode Sessions Tab ──
 
-function SessionsTab() {
+function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string) => void; onOpenGrant: (userId: string) => void }) {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
-  const [failedOnly, setFailedOnly] = useState(false);
+  const [filters, setFilters] = useState<string[]>([]);
   const [fundedBy, setFundedBy] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -295,6 +318,7 @@ function SessionsTab() {
     const params = new URLSearchParams({ limit: "50" });
     if (search) params.set("q", search);
     if (fundedBy) params.set("funded_by", fundedBy);
+    for (const f of filters) params.set(f, "true");
     adminFetchJson<{ sessions?: AgentSession[]; total?: number }>(`${API_URL}/v1/admin/agent-sessions?${params}`)
       .then((data) => {
         setSessions(data.sessions || []);
@@ -302,29 +326,38 @@ function SessionsTab() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [search, fundedBy]);
+  }, [search, fundedBy, filters]);
 
-  const visibleSessions = failedOnly ? sessions.filter((s) => s.deployState?.phase === "error") : sessions;
+  const toggleFilter = (key: string) => setFilters((f) => (f.includes(key) ? f.filter((k) => k !== key) : [...f, key]));
+  const filtered = filters.length > 0 || !!fundedBy || !!search;
 
   return (
     <>
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          {failedOnly ? `${visibleSessions.length} failed deploy sessions` : `${total} total VibeCode sessions`}
+          {filtered ? `${total} matching VibeCode sessions` : `${total} total VibeCode sessions`}
         </p>
         <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setFailedOnly((v) => !v)}
-            className="px-3 py-2 rounded-lg text-sm font-semibold border"
-            style={{
-              background: failedOnly ? "color-mix(in srgb, var(--danger) 15%, var(--panel))" : "var(--panel)",
-              borderColor: failedOnly ? "var(--danger)" : "var(--line)",
-              color: failedOnly ? "var(--danger)" : "var(--muted)",
-              cursor: "pointer",
-            }}
-          >
-            Failed deploys
-          </button>
+          {SESSION_FILTERS.map((f) => {
+            const on = filters.includes(f.key);
+            const tone = f.danger ? "var(--danger)" : "var(--accent)";
+            return (
+              <button
+                key={f.key}
+                onClick={() => toggleFilter(f.key)}
+                aria-pressed={on}
+                className="px-3 py-2 rounded-lg text-sm font-semibold border"
+                style={{
+                  background: on ? `color-mix(in srgb, ${tone} 15%, var(--panel))` : "var(--panel)",
+                  borderColor: on ? tone : "var(--line)",
+                  color: on ? tone : "var(--muted)",
+                  cursor: "pointer",
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
           <select
             value={fundedBy}
             onChange={(e) => setFundedBy(e.target.value)}
@@ -368,6 +401,9 @@ function SessionsTab() {
                   Status
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  Last error
+                </th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                   AI
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
@@ -379,7 +415,7 @@ function SessionsTab() {
               </tr>
             </thead>
             <tbody>
-              {visibleSessions.map((s) => (
+              {sessions.map((s) => (
                 <tr key={s.sessionId} style={{ borderBottom: "1px solid var(--line)" }}>
                   <td className="p-2">
                     <strong>{s.name}</strong>
@@ -404,6 +440,16 @@ function SessionsTab() {
                   </td>
                   <td className="p-2">
                     <StatusDot status={s.deployed ? "deployed" : s.deployState?.phase || "draft"} />
+                  </td>
+                  <td className="p-2 text-xs" style={{ maxWidth: 280 }}>
+                    {s.lastErrorSummary ? (
+                      <span title={s.lastErrorSummary} style={{ color: "var(--danger)" }}>
+                        {s.lastErrorSummary}
+                        {(s.errorCount || 0) > 1 && <span style={{ color: "var(--muted)" }}> · {s.errorCount} errors</span>}
+                      </span>
+                    ) : (
+                      <span style={{ color: "var(--muted)" }}>—</span>
+                    )}
                   </td>
                   <td className="p-2">
                     <AiUsageCell session={s} />
@@ -431,22 +477,40 @@ function SessionsTab() {
           </table>
           {sessions.length === 0 && (
             <p className="py-8 text-center" style={{ color: "var(--muted)" }}>
-              No sessions found.
-            </p>
-          )}
-          {sessions.length > 0 && visibleSessions.length === 0 && (
-            <p className="py-8 text-center" style={{ color: "var(--muted)" }}>
-              No failed deploy sessions match this search.
+              {filtered ? "No sessions match these filters." : "No sessions found."}
             </p>
           )}
         </div>
       )}
-      {selected && <SessionInspectModal summary={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <SessionInspectModal
+          summary={selected}
+          onClose={() => setSelected(null)}
+          onOpenUser={(userId) => {
+            setSelected(null);
+            onOpenUser(userId);
+          }}
+          onOpenGrant={(userId) => {
+            setSelected(null);
+            onOpenGrant(userId);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onClose: () => void }) {
+function SessionInspectModal({
+  summary,
+  onClose,
+  onOpenUser,
+  onOpenGrant,
+}: {
+  summary: AgentSession;
+  onClose: () => void;
+  onOpenUser: (userId: string) => void;
+  onOpenGrant: (userId: string) => void;
+}) {
   const [detail, setDetail] = useState<AgentSessionDetail | null>(null);
   const [view, setView] = useState<"transcript" | "tools" | "errors" | "deploy">("transcript");
   const [error, setError] = useState("");
@@ -489,6 +553,9 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
   const deployState = detail?.deployState || summary.deployState;
   const appId = detail?.appId || summary.appId;
   const appActionsUrl = githubActionsUrl(appId);
+  const repoUrl = detail?.repoUrl || summary.repoUrl;
+  const aiSource = detail?.aiSource ?? summary.aiSource;
+  const linkButton = { color: "var(--accent)", background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit" } as const;
 
   return (
     <div
@@ -558,6 +625,33 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
                   <a href={appActionsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
                     GitHub Actions
                   </a>
+                </>
+              ) : null}
+              {repoUrl ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <a href={repoUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+                    Repo
+                  </a>
+                </>
+              ) : null}
+              {userId ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <button type="button" onClick={() => onOpenUser(userId)} style={linkButton}>
+                    View user
+                  </button>
+                </>
+              ) : null}
+              {userId && aiSource?.startsWith("grant") ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <button type="button" onClick={() => onOpenGrant(userId)} style={linkButton}>
+                    View grant
+                  </button>
                 </>
               ) : null}
             </div>
@@ -776,7 +870,7 @@ function LogBlock({ title, time, body, tone }: { title: string; time?: string | 
 
 // ── AI Grants Tab ──
 
-function GrantsTab() {
+function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
   const [users, setUsers] = useState<GrantUser[]>([]);
   const [funded, setFunded] = useState<string[]>([]);
   const [selectedUser, setSelectedUser] = useState("");
@@ -800,13 +894,19 @@ function GrantsTab() {
       .then(([userData, grantData]) => {
         setUsers(userData.users || []);
         setFunded(grantData.funded || []);
-        setSelectedUser((current) => current || userData.users?.[0]?.id || "");
+        // A deep link from the session inspector preselects that user in the grant editor.
+        setSelectedUser((current) => focusUserId || current || userData.users?.[0]?.id || "");
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
+
+  // Bring the deep-linked user's row into view once the list is loaded (#15).
+  useEffect(() => {
+    if (!loading && focusUserId) document.getElementById(`grant-row-${focusUserId}`)?.scrollIntoView({ block: "center" });
+  }, [loading, focusUserId]);
 
   async function saveGrant() {
     const isFunded = funded.includes(provider);
@@ -961,7 +1061,14 @@ function GrantsTab() {
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} style={{ borderBottom: "1px solid var(--line)" }}>
+              <tr
+                key={u.id}
+                id={`grant-row-${u.id}`}
+                style={{
+                  borderBottom: "1px solid var(--line)",
+                  background: u.id === focusUserId ? "color-mix(in srgb, var(--accent) 12%, var(--panel))" : undefined,
+                }}
+              >
                 <td className="p-2">
                   <strong>{u.displayName || u.githubLogin || u.id}</strong>
                   <div className="text-xs" style={{ color: "var(--muted)" }}>
@@ -1582,7 +1689,7 @@ function AppsTab() {
 
 // ── Users Tab ──
 
-function UsersTab() {
+function UsersTab({ focusUserId, onClearFocus }: { focusUserId: string | null; onClearFocus: () => void }) {
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -1596,7 +1703,8 @@ function UsersTab() {
     setError("");
     const offset = (page - 1) * 50;
     const funded = fundedBy ? `&funded_by=${encodeURIComponent(fundedBy)}` : "";
-    adminFetchJson<{ users?: Record<string, unknown>[]; total?: number }>(`${API_URL}/v1/admin/users?limit=50&offset=${offset}${funded}`)
+    const focus = focusUserId ? `&user=${encodeURIComponent(focusUserId)}` : "";
+    adminFetchJson<{ users?: Record<string, unknown>[]; total?: number }>(`${API_URL}/v1/admin/users?limit=50&offset=${offset}${funded}${focus}`)
       .then((data) => {
         setUsers(
           (data.users || []).map((u: Record<string, unknown>) => ({
@@ -1614,7 +1722,7 @@ function UsersTab() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [page, fundedBy]);
+  }, [page, fundedBy, focusUserId]);
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading users...</p>;
   if (error) return <AdminAccessError message={error} />;
@@ -1623,7 +1731,16 @@ function UsersTab() {
     <>
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          {total} {fundedBy ? "matching" : "total"} users
+          {focusUserId ? (
+            <>
+              Showing <span className="font-mono">{focusUserId}</span> ·{" "}
+              <button type="button" onClick={onClearFocus} style={{ color: "var(--accent)", background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit" }}>
+                Show all users
+              </button>
+            </>
+          ) : (
+            `${total} ${fundedBy ? "matching" : "total"} users`
+          )}
         </p>
         <select
           value={fundedBy}

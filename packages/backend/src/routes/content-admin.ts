@@ -199,10 +199,19 @@ contentAdminRoutes.get('/admin/users', async (c) => {
   if (fundedBy && !(fundedBy in FUNDED_BY)) {
     return c.json({ error: `funded_by must be one of: ${Object.keys(FUNDED_BY).join(', ')}` }, 400);
   }
-  const filter = fundedBy
-    ? ' WHERE id IN (SELECT user_id FROM agent_sessions WHERE ai_source = ?)'
-    : '';
-  const filterBinds = fundedBy ? [FUNDED_BY[fundedBy]] : [];
+  // ?user=<id>: just that user, for deep links from the session inspector (#15).
+  const userId = (c.req.query('user') ?? '').trim();
+  const where: string[] = [];
+  const filterBinds: unknown[] = [];
+  if (fundedBy) {
+    where.push('id IN (SELECT user_id FROM agent_sessions WHERE ai_source = ?)');
+    filterBinds.push(FUNDED_BY[fundedBy]);
+  }
+  if (userId) {
+    where.push('id = ?');
+    filterBinds.push(userId);
+  }
+  const filter = where.length ? ` WHERE ${where.join(' AND ')}` : '';
 
   const result = await c.env.DB.prepare(
     `SELECT id, github_login, display_name, email, provider, avatar_url, created_at FROM users${filter} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
@@ -512,9 +521,50 @@ function sessionUsage(r: Record<string, unknown>) {
   };
 }
 
+// Session debug columns are JSON text written by the agent. SQLite's JSON
+// functions throw "malformed JSON" on a bad value, which would fail the whole
+// list, so every read goes through json_valid first (#15).
+const DEPLOY_PHASE_SQL = `CASE WHEN json_valid(s.deploy_state) THEN json_extract(s.deploy_state, '$.phase') END`;
+const ERROR_COUNT_SQL = `CASE WHEN json_valid(s.errors) AND json_type(s.errors) = 'array' THEN json_array_length(s.errors) ELSE 0 END`;
+/** Errors are appended, so the last entry is the most recent. */
+const LAST_ERROR_SQL = `CASE WHEN json_valid(s.errors) AND json_type(s.errors) = 'array' THEN json_extract(s.errors, '$[#-1].message') END`;
+
+/** Active recently = updated within this window (#15). */
+export const ACTIVE_RECENTLY_MS = 24 * 60 * 60 * 1000;
+
+/** Boolean filters on the sessions list, each an AND-ed SQL condition (#15). */
+const SESSION_FLAGS: Record<string, (now: number) => { sql: string; binds: unknown[] }> = {
+  failed_deploy: () => ({ sql: `${DEPLOY_PHASE_SQL} = 'error'`, binds: [] }),
+  has_errors: () => ({ sql: `${ERROR_COUNT_SQL} > 0`, binds: [] }),
+  active_recently: (now) => ({ sql: 's.updated_at > ?', binds: [now - ACTIVE_RECENTLY_MS] }),
+  // Has shipped an app: marked deployed, or its latest deploy went live.
+  deployed: () => ({
+    sql: `(COALESCE(s.deployed, 0) = 1 OR ${DEPLOY_PHASE_SQL} = 'live')`,
+    binds: [],
+  }),
+  // Never produced an app.
+  draft: () => ({
+    sql: `(s.app_id IS NULL AND COALESCE(s.deployed, 0) = 0 AND COALESCE(${DEPLOY_PHASE_SQL}, '') != 'live')`,
+    binds: [],
+  }),
+};
+
+const isOn = (value: string | undefined) => value === 'true' || value === '1';
+
+function repoUrlFor(repo: unknown, appId: unknown): string | null {
+  const r = stringValue(repo);
+  if (r && /^[\w.-]+\/[\w.-]+$/.test(r)) return `https://github.com/${r}`;
+  const id = stringValue(appId);
+  return id ? `https://github.com/freeappstore-online/${id}` : null;
+}
+
 /**
  * GET /v1/admin/agent-sessions — every user's VibeCode sessions.
- * Query: ?limit=50&offset=0&q=<search>&funded_by=grant|admin_key|user_key|browser_key|none
+ * Query: ?limit=50&offset=0&q=<search>
+ *        &funded_by=grant|admin_key|user_key|browser_key|none
+ *        &failed_deploy=true&has_errors=true&active_recently=true&deployed=true&draft=true
+ * Filters combine with AND. Search covers session ID, app ID, name, user ID,
+ * login and display name.
  */
 contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
   await requireAdmin(c);
@@ -527,60 +577,74 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
     return c.json({ error: `funded_by must be one of: ${Object.keys(FUNDED_BY).join(', ')}` }, 400);
   }
 
-  let sql = `SELECT
-       s.session_id, s.user_id, s.name, s.app_id, s.app_url, s.deployed, s.deploy_state, s.created_at, s.updated_at,
-       s.input_tokens, s.output_tokens, s.ai_provider, s.ai_model, s.ai_source,
-       u.github_login, u.display_name
-     FROM agent_sessions s
-     LEFT JOIN users u ON u.id = s.user_id`;
-  let countSql = 'SELECT COUNT(*) as n FROM agent_sessions s LEFT JOIN users u ON u.id = s.user_id';
+  const from = `FROM agent_sessions s
+     LEFT JOIN users u ON u.id = s.user_id
+     LEFT JOIN apps a ON a.id = s.app_id`;
   const where: string[] = [];
   const filterBinds: unknown[] = [];
 
   if (q) {
     where.push(
-      '(s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?)',
+      `(s.name LIKE ? ESCAPE '\\' OR s.app_id LIKE ? ESCAPE '\\' OR s.session_id LIKE ? ESCAPE '\\' OR s.user_id LIKE ? ESCAPE '\\' OR u.github_login LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\')`,
     );
-    const like = `%${q.replace(/[%_]/g, '\\$&')}%`;
+    const like = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
     filterBinds.push(like, like, like, like, like, like);
   }
   if (fundedBy) {
     where.push('s.ai_source = ?');
     filterBinds.push(FUNDED_BY[fundedBy]);
   }
-  if (where.length) {
-    sql += ` WHERE ${where.join(' AND ')}`;
-    countSql += ` WHERE ${where.join(' AND ')}`;
+  const now = Date.now();
+  for (const [name, condition] of Object.entries(SESSION_FLAGS)) {
+    if (!isOn(c.req.query(name))) continue;
+    const { sql, binds } = condition(now);
+    where.push(sql);
+    filterBinds.push(...binds);
   }
-  const binds: unknown[] = [...filterBinds];
-  const countBinds: unknown[] = [...filterBinds];
-  sql += ' ORDER BY s.updated_at DESC LIMIT ? OFFSET ?';
-  binds.push(limit, offset);
+  const whereSql = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+
+  const sql = `SELECT
+       s.session_id, s.user_id, s.name, s.app_id, s.app_url, s.deployed, s.deploy_state, s.created_at, s.updated_at,
+       s.input_tokens, s.output_tokens, s.ai_provider, s.ai_model, s.ai_source,
+       ${ERROR_COUNT_SQL} AS error_count, ${LAST_ERROR_SQL} AS last_error,
+       a.repo, u.github_login, u.display_name
+     ${from}${whereSql}
+     ORDER BY s.updated_at DESC LIMIT ? OFFSET ?`;
 
   const [rows, count] = await Promise.all([
     c.env.DB.prepare(sql)
-      .bind(...binds)
+      .bind(...filterBinds, limit, offset)
       .all<Record<string, unknown>>(),
-    c.env.DB.prepare(countSql)
-      .bind(...countBinds)
+    c.env.DB.prepare(`SELECT COUNT(*) as n ${from}${whereSql}`)
+      .bind(...filterBinds)
       .first<{ n: number }>(),
   ]);
 
   return c.json({
-    sessions: (rows.results ?? []).map((r) => ({
-      sessionId: r.session_id,
-      userId: r.user_id,
-      userLogin: r.github_login,
-      userDisplayName: r.display_name,
-      name: r.name,
-      appId: r.app_id,
-      appUrl: r.app_url,
-      deployed: r.deployed === 1 || r.deployed === true,
-      deployState: parseJsonObject(r.deploy_state),
-      ...sessionUsage(r),
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    })),
+    sessions: (rows.results ?? []).map((r) => {
+      const lastError = stringValue(r.last_error);
+      return {
+        sessionId: r.session_id,
+        userId: r.user_id,
+        userLogin: r.github_login,
+        userDisplayName: r.display_name,
+        name: r.name,
+        appId: r.app_id,
+        appUrl: r.app_url,
+        repoUrl: repoUrlFor(r.repo, r.app_id),
+        deployed: r.deployed === 1 || r.deployed === true,
+        deployState: parseJsonObject(r.deploy_state),
+        errorCount: Number(r.error_count) || 0,
+        lastErrorSummary: lastError
+          ? lastError.length > 120
+            ? `${lastError.slice(0, 119)}…`
+            : lastError
+          : null,
+        ...sessionUsage(r),
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+      };
+    }),
     total: count?.n ?? 0,
     limit,
     offset,
@@ -667,9 +731,10 @@ contentAdminRoutes.get('/admin/agent-sessions/:id', async (c) => {
   const sessionId = c.req.param('id')!;
 
   const row = await c.env.DB.prepare(
-    `SELECT s.*, u.github_login, u.display_name
+    `SELECT s.*, a.repo, u.github_login, u.display_name
      FROM agent_sessions s
      LEFT JOIN users u ON u.id = s.user_id
+     LEFT JOIN apps a ON a.id = s.app_id
      WHERE s.session_id = ?`,
   )
     .bind(sessionId)
@@ -686,6 +751,7 @@ contentAdminRoutes.get('/admin/agent-sessions/:id', async (c) => {
       name: row.name,
       appId: row.app_id,
       appUrl: row.app_url,
+      repoUrl: repoUrlFor(row.repo, row.app_id),
       deployed: row.deployed === 1,
       messages: parseJsonArray(row.messages),
       deployState: parseJsonObject(row.deploy_state),
