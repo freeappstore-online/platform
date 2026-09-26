@@ -47,7 +47,8 @@ const COMP_SCHEMA = `CREATE TABLE IF NOT EXISTS complimentary_grants (
   granted_by TEXT NOT NULL,
   note TEXT,
   created_at INTEGER NOT NULL,
-  expires_at TEXT
+  expires_at TEXT,
+  last_used_at INTEGER
 )`;
 let compSchemaReady = false;
 
@@ -84,23 +85,62 @@ function rowToGrant(row: Record<string, unknown>) {
     note: row.note ? String(row.note) : null,
     createdAt: Number(row.created_at) || 0,
     expiresAt: row.expires_at ? String(row.expires_at) : null,
+    lastUsedAt: row.last_used_at ? Number(row.last_used_at) : null,
   };
 }
 
 async function listCompGrants(env: Env) {
   await ensureCompSchema(env.DB);
   const rows = await env.DB.prepare(
-    `SELECT user_id, provider, model, granted_by, note, created_at, expires_at
+    `SELECT user_id, provider, model, granted_by, note, created_at, expires_at, last_used_at
      FROM complimentary_grants
      ORDER BY created_at DESC`,
   ).all<Record<string, unknown>>();
-  return rows.results.map(rowToGrant);
+  const usage = await grantUsageByUser(env);
+  return rows.results.map((row) => {
+    const grant = rowToGrant(row);
+    return {
+      ...grant,
+      usage: usage.get(grant.userId) ?? { sessions: 0, inputTokens: 0, outputTokens: 0 },
+    };
+  });
+}
+
+/**
+ * Approximate tokens each grant has funded (#16): totals of the user's VibeCode
+ * sessions whose latest turn ran on the grant. Summed from agent_sessions
+ * rather than counted separately, so a re-synced session is never double
+ * counted. A failure just leaves the totals out.
+ */
+async function grantUsageByUser(env: Env) {
+  const usage = new Map<string, { sessions: number; inputTokens: number; outputTokens: number }>();
+  const rows = await env.DB.prepare(
+    `SELECT user_id, COUNT(*) AS sessions, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens
+     FROM agent_sessions
+     WHERE ai_source = 'grant'
+     GROUP BY user_id`,
+  )
+    .all<{
+      user_id: string;
+      sessions: number;
+      input_tokens: number | null;
+      output_tokens: number | null;
+    }>()
+    .catch(() => ({ results: [] }));
+  for (const r of rows.results) {
+    usage.set(r.user_id, {
+      sessions: r.sessions,
+      inputTokens: r.input_tokens ?? 0,
+      outputTokens: r.output_tokens ?? 0,
+    });
+  }
+  return usage;
 }
 
 async function getActiveCompGrant(env: Env, userId: string) {
   await ensureCompSchema(env.DB);
   const row = await env.DB.prepare(
-    `SELECT user_id, provider, model, granted_by, note, created_at, expires_at
+    `SELECT user_id, provider, model, granted_by, note, created_at, expires_at, last_used_at
      FROM complimentary_grants
      WHERE user_id = ?`,
   )
@@ -139,11 +179,18 @@ keysRoutes.get('/internal/keys/providers', async (c) => {
 
 keysRoutes.get('/internal/keys/users', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  return c.json({ users: await listGrantUsers(c.env) });
+});
 
-  const grants = await listCompGrants(c.env);
+/**
+ * Users with their vault keys and grant, for the admin Grants tab. Keys carry
+ * `provisionedBy` (null = the user's own) but never a key value (#16).
+ */
+async function listGrantUsers(env: Env) {
+  const grants = await listCompGrants(env);
   const grantsByUser = new Map(grants.map((grant) => [grant.userId, grant]));
   const [usersRes, keysRes] = await Promise.all([
-    c.env.DB.prepare(
+    env.DB.prepare(
       `SELECT id, github_login, display_name, avatar_url, created_at
        FROM users
        ORDER BY created_at DESC
@@ -155,8 +202,8 @@ keysRoutes.get('/internal/keys/users', async (c) => {
       avatar_url: string | null;
       created_at: number | null;
     }>(),
-    c.env.DB.prepare(
-      `SELECT user_id, provider, label, created_at, last_used_at
+    env.DB.prepare(
+      `SELECT user_id, provider, label, created_at, last_used_at, provisioned_by
        FROM user_api_keys
        ORDER BY provider`,
     )
@@ -166,13 +213,20 @@ keysRoutes.get('/internal/keys/users', async (c) => {
         label: string | null;
         created_at: number;
         last_used_at: number | null;
+        provisioned_by: string | null;
       }>()
       .catch(() => ({ results: [] })),
   ]);
 
   const keysByUser = new Map<
     string,
-    Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>
+    Array<{
+      provider: string;
+      label: string | null;
+      createdAt: number;
+      lastUsedAt: number | null;
+      provisionedBy: string | null;
+    }>
   >();
   for (const key of keysRes.results) {
     const keys = keysByUser.get(key.user_id) ?? [];
@@ -181,22 +235,21 @@ keysRoutes.get('/internal/keys/users', async (c) => {
       label: key.label,
       createdAt: key.created_at,
       lastUsedAt: key.last_used_at,
+      provisionedBy: key.provisioned_by ?? null,
     });
     keysByUser.set(key.user_id, keys);
   }
 
-  return c.json({
-    users: usersRes.results.map((user) => ({
-      id: user.id,
-      githubLogin: user.github_login,
-      displayName: user.display_name,
-      avatarUrl: user.avatar_url,
-      createdAt: user.created_at,
-      keys: keysByUser.get(user.id) ?? [],
-      grant: grantsByUser.get(user.id) ?? null,
-    })),
-  });
-});
+  return usersRes.results.map((user) => ({
+    id: user.id,
+    githubLogin: user.github_login,
+    displayName: user.display_name,
+    avatarUrl: user.avatar_url,
+    createdAt: user.created_at,
+    keys: keysByUser.get(user.id) ?? [],
+    grant: grantsByUser.get(user.id) ?? null,
+  }));
+}
 
 keysRoutes.get('/internal/keys/grants', async (c) => {
   if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
@@ -290,63 +343,7 @@ keysRoutes.post('/internal/keys/grants/delete', async (c) => {
 
 keysRoutes.get('/admin/ai-grants/users', async (c) => {
   await requireAdmin(c);
-
-  const grants = await listCompGrants(c.env);
-  const grantsByUser = new Map(grants.map((grant) => [grant.userId, grant]));
-  const [usersRes, keysRes] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT id, github_login, display_name, avatar_url, created_at
-       FROM users
-       ORDER BY created_at DESC
-       LIMIT 1000`,
-    ).all<{
-      id: string;
-      github_login: string;
-      display_name: string | null;
-      avatar_url: string | null;
-      created_at: number | null;
-    }>(),
-    c.env.DB.prepare(
-      `SELECT user_id, provider, label, created_at, last_used_at
-       FROM user_api_keys
-       ORDER BY provider`,
-    )
-      .all<{
-        user_id: string;
-        provider: string;
-        label: string | null;
-        created_at: number;
-        last_used_at: number | null;
-      }>()
-      .catch(() => ({ results: [] })),
-  ]);
-
-  const keysByUser = new Map<
-    string,
-    Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>
-  >();
-  for (const key of keysRes.results) {
-    const keys = keysByUser.get(key.user_id) ?? [];
-    keys.push({
-      provider: key.provider,
-      label: key.label,
-      createdAt: key.created_at,
-      lastUsedAt: key.last_used_at,
-    });
-    keysByUser.set(key.user_id, keys);
-  }
-
-  return c.json({
-    users: usersRes.results.map((user) => ({
-      id: user.id,
-      githubLogin: user.github_login,
-      displayName: user.display_name,
-      avatarUrl: user.avatar_url,
-      createdAt: user.created_at,
-      keys: keysByUser.get(user.id) ?? [],
-      grant: grantsByUser.get(user.id) ?? null,
-    })),
-  });
+  return c.json({ users: await listGrantUsers(c.env) });
 });
 
 keysRoutes.get('/admin/ai-grants', async (c) => {
@@ -371,7 +368,7 @@ keysRoutes.post('/admin/ai-grants/delete', async (c) => {
 });
 
 keysRoutes.post('/admin/ai-keys', async (c) => {
-  await requireAdmin(c);
+  const admin = await requireAdmin(c);
   if (!c.env.APP_SECRET_KEK) {
     return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
   }
@@ -412,16 +409,26 @@ keysRoutes.post('/admin/ai-keys', async (c) => {
 
   const sealed = await sealSecret(key, c.env.APP_SECRET_KEK);
   await c.env.DB.prepare(
-    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at, provisioned_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (user_id, provider) DO UPDATE SET
        label = excluded.label,
        key_ciphertext = excluded.key_ciphertext,
        dek_wrapped = excluded.dek_wrapped,
        iv = excluded.iv,
-       created_at = excluded.created_at`,
+       created_at = excluded.created_at,
+       provisioned_by = excluded.provisioned_by`,
   )
-    .bind(userId, provider, label, sealed.keyCiphertext, sealed.dekWrapped, sealed.iv, Date.now())
+    .bind(
+      userId,
+      provider,
+      label,
+      sealed.keyCiphertext,
+      sealed.dekWrapped,
+      sealed.iv,
+      Date.now(),
+      admin.githubLogin || admin.login,
+    )
     .run();
 
   return c.json({ ok: true, userId, provider });
@@ -488,16 +495,26 @@ keysRoutes.post('/internal/keys/userkey', async (c) => {
 
   const sealed = await sealSecret(key, c.env.APP_SECRET_KEK);
   await c.env.DB.prepare(
-    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at, provisioned_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (user_id, provider) DO UPDATE SET
        label = excluded.label,
        key_ciphertext = excluded.key_ciphertext,
        dek_wrapped = excluded.dek_wrapped,
        iv = excluded.iv,
-       created_at = excluded.created_at`,
+       created_at = excluded.created_at,
+       provisioned_by = excluded.provisioned_by`,
   )
-    .bind(userId, provider, label, sealed.keyCiphertext, sealed.dekWrapped, sealed.iv, Date.now())
+    .bind(
+      userId,
+      provider,
+      label,
+      sealed.keyCiphertext,
+      sealed.dekWrapped,
+      sealed.iv,
+      Date.now(),
+      'admin-worker',
+    )
     .run();
 
   return c.json({ ok: true, userId, provider });
@@ -594,14 +611,15 @@ keysRoutes.put('/keys/:provider', async (c) => {
 
   const sealed = await sealSecret(body.value, c.env.APP_SECRET_KEK);
   await c.env.DB.prepare(
-    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at, provisioned_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (user_id, provider) DO UPDATE SET
        label = excluded.label,
        key_ciphertext = excluded.key_ciphertext,
        dek_wrapped = excluded.dek_wrapped,
        iv = excluded.iv,
-       created_at = excluded.created_at`,
+       created_at = excluded.created_at,
+       provisioned_by = excluded.provisioned_by`,
   )
     .bind(
       user.id,
@@ -611,6 +629,7 @@ keysRoutes.put('/keys/:provider', async (c) => {
       sealed.dekWrapped,
       sealed.iv,
       Date.now(),
+      null, // the user's own key, even if it replaces one an admin provisioned
     )
     .run();
 
@@ -672,11 +691,17 @@ keysRoutes.get('/keys/resolve-agent/:provider', async (c) => {
   const agentProvider = VAULT_PROVIDER_TO_AGENT[vaultProvider] ?? requestedProvider;
   const key = await resolveUserKey(c.env.DB, user.id, vaultProvider, c.env.APP_SECRET_KEK);
   if (key) {
-    return c.json({ key, provider: agentProvider, source: 'vault' });
+    const source = await stampVaultKeyUse(c.env.DB, user.id, vaultProvider);
+    return c.json({ key, provider: agentProvider, source });
   }
 
   const grant = await getActiveCompGrant(c.env, user.id);
   if (!grant) return c.json({ key: null, source: 'none' });
+  // Each call funds one VibeCode turn (#16). Best-effort: never blocks the key.
+  await c.env.DB.prepare('UPDATE complimentary_grants SET last_used_at = ? WHERE user_id = ?')
+    .bind(Date.now(), user.id)
+    .run()
+    .catch(() => {});
   const grantKey = compKeyFor(c.env, grant.provider);
   if (!grantKey)
     return c.json({
@@ -694,6 +719,31 @@ keysRoutes.get('/keys/resolve-agent/:provider', async (c) => {
     grantExpiresAt: grant.expiresAt,
   });
 });
+
+/**
+ * Record that a vault key funded a VibeCode turn and say whose it is (#16):
+ * 'vault_admin' when an admin provisioned it, else 'vault_user'. Best-effort:
+ * a failure (e.g. before the provisioned_by migration) reads as the user's own.
+ */
+async function stampVaultKeyUse(
+  db: D1Database,
+  userId: string,
+  provider: string,
+): Promise<'vault_user' | 'vault_admin'> {
+  try {
+    await db
+      .prepare('UPDATE user_api_keys SET last_used_at = ? WHERE user_id = ? AND provider = ?')
+      .bind(Date.now(), userId, provider)
+      .run();
+    const row = await db
+      .prepare('SELECT provisioned_by FROM user_api_keys WHERE user_id = ? AND provider = ?')
+      .bind(userId, provider)
+      .first<{ provisioned_by: string | null }>();
+    return row?.provisioned_by ? 'vault_admin' : 'vault_user';
+  } catch {
+    return 'vault_user';
+  }
+}
 
 // ── Resolve a user's key (internal, used by proxy) ────────────────────
 

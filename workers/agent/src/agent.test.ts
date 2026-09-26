@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
+import { collectUsage, runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
 import { getConfig } from "./config";
 import type { AIConfig, StreamEvent } from "./providers/types";
 
@@ -292,5 +292,47 @@ describe("runAgentTurn — read-only stall nudge (issue #37)", () => {
     expect(nudgeRequest.at(-1)).toEqual({ role: "user", content: STALL_NUDGE });
     expect(nudgeRequest.at(-2)?.role).not.toBe("assistant"); // no empty assistant turn before the nudge
     expect(result.terminalError).toBeUndefined();
+  });
+});
+
+describe("token usage (#16)", () => {
+  const usageEvent = (input: number, output: number) => ({ type: "usage" as const, data: JSON.stringify({ input, output }) });
+
+  it("collectUsage takes the largest value per field, which is right for every provider", async () => {
+    const seen: string[] = [];
+    // Anthropic: input and output arrive in separate events.
+    const anthropic = collectUsage(async (e) => void seen.push(e.type));
+    await anthropic.emit(usageEvent(120, 0));
+    await anthropic.emit(usageEvent(0, 45));
+    expect(anthropic.usage).toEqual({ input: 120, output: 45 });
+    expect(seen).toEqual(["usage", "usage"]); // events still reach the stream
+
+    // Google: cumulative totals repeated on every chunk. Summing would triple-count.
+    const google = collectUsage(async () => {});
+    await google.emit(usageEvent(300, 10));
+    await google.emit(usageEvent(300, 25));
+    await google.emit(usageEvent(300, 40));
+    expect(google.usage).toEqual({ input: 300, output: 40 });
+  });
+
+  it("a provider that reports no usage, or garbage, counts zero without throwing", async () => {
+    const none = collectUsage(async () => {});
+    await none.emit({ type: "text", data: "hi" });
+    expect(none.usage).toEqual({ input: 0, output: 0 });
+
+    const bad = collectUsage(async () => {});
+    await bad.emit({ type: "usage", data: "not json" });
+    await bad.emit({ type: "usage", data: JSON.stringify({ input: "lots" }) });
+    expect(bad.usage).toEqual({ input: 0, output: 0 });
+  });
+
+  it("runAgentTurn adds up each model call's usage", async () => {
+    // write_file call (20 in / 10 out), then a text answer (10 in / 5 out).
+    scriptFetch([writeFile(), makeTextOnlySSE("Done.")]);
+    const { writer } = makeWriter();
+
+    const result = await runAgentTurn(aiConfig, [], "build it", new Map(), writer, storeConfig);
+
+    expect(result.usage).toEqual({ input: 30, output: 15 });
   });
 });

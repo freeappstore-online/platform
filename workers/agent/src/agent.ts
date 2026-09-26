@@ -6,7 +6,7 @@ import { AnthropicAdapter } from "./providers/anthropic";
 import { GitHubModelsAdapter } from "./providers/github";
 import { GoogleAdapter } from "./providers/google";
 import { OpenAIAdapter } from "./providers/openai";
-import type { AIConfig, Message, ProviderAdapter, StreamEvent, ToolCall, ToolResult } from "./providers/types";
+import type { AIConfig, Message, ProviderAdapter, StreamEvent, TokenUsage, ToolCall, ToolResult } from "./providers/types";
 import { getSystemPrompt } from "./template";
 import { executeTool, getToolDefinitions, INFRA_TOOLS } from "./tools";
 
@@ -48,6 +48,8 @@ export interface AgentTurnResult {
    * syncToD1 on this field so the failure is durable.
    */
   terminalError?: string;
+  /** Tokens the provider reported for this turn; zero when it reports none (#16). */
+  usage: TokenUsage;
 }
 
 export interface SessionContext {
@@ -143,6 +145,35 @@ export function prepareTurn(
 }
 
 export type Emit = (event: StreamEvent) => Promise<void>;
+
+/**
+ * Wrap `emit` for ONE model call and collect the tokens it used (#16).
+ * Providers report usage differently: Anthropic sends input and output in two
+ * separate events, OpenAI sends one final event, Google repeats cumulative
+ * totals on every chunk. Taking the largest value seen per field, rather than
+ * summing, is right for all three. Events still reach `emit` unchanged.
+ */
+export function collectUsage(emit: Emit): { emit: Emit; usage: TokenUsage } {
+  const usage: TokenUsage = { input: 0, output: 0 };
+  const wrapped: Emit = async (event) => {
+    if (event.type === "usage") {
+      try {
+        const reported = JSON.parse(event.data) as Partial<TokenUsage>;
+        usage.input = Math.max(usage.input, Number(reported.input) || 0);
+        usage.output = Math.max(usage.output, Number(reported.output) || 0);
+      } catch {
+        /* malformed usage event: count nothing */
+      }
+    }
+    await emit(event);
+  };
+  return { emit: wrapped, usage };
+}
+
+export function addUsage(total: TokenUsage, more: TokenUsage): void {
+  total.input += more.input;
+  total.output += more.output;
+}
 
 /** What one model round-trip produced. `appended` messages belong on both the
  *  model's message list and the turn's new messages, in order. */
@@ -321,17 +352,20 @@ export async function runAgentTurn(
   };
 
   let retries = 0;
+  const usage: TokenUsage = { input: 0, output: 0 };
 
   for (let loop = 0; loop < MAX_LOOPS; loop++) {
     // Stagger API calls — wait between rounds to avoid rate limits
     if (loop > 0) await new Promise((r) => setTimeout(r, stepDelayMs(config)));
 
-    const step = await runAgentStep(config, prepared, files, storeConfig, send, gatewayEnv);
+    const counted = collectUsage(send);
+    const step = await runAgentStep(config, prepared, files, storeConfig, counted.emit, gatewayEnv);
+    addUsage(usage, counted.usage);
 
     if (step.kind === "threw") break;
     if (step.kind === "stream_error") {
       newMessages.push({ role: "assistant", content: step.message });
-      return { newMessages, infraRequests, terminalError: step.message };
+      return { newMessages, infraRequests, terminalError: step.message, usage };
     }
     // Auto-retry on rate limit with exponential backoff
     if (step.kind === "rate_limited") {
@@ -378,5 +412,5 @@ export async function runAgentTurn(
   }
 
   const terminalError = emptyNoOutputError(newMessages, infraRequests, anyToolCallsMade);
-  return terminalError ? { newMessages, infraRequests, terminalError } : { newMessages, infraRequests };
+  return terminalError ? { newMessages, infraRequests, terminalError, usage } : { newMessages, infraRequests, usage };
 }

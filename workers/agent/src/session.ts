@@ -2,7 +2,9 @@
  *  Stores conversation history, virtual filesystem, token usage, deploy status. */
 
 import {
+  addUsage,
   appendStallNudge,
+  collectUsage,
   emptyNoOutputError,
   MAX_LOOPS,
   MAX_RATE_LIMIT_RETRIES,
@@ -21,7 +23,7 @@ import { corsHeaders, json } from "./cors";
 import type { DeployEnv, DeployStatus } from "./deploy";
 import type { Env } from "./index";
 import { editAccess, executeInfraTool, readAppOwner } from "./infra-exec";
-import type { AIConfig, Message, TokenUsage, ToolCall } from "./providers/types";
+import { AI_SOURCES, type AIConfig, type AiSource, type Message, type TokenUsage, type ToolCall } from "./providers/types";
 import { type PushSubscription, sendWebPush } from "./push";
 import { fetchRepoFiles } from "./repo-import";
 import { APP_ARCHETYPES, type AppArchetype, getTemplateFiles } from "./template";
@@ -48,7 +50,12 @@ interface SessionState {
   messages: Message[];
   files: Record<string, string>;
   baselineFiles: Record<string, string>;
+  /** Cumulative tokens the providers reported for this session (#16). */
   tokenUsage: TokenUsage;
+  /** What the latest turn used and who paid for it (#16). Never a key value. */
+  aiProvider?: string | null;
+  aiModel?: string | null;
+  aiSource?: AiSource | null;
   deployStatus: DeployStatus | null;
   deployLog: DeployLogEntry[];
   appId: string | null;
@@ -88,7 +95,8 @@ const MAX_TURN_EVENTS = 200;
 const LATEST_TURN_ID_KEY = "latestTurnId";
 
 type TurnPhase = "main" | "main-infra" | "followup" | "followup-infra";
-type ChatBody = { message: string; aiConfig: AIConfig; archetype?: AppArchetype };
+/** aiSource is set by the worker entry (index.ts), never by the client. */
+type ChatBody = { message: string; aiConfig: AIConfig; archetype?: AppArchetype; aiSource?: AiSource };
 type AgentTurnResult = Awaited<ReturnType<typeof runAgentTurn>>;
 
 export interface PendingTurn {
@@ -241,6 +249,7 @@ export class AgentSession implements DurableObject {
     // Migrate old sessions
     if (!this.session.errors) this.session.errors = [];
     if (!this.session.deployLog) this.session.deployLog = [];
+    if (!this.session.tokenUsage) this.session.tokenUsage = { input: 0, output: 0 };
     if (this.session.ownerId === undefined) this.session.ownerId = null;
     if (this.session.ownerLogin === undefined) this.session.ownerLogin = null;
     if (this.session.tokenHash === undefined) this.session.tokenHash = null;
@@ -422,6 +431,7 @@ export class AgentSession implements DurableObject {
     }
 
     const body = await request.json<ChatBody>();
+    await this.recordAiSource(body);
 
     if (!body.message || !body.aiConfig?.provider || !body.aiConfig?.model) {
       return json({ error: "message, aiConfig.provider, and aiConfig.model are required" }, 400, request, this.config.domain);
@@ -587,6 +597,7 @@ export class AgentSession implements DurableObject {
 
   private async persistLegacyAgentResult(ctx: LegacyTurnContext, result: AgentTurnResult): Promise<void> {
     this.logTerminalError(result.terminalError, ctx.scrubKey);
+    if (result.usage) addUsage(ctx.session.tokenUsage, result.usage);
     ctx.session.messages = [...ctx.history, ...result.newMessages];
     if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
     if (ctx.session.errors.length > MAX_ERRORS) ctx.session.errors = ctx.session.errors.slice(-MAX_ERRORS);
@@ -634,6 +645,7 @@ export class AgentSession implements DurableObject {
       ? "The tool action above returned an error. Analyze the error, fix the issue if possible, and retry the action. Do not ask the user — just fix it."
       : "The action completed. Summarize the result briefly for the user.";
     const followUp = await this.runLegacyAgentTurn(ctx, ctx.session.messages, followUpPrompt);
+    if (followUp.usage) addUsage(ctx.session.tokenUsage, followUp.usage);
 
     this.logTerminalError(followUp.terminalError, ctx.scrubKey);
     ctx.session.messages.push(...followUp.newMessages);
@@ -1014,7 +1026,9 @@ export class AgentSession implements DurableObject {
     if (pending.loopIndex >= MAX_LOOPS || !pending.prepared) return this.finishLlmPhase(session, pending);
 
     const files = new Map(Object.entries(session.files));
-    const step = await runAgentStep(pending.aiConfig, pending.prepared, files, this.config, emit, this.env);
+    const counted = collectUsage(emit);
+    const step = await runAgentStep(pending.aiConfig, pending.prepared, files, this.config, counted.emit, this.env);
+    addUsage(session.tokenUsage, counted.usage);
 
     switch (step.kind) {
       case "threw":
@@ -1294,6 +1308,42 @@ export class AgentSession implements DurableObject {
     } catch {
       // D1 sync is best-effort — DO storage is still authoritative while alive
     }
+    await this.syncUsageToD1();
+  }
+
+  /**
+   * Usage columns (#16), written separately from the transcript so a failure
+   * here, e.g. the agent deploying before the backend's migration ran, never
+   * costs the messages/errors sync above, and never reaches chat.
+   */
+  private async syncUsageToD1(): Promise<void> {
+    const session = this.session;
+    if (!session?.sessionId) return;
+    try {
+      await this.env.DB.prepare(
+        `UPDATE agent_sessions SET input_tokens = ?, output_tokens = ?, ai_provider = ?, ai_model = ?, ai_source = ? WHERE session_id = ?`,
+      )
+        .bind(
+          Math.max(0, Math.round(session.tokenUsage?.input ?? 0)),
+          Math.max(0, Math.round(session.tokenUsage?.output ?? 0)),
+          session.aiProvider ?? null,
+          session.aiModel ?? null,
+          session.aiSource ?? null,
+          session.sessionId,
+        )
+        .run();
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  /** Remember what this turn uses and who pays for it (#16), before any
+   *  validation, so a "No API key found" turn still shows what was tried. */
+  private async recordAiSource(body: Partial<ChatBody>): Promise<void> {
+    const session = await this.load();
+    session.aiProvider = body.aiConfig?.provider ?? null;
+    session.aiModel = body.aiConfig?.model ?? null;
+    session.aiSource = body.aiSource && AI_SOURCES.includes(body.aiSource) ? body.aiSource : "none";
   }
 
   /** GET /errors — return server-side errors for debugging */

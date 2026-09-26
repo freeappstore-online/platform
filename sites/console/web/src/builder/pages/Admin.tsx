@@ -88,6 +88,8 @@ interface UserRecord {
   photo_url: string | null;
   provider: string;
   created_at: string | number;
+  /** VibeCode sessions and tokens per funding source (#16). */
+  aiUsage: { source: string; sessions: number; inputTokens: number; outputTokens: number }[];
 }
 
 interface Creator {
@@ -107,7 +109,53 @@ interface AgentSession {
   appUrl: string | null;
   deployed: boolean;
   deployState: { phase?: string; error?: string | null } | null;
+  inputTokens?: number;
+  outputTokens?: number;
+  aiProvider?: string | null;
+  aiModel?: string | null;
+  aiSource?: string | null;
   updatedAt: number;
+}
+
+/** What funded a VibeCode turn (#16), as the backend's `ai_source`. */
+const AI_SOURCE_LABELS: Record<string, string> = {
+  vault_user: "User key",
+  vault_admin: "Admin key",
+  grant: "Grant",
+  grant_unfunded: "Grant (unfunded)",
+  browser_key: "Browser key",
+  none: "No key",
+};
+
+/** `?funded_by=` values the admin session/user lists accept. */
+const FUNDED_BY_OPTIONS: { value: string; label: string }[] = [
+  { value: "", label: "Any funding" },
+  { value: "grant", label: "Grant" },
+  { value: "admin_key", label: "Admin key" },
+  { value: "user_key", label: "User key" },
+  { value: "browser_key", label: "Browser key" },
+  { value: "none", label: "No key" },
+];
+
+function formatTokens(n: number | undefined): string {
+  const v = n || 0;
+  return v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v);
+}
+
+/** Provider/model, funding source and token totals for one session (#16). */
+function AiUsageCell({ session }: { session: Pick<AgentSession, "aiProvider" | "aiModel" | "aiSource" | "inputTokens" | "outputTokens"> }) {
+  if (!session.aiSource && !session.aiProvider) return <span style={{ color: "var(--muted)" }}>—</span>;
+  return (
+    <>
+      <strong className="text-xs">{session.aiSource ? AI_SOURCE_LABELS[session.aiSource] || session.aiSource : "—"}</strong>
+      <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+        {[session.aiProvider, session.aiModel].filter(Boolean).join(" · ") || "—"}
+      </div>
+      <div className="text-xs" style={{ color: "var(--muted)" }}>
+        {formatTokens(session.inputTokens)} in · {formatTokens(session.outputTokens)} out
+      </div>
+    </>
+  );
 }
 
 interface AgentToolCall {
@@ -159,8 +207,14 @@ interface GrantUser {
   id: string;
   githubLogin: string;
   displayName: string | null;
-  keys: { provider: string; label?: string | null }[];
-  grant: { provider: string; model: string; expiresAt: string | null } | null;
+  keys: { provider: string; label?: string | null; lastUsedAt?: number | null; provisionedBy?: string | null }[];
+  grant: {
+    provider: string;
+    model: string;
+    expiresAt: string | null;
+    lastUsedAt?: number | null;
+    usage?: { sessions: number; inputTokens: number; outputTokens: number };
+  } | null;
 }
 
 export function Admin() {
@@ -230,6 +284,7 @@ function SessionsTab() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [failedOnly, setFailedOnly] = useState(false);
+  const [fundedBy, setFundedBy] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<AgentSession | null>(null);
@@ -239,6 +294,7 @@ function SessionsTab() {
     setError("");
     const params = new URLSearchParams({ limit: "50" });
     if (search) params.set("q", search);
+    if (fundedBy) params.set("funded_by", fundedBy);
     adminFetchJson<{ sessions?: AgentSession[]; total?: number }>(`${API_URL}/v1/admin/agent-sessions?${params}`)
       .then((data) => {
         setSessions(data.sessions || []);
@@ -246,7 +302,7 @@ function SessionsTab() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [search]);
+  }, [search, fundedBy]);
 
   const visibleSessions = failedOnly ? sessions.filter((s) => s.deployState?.phase === "error") : sessions;
 
@@ -269,6 +325,19 @@ function SessionsTab() {
           >
             Failed deploys
           </button>
+          <select
+            value={fundedBy}
+            onChange={(e) => setFundedBy(e.target.value)}
+            aria-label="Funded by"
+            className="p-2 rounded-lg border text-sm"
+            style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}
+          >
+            {FUNDED_BY_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -297,6 +366,9 @@ function SessionsTab() {
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                   Status
+                </th>
+                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  AI
                 </th>
                 <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                   Updated
@@ -332,6 +404,9 @@ function SessionsTab() {
                   </td>
                   <td className="p-2">
                     <StatusDot status={s.deployed ? "deployed" : s.deployState?.phase || "draft"} />
+                  </td>
+                  <td className="p-2">
+                    <AiUsageCell session={s} />
                   </td>
                   <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
                     {timeAgo(s.updatedAt)}
@@ -485,6 +560,9 @@ function SessionInspectModal({ summary, onClose }: { summary: AgentSession; onCl
                   </a>
                 </>
               ) : null}
+            </div>
+            <div className="mt-1">
+              <AiUsageCell session={{ ...summary, ...(detail ?? {}) }} />
             </div>
           </div>
           <button
@@ -890,7 +968,21 @@ function GrantsTab() {
                     {u.id}
                   </div>
                 </td>
-                <td className="p-2 text-xs">{u.grant ? `${u.grant.provider} / ${u.grant.model}` : "none"}</td>
+                <td className="p-2 text-xs">
+                  {u.grant ? (
+                    <>
+                      {u.grant.provider} / {u.grant.model}
+                      <div style={{ color: "var(--muted)" }}>
+                        {u.grant.lastUsedAt ? `last used ${timeAgo(u.grant.lastUsedAt)}` : "never used"}
+                        {u.grant.usage?.sessions
+                          ? ` · ~${formatTokens(u.grant.usage.inputTokens)} in / ${formatTokens(u.grant.usage.outputTokens)} out over ${u.grant.usage.sessions} session${u.grant.usage.sessions === 1 ? "" : "s"}`
+                          : ""}
+                      </div>
+                    </>
+                  ) : (
+                    "none"
+                  )}
+                </td>
                 <td className="p-2 text-xs">
                   {u.keys.length ? (
                     <div className="flex flex-wrap gap-1">
@@ -904,7 +996,10 @@ function GrantsTab() {
                             background: "color-mix(in srgb, var(--success) 10%, var(--panel))",
                           }}
                         >
-                          {k.provider}
+                          <span title={k.lastUsedAt ? `last used ${timeAgo(k.lastUsedAt)}` : "never used"}>
+                            {k.provider}
+                            {k.provisionedBy ? " (admin)" : ""}
+                          </span>
                           <button
                             onClick={() => removeUserKey(u.id, k.provider)}
                             title={`Remove ${k.provider} key`}
@@ -1492,6 +1587,7 @@ function UsersTab() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
+  const [fundedBy, setFundedBy] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -1499,7 +1595,8 @@ function UsersTab() {
     setLoading(true);
     setError("");
     const offset = (page - 1) * 50;
-    adminFetchJson<{ users?: Record<string, unknown>[]; total?: number }>(`${API_URL}/v1/admin/users?limit=50&offset=${offset}`)
+    const funded = fundedBy ? `&funded_by=${encodeURIComponent(fundedBy)}` : "";
+    adminFetchJson<{ users?: Record<string, unknown>[]; total?: number }>(`${API_URL}/v1/admin/users?limit=50&offset=${offset}${funded}`)
       .then((data) => {
         setUsers(
           (data.users || []).map((u: Record<string, unknown>) => ({
@@ -1509,6 +1606,7 @@ function UsersTab() {
             photo_url: u.avatar_url ? String(u.avatar_url) : null,
             provider: String(u.provider || "github"),
             created_at: typeof u.created_at === "number" ? u.created_at : String(u.created_at || ""),
+            aiUsage: Array.isArray(u.aiUsage) ? (u.aiUsage as UserRecord["aiUsage"]) : [],
           })),
         );
         setTotal(data.total || 0);
@@ -1516,16 +1614,34 @@ function UsersTab() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [page]);
+  }, [page, fundedBy]);
 
   if (loading) return <p style={{ color: "var(--muted)" }}>Loading users...</p>;
   if (error) return <AdminAccessError message={error} />;
 
   return (
     <>
-      <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
-        {total} total users
-      </p>
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>
+          {total} {fundedBy ? "matching" : "total"} users
+        </p>
+        <select
+          value={fundedBy}
+          onChange={(e) => {
+            setPage(1);
+            setFundedBy(e.target.value);
+          }}
+          aria-label="Funded by"
+          className="p-2 rounded-lg border text-sm"
+          style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}
+        >
+          {FUNDED_BY_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
           <thead>
@@ -1538,6 +1654,9 @@ function UsersTab() {
               </th>
               <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                 Provider
+              </th>
+              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                AI usage
               </th>
               <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
                 Joined
@@ -1555,6 +1674,18 @@ function UsersTab() {
                   {u.email}
                 </td>
                 <td className="p-2 text-xs">{u.provider}</td>
+                <td className="p-2 text-xs">
+                  {u.aiUsage.length
+                    ? u.aiUsage.map((a) => (
+                        <div key={a.source}>
+                          <strong>{AI_SOURCE_LABELS[a.source] || a.source}</strong>{" "}
+                          <span style={{ color: "var(--muted)" }}>
+                            {a.sessions} session{a.sessions === 1 ? "" : "s"} · {formatTokens(a.inputTokens)} in / {formatTokens(a.outputTokens)} out
+                          </span>
+                        </div>
+                      ))
+                    : <span style={{ color: "var(--muted)" }}>—</span>}
+                </td>
                 <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
                   {formatDate(u.created_at)}
                 </td>

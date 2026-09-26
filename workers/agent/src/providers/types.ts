@@ -10,6 +10,14 @@ export interface AIConfig {
   maxTokens?: number;
 }
 
+/** What funded a VibeCode turn (#16). Resolved server-side, never a key value:
+ *  the user's own vault key, a key an admin provisioned for them, a platform
+ *  grant (possibly with no platform key behind it), a key the browser sent, or
+ *  nothing. */
+export type AiSource = "vault_user" | "vault_admin" | "grant" | "grant_unfunded" | "browser_key" | "none";
+
+export const AI_SOURCES: readonly AiSource[] = ["vault_user", "vault_admin", "grant", "grant_unfunded", "browser_key", "none"];
+
 export interface ToolDef {
   name: string;
   description: string;

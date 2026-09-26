@@ -2,6 +2,7 @@
 
 import { getConfig } from "./config";
 import { corsHeaders } from "./cors";
+import { AI_SOURCES, type AiSource } from "./providers/types";
 
 export { AgentSession } from "./session";
 
@@ -36,6 +37,36 @@ function mapProviderToVault(provider: string): string | null {
     google: "google-ai",
   };
   return map[provider] ?? null;
+}
+
+/**
+ * Fill in body.aiConfig's key/provider/model from the platform when the browser
+ * sent no key, and say what funded the turn. A lookup failure is "none", which
+ * the session reports as "No API key found".
+ */
+async function resolveAiKey(
+  body: { aiConfig?: { provider?: string; apiKey?: string; model?: string } },
+  authHeader: string,
+  env: Env,
+): Promise<AiSource> {
+  const aiConfig = body.aiConfig;
+  if (!aiConfig) return "none";
+  if (aiConfig.apiKey) return "browser_key";
+  if (!authHeader || !env.PLATFORM || !aiConfig.provider) return "none";
+  const provider = mapProviderToVault(aiConfig.provider) ?? aiConfig.provider;
+  try {
+    const res = await env.PLATFORM.fetch(`https://backend/v1/keys/resolve-agent/${provider}`, { headers: { Authorization: authHeader } });
+    if (!res.ok) return "none";
+    const resolved = (await res.json()) as { key: string | null; provider?: string; model?: string; source?: string };
+    if (resolved.key) {
+      aiConfig.apiKey = resolved.key;
+      if (resolved.provider) aiConfig.provider = resolved.provider;
+      if (resolved.model) aiConfig.model = resolved.model;
+    }
+    return AI_SOURCES.includes(resolved.source as AiSource) ? (resolved.source as AiSource) : "none";
+  } catch {
+    return "none";
+  }
 }
 
 export default {
@@ -76,48 +107,23 @@ export default {
     const doId = env.SESSION.idFromName(sessionId);
     const stub = env.SESSION.get(doId);
 
-    // For /chat: try to resolve API key from platform vault before forwarding.
-    // If the browser sent a key, use it (backwards compat). If not, check vault.
+    // For /chat: resolve the API key from the platform (user vault, then a
+    // complimentary grant) when the browser didn't send one, and record what
+    // funded the turn as body.aiSource (#16). aiSource is always set here, so
+    // a client can't claim its own; the key itself never goes into it.
     let forwardBody: BodyInit | undefined = request.method === "POST" ? (request.body ?? undefined) : undefined;
 
-    if (route === "chat" && request.method === "POST" && env.PLATFORM) {
+    if (route === "chat" && request.method === "POST") {
+      const bodyText = await request.text();
+      forwardBody = bodyText;
       try {
-        const bodyText = await request.text();
         const body = JSON.parse(bodyText);
-        const authHeader = request.headers.get("Authorization") || "";
-
-        // If no API key in request but user is authenticated, resolve the
-        // effective access server-side: user's vault key first, then an active
-        // complimentary grant funded by a platform provider key.
-        if (body.aiConfig && !body.aiConfig.apiKey && authHeader) {
-          const provider = mapProviderToVault(body.aiConfig.provider) ?? body.aiConfig.provider;
-          if (provider) {
-            const vaultRes = await env.PLATFORM.fetch(`https://backend/v1/keys/resolve-agent/${provider}`, {
-              headers: { Authorization: authHeader },
-            });
-            if (vaultRes.ok) {
-              const {
-                key,
-                provider: resolvedProvider,
-                model,
-              } = (await vaultRes.json()) as {
-                key: string | null;
-                provider?: string;
-                model?: string;
-                source?: string;
-              };
-              if (key) {
-                body.aiConfig.apiKey = key;
-                if (resolvedProvider) body.aiConfig.provider = resolvedProvider;
-                if (model) body.aiConfig.model = model;
-              }
-            }
-          }
+        if (body && typeof body === "object") {
+          body.aiSource = await resolveAiKey(body, request.headers.get("Authorization") || "", env);
+          forwardBody = JSON.stringify(body);
         }
-        forwardBody = JSON.stringify(body);
       } catch {
-        // Parse failed — forward original body
-        forwardBody = request.body ?? undefined;
+        // Unparseable body — forward it as-is; the session rejects it.
       }
     }
 

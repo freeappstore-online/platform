@@ -194,17 +194,76 @@ contentAdminRoutes.get('/admin/users', async (c) => {
   await requireAdmin(c);
   const limit = Math.min(Number(c.req.query('limit') || 50), 200);
   const offset = Number(c.req.query('offset') || 0);
+  // ?funded_by=: only users with a VibeCode session funded that way (#16).
+  const fundedBy = (c.req.query('funded_by') ?? '').trim();
+  if (fundedBy && !(fundedBy in FUNDED_BY)) {
+    return c.json({ error: `funded_by must be one of: ${Object.keys(FUNDED_BY).join(', ')}` }, 400);
+  }
+  const filter = fundedBy
+    ? ' WHERE id IN (SELECT user_id FROM agent_sessions WHERE ai_source = ?)'
+    : '';
+  const filterBinds = fundedBy ? [FUNDED_BY[fundedBy]] : [];
 
   const result = await c.env.DB.prepare(
-    'SELECT id, github_login, display_name, email, provider, avatar_url, created_at FROM users ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    `SELECT id, github_login, display_name, email, provider, avatar_url, created_at FROM users${filter} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
   )
-    .bind(limit, offset)
-    .all();
+    .bind(...filterBinds, limit, offset)
+    .all<Record<string, unknown>>();
 
-  const count = await c.env.DB.prepare('SELECT COUNT(*) as n FROM users').first<{ n: number }>();
+  const count = await c.env.DB.prepare(`SELECT COUNT(*) as n FROM users${filter}`)
+    .bind(...filterBinds)
+    .first<{ n: number }>();
 
-  return c.json({ users: result.results ?? [], total: count?.n ?? 0 });
+  const users = result.results ?? [];
+  const usage = await aiUsageByUser(
+    c.env.DB,
+    users.map((u) => String(u.id)),
+  );
+  return c.json({
+    users: users.map((u) => ({ ...u, aiUsage: usage.get(String(u.id)) ?? [] })),
+    total: count?.n ?? 0,
+  });
 });
+
+/**
+ * Per-user VibeCode usage by funding source (#16): sessions and token totals
+ * for each ai_source a user's sessions ran on. Best-effort: a failure leaves
+ * the users listed without it.
+ */
+async function aiUsageByUser(db: D1Database, userIds: string[]) {
+  const usage = new Map<
+    string,
+    { source: string; sessions: number; inputTokens: number; outputTokens: number }[]
+  >();
+  if (userIds.length === 0) return usage;
+  const rows = await db
+    .prepare(
+      `SELECT user_id, ai_source, COUNT(*) AS sessions, SUM(input_tokens) AS input_tokens, SUM(output_tokens) AS output_tokens
+       FROM agent_sessions
+       WHERE ai_source IS NOT NULL AND user_id IN (${userIds.map(() => '?').join(', ')})
+       GROUP BY user_id, ai_source`,
+    )
+    .bind(...userIds)
+    .all<{
+      user_id: string;
+      ai_source: string;
+      sessions: number;
+      input_tokens: number | null;
+      output_tokens: number | null;
+    }>()
+    .catch(() => ({ results: [] }));
+  for (const r of rows.results) {
+    const list = usage.get(r.user_id) ?? [];
+    list.push({
+      source: r.ai_source,
+      sessions: r.sessions,
+      inputTokens: r.input_tokens ?? 0,
+      outputTokens: r.output_tokens ?? 0,
+    });
+    usage.set(r.user_id, list);
+  }
+  return usage;
+}
 
 // ── Apps overview ───────────────────────────────────────────────
 
@@ -433,9 +492,29 @@ function parseJsonArray(value: unknown): unknown[] {
 
 // ── Agent sessions (VibeCode debugging) ─────────────────────────
 
+/** `?funded_by=` shorthands for the agent_sessions.ai_source values (#16). */
+const FUNDED_BY: Record<string, string> = {
+  grant: 'grant',
+  admin_key: 'vault_admin',
+  user_key: 'vault_user',
+  browser_key: 'browser_key',
+  none: 'none',
+};
+
+/** What a session used and who paid for it (#16). Never a key value. */
+function sessionUsage(r: Record<string, unknown>) {
+  return {
+    inputTokens: Number(r.input_tokens) || 0,
+    outputTokens: Number(r.output_tokens) || 0,
+    aiProvider: r.ai_provider ?? null,
+    aiModel: r.ai_model ?? null,
+    aiSource: r.ai_source ?? null,
+  };
+}
+
 /**
  * GET /v1/admin/agent-sessions — every user's VibeCode sessions.
- * Query: ?limit=50&offset=0&q=<search>
+ * Query: ?limit=50&offset=0&q=<search>&funded_by=grant|admin_key|user_key|browser_key|none
  */
 contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
   await requireAdmin(c);
@@ -443,24 +522,38 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
   const offset = Number(c.req.query('offset') || 0);
   const q = (c.req.query('q') ?? '').trim();
 
+  const fundedBy = (c.req.query('funded_by') ?? '').trim();
+  if (fundedBy && !(fundedBy in FUNDED_BY)) {
+    return c.json({ error: `funded_by must be one of: ${Object.keys(FUNDED_BY).join(', ')}` }, 400);
+  }
+
   let sql = `SELECT
        s.session_id, s.user_id, s.name, s.app_id, s.app_url, s.deployed, s.deploy_state, s.created_at, s.updated_at,
+       s.input_tokens, s.output_tokens, s.ai_provider, s.ai_model, s.ai_source,
        u.github_login, u.display_name
      FROM agent_sessions s
      LEFT JOIN users u ON u.id = s.user_id`;
   let countSql = 'SELECT COUNT(*) as n FROM agent_sessions s LEFT JOIN users u ON u.id = s.user_id';
-  const binds: unknown[] = [];
-  const countBinds: unknown[] = [];
+  const where: string[] = [];
+  const filterBinds: unknown[] = [];
 
   if (q) {
-    sql +=
-      ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
-    countSql +=
-      ' WHERE s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?';
+    where.push(
+      '(s.name LIKE ? OR s.app_id LIKE ? OR s.session_id LIKE ? OR s.user_id LIKE ? OR u.github_login LIKE ? OR u.display_name LIKE ?)',
+    );
     const like = `%${q.replace(/[%_]/g, '\\$&')}%`;
-    binds.push(like, like, like, like, like, like);
-    countBinds.push(like, like, like, like, like, like);
+    filterBinds.push(like, like, like, like, like, like);
   }
+  if (fundedBy) {
+    where.push('s.ai_source = ?');
+    filterBinds.push(FUNDED_BY[fundedBy]);
+  }
+  if (where.length) {
+    sql += ` WHERE ${where.join(' AND ')}`;
+    countSql += ` WHERE ${where.join(' AND ')}`;
+  }
+  const binds: unknown[] = [...filterBinds];
+  const countBinds: unknown[] = [...filterBinds];
   sql += ' ORDER BY s.updated_at DESC LIMIT ? OFFSET ?';
   binds.push(limit, offset);
 
@@ -484,6 +577,7 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
       appUrl: r.app_url,
       deployed: r.deployed === 1 || r.deployed === true,
       deployState: parseJsonObject(r.deploy_state),
+      ...sessionUsage(r),
       createdAt: r.created_at,
       updatedAt: r.updated_at,
     })),
@@ -597,6 +691,7 @@ contentAdminRoutes.get('/admin/agent-sessions/:id', async (c) => {
       deployState: parseJsonObject(row.deploy_state),
       deployLog: parseJsonArray(row.deploy_log),
       errors: parseJsonArray(row.errors),
+      ...sessionUsage(row),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     },

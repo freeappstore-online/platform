@@ -732,3 +732,128 @@ describe("trimming past MAX_FILES never becomes a deletion (#12)", () => {
     expectNoDeletions(store);
   });
 });
+
+describe("AI usage persistence (#16)", () => {
+  /** A D1 that records every statement; `failUsage` makes the usage write throw. */
+  function recordingDB(failUsage = false) {
+    const stmts: Array<{ sql: string; binds: unknown[] }> = [];
+    const DB = {
+      prepare: (sql: string) => ({
+        bind: (...binds: unknown[]) => ({
+          run: async () => {
+            stmts.push({ sql, binds });
+            if (failUsage && sql.includes("input_tokens")) throw new Error("no such column: input_tokens");
+            return {};
+          },
+        }),
+      }),
+    };
+    return { DB, stmts };
+  }
+
+  function chatWithSource(aiSource: string) {
+    return new Request("https://agent/chat", {
+      method: "POST",
+      headers: { Authorization: "Bearer tok", "X-Session-Id": "sess-1", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "build me a timer",
+        aiConfig: { provider: "anthropic", model: "claude-sonnet-4-6", apiKey: API_KEY },
+        aiSource,
+      }),
+    });
+  }
+
+  const usageWrite = (stmts: Array<{ sql: string; binds: unknown[] }>) => stmts.filter((s) => s.sql.includes("SET input_tokens")).at(-1);
+
+  it("alarm loop: sums each step's reported usage and writes it with the funding source", async () => {
+    const { state, store } = fakeState();
+    const { DB, stmts } = recordingDB();
+    const env = { ...fakeEnv().env, DB };
+    const res = await new AgentSession(state, env).fetch(chatWithSource("grant"));
+    await res.body?.cancel();
+    scriptSteps(
+      async (files, emit) => {
+        // Anthropic-style: input and output in separate events.
+        await emit({ type: "usage", data: JSON.stringify({ input: 1000, output: 0 }) });
+        await emit({ type: "usage", data: JSON.stringify({ input: 0, output: 200 }) });
+        files.set("web/src/App.tsx", "x");
+        const call = { id: "w", name: "write_file", input: {} };
+        return {
+          kind: "continue",
+          appended: [assistant("", [call]), { role: "tool_result", content: "", toolResults: [{ id: "w", content: "ok" }] }],
+        };
+      },
+      async (_files, emit) => {
+        await emit({ type: "usage", data: JSON.stringify({ input: 1300, output: 50 }) });
+        return { kind: "final", appended: [assistant("Done.")] };
+      },
+    );
+
+    await drain(new AgentSession(state, env), store);
+
+    expect((store.get("session") as any).tokenUsage).toEqual({ input: 2300, output: 250 });
+    expect(usageWrite(stmts)?.binds).toEqual([2300, 250, "anthropic", "claude-sonnet-4-6", "grant", "sess-1"]);
+  });
+
+  it("legacy loop: adds the main turn's and follow-up's usage", async () => {
+    const { state, store } = fakeState();
+    const { DB, stmts } = recordingDB();
+    const env = { ...fakeEnv("false").env, DB };
+    turnMock.mockResolvedValue({ newMessages: [assistant("ok")], infraRequests: [], usage: { input: 70, output: 30 } });
+
+    await (await new AgentSession(state, env).fetch(chatWithSource("vault_admin"))).text();
+
+    expect((store.get("session") as any).tokenUsage).toEqual({ input: 70, output: 30 });
+    expect(usageWrite(stmts)?.binds).toEqual([70, 30, "anthropic", "claude-sonnet-4-6", "vault_admin", "sess-1"]);
+  });
+
+  it("a turn with no key still records what was tried", async () => {
+    const { state, store } = fakeState();
+    const { DB, stmts } = recordingDB();
+    const env = { ...fakeEnv("false").env, DB };
+    const req = new Request("https://agent/chat", {
+      method: "POST",
+      headers: { Authorization: "Bearer tok", "X-Session-Id": "sess-1", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: "build",
+        aiConfig: { provider: "anthropic", model: "claude-sonnet-4-6" },
+        aiSource: "grant_unfunded",
+      }),
+    });
+
+    const res = await new AgentSession(state, env).fetch(req);
+
+    expect(res.status).toBe(400);
+    expect((store.get("session") as any).aiSource).toBe("grant_unfunded");
+    expect(usageWrite(stmts)?.binds.slice(2, 5)).toEqual(["anthropic", "claude-sonnet-4-6", "grant_unfunded"]);
+  });
+
+  it("the API key never reaches D1", async () => {
+    const { state, store } = fakeState();
+    const { DB, stmts } = recordingDB();
+    const env = { ...fakeEnv().env, DB };
+    const res = await new AgentSession(state, env).fetch(chatWithSource("browser_key"));
+    await res.body?.cancel();
+    scriptSteps({ kind: "final", appended: [assistant("hi")] });
+
+    await drain(new AgentSession(state, env), store);
+
+    expect(stmts.length).toBeGreaterThan(0);
+    expect(JSON.stringify(stmts)).not.toContain(API_KEY);
+  });
+
+  it("a failing usage write never breaks chat or the transcript sync", async () => {
+    const { state, store } = fakeState();
+    const { DB, stmts } = recordingDB(true);
+    const env = { ...fakeEnv().env, DB };
+    const res = await new AgentSession(state, env).fetch(chatWithSource("grant"));
+    await res.body?.cancel();
+    scriptSteps({ kind: "final", appended: [assistant("Done — still fine.")] });
+
+    await drain(new AgentSession(state, env), store);
+
+    expect(store.has("pendingTurn")).toBe(false);
+    expect((store.get("session") as any).messages.at(-1).content).toBe("Done — still fine.");
+    expect(stmts.some((s) => s.sql.includes("SET messages = ?"))).toBe(true);
+  });
+});
