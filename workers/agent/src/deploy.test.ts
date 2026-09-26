@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "./config";
-import { computeFileDelta, deployApp, pushUpdate } from "./deploy";
+import {
+  computeFileDelta,
+  DEPLOY_POLL_TIMEOUT_MS,
+  type DeployStatus,
+  deployApp,
+  keyErrorLines,
+  pushUpdate,
+  readDeployRun,
+  waitForGitHubDeploy,
+} from "./deploy";
 // Most deploy flow tests exercise executeInfraTool, which wraps the GitHub
 // helpers; the baseline/delta tests below mock fetch at the Git API boundary.
 import { executeInfraTool } from "./infra-exec";
@@ -439,5 +448,81 @@ describe("baseline/delta deploy protection", () => {
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+});
+
+describe("deploy run polling (#11)", () => {
+  const SHA = "abc123";
+  const FAILED_LOG = [
+    "2026-09-26T10:00:01.0000000Z > vite build",
+    "2026-09-26T10:00:02.0000000Z src/App.tsx(3,7): error TS2322: Type 'string' is not assignable to type 'number'.",
+    "2026-09-26T10:00:02.5000000Z ##[error]Process completed with exit code 2.",
+  ].join("\n");
+
+  /** GitHub stand-in: the run for SHA has `run`'s state; jobs + logs for a failure. */
+  function mockGitHub(run: { status: string; conclusion: string | null }) {
+    globalThis.fetch = vi.fn(async (url: string) => {
+      if (url.includes("/actions/runs?")) return Response.json({ workflow_runs: [{ id: 7, head_sha: SHA, ...run }] });
+      if (url.endsWith("/actions/runs/7/jobs")) {
+        return Response.json({
+          jobs: [
+            {
+              id: 70,
+              name: "build",
+              status: "completed",
+              conclusion: "failure",
+              steps: [
+                { name: "Install", status: "completed", conclusion: "success" },
+                { name: "Build web", status: "completed", conclusion: "failure" },
+                { name: "Upload to R2", status: "completed", conclusion: "skipped" },
+              ],
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/actions/jobs/70/logs")) return new Response(FAILED_LOG);
+      return new Response("{}", { status: 404 });
+    }) as typeof fetch;
+  }
+
+  it("a failed run leads with the failing step and error line, within the 500 chars the session keeps", async () => {
+    mockGitHub({ status: "completed", conclusion: "failure" });
+
+    const status = await readDeployRun("dict", mockEnv, appsConfig, SHA);
+
+    expect(status?.phase).toBe("error");
+    const head = status?.phase === "error" ? status.error.slice(0, 500) : "";
+    expect(head).toMatch(/^Build failed at build › Build web \(run 7\)/);
+    expect(head).toContain("src/App.tsx(3,7): error TS2322");
+    expect(head).toContain("https://github.com/freeappstore-online/dict/actions/runs/7");
+  });
+
+  it("a successful run is live", async () => {
+    mockGitHub({ status: "completed", conclusion: "success" });
+    expect(await readDeployRun("dict", mockEnv, appsConfig, SHA)).toEqual({ phase: "live", appUrl: "https://dict.freeappstore.online" });
+  });
+
+  it("an unfinished run is not a result yet", async () => {
+    mockGitHub({ status: "in_progress", conclusion: null });
+    expect(await readDeployRun("dict", mockEnv, appsConfig, SHA)).toBeNull();
+  });
+
+  it("times out as still building: returns null and never reports live", async () => {
+    vi.useFakeTimers();
+    try {
+      mockGitHub({ status: "in_progress", conclusion: null });
+      const statuses: DeployStatus[] = [];
+      const done = waitForGitHubDeploy("dict", mockEnv, appsConfig, (s) => void statuses.push(s), SHA);
+      await vi.advanceTimersByTimeAsync(DEPLOY_POLL_TIMEOUT_MS + 10_000);
+
+      expect(await done).toBeNull();
+      expect(statuses).toEqual([{ phase: "building", deployUrl: "https://dict.freeappstore.online" }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keyErrorLines keeps error lines, drops timestamps and the exit-code noise", () => {
+    expect(keyErrorLines(FAILED_LOG)).toEqual(["src/App.tsx(3,7): error TS2322: Type 'string' is not assignable to type 'number'."]);
   });
 });

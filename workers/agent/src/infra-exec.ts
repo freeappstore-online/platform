@@ -3,7 +3,7 @@
 import { checkBuildSanity, formatSanityBlock } from "./build-sanity";
 import type { StoreConfig } from "./config";
 import type { DeployEnv, DeployStatus } from "./deploy";
-import { deployApp, pushUpdate, waitForGitHubDeploy } from "./deploy";
+import { deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./deploy";
 import { checkDeployStatus, fetchUrl, getAuditResults, getBuildLogs, getCIResults, listDeployed } from "./infra";
 import type { ToolCall } from "./providers/types";
 
@@ -18,8 +18,17 @@ interface ExecContext {
   /** Awaited at every call site so the session's storage write settles before
    *  the deploy moves on (#41). */
   onDeployStatus: (status: DeployStatus) => void | Promise<void>;
+  /** The session's current deploy status, so check_deploy_status only reports a change. */
+  deployStatus?: DeployStatus | null;
   onAppDeployed: (id: string, name: string) => void | Promise<void>;
 }
+
+/** What the model should do after a terminal build failure (#11). */
+const FIX_HINT = "Use get_build_logs to see the full log, fix the code, then push_update.";
+/** For a deploy that outlived the poll window. Deliberately avoids "error"/"fail",
+ *  which would make the follow-up prompt treat an unfinished build as broken. */
+const STILL_BUILDING =
+  "CI is still building, so it is not live yet. Call check_deploy_status shortly to confirm it went live; if the build did not succeed, it will say why.";
 
 /** Execute a single infra tool. Returns the result string. */
 export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<string> {
@@ -82,7 +91,7 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
     case "push_update":
       return executePushUpdate(tc, ctx);
     case "check_deploy_status":
-      return checkDeployStatus(targetId!, ctx.env, config);
+      return executeCheckDeployStatus(targetId!, ctx);
     case "list_deployed_apps":
     case "list_deployed_games":
       return listDeployed(ctx.env, config);
@@ -253,8 +262,11 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
 
   await ctx.onAppDeployed(appId, appName);
 
-  let deployError: string | null = null;
-  let liveUrl: string | null = null;
+  // Track the LAST status, not just "live": a failed CI build is reported
+  // through onStatus({phase:"error"}) while deployApp returns normally (#11).
+  let finalStatus: DeployStatus | null = null;
+  let codePushed = false;
+  let thrown: string | null = null;
   await deployApp(
     {
       id: appId,
@@ -269,56 +281,75 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     ctx.config,
     async (status) => {
       await ctx.onDeployStatus(status);
-      if (status.phase === "live") liveUrl = status.appUrl;
-      if (status.phase === "error") deployError = status.error;
+      finalStatus = status;
+      if (status.phase === "building") codePushed = true;
     },
     // Only reuse an existing repo when it is provably ours.
     claim.ownedAlready || (!ctx.env.DB && ctx.appId === appId),
     ctx.baselineFiles,
   ).catch((err) => {
-    deployError = String(err);
+    thrown = String(err);
   });
 
-  if (deployError) {
+  const last = finalStatus as DeployStatus | null;
+  // Failed before the code reached GitHub (repo creation, scaffold, push): the
+  // app was never provisioned, so stop here.
+  const provisioningError = thrown ?? (!codePushed && last?.phase === "error" ? last.error : null);
+  if (provisioningError) {
     // Release a claim we took moments ago only if nothing was provisioned under
     // it — otherwise keep it, so the retry can reuse the repo it already made
     // and no one else can take the id out from under a half-built app.
     if (claim.createdNow && !(await repoExists(appId, ctx).catch(() => true))) {
       await releaseApp(appId, ctx);
     }
-    await ctx.onDeployStatus({ phase: "error", error: deployError });
-    return `Deploy FAILED: ${deployError}`;
+    if (thrown) await ctx.onDeployStatus({ phase: "error", error: thrown });
+    return `Deploy FAILED: ${provisioningError}`;
   }
 
+  // The code is pushed and the app provisioned, whatever CI says. Finish the
+  // listing and hosting route either way, so a push_update fix goes live
+  // without another deploy.
   const publishError = await publishStoreListing(appId, appName, tc, ctx);
 
-  // Insert D1 hosting route so the host worker can serve this app from R2.
-  // Ownership was already settled by claimApp above; the WHERE clause is a
-  // second lock on the same door — an existing route is only ever repointed
-  // when the app it serves is ours (or is unclaimed). Without it a colliding
-  // deploy would redirect a live app at another owner's URL to its own bundle.
-  if (ctx.env.DB) {
-    const r2Prefix = `${ctx.config.nounPlural}/${appId}`;
-    try {
-      await ctx.env.DB.prepare(
-        `INSERT INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at)
-           VALUES (?1, ?2, ?3, ?4, 'r2', ?5, ?5)
-           ON CONFLICT (slug, zone) DO UPDATE SET
-             r2_prefix = excluded.r2_prefix, store = excluded.store,
-             hosted_on = excluded.hosted_on, updated_at = excluded.updated_at
-           WHERE EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug AND apps.owner_login = ?6)
-              OR NOT EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug)`,
-      )
-        .bind(appId, ctx.config.domain, r2Prefix, ctx.config.store, Date.now(), ctx.ownerLogin)
-        .run();
-    } catch {
-      /* D1 insert failed — app deploys but won't be routable until published */
-    }
-  }
+  await upsertHostingRoute(appId, ctx);
 
   const renamed = appId !== requestedId ? ` (ID "${requestedId}" was taken — deployed as "${appId}")` : "";
+  return deployOutcomeMessage(last, renamed, publishError);
+}
+
+/** The deploy tool's result for an app whose code was pushed, by CI outcome (#11). */
+function deployOutcomeMessage(last: DeployStatus | null, renamed: string, publishError: string | null): string {
   const listing = publishError ? ` Store listing failed: ${publishError}` : " Store listing published.";
-  return `Deploy succeeded${renamed}. Preview: ${liveUrl || "building..."}.${listing}`;
+  if (last?.phase === "error") return `Deploy FAILED${renamed}: the code was pushed but the build broke.\n${last.error}\n${FIX_HINT}`;
+  if (last?.phase === "live") return `Deploy succeeded${renamed}. Live: ${last.appUrl}.${listing}`;
+  return `Deploy pushed${renamed}. ${STILL_BUILDING}${listing}`;
+}
+
+/**
+ * Insert the D1 hosting route so the host worker can serve this app from R2.
+ * Ownership was already settled by claimApp; the WHERE clause is a second lock
+ * on the same door — an existing route is only ever repointed when the app it
+ * serves is ours (or is unclaimed). Without it a colliding deploy would redirect
+ * a live app at another owner's URL to its own bundle.
+ */
+async function upsertHostingRoute(appId: string, ctx: ExecContext): Promise<void> {
+  if (!ctx.env.DB) return;
+  const r2Prefix = `${ctx.config.nounPlural}/${appId}`;
+  try {
+    await ctx.env.DB.prepare(
+      `INSERT INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 'r2', ?5, ?5)
+         ON CONFLICT (slug, zone) DO UPDATE SET
+           r2_prefix = excluded.r2_prefix, store = excluded.store,
+           hosted_on = excluded.hosted_on, updated_at = excluded.updated_at
+         WHERE EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug AND apps.owner_login = ?6)
+            OR NOT EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug)`,
+    )
+      .bind(appId, ctx.config.domain, r2Prefix, ctx.config.store, Date.now(), ctx.ownerLogin)
+      .run();
+  } catch {
+    /* D1 insert failed — app deploys but won't be routable until published */
+  }
 }
 
 async function publishStoreListing(appId: string, appName: string, tc: ToolCall, ctx: ExecContext): Promise<string | null> {
@@ -401,8 +432,27 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string
     await ctx.onDeployStatus({ phase: "live", appUrl: `https://${tc.input.id as string}.${ctx.config.domain}` });
     return result.message;
   }
-  await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
-  return result.message;
+  const final = await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
+  if (final?.phase === "live") return `${result.message} Update deployed and LIVE at ${final.appUrl}.`;
+  if (final?.phase === "error") return `Update pushed but the build FAILED:\n${final.error}\n${FIX_HINT}`;
+  return `${result.message} ${STILL_BUILDING}`;
+}
+
+/**
+ * Report the latest deploy run, and move the session to its terminal state when
+ * it finished after the deploy/push_update stopped waiting, so the UI does not
+ * stay on "building" (#11). Only a change is reported, so polling a failed
+ * build does not log the same failure again.
+ */
+async function executeCheckDeployStatus(appId: string, ctx: ExecContext): Promise<string> {
+  const status = await readDeployRun(appId, ctx.env, ctx.config);
+  if (!status) return checkDeployStatus(appId, ctx.env, ctx.config);
+  const current = ctx.deployStatus;
+  const errorOf = (st: DeployStatus | null | undefined) => (st?.phase === "error" ? st.error : null);
+  const changed = current?.phase !== status.phase || errorOf(current) !== errorOf(status);
+  if (changed) await ctx.onDeployStatus(status);
+  if (status.phase === "live") return `Latest deploy: live at ${status.appUrl}`;
+  return `Latest deploy FAILED:\n${status.error}\n${FIX_HINT}`;
 }
 
 async function executeFetchUrl(tc: ToolCall, config: StoreConfig): Promise<string> {

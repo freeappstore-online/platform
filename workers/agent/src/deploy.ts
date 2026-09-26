@@ -31,6 +31,9 @@ export type DeployStatus =
   | { phase: "live"; appUrl: string }
   | { phase: "error"; error: string };
 
+/** How a deploy run ended. */
+export type TerminalDeployStatus = Extract<DeployStatus, { phase: "live" | "error" }>;
+
 type TreeItem = { path: string; mode: string; type: string; sha: string | null };
 export type FileDelta = Map<string, string | null>;
 export type PushUpdateResult =
@@ -175,70 +178,95 @@ export async function deployApp(
   }
 }
 
+/** How long deploy/push_update wait for GitHub Actions before reporting "still building". */
+export const DEPLOY_POLL_TIMEOUT_MS = 150_000;
+const DEPLOY_POLL_INTERVAL_MS = 8000;
+
+/**
+ * One look at the app's deploy workflow run. Returns the terminal status
+ * (`live`, or `error` with the failure reason), or null while the run is
+ * missing or still in progress. With `commitSha` it only considers the run for
+ * that commit, so an older run's result is never mistaken for this push's.
+ */
+export async function readDeployRun(
+  appId: string,
+  env: DeployEnv,
+  config: StoreConfig,
+  commitSha?: string,
+): Promise<TerminalDeployStatus | null> {
+  const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
+  const repo = `${config.org}/${appId}`;
+  const runs = await ghApi(`/repos/${repo}/actions/runs?per_page=10`);
+  const workflowRuns = (runs.workflow_runs || []) as WorkflowRun[];
+  const run = commitSha ? workflowRuns.find((r) => r.head_sha === commitSha) : workflowRuns[0];
+  if (!run || run.status !== "completed") return null;
+  if (run.conclusion === "success") return { phase: "live", appUrl: `https://${appId}.${config.domain}` };
+  if (run.conclusion === "failure") return { phase: "error", error: await fetchCIFailureDetails(ghApi, repo, run.id, env.GITHUB_TOKEN) };
+  return {
+    phase: "error",
+    error: `GitHub Actions deploy ended with ${run.conclusion ?? "no conclusion"}. Check: https://github.com/${repo}/actions/runs/${run.id}`,
+  };
+}
+
+/**
+ * Poll the deploy run until it finishes or DEPLOY_POLL_TIMEOUT_MS passes.
+ * Reports every change through `onStatus` and returns the terminal status, or
+ * null on timeout. A timeout leaves the status at `building`: CI may still
+ * fail, so it must not be reported as live (#11).
+ */
 export async function waitForGitHubDeploy(
   appId: string,
   env: DeployEnv,
   config: StoreConfig,
   onStatus: (status: DeployStatus) => void | Promise<void>,
   commitSha?: string,
-): Promise<void> {
-  const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
-  const appUrl = `https://${appId}.${config.domain}`;
-  const repo = `${config.org}/${appId}`;
-  await onStatus({ phase: "building", deployUrl: appUrl });
+): Promise<TerminalDeployStatus | null> {
+  await onStatus({ phase: "building", deployUrl: `https://${appId}.${config.domain}` });
 
-  const deadline = Date.now() + 150_000; // 2.5 min
+  const deadline = Date.now() + DEPLOY_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    await sleep(8000);
+    await sleep(DEPLOY_POLL_INTERVAL_MS);
+    let status: TerminalDeployStatus | null;
     try {
-      const runs = await ghApi(`/repos/${repo}/actions/runs?per_page=10`);
-      const workflowRuns = (runs.workflow_runs || []) as WorkflowRun[];
-      const latestRun = commitSha ? workflowRuns.find((run) => run.head_sha === commitSha) : workflowRuns[0];
-      if (!latestRun) continue;
-      if (latestRun.status !== "completed") continue;
-
-      if (latestRun.conclusion === "success") {
-        await onStatus({ phase: "live", appUrl });
-        return;
-      }
-      if (latestRun.conclusion === "failure") {
-        const errorDetail = await fetchCIFailureDetails(ghApi, repo, latestRun.id, env.GITHUB_TOKEN);
-        await onStatus({ phase: "error", error: errorDetail });
-        return;
-      }
-      if (latestRun.conclusion) {
-        await onStatus({
-          phase: "error",
-          error: `GitHub Actions deploy ended with ${latestRun.conclusion}. Check: https://github.com/${repo}/actions`,
-        });
-        return;
-      }
+      status = await readDeployRun(appId, env, config, commitSha);
     } catch {
-      /* GH API transient error — retry on next poll */
+      continue; // GH API transient error — retry on next poll
+    }
+    if (status) {
+      await onStatus(status);
+      return status;
     }
   }
-  await onStatus({ phase: "live", appUrl }); // timeout — assume deploying
+  return null;
 }
 
-/** Fetch detailed step-level failure info from a failed GitHub Actions run. */
+/**
+ * The failure reason from a failed run's job and log, reason first: the
+ * session's deployLog and errors keep 500 chars, and the admin inspector shows
+ * those, so the failing step and error lines must come before the detail.
+ */
 async function fetchCIFailureDetails(ghApi: ReturnType<typeof makeGhApi>, repo: string, runId: number, token: string): Promise<string> {
+  const runUrl = `https://github.com/${repo}/actions/runs/${runId}`;
   try {
     const jobs = await ghApi(`/repos/${repo}/actions/runs/${runId}/jobs`);
-    const lines: string[] = [`Deploy failed (run ${runId})`];
+    const stepLines: string[] = [];
     let failedJobId: number | null = null;
+    let failedAt: string | null = null;
 
     for (const job of jobs.jobs || []) {
       const jobStatus = job.status === "completed" ? job.conclusion : job.status;
-      lines.push(`Job: ${job.name} — ${jobStatus}`);
+      stepLines.push(`Job: ${job.name} — ${jobStatus}`);
       for (const step of job.steps || []) {
         const stepStatus = step.status === "completed" ? step.conclusion : step.status;
         const icon = stepStatus === "success" ? "✓" : stepStatus === "failure" ? "✗" : stepStatus === "skipped" ? "⊘" : "…";
-        lines.push(`  ${icon} ${step.name}`);
+        stepLines.push(`  ${icon} ${step.name}`);
+        if (stepStatus === "failure" && !failedAt) failedAt = `${job.name} › ${step.name}`;
       }
       if (jobStatus === "failure" && !failedJobId) failedJobId = job.id;
     }
 
-    // Try to fetch the actual log output of the failed job
+    // The actual log output of the failed job: most useful info is at the end.
+    let logTail = "";
     if (failedJobId) {
       try {
         const logRes = await fetch(`https://api.github.com/repos/${repo}/actions/jobs/${failedJobId}/logs`, {
@@ -247,20 +275,32 @@ async function fetchCIFailureDetails(ghApi: ReturnType<typeof makeGhApi>, repo: 
         });
         if (logRes.ok) {
           const logText = await logRes.text();
-          // Extract last 1500 chars — most useful error info is at the end
-          const tail = logText.length > 1500 ? logText.slice(-1500) : logText;
-          lines.push("\n--- Failed job log (tail) ---");
-          lines.push(tail);
+          logTail = logText.length > 1500 ? logText.slice(-1500) : logText;
         }
       } catch {
         // Log fetch failed — step summary is still useful
       }
     }
 
+    const keyLines = keyErrorLines(logTail);
+    const lines = [`Build failed${failedAt ? ` at ${failedAt}` : ""} (run ${runId})`];
+    if (keyLines.length) lines.push(...keyLines);
+    lines.push(`Run: ${runUrl}`, "", ...stepLines);
+    if (logTail) lines.push("", "--- Failed job log (tail) ---", logTail);
     return lines.join("\n").slice(0, 4000);
   } catch {
-    return `GitHub Actions deploy failed. Check: https://github.com/${repo}/actions`;
+    return `GitHub Actions deploy failed. Check: ${runUrl}`;
   }
+}
+
+/** The last few error-looking lines of a GitHub Actions log, without timestamps. */
+export function keyErrorLines(log: string, max = 5): string[] {
+  return log
+    .split("\n")
+    .map((line) => line.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/, "").trim())
+    .filter((line) => /\berror\b|ERR!|failed|✘|Cannot find|is not assignable|Unexpected token/i.test(line))
+    .filter((line) => !/^##\[group\]|Process completed with exit code/.test(line))
+    .slice(-max);
 }
 
 async function hasMainBranch(repoId: string, token: string, config: StoreConfig): Promise<boolean> {

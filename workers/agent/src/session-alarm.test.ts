@@ -623,3 +623,66 @@ describe("ALARM_LOOP=true: read-only stall nudge (#37)", () => {
     expect(store.has("pendingTurn")).toBe(false);
   });
 });
+
+describe("deploy failures are persisted for the session and admin (#11)", () => {
+  const REASON =
+    "Build failed at build › Build web (run 7)\nsrc/App.tsx(3,7): error TS2322: Type 'string' is not assignable to type 'number'.";
+  const deploy = { id: "d1", name: "deploy", input: { id: "dict" } };
+  let sawCurrentStatus: unknown;
+
+  /** The deploy tool reports building, then a terminal CI failure. */
+  function failingDeploy() {
+    infraMock.mockImplementation(async (_tc, ctx) => {
+      sawCurrentStatus = ctx.deployStatus;
+      await ctx.onAppDeployed("dict", "Dict");
+      await ctx.onDeployStatus({ phase: "building", deployUrl: "https://dict.freeappstore.online" });
+      await ctx.onDeployStatus({ phase: "error", error: REASON });
+      return `Deploy FAILED: the code was pushed but the build broke.\n${REASON}`;
+    });
+  }
+
+  function expectFailureRecorded(store: Map<string, unknown>, d1Writes: ReturnType<typeof fakeEnv>["d1Writes"]) {
+    const saved = store.get("session") as any;
+    expect(saved.deployStatus).toEqual({ phase: "error", error: REASON });
+    expect(saved.errors).toContainEqual(expect.objectContaining({ source: "deploy", message: REASON }));
+    expect(saved.deployLog.at(-1)).toMatchObject({ phase: "error", detail: REASON });
+    // D1 is what the admin inspector reads.
+    expect(d1Writes.some((w) => w.errors.some((e) => e.source === "deploy" && e.message === REASON))).toBe(true);
+  }
+
+  it("alarm loop: the failure lands in errors, deployLog and D1", async () => {
+    const { state, store } = fakeState();
+    const { env, d1Writes } = fakeEnv();
+    const session = new AgentSession(state, env);
+    const res = await session.fetch(chatRequest());
+    await res.body?.cancel();
+    scriptSteps(
+      { kind: "infra", appended: [assistant("Deploying", [deploy])], infraRequests: [{ toolCall: deploy }] },
+      { kind: "final", appended: [assistant("The build broke; fixing it.")] },
+    );
+    failingDeploy();
+
+    await drain(session, store);
+
+    expectFailureRecorded(store, d1Writes);
+    expect(sawCurrentStatus).toBeNull(); // check_deploy_status compares against this
+  });
+
+  it("legacy loop: the failure lands in errors, deployLog and D1", async () => {
+    const { state, store } = fakeState();
+    const { env, d1Writes } = fakeEnv("false");
+    const session = new AgentSession(state, env);
+    turnMock
+      .mockResolvedValueOnce({
+        newMessages: [{ role: "user", content: "build" }, assistant("Deploying", [deploy])],
+        infraRequests: [{ toolCall: deploy }],
+      })
+      .mockResolvedValueOnce({ newMessages: [assistant("The build broke; fixing it.")], infraRequests: [] });
+    failingDeploy();
+
+    const res = await session.fetch(chatRequest());
+    await res.text();
+
+    expectFailureRecorded(store, d1Writes);
+  });
+});

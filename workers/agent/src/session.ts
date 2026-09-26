@@ -665,6 +665,7 @@ export class AgentSession implements DurableObject {
         baselineFiles: ctx.baselineFiles,
         env: ctx.deployEnv,
         config: ctx.config,
+        deployStatus: ctx.session.deployStatus,
         onDeployStatus: (status) => this.handleLegacyDeployStatus(ctx, status),
         onAppDeployed: (id, name) => this.handleLegacyAppDeployed(ctx, id, name),
       });
@@ -676,6 +677,7 @@ export class AgentSession implements DurableObject {
   private async handleLegacyDeployStatus(ctx: LegacyTurnContext, status: DeployStatus): Promise<void> {
     ctx.session.deployStatus = status;
     this.logDeploy(status.phase, deployStatusDetail(status));
+    if (status.phase === "error") this.logError("deploy", status.error);
     await this.state.storage.put("session", ctx.session);
     await ctx.sendSSE({ type: "deploy_status", data: JSON.stringify(status) });
     if (status.phase === "live") {
@@ -1093,9 +1095,11 @@ export class AgentSession implements DurableObject {
           baselineFiles,
           env: deployEnv,
           config: this.config,
+          deployStatus: session.deployStatus,
           onDeployStatus: async (status) => {
             session.deployStatus = status;
             this.logDeploy(status.phase, deployStatusDetail(status));
+            if (status.phase === "error") this.logError("deploy", status.error);
             await this.state.storage.put("session", session);
             await emit({ type: "deploy_status", data: JSON.stringify(status) });
             if (status.phase === "live" || status.phase === "error") {
