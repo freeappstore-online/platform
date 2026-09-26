@@ -31,6 +31,32 @@ async function platform(req: Request): Promise<Response> {
   return new Response("not found", { status: 404 });
 }
 
+/** What the "update" script writes; the push stub only accepts this content. */
+const UPDATED_APP = "export default function App() { return <main>Updated title</main>; }";
+/** The commit the push creates; Actions reports success for exactly this SHA. */
+const PUSHED_SHA = "commit-dict-1";
+
+/** GitHub's Git Data + Actions APIs for push_update to freeappstore-online/dict. */
+async function githubPush(req: Request, url: URL): Promise<Response | null> {
+  const base = "/repos/freeappstore-online/dict";
+  if (!url.pathname.startsWith(base)) return null;
+  if (req.headers.get("authorization") !== "Bearer gh-test-token") return Response.json({ message: "Bad credentials" }, { status: 401 });
+  const path = url.pathname.slice(base.length);
+  if (req.method === "GET" && path === "/git/ref/heads/main") return Response.json({ object: { sha: "parent-sha" } });
+  if (req.method === "POST" && path === "/git/blobs") {
+    const { content } = (await req.json()) as { content: string };
+    return content === UPDATED_APP ? Response.json({ sha: "blob-sha" }) : Response.json({ message: "unexpected blob" }, { status: 422 });
+  }
+  if (req.method === "GET" && path === "/git/commits/parent-sha") return Response.json({ tree: { sha: "base-tree-sha" } });
+  if (req.method === "POST" && path === "/git/trees") return Response.json({ sha: "tree-sha" });
+  if (req.method === "POST" && path === "/git/commits") return Response.json({ sha: PUSHED_SHA });
+  if (req.method === "PATCH" && path === "/git/refs/heads/main") return Response.json({ ref: "refs/heads/main" });
+  if (req.method === "GET" && path === "/actions/runs") {
+    return Response.json({ workflow_runs: [{ id: 7, status: "completed", conclusion: "success", head_sha: PUSHED_SHA }] });
+  }
+  return null;
+}
+
 /** GitHub, for /import: one small app repo. */
 const REPO: Record<string, string> = {
   "web/src/App.tsx": "export default function App() { return <main>Dictionary</main>; }",
@@ -54,9 +80,11 @@ function anthropicSSE(blocks: Array<{ type: "text"; text: string } | { type: "to
 }
 
 /**
- * A scripted model. The first user message names the script:
+ * A scripted model. The latest message the user typed names the script:
  *   "build ..."      → write web/src/App.tsx, then answer once it sees the tool result
  *   "overloaded ..." → Anthropic's 529
+ *   "update ..."     → edit web/src/App.tsx and push_update the imported "dict"
+ *                      app, then answer once it sees the push result
  *   "hold ..."       → the first call doesn't answer until the test fetches
  *                      https://control.test/release, so a step is reliably in flight
  */
@@ -64,10 +92,24 @@ const held: Array<() => void> = [];
 async function anthropic(req: Request): Promise<Response> {
   if (req.headers.get("x-api-key") !== "sk-test") return Response.json({ type: "error", error: { type: "authentication_error" } }, { status: 401 });
   const body = (await req.json()) as { messages: Array<{ role: string; content: unknown }> };
-  const first = JSON.stringify(body.messages.find((m) => m.role === "user")?.content ?? "");
-  if (first.includes("overloaded")) return Response.json({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }, { status: 529 });
-  const sawToolResult = JSON.stringify(body.messages).includes("tool_result");
-  if (first.includes("hold") && !sawToolResult) await new Promise<void>((release) => held.push(release));
+  // The script is named by the latest message the user typed (a string), not by
+  // tool results or the platform's follow-up prompt, so each turn picks its own.
+  const typed = body.messages
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => m.role === "user" && typeof m.content === "string" && !/^The (action completed|tool action above)/.test(m.content));
+  const latest = typed.at(-1);
+  const script = JSON.stringify(latest?.m.content ?? "");
+  if (script.includes("overloaded")) return Response.json({ type: "error", error: { type: "overloaded_error", message: "Overloaded" } }, { status: 529 });
+  const sawToolResult = JSON.stringify(body.messages.slice((latest?.i ?? -1) + 1)).includes("tool_result");
+  if (script.includes("hold") && !sawToolResult) await new Promise<void>((release) => held.push(release));
+  if (script.includes("update")) {
+    if (sawToolResult) return anthropicSSE([{ type: "text", text: "Updated and live." }]);
+    return anthropicSSE([
+      { type: "text", text: "Updating the title." },
+      { type: "tool_use", id: "tu_w", name: "write_file", input: { path: "web/src/App.tsx", content: UPDATED_APP } },
+      { type: "tool_use", id: "tu_p", name: "push_update", input: { id: "dict", message: "Update title" } },
+    ]);
+  }
   if (!sawToolResult) {
     return anthropicSSE([
       { type: "text", text: "Building it." },
@@ -86,6 +128,8 @@ async function internet(req: Request): Promise<Response> {
     return Response.json({ released: n });
   }
   if (url.hostname === "api.github.com") {
+    const pushed = await githubPush(req, url);
+    if (pushed) return pushed;
     if (url.pathname === "/repos/freeappstore-online/dict/git/trees/main") {
       return Response.json({ tree: Object.entries(REPO).map(([p, c]) => ({ path: p, type: "blob", size: c.length })) });
     }

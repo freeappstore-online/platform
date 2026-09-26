@@ -49,9 +49,10 @@ const doState = (sessionId: string) =>
  * the object is evicted every time it's parked between steps (alarm
  * scheduled, nothing in flight), so each step starts on a fresh instance.
  */
-async function waitForTurnEnd(sessionId: string, { evictBetween = false } = {}) {
+async function waitForTurnEnd(sessionId: string, { evictBetween = false, timeoutMs = 6000 } = {}) {
   let evictions = 0;
-  for (let i = 0; i < 300; i++) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
     const { pending, alarm } = await doState(sessionId);
     if (!pending) return { evictions };
     if (alarm !== null) {
@@ -157,5 +158,109 @@ describe("alarm loop on a real Durable Object (#41)", () => {
     expect(second.headers.get("Retry-After")).toBeTruthy();
     await fetch("https://control.test/release");
     await waitForTurnEnd("alarm-busy");
+  });
+});
+
+/** One `/live` read for the session's latest turn, parsed into SSE events. */
+async function live(sessionId: string, lastEventId?: string) {
+  const headers: Record<string, string> = { ...ALICE };
+  if (lastEventId !== undefined) headers["Last-Event-ID"] = lastEventId;
+  const res = await exports.default.fetch(new Request(`https://agent.freeappstore.online/session/${sessionId}/live`, { headers }));
+  expect(res.status).toBe(200);
+  const text = await res.text(); // the relay closes once the turn has ended
+  const events = text
+    .split("\n\n")
+    .filter((block) => block.includes("data:"))
+    .map((block) => {
+      const id = Number(/^id: (\d+)$/m.exec(block)?.[1]);
+      const data = JSON.parse(/^data: (.*)$/m.exec(block)![1]) as { type: string; data: string };
+      return { id, ...data };
+    });
+  return { events, lastEventIdHeader: res.headers.get("Last-Event-ID") };
+}
+
+describe("deploy turn on a real Durable Object (#38)", () => {
+  it(
+    "runs model → push_update → CI poll → follow-up through real alarms, with deploy status in the live stream",
+    async () => {
+      const id = "deploy-turn";
+      await env.DB.prepare("INSERT OR IGNORE INTO apps (id, owner_login, created_at) VALUES ('dict', 'alice', 0)").run();
+      // Open the existing app first (#12), so the session is bound to it and push_update is the right tool.
+      const imported = await exports.default.fetch(
+        new Request(`https://agent.freeappstore.online/session/${id}/import`, {
+          method: "POST",
+          headers: { ...ALICE, "Content-Type": "application/json" },
+          body: JSON.stringify({ appId: "dict" }),
+        }),
+      );
+      expect(imported.status).toBe(200);
+
+      await startTurnAndLeave(id, "update the title");
+      // push_update polls GitHub Actions after an 8s pause (DEPLOY_POLL_INTERVAL_MS).
+      await waitForTurnEnd(id, { timeoutMs: 25_000 });
+
+      // Every phase ran: main → main-infra → followup, and the turn ended cleanly.
+      expect(await pendingOf(id)).toBeUndefined();
+      const { events } = await live(id);
+      const types = events.map((e) => e.type);
+      const phases = events.filter((e) => e.type === "deploy_status").map((e) => (JSON.parse(e.data) as { phase: string }).phase);
+      expect(phases).toEqual(["pushing", "building", "live"]);
+      expect(events).toContainEqual(expect.objectContaining({ type: "tool_result", data: JSON.stringify({ id: "tu_p", tool: "push_update" }) }));
+      expect(types.at(-1)).toBe("done");
+      expect(types).not.toContain("error");
+      expect((await history(id)).messages.at(-1)).toMatchObject({ role: "assistant", content: "Updated and live." });
+
+      // The deploy outcome is durable, and no LLM-phase failure was recorded.
+      const row = await env.DB.prepare("SELECT deploy_state, errors FROM agent_sessions WHERE session_id = ?")
+        .bind(id)
+        .first<{ deploy_state: string; errors: string | null }>();
+      expect(JSON.parse(row!.deploy_state)).toEqual({ phase: "live", appUrl: "https://dict.freeappstore.online" });
+      const errors = JSON.parse(row!.errors ?? "[]") as Array<{ source: string }>;
+      expect(errors.filter((e) => ["agent-empty", "agent-stream", "deploy"].includes(e.source))).toEqual([]);
+
+      // What was pushed is now the baseline, so the next push sends only newer edits.
+      const saved = await runInDurableObject(stubFor(id), (_i, state) =>
+        state.storage.get<{ files: Record<string, string>; baselineFiles: Record<string, string> }>("session"),
+      );
+      expect(saved?.files["web/src/App.tsx"]).toContain("Updated title");
+      expect(saved?.baselineFiles).toEqual(saved?.files);
+
+      // A second update that changes nothing is skipped, not re-pushed and re-built.
+      await startTurnAndLeave(id, "update the title again");
+      await waitForTurnEnd(id, { timeoutMs: 25_000 });
+      const second = await live(id);
+      const secondPhases = second.events
+        .filter((e) => e.type === "deploy_status")
+        .map((e) => (JSON.parse(e.data) as { phase: string }).phase);
+      expect(secondPhases).toEqual(["pushing", "live"]);
+      expect(second.events.at(-1)?.type).toBe("done");
+    },
+    60_000,
+  );
+});
+
+describe("stream replay from Last-Event-ID on a real Durable Object (#38)", () => {
+  it("replays only the events after the one the client last saw", async () => {
+    const id = "replay-turn";
+    await startTurnAndLeave(id, "build a timer");
+    await waitForTurnEnd(id);
+
+    const full = await live(id);
+    const ids = full.events.map((e) => e.id);
+    expect(ids.length).toBeGreaterThan(2);
+    expect(ids).toEqual(ids.map((_, i) => i + 1)); // 1..n, in order
+    expect(full.events.at(-1)?.type).toBe("done");
+    expect(full.lastEventIdHeader).toBe(String(ids.length));
+
+    // Reconnecting after event 1: everything from 2 on, nothing repeated.
+    const resumed = await live(id, "1");
+    expect(resumed.events.map((e) => e.id)).toEqual(ids.slice(1));
+    expect(resumed.events).toEqual(full.events.slice(1));
+
+    // Reconnecting after the last event: nothing to replay.
+    expect((await live(id, String(ids.length))).events).toEqual([]);
+
+    // A header that isn't an event ID replays from the start rather than skipping.
+    expect((await live(id, "garbage")).events.map((e) => e.id)).toEqual(ids);
   });
 });

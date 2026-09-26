@@ -353,6 +353,7 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
     if (thrown) await ctx.onDeployStatus({ phase: "error", error: thrown });
     return `Deploy FAILED: ${provisioningError}`;
   }
+  advanceBaseline(ctx);
 
   // The code is pushed and the app provisioned, whatever CI says. Finish the
   // listing and hosting route either way, so a push_update fix goes live
@@ -448,6 +449,19 @@ function normalizePublishCategory(category: string): string {
   return map[normalized] || "Other (specify in description)";
 }
 
+/**
+ * Once a push has landed, the repo holds exactly the session's files, so they
+ * become the baseline (#38). Without this the baseline stayed at the import or
+ * template: every later push resent everything pushed before, and a pushed
+ * file the agent later deleted was never deleted from the repo (it wasn't in
+ * the baseline, so the delta had no deletion for it).
+ */
+function advanceBaseline(ctx: ExecContext): void {
+  if (!ctx.baselineFiles) return;
+  ctx.baselineFiles.clear();
+  for (const [path, content] of ctx.files) ctx.baselineFiles.set(path, content);
+}
+
 /** Replace APPNAME (display name; id in package.json) + APPID (the slug, everywhere). */
 export function applyPlaceholders(files: Map<string, string>, appId: string, appName: string): void {
   for (const [path, content] of files) {
@@ -476,6 +490,7 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string
     await ctx.onDeployStatus({ phase: "error", error: result.message });
     return result.message;
   }
+  advanceBaseline(ctx);
   if (result.skipped) {
     await ctx.onDeployStatus({ phase: "live", appUrl: `https://${tc.input.id as string}.${ctx.config.domain}` });
     return result.message;

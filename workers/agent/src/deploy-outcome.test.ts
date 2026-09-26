@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "./config";
-import { type DeployStatus, deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./deploy";
+import { computeFileDelta, type DeployStatus, deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./deploy";
 import { executeInfraTool } from "./infra-exec";
 
 vi.mock("./deploy", async (importOriginal) => {
@@ -250,5 +250,66 @@ describe("push_update ownership guard (#12)", () => {
 
     expect(result).toMatch(/cannot verify ownership/);
     expect(pushMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("the baseline follows what was pushed (#38)", () => {
+  /** Record, at call time, the delta each push would send. */
+  function capturePushes(result: Awaited<ReturnType<typeof pushUpdate>>) {
+    const sent: Array<Map<string, string | null>> = [];
+    pushMock.mockImplementation(async (_id, files, baseline) => {
+      sent.push(computeFileDelta(files, baseline));
+      return result;
+    });
+    waitMock.mockResolvedValue({ phase: "live", appUrl: APP_URL });
+    return sent;
+  }
+
+  it("deletes a pushed file the agent later removed, and resends nothing else", async () => {
+    const sent = capturePushes({ ok: true, message: "Pushed.", commitSha: "c1" });
+    const { ctx } = makeCtx({ appId: "dict" });
+    const session = { ...ctx, baselineFiles: new Map([["web/src/App.tsx", "v0"]]) };
+    session.files.set("web/src/App.tsx", "v1");
+    session.files.set("web/src/util.ts", "helper");
+
+    await executeInfraTool(pushCall, session);
+    session.files.delete("web/src/util.ts");
+    await executeInfraTool(pushCall, session);
+
+    expect(sent[0]).toEqual(
+      new Map([
+        ["web/src/App.tsx", "v1"],
+        ["web/src/util.ts", "helper"],
+      ]),
+    );
+    // Before #38 the baseline stayed at v0, so this resent App.tsx and never deleted util.ts.
+    expect(sent[1]).toEqual(new Map([["web/src/util.ts", null]]));
+  });
+
+  it("leaves the baseline alone when the push didn't land", async () => {
+    capturePushes({ ok: false, message: "Error: failed to update ref" });
+    const { ctx } = makeCtx({ appId: "dict" });
+    const baselineFiles = new Map([["web/src/App.tsx", "v0"]]);
+    ctx.files.set("web/src/App.tsx", "v1");
+
+    await executeInfraTool(pushCall, { ...ctx, baselineFiles });
+
+    expect(baselineFiles).toEqual(new Map([["web/src/App.tsx", "v0"]]));
+  });
+
+  it("a first deploy that pushed code moves the baseline; one that failed before pushing doesn't", async () => {
+    deployReports({ phase: "building", deployUrl: APP_URL }, { phase: "live", appUrl: APP_URL });
+    const pushed = makeCtx();
+    const pushedBaseline = new Map([["web/src/App.tsx", "template"]]);
+    pushed.ctx.files.set("web/src/App.tsx", "built");
+    await executeInfraTool(deployCall, { ...pushed.ctx, baselineFiles: pushedBaseline });
+    expect(pushedBaseline.get("web/src/App.tsx")).toBe("built");
+
+    deployReports({ phase: "error", error: "GitHub repo creation failed: 422" });
+    const failed = makeCtx();
+    const failedBaseline = new Map([["web/src/App.tsx", "template"]]);
+    failed.ctx.files.set("web/src/App.tsx", "built");
+    await executeInfraTool(deployCall, { ...failed.ctx, baselineFiles: failedBaseline });
+    expect(failedBaseline.get("web/src/App.tsx")).toBe("template");
   });
 });
