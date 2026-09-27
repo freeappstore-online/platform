@@ -33,3 +33,10 @@ updates:
         dependency-type: development
         patterns: ['*']
         update-types: [minor, patch]
+    ignore:
+      # workers/mcp (the only manifest with zod) pins @modelcontextprotocol/sdk
+      # to the exact version `agents` builds on, and both are built against
+      # zod 3. A zod major there breaks the MCP tool schemas, so it has to come
+      # as a deliberate SDK + agents + zod upgrade, not a Dependabot bump (#70).
+      - dependency-name: zod
+        update-types: [version-update:semver-major]
