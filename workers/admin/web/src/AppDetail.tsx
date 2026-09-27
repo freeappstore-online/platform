@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { AppHealth, UnifiedApp, DeprovisionResult, AppSession } from './api.ts'
+import type { AppHealth, GhRun, UnifiedApp, DeprovisionResult, AppSession } from './api.ts'
 import { api } from './api.ts'
 import { Loading, ErrorBox } from './Overview.tsx'
 import { StatusBadge } from './AppList.tsx'
@@ -58,6 +58,12 @@ export function AppDetail({ id, navigate }: { id: string; navigate: (h: string) 
         <HealthCard health={health} app={app} />
         <InfoCard app={app} />
       </div>
+
+      {health?.ghActionsError && (
+        <div className="mb-6">
+          <ErrorBox message={`Could not load GitHub Actions runs: ${health.ghActionsError}`} />
+        </div>
+      )}
 
       {health?.ghActions && health.ghActions.length > 0 && (
         <div className="mb-6">
@@ -146,7 +152,7 @@ function InfoCard({ app }: { app: UnifiedApp | null }) {
   )
 }
 
-function GhActionsCard({ runs, repo }: { runs: AppHealth['ghActions']; repo: string }) {
+function GhActionsCard({ runs, repo }: { runs: GhRun[]; repo: string }) {
   return (
     <div className="rounded-xl p-5" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
       <div className="flex items-center justify-between mb-4">

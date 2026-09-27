@@ -5,18 +5,28 @@ import type { RouteHandler } from "./types";
 // `caches.default` is a Cloudflare Workers extension (not in DOM CacheStorage types).
 const workerCache = () => (caches as unknown as { default: Cache }).default;
 
-/** Serve `produce()` from the Worker cache for `maxAge` seconds. */
-async function cachedJson(request: Request, key: string, maxAge: number, produce: () => Promise<unknown>): Promise<Response> {
+/** Serve `produce()` from the Worker cache for `maxAge` seconds. A result
+ *  `cacheable` rejects is served but not cached, so an outage isn't pinned. */
+async function cachedJson<T>(
+  request: Request,
+  key: string,
+  maxAge: number,
+  produce: () => Promise<T>,
+  cacheable: (value: T) => boolean = () => true,
+): Promise<Response> {
   const cache = workerCache();
   const cacheKey = new Request(key);
   const hit = await cache.match(cacheKey);
   if (hit) return new Response(hit.body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
   try {
-    const body = JSON.stringify(await produce());
-    await cache.put(
-      cacheKey,
-      new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${maxAge}` } }),
-    );
+    const value = await produce();
+    const body = JSON.stringify(value);
+    if (cacheable(value)) {
+      await cache.put(
+        cacheKey,
+        new Response(body, { headers: { "Content-Type": "application/json", "Cache-Control": `public, max-age=${maxAge}` } }),
+      );
+    }
     return new Response(body, { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(request) } });
   } catch (e) {
     return json({ error: String(e) }, 500, request);
@@ -37,7 +47,14 @@ export const appsRoutes: RouteHandler = async ({ request, env, url }) => {
   // Deploy status for every app (latest GH Actions conclusion). Cached 5 min so
   // the Apps list can flag failed deploys without a GitHub fan-out on every load.
   if (url.pathname === "/api/apps/deploy-status") {
-    return cachedJson(request, "https://admin.internal/api/apps/deploy-status", 300, () => handleDeployStatus(env));
+    // Don't cache a GitHub outage for 5 min: only a read with no per-app errors (#72).
+    return cachedJson(
+      request,
+      "https://admin.internal/api/apps/deploy-status",
+      300,
+      () => handleDeployStatus(env),
+      (statuses) => !Object.values(statuses).some((s) => s.error),
+    );
   }
 
   // Deploy status for ONE app. Same GitHub data, scoped to a single repo so the

@@ -193,6 +193,8 @@ export type DeployStatus = {
   branch?: string | null;
   /** Distinguishes "never deployed" (no runs at all) from "we couldn't tell". */
   neverDeployed?: boolean;
+  /** GitHub couldn't be read for this app; the other fields are null (#72). */
+  error?: string;
 };
 
 /** One app's latest deploy plus its recent history, for the app detail page. */
@@ -239,7 +241,12 @@ export async function handleDeployStatus(env: Env): Promise<Record<string, Deplo
     const batch = ids.slice(i, i + CONCURRENCY);
     await Promise.all(
       batch.map(async (id) => {
-        result[id] = latestOf(await fetchGhRuns(id, env));
+        // One app's GitHub failure marks that app, not the whole fan-out (#72).
+        try {
+          result[id] = latestOf(await fetchGhRuns(id, env));
+        } catch (e) {
+          result[id] = { status: null, conclusion: null, at: null, sha: null, error: e instanceof Error ? e.message : String(e) };
+        }
       }),
     );
   }
@@ -316,9 +323,15 @@ export async function handleAppsAll(env: Env) {
 }
 
 export async function handleAppHealth(appId: string, env: Env) {
+  // A GitHub failure is reported alongside the rest of the health check, not
+  // as a failure of the whole page, and never as "no runs" (#72).
+  let ghActionsError: string | null = null;
   const [routeRow, ghRuns] = await Promise.all([
     env.DB.prepare("SELECT slug, zone, hosted_on FROM routes WHERE slug = ?").bind(appId).first(),
-    fetchGhRuns(appId, env),
+    fetchGhRuns(appId, env).catch((e: unknown) => {
+      ghActionsError = e instanceof Error ? e.message : String(e);
+      return null;
+    }),
   ]);
 
   const domain = routeRow ? `${routeRow.slug}.${routeRow.zone}` : `${appId}.freeappstore.online`;
@@ -343,6 +356,7 @@ export async function handleAppHealth(appId: string, env: Env) {
     httpStatus,
     reachable: httpStatus >= 200 && httpStatus < 400,
     ghActions: ghRuns,
+    ghActionsError,
   };
 }
 

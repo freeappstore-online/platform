@@ -96,7 +96,9 @@ export interface AppHealth {
   hasRoute: boolean
   httpStatus: number
   reachable: boolean
-  ghActions: GhRun[]
+  /** null when GitHub couldn't be read — see `ghActionsError` (#72). */
+  ghActions: GhRun[] | null
+  ghActionsError?: string | null
 }
 
 export interface GhRun {

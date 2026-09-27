@@ -375,6 +375,45 @@ describe("routes/apps", () => {
   });
 });
 
+describe("routes/apps deploy-status when GitHub partly fails (#72)", () => {
+  function stubCache() {
+    const puts: string[] = [];
+    vi.stubGlobal("caches", { default: { match: async () => undefined, put: async (k: Request) => void puts.push(k.url) } });
+    return puts;
+  }
+  /** GitHub Actions runs: `bad` answers 500, everything else one successful run. */
+  function stubGitHub() {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes("/repos/freeappstore-online/bad/")
+          ? new Response("boom", { status: 500 })
+          : new Response(JSON.stringify({ workflow_runs: [{ id: 1, status: "completed", conclusion: "success", head_sha: "abc" }] })),
+      ),
+    );
+  }
+
+  it("marks only the failing app and doesn't cache the outage", async () => {
+    const puts = stubCache();
+    stubGitHub();
+    const res = await call(appsRoutes, "/api/apps/deploy-status", {}, env({ DB: fakeDB({ rows: [{ id: "good" }, { id: "bad" }] }) }));
+    expect(res!.status).toBe(200);
+    const out = (await res!.json()) as Record<string, { conclusion: string | null; error?: string }>;
+    expect(out.good).toMatchObject({ conclusion: "success" });
+    expect(out.good!.error).toBeUndefined();
+    expect(out.bad).toMatchObject({ conclusion: null });
+    expect(out.bad!.error).toContain("500");
+    expect(puts).toEqual([]);
+  });
+
+  it("still caches a clean read for 5 minutes", async () => {
+    const puts = stubCache();
+    stubGitHub();
+    await call(appsRoutes, "/api/apps/deploy-status", {}, env({ DB: fakeDB({ rows: [{ id: "good" }] }) }));
+    expect(puts).toEqual(["https://admin.internal/api/apps/deploy-status"]);
+  });
+});
+
 describe("routes/agent-sessions", () => {
   it("404s an unknown session id", async () => {
     const db = { prepare: () => ({ bind: () => ({ first: async () => null }) }) };
