@@ -61,7 +61,7 @@ sdk/
 
 ## Contributing
 
-PRs welcome. Run `pnpm install && pnpm -r build && pnpm test` before pushing — CI runs typecheck + 200+ unit tests + an e2e suite against `wrangler dev --local`.
+Work goes straight to `main` — no branches or pull requests. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the workflow, how Dependabot updates are handled, and how outside contributors can propose changes.
 
 ## License
 
