@@ -49,10 +49,12 @@ async function fetchUser(token: string): Promise<AdminUser> {
   return user
 }
 
-function signInUrl(): string {
+export type SignInProvider = 'github' | 'google'
+
+function signInUrl(provider: SignInProvider): string {
   const here = new URL(window.location.href)
   here.hash = ''
-  const url = new URL('/v1/auth/github/start', API_BASE)
+  const url = new URL(`/v1/auth/${provider}/start`, API_BASE)
   url.searchParams.set('app_id', 'fas-admin')
   url.searchParams.set('return_to', here.toString())
   return url.toString()
@@ -105,8 +107,8 @@ export function useAdminAuth() {
     }
   }, [])
 
-  const signIn = useCallback(() => {
-    window.location.assign(signInUrl())
+  const signIn = useCallback((provider: SignInProvider) => {
+    window.location.assign(signInUrl(provider))
   }, [])
 
   const signOut = useCallback(() => {

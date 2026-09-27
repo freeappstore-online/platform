@@ -1,6 +1,6 @@
 import { Apple, decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
-import { HttpError, isAdminLogin, requireUser } from '../lib/auth.js';
+import { HttpError, isAdminLogin, isAdminUserId, requireUser } from '../lib/auth.js';
 import { deliverSession, exchangeAuthCode } from '../lib/deliver-session.js';
 import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
@@ -631,7 +631,8 @@ authRoutes.delete('/auth/me', async (c) => {
  *
  * - 'user' — always (signed in)
  * - 'creator' — has at least one published app
- * - 'admin' — login is in ADMIN_GITHUB_LOGINS env var
+ * - 'admin' — GitHub login is in ADMIN_GITHUB_LOGINS, or the stable user id
+ *   (e.g. `google:<sub>`) is in ADMIN_USER_IDS
  */
 export async function computeRoles(
   userId: string,
@@ -685,8 +686,9 @@ export async function computeRoles(
     // Tables don't exist yet (fresh DB or test env) — skip
   }
 
-  // Check admin list (GitHub identities only — see security note above).
-  if (isGithub && isAdminLogin(login, env)) roles.push('admin');
+  // Admin: login matches only for GitHub (see security note above); the user id
+  // is provider-issued, so ADMIN_USER_IDS works for every provider (#22).
+  if ((isGithub && isAdminLogin(login, env)) || isAdminUserId(userId, env)) roles.push('admin');
 
   return { roles, appRoles };
 }

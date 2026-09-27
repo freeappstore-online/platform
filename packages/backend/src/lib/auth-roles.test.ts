@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { computeRoles } from '../routes/auth.js';
 import { isAdminLogin } from './auth.js';
 import { signSession, verifySession } from './session.js';
 
@@ -114,5 +115,56 @@ describe('isAdminLogin', () => {
 
   it('does not partial-match', () => {
     expect(isAdminLogin('serge', makeEnv('serge-ivo'))).toBe(false);
+  });
+});
+
+describe('computeRoles admin (#22)', () => {
+  // D1 stand-in: no apps, no app_roles rows.
+  const DB = {
+    prepare: () => ({
+      bind: () => ({ first: async () => null, all: async () => ({ results: [] }) }),
+    }),
+  };
+  const makeEnv = (vars: { ADMIN_GITHUB_LOGINS?: string; ADMIN_USER_IDS?: string }) =>
+    ({ DB, ...vars }) as any;
+
+  it('grants admin to a Google user whose stable id is in ADMIN_USER_IDS', async () => {
+    const env = makeEnv({ ADMIN_USER_IDS: 'gh:1, google:1234567890' });
+    const { roles } = await computeRoles('google:1234567890', 'serge', env, 'google');
+    expect(roles).toContain('admin');
+  });
+
+  it('matches ADMIN_USER_IDS case-insensitively', async () => {
+    const env = makeEnv({ ADMIN_USER_IDS: 'Google:ABC' });
+    const { roles } = await computeRoles('google:abc', 'x', env, 'google');
+    expect(roles).toContain('admin');
+  });
+
+  it('does not grant admin to a Google user whose email local part matches an admin GitHub login', async () => {
+    const env = makeEnv({ ADMIN_GITHUB_LOGINS: 'serge-ivo', ADMIN_USER_IDS: 'google:1234567890' });
+    const { roles } = await computeRoles('google:999', 'serge-ivo', env, 'google');
+    expect(roles).toEqual(['user']);
+  });
+
+  it('does not grant admin to email or Apple users by login either', async () => {
+    const env = makeEnv({ ADMIN_GITHUB_LOGINS: 'serge-ivo' });
+    expect((await computeRoles('email:x', 'serge-ivo', env, 'email')).roles).not.toContain('admin');
+    expect((await computeRoles('apple:x', 'serge-ivo', env, 'apple')).roles).not.toContain('admin');
+  });
+
+  it('still grants admin to GitHub users by login', async () => {
+    const env = makeEnv({ ADMIN_GITHUB_LOGINS: 'serge-ivo' });
+    expect((await computeRoles('gh:42', 'serge-ivo', env)).roles).toContain('admin');
+    expect((await computeRoles('gh:43', 'someone-else', env)).roles).toEqual(['user']);
+  });
+
+  it('grants admin to GitHub users by stable id too', async () => {
+    const env = makeEnv({ ADMIN_USER_IDS: 'gh:42' });
+    expect((await computeRoles('gh:42', 'renamed', env)).roles).toContain('admin');
+  });
+
+  it('grants nothing extra when neither list is set', async () => {
+    const env = makeEnv({});
+    expect((await computeRoles('google:1', 'serge-ivo', env, 'google')).roles).toEqual(['user']);
   });
 });

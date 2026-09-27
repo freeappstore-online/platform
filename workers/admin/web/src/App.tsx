@@ -7,7 +7,7 @@ import { AgentSessions } from './AgentSessions.tsx'
 import { AgentSessionView } from './AgentSessionView.tsx'
 import { AIKeys } from './AIKeys.tsx'
 import { ContentData } from './ContentData.tsx'
-import { type AdminUser, useAdminAuth } from './auth.ts'
+import { type AdminUser, type SignInProvider, useAdminAuth } from './auth.ts'
 
 type View =
   | { page: 'overview' }
@@ -79,7 +79,7 @@ export default function App() {
   )
 }
 
-function SignIn({ error, onSignIn }: { error: string | null; onSignIn: () => void }) {
+function SignIn({ error, onSignIn }: { error: string | null; onSignIn: (provider: SignInProvider) => void }) {
   return (
     <div className="min-h-[100dvh] flex items-center justify-center px-4">
       <div className="w-full max-w-sm text-center">
@@ -93,11 +93,18 @@ function SignIn({ error, onSignIn }: { error: string | null; onSignIn: () => voi
           </p>
         )}
         <button
-          onClick={onSignIn}
+          onClick={() => onSignIn('github')}
           className="mt-6 w-full text-sm font-semibold px-4 py-2 rounded-lg"
           style={{ background: 'var(--accent)', color: '#fff' }}
         >
           Sign in with GitHub
+        </button>
+        <button
+          onClick={() => onSignIn('google')}
+          className="mt-3 w-full text-sm font-semibold px-4 py-2 rounded-lg border"
+          style={{ borderColor: 'var(--line)', color: 'var(--ink)' }}
+        >
+          Sign in with Google
         </button>
       </div>
     </div>

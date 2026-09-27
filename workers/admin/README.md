@@ -52,7 +52,7 @@ The rule: **this worker owns provisioning and anything that needs its privileged
 
 ## Auth
 
-- **Humans:** the SPA redirects through `api.freeappstore.online/v1/auth/github/start`, stores the returned `fas:session`, and sends it as `Authorization: Bearer <session>` to `/api/*`. The Worker verifies that session through the `BACKEND_FAS` service binding and requires the returned roles to include `admin`. Admin membership is controlled by the backend's `ADMIN_GITHUB_LOGINS` / `ADMIN_USER_IDS` configuration.
+- **Humans:** the SPA redirects through `api.freeappstore.online/v1/auth/{github,google}/start`, stores the returned `fas:session`, and sends it as `Authorization: Bearer <session>` to `/api/*`. The Worker verifies that session through the `BACKEND_FAS` service binding and requires the returned roles to include `admin`. Admin membership is controlled by the backend's `ADMIN_GITHUB_LOGINS` / `ADMIN_USER_IDS` configuration.
 - **Service:** the api worker calls in via service binding (`env.ADMIN.fetch(...)`). Service-binding calls bypass the edge entirely, so they never see CF Access; they authenticate to this Worker with `X-Internal-Token: ADMIN_PROVISION_TOKEN` instead.
 
 Do **not** add a Cloudflare Access application in front of `admin.freeappstore.online`. It blocks the SPA before FAS auth can run and has broken before when the Zero Trust team domain changed.
@@ -64,6 +64,39 @@ Secrets for GitHub + DNS + D1 calls are managed in the private SOPS repo
 cd ~/dev/stores/fas/platform
 SECRETS_PROJECT=fas bash scripts/sync-worker-secrets.sh workers/admin
 ```
+
+## Google SSO for admin
+
+The admin sign-in screen offers **Sign in with Google** next to GitHub (#22). Both go
+through the backend's normal OAuth flow; nothing is configured in Cloudflare.
+
+A Google account only gets the `admin` role once its stable user id is listed:
+
+1. Sign in once with Google at `admin.freeappstore.online`. It will say the account
+   isn't an admin; that sign-in creates the `users` row.
+2. Find the id (`google:<sub>`):
+   ```bash
+   cd ~/dev/stores/fas/platform/packages/backend
+   npx wrangler d1 execute fas --remote \
+     --command "SELECT id, email FROM users WHERE provider = 'google' AND email = '<you@gmail.com>'"
+   ```
+3. Add it to the backend's `ADMIN_USER_IDS` secret, a comma-separated list. Setting
+   the secret replaces the whole value, so include any ids already in it:
+   ```bash
+   cd ~/dev/stores/fas/platform/packages/backend
+   npx wrangler secret put ADMIN_USER_IDS    # e.g. google:1234567890,gh:42
+   ```
+4. Sign in with Google again. Roles are computed at sign-in, so an existing session
+   won't pick up the change.
+
+`ADMIN_GITHUB_LOGINS` only applies to GitHub sign-ins: for Google, Apple and email
+users the backend's `login` is the email local part, which anyone can choose, so it
+is never matched against admin logins. `ADMIN_USER_IDS` is keyed by the
+provider-issued id and works for every provider.
+
+No Cloudflare Access configuration is needed. Access is deliberately not in front of
+`admin.freeappstore.online` since ef71a81 (see Auth above); the Zero Trust plan in
+the original #22 no longer applies.
 
 ## Develop
 
