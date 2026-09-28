@@ -45,6 +45,10 @@ fas init asteroids --template game-canvas
 |------|---------|
 | `-t, --template <name>` | `standalone`, `connected`, `game-canvas`, `game-grid`, `game-3d` |
 
+Both app templates start inside the SDK `Shell` with real `nav` items: `standalone` has
+Home and About and no sign-in; `connected` has Home and Account behind the sign-in gate
+(`requireAuth`). See [Templates](getting-started.md#templates).
+
 ## `fas check`
 
 Runs compliance checks against the app in the current directory.

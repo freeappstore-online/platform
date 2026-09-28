@@ -181,8 +181,8 @@ This keeps things simple. Every app has one URL, one branch, one truth.
 
 Developers bootstrap new apps from these templates:
 
-- **freeappstore-online/template-standalone** — For apps with no backend (localStorage only)
-- For connected apps (auth, KV, rooms, proxy): add `@freeappstore/sdk` to a standalone template
+- **freeappstore-online/template-standalone** — For apps with no backend (localStorage only); SDK `Shell` with Home/About in `nav`, no sign-in
+- **freeappstore-online/template-connected** — For apps using the platform backend through `@freeappstore/sdk` (auth, KV, rooms, proxy); SDK `Shell` with `requireAuth` and Home/Account in `nav`
 
 Templates include:
 - Correct pnpm workspace structure

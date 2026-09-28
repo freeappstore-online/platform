@@ -105,8 +105,11 @@ fas init racing --template game-3d         # 3D game
 
 | Template | Use case |
 |----------|----------|
-| `standalone` | Apps that only need localStorage. No backend dependency. |
-| `connected` | Apps that use the SDK (auth, KV, rooms, counters, etc.). |
+| `standalone` | Apps that only need localStorage. No sign-in. Starts inside `Shell` with two screens in `nav`: Home (`/`) and About (`/about`). |
+| `connected` | Apps that work with the user's data through the SDK (auth, KV, collections, rooms, proxy). Starts inside `Shell` with `requireAuth` (a sign-in screen until the user signs in) and two screens in `nav`: Home (`/`, a note saved to per-user KV) and Account (`/account`, the SDK's `ProfilePage`). |
+
+Both app templates route screens by `location.pathname` with `onNavigate`, so adding
+a screen is one `nav` entry plus one branch in `App`.
 | `game-canvas` | HTML5 Canvas games. |
 | `game-grid` | Grid/tile-based games. |
 | `game-3d` | Three.js 3D games. |

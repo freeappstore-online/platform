@@ -22,12 +22,14 @@ on:
     paths:
       - 'packages/cli/**'
       - 'packages/compliance/**'
+      - 'scripts/check-scaffold-shell.sh'
       - '.github/workflows/scaffold-smoke.yml'
   pull_request:
     branches: [main]
     paths:
       - 'packages/cli/**'
       - 'packages/compliance/**'
+      - 'scripts/check-scaffold-shell.sh'
       - '.github/workflows/scaffold-smoke.yml'
   schedule:
     # 04:30 UTC daily — independent of CLI changes, so template-side drift
@@ -99,6 +101,14 @@ jobs:
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
           node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" \
             init "$APP_ID" --template="${{ matrix.template }}"
+
+      - name: Scaffold starts on the SDK Shell with nav (#93)
+        # Every new app must render the SDK Shell with real nav items from the
+        # first render: no hand-rolled Shell.tsx, no Firebase, an SDK with the
+        # navbar + resilience layer; connected apps sign in (requireAuth),
+        # standalone apps don't.
+        working-directory: /tmp/scaffold-smoke
+        run: bash "$GITHUB_WORKSPACE/scripts/check-scaffold-shell.sh" "$APP_ID" "${{ matrix.template }}"
 
       - name: Install scaffold deps
         working-directory: /tmp/scaffold-smoke
