@@ -8,6 +8,11 @@ A free, open-source PWA app store. Every app gets its own subdomain (`yourapp.fr
 
 ## For developers
 
+**Start here: [Build your app on the Shell](getting-started.md#build-your-app-on-the-shell).**
+Every FreeAppStore app wraps itself in `Shell` from `@freeappstore/sdk/ui`, with one `nav`
+entry per screen. The Shell provides the topbar, the app's navigation, an error boundary,
+toasts and an offline banner; you write the screens.
+
 - **[Getting Started](getting-started.md)** -- scaffold, build, and publish your first app in 60 seconds
 - **[SDK Reference](sdk.md)** -- auth, KV, counters, collections, rooms, proxy, keys, roles, friends, email
 - **[UI Components](ui.md)** -- the standard app `Shell` (topbar, navigation, error boundary, toasts) and 25+ drop-in React components
@@ -18,7 +23,7 @@ A free, open-source PWA app store. Every app gets its own subdomain (`yourapp.fr
 
 ## For AI agents
 
-- **[MCP Server](mcp.md)** -- connect Claude Code, Cursor, or any MCP-compatible agent
+- **[MCP Server](mcp.md)** -- connect Claude Code, Cursor, or any MCP-compatible agent. Its `sdk_reference` tool (feature `shell`) teaches the same Shell-first build
 - **[SKILLS.md](https://freeappstore.online/skills.md)** -- full platform guide for AI consumption
 
 ## Architecture

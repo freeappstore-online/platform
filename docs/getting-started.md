@@ -26,11 +26,72 @@ pnpm install && pnpm dev
 
 Your app runs at `http://localhost:5173`. Edit `web/src/App.tsx` to build your app.
 
-`App.tsx` already wraps the app in `Shell` from `@freeappstore/sdk/ui`, the standard
-frame every FreeAppStore app uses: topbar, sign-in and profile menu, theme and text
-size, and an error boundary, toasts and offline banner around your screens. List your
-screens in its `nav` prop and it renders the app's navigation. Don't build your own
-header or navbar. See [the Shell](ui.md#shell-the-standard-app-frame).
+## Build your app on the Shell
+
+Every FreeAppStore app has the same outer frame: `Shell` from `@freeappstore/sdk/ui`.
+It renders the topbar (FreeAppStore link, app name, sign-in and profile menu, theme and
+text size) and your app's navigation, and wraps your screens in an error boundary,
+loading fallback, toast region and offline banner. You write the screens.
+
+1. **Wrap the app in `Shell`, with one `nav` entry per screen.** The Shell renders them
+   as `<nav aria-label="Main">`, highlights the current screen, and collapses to a menu
+   on phones.
+2. **Start each screen with `PageHeader`**, its single `<h1>`.
+3. **Give feedback with `useToast()`**, and build screens from the
+   [SDK components](ui.md) instead of hand-rolled chrome.
+4. **Don't add** your own header, sidebar, tab bar, bottom dock or error boundary, and
+   don't put navigation inside a screen.
+
+```tsx
+import { useEffect, useState } from 'react';
+import { initApp } from '@freeappstore/sdk';
+import { type NavItem, PageHeader, Shell, useToast } from '@freeappstore/sdk/ui';
+
+const fas = initApp({ appId: 'my-cool-app' });
+
+const NAV: NavItem[] = [
+  { label: 'Home', href: '/', title: 'My Cool App' },
+  { label: 'Settings', href: '/settings', title: 'Settings — My Cool App' },
+];
+
+export default function App() {
+  const [path, setPath] = useState(location.pathname);
+  useEffect(() => {
+    const sync = () => setPath(location.pathname);
+    addEventListener('popstate', sync);
+    return () => removeEventListener('popstate', sync);
+  }, []);
+  const navigate = (href: string) => {
+    history.pushState(null, '', href);
+    setPath(href);
+  };
+
+  return (
+    <Shell app={fas} appName="My Cool App" nav={NAV} onNavigate={navigate}>
+      {path === '/settings' ? <Settings /> : <Home />}
+    </Shell>
+  );
+}
+
+function Home() {
+  return <PageHeader title="Home" description="Your app starts here." />;
+}
+
+function Settings() {
+  const toast = useToast();
+  return (
+    <PageHeader
+      title="Settings"
+      actions={<button onClick={() => toast.show('Saved', { variant: 'success' })}>Save</button>}
+    />
+  );
+}
+```
+
+The templates and VibeCode start you inside `Shell`. FreeAppStore is free, so there is
+no subscription or upgrade screen; the only gate is the optional sign-in gate
+(`requireAuth`), for apps where everything needs an account. Full reference, migration
+from older layouts, and caveats: [the Shell](ui.md#shell-the-standard-app-frame).
 
 ## Templates
 
@@ -97,6 +158,7 @@ Don't want to code? Go to [freeappstore.online/app/build](https://freeappstore.o
 
 ## Next steps
 
+- [The Shell](ui.md#shell-the-standard-app-frame) -- props, migration from older layouts, caveats
 - [SDK Reference](sdk.md) -- all modules and methods
 - [UI Components](ui.md) -- drop-in React components
 - [CLI Reference](cli.md) -- every `fas` command

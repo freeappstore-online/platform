@@ -132,6 +132,50 @@ useEffect(() => {
 `Shell` are unaffected by any of this. `NavBar` and `activeHref` are exported for
 custom layouts.
 
+### Migrating to the Shell
+
+Older apps and older copies of this guide used a hand-rolled layout. To move an app
+onto the standard frame:
+
+1. **Update the SDK** to `@freeappstore/sdk@^0.14.30` or later. That is the first
+   release with `nav`, `PageHeader`, `useToast` and the resilience layer.
+2. **Delete the local layout.** Remove `web/src/components/Shell.tsx` (the old
+   sidebar + bottom-dock template component) or any hand-built header, sidebar, tab
+   bar or dock, and render `<Shell app={fas} appName="…" nav={NAV}>` from
+   `@freeappstore/sdk/ui` as the root of `App.tsx`.
+3. **Move navigation into `nav`.** Every link that was in the sidebar or dock becomes
+   a `{ label, href, title? }` entry. Remove navigation from inside screens.
+4. **Give each screen a `PageHeader`** in place of its own `<h1>`.
+5. **Drop your own error boundary and loading wrapper** around the app; the Shell
+   has both. Replace ad-hoc "Saved!" banners with `useToast()`.
+6. **Theme CSS:** key dark mode off `:root[data-theme="dark"]` (see
+   [Theming](#theming)). A stylesheet that only uses `@media (prefers-color-scheme: dark)`
+   ignores the Shell's theme toggle.
+7. **Already on `FasShell`?** It is the same component. Add `nav` (and `onNavigate`
+   if you route client-side), and remove `requireAuth` unless the whole app needs
+   sign-in.
+
+### Caveats
+
+- **Sign-in is optional.** Signed-out visitors see a "Sign in" button in the topbar
+  even in apps that only use localStorage; that is expected. `requireAuth` hides the
+  whole app, navigation included, behind a sign-in screen.
+- **The error boundary catches render errors only.** Errors thrown in event handlers
+  or async code are not caught by React; handle them there (for example
+  `catch (e) { toast.show('Could not save', { variant: 'error' }) }`). Caught render
+  errors are kept in `fas.log` and uploaded only for signed-in users.
+- **`useToast` works only inside `Shell`.** Outside it throws
+  `useToast must be used inside <Shell>`.
+- **Scroll and focus handling needs `onNavigate`.** Without it every nav click is a
+  full page load, which the browser handles. The host serves your app's `index.html`
+  for any path without a file extension, so deep links like `/tags` work on reload.
+- **The Shell does not load fonts or tokens.** They come from your app's `index.css`
+  (the templates include them).
+- **`<main id="main">` belongs to the Shell.** Don't reuse `id="main"` in a screen;
+  the skip link targets it.
+- **Brief loading screen.** The Shell renders "Loading…" until auth has initialised,
+  which is immediate unless the page is returning from sign-in.
+
 ## Auth & Identity
 
 | Component | Props | Description |
@@ -238,3 +282,12 @@ All components respect the platform design system tokens. Override accent color:
 The tokens and brand fonts (Manrope + Fraunces) come from your app's `index.css`,
 which the templates set up. Dark mode keys off `:root[data-theme="dark"]`: the SDK
 sets it from the system preference or the `Shell`'s theme toggle.
+
+```css
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0f0f0f;
+  --ink: #f5f5f5;
+  /* …the rest of your dark tokens */
+}
+```

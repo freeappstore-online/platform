@@ -187,7 +187,7 @@ Developers bootstrap new apps from these templates:
 Templates include:
 - Correct pnpm workspace structure
 - Brand CSS variables and fonts
-- Responsive Shell component (sidebar + dock)
+- `App.tsx` wrapped in the SDK `Shell` (`@freeappstore/sdk/ui`: topbar, navigation, error boundary, toasts)
 - CI workflow (typecheck on PRs)
 - CLAUDE.md for AI agent instructions
 - PWA manifest

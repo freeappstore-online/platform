@@ -64,8 +64,8 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 | `app_info` | None | Live URL, repo, store listing, up/down status |
 | `deploy_status` | None | Check last 5 GitHub Actions runs |
 | `app_logs` | Owner | Recent errors, warnings, SDK calls, build info |
-| `platform_guide` | None | Fetch full SKILLS.md platform guide |
-| `sdk_reference` | None | SDK reference (auth, kv, counters, collections, rooms, proxy, keys, ui) |
+| `platform_guide` | None | Fetch full SKILLS.md platform guide, followed by the current app-building rules |
+| `sdk_reference` | None | SDK reference. Start with `shell` (the standard app frame), then `components`; also auth, kv, counters, collections, rooms, proxy, keys, hooks, ui |
 
 ## Workflow Recipes
 
@@ -77,9 +77,15 @@ Expected tool flow:
 1. create_app       → provisions repo + hosting + listing, scaffolds template
 2. list_files       → see the scaffolded template files
 3. read_file        → read web/src/App.tsx
-4. update_files     → write your app code (auto-deploys)
+4. update_files     → wrap the app in <Shell app={fas} nav={NAV}> (one nav item per
+                      screen), then write the screens (auto-deploys)
 5. deploy_status    → confirm it went live
 ```
+
+`create_app` and `platform_guide` end with the same build rules, and `sdk_reference`
+feature `shell` has a complete example: the app is wrapped in `Shell` with real nav
+items from the first render, screens start with `PageHeader` and use the SDK
+components. See [Build your app on the Shell](getting-started.md#build-your-app-on-the-shell).
 
 ### Improve an existing app
 

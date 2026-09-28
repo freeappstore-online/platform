@@ -48,11 +48,25 @@ app-name/
         └── components/
 ```
 
+### App Shell (mandatory)
+- Wrap the whole app in `<Shell app={fas} appName="My App" nav={NAV} onNavigate={navigate}>`
+  from `@freeappstore/sdk/ui` (SDK 0.14.30+), with one `nav` entry per screen
+  (`{ label, href, title? }`). The Shell renders the topbar (FreeAppStore link, sign-in /
+  profile menu, theme, text size) and the navigation as `<nav aria-label="Main">`, and wraps
+  screens in an error boundary, loading fallback, toast region and offline banner.
+- Start each screen with `<PageHeader title="…" />`. Use `useToast()` for feedback and
+  `useDocumentTitle()` for a screen's tab title.
+- Do NOT build a header, sidebar, tab bar, bottom dock or error boundary, and do NOT put
+  navigation inside a screen.
+- No subscription or upgrade screen: FreeAppStore is free. `requireAuth` only when the
+  whole app needs sign-in.
+- Full guide: https://docs.freeappstore.online/getting-started/#build-your-app-on-the-shell
+
 ### Brand Design (mandatory)
 - Fonts: Manrope (body, all weights) + Fraunces (display, 700-800)
-- CSS Variables: `--paper`, `--ink`, `--muted`, `--line`, `--panel`, `--glass`, `--dock`, `--accent`, `--success`, `--warning`, `--error`
-- Layout: Desktop = sidebar (17rem) + main content. Mobile = header + main + bottom dock.
-- Dark mode: via `prefers-color-scheme: dark` or `[data-theme='dark']`
+- CSS Variables: `--paper`, `--ink`, `--muted`, `--line`, `--line-strong`, `--panel`, `--accent`, `--success`, `--warning`, `--danger` (never the banned aliases `--bg`, `--surface`, `--border`, `--glass`, `--dock`, `--error`)
+- Layout: the SDK `Shell` (see App Shell above): topbar with the app's navigation, then the screen.
+- Dark mode: via `:root[data-theme='dark']` (the SDK sets it from the system or the Shell's theme toggle)
 - Border radius: 1.25rem (cards), 0.75rem (buttons)
 - Transitions: 160ms ease (buttons), 200ms ease (cards)
 - Must include "Part of FreeAppStore — free forever" link somewhere in the app

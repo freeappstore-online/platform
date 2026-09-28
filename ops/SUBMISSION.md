@@ -49,8 +49,8 @@ Developer opens an issue in `freeappstore-online/submissions` repo using the "Ap
   - [ ] No tracking/analytics/cookies
   - [ ] Uses Manrope + Fraunces fonts
   - [ ] Follows FreeAppStore CSS variables
-  - [ ] Sidebar desktop + dock mobile layout
-  - [ ] Dark mode via prefers-color-scheme
+  - [ ] Wrapped in the SDK `Shell` with a `nav` entry per screen (no hand-rolled header, sidebar or dock)
+  - [ ] Dark mode via `:root[data-theme="dark"]` (follows the system and the Shell's theme toggle)
   - [ ] MIT license
   - [ ] CLAUDE.md included for AI agents
   - [ ] TypeScript, React 19, Vite 6, Tailwind 4, pnpm

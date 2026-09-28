@@ -70,7 +70,6 @@ Each app gets ONE accent color. All other UI chrome uses the shared neutral pale
 --line-strong: #d4d0ca / #3a3835 /* Strong borders */
 --panel: #f5f3f0 / #1e1d1b       /* Panel backgrounds */
 --glass: rgba(255,253,251,0.7) / rgba(20,20,19,0.7) /* Frosted glass */
---dock: rgba(245,243,240,0.92) / rgba(30,29,27,0.92) /* Navigation dock */
 
 --success: #22c55e / #4ade80
 --warning: #f59e0b / #fbbf24
@@ -118,32 +117,30 @@ Load from Google Fonts:
 
 ### App Shell
 
-All apps follow the same shell pattern:
+All apps use the SDK's `Shell` (`@freeappstore/sdk/ui`), so every app has the same frame.
+Apps don't draw their own header, sidebar or dock. See
+[Build your app on the Shell](../docs/getting-started.md#build-your-app-on-the-shell).
 
 ```
-Desktop (≥1024px):
-┌──────────────────────────────────────────┐
-│  ┌─────────┐  ┌──────────────────────┐   │
-│  │ Sidebar │  │     Main Content     │   │
-│  │ (17rem) │  │                      │   │
-│  │         │  │                      │   │
-│  │ - Nav   │  │                      │   │
-│  │ - Tools │  │                      │   │
-│  │         │  │                      │   │
-│  └─────────┘  └──────────────────────┘   │
-└──────────────────────────────────────────┘
+Desktop (≥640px):
+┌──────────────────────────────────────────────────────┐
+│ Free  App name   Home  Notes  Settings    Aa  ◐  (•) │  ← topbar: <header> + <nav aria-label="Main">
+├──────────────────────────────────────────────────────┤
+│  Page title                                          │  ← PageHeader (the screen's h1)
+│                                                      │
+│  Screen content                                      │  ← <main id="main">
+│                                                      │
+└──────────────────────────────────────────────────────┘
 
-Mobile (<1024px):
-┌──────────────────────┐
-│      App Header      │
-├──────────────────────┤
-│                      │
-│    Main Content      │
-│                      │
-│                      │
-├──────────────────────┤
-│    Bottom Dock       │
-└──────────────────────┘
+Mobile (<640px):
+┌──────────────────────────┐
+│ Free  App name  ☰  Aa (•) │  ← nav collapses to a menu button
+├──────────────────────────┤
+│  Page title              │
+│                          │
+│  Screen content          │
+│                          │
+└──────────────────────────┘
 ```
 
 ### Spacing
@@ -159,7 +156,7 @@ Use Tailwind spacing scale. Key values:
 ```css
 sm: 640px   /* Large phones */
 md: 768px   /* Tablets */
-lg: 1024px  /* Desktop (sidebar appears) */
+lg: 1024px  /* Desktop */
 xl: 1280px  /* Wide desktop */
 ```
 
