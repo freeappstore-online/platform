@@ -35,9 +35,25 @@ Streamable HTTP transport at `https://mcp.freeappstore.online/mcp`
 |------|------|-------------|
 | `deploy_status` | None | Check last 5 GitHub Actions runs for any app |
 | `app_info` | None | Live URL, repo, store listing, up/down status |
-| `sdk_reference` | None | SDK docs for auth, KV, counters, collections, rooms, proxy, hooks, UI |
-| `platform_guide` | None | Fetch full SKILLS.md (the complete platform guide) |
+| `sdk_reference` | None | SDK docs. Start with `shell` (the standard app frame), then `components` (every UI component); also auth, KV, counters, collections, rooms, proxy, hooks |
+| `platform_guide` | None | Fetch full SKILLS.md, followed by the current app-building rules |
 | `list_apps` | FAS token | List your published apps |
+
+### Building apps: the Shell comes first
+
+An AI building over this server learns the standard app frame from the tool output
+(`src/sdk-reference.ts`, #91). `create_app` and `platform_guide` end with the same build
+hand-off, and `sdk_reference` leads with it:
+
+1. Wrap the whole app in `<Shell app={fas} appName="My App" nav={NAV} onNavigate={navigate}>` from
+   `@freeappstore/sdk/ui`, with a `nav` entry per screen. The Shell renders the topbar and
+   `<nav aria-label="Main">`, plus the error boundary, toasts, offline banner and skip link.
+2. Start each screen with `PageHeader`, and build it from the SDK components.
+3. No hand-rolled header, sidebar or dock, and no subscription or upgrade screen (FreeAppStore is
+   free). `requireAuth` only when the whole app needs sign-in.
+
+`src/sdk-reference.test.ts` keeps this true: the `components` section is checked against the
+SDK's `packages/sdk/src/ui/index.ts` exports, and the tools are pinned to return the hand-off.
 
 ## Discovery
 

@@ -39,8 +39,16 @@ Note: `create_app`/`update_files` need no AI key (the client model is the author
 | `app_logs` | owner | Recent errors/warnings/SDK calls/build info |
 | `deploy_status` | None | Check GitHub Actions deploy status |
 | `app_info` | None | Get app URLs, repo, status |
-| `platform_guide` | None | Fetch SKILLS.md (full platform guide) |
-| `sdk_reference` | None | SDK reference (auth, kv, counters, collections, rooms, proxy, keys, email, webhooks, roles, ui) |
+| `platform_guide` | None | Fetch SKILLS.md (full platform guide), then the current build rules |
+| `sdk_reference` | None | SDK reference: `shell` and `components` first, then auth, kv, counters, collections, rooms, proxy, keys, hooks, ui, free-apis |
+
+**Apps are built on the SDK Shell (#91).** Whatever an AI builds through this server, the output
+must tell it to wrap the app in `<Shell app={fas} nav={NAV}>` from `@freeappstore/sdk/ui` with a nav
+item per screen, start screens with `PageHeader`, and use the SDK components instead of
+hand-rolled chrome. The text lives in `src/sdk-reference.ts` (`BUILD_HANDOFF_BLOCK`, the `shell` and
+`components` sections); `create_app` (dry run and result) and `platform_guide` return the hand-off.
+When the SDK's UI exports or Shell props change, update `sdk-reference.ts`;
+`sdk-reference.test.ts` fails until the `components` list matches `packages/sdk/src/ui/index.ts`.
 
 Write tools require the `GITHUB_TOKEN` secret (org token with contents:write) on the
 worker; writes are gated by verified app ownership (`/v1/apps/mine`). `create_app`

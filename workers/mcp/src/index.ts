@@ -8,6 +8,7 @@ import { sessionPrefix, auditLog } from "./lib.js";
 import { ownsApp, ownershipGateText } from "./ownership.js";
 import { type RateLimiter, withRateLimit } from "./ratelimit.js";
 import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
+import { BUILD_HANDOFF_BLOCK, getSdkReference, SDK_REFERENCE_FEATURES, withBuildHandoff } from "./sdk-reference.js";
 
 interface Env {
   API_BASE: string;
@@ -237,161 +238,27 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     // ── platform_guide ─────────────────────────────────────────
     this.server.tool(
       "platform_guide",
-      "Get the FreeAppStore platform guide (SKILLS.md) for AI-assisted development. Returns the full guide that tells you how to build apps on the platform.",
+      "Get the FreeAppStore platform guide (SKILLS.md) for AI-assisted development, followed by the current app-building rules: wrap the app in the SDK Shell with real nav items and build screens from the SDK components.",
       {},
       async () => {
         const res = await fetch("https://freeappstore.online/skills.md");
-        if (!res.ok) return { content: [{ type: "text" as const, text: "Failed to fetch SKILLS.md" }] };
-        const text = await res.text();
-        return { content: [{ type: "text" as const, text }] };
+        if (!res.ok) return txt(withBuildHandoff("Failed to fetch SKILLS.md"));
+        return txt(withBuildHandoff(await res.text()));
       }
     );
 
     // ── sdk_reference ──────────────────────────────────────────
     this.server.tool(
       "sdk_reference",
-      "Quick reference for @freeappstore/sdk — imports, features, and usage patterns for auth, KV, counters, collections, rooms, proxy, hooks, and UI components.",
-      { feature: z.enum(["all", "auth", "kv", "counters", "collections", "rooms", "proxy", "keys", "hooks", "ui", "free-apis"]).optional().describe("Specific feature to look up, or 'all' for the full reference") },
-      async ({ feature }) => {
-        const sections: Record<string, string> = {
-          auth: `## Auth
-\`\`\`tsx
-import { initApp } from '@freeappstore/sdk'
-const fas = initApp({ appId: 'my-app' })
-// fas.auth.signIn()  — GitHub OAuth
-// fas.auth.signOut()
-// fas.auth.token     — current session token (string | null)
-// fas.auth.user      — current user ({ id, login, avatarUrl } | null)
-\`\`\``,
-          kv: `## Per-user KV Storage
-\`\`\`tsx
-await fas.kv.set('key', { any: 'json' })
-const val = await fas.kv.get('key')
-await fas.kv.delete('key')
-const keys = await fas.kv.list()                // all keys
-const filtered = await fas.kv.list({ prefix: 'draft:' })
-const many = await fas.kv.getMany(['k1', 'k2']) // batch read
-\`\`\`
-Limits: 1MB/user, 100 active users/day, 1k ops/min.`,
-          counters: `## Shared Counters
-\`\`\`tsx
-const count = await fas.counters.get('likes')        // public, no auth
-await fas.counters.increment('likes')                 // +1, requires auth
-await fas.counters.increment('score', 10)             // +10
-await fas.counters.increment('lives', -1)             // decrement
-const all = await fas.counters.list()                 // all counters
-const filtered = await fas.counters.list({ prefix: 'vote:' })
-\`\`\`
-Not user-scoped. Atomic. Use for votes, views, leaderboards.`,
-          collections: `## Collections (Document Database)
-\`\`\`tsx
-const doc = await fas.collections.create('posts', { title: 'Hello', body: '...' })
-const post = await fas.collections.get('posts', doc.id)
-const all = await fas.collections.list('posts')
-const mine = await fas.collections.list('posts', { mine: true })
-await fas.collections.update('posts', doc.id, { title: 'Updated' })
-await fas.collections.delete('posts', doc.id)
-\`\`\`
-Firestore-style. Public queryable JSON documents with ownership.`,
-          rooms: `## Real-time Rooms (WebSocket)
-\`\`\`tsx
-const room = fas.rooms.join('my-room')
-room.onMessage((msg) => console.log(msg.from.login, msg.data))
-room.onPeers((peers) => console.log('peers:', peers))
-room.onState((state) => console.log('connection:', state))
-room.send({ type: 'move', x: 10, y: 20 })
-room.leave()
-\`\`\`
-Limits: 5 rooms x 25 peers x 50 user-hours/day per app.`,
-          proxy: `## Secret-injecting API Proxy
-\`\`\`tsx
-const weather = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London')
-const data = await weather.json()
-\`\`\`
-Calls third-party APIs without exposing keys. Developer keys configured by platform admin, user keys stored in the key vault.`,
-          keys: `## User API Key Vault
-\`\`\`tsx
-// Check if user has a key
-const hasKey = await fas.keys.has('openai')
-
-// Redirect to platform key management page
-fas.keys.manage('openai')
-
-// Check all configured providers
-const keys = await fas.keys.status()
-// [{ provider: 'openai', label: '...', createdAt: ..., lastUsedAt: ... }]
-\`\`\`
-Users store their API keys on the platform (encrypted AES-256-GCM). Apps never see plaintext keys. Use \`<KeyPrompt>\` component to prompt users when a key is missing. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.`,
-          hooks: `## React Hooks
-\`\`\`tsx
-import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
-
-const { user, loading, signIn, signOut, deleteAccount } = useAuth(fas)
-const { theme, preference, setPreference } = useTheme()
-\`\`\``,
-          ui: `## UI Components
-\`\`\`tsx
-import {
-  FasShell, Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage,
-  Spinner, Badge, Card, Tabs, Modal, ConfirmDialog, EmptyState,
-  ProgressBar, SearchInput, ListRow, ErrorBoundary, KeyPrompt,
-} from '@freeappstore/sdk/ui'
-
-// Full app wrapper:
-<FasShell app={fas} appName="My App" requireAuth>{children}</FasShell>
-
-// Building blocks:
-<Spinner size={24} />
-<Badge variant="success">Live</Badge>
-<Card onClick={handleClick}>content</Card>
-<Tabs tabs={[{key:'a',label:'Tab A'},{key:'b',label:'Tab B'}]} active="a" onChange={setTab} />
-<Modal open={isOpen} onClose={close} title="Settings">content</Modal>
-<ConfirmDialog open={show} onConfirm={ok} onCancel={cancel} title="Delete?" message="Are you sure?" variant="danger" />
-<EmptyState message="No items yet" action={<button>Add one</button>} />
-<ProgressBar value={75} label="Upload" />
-<SearchInput value={query} onChange={setQuery} />
-<ListRow title="Item" subtitle="description" onClick={handleClick} />
-<ErrorBoundary fallback={<p>Oops</p>}>{children}</ErrorBoundary>
-<KeyPrompt app={fas} provider="openai" providerName="OpenAI" />
-\`\`\``,
-          "free-apis": `## Free Libraries & APIs (no key needed)
-
-**Client-side libraries** (install and use directly):
-- **Maps:** Leaflet + OpenStreetMap (\`pnpm add leaflet react-leaflet\`)
-- **Charts:** Recharts (\`pnpm add recharts\`)
-- **Rich text:** Tiptap (\`pnpm add @tiptap/react @tiptap/starter-kit\`)
-- **Date/time:** date-fns (\`pnpm add date-fns\`)
-- **Markdown:** react-markdown (\`pnpm add react-markdown\`)
-- **PDF:** react-pdf or jsPDF (\`pnpm add @react-pdf/renderer\`)
-- **QR codes:** qrcode.react (\`pnpm add qrcode.react\`)
-- **Drag & drop:** dnd-kit (\`pnpm add @dnd-kit/core @dnd-kit/sortable\`)
-- **Animations:** Framer Motion (\`pnpm add framer-motion\`)
-- **Icons:** Lucide React (\`pnpm add lucide-react\`) — 1500+ icons
-- **Forms:** React Hook Form (\`pnpm add react-hook-form\`)
-- **State:** Zustand (\`pnpm add zustand\`)
-
-**Free APIs** (no key, call directly from browser):
-- Weather: Open-Meteo, Geocoding: Nominatim, Routing: OSRM
-- Exchange rates: ExchangeRate-API, Countries: REST Countries
-- Dictionary: dictionaryapi.dev, Hacker News: hn.algolia.com
-- Wikipedia: MediaWiki API, Open Library: openlibrary.org
-- Random users: randomuser.me, Images: picsum.photos
-
-Prefer these before using the proxy. No key = no cost = no setup.`,
-        };
-
-        const selected = feature === "all" || !feature
-          ? Object.values(sections).join("\n\n")
-          : sections[feature] ?? `Unknown feature: ${feature}`;
-
-        return { content: [{ type: "text" as const, text: `# @freeappstore/sdk Reference\n\n${selected}` }] };
-      }
+      "Reference for @freeappstore/sdk. Start with feature \"shell\": every app wraps itself in <Shell> with a nav item per screen (topbar, <nav aria-label=\"Main\">, error boundary, toasts). \"components\" lists every UI component with its props. Also auth, KV, counters, collections, rooms, proxy, keys, hooks and free APIs.",
+      { feature: z.enum(["all", ...SDK_REFERENCE_FEATURES]).optional().describe("Specific feature to look up (start with 'shell', then 'components'), or 'all' for the full reference") },
+      async ({ feature }) => txt(getSdkReference(feature)),
     );
 
     // ── create_app (provision + scaffold + go live) ────────────
     this.server.tool(
       "create_app",
-      "Create AND publish a brand-new app on FreeAppStore, end to end. Provisions the GitHub repo + R2 hosting + store listing (same as `fas publish`), scaffolds the chosen template, and pushes it so the app deploys live at <app_id>.freeappstore.online (~1-2 min). Then use read_file/update_files to build it out. Requires authentication. Set dry_run=true to validate without creating.",
+      "Create AND publish a brand-new app on FreeAppStore, end to end. Provisions the GitHub repo + R2 hosting + store listing (same as `fas publish`), scaffolds the chosen template, and pushes it so the app deploys live at <app_id>.freeappstore.online (~1-2 min). Then use read_file/update_files to build it out on the SDK Shell with a nav item per screen (see sdk_reference 'shell'). Requires authentication. Set dry_run=true to validate without creating.",
       {
         app_id: z.string().describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
         category: z.string().describe("Learning, Strategy, Discovery, Brain Training, Social, Productivity, Health & Fitness, Finance, News & Weather, Utilities, or Other"),
@@ -416,7 +283,8 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
             `- Provision: GitHub repo \`${this.env.GITHUB_ORG}/${app_id}\` + R2 hosting + store listing\n` +
             `- Scaffold: \`template-${kind}\` with APPNAME→${app_id} substitution\n` +
             `- Deploy: push to main → GitHub Actions → live at https://${app_id}.freeappstore.online\n` +
-            `- Category: ${category}\n- Oneliner: ${oneliner}\n\nNo changes made. Remove dry_run to execute.`,
+            `- Build: wrap web/src/App.tsx in <Shell app={fas} nav={NAV}> with a nav item per screen, then write the screens\n` +
+            `- Category: ${category}\n- Oneliner: ${oneliner}\n\nNo changes made. Remove dry_run to execute.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         }
         // 1. Provision via the same backend endpoint `fas publish` uses.
@@ -435,7 +303,7 @@ Prefer these before using the proxy. No key = no cost = no setup.`,
             `Live in ~1-2 min: https://${app_id}.freeappstore.online\n` +
             `Repo: https://github.com/${this.env.GITHUB_ORG}/${app_id}\n` +
             `Listing: https://freeappstore.online/apps/${app_id}\n\n` +
-            `Scaffolded ${files.size} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.`,
+            `Scaffolded ${files.size} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         } catch (e) {
           return txt(`Provisioned the repo + hosting, but the scaffold push failed: ${String(e)}\nThe app exists — retry by pushing files with update_files.`);
