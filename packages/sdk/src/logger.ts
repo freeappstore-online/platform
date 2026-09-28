@@ -146,6 +146,18 @@ export class Logger {
     );
   }
 
+  /** @internal Log a render error caught by Shell's error boundary. */
+  _renderError(
+    message: string,
+    data: {
+      stack?: string | undefined;
+      componentStack?: string | undefined;
+      path?: string | undefined;
+    },
+  ) {
+    this.add('error', 'react.error-boundary', message, data);
+  }
+
   // ── Private ───────────────────────────────────────────────────
 
   private add(level: LogLevel, category: string, message: string, data?: unknown) {

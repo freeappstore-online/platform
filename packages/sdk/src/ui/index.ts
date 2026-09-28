@@ -45,5 +45,14 @@ export type {
 export { ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';
 export type { NavBarProps, NavItem } from './navbar.js';
 export { activeHref, NavBar, useCurrentPath } from './navbar.js';
+export type { PageHeaderProps } from './page.js';
+export { PageHeader, useDocumentTitle } from './page.js';
+export type {
+  ShellErrorContext,
+  ToastApi,
+  ToastOptions,
+  ToastVariant,
+} from './shell-resilience.js';
+export { OfflineBanner, useOnline, useToast } from './shell-resilience.js';
 export type { VoiceButtonProps, VoiceTextAreaProps } from './voice.js';
 export { VoiceButton, VoiceTextArea } from './voice.js';

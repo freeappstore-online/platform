@@ -15,6 +15,11 @@ export interface NavItem {
   href: string;
   /** Optional icon, rendered before the label (mark it `aria-hidden`). */
   icon?: ReactNode;
+  /**
+   * Tab title while this item's route is current. Shell applies it; a screen's
+   * own `useDocumentTitle` overrides it.
+   */
+  title?: string;
 }
 
 export interface NavBarProps {

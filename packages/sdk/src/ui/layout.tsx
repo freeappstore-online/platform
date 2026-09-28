@@ -1,10 +1,28 @@
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  Suspense,
+  useEffect,
+  useInsertionEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
-import { ErrorBoundary, Footer, Modal } from './components.js';
+import { Footer, Modal, Spinner } from './components.js';
 import { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
-import { NavBar, type NavItem, useCurrentPath } from './navbar.js';
+import { activeHref, NavBar, type NavItem, useCurrentPath } from './navbar.js';
+import {
+  OfflineBanner,
+  SHELL_CSS,
+  ShellErrorBoundary,
+  type ShellErrorContext,
+  SkipLink,
+  ToastProvider,
+  useRouteChangeEffects,
+} from './shell-resilience.js';
 
 // ---------------------------------------------------------------------------
 // ProfileMenu
@@ -473,6 +491,13 @@ export interface ShellProps {
    * Without it, nav items are ordinary links (full page load).
    */
   onNavigate?: (href: string) => void;
+  /**
+   * Replace the fallback shown when a screen throws while rendering. The error
+   * is already recorded via `app.log`; call `reset` to retry.
+   */
+  renderError?: (ctx: ShellErrorContext) => ReactNode;
+  /** Replace the spinner shown while a lazy-loaded screen loads. */
+  renderLoading?: () => ReactNode;
   requireAuth?: boolean;
   showThemeToggle?: boolean;
 }
@@ -481,7 +506,12 @@ function normalizeShellAppName(appName?: string) {
   return appName === 'AppStore' ? 'FreeAppStore' : appName;
 }
 
-/** Full wrapper: sticky topbar with main navigation, main content, footer. Optional auth gate. */
+/**
+ * Full wrapper: skip link, sticky topbar with main navigation, offline banner,
+ * main content (error boundary + Suspense), toast region, footer. Optional auth
+ * gate. On client-side navigation (`onNavigate`) it scrolls to the top (or back
+ * to where the route was left) and moves focus to the new screen's heading.
+ */
 export function Shell({
   app,
   children,
@@ -489,12 +519,33 @@ export function Shell({
   nav,
   renderNav,
   onNavigate,
+  renderError,
+  renderLoading,
   requireAuth = false,
   showThemeToggle = true,
 }: ShellProps) {
   const { user, loading } = useAuth(app);
   const [currentPath, setCurrentPath] = useCurrentPath();
+  const mainRef = useRef<HTMLElement>(null);
+  const beforeNavigate = useRouteChangeEffects(currentPath, mainRef, onNavigate !== undefined);
   const displayAppName = normalizeShellAppName(appName);
+
+  useInsertionEffect(() => {
+    if (document.getElementById('fas-shell-css')) return;
+    const style = document.createElement('style');
+    style.id = 'fas-shell-css';
+    style.textContent = SHELL_CSS;
+    document.head.appendChild(style);
+  }, []);
+
+  // A nav item's `title` becomes the tab title on its route. A layout effect
+  // runs before every passive effect, so a screen's own useDocumentTitle wins.
+  const navItems = nav ?? [];
+  const navTitle = navItems.find((item) => item.href === activeHref(navItems, currentPath))?.title;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply on every route change, even when two routes share a title.
+  useLayoutEffect(() => {
+    if (navTitle) document.title = navTitle;
+  }, [navTitle, currentPath]);
 
   if (loading) {
     return (
@@ -547,9 +598,9 @@ export function Shell({
 
   // Client-side navigation goes through the shell so it knows the route changed.
   // Without onNavigate, items are plain links.
-  const navItems = nav ?? [];
   const navigate = onNavigate
     ? (href: string) => {
+        beforeNavigate();
         onNavigate(href);
         setCurrentPath(href);
       }
@@ -567,54 +618,74 @@ export function Shell({
       <NavBar items={navItems} />
     );
 
-  return (
-    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '0.5rem 1rem',
-          borderBottom: '1px solid var(--line)',
-          background: 'var(--panel)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <a
-            href="https://freeappstore.online"
-            style={{
-              fontWeight: 800,
-              fontSize: '1rem',
-              color: 'var(--accent)',
-              textDecoration: 'none',
-            }}
-          >
-            Free
-          </a>
-          {displayAppName && displayAppName !== 'FreeAppStore' && (
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--muted)' }}>
-              {displayAppName}
-            </span>
-          )}
-        </div>
-        {navNode}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <TextSizeToggle />
-          {showThemeToggle && !user && <ThemeToggle />}
-          {user ? (
-            <ProfileMenu app={app} showThemeToggle={showThemeToggle} />
-          ) : (
-            <SignInButton app={app} label="Sign in" />
-          )}
-        </div>
-      </header>
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <ErrorBoundary>{children}</ErrorBoundary>
-      </main>
-      <Footer />
+  const loadingNode = renderLoading ? (
+    renderLoading()
+  ) : (
+    <div className="fas-shell-loading">
+      <Spinner size={28} />
     </div>
+  );
+
+  return (
+    <ToastProvider>
+      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+        <SkipLink mainRef={mainRef} />
+        <header
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.5rem 1rem',
+            borderBottom: '1px solid var(--line)',
+            background: 'var(--panel)',
+            position: 'sticky',
+            top: 0,
+            zIndex: 50,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <a
+              href="https://freeappstore.online"
+              style={{
+                fontWeight: 800,
+                fontSize: '1rem',
+                color: 'var(--accent)',
+                textDecoration: 'none',
+              }}
+            >
+              Free
+            </a>
+            {displayAppName && displayAppName !== 'FreeAppStore' && (
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--muted)' }}>
+                {displayAppName}
+              </span>
+            )}
+          </div>
+          {navNode}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <TextSizeToggle />
+            {showThemeToggle && !user && <ThemeToggle />}
+            {user ? (
+              <ProfileMenu app={app} showThemeToggle={showThemeToggle} />
+            ) : (
+              <SignInButton app={app} label="Sign in" />
+            )}
+          </div>
+        </header>
+        <OfflineBanner />
+        <main
+          id="main"
+          ref={mainRef}
+          tabIndex={-1}
+          className="fas-main"
+          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+        >
+          <ShellErrorBoundary app={app} renderError={renderError} resetKey={currentPath}>
+            <Suspense fallback={loadingNode}>{children}</Suspense>
+          </ShellErrorBoundary>
+        </main>
+        <Footer />
+      </div>
+    </ToastProvider>
   );
 }

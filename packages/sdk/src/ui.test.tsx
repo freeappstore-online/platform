@@ -16,6 +16,12 @@ vi.mock('react', () => {
     useCallback: (fn: unknown) => fn,
     useRef: () => ({ current: null }),
     useSyncExternalStore: (_sub: unknown, getSnapshot: () => unknown) => getSnapshot(),
+    useMemo: (fn: () => unknown) => fn(),
+    useContext: vi.fn(),
+    useInsertionEffect: vi.fn(),
+    useLayoutEffect: vi.fn(),
+    createContext: () => ({ Provider: 'Provider' }),
+    Suspense: 'Suspense',
     Component: MockComponent,
   };
 });
