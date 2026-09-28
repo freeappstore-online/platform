@@ -4,6 +4,7 @@ import type { FreeAppStore } from '../index.js';
 import { ErrorBoundary, Footer, Modal } from './components.js';
 import { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
+import { NavBar, type NavItem, useCurrentPath } from './navbar.js';
 
 // ---------------------------------------------------------------------------
 // ProfileMenu
@@ -443,10 +444,35 @@ const profileBtnStyle: CSSProperties = {
 // Shell (also exported as FasShell for backwards compatibility)
 // ---------------------------------------------------------------------------
 
+export interface ShellNavContext {
+  items: NavItem[];
+  /** The path the shell considers current (`location.pathname`, following back/forward). */
+  currentPath: string;
+  /** Navigate to `href`: the shell's `onNavigate`, else a full page load. */
+  onNavigate: (href: string) => void;
+}
+
 export interface ShellProps {
   app: FreeAppStore;
   children: ReactNode;
   appName?: string;
+  /**
+   * The app's screens — the standard way to give an app navigation. Shell
+   * renders them as a `<nav aria-label="Main">` in its topbar, marks the current
+   * route, and collapses to a menu button on small screens.
+   *
+   * ```tsx
+   * <Shell app={fas} appName="Notes" nav={[{ label: 'Notes', href: '/' }, { label: 'Tags', href: '/tags' }]}>
+   * ```
+   */
+  nav?: NavItem[];
+  /** Replace the built-in NavBar (still placed in the topbar) with your own. */
+  renderNav?: (ctx: ShellNavContext) => ReactNode;
+  /**
+   * Client-side navigation for nav clicks (e.g. your router's `navigate`).
+   * Without it, nav items are ordinary links (full page load).
+   */
+  onNavigate?: (href: string) => void;
   requireAuth?: boolean;
   showThemeToggle?: boolean;
 }
@@ -455,15 +481,19 @@ function normalizeShellAppName(appName?: string) {
   return appName === 'AppStore' ? 'FreeAppStore' : appName;
 }
 
-/** Full wrapper: sticky topbar, main content, footer. Optional auth gate. */
+/** Full wrapper: sticky topbar with main navigation, main content, footer. Optional auth gate. */
 export function Shell({
   app,
   children,
   appName,
+  nav,
+  renderNav,
+  onNavigate,
   requireAuth = false,
   showThemeToggle = true,
 }: ShellProps) {
   const { user, loading } = useAuth(app);
+  const [currentPath, setCurrentPath] = useCurrentPath();
   const displayAppName = normalizeShellAppName(appName);
 
   if (loading) {
@@ -515,6 +545,28 @@ export function Shell({
     );
   }
 
+  // Client-side navigation goes through the shell so it knows the route changed.
+  // Without onNavigate, items are plain links.
+  const navItems = nav ?? [];
+  const navigate = onNavigate
+    ? (href: string) => {
+        onNavigate(href);
+        setCurrentPath(href);
+      }
+    : undefined;
+  const navNode =
+    navItems.length === 0 ? null : renderNav ? (
+      renderNav({
+        items: navItems,
+        currentPath,
+        onNavigate: navigate ?? ((href) => window.location.assign(href)),
+      })
+    ) : navigate ? (
+      <NavBar items={navItems} currentPath={currentPath} onNavigate={navigate} />
+    ) : (
+      <NavBar items={navItems} />
+    );
+
   return (
     <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
       <header
@@ -548,6 +600,7 @@ export function Shell({
             </span>
           )}
         </div>
+        {navNode}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <TextSizeToggle />
           {showThemeToggle && !user && <ThemeToggle />}

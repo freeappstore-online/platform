@@ -38,9 +38,12 @@ export { AddFriendButton, FriendRequestBadge, FriendsList } from './friends.js';
 export type {
   ProfileMenuProps,
   ProfilePageProps,
+  ShellNavContext,
   ShellProps,
   ShellProps as FasShellProps,
 } from './layout.js';
 export { ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';
+export type { NavBarProps, NavItem } from './navbar.js';
+export { activeHref, NavBar, useCurrentPath } from './navbar.js';
 export type { VoiceButtonProps, VoiceTextAreaProps } from './voice.js';
 export { VoiceButton, VoiceTextArea } from './voice.js';
