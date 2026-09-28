@@ -175,19 +175,40 @@ function App() {
 }
 ```
 
+### App shell
+
+Every app wraps itself in `Shell` from `@freeappstore/sdk/ui`: the topbar (FreeAppStore link, app name, text size, theme, sign-in / profile menu), the app's main navigation from `nav`, and an error boundary, loading fallback, toast region, offline banner and skip link around your screens. There is no paid tier, so the only gate is the optional sign-in gate (`requireAuth`).
+
+```tsx
+import { type NavItem, PageHeader, Shell, useToast } from '@freeappstore/sdk/ui';
+
+const NAV: NavItem[] = [
+  { label: 'Notes', href: '/', title: 'Notes' },
+  { label: 'Tags', href: '/tags', title: 'Tags — Notes' },
+];
+
+<Shell app={fas} appName="Notes" nav={NAV} onNavigate={navigate}>
+  <Screen />
+</Shell>
+
+// In a screen: its single h1, and feedback through the shell
+<PageHeader title="Tags" />
+const toast = useToast(); toast.show('Saved', { variant: 'success' });
+```
+
+`onNavigate` makes nav clicks client-side (scroll and focus are handled on route changes); without it the items are ordinary links. `FasShell` is the same component under its older name. Full reference: [docs/ui.md](../../docs/ui.md#shell-the-standard-app-frame).
+
 ### UI Components
 
 Drop-in React components. Import from `@freeappstore/sdk/ui`. Components use CSS custom properties (`--ink`, `--accent`, etc.) to blend into your app's theme.
 
 ```tsx
 import {
-  FasShell, Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage,
+  Shell, PageHeader, NavBar, useToast, useDocumentTitle, useOnline,
+  Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage,
   Spinner, Badge, Card, Tabs, Modal, ConfirmDialog, EmptyState,
   ProgressBar, SearchInput, ListRow, ErrorBoundary, KeyPrompt,
 } from '@freeappstore/sdk/ui';
-
-// Zero-config shell
-<FasShell app={fas} appName="My App"><MyApp /></FasShell>
 
 // Building blocks
 <Spinner size={24} />

@@ -26,6 +26,12 @@ pnpm install && pnpm dev
 
 Your app runs at `http://localhost:5173`. Edit `web/src/App.tsx` to build your app.
 
+`App.tsx` already wraps the app in `Shell` from `@freeappstore/sdk/ui`, the standard
+frame every FreeAppStore app uses: topbar, sign-in and profile menu, theme and text
+size, and an error boundary, toasts and offline banner around your screens. List your
+screens in its `nav` prop and it renders the app's navigation. Don't build your own
+header or navbar. See [the Shell](ui.md#shell-the-standard-app-frame).
+
 ## Templates
 
 ```bash
@@ -87,7 +93,7 @@ See the full [SDK Reference](sdk.md).
 
 ## Using VibeCode (AI builder)
 
-Don't want to code? Go to [freeappstore.online/app/build](https://freeappstore.online/app/build), describe your app in plain English, and the AI builds and deploys it for you.
+Don't want to code? Go to [freeappstore.online/app/build](https://freeappstore.online/app/build), describe your app in plain English, and the AI builds and deploys it for you. VibeCode apps start inside the same `Shell`, with working navigation from the first render.
 
 ## Next steps
 

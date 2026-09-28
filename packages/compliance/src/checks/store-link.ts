@@ -14,7 +14,13 @@ import type { CheckResult } from '../types.js';
  * The link can be in JSX (`<a href="https://freeappstore.online">`),
  * a string constant, or even a footer comment — we don't enforce a
  * specific component, just that the link exists somewhere visible.
+ * An app wrapped in the SDK's `Shell` passes too: its topbar links to
+ * freeappstore.online.
  */
+// `<Shell>` / `<FasShell>` rendered from @freeappstore/sdk/ui (not a local component).
+const SDK_SHELL_RE =
+  /from\s*['"]@freeappstore\/sdk\/ui['"][\s\S]*<(?:Fas)?Shell\b|<(?:Fas)?Shell\b[\s\S]*from\s*['"]@freeappstore\/sdk\/ui['"]/;
+
 export async function checkStoreLink(source: FileSource): Promise<CheckResult> {
   const isGame = await isGameProject(source);
   const domain = isGame ? 'freegamestore.online' : 'freeappstore.online';
@@ -24,6 +30,13 @@ export async function checkStoreLink(source: FileSource): Promise<CheckResult> {
     const content = await source.read(path);
     if (content?.includes(domain)) {
       return { name: 'Store link', status: 'pass', detail: `${domain} referenced in ${path}` };
+    }
+    if (!isGame && content && SDK_SHELL_RE.test(content)) {
+      return {
+        name: 'Store link',
+        status: 'pass',
+        detail: `${path} renders the SDK Shell, whose topbar links to ${domain}`,
+      };
     }
   }
   return {

@@ -39,7 +39,7 @@ const SHARED_FILES: Record<string, string> = {
   "dependencies": {
     "react": "^19",
     "react-dom": "^19",
-    "@freeappstore/sdk": "^0.14.25"
+    "@freeappstore/sdk": "^0.14.30"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1",
@@ -169,81 +169,90 @@ const APP_FILES: Record<string, string> = {
   --warning: #d97706;
   --danger: #dc2626;
   --accent: #2563eb;
+  --font-display: "Fraunces", Georgia, serif;
   font-family: "Manrope", system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #0f0f0f;
-    --ink: #f5f5f5;
-    --muted: #9ca3af;
-    --line: #2d2d2d;
-    --line-strong: #404040;
-    --panel: #1a1a1a;
-    --success: #22c55e;
-    --warning: #fbbf24;
-    --danger: #ef4444;
-  }
+/* Dark mode: the SDK sets data-theme="dark" on <html> when the system is dark
+   or the user picks dark in the Shell's theme toggle. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0f0f0f;
+  --ink: #f5f5f5;
+  --muted: #9ca3af;
+  --line: #2d2d2d;
+  --line-strong: #404040;
+  --panel: #1a1a1a;
+  --success: #22c55e;
+  --warning: #fbbf24;
+  --danger: #ef4444;
 }
 
 body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-}`,
-
-  "web/src/components/Shell.tsx": `import type { ReactNode } from "react";
-
-interface ShellProps {
-  children: ReactNode;
 }
 
-export function Shell({ children }: ShellProps) {
-  return (
-    <>
-      <div className="hidden md:flex h-screen">
-        <aside
-          className="flex flex-col border-r h-full shrink-0"
-          style={{ width: "17rem", borderColor: "var(--line)", background: "var(--panel)" }}
-        >
-          <div className="p-6 font-bold text-lg" style={{ fontFamily: "Fraunces, serif" }}>
-            APPNAME
-          </div>
-          <nav className="flex-1 px-4" />
-          <div className="p-4 text-xs" style={{ color: "var(--muted)" }}>
-            <a href="https://freeappstore.online" target="_blank" rel="noopener noreferrer"
-              className="hover:underline" style={{ color: "var(--muted)" }}>
-              Part of FreeAppStore — free forever
-            </a>
-          </div>
-        </aside>
-        <main className="flex-1 overflow-auto p-8">{children}</main>
-      </div>
-      <div className="flex flex-col h-screen md:hidden">
-        <header className="flex items-center px-4 h-14 border-b shrink-0"
-          style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
-          <span className="font-bold" style={{ fontFamily: "Fraunces, serif" }}>APPNAME</span>
-        </header>
-        <main className="flex-1 overflow-auto p-4">{children}</main>
-        <nav className="flex items-center justify-around h-16 border-t shrink-0"
-          style={{ borderColor: "var(--line)", background: "var(--panel)" }} />
-      </div>
-    </>
-  );
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
 }`,
 
-  "web/src/App.tsx": `import { Shell } from "./components/Shell";
+  "web/src/App.tsx": `import { useEffect, useState } from "react";
+import { initApp } from "@freeappstore/sdk";
+import { type NavItem, PageHeader, Shell } from "@freeappstore/sdk/ui";
+
+// "APPID" is replaced with this app's id when it deploys.
+const fas = initApp({ appId: "APPID" });
+
+// The app's screens. Shell renders them as the navbar: a <nav> in its topbar
+// with the current screen highlighted, collapsing to a menu on phones.
+// Add one entry per screen; \`title\` becomes the browser tab title.
+const NAV: NavItem[] = [
+  { label: "Home", href: "/", title: "APPNAME" },
+  { label: "About", href: "/about", title: "About — APPNAME" },
+];
 
 export default function App() {
+  const [path, setPath] = useState(() => window.location.pathname);
+
+  // Keep the screen in step with the browser's back and forward buttons.
+  useEffect(() => {
+    const sync = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  // Nav clicks switch screens without a page load. Shell scrolls to the top
+  // and moves focus to the new screen's PageHeader.
+  const navigate = (href: string) => {
+    window.history.pushState(null, "", href);
+    setPath(href);
+  };
+
   return (
-    <Shell>
-      <h1 className="text-3xl font-bold mb-4" style={{ fontFamily: "Fraunces, serif" }}>
-        Welcome to APPNAME
-      </h1>
-      <p style={{ color: "var(--muted)" }}>
-        Edit <code>src/App.tsx</code> to get started.
-      </p>
+    <Shell app={fas} appName="APPNAME" nav={NAV} onNavigate={navigate}>
+      <div className="mx-auto w-full max-w-3xl p-4 sm:p-8">
+        {path === "/about" ? <About /> : <Home />}
+      </div>
     </Shell>
+  );
+}
+
+function Home() {
+  return <PageHeader title="Welcome to APPNAME" description="Edit web/src/App.tsx to get started." />;
+}
+
+function About() {
+  return (
+    <>
+      <PageHeader title="About" />
+      <p style={{ color: "var(--muted)" }}>
+        APPNAME is a free app on <a href="https://freeappstore.online">FreeAppStore</a>.
+      </p>
+    </>
   );
 }`,
 
@@ -779,18 +788,33 @@ const APP_SYSTEM_PROMPT = `You are the FreeAppStore AI agent. You build free, hi
 Users describe an app idea and you build it. You write TypeScript + React code, following the FreeAppStore brand and conventions exactly.
 
 ## Tech Stack (mandatory)
-- TypeScript, React 19, Vite 6, Tailwind CSS 4.1
+- TypeScript, React 19, Vite 6, Tailwind CSS 4.1, @freeappstore/sdk
 - All data in localStorage (no backend, no server, no database)
 - Must work offline after first load (PWA)
 
+## The app shell (mandatory)
+web/src/App.tsx already wraps the app in the platform's standard frame, \`<Shell>\` from
+"@freeappstore/sdk/ui". Keep it as the root and build every screen inside it. Shell provides:
+- The topbar: FreeAppStore link, app name, text size, theme toggle, sign-in / profile menu.
+- The main navigation from the \`nav\` prop: a <nav aria-label="Main"> with the current screen
+  highlighted, collapsing to a menu on phones. Declare every screen in \`NAV\` (label + href, and
+  a \`title\` for the browser tab); switch screens on \`path\` in App. Never build your own header,
+  sidebar, tab bar or bottom dock, and don't put navigation inside a screen.
+- An error boundary (a crashing screen shows "Try again", not a white page), a loading spinner
+  for React.lazy screens, an offline banner, and a skip link. Don't add your own.
+- Feedback: \`const toast = useToast(); toast.show("Saved", { variant: "success" })\`.
+Start each screen with \`<PageHeader title="…" />\` (its one h1, and the focus target after
+navigation). \`useDocumentTitle("…")\` sets a screen's tab title when the nav title isn't enough.
+All of these import from "@freeappstore/sdk/ui". FreeAppStore is free: there is no paid tier,
+subscription or upgrade screen. Only pass \`requireAuth\` to Shell if the whole app needs sign-in.
+
 ## Brand Rules (mandatory)
-- Fonts: Manrope (body) + Fraunces (display/headings only)
+- Fonts: Manrope (body) + Fraunces (headings; index.css already applies it to h1-h3)
 - CSS variables: --paper, --ink, --muted, --line, --panel, --accent, etc. (defined in index.css)
-- Dark mode via prefers-color-scheme (already set up, just use the CSS variables)
-- Desktop: sidebar (17rem) + main content. Mobile: header + content + bottom dock.
-- Use the Shell component for layout. Build your app inside <Shell>.
+- Dark mode via :root[data-theme="dark"] in index.css (the SDK sets it from the system or the
+  Shell's theme toggle); just use the CSS variables
 - Border radius: 1.25rem for cards, 0.75rem for buttons
-- Link to freeappstore.online in sidebar (already in Shell)
+- The freeappstore.online link is in the Shell topbar (already included)
 
 ## Privacy Rules (mandatory)
 - ZERO analytics, tracking, cookies, or third-party scripts (except Google Fonts which is in the template)
@@ -803,12 +827,12 @@ Users describe an app idea and you build it. You write TypeScript + React code, 
    package.json, pnpm-workspace.yaml, .gitignore, LICENSE,
    web/package.json, web/tsconfig.json, web/tsconfig.app.json, web/tsconfig.node.json,
    web/vite.config.ts, web/index.html, web/public/manifest.json,
-   web/src/main.tsx, web/src/index.css, web/src/components/Shell.tsx,
+   web/src/main.tsx, web/src/index.css,
    .github/workflows/deploy.yml
 2. You ONLY need to write: web/src/App.tsx (your main component) and any additional components in web/src/components/.
-3. Do NOT write package.json, vite.config.ts, tsconfig files, index.css, main.tsx, or Shell.tsx — they are already correct.
-4. Keep the Shell component as the root layout. Build your app's UI inside it.
-5. Add navigation items to the Shell sidebar/dock as needed.
+3. Do NOT write package.json, vite.config.ts, tsconfig files, index.css, or main.tsx — they are already correct.
+4. Keep <Shell> from "@freeappstore/sdk/ui" as the root in App.tsx. Build your app's screens inside it.
+5. Add one NAV entry per screen (see "The app shell"); the navbar comes from Shell.
 6. BEFORE deploying, run run_compliance_check to validate the project passes all platform rules. Fix any failures.
 7. After compliance passes, IMMEDIATELY deploy — do NOT ask "ready to deploy?". Just call the deploy tool right away. Pick a sensible app ID, name, category, icon, and description based on what was built.
 8. Never wait for user confirmation to deploy. Build -> compliance -> deploy. That's the flow.
@@ -824,7 +848,7 @@ Users describe an app idea and you build it. You write TypeScript + React code, 
 - Store user data in localStorage with a namespaced key (e.g. "appname_data")
 - Handle empty states gracefully
 - Make it responsive (mobile-first)
-- Keep bundle size small — no unnecessary dependencies (the template has React + Tailwind only)
+- Keep bundle size small — no unnecessary dependencies (the template has React + Tailwind + @freeappstore/sdk only)
 
 ## Voice Input
 User messages may come from voice dictation and contain transcription errors, partial sentences,
@@ -842,9 +866,8 @@ or garbled phrasing. If you're unsure what they meant, ask for clarification.
 The app has no backend, but it CAN call third-party APIs through the platform's secret-injecting
 proxy. The developer's API key is configured once in the platform and injected server-side — the
 **end user never enters a key**. Build it like this:
-1. Add "@freeappstore/sdk" to web/package.json dependencies (this is the ONLY extra dependency
-   allowed). Then: \`import { initApp } from "@freeappstore/sdk"\` and
-   \`const fas = initApp({ appId: "APPID" });\` — write the literal string "APPID"; it is replaced
+1. "@freeappstore/sdk" is already a dependency and App.tsx already has
+   \`const fas = initApp({ appId: "APPID" });\` — keep the literal string "APPID"; it is replaced
    with this app's real id at deploy. Do NOT guess the id (the SDK appId MUST equal the deployed id
    or the proxy will 404).
 2. Call the API via the proxy — first path segment is the host, the rest is path+query:
@@ -862,7 +885,7 @@ proxy. The developer's API key is configured once in the platform and injected s
 localStorage is per-device and is wiped when the user clears their browser. When the user wants their
 data to PERSIST and FOLLOW THEM across devices ("save my X", "sync", "log in", "don't lose my data"),
 use the platform's free per-user cloud store instead:
-1. Add "@freeappstore/sdk" (same as APIs above) and \`const fas = initApp({ appId: "APPID" });\`.
+1. Use the \`fas\` instance App.tsx already creates with \`initApp({ appId: "APPID" })\`.
 2. Storage is per signed-in user — gate it behind sign-in (\`useAuth\` from "@freeappstore/sdk/hooks",
    \`fas.auth.signIn()\`). One tap, no key.
 3. Read/write JSON values:
@@ -885,8 +908,8 @@ These files are managed by the platform and write_file will reject changes to th
 Do NOT attempt to edit these. Build your app entirely in web/src/ (App.tsx + components/).
 
 ## Important
-- The ONLY npm dependency you may add is "@freeappstore/sdk" (for the API proxy / sign-in above).
-  Otherwise build everything with React + Tailwind — no other dependencies.
+- Do not add npm dependencies. The template already has React, Tailwind and "@freeappstore/sdk"
+  (the Shell, UI components, sign-in, cloud storage and the API proxy).
 - Do NOT add analytics, tracking, or any third-party scripts.
 - Do NOT build your own backend/server. For external data, use the platform proxy (above), not a
   custom backend.

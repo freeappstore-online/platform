@@ -205,6 +205,12 @@ await fas.log.flush();   // send to server
 fas.log.clear();
 ```
 
+## App shell
+
+The standard app frame, `Shell`, and the screen helpers (`PageHeader`, `useToast`,
+`useDocumentTitle`, `useOnline`) live in `@freeappstore/sdk/ui`. See
+[UI Components: Shell](ui.md#shell-the-standard-app-frame).
+
 ## React hooks
 
 Import from `@freeappstore/sdk/hooks`. Requires React 18+.

@@ -70,4 +70,29 @@ describe("runComplianceCheck", () => {
     const output = runComplianceCheck(makeFiles({ "web/src/App.tsx": "const name = 'APPNAME'" }), appsConfig);
     expect(output).toContain("FAIL: APPNAME placeholders");
   });
+
+  describe("store link and the SDK Shell (#90)", () => {
+    const shellApp = 'import { Shell } from "@freeappstore/sdk/ui";\nexport default () => <Shell app={fas} nav={NAV}>hi</Shell>';
+
+    it("an app wrapped in the SDK Shell passes: the Shell topbar links to the store", () => {
+      const output = runComplianceCheck(makeFiles({ "web/src/App.tsx": shellApp }), appsConfig);
+      expect(output).toContain("PASS: FreeAppStore link (SDK Shell topbar)");
+      expect(output).not.toContain("FAIL");
+    });
+
+    it("the FasShell alias counts too", () => {
+      const app = 'import { FasShell } from "@freeappstore/sdk/ui";\nexport default () => <FasShell app={fas}>hi</FasShell>';
+      expect(runComplianceCheck(makeFiles({ "web/src/App.tsx": app }), appsConfig)).not.toContain("FAIL");
+    });
+
+    it("importing the SDK UI without rendering Shell still needs a link", () => {
+      const app = 'import { Card } from "@freeappstore/sdk/ui";\nexport default () => <Card>hi</Card>';
+      expect(runComplianceCheck(makeFiles({ "web/src/App.tsx": app }), appsConfig)).toContain("FAIL: FreeAppStore link");
+    });
+
+    it("a local component named Shell does not count", () => {
+      const app = 'import { Shell } from "./components/Shell";\nexport default () => <Shell>hi</Shell>';
+      expect(runComplianceCheck(makeFiles({ "web/src/App.tsx": app }), appsConfig)).toContain("FAIL: FreeAppStore link");
+    });
+  });
 });

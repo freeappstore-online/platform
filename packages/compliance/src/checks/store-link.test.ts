@@ -37,4 +37,27 @@ describe('checkStoreLink', () => {
     const r = await checkStoreLink(mapFileSource(files));
     expect(r.status).toBe('warn');
   });
+
+  it('passes for an app wrapped in the SDK Shell, whose topbar links to the store (#90)', async () => {
+    const files = new Map([
+      [
+        'web/src/App.tsx',
+        "import { Shell } from '@freeappstore/sdk/ui';\nexport default () => <Shell app={fas}>hi</Shell>;",
+      ],
+    ]);
+    const r = await checkStoreLink(mapFileSource(files));
+    expect(r.status).toBe('pass');
+    expect(r.detail).toMatch(/SDK Shell/);
+  });
+
+  it('still warns for a local component named Shell', async () => {
+    const files = new Map([
+      [
+        'web/src/App.tsx',
+        "import { Shell } from './components/Shell';\nexport default () => <Shell>hi</Shell>;",
+      ],
+    ]);
+    const r = await checkStoreLink(mapFileSource(files));
+    expect(r.status).toBe('warn');
+  });
 });

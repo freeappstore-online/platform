@@ -253,7 +253,7 @@ describe("locked infrastructure files", () => {
 });
 
 describe("run_compliance_check", () => {
-  it("apps template passes apps compliance (except APPNAME + Fraunces)", () => {
+  it("apps template passes apps compliance (except APPNAME, replaced at deploy)", () => {
     const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
     const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
     expect(result.content).toContain("PASS: MIT License");
@@ -262,11 +262,11 @@ describe("run_compliance_check", () => {
     expect(result.content).toContain("PASS: FreeAppStore link");
     expect(result.content).toContain("PASS: pnpm workspace");
     expect(result.content).toContain("PASS: PWA manifest");
-    // Fraunces is in index.html + component inline styles, not index.css — known gap
-    expect(result.content).toContain("FAIL: Brand fonts");
+    // index.css applies Fraunces to headings (#90)
+    expect(result.content).toContain("PASS: Brand fonts");
     // APPNAME placeholders remain until deploy time
     expect(result.content).toContain("FAIL: APPNAME placeholders");
-    expect(result.content).toContain("10 pass, 2 fail");
+    expect(result.content).toContain("11 pass, 1 fail");
   });
 
   it("games template passes games compliance (except APPNAME + Fraunces)", () => {

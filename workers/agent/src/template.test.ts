@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { runComplianceCheck } from "./compliance";
 import { getConfig } from "./config";
-import { getArchetypeFiles, getSystemPrompt, getTemplateFiles } from "./template";
+import { APP_ARCHETYPES, getArchetypeFiles, getSystemPrompt, getTemplateFiles, substituteAppName } from "./template";
 
 const appsConfig = getConfig("apps");
 const gamesConfig = getConfig("games");
@@ -9,8 +10,8 @@ describe("getTemplateFiles", () => {
   const appsFiles = getTemplateFiles(appsConfig);
   const gamesFiles = getTemplateFiles(gamesConfig);
 
-  it("apps template has Shell.tsx, not GameShell.tsx", () => {
-    expect(appsFiles).toHaveProperty("web/src/components/Shell.tsx");
+  it("apps template has no local shell component: it uses the SDK Shell (#90)", () => {
+    expect(appsFiles).not.toHaveProperty("web/src/components/Shell.tsx");
     expect(appsFiles).not.toHaveProperty("web/src/components/GameShell.tsx");
   });
 
@@ -30,8 +31,8 @@ describe("getTemplateFiles", () => {
     expect(gamesFiles["web/src/components/GameShell.tsx"]).not.toMatch(banned);
   });
 
-  it("apps template has light/dark theme", () => {
-    expect(appsFiles["web/src/index.css"]).toContain("prefers-color-scheme: dark");
+  it("apps template's dark theme follows the SDK's data-theme (system default + Shell toggle)", () => {
+    expect(appsFiles["web/src/index.css"]).toMatch(/:root\[data-theme="dark"\]\s*\{[^}]*color-scheme: dark/);
   });
 
   it("games template has overflow: hidden", () => {
@@ -56,8 +57,8 @@ describe("getTemplateFiles", () => {
     expect(gamesFiles["web/index.html"]).toContain("FreeGameStore");
   });
 
-  it("apps Shell links to freeappstore.online", () => {
-    expect(appsFiles["web/src/components/Shell.tsx"]).toContain("freeappstore.online");
+  it("apps starter links to freeappstore.online", () => {
+    expect(appsFiles["web/src/App.tsx"]).toContain("freeappstore.online");
   });
 
   it("games GameShell links to freegamestore.online", () => {
@@ -155,8 +156,13 @@ describe("getSystemPrompt", () => {
     expect(prompt).not.toContain("FreeAppStore");
   });
 
-  it("apps prompt references Shell component", () => {
-    expect(getSystemPrompt(appsConfig)).toContain("Shell");
+  it("apps prompt teaches the SDK Shell as the standard path (#90)", () => {
+    const prompt = getSystemPrompt(appsConfig);
+    for (const term of ["<Shell>", '"@freeappstore/sdk/ui"', "NAV", "PageHeader", "useToast", "useDocumentTitle", "no paid tier"]) {
+      expect(prompt).toContain(term);
+    }
+    expect(prompt).not.toContain("Shell.tsx");
+    expect(prompt).not.toMatch(/sidebar \(17rem\)|Shell sidebar|prefers-color-scheme/);
   });
 
   it("games prompt references GameShell component", () => {
@@ -182,6 +188,52 @@ describe("getSystemPrompt", () => {
     const prompt = getSystemPrompt(appsConfig);
     expect(prompt).toContain("localStorage");
     expect(prompt).toContain("Dark mode");
-    expect(prompt).toContain("sidebar");
+  });
+});
+
+describe("apps scaffold: the SDK Shell with real navigation from first render (#90)", () => {
+  const files = getTemplateFiles(appsConfig);
+  const app = files["web/src/App.tsx"]!;
+
+  it("App.tsx wraps the app in Shell from @freeappstore/sdk/ui, not a local component", () => {
+    expect(app).toMatch(/import \{[^}]*\bShell\b[^}]*\} from "@freeappstore\/sdk\/ui"/);
+    expect(app).toMatch(/const fas = initApp\(\{ appId: "APPID" \}\)/);
+    expect(app).toMatch(/<Shell app=\{fas\} appName="APPNAME" nav=\{NAV\} onNavigate=\{navigate\}>/);
+    expect(app).not.toMatch(/from "\.\/components\/Shell"/);
+  });
+
+  it("declares real nav items, each with a screen App renders", () => {
+    const hrefs = [...app.matchAll(/\{ label: "[^"]+", href: "([^"]+)", title: "[^"]+" \}/g)].map((m) => m[1]);
+    expect(hrefs).toEqual(["/", "/about"]);
+    expect(app).toContain('path === "/about" ? <About /> : <Home />');
+    // Client-side routing follows back/forward.
+    expect(app).toContain('addEventListener("popstate"');
+    expect(app).toContain("history.pushState");
+  });
+
+  it("each starter screen opens with PageHeader (its single h1)", () => {
+    expect(app.match(/<PageHeader /g)).toHaveLength(2);
+    expect(app).not.toMatch(/<h1\b/);
+  });
+
+  it("depends on an SDK with the navbar and resilience layer (>= 0.14.30)", () => {
+    const range = JSON.parse(files["web/package.json"]!).dependencies["@freeappstore/sdk"] as string;
+    const [major, minor, patch] = range.replace(/^\^/, "").split(".").map(Number);
+    expect(major).toBe(0);
+    expect(minor).toBe(14);
+    expect(patch).toBeGreaterThanOrEqual(30);
+  });
+
+  it("applies Fraunces to headings", () => {
+    expect(files["web/src/index.css"]).toMatch(/--font-display: "Fraunces"/);
+    expect(files["web/src/index.css"]).toMatch(/h1,\s*h2,\s*h3\s*\{\s*font-family: var\(--font-display\)/);
+  });
+
+  it("a freshly scaffolded app passes the agent's compliance check, for every archetype", () => {
+    for (const archetype of APP_ARCHETYPES) {
+      const scaffold = substituteAppName(getTemplateFiles(appsConfig, archetype), "my-app", "My App");
+      const output = runComplianceCheck(new Map(Object.entries(scaffold)), appsConfig);
+      expect(output, archetype).not.toContain("FAIL");
+    }
   });
 });

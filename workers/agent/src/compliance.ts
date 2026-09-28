@@ -87,10 +87,20 @@ function checkPwaMeta(files: Map<string, string>, pass: Pass, fail: Fail) {
   else fail("PWA meta tags", "Missing apple-mobile-web-app-capable or mobile-web-app-capable");
 }
 
+// The SDK's app shell renders the freeappstore.online link in its topbar, so an
+// app wrapped in it has the link without spelling it out (#90).
+const SDK_SHELL_RE =
+  /from\s*["']@freeappstore\/sdk\/ui["'][\s\S]*<(?:Fas)?Shell\b|<(?:Fas)?Shell\b[\s\S]*from\s*["']@freeappstore\/sdk\/ui["']/;
+
 function checkStoreLink(files: Map<string, string>, config: StoreConfig, pass: Pass, fail: Fail) {
   for (const [path, content] of files) {
-    if (path.startsWith("web/src/") && content.includes(config.domain)) {
+    if (!path.startsWith("web/src/")) continue;
+    if (content.includes(config.domain)) {
       pass(`${config.storeName} link in source`);
+      return;
+    }
+    if (config.store === "apps" && SDK_SHELL_RE.test(content)) {
+      pass(`${config.storeName} link (SDK Shell topbar)`);
       return;
     }
   }
