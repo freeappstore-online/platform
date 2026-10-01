@@ -42,9 +42,9 @@ Pro[App]Store     — accent purple (#7c3aed)
 | `--pro` | `#7c3aed` | `#a78bfa` | Pro references, upgrade links |
 | `--ink` | `#1a1a1a` | `#f0f0f0` | Body text |
 | `--muted` | `#6b6b6b` | `#999999` | Secondary text |
-| `--surface` | `#ffffff` | `#1a1a1a` | Card backgrounds |
-| `--bg` | `#fafaf9` | `#0f0f0f` | Page background |
-| `--border` | `#e5e5e5` | `#2a2a2a` | Borders, dividers |
+| `--panel` | `#ffffff` | `#1a1a1a` | Card backgrounds |
+| `--paper` | `#fafaf9` | `#0f0f0f` | Page background |
+| `--line` | `#e5e5e5` | `#2a2a2a` | Borders, dividers |
 
 ### App Colors (within individual apps)
 
@@ -69,11 +69,10 @@ Each app gets ONE accent color. All other UI chrome uses the shared neutral pale
 --line: #e8e5e0 / #2a2825        /* Borders */
 --line-strong: #d4d0ca / #3a3835 /* Strong borders */
 --panel: #f5f3f0 / #1e1d1b       /* Panel backgrounds */
---glass: rgba(255,253,251,0.7) / rgba(20,20,19,0.7) /* Frosted glass */
 
 --success: #22c55e / #4ade80
 --warning: #f59e0b / #fbbf24
---error: #ef4444 / #f87171
+--danger: #ef4444 / #f87171
 
 --shadow-soft: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03)
 --shadow-card: 0 2px 8px rgba(0,0,0,0.06), 0 8px 24px rgba(0,0,0,0.04)
@@ -180,7 +179,7 @@ xl: 1280px  /* Wide desktop */
 
 ### Cards
 
-- Background: `var(--surface)` or `var(--panel)`
+- Background: `var(--panel)`
 - Border: `1px solid var(--line)`
 - Border radius: `1.25rem`
 - Padding: `1.5rem`

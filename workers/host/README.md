@@ -40,7 +40,7 @@ Two surfaces consume credentials related to R2 hosting:
 | Where | Secrets | Notes |
 |---|---|---|
 | **This Worker** | None at runtime. The R2 + D1 bindings are declared in `wrangler.toml`; CF auto-injects them. | Nothing to rotate on the Worker itself. |
-| **App repos** (`.github/workflows/deploy.yml`) | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` set as **organization-level** secrets on `freeappstore-online` | One set, every repo inherits. See [workspace SECRETS.md](../../SECRETS.md) for the rotation procedure. |
+| **App repos** (`.github/workflows/deploy.yml`) | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ACCOUNT_ID` set as **organization-level** secrets on `freeappstore-online` | One set, every repo inherits. See the [infrastructure inventory](../../docs/architecture.md#infrastructure) for the private secrets source; maintainers manage rotation there. |
 
 The R2 access key should be scoped to **Object Read & Write on `fas-apps`
 only** (least privilege — keeps the deploy creds away from `fas-backups`,
@@ -48,10 +48,10 @@ only** (least privilege — keeps the deploy creds away from `fas-backups`,
 
 ## When things go wrong
 
-- Worker itself failing → [RUNBOOKS/path-b-host-worker-down.md](../../RUNBOOKS/path-b-host-worker-down.md)
-- R2 bucket lost data → [RUNBOOKS/r2-bucket-recovery.md](../../RUNBOOKS/r2-bucket-recovery.md)
-- D1 `routes` table drift → [RUNBOOKS/d1-routes-corrupted.md](../../RUNBOOKS/d1-routes-corrupted.md)
-- Wildcard DNS broken → [RUNBOOKS/wildcard-dns-broken.md](../../RUNBOOKS/wildcard-dns-broken.md)
+- Worker itself failing → [Bad Worker deploy recovery](../../ops/DR.md#scenario-3-bad-worker-deploy)
+- R2 bucket lost data (backup limitations) → [Backup limitations](../../ops/DR.md#backups-gap-to-close)
+- D1 `routes` table drift → [D1 corruption recovery](../../ops/DR.md#scenario-2-d1-corruption-accidental-drop-bad-migration)
+- Wildcard DNS broken → [DNS recovery](../../ops/DR.md#scenario-4-dns-misconfiguration)
 
 ## Local dev
 

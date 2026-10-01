@@ -114,6 +114,8 @@ const DEVELOPER_DOCS = [
   'brand/BRAND.md',
   'brand/SKILLS.md',
   'ops/SKILLS.md',
+  'ops/INFRASTRUCTURE.md',
+  'workers/host/README.md',
 ];
 
 const withoutCode = (md: string) => md.replace(/```[\s\S]*?```/g, '');

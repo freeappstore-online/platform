@@ -90,8 +90,8 @@ Sibling components:
 - `fas/admin/src/publish.ts insertHostRoute()` — the publish step that
   inserts the D1 row
 
-Secrets: see [workspace SECRETS.md](../../SECRETS.md). Runbooks for Path
-B failures live at [workspace RUNBOOKS/](../../RUNBOOKS/).
+Secrets: see the [infrastructure inventory and private secrets source](../docs/architecture.md#infrastructure).
+Recovery guidance lives in the [disaster recovery runbook](./DR.md).
 
 Pro apps (PAS/PGS) are **still on the legacy CF Pages model** described
 below — they're heavier and few in number, and per-project isolation is

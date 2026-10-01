@@ -1,8 +1,18 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { mapFileSource } from '../lib/file-source.js';
 import { checkBrandTokens } from './brand-tokens.js';
 
 describe('checkBrandTokens', () => {
+  it('the brand guide recommends canonical tokens and satisfies compliance (#96)', async () => {
+    const brand = readFileSync(new URL('../../../../brand/BRAND.md', import.meta.url), 'utf8');
+    expect(brand).not.toMatch(/--(?:bg|surface|border|glass|dock|error)\b/);
+    const tokens = [...brand.matchAll(/`(--[a-z-]+)` \|/g)].map((match) => match[1]);
+    const css = `:root { ${tokens.map((token) => `${token}: initial;`).join(' ')} }`;
+    const result = await checkBrandTokens(mapFileSource(new Map([['theme.css', css]])));
+    expect(result.status).toBe('pass');
+  });
+
   it('passes for an app defining --paper, --ink, --accent', async () => {
     const files = new Map([
       [
