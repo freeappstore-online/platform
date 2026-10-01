@@ -23,6 +23,11 @@ on:
       - 'packages/cli/**'
       - 'packages/compliance/**'
       - 'scripts/check-scaffold-shell.sh'
+      - 'packages/sdk/**'
+      - 'packages/e2e/scaffold/**'
+      - 'packages/e2e/scaffold.config.ts'
+      - 'packages/e2e/package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/scaffold-smoke.yml'
   pull_request:
     branches: [main]
@@ -30,6 +35,11 @@ on:
       - 'packages/cli/**'
       - 'packages/compliance/**'
       - 'scripts/check-scaffold-shell.sh'
+      - 'packages/sdk/**'
+      - 'packages/e2e/scaffold/**'
+      - 'packages/e2e/scaffold.config.ts'
+      - 'packages/e2e/package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/scaffold-smoke.yml'
   schedule:
     # 04:30 UTC daily — independent of CLI changes, so template-side drift
@@ -133,6 +143,37 @@ jobs:
           # `fas check` and `fgs check` exit non-zero on any hard fail.
           # Warnings are tolerated (they're informational by design).
           node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" check
+
+      - name: Install browser
+        run: pnpm --filter @freeappstore/e2e exec playwright install --with-deps chromium
+
+      - name: Browser check of fresh scaffold (published SDK)
+        env:
+          SCAFFOLD_DIR: /tmp/scaffold-smoke/${{ env.APP_ID }}
+          SCAFFOLD_TEMPLATE: ${{ matrix.template }}
+        run: pnpm --filter @freeappstore/e2e exec playwright test --config scaffold.config.ts
+
+      # Also exercise this checkout's SDK so an unpublished Shell regression
+      # fails CI, rather than waiting for the next npm release to expose it.
+      - name: Install checkout SDK into disposable scaffold
+        run: |
+          pnpm --filter @freeappstore/sdk build
+          pnpm --filter @freeappstore/sdk pack --pack-destination /tmp/scaffold-sdk
+          cd "/tmp/scaffold-smoke/$APP_ID"
+          pnpm --filter "./web" add /tmp/scaffold-sdk/freeappstore-sdk-*.tgz
+
+      - name: Browser check of fresh scaffold (checkout SDK)
+        env:
+          SCAFFOLD_DIR: /tmp/scaffold-smoke/${{ env.APP_ID }}
+          SCAFFOLD_TEMPLATE: ${{ matrix.template }}
+        run: pnpm --filter @freeappstore/e2e exec playwright test --config scaffold.config.ts
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: scaffold-browser-${{ matrix.template }}
+          path: packages/e2e/test-results/
+          if-no-files-found: ignore
 
       - name: Show scaffold tree on failure
         if: failure()
