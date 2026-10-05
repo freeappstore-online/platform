@@ -127,7 +127,9 @@ jobs:
           # Use plain `pnpm install` (not --frozen-lockfile) because the
           # template's lockfile may be hash-locked to "@APPNAME" while we
           # just substituted to a real id. This matches what a new user
-          # actually runs.
+          # actually runs. Keep each template lockfile current with the SDK:
+          # this published-SDK leg intentionally verifies what new apps receive,
+          # including Shell resilience fixes such as the offline-banner reset.
           pnpm install
 
       - name: Build scaffold
