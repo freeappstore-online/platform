@@ -255,6 +255,30 @@ describe('toasts', () => {
 describe('offline banner', () => {
   const banner = () => $('.fas-offline');
 
+  it('clears dismissal when reconnect and disconnect are batched in the same task', async () => {
+    const { app } = fakeApp();
+    await mount(
+      <Shell app={app}>
+        <p>content</p>
+      </Shell>,
+    );
+    await act(async () => setOnline(false));
+    expect(banner()).not.toBeNull();
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Dismiss offline notice"]')?.click(),
+    );
+    expect(banner()).toBeNull();
+
+    await act(async () => {
+      setOnline(false);
+      setOnline(true);
+      setOnline(false);
+    });
+    expect(banner()?.textContent).toContain("You're offline");
+    await act(async () => setOnline(true));
+    expect(banner()).toBeNull();
+  });
+
   it('toggles on offline/online events in a polite live region, and can be dismissed until the next drop', async () => {
     const { app } = fakeApp();
     await mount(

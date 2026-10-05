@@ -240,11 +240,24 @@ export function useOnline(): boolean {
  * itself on reconnect, and a later drop shows it again.
  */
 export function OfflineBanner() {
-  const online = useOnline();
-  const [dismissed, setDismissed] = useState(false);
+  const [{ online, dismissed }, setState] = useState(() => ({
+    online: typeof navigator === 'undefined' ? true : navigator.onLine,
+    dismissed: false,
+  }));
   useEffect(() => {
-    if (online) setDismissed(false);
-  }, [online]);
+    // Reset dismissal as part of the reconnect event, even when React batches
+    // online/offline updates and never commits an intermediate online render.
+    const up = () => setState({ online: true, dismissed: false });
+    const down = () => setState((state) => ({ ...state, online: false }));
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    if (navigator.onLine) up();
+    else down();
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
   return (
     <div role="status" aria-live="polite">
       {!online && !dismissed && (
@@ -254,7 +267,7 @@ export function OfflineBanner() {
             type="button"
             className="fas-dismiss"
             aria-label="Dismiss offline notice"
-            onClick={() => setDismissed(true)}
+            onClick={() => setState((state) => ({ ...state, dismissed: true }))}
           >
             ×
           </button>
