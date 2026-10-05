@@ -99,7 +99,7 @@ People join as creators to build apps/games. The flow:
 | **SDK (connected apps)** | `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice) | — || **Accent color** | Blue (#2563eb) | Emerald (#10b981) |
 | **Logo** | Free **Apps** | Free **Games** |
 | **Admin** | admin.freeappstore.online | admin.freegamestore.online |
-| **Publish portal** | publish.freeappstore.online | publish.freegamestore.online |
+| **Publish** | freeappstore.online/app/publish | publish.freegamestore.online |
 | **Local path** | ~/dev/fas/ | ~/dev/fgs/ |
 | **Storefront repo** | ~/dev/fas/freeappstore/ | ~/dev/fgs/freegamestore/ |
 
@@ -121,7 +121,7 @@ The path is a suggestion, not a requirement — the CLI doesn't care where the r
 ## IMPORTANT: What NOT to do
 
 - **Do NOT ask the user for Cloudflare API tokens, keys, or secrets.** Tokens are stored as org-level GitHub secrets and used only via GitHub Actions. Wrangler CLI uses its own OAuth. Never handle raw tokens.
-- **Do NOT provision via `wrangler` or raw `curl`** — provisioning goes through the admin API / publisher portal (see *Provisioning* below).
+- **Do NOT provision via `wrangler` or raw `curl`** — provisioning goes through the admin API / console publish page (see *Provisioning* below).
 - **Do NOT deploy manually** — push to main triggers auto-deploy via GitHub Actions → R2. The only deploy is `git push`.
 - **Do NOT use /ship or feature branches** — this platform uses trunk-based development. Push to main = deploy.
 - **Do NOT create staging environments** — there's only production. Fix forward (revert commits are fine).
@@ -139,7 +139,7 @@ No manual deploy commands needed. The `deploy.yml` workflow in each repo builds 
 
 ### 1. PROVISION (one-time setup for a new app)
 Creates the GitHub repo, hosting route (subdomain → R2 prefix), and store listing.
-This is done ONCE when a new app/game is created. Use the admin API, CLI (`fas publish`), or publisher portal.
+This is done ONCE when a new app/game is created. Use the admin API, CLI (`fas publish`), or the console publish page.
 
 ### 2. DEPLOY (automatic on every push)
 After provisioning, just push code to main. GitHub Actions builds and uploads to R2.
@@ -149,7 +149,7 @@ No API calls, no scripts, no manual steps. Just `git push`.
 
 ## Provisioning a New App or Game
 
-Provisioning is done by the **platform admin** or by the creator via the **publisher portal**.
+Provisioning is done by the **platform admin** or by the creator via the **console publish page**.
 
 **As an AI agent, you do NOT provision apps.** Your job is:
 1. Write code in an existing repo
@@ -157,7 +157,7 @@ Provisioning is done by the **platform admin** or by the creator via the **publi
 3. It auto-deploys
 
 If the user wants a new app created, direct them to:
-- **Self-service:** https://publish.freeappstore.online (sign in with GitHub, create instantly)
+- **Self-service:** https://freeappstore.online/app/publish (sign in with GitHub, create instantly)
 - **Admin:** https://admin.freeappstore.online (admin only)
 - **From your editor:** the MCP `create_app` / `agent_build` tools provision + deploy directly (see *MCP Server* below)
 
