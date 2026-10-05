@@ -164,6 +164,8 @@ function BrowserProbe() {
     await expect(page.getByText(/You're offline/)).toHaveCount(0);
     await context.setOffline(false);
     await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(true);
+    // Wait for React to commit the dismissal-reset effect before going offline again
+    await expect(page.getByText(/You're offline/)).toHaveCount(0);
     await context.setOffline(true);
     await expect(page.getByText(/You're offline/)).toBeVisible();
     await context.setOffline(false);
