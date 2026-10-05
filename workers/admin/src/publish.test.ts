@@ -182,7 +182,7 @@ describe("writeRegistryWithRetry", () => {
   it("adds entry to registry on success", async () => {
     const gh = successGh();
     const req = baseReq();
-    const config = { org: "freeappstore-online", storeRepo: "freeappstore", registryKey: "apps", domain: "freeappstore.online" } as any;
+    const config = { org: "freeappstore-online", storeRepo: "platform", registryPath: "sites/storefront/registry.json", registryKey: "apps", domain: "freeappstore.online" } as any;
     const result = await writeRegistryWithRetry(gh, req, config, "testapp.freeappstore.online");
     expect(result.status).toBe("ok");
     expect(result.detail).toContain("Test App");
@@ -197,7 +197,7 @@ describe("writeRegistryWithRetry", () => {
       return { __status: 200 };
     };
     const req = baseReq();
-    const config = { org: "freeappstore-online", storeRepo: "freeappstore", registryKey: "apps", domain: "freeappstore.online" } as any;
+    const config = { org: "freeappstore-online", storeRepo: "platform", registryPath: "sites/storefront/registry.json", registryKey: "apps", domain: "freeappstore.online" } as any;
     const result = await writeRegistryWithRetry(gh, req, config, "testapp.freeappstore.online");
     expect(result.status).toBe("skip");
     expect(result.detail).toContain("Already listed");
@@ -218,7 +218,7 @@ describe("writeRegistryWithRetry", () => {
       return { __status: 200 };
     };
     const req = baseReq();
-    const config = { org: "freeappstore-online", storeRepo: "freeappstore", registryKey: "apps", domain: "freeappstore.online" } as any;
+    const config = { org: "freeappstore-online", storeRepo: "platform", registryPath: "sites/storefront/registry.json", registryKey: "apps", domain: "freeappstore.online" } as any;
     const result = await writeRegistryWithRetry(gh, req, config, "testapp.freeappstore.online");
     expect(result.status).toBe("ok");
     expect(callCount).toBe(2);

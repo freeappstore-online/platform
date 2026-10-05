@@ -68,6 +68,7 @@ export interface StoreConfig {
   org: string;
   domain: string;
   storeRepo: string;
+  registryPath: string;
   registryKey: string;
   developer: string;
   templateRepo: string;
@@ -80,7 +81,8 @@ export const STORE_CONFIG: Record<Store, StoreConfig> = {
   apps: {
     org: "freeappstore-online",
     domain: "freeappstore.online",
-    storeRepo: "freeappstore",
+    storeRepo: "platform",
+    registryPath: "sites/storefront/registry.json",
     registryKey: "apps",
     developer: "FreeAppStore",
     templateRepo: "template-standalone",
@@ -223,7 +225,7 @@ export function encodeRegistry(content: any): string {
  * three concurrent provisions of the same id is vanishingly rare and a real
  * fix would need GH branch-protection or a CRDT, both overkill for our volume. */
 export async function writeRegistryWithRetry(gh: GhFn, req: PublishRequest, config: StoreConfig, subdomain: string): Promise<Step> {
-  const registryPath = `/repos/${config.org}/${config.storeRepo}/contents/registry.json`;
+  const registryPath = `/repos/${config.org}/${config.storeRepo}/contents/${config.registryPath}`;
   const key = config.registryKey;
   const entry = buildRegistryEntry(req, config, subdomain);
 

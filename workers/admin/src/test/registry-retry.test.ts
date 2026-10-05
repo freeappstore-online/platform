@@ -24,7 +24,8 @@ const req = {
 const config: any = {
   org: "freeappstore-online",
   domain: "freeappstore.online",
-  storeRepo: "freeappstore",
+  storeRepo: "platform",
+  registryPath: "sites/storefront/registry.json",
   registryKey: "apps",
   developer: "FreeAppStore",
   templateRepo: "template-standalone",

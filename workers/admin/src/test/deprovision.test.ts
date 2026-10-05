@@ -45,10 +45,10 @@ describe("deprovision endpoint", () => {
       fetchCalls.push({ url, method });
 
       // Mock the storefront registry.json (read, then write back without the app)
-      if (url.includes("/contents/registry.json") && method === "GET") {
+      if (url.includes("/contents/sites/storefront/registry.json") && method === "GET") {
         return new Response(JSON.stringify({ content: btoa(JSON.stringify({ apps: [{ id: "my-app" }, { id: "other" }] })), sha: "sha1" }));
       }
-      if (url.includes("/contents/registry.json") && method === "PUT") {
+      if (url.includes("/contents/sites/storefront/registry.json") && method === "PUT") {
         return new Response(JSON.stringify({ content: { sha: "sha2" } }));
       }
       // Mock DNS list

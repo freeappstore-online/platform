@@ -31,7 +31,7 @@ export interface DeprovisionEnv extends PublishEnv {
  *  goes through CF Access and was answered with a 302 to the login page — so
  *  every deprovision reported "Not in registry" while the entry stayed put. */
 export async function removeRegistryEntry(gh: GhFn, id: string, config: StoreConfig): Promise<Step> {
-  const registryPath = `/repos/${config.org}/${config.storeRepo}/contents/registry.json`;
+  const registryPath = `/repos/${config.org}/${config.storeRepo}/contents/${config.registryPath}`;
   const key = config.registryKey;
 
   const attempt = async (): Promise<Step | null> => {

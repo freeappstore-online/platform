@@ -15,9 +15,10 @@ async function unpublish(request: Request, env: Env): Promise<Response> {
   try {
     const body = (await request.json()) as { id: string; store: "apps" | "games" };
     if (!body.id || !body.store) return json({ error: "id and store required" }, 400, request);
-    const registryRepo = body.store === "apps" ? "freeappstore-online/freeappstore" : "freegamestore-online/freegamestore";
+    const registryRepo = body.store === "apps" ? "freeappstore-online/platform" : "freegamestore-online/freegamestore";
+    const registryPath = body.store === "apps" ? "sites/storefront/registry.json" : "registry.json";
     const key = body.store === "apps" ? "apps" : "games";
-    const regRes = await fetch(`https://api.github.com/repos/${registryRepo}/contents/registry.json`, {
+    const regRes = await fetch(`https://api.github.com/repos/${registryRepo}/contents/${registryPath}`, {
       headers: {
         Authorization: `Bearer ${env.GITHUB_TOKEN}`,
         Accept: "application/vnd.github+json",
@@ -30,7 +31,7 @@ async function unpublish(request: Request, env: Env): Promise<Response> {
     const before = registry[key]?.length ?? 0;
     registry[key] = (registry[key] || []).filter((a: any) => a.id !== body.id);
     if (registry[key].length === before) return json({ error: "Not found in registry" }, 404, request);
-    const updateRes = await fetch(`https://api.github.com/repos/${registryRepo}/contents/registry.json`, {
+    const updateRes = await fetch(`https://api.github.com/repos/${registryRepo}/contents/${registryPath}`, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${env.GITHUB_TOKEN}`,

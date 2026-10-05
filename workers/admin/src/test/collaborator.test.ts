@@ -56,7 +56,7 @@ describe("handlePublish collaborator step", () => {
       if (url.includes("/dns_records")) {
         return new Response(JSON.stringify({ success: true }));
       }
-      if (url.includes("/contents/registry.json")) {
+      if (url.includes("/contents/sites/storefront/registry.json")) {
         return new Response(
           JSON.stringify({
             content: Buffer.from(JSON.stringify({ apps: [] })).toString("base64"),

@@ -68,8 +68,8 @@ function fakeGh(opts: { apps: { id: string }[]; putStatus?: number[]; deleteStat
   const deletes: string[] = [];
   const putStatuses = [...(opts.putStatus ?? [200])];
   const gh: GhFn = async (path, method = "GET", body) => {
-    if (path.endsWith("/contents/registry.json") && method === "GET") return registryFile(opts.apps);
-    if (path.endsWith("/contents/registry.json") && method === "PUT") {
+    if (path.endsWith("/contents/sites/storefront/registry.json") && method === "GET") return registryFile(opts.apps);
+    if (path.endsWith("/contents/sites/storefront/registry.json") && method === "PUT") {
       puts.push(body);
       const status = putStatuses.shift() ?? 200;
       return status === 200 ? { content: {}, __status: 200 } : { message: "conflict", __status: status };

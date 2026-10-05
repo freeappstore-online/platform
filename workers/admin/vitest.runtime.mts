@@ -43,7 +43,7 @@ async function internet(req: Request): Promise<Response> {
   const auth = req.headers.get("authorization");
   if (url.hostname === "api.github.com") {
     if (auth !== `Bearer ${GITHUB_TOKEN}`) return Response.json({ message: "Bad credentials" }, { status: 401 });
-    if (url.pathname.endsWith("/contents/registry.json")) {
+    if (url.pathname.endsWith("/contents/sites/storefront/registry.json")) {
       if (req.method === "PUT") return Response.json({ content: { sha: "new" } });
       return Response.json({ content: btoa(JSON.stringify({ apps: [] })), sha: "abc" });
     }
