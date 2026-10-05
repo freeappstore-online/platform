@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{NAME}} — FreeAppStore</title>
+  <meta name="description" content="Free {{NAME_LOWER}} app. {{DESCRIPTION}} Works offline, no account needed." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="{{NAME}} — FreeAppStore" />
+  <meta property="og:description" content="Free {{NAME_LOWER}} app. {{DESCRIPTION}}" />
+  <meta property="og:url" content="https://freeappstore.online/apps/{{ID}}.html" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/apps/{{ID}}.html" />
+  <!-- Per-app SoftwareApplication JSON-LD — helps Google show rich-card
+       hits for app searches (name, screenshot, free price). -->
+  <script type="application/ld+json">{
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "{{NAME}}",
+    "description": "{{DESCRIPTION}}",
+    "applicationCategory": "{{CATEGORY_LABEL}}",
+    "operatingSystem": "Web",
+    "url": "{{APP_URL}}",
+    "image": "https://freeappstore.online/icon-512.png",
+    "fileSize": "{{SIZE}}",
+    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+    "isPartOf": {"@id": "https://freeappstore.online/#website"}
+  }</script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+  <!-- Per-app icon backgrounds live here (one rule per data-id) so we can
+       keep CSP style-src 'self' with no 'unsafe-inline'. -->
+  <link rel="stylesheet" href="/card-styles.css" />
+  <!-- CF Web Analytics — cookieless, no PII. Token injected at build time. -->
+  __CF_BEACON__
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="app-split">
+      <div class="app-split-info">
+        <div class="app-hero">
+          <div class="app-hero-icon app-icon" data-letter="{{LETTER}}" data-id="{{ID}}"><span class="app-emoji app-hero-emoji" aria-hidden="true">{{ICON}}</span></div>
+          <div>
+            <h1>{{NAME}}</h1>
+            <div class="tag">{{CATEGORY_LABEL}}</div>
+            <div class="app-hero-author">{{AUTHOR_CHIP}}</div>
+          </div>
+        </div>
+
+        <p class="app-description">{{DESCRIPTION}}</p>
+
+        {{PUBLISHED_LINE}}
+        {{AUDIT_BADGE}}
+        {{CODE_QUALITY_BADGE}}
+        {{VIEWPORT_BADGE}}
+
+        <div class="app-meta">
+      <div class="app-meta-item">
+        <div class="label">Price</div>
+        <div class="value">Free forever</div>
+      </div>
+      <div class="app-meta-item">
+        <div class="label">Platform</div>
+        <div class="value">Web (any device)</div>
+      </div>
+      <div class="app-meta-item">
+        <div class="label">Offline</div>
+        <div class="value">{{OFFLINE}}</div>
+      </div>
+      <div class="app-meta-item">
+        <div class="label">Account</div>
+        <div class="value">{{ACCOUNT}}</div>
+      </div>
+      <div class="app-meta-item">
+        <div class="label">Size</div>
+        <div class="value">{{SIZE}}</div>
+      </div>
+      <div class="app-meta-item">
+        <div class="label">Source</div>
+        <div class="value"><a href="https://github.com/{{REPO}}" class="source-link">GitHub</a></div>
+      </div>
+    </div>
+      </div>
+
+      <aside class="app-split-phone">
+        <div class="phone-frame">
+          <iframe
+            src="{{APP_URL}}"
+            title="{{NAME}} live preview"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin"
+            allow="clipboard-write; fullscreen"
+          ></iframe>
+        </div>
+        <div class="preview-actions">
+          <a class="app-cta" href="{{APP_URL}}" target="_blank" rel="noopener">Open in new tab &rarr;</a>
+          <button type="button" class="app-btn-secondary" data-action="reload-preview">Reload</button>
+        </div>
+        <p class="preview-note">If the preview doesn't load, open in a new tab.</p>
+      </aside>
+    </div>
+
+    <section class="app-section" id="rating-section">
+      <h2>Rate this app</h2>
+      <div id="rating-widget" class="rating-widget">
+        <button id="rate-up" type="button" class="rate-btn" title="Like">
+          <span class="rate-emoji">&#128077;</span><span id="count-up">0</span>
+        </button>
+        <button id="rate-down" type="button" class="rate-btn" title="Dislike">
+          <span class="rate-emoji">&#128078;</span><span id="count-down">0</span>
+        </button>
+        <span id="rating-status" class="rating-status"></span>
+      </div>
+    </section>
+
+    <section class="app-section">
+      <h2>About</h2>
+      <p>{{DESCRIPTION}}</p>
+      <p class="mt-half"><strong>Type:</strong> {{TYPE_LABEL}} &middot; <strong>By:</strong> {{AUTHOR_CHIP}}</p>
+    </section>
+
+    <section class="app-section">
+      <h2>Privacy</h2>
+      <p>{{NAME}} collects zero data. No analytics, no tracking, no cookies. Nothing leaves your browser.</p>
+    </section>
+
+    <section class="app-section">
+      <h2>Open Source</h2>
+      <p>Fully open source under the MIT license. Inspect the code, report bugs, or contribute improvements.</p>
+      <a href="https://github.com/{{REPO}}" class="source-link">View source on GitHub &rarr;</a>
+    </section>
+
+    {{HISTORY_SECTION}}
+    <aside class="detail-aside-games">
+      Looking for free games? Visit <a href="https://freegamestore.online" class="text-accent-bold">FreeGameStore</a>
+    </aside>
+  </main>
+  {{FOOTER}}
+
+  <!-- Per-page data island; read by /detail-page.js. No inline JS so CSP can stay locked. -->
+  <script type="application/json" id="page-data">{"id":"{{ID}}"}</script>
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+  <script src="/detail-page.js?v={{VER_DETAIL_PAGE_JS}}" integrity="{{SRI_DETAIL_PAGE_JS}}" defer></script>
+</body>
+</html>

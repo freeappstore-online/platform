@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Build with AI — FreeAppStore</title>
+  <meta name="description" content="Step-by-step guide to building a free app with Claude Code, Cursor, Copilot, or any AI tool. From zero to deployed in 10 minutes." />
+  <meta property="og:title" content="Build with AI — FreeAppStore" />
+  <meta property="og:description" content="Build a free app with AI. Step-by-step from install to deploy." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://freeappstore.online/build-with-ai" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/build-with-ai" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})()</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+
+    <div class="ai-hero">
+      <h1>Build a free app with AI.</h1>
+      <p class="ai-lead">Follow these steps to go from zero to a deployed app on FreeAppStore. Works with Claude Code, Cursor, Copilot, or any AI tool. Your app gets free hosting, a subdomain, and a listing in the store.</p>
+    </div>
+
+    <!-- ==================== PREREQUISITES ==================== -->
+    <h2 class="ai-h2">Prerequisites</h2>
+    <p class="ai-note-small">You need Node.js and pnpm installed. If you already have them, skip to Step 1.</p>
+
+    <div class="ai-cmd"><span class="comment"># Check if Node is installed (need v20+)</span>
+node --version
+<span class="output"># v20.x.x or higher? You're good. If not:</span>
+
+<span class="comment"># Install Node.js (macOS)</span>
+brew install node
+
+<span class="comment"># Install Node.js (Windows) — download from nodejs.org</span>
+<span class="comment"># Install Node.js (Linux)</span>
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs</div>
+
+    <div class="ai-cmd"><span class="comment"># Install pnpm (the package manager)</span>
+npm install -g pnpm
+
+<span class="comment"># Verify</span>
+pnpm --version
+<span class="output"># Should print 10.x.x</span></div>
+
+    <!-- ==================== STEP BY STEP ==================== -->
+    <h2 class="ai-h2">Step-by-step: Claude Code (terminal)</h2>
+    <p class="ai-note-small-tight">Full walkthrough using Claude Code. Other tools follow the same steps — see <a href="#other-tools">tool-specific setup</a> below.</p>
+
+    <ol class="ai-steps">
+      <li>
+        <h3>Install Claude Code and the FreeAppStore CLI</h3>
+        <div class="ai-cmd"><span class="comment"># Install Claude Code (Anthropic's terminal AI)</span>
+npm install -g @anthropic-ai/claude-code
+
+<span class="comment"># Install the FreeAppStore CLI</span>
+npm install -g @freeappstore/cli
+
+<span class="comment"># Verify both installed</span>
+claude --version
+fas --version</div>
+      </li>
+
+      <li>
+        <h3>Log in to FreeAppStore</h3>
+        <div class="ai-cmd"><span class="comment"># Sign in with your GitHub account</span>
+fas login
+
+<span class="output"># Opens GitHub in your browser for OAuth.
+# Once approved, you'll see:
+# ✓ Logged in as your-username</span></div>
+      </li>
+
+      <li>
+        <h3>Create your app from a template</h3>
+        <div class="ai-cmd"><span class="comment"># Scaffold a new app</span>
+fas init my-app
+
+<span class="output"># Output:
+#   Creating my-app...
+#   [1/3] Cloning template-standalone...
+#   [2/3] Installing dependencies...
+#   [3/3] Initializing git...
+#   Done!</span>
+
+<span class="comment"># Go into the project</span>
+cd my-app</div>
+        <p>This creates a React + Vite + Tailwind project with the FreeAppStore design system, fonts, and CSS variables already set up.</p>
+      </li>
+
+      <li>
+        <h3>Start Claude Code</h3>
+        <div class="ai-cmd"><span class="comment"># Launch Claude Code in the project</span>
+claude</div>
+        <p>Claude Code reads <code>CLAUDE.md</code> automatically. For even deeper integration, connect the MCP server:</p>
+        <div class="ai-cmd is-small"><span class="comment"># Add to ~/.claude.json for MCP tools (optional but powerful)</span>
+{
+  "mcpServers": {
+    "freeappstore": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.freeappstore.online/mcp"]
+    }
+  }
+}</div>
+        <p>With MCP, Claude can check deploy status, look up SDK docs, and list your apps as tool calls. Without it, Claude still reads <code>SKILLS.md</code> for full platform context. <a href="https://docs.freeappstore.online/mcp/">MCP docs &rarr;</a></p>
+      </li>
+
+      <li>
+        <h3>Tell Claude what to build</h3>
+        <p>Type your prompt in the Claude Code terminal. Be specific.</p>
+        <div class="ai-cmd is-dashed"><span class="comment"># Example prompts:</span>
+
+Build a pomodoro timer with work and break sessions.
+25 min work, 5 min break, 15 min long break. Show
+session count. Play a sound when the timer ends.
+Save progress in localStorage.
+
+<span class="comment"># Or with the SDK for connected features:</span>
+
+Build a flashcard app. Let users create decks and
+cards. Use app.kv to save cards per user. Add a
+shared counter with app.counters to track total
+cards created across all users. Use useAuth for
+sign-in.</div>
+        <p>Claude edits <code>web/src/App.tsx</code> and creates any files needed. It follows the design system from skills.md.</p>
+      </li>
+
+      <li>
+        <h3>Run it locally</h3>
+        <div class="ai-cmd"><span class="comment"># Start the dev server</span>
+pnpm dev
+
+<span class="output"># Output:
+#   VITE v8.x.x ready in 200ms
+#   ➜  Local:   http://localhost:5173/</span>
+
+<span class="comment"># Open http://localhost:5173 in your browser</span></div>
+        <p>Make changes, and the page updates instantly (hot reload).</p>
+      </li>
+
+      <li>
+        <h3>Check compliance</h3>
+        <div class="ai-cmd"><span class="comment"># Run the platform compliance checker</span>
+fas check
+
+<span class="output"># ✓ TypeScript strict mode
+# ✓ No tracking/analytics
+# ✓ No cookies
+# ✓ Manrope + Fraunces fonts
+# ✓ Dark mode supported
+# ✓ PWA manifest present
+# ✓ MIT license
+# All checks passed!</span></div>
+        <p>If anything fails, Claude Code can fix it — just tell it which check failed.</p>
+      </li>
+
+      <li>
+        <h3>Publish and deploy</h3>
+        <div class="ai-cmd"><span class="comment"># Publish to the store (creates repo + hosting + DNS)</span>
+fas publish
+
+<span class="output"># ✓ Created repo: freeappstore-online/my-app
+# ✓ Hosting route configured
+# ✓ Live at: my-app.freeappstore.online
+# ✓ Added deploy.yml workflow</span>
+
+<span class="comment"># Future deploys: just push to main</span>
+git push origin main
+
+<span class="output"># Your app is live at:
+# https://my-app.freeappstore.online</span></div>
+      </li>
+    </ol>
+
+    <div class="ai-callout">
+      <strong>That's it.</strong> Eight steps from zero to a published app on FreeAppStore. Free hosting, free subdomain, listed in the store. All free, forever.
+    </div>
+
+    <!-- ==================== OTHER TOOLS ==================== -->
+    <h2 id="other-tools" class="ai-h2">Other AI tools</h2>
+    <p class="ai-note-small">Steps 1-3 and 6-8 are the same for every tool. The only difference is Step 4 — how you tell the AI about the platform. Add this line to the tool's instruction file:</p>
+    <div class="ai-cmd">See https://freeappstore.online/skills.md for platform conventions.</div>
+
+    <p class="ai-note-small-mid">Here's where that line goes for each tool:</p>
+
+    <div class="tool-grid">
+      <div class="tool-card">
+        <span class="ai-tag">Terminal</span>
+        <h4>Claude Code</h4>
+        <p>Auto-reads from project root.</p>
+        <code>CLAUDE.md</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Editor</span>
+        <h4>Cursor</h4>
+        <p>Create in project root.</p>
+        <code>.cursorrules</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Editor</span>
+        <h4>GitHub Copilot</h4>
+        <p>Create in .github folder.</p>
+        <code>.github/copilot-instructions.md</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Terminal</span>
+        <h4>Codex CLI</h4>
+        <p>Create in project root.</p>
+        <code>AGENTS.md</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Terminal</span>
+        <h4>Aider</h4>
+        <p>Create in project root.</p>
+        <code>CONVENTIONS.md</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Editor</span>
+        <h4>Windsurf</h4>
+        <p>Create in project root.</p>
+        <code>.windsurfrules</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Editor</span>
+        <h4>Cline</h4>
+        <p>Paste in custom instructions.</p>
+        <code>Settings → Custom</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Editor</span>
+        <h4>Zed</h4>
+        <p>Paste in assistant context.</p>
+        <code>Assistant panel</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Editor</span>
+        <h4>Continue</h4>
+        <p>Create in project root.</p>
+        <code>.continuerules</code>
+      </div>
+      <div class="tool-card">
+        <span class="ai-tag">Web</span>
+        <h4>ChatGPT</h4>
+        <p>Paste skills.md into chat.</p>
+        <code>Paste in chat</code>
+      </div>
+    </div>
+
+    <!-- ==================== SDK CHEAT SHEET ==================== -->
+    <h2 class="ai-h2">SDK cheat sheet</h2>
+    <p class="ai-note-small">Copy-paste these into your AI prompts for connected apps (apps that need sign-in, storage, or real-time features).</p>
+
+    <div class="ai-cmd"><span class="comment">// Add the SDK to your project</span>
+pnpm add @freeappstore/sdk
+
+<span class="comment">// Initialize</span>
+import { init } from '@freeappstore/sdk'
+const app = init({ appId: 'my-app' })
+
+<span class="comment">// Auth (sign in with GitHub)</span>
+await app.auth.init()
+app.auth.signIn()
+app.auth.onChange(user => console.log(user))
+
+<span class="comment">// Per-user storage (each user gets their own data)</span>
+await app.kv.set('notes', ['Buy milk', 'Walk dog'])
+const notes = await app.kv.get('notes')
+await app.kv.delete('notes')
+
+<span class="comment">// Shared counters (visible to all users)</span>
+await app.counters.increment('page-views')
+const count = await app.counters.get('page-views')
+
+<span class="comment">// Real-time rooms (chat, multiplayer)</span>
+const room = app.rooms.join('lobby')
+room.send({ text: 'hello' })
+room.onMessage(msg => console.log(msg))
+room.onPeers(peers => console.log(peers.length, 'online'))</div>
+
+    <!-- ==================== STANDALONE VS CONNECTED ==================== -->
+    <h2 class="ai-h2">Standalone vs Connected apps</h2>
+    <div class="ai-two-col">
+      <div class="ai-pane">
+        <h3>Standalone</h3>
+        <p>No sign-in needed. Data saved in localStorage on the user's device. Works fully offline. Timer, calculator, notes, converter — most apps are this type.</p>
+      </div>
+      <div class="ai-pane is-accent">
+        <h3 class="is-accent">Connected</h3>
+        <p>Uses <code>@freeappstore/sdk</code> for sign-in, per-user cloud storage, shared counters, and real-time rooms. Messenger, social apps, collaborative tools.</p>
+      </div>
+    </div>
+
+    <!-- ==================== MCP ==================== -->
+    <h2 class="ai-h2">Build straight from your editor (MCP)</h2>
+    <p class="ai-note-small">Connect the FreeAppStore MCP server and build, publish, and improve apps without ever leaving Claude Code or Cursor.</p>
+    <div class="ai-cmd"><span class="comment"># Claude Code</span>
+claude mcp add freeappstore -- npx mcp-remote https://mcp.freeappstore.online/mcp
+
+<span class="comment"># Cursor — add a server with this command:</span>
+npx mcp-remote https://mcp.freeappstore.online/mcp</div>
+    <div class="ai-two-col">
+      <div class="ai-pane">
+        <h3>Your AI writes, MCP ships</h3>
+        <p>Your editor's AI generates the code, then ships it through the platform with <code>create_app</code>, <code>update_files</code>, <code>read_file</code>, and <code>list_files</code>.</p>
+      </div>
+      <div class="ai-pane is-accent">
+        <h3 class="is-accent">Just prompt — agent builds it</h3>
+        <p>Hand it off entirely: <code>agent_build</code> kicks off the platform's VibeCode agent (using an AI key from your vault) and <code>agent_status</code> tracks it. No local code needed.</p>
+      </div>
+    </div>
+    <p class="ai-note-small-tight"><a href="https://docs.freeappstore.online/mcp/">Full MCP guide &rarr;</a></p>
+
+    <!-- ==================== ALSO ==================== -->
+    <h2 class="ai-h2">Also available</h2>
+    <div class="ai-two-col-mid">
+      <div class="ai-pane">
+        <h3>VibeCode (no-code)</h3>
+        <p>Don't want to use a terminal? <a href="https://console.freeappstore.online/create">console.freeappstore.online/create</a> lets you describe your app in plain English and AI builds it for you in the browser.</p>
+      </div>
+      <div class="ai-pane is-pro">
+        <h3 class="is-pro">Need a database?</h3>
+        <p>Free apps use localStorage. If you need SQL databases, file uploads, maps, or payments, check <a href="https://proappstore.online/build-with-ai" class="ai-pane-pro-link">ProAppStore</a>.</p>
+      </div>
+    </div>
+
+    <h2 class="ai-h2">Other reading</h2>
+    <ul class="ai-reading-list">
+      <li><a href="/guidelines">Platform guidelines</a> — design system, privacy rules, compliance checks</li>
+      <li><a href="/pricing">Pricing</a> — free tier caps and what Pro unlocks</li>
+      <li><a href="https://freeappstore.online/skills.md">skills.md</a> — the machine-readable platform reference your AI tool reads</li>
+      <li><a href="https://github.com/freeappstore-online/platform">Platform source code</a> — SDK, CLI, backend</li>
+      <li><a href="https://freegamestore.online/build-with-ai">FreeGameStore build guide</a> — same flow for games</li>
+      <li><a href="https://proappstore.online/build-with-ai">ProAppStore build guide</a> — paid tier with databases and storage</li>
+    </ul>
+
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

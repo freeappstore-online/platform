@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browser APIs — What you can build today</title>
+  <meta name="description" content="Modern browsers are app platforms. Camera, GPS, speech, Bluetooth, offline storage, notifications, and more — no app store, no install, no native code." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Browser APIs — What you can build today" />
+  <meta property="og:description" content="Modern browsers are app platforms. Camera, GPS, speech, Bluetooth, offline, and more." />
+  <meta property="og:url" content="https://freeappstore.online/browser-apis" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/browser-apis" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})()</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Browser APIs</h1>
+      <p>Modern browsers are full app platforms. No app store review, no native SDK, no install. Just HTML, CSS, and JavaScript &mdash; and access to hardware, sensors, storage, and communication APIs that would have been native-only five years ago.</p>
+    </div>
+
+    <div class="page-content">
+
+      <p class="section-note">Every API below works in a FreeAppStore app. Combine them with the <a href="/capabilities">platform capabilities</a> (auth, storage, real-time, AI proxy) and you can build things that compete with native apps.</p>
+
+      <h2>Media &amp; Input</h2>
+      <div class="api-grid">
+        <div class="api-card">
+          <h3>Camera &amp; Microphone</h3>
+          <p><code>navigator.mediaDevices.getUserMedia()</code>. Access front/rear camera, microphone. Live video/audio streams.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Video recorder, voice memo app, photo booth, QR scanner, video chat.</p>
+        </div>
+        <div class="api-card">
+          <h3>Screen Recording</h3>
+          <p><code>navigator.mediaDevices.getDisplayMedia()</code>. Capture screen, window, or tab as a video stream.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-no">Mobile</span></div>
+          <p class="idea">Screen recorder, tutorial maker, bug reporter with video evidence.</p>
+        </div>
+        <div class="api-card">
+          <h3>Web Audio API</h3>
+          <p>Low-level audio processing. Oscillators, filters, gain nodes, analyzers, spatial audio. Real-time synthesis and effects.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Synthesizer, guitar tuner, drum machine, audio visualizer, white noise generator, metronome.</p>
+        </div>
+        <div class="api-card">
+          <h3>Speech Recognition</h3>
+          <p><code>SpeechRecognition</code>. Real-time speech-to-text in 100+ languages. Continuous or one-shot.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-partial">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Voice notes, dictation app, language learning, voice-controlled interface, accessibility tool.</p>
+        </div>
+        <div class="api-card">
+          <h3>Speech Synthesis</h3>
+          <p><code>speechSynthesis.speak()</code>. Text-to-speech with multiple voices, pitch, rate control.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Reading assistant, pronunciation trainer, screen reader, audiobook creator.</p>
+        </div>
+        <div class="api-card">
+          <h3>Gamepad API</h3>
+          <p><code>navigator.getGamepads()</code>. Read Xbox, PlayStation, and generic USB/Bluetooth controllers.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-partial">Mobile</span></div>
+          <p class="idea">Controller tester, game input mapper, accessibility controller, MIDI-style input.</p>
+        </div>
+      </div>
+
+      <h2>Sensors &amp; Location</h2>
+      <div class="api-grid">
+        <div class="api-card">
+          <h3>Geolocation</h3>
+          <p><code>navigator.geolocation.getCurrentPosition()</code>. GPS coordinates, altitude, speed, heading. One-shot or watch.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Run tracker, delivery tracker, weather by location, nearby places finder, geo-tagged photo journal.</p>
+        </div>
+        <div class="api-card">
+          <h3>Device Orientation</h3>
+          <p><code>DeviceOrientationEvent</code>. Gyroscope + accelerometer. Alpha (compass), beta (tilt), gamma (rotation).</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Spirit level, compass, tilt-controlled interface, motion-based game controller, panorama viewer.</p>
+        </div>
+        <div class="api-card">
+          <h3>Ambient Light Sensor</h3>
+          <p><code>AmbientLightSensor</code>. Reads ambient light level in lux. Auto-theme switching, display adaptation.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-no">Safari</span> <span class="compat-no">Firefox</span> <span class="compat-partial">Mobile</span></div>
+          <p class="idea">Auto dark mode, light meter for photography, reading comfort optimizer.</p>
+        </div>
+        <div class="api-card">
+          <h3>Vibration</h3>
+          <p><code>navigator.vibrate()</code>. Haptic feedback with custom patterns. Duration in milliseconds.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-no">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Android</span></div>
+          <p class="idea">Timer with haptic alert, Morse code teacher, accessible notification, game feedback.</p>
+        </div>
+      </div>
+
+      <h2>Storage &amp; Files</h2>
+      <div class="api-grid">
+        <div class="api-card">
+          <h3>IndexedDB</h3>
+          <p>Client-side structured database. Stores megabytes of data. Transactional, indexed queries. Survives page reload.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Offline-first note app, local-first spreadsheet, cached API data, draft manager.</p>
+        </div>
+        <div class="api-card">
+          <h3>File System Access</h3>
+          <p><code>showOpenFilePicker()</code>, <code>showSaveFilePicker()</code>. Read/write real files on the user's disk. Directory access too.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-no">Safari</span> <span class="compat-no">Firefox</span> <span class="compat-no">Mobile</span></div>
+          <p class="idea">Code editor, image editor with save, CSV processor, local backup tool.</p>
+        </div>
+        <div class="api-card">
+          <h3>Clipboard</h3>
+          <p><code>navigator.clipboard.readText()</code> / <code>.writeText()</code>. Also supports images and rich content.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Clipboard manager, password generator, code snippet tool, image converter.</p>
+        </div>
+        <div class="api-card">
+          <h3>Cache API + Service Worker</h3>
+          <p>Full offline support. Cache assets, API responses, pages. Background sync when connection returns.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Offline-first todo, reading app that works on planes, field data collector.</p>
+        </div>
+        <div class="api-card">
+          <h3>Share API</h3>
+          <p><code>navigator.share()</code>. Native share sheet on mobile. Share text, URLs, files to any installed app.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Share button for any content, social posting tool, receipt sharer.</p>
+        </div>
+      </div>
+
+      <h2>Graphics &amp; Rendering</h2>
+      <div class="api-grid">
+        <div class="api-card">
+          <h3>Canvas 2D</h3>
+          <p><code>&lt;canvas&gt;</code>. Pixel-level drawing. Shapes, text, images, transforms. Up to 60fps animation.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Drawing app, chart renderer, image editor, signature pad, pixel art tool, whiteboard.</p>
+        </div>
+        <div class="api-card">
+          <h3>WebGL / WebGL2</h3>
+          <p>GPU-accelerated 3D rendering. Shaders, textures, lighting. Powers Three.js, Babylon.js, PlayCanvas.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">3D viewer, product configurator, data visualization, architectural walkthrough.</p>
+        </div>
+        <div class="api-card">
+          <h3>WebGPU</h3>
+          <p>Next-gen GPU API. Compute shaders, modern rendering pipeline. 3-10x faster than WebGL for complex scenes.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-partial">Safari</span> <span class="compat-partial">Firefox</span> <span class="compat-no">Mobile</span></div>
+          <p class="idea">ML inference in browser, physics simulation, ray tracing, advanced data viz.</p>
+        </div>
+        <div class="api-card">
+          <h3>CSS Animations + WAAPI</h3>
+          <p>Web Animations API. Hardware-accelerated. Keyframes, easing, composition. Performant on mobile.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Animated onboarding, micro-interactions, scroll-driven animations, loading states.</p>
+        </div>
+      </div>
+
+      <h2>Communication &amp; Connectivity</h2>
+      <div class="api-grid">
+        <div class="api-card">
+          <h3>WebSocket</h3>
+          <p>Full-duplex real-time communication. The FreeAppStore SDK wraps this as <code>fas.rooms</code>.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Chat app, live dashboard, collaborative editor, real-time notifications.</p>
+        </div>
+        <div class="api-card">
+          <h3>WebRTC</h3>
+          <p>Peer-to-peer video/audio/data. No server needed for the media stream (signaling server still required).</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Video call app, peer-to-peer file sharing, screen sharing tool, remote pair programming.</p>
+        </div>
+        <div class="api-card">
+          <h3>Web Bluetooth</h3>
+          <p><code>navigator.bluetooth.requestDevice()</code>. Connect to BLE devices. Read/write characteristics.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-no">Safari</span> <span class="compat-no">Firefox</span> <span class="compat-partial">Mobile</span></div>
+          <p class="idea">Heart rate monitor, smart light controller, IoT dashboard, fitness tracker companion.</p>
+        </div>
+        <div class="api-card">
+          <h3>Web USB</h3>
+          <p><code>navigator.usb.requestDevice()</code>. Direct communication with USB devices from the browser.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-no">Safari</span> <span class="compat-no">Firefox</span> <span class="compat-no">Mobile</span></div>
+          <p class="idea">Arduino programmer, firmware flasher, USB device tester, hardware debugger.</p>
+        </div>
+        <div class="api-card">
+          <h3>Push Notifications</h3>
+          <p><code>PushManager.subscribe()</code>. Receive notifications even when the app isn't open. Requires service worker.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Reminder app, price alert, chat notification, daily habit nudge.</p>
+        </div>
+      </div>
+
+      <h2>PWA &amp; System Integration</h2>
+      <div class="api-grid">
+        <div class="api-card">
+          <h3>Install to Home Screen</h3>
+          <p>PWA manifest + service worker = installable app. Full-screen, no browser chrome, app icon on home screen.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Every FreeAppStore app is already a PWA. Users can install it like a native app.</p>
+        </div>
+        <div class="api-card">
+          <h3>Badging API</h3>
+          <p><code>navigator.setAppBadge(count)</code>. Show unread count on the app icon. Works when installed as PWA.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-no">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Unread messages count, pending tasks badge, notification counter.</p>
+        </div>
+        <div class="api-card">
+          <h3>Web Workers</h3>
+          <p>Background threads. CPU-intensive work without blocking the UI. SharedArrayBuffer for parallel computing.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Image processing, data crunching, markdown rendering, syntax highlighting, spell checking.</p>
+        </div>
+        <div class="api-card">
+          <h3>WebAssembly</h3>
+          <p>Run C/C++/Rust/Go at near-native speed in the browser. SQLite, FFmpeg, OpenCV, TensorFlow all have WASM builds.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Local SQLite database, image/video processing, PDF renderer, code compiler, CAD tool.</p>
+        </div>
+      </div>
+
+      <h2>AI in the browser</h2>
+      <div class="api-grid">
+        <div class="api-card">
+          <h3>WebNN (Neural Network API)</h3>
+          <p>Hardware-accelerated ML inference. Runs models on GPU/NPU without a server.</p>
+          <div class="compat"><span class="compat-partial">Chrome</span> <span class="compat-no">Safari</span> <span class="compat-no">Firefox</span> <span class="compat-no">Mobile</span></div>
+          <p class="idea">On-device image classification, text analysis, real-time object detection without API costs.</p>
+        </div>
+        <div class="api-card">
+          <h3>TensorFlow.js / ONNX Runtime</h3>
+          <p>Run ML models in the browser via WebGL/WebGPU/WASM. Pre-trained models for vision, NLP, pose detection.</p>
+          <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
+          <p class="idea">Background removal, face filter, handwriting recognition, sentiment analysis, music generation.</p>
+        </div>
+        <div class="api-card">
+          <h3>Platform AI Proxy</h3>
+          <p>Combine browser APIs with server-side AI via <code>fas.proxy.fetch()</code>. User's own OpenAI/Anthropic/Google AI key.</p>
+          <div class="compat"><span class="compat-yes">All browsers</span></div>
+          <p class="idea">AI writing assistant, code generator, image describer, chatbot, translation tool, summarizer.</p>
+        </div>
+      </div>
+
+      <div class="upgrade-banner">
+        <h3>The browser is the platform. Build anything.</h3>
+        <p>Combine these APIs with FreeAppStore's SDK (auth, storage, real-time, AI proxy) and you have a full app platform. No native code, no app store review, no install friction. Just a URL.</p>
+        <a href="/get-started">Start building &rarr;</a>
+      </div>
+
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

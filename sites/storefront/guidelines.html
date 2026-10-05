@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Developer Guidelines — FreeAppStore</title>
+  <meta name="description" content="Design system, tech stack, and publishing guidelines for FreeAppStore developers." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Developer Guidelines — FreeAppStore" />
+  <meta property="og:description" content="Design system, tech stack, and publishing guidelines for FreeAppStore developers." />
+  <meta property="og:url" content="https://freeappstore.online/guidelines" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/guidelines" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})()</script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Developer Guidelines</h1>
+      <p>Everything you need to build and publish an app on FreeAppStore. Brand, design system, tech stack, and publishing process.</p>
+    </div>
+
+    <div class="page-content">
+      <div class="section-nav">
+        <h3>Contents</h3>
+        <a href="#tech-stack">Tech Stack</a>
+        <a href="#project-structure">Project Structure</a>
+        <a href="#brand">Brand Guidelines</a>
+        <a href="#privacy">Privacy Rules</a>
+        <a href="#compliance">Compliance Checks</a>
+        <a href="#templates">Templates</a>
+      </div>
+
+      <!-- Tech Stack -->
+      <h2 id="tech-stack">Tech Stack</h2>
+      <p>All FreeAppStore apps share the same foundation.</p>
+
+      <table class="spec-table">
+        <tr><th>Layer</th><th>Choice</th><th>Version</th></tr>
+        <tr><td>Language</td><td>TypeScript</td><td>^5.7</td></tr>
+        <tr><td>Framework</td><td>React</td><td>^19.0</td></tr>
+        <tr><td>Bundler</td><td>Vite</td><td>^6.0</td></tr>
+        <tr><td>Styling</td><td>Tailwind CSS</td><td>^4.1</td></tr>
+        <tr><td>Hosting</td><td>Cloudflare R2 + Workers</td><td>—</td></tr>
+        <tr><td>Backend (connected apps)</td><td>@freeappstore/sdk</td><td>Auth, KV, Rooms, Proxy</td></tr>
+        <tr><td>Package Manager</td><td>pnpm</td><td>^10.30</td></tr>
+        <tr><td>Node</td><td>—</td><td>&ge;20.19</td></tr>
+      </table>
+
+      <!-- Project Structure -->
+      <h2 id="project-structure">Project Structure</h2>
+      <p>Every app uses a pnpm workspace with the frontend in a <code>web/</code> package.</p>
+
+      <div class="code-block"><code>app-name/
+├── package.json           (workspace root)
+├── pnpm-workspace.yaml    (packages: [web])
+├── .gitignore
+└── web/
+    ├── index.html
+    ├── package.json       (@appname/web)
+    ├── vite.config.ts
+    ├── tsconfig.json
+    ├── public/
+    │   └── manifest.json  (PWA manifest)
+    └── src/
+        ├── main.tsx
+        ├── index.css       (Tailwind + CSS variables)
+        ├── App.tsx
+        ├── types.ts
+        ├── components/
+        ├── hooks/
+        └── services/</code></div>
+
+      <!-- Brand Guidelines -->
+      <h2 id="brand">Brand Guidelines</h2>
+
+      <h3>Fonts</h3>
+      <table class="spec-table">
+        <tr><th>Role</th><th>Family</th><th>Weights</th><th>Usage</th></tr>
+        <tr><td>Body</td><td><strong>Manrope</strong></td><td>400, 500, 600, 700, 800</td><td>All UI text, labels, body</td></tr>
+        <tr><td>Display</td><td><strong>Fraunces</strong></td><td>700, 800</td><td>Headlines, card titles</td></tr>
+      </table>
+
+      <div class="code-block"><code>&lt;link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Fraunces:opsz,wght@9..144,700;9..144,800&amp;display=swap" rel="stylesheet"&gt;</code></div>
+
+      <h3>CSS Variables</h3>
+      <table class="spec-table">
+        <tr><th>Token</th><th>Light</th><th>Dark</th><th>Usage</th></tr>
+        <tr><td><code>--paper</code></td><td><span class="color-swatch" data-swatch="paper-l"></span>#fefdfb</td><td><span class="color-swatch" data-swatch="paper-d"></span>#141413</td><td>Page background</td></tr>
+        <tr><td><code>--ink</code></td><td><span class="color-swatch" data-swatch="ink-l"></span>#1a1917</td><td><span class="color-swatch" data-swatch="ink-d"></span>#f2f0ed</td><td>Primary text</td></tr>
+        <tr><td><code>--muted</code></td><td><span class="color-swatch" data-swatch="muted-l"></span>#8a8780</td><td><span class="color-swatch" data-swatch="muted-d"></span>#7a7770</td><td>Secondary text</td></tr>
+        <tr><td><code>--line</code></td><td><span class="color-swatch" data-swatch="line-l"></span>#e8e5e0</td><td><span class="color-swatch" data-swatch="line-d"></span>#2a2825</td><td>Borders</td></tr>
+        <tr><td><code>--panel</code></td><td><span class="color-swatch" data-swatch="panel-l"></span>#f5f3f0</td><td><span class="color-swatch" data-swatch="panel-d"></span>#1e1d1b</td><td>Panel background</td></tr>
+        <tr><td><code>--success</code></td><td><span class="color-swatch" data-swatch="success-l"></span>#22c55e</td><td><span class="color-swatch" data-swatch="success-d"></span>#4ade80</td><td>Correct / positive</td></tr>
+        <tr><td><code>--warning</code></td><td><span class="color-swatch" data-swatch="warning-l"></span>#f59e0b</td><td><span class="color-swatch" data-swatch="warning-d"></span>#fbbf24</td><td>Caution</td></tr>
+        <tr><td><code>--danger</code></td><td><span class="color-swatch" data-swatch="error-l"></span>#ef4444</td><td><span class="color-swatch" data-swatch="error-d"></span>#f87171</td><td>Wrong / destructive</td></tr>
+      </table>
+      <p>Each app also gets ONE accent color for active states, primary buttons, and highlights. Dark mode follows the system preference by default, and the Shell's theme toggle lets users override it; style dark mode with <code>:root[data-theme='dark']</code>, which the SDK sets. Never use the retired aliases <code>--bg</code>, <code>--surface</code>, <code>--border</code>, <code>--glass</code>, <code>--dock</code> or <code>--error</code>.</p>
+
+      <h3>Shell Component Layout</h3>
+      <p>All apps wrap themselves in the SDK's <code>Shell</code> (<code>@freeappstore/sdk/ui</code>) with one <code>nav</code> entry per screen: <code>&lt;Shell app={fas} appName="My App" nav={NAV}&gt;</code>. The Shell draws the topbar and the app's navigation (<code>&lt;nav aria-label="Main"&gt;</code>), and wraps each screen in an error boundary, toasts and an offline banner. Apps don't build their own header, sidebar or dock. <a href="https://docs.freeappstore.online/getting-started/#build-your-app-on-the-shell">How to build on the Shell</a>.</p>
+
+      <div class="guide-two-col">
+        <div class="rule-card">
+          <strong>Desktop (640px+)</strong>
+          <div class="guide-shell-mobile">
+            <div class="guide-shell-header">Topbar: logo · app name · Home · Notes · Settings · theme · profile</div>
+            <div class="guide-shell-content">Screen (PageHeader + content)</div>
+          </div>
+        </div>
+        <div class="rule-card">
+          <strong>Mobile (&lt;640px)</strong>
+          <div class="guide-shell-mobile">
+            <div class="guide-shell-header">Topbar: logo · app name · ☰ menu · profile</div>
+            <div class="guide-shell-content">Screen (PageHeader + content)</div>
+          </div>
+        </div>
+      </div>
+
+      <table class="spec-table">
+        <tr><th>Element</th><th>Value</th></tr>
+        <tr><td>Navigation</td><td><code>Shell</code> <code>nav</code> prop (topbar; menu button below 640px)</td></tr>
+        <tr><td>Card border radius</td><td><code>1.25rem</code></td></tr>
+        <tr><td>Button border radius</td><td><code>0.75rem</code></td></tr>
+        <tr><td>Card padding</td><td><code>1.5rem</code></td></tr>
+        <tr><td>Grid gap</td><td><code>1.25rem</code></td></tr>
+        <tr><td>Page margin (mobile)</td><td><code>1.5rem</code></td></tr>
+        <tr><td>Page margin (desktop)</td><td><code>2rem</code></td></tr>
+      </table>
+
+      <!-- Privacy Rules -->
+      <h2 id="privacy">Privacy Rules</h2>
+      <p>Non-negotiable. Every app on FreeAppStore must follow these:</p>
+
+      <div class="rule-card">
+        <strong>Zero tracking</strong>
+        <p>No analytics, no telemetry, no usage metrics. Zero network requests for tracking purposes.</p>
+      </div>
+      <div class="rule-card">
+        <strong>No cookies</strong>
+        <p>No cookies of any kind — not for sessions, not for preferences, not for anything.</p>
+      </div>
+      <div class="rule-card">
+        <strong>localStorage only</strong>
+        <p>All user data stays on-device in localStorage. No server-side storage for standalone apps. No external scripts (CDN fonts are OK).</p>
+      </div>
+
+      <!-- Compliance Checks -->
+      <h2 id="compliance">Compliance Checks</h2>
+      <p>These checks run automatically on every push. Your app must pass all of them.</p>
+
+      <h3>Build &amp; Code</h3>
+      <ul>
+        <li>TypeScript strict mode — no <code>any</code> types</li>
+        <li>Clean build with zero warnings</li>
+        <li>Core JS bundle &lt;100KB gzipped</li>
+        <li>MIT license present in repo</li>
+      </ul>
+
+      <h3>Design</h3>
+      <ul>
+        <li>Uses Manrope + Fraunces fonts</li>
+        <li>Uses shared CSS custom properties for neutrals</li>
+        <li>Single app-specific accent color</li>
+        <li>Wrapped in the SDK <code>Shell</code> with a <code>nav</code> entry per screen (no hand-built header, sidebar or dock)</li>
+        <li>Dark mode via <code>:root[data-theme='dark']</code> (follows the system and the Shell's theme toggle)</li>
+        <li>Respects safe area insets (notched phones)</li>
+      </ul>
+
+      <h3>PWA</h3>
+      <ul>
+        <li><code>manifest.json</code> with name, icons, theme color</li>
+        <li><code>apple-mobile-web-app-capable</code> meta tag</li>
+        <li>Service worker registered</li>
+        <li>Works when added to home screen</li>
+        <li>Works offline after first load</li>
+      </ul>
+
+      <h3>Privacy</h3>
+      <ul>
+        <li>Zero tracking/analytics network requests</li>
+        <li>No cookies</li>
+        <li>No external scripts (CDN fonts OK)</li>
+        <li>All user data in localStorage only</li>
+      </ul>
+
+      <h3>Performance</h3>
+      <ul>
+        <li>First load &lt;2s on 3G</li>
+        <li>No layout shift after load</li>
+        <li>Works on mobile (320px+) and desktop (1024px+)</li>
+      </ul>
+
+      <!-- Templates -->
+      <h2 id="templates">Templates</h2>
+
+      <div class="guide-two-col">
+        <div class="rule-card">
+          <strong>Standalone</strong>
+          <p>Pure client-side app, no backend. All data in localStorage. Works fully offline.</p>
+          <p class="rule-card-link-row"><a href="https://github.com/freeappstore-online/template-standalone">github.com/freeappstore-online/template-standalone</a></p>
+        </div>
+        <div class="rule-card">
+          <strong>Connected</strong>
+          <p>Apps with auth, per-user storage, realtime rooms, or API proxy. Start from standalone template, add <code>@freeappstore/sdk</code>.</p>
+          <p class="rule-card-link-row"><code>npm i @freeappstore/sdk</code></p>
+        </div>
+      </div>
+
+      <div class="rule-card">
+        <strong>Building a game?</strong>
+        <p>Games live on our sister platform. See <a href="https://freegamestore.online/guidelines">freegamestore.online/guidelines</a> for game-specific guidelines and templates.</p>
+      </div>
+
+      <div class="cta-box">
+        <h3>Ready to build?</h3>
+        <a href="https://github.com/freeappstore-online" class="btn">GitHub Organization &rarr;</a>
+      </div>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

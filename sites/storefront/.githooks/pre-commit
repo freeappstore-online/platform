@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+echo "Pre-commit: running design-system lint..."
+npm run lint
+echo "Pre-commit checks passed."

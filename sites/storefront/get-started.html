@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Get Started — FreeAppStore</title>
+  <meta name="description" content="Start building on FreeAppStore in 60 seconds. Three commands." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Get Started — FreeAppStore" />
+  <meta property="og:description" content="Start building on FreeAppStore in 60 seconds. Three commands." />
+  <meta property="og:url" content="https://freeappstore.online/get-started" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/get-started" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})()</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="gs-hero">
+      <h1>Start building in 60 seconds</h1>
+      <p>Three commands. Free hosting. Auto-deploy. Your app is live.</p>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span>
+        <span class="terminal-dot yellow"></span>
+        <span class="terminal-dot green"></span>
+        <span class="terminal-title">Terminal</span>
+      </div>
+      <div class="terminal-body" id="term">
+      </div>
+      <div class="gs-replay-wrap">
+        <button id="gs-replay-btn" class="replay-btn" type="button">Replay</button>
+      </div>
+    </div>
+
+    <div class="gs-after">
+      <h2>Your app is running locally.</h2>
+      <p>Now build it with your AI tool, then submit it to get listed in the store with free hosting.</p>
+      <div class="gs-mt-1-25">
+        <a href="/build-with-ai" class="gs-btn">Full build guide</a>
+        <a href="/guidelines" class="gs-btn-outline">Guidelines</a>
+      </div>
+    </div>
+
+    <!-- HOW TO PUBLISH -->
+    <h2 class="gs-section-h2">When you're ready to publish</h2>
+    <p class="gs-section-desc">After building and testing locally, submit your app to get free hosting and a subdomain.</p>
+
+    <div class="terminal gs-terminal-narrow">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span class="terminal-title">Publishing</span>
+      </div>
+      <div class="terminal-body gs-terminal-body-tight">
+        <div class="terminal-line visible"><span class="comment"># Run compliance checks first</span></div>
+        <div class="terminal-line visible"><span class="prompt">my-app $</span> <span class="cmd">fas check</span></div>
+        <div class="terminal-line visible"><span class="success">  ✓ All checks passed</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="comment"># Submit to the store</span></div>
+        <div class="terminal-line visible"><span class="prompt">my-app $</span> <span class="cmd">fas publish</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="output">  Submitting my-app for review...</span></div>
+        <div class="terminal-line visible"><span class="success">  ✓ Submission created</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="highlight">  What happens next:</span></div>
+        <div class="terminal-line visible"><span class="output">  1. We review your app (usually within 48 hours)</span></div>
+        <div class="terminal-line visible"><span class="output">  2. We create a repo + hosting + subdomain for you</span></div>
+        <div class="terminal-line visible"><span class="output">  3. You push your code, it auto-deploys</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="url">  Your app will be at: https://my-app.freeappstore.online</span></div>
+      </div>
+    </div>
+
+    <div class="gs-aside-block">
+      <p>Don't want to wait? Use <a href="https://console.freeappstore.online/create" class="gs-aside-link">VibeCode</a> to build and deploy instantly in your browser — no CLI, no review wait.</p>
+    </div>
+
+    <div class="gs-aside-block">
+      <p>Prefer your editor? Connect the <a href="https://docs.freeappstore.online/mcp/" class="gs-aside-link">FreeAppStore MCP</a> to build, publish, and improve apps from Claude Code or Cursor — let your AI ship the code, or hand the whole build to the platform's agent with a single prompt.</p>
+    </div>
+
+    <!-- AI TOOL EXAMPLES -->
+    <h2 class="gs-section-h2">Now use any AI tool to build</h2>
+    <p class="gs-section-desc-wide">After <code>fas init</code>, your project has a <code>CLAUDE.md</code> that points to the platform guide. Open any AI tool and start building.</p>
+
+    <!-- Claude Code -->
+    <div class="terminal gs-terminal-narrow">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span class="terminal-title">Claude Code</span>
+      </div>
+      <div class="terminal-body gs-terminal-body-tight">
+        <div class="terminal-line visible"><span class="prompt">my-app $</span> <span class="cmd">claude</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="success">  Claude reads CLAUDE.md automatically.</span></div>
+        <div class="terminal-line visible"><span class="success">  It already knows the platform SDK, design system, and deploy flow.</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="highlight">  &gt; Build a pomodoro timer with 25/5/15 minute intervals.</span></div>
+        <div class="terminal-line visible"><span class="highlight">    Save session count in localStorage. Play a sound when done.</span></div>
+      </div>
+    </div>
+
+    <!-- Cursor -->
+    <div class="terminal gs-terminal-narrow">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span class="terminal-title">Cursor</span>
+      </div>
+      <div class="terminal-body gs-terminal-body-tight">
+        <div class="terminal-line visible"><span class="output">  1. Open the project folder in Cursor</span></div>
+        <div class="terminal-line visible"><span class="output">  2. Create <span class="highlight">.cursorrules</span> in the root with one line:</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="url">     See https://freeappstore.online/skills.md for platform conventions.</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="output">  3. Open Composer (Cmd+I) and describe what you want to build.</span></div>
+        <div class="terminal-line visible"><span class="output">     Cursor reads .cursorrules and follows the platform rules.</span></div>
+      </div>
+    </div>
+
+    <!-- Codex CLI -->
+    <div class="terminal gs-terminal-narrow">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span class="terminal-title">Codex CLI (OpenAI)</span>
+      </div>
+      <div class="terminal-body gs-terminal-body-tight">
+        <div class="terminal-line visible"><span class="prompt">my-app $</span> <span class="cmd">codex</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="output">  Create <span class="highlight">AGENTS.md</span> in the root with one line:</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="url">  See https://freeappstore.online/skills.md for platform conventions.</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="output">  Codex reads AGENTS.md and knows the platform.</span></div>
+        <div class="terminal-line visible"><span class="highlight">  &gt; Build a unit converter for length, weight, and temperature.</span></div>
+      </div>
+    </div>
+
+    <!-- GitHub Copilot -->
+    <div class="terminal gs-terminal-narrow">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span class="terminal-title">GitHub Copilot</span>
+      </div>
+      <div class="terminal-body gs-terminal-body-tight">
+        <div class="terminal-line visible"><span class="output">  1. Open the project in VS Code with Copilot enabled</span></div>
+        <div class="terminal-line visible"><span class="output">  2. Create <span class="highlight">.github/copilot-instructions.md</span> with one line:</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="url">     See https://freeappstore.online/skills.md for platform conventions.</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="output">  3. Open Copilot Chat (Ctrl+Shift+I) and describe your app.</span></div>
+      </div>
+    </div>
+
+    <!-- Any tool -->
+    <div class="terminal gs-terminal-narrow">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span><span class="terminal-dot yellow"></span><span class="terminal-dot green"></span>
+        <span class="terminal-title">Windsurf / Cline / Zed / Continue / Aider / Any AI tool</span>
+      </div>
+      <div class="terminal-body gs-terminal-body-tight">
+        <div class="terminal-line visible"><span class="output">  Every AI coding tool has an instruction file. Add this one line:</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="url">  See https://freeappstore.online/skills.md for platform conventions.</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="output">  <span class="highlight">.windsurfrules</span>  — Windsurf</span></div>
+        <div class="terminal-line visible"><span class="output">  <span class="highlight">.continuerules</span>  — Continue</span></div>
+        <div class="terminal-line visible"><span class="output">  <span class="highlight">CONVENTIONS.md</span>  — Aider</span></div>
+        <div class="terminal-line visible"><span class="output">  <span class="highlight">Custom instructions</span> — Cline (in VS Code settings)</span></div>
+        <div class="terminal-line visible"><span class="output">  <span class="highlight">Assistant context</span>  — Zed (paste in panel)</span></div>
+        <div class="terminal-line visible"><span class="output"></span></div>
+        <div class="terminal-line visible"><span class="output">  The AI reads the skills.md URL and knows everything about the platform.</span></div>
+        <div class="terminal-line visible"><span class="output">  Then just describe what you want to build.</span></div>
+      </div>
+    </div>
+
+    <div class="gs-features">
+      <div class="gs-feature">
+        <strong>Free forever</strong>
+        <p>No charges, no trial, no credit card. Hosting included.</p>
+      </div>
+      <div class="gs-feature">
+        <strong>Auto-deploy</strong>
+        <p>Push to main, live in 30 seconds. No CI config needed.</p>
+      </div>
+      <div class="gs-feature">
+        <strong>Your subdomain</strong>
+        <p>my-app.freeappstore.online — instant, automatic.</p>
+      </div>
+      <div class="gs-feature">
+        <strong>AI-ready</strong>
+        <p>CLAUDE.md included. Works with any AI coding tool.</p>
+      </div>
+      <div class="gs-feature">
+        <strong>SDK included</strong>
+        <p>Auth (GitHub + Google), KV storage, collections, counters, real-time rooms, friends, voice input, email, webhooks, RBAC. One import.</p>
+      </div>
+      <div class="gs-feature">
+        <strong>Code quality</strong>
+        <p>Every deploy runs a 22-check health scan. See your score at <code>/v1/apps/YOUR_ID/quality</code>.</p>
+      </div>
+      <div class="gs-feature">
+        <strong>Open source</strong>
+        <p>MIT licensed. Your code, your app, fully open.</p>
+      </div>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+  <script src="/get-started.js?v={{VER_GET_STARTED_JS}}" integrity="{{SRI_GET_STARTED_JS}}" defer></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+name: Test storefront
+
+on:
+  pull_request:
+    paths:
+      - 'sites/storefront/**'
+  push:
+    branches: [main]
+    paths:
+      - 'sites/storefront/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-storefront-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sites/storefront
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Design system lint
+        run: bash scripts/check-design-system.sh .
+      - run: npm test

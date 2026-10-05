@@ -1,0 +1,29 @@
+name: Refresh storefront quality scores
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sites/storefront
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: mkdir -p dist/quality && node scripts/fetch-quality-scores.js
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f dist/quality/scores.json
+          git diff --cached --quiet || git commit -m "Refresh storefront quality scores [skip ci]"
+          git push

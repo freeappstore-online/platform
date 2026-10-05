@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Build — FreeAppStore</title>
+  <meta name="description" content="Build a free app for FreeAppStore. Clone a template, write code (with AI or without), push to deploy. Open source, TypeScript, React." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Build — FreeAppStore" />
+  <meta property="og:description" content="Build a free app for FreeAppStore. Clone a template, write code (with AI or without), push to deploy." />
+  <meta property="og:url" content="https://freeappstore.online/contribute" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/contribute" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})()</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Build</h1>
+      <p>Use an existing app, become a creator, or start building your own. Every app is open source.</p>
+    </div>
+
+    <div class="page-content">
+
+      <div class="contrib-highlight is-cta">
+        <h3>Building with AI? Start there.</h3>
+        <p>FreeAppStore is AI-first. Drop our <a href="https://freeappstore.online/skills.md">SKILLS.md</a> into Claude Code, Cursor, GitHub Copilot, Aider, or Codex — your agent already knows the brand rules, the privacy mandates, the CLI, and the deploy flow before it writes a line of code.</p>
+        <a href="/build-with-ai" class="btn">Build with AI &rarr;</a>
+      </div>
+
+      <!-- Section 1: Use an existing app -->
+      <h2>Use an existing app</h2>
+      <p>Every app on FreeAppStore is open source. You can contribute without building something new.</p>
+      <div class="contrib-cards">
+        <div class="contrib-card">
+          <h3>Browse apps</h3>
+          <p>Explore the <a href="/">app catalog</a> and use what's already built. All apps are free, private, and work offline.</p>
+        </div>
+        <div class="contrib-card">
+          <h3>Fix bugs</h3>
+          <p>Found a bug? Every app has a public repo on <a href="https://github.com/freeappstore-online">GitHub</a>. Fork it, fix it, open a PR. We review within 48 hours.</p>
+        </div>
+        <div class="contrib-card">
+          <h3>Suggest features</h3>
+          <p>Have an idea for an existing app? Open a <a href="https://github.com/freeappstore-online">GitHub Issue</a> on that app's repo. Describe what you'd like and why.</p>
+        </div>
+      </div>
+
+      <!-- Section 2: Become a Creator -->
+      <h2>Become a Creator</h2>
+      <p>Apply to join the creators program and ship your own app under the FreeAppStore platform.</p>
+
+      <div class="contrib-highlight">
+        <h3>What creators get</h3>
+        <ul>
+          <li>Your own app at <code>yourapp.freeappstore.online</code></li>
+          <li>Auto-deploy on every push to main via GitHub Actions</li>
+          <li>Listed in the FreeAppStore catalog for all users to discover</li>
+        </ul>
+      </div>
+
+      <h3>How to apply</h3>
+      <ol class="contrib-steps">
+        <li>
+          <strong>Open an issue</strong>
+          <p>Go to <a href="https://github.com/freeappstore-online/submissions/issues/new">github.com/freeappstore-online/submissions</a> and describe your app idea. Include your GitHub username.</p>
+        </li>
+        <li>
+          <strong>We review within 48 hours</strong>
+          <p>We check the idea fits the platform — unique category, genuinely useful, buildable as a PWA.</p>
+        </li>
+        <li>
+          <strong>Get provisioned</strong>
+          <p>Once approved, we add you to the creators team, create your repo, set up your subdomain, and configure auto-deploy. You start coding.</p>
+        </li>
+      </ol>
+
+      <h3>Requirements</h3>
+      <ul>
+        <li><strong>Free forever</strong> — no monetization, no ads, no paywalls</li>
+        <li><strong>No tracking</strong> — zero analytics, cookies, or data collection</li>
+        <li><strong>Open source</strong> — MIT license, public repo</li>
+        <li><strong>Uses our tech stack</strong> — TypeScript, React, Vite, Tailwind. See <a href="/guidelines">Guidelines</a></li>
+      </ul>
+
+      <!-- Section 3: Workspace Setup -->
+      <h2>Workspace Setup</h2>
+      <p>Organize your repos under a consistent folder so every tool — and every AI agent — knows where to find things.</p>
+      <div class="contrib-cmd">mkdir -p ~/dev/fas/apps && cd ~/dev/fas/apps</div>
+      <p>Clone each app repo into the <code>apps/</code> folder:</p>
+      <div class="contrib-cmd">git clone https://github.com/freeappstore-online/my-app.git
+# Result: ~/dev/fas/apps/my-app/</div>
+      <p>The recommended layout:</p>
+      <div class="contrib-cmd is-pre">~/dev/fas/
+  apps/             ← your app repos
+    timer/
+    notes/
+    calculator/
+  platform/         ← store site &amp; templates (maintainers only)</div>
+      <p>This matches the paths in <a href="https://freeappstore.online/skills.md">SKILLS.md</a>, so AI agents reading the platform guide will find your code automatically. If you also build games, use <code>~/dev/fgs/games/</code> for <a href="https://freegamestore.online">FreeGameStore</a> projects.</p>
+
+      <!-- Section 4: Start Building with the fas CLI -->
+      <h2>Start Building</h2>
+      <p>The <code>fas</code> CLI handles everything end-to-end — scaffold, check, publish, list, logs.</p>
+
+      <ol class="contrib-steps">
+        <li>
+          <strong>Install the CLI</strong>
+          <div class="contrib-cmd">npm i -g @freeappstore/cli</div>
+          <p>Requires Node 22+. Source on <a href="https://github.com/freeappstore-online/platform">github.com/freeappstore-online/platform</a>; package on <a href="https://www.npmjs.com/package/@freeappstore/cli">npm</a>.</p>
+        </li>
+        <li>
+          <strong>Sign in with GitHub</strong>
+          <div class="contrib-cmd">fas login</div>
+          <p>Device-flow OAuth — no password leaves your terminal. Token cached at <code>~/.fas/config.json</code> (mode 0600).</p>
+        </li>
+        <li>
+          <strong>Scaffold a new app</strong>
+          <div class="contrib-cmd">fas init my-app</div>
+          <p>Clones the standalone template, replaces <code>APPNAME</code> placeholders, runs <code>git init</code>, makes the first commit. Use <code>--template connected</code> if your app needs the platform backend (auth + KV + rooms).</p>
+        </li>
+        <li>
+          <strong>Develop locally</strong>
+          <div class="contrib-cmd">cd my-app && pnpm install && pnpm dev</div>
+          <p>Edit <code>web/src/App.tsx</code>. It already wraps your app in the SDK's <code>Shell</code> with starter screens in its <code>nav</code> prop: the topbar, navigation, error boundary and toasts come for free. Add a <code>nav</code> entry for each screen you build.</p>
+        </li>
+        <li>
+          <strong>Run compliance checks</strong>
+          <div class="contrib-cmd">fas check</div>
+          <p>Catches missing brand fonts, tracking SDKs, oversized bundles, missing PWA manifest, and unsubstituted template placeholders before you publish.</p>
+        </li>
+        <li>
+          <strong>Verify the layout fits (recommended)</strong>
+          <div class="contrib-cmd">fas screencheck</div>
+          <p>Builds, serves the dist locally, and drives a real Chromium at the <code>min_viewport_width</code> declared in your manifest in both portrait and landscape. Fails if the page actually scrolls — the static check only sees what you declared, this proves it works. Playwright is an opt-in peer dep; the command prompts to install on first run.</p>
+        </li>
+        <li>
+          <strong>Publish</strong>
+          <div class="contrib-cmd">fas publish</div>
+          <p>Provisions your repo at <code>github.com/freeappstore-online/my-app</code>, the hosting route, the custom subdomain, and the storefront entry. Prints the <code>git remote add</code> + <code>git push</code> commands when done.</p>
+          <p class="contrib-small">Scriptable from CI: pass <code>--name</code>, <code>--category</code>, <code>--type</code>, <code>--oneliner</code>, and <code>--yes</code>.</p>
+        </li>
+        <li>
+          <strong>Push your code</strong>
+          <div class="contrib-cmd">git push upstream main</div>
+          <p>Auto-deploys via GitHub Actions in ~30 seconds. Future commits to <code>main</code> deploy automatically too.</p>
+        </li>
+      </ol>
+
+      <h3>Other commands</h3>
+      <ul>
+        <li><code>fas list</code> — see all apps you've published</li>
+        <li><code>fas logs my-app</code> — tail deployment logs</li>
+        <li><code>fas doctor</code> — health check (Node, git, pnpm, auth, API reachability)</li>
+        <li><code>fas whoami</code> — show signed-in GitHub user</li>
+      </ul>
+
+      <p>Full reference: <a href="https://github.com/freeappstore-online/platform/tree/main/packages/cli#readme">github.com/freeappstore-online/platform/packages/cli</a></p>
+
+      <h2>Brand and UI rules (mandated)</h2>
+      <p>Every app on the platform looks predictable and consistent. The storefront, the detail pages, and every app share the same visual language so visitors learn the rhythm once and never relearn it. This is not a style guide suggestion — it's enforced by <code>fas check</code> and the CI workflow that runs before merge.</p>
+
+      <ul>
+        <li><strong>Use the template's CSS tokens.</strong> Colors, surfaces, lines, and spacing come from <code>--paper</code>, <code>--ink</code>, <code>--muted</code>, <code>--accent</code>, <code>--line</code>, <code>--line-strong</code>, <code>--panel</code>. Reference them via <code>var(--accent)</code>, etc. Don't redefine them in component CSS or inline styles.</li>
+        <li><strong>Brand fonts only:</strong> Manrope (body) and Fraunces (display). System and monospace fallbacks are fine. No custom display fonts (Cormorant, Sora, Inter, etc.) — even when they'd look great.</li>
+        <li><strong>No custom theme.</strong> Light/dark mode comes from the system preference, the <code>Shell</code>'s theme toggle (<code>:root[data-theme='dark']</code>) and the template's variables. Don't ship your own theme switcher or override <code>color-scheme</code>.</li>
+        <li><strong>Layout uses <code>Shell</code>.</strong> The topbar, navigation and footer rhythm come from the SDK's <code>Shell</code> (<code>@freeappstore/sdk/ui</code>): list every screen in its <code>nav</code> prop and build screens inside it, each starting with a <code>PageHeader</code>. Don't build your own header, sidebar or dock. <a href="https://docs.freeappstore.online/getting-started/#build-your-app-on-the-shell">How to build on the Shell</a>.</li>
+      </ul>
+
+      <p>The <code>fas check</code> compliance suite (run automatically before <code>fas publish</code> and again in your repo's CI) enforces:</p>
+      <ul>
+        <li><code>No template placeholders</code> — every <code>APPNAME</code> substituted</li>
+        <li><code>No tracking SDKs</code> — none of the 8 known trackers (Google Analytics, Plausible, Mixpanel, etc.)</li>
+        <li><code>Brand fonts present</code> — Manrope and Fraunces both referenced</li>
+        <li><code>No brand overrides</code> — no app redefines a platform CSS token outside the canonical theme file; no non-brand <code>font-family</code> declarations</li>
+        <li><code>PWA manifest</code> — <code>web/public/manifest.json</code> with <code>name</code>, <code>display</code>, <code>start_url</code></li>
+        <li><code>Bundle size</code> — main bundle under 300 KB gzipped</li>
+      </ul>
+
+      <p>Run them locally any time:</p>
+      <div class="contrib-cmd">fas check</div>
+      <p>Hard failures block <code>fas publish</code> (override with <code>--skip-checks</code> at your own risk; admin review will still catch issues). Warnings are advisory.</p>
+
+      <div class="contrib-highlight">
+        <h3>AI-assisted development</h3>
+        <p>Using Claude Code, Cursor, Codex, or another AI coding tool? Add this to your agent so it knows the entire platform — tech stack, brand, how to deploy:</p>
+        <div class="contrib-cmd">Read https://freeappstore.online/skills.md</div>
+      </div>
+
+      <div class="cta-box">
+        <h3>Ready?</h3>
+        <p>Apply to join the creators program and start building.</p>
+        <a href="https://github.com/freeappstore-online/submissions/issues/new" class="btn">Apply now &rarr;</a>
+      </div>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

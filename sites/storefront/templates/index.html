@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FreeAppStore — Beautiful, Free-Forever Web Apps</title>
+  <meta name="description" content="A platform of free-forever web apps. No charges, no plans, no paywalls. Works on mobile, tablet, and desktop. Open source." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="FreeAppStore — Beautiful, Free-Forever Web Apps" />
+  <meta property="og:description" content="A platform of free-forever web apps. No charges, no plans, no paywalls. Works on mobile, tablet, and desktop. Open source." />
+  <meta property="og:url" content="https://freeappstore.online/" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/" />
+  <!-- WebSite + SearchAction JSON-LD so Google can wire its sitelinks search
+       box to our in-store search. Organization gives knowledge-panel signal. -->
+  <script type="application/ld+json">{
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://freeappstore.online/#website",
+        "url": "https://freeappstore.online/",
+        "name": "FreeAppStore",
+        "description": "A platform of free-forever web apps. No charges, no plans, no paywalls.",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": "https://freeappstore.online/?q={search_term_string}",
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://freeappstore.online/#org",
+        "name": "FreeAppStore",
+        "url": "https://freeappstore.online/",
+        "logo": "https://freeappstore.online/icon-512.png",
+        "sameAs": ["https://github.com/freeappstore-online"]
+      }
+    ]
+  }</script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+  <meta http-equiv="x-dns-prefetch-control" content="on" />
+  <link rel="dns-prefetch" href="https://api.freeappstore.online" />
+  <!-- CSP lives in dist/_headers (HTTP-header source of truth). frame-ancestors,
+       report-to, and Strict-Transport-Security only work as real HTTP headers,
+       so duplicating CSP in <meta> creates drift; we don't. Local dev (no CF
+       Pages) runs without CSP enforcement — that's a known dev-only gap. -->
+  <!-- Apply theme before paint to avoid flash. Reads localStorage then falls back to system preference. -->
+  <script>
+    (function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="card-styles.css" />
+  <!-- CF Web Analytics — cookieless, no PII. Token injected at build time from FAS_CF_BEACON_TOKEN; omitted if unset. -->
+  __CF_BEACON__
+</head>
+<body>
+  {{HEADER}}
+
+
+  <main class="container">
+    <h1 class="sr-only">FreeAppStore — Free-Forever Web Apps</h1>
+    <section class="apps-section" id="apps">
+      <div class="apps-toolbar">
+        <div class="input-wrap" id="searchInputWrap">
+          <svg class="input-icon muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          <input
+            class="search-input"
+            type="search"
+            id="storefront-search"
+            placeholder="Search apps…"
+            autocomplete="off"
+            aria-label="Search apps"
+          />
+        </div>
+        <div class="filter-bar" id="categoryFilter" role="toolbar" aria-label="Filter by category">
+          <button class="filter-btn active" type="button" data-category="all">All</button>
+          {{CATEGORY_FILTERS}}
+        </div>
+        <div class="filter-bar" id="sortBar" role="toolbar" aria-label="Sort apps">
+          <button class="filter-btn" type="button" data-sort="az">A→Z</button>
+          <button class="filter-btn active" type="button" data-sort="newest">Newest</button>
+          <button class="filter-btn" type="button" data-sort="popular">Most popular</button>
+        </div>
+        <div class="apps-count" id="apps-count">{{APPS_COUNT}} apps</div>
+      </div>
+
+      <div class="split-layout">
+        <div class="apps-pane">
+          <div class="apps-grid compact" id="apps-grid">
+            {{APPS_GRID}}
+          </div>
+
+          <p id="search-empty" hidden>No apps match your search here.</p>
+
+          <section id="cross-store-results" hidden class="mt-section">
+            <h2>Also matching on FreeGameStore</h2>
+            <div class="apps-grid compact" id="cross-store-grid"></div>
+          </section>
+        </div>
+
+        <aside class="preview-pane" id="previewPane" aria-label="App preview">
+          <div class="preview-toolbar">
+            <div class="preview-title" id="previewTitle">No app selected<span class="preview-host"></span></div>
+            <div class="preview-mode-bar" id="previewModeBar" hidden>
+              <button class="preview-mode-btn active" type="button" data-preview="desktop" title="Desktop view" aria-label="Desktop view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+              </button>
+              <button class="preview-mode-btn" type="button" data-preview="tablet" title="Tablet view" aria-label="Tablet view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              </button>
+              <button class="preview-mode-btn" type="button" data-preview="mobile" title="Mobile view" aria-label="Mobile view">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              </button>
+            </div>
+            <button class="preview-btn" id="previewAbout" type="button" title="View details" aria-label="View details" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            </button>
+            <button class="preview-btn" id="previewNewTab" type="button" title="Open in new tab" aria-label="Open in new tab" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3h7v7"/><path d="M10 14L21 3"/><path d="M21 13v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h7"/></svg>
+            </button>
+            <button class="preview-btn" id="previewClose" type="button" title="Close preview" aria-label="Close preview" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div class="preview-body">
+            <div class="preview-empty" id="previewEmpty">
+              <span class="empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6,4 20,12 6,20"/></svg>
+              </span>
+              <span class="empty-title">Pick any app to launch it here</span>
+              <span class="empty-tip">Click an app on the left and it loads instantly in this pane. Use <strong>↗</strong> to pop it into a new tab.</span>
+            </div>
+            <iframe class="preview-frame" id="previewFrame" title="App preview" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer-when-downgrade" loading="lazy" hidden></iframe>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <script type="application/json" id="cross-store-registry">{{CROSS_STORE_REGISTRY}}</script>
+    <script src="/search.js?v={{VER_SEARCH_JS}}" integrity="{{SRI_SEARCH_JS}}" defer></script>
+
+    <aside class="aside-note">
+      Looking for games? Visit <a href="https://freegamestore.online" class="text-accent-bold">FreeGameStore</a> — free-forever web games.
+    </aside>
+
+    <section id="where" class="section-spaced">
+      <h2 class="section-h2">Where everything lives</h2>
+      <p class="lede">A map of every URL across the stores. Bookmark this page.</p>
+      <div class="tile-grid">
+        <div class="tile">
+          <strong>For users</strong>
+          <p class="mt-half-small"><a href="https://freeappstore.online" class="text-accent-bold">freeappstore.online</a> — free apps (you are here)<br/><a href="https://freegamestore.online" class="text-accent-bold">freegamestore.online</a> — free games<br/><a href="https://freewebstore.online" class="text-accent-bold">freewebstore.online</a> — one-page sites</p>
+        </div>
+        <div class="tile">
+          <strong>For developers</strong>
+          <p class="mt-half-small"><a href="https://console.freeappstore.online/create" class="text-accent-bold">console.freeappstore.online/create</a> — VibeCode (browser scaffolder)<br/><a href="/build-with-ai" class="text-accent-bold">/build-with-ai</a> — AI-assisted dev guide<br/><a href="/skills.md" class="text-accent-bold">/skills.md</a> — SDK reference<br/><a href="https://github.com/freeappstore-online" class="text-accent-bold">github.com/freeappstore-online</a> — source</p>
+        </div>
+        <div class="tile">
+          <strong>CLI</strong>
+          <p class="mt-half-mono">npm i -g @freeappstore/cli<br/>fas init &lt;id&gt;<br/>fas publish<br/>fas check</p>
+        </div>
+        <div class="tile">
+          <strong>Admin / submission</strong>
+          <p class="mt-half-small"><a href="https://admin.freeappstore.online" class="text-accent-bold">admin.freeappstore.online</a> — admin UI (Google sign-in)<br/><a href="https://github.com/freeappstore-online/submissions/issues/new" class="text-accent-bold">file a creator application</a></p>
+        </div>
+        <div class="tile">
+          <strong>Pro sister stores</strong>
+          <p class="mt-half-small"><a href="https://proappstore.online" class="text-pro-bold">proappstore.online</a> — pro apps<br/><a href="https://console.proappstore.online" class="text-pro-bold">console.proappstore.online</a> — pro dev console<br/><a href="https://dashboard.proappstore.online" class="text-pro-bold">dashboard.proappstore.online</a> — pro user account<br/><a href="https://prowebstore.online" class="text-pro-bold">prowebstore.online</a> — KG-CMS sites</p>
+        </div>
+        <div class="tile">
+          <strong>Backend APIs</strong>
+          <p class="mt-half-small"><a href="https://api.freeappstore.online" class="text-accent-bold">api.freeappstore.online</a> — free side<br/><a href="https://api.proappstore.online" class="text-pro-bold">api.proappstore.online</a> — pro side</p>
+        </div>
+        <div class="tile">
+          <strong>Reference</strong>
+          <p class="mt-half-small"><a href="/about" class="text-accent-bold">/about</a> · <a href="/pricing" class="text-accent-bold">/pricing</a> · <a href="https://docs.freeappstore.online" class="text-accent-bold">docs</a><br/><a href="/quality" class="text-accent-bold">/quality</a> — store audit dashboard<br/><a href="/privacy" class="text-accent-bold">/privacy</a> · <a href="/terms" class="text-accent-bold">/terms</a></p>
+        </div>
+        <div class="tile">
+          <strong>All five orgs on GitHub</strong>
+          <p class="mt-half-mono">freeappstore-online<br/>freegamestore-online<br/>freewebstore-online<br/>proappstore-online<br/>prowebstore-online</p>
+        </div>
+      </div>
+    </section>
+  </main>
+  {{FOOTER}}
+
+
+  <script src="/storefront.js?v={{VER_STOREFRONT_JS}}" integrity="{{SRI_STOREFRONT_JS}}" defer></script>
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}" defer></script>
+</body>
+</html>

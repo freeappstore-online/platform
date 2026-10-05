@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>@{{USERNAME}} — FreeAppStore</title>
+  <meta name="description" content="{{APP_COUNT}} free app{{S}} on FreeAppStore by @{{USERNAME}}." />
+  <meta property="og:type" content="profile" />
+  <meta property="og:title" content="@{{USERNAME}} — FreeAppStore" />
+  <meta property="og:description" content="{{APP_COUNT}} free app{{S}} on FreeAppStore by @{{USERNAME}}." />
+  <meta property="og:url" content="https://freeappstore.online/u/{{USERNAME}}.html" />
+  <meta property="og:image" content="https://avatars.githubusercontent.com/{{USERNAME}}?size=400" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/u/{{USERNAME}}.html" />
+  <!-- Person + ProfilePage JSON-LD so Google can show "by @{{USERNAME}}"
+       attribution under our app cards in search results. -->
+  <script type="application/ld+json">{
+    "@context": "https://schema.org",
+    "@type": "ProfilePage",
+    "mainEntity": {
+      "@type": "Person",
+      "name": "{{USERNAME}}",
+      "url": "https://github.com/{{USERNAME}}",
+      "image": "https://avatars.githubusercontent.com/{{USERNAME}}?size=400",
+      "sameAs": ["https://github.com/{{USERNAME}}"]
+    },
+    "isPartOf": {"@id": "https://freeappstore.online/#website"}
+  }</script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/card-styles.css" />
+  __CF_BEACON__
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <section class="author-hero">
+      <img
+        src="https://avatars.githubusercontent.com/{{USERNAME}}?size=200"
+        alt=""
+        class="author-hero-avatar"
+        width="120"
+        height="120"
+        loading="eager"
+      />
+      <div class="author-hero-meta">
+        <h1 class="author-hero-name">@{{USERNAME}}</h1>
+        <p class="author-hero-tagline">{{APP_COUNT}} app{{S}} on FreeAppStore</p>
+        {{BADGES}}
+        <a href="https://github.com/{{USERNAME}}" class="source-link" rel="noopener">View on GitHub &rarr;</a>
+      </div>
+    </section>
+
+    <section class="app-section">
+      <h2>Apps by @{{USERNAME}}</h2>
+      <div class="apps-grid compact">
+        {{APP_CARDS}}
+      </div>
+    </section>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

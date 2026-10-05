@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+echo "Pre-push: running security regression tests..."
+npm run test:security
+echo "Pre-push checks passed."

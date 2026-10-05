@@ -1,0 +1,49 @@
+# FreeAppStore
+
+> FreeAppStore is a free, open-source app platform where developers publish PWA apps at `<name>.freeappstore.online`. Apps are built with TypeScript, React, and Vite, deployed via GitHub Actions to Cloudflare R2. The platform provides an SDK with auth, per-user storage, real-time rooms, and UI components. Every app is free forever, MIT-licensed, and privacy-first (zero tracking). For the full AI agent guide, see [SKILLS.md](https://freeappstore.online/skills.md).
+
+## AI Agent Integration
+
+- [SKILLS.md](https://freeappstore.online/skills.md): Complete platform guide for AI agents. Tech stack, SDK reference (auth, KV, counters, collections, rooms, proxy), UI components, CLI commands, deploy flow, compliance rules. Point your AI agent here.
+- [MCP Server](https://mcp.freeappstore.online/mcp): Remote MCP server (Streamable HTTP). Drives the full build loop in two modes: (a) your AI writes the code — `create_app`, `update_files`, `read_file`, `list_files` (write a file, it auto-redeploys); (b) the platform's VibeCode agent writes+deploys from a prompt — `agent_build`, `agent_status`. Plus inspect/reference: `list_apps`, `app_info`, `deploy_status`, `app_logs`, `platform_guide`, `sdk_reference`. Connect with `npx mcp-remote https://mcp.freeappstore.online/mcp`.
+- [MCP Discovery](https://freeappstore.online/.well-known/mcp.json): Auto-discovery endpoint for MCP clients and registries.
+- [MCP Docs](https://freeappstore.online/docs/mcp): Setup guide for Claude Code, Cursor, and other MCP clients.
+- [MCP Auth](https://freeappstore.online/docs/mcp#authentication): OAuth 2.1 (automatic via mcp-remote) or Bearer session token. Write tools verify per-app ownership.
+- [MCP Security](https://freeappstore.online/docs/mcp#security): Scoped tokens, session isolation, rate limiting, read-only mode, dry-run support. No generic shell/API proxy.
+- [MCP Capabilities](https://freeappstore.online/docs/mcp#capabilities): What's read-only, what's write-protected, what's not supported via MCP.
+- [Agent Instructions](https://github.com/freeappstore-online/mcp/blob/main/AGENTS.md): Rules for AI agents — use MCP only, no direct REST API calls, confirm before destructive actions.
+
+## SDK
+
+- [@freeappstore/sdk on npm](https://www.npmjs.com/package/@freeappstore/sdk): Platform SDK. `initApp()` gives you auth, KV storage, counters, collections, real-time rooms, API proxy, user API key vault, React hooks, and 18 UI components.
+- [SDK Docs](https://freeappstore.online/docs): Full SDK documentation with examples for every feature.
+- [UI Component Library](https://freeappstore.online/docs/ui): Shell (the standard app frame: wrap every app in `<Shell app={fas} nav={NAV}>` with one nav item per screen; alias FasShell), PageHeader, NavBar, useToast, useDocumentTitle, useOnline, Avatar, SignInButton, ThemeToggle, ProfileMenu, ProfilePage, Spinner, Badge, Card, Tabs, Modal, ConfirmDialog, EmptyState, ProgressBar, SearchInput, ListRow, ErrorBoundary, KeyPrompt.
+- [API Key Vault](https://api.freeappstore.online/v1/keys): Platform-hosted key management page. Users store encrypted API keys (OpenAI, Anthropic, etc.) that apps access via the proxy. Apps never see plaintext keys.
+- [Free Libraries & APIs](https://freeappstore.online/skills.md#free-apis-no-key-required): 25 free tools that need no API key. Libraries: Leaflet (maps), Recharts (charts), Tiptap (rich text), date-fns, dnd-kit, Framer Motion, Lucide icons, Zustand. APIs: Open-Meteo (weather), Nominatim (geocoding), OSRM (routing), REST Countries, Wikipedia, and more.
+
+## CLI
+
+- [@freeappstore/cli on npm](https://www.npmjs.com/package/@freeappstore/cli): CLI for scaffolding, compliance checks, and publishing. Commands: `fas init`, `fas check`, `fas publish`, `fas login`, `fas list`.
+
+## For Developers
+
+- [Build with AI](https://freeappstore.online/build-with-ai): Step-by-step guide to building an app with Claude Code, Cursor, Codex, or any AI tool.
+- [Get Started](https://freeappstore.online/get-started): Manual setup guide without AI.
+- [Guidelines](https://freeappstore.online/guidelines): Tech stack, project structure, brand rules, compliance checks, templates.
+- [Contribute](https://freeappstore.online/contribute): How to become a creator and publish apps.
+
+## Platform
+
+- [App Catalog](https://freeappstore.online/): Browse all published apps.
+- [Creator Console](https://freeappstore.online/app/): Manage your apps, deploy status, analytics.
+- [VibeCode](https://console.freeappstore.online/create): AI app builder in the browser.
+- [Pricing](https://freeappstore.online/pricing): Free vs Pro feature comparison and cost breakdown.
+- [Platform Source](https://github.com/freeappstore-online/platform): SDK, CLI, compliance, and backend source code.
+
+## Optional
+
+- [Privacy Policy](https://freeappstore.online/privacy): Zero tracking, no cookies, localStorage only.
+- [Terms of Service](https://freeappstore.online/terms): MIT license required, free forever.
+- [Quality Reports](https://freeappstore.online/quality): Automated quality scores for every app.
+- [FreeGameStore](https://freegamestore.online/): Sister platform for free web games.
+- [ProAppStore](https://proappstore.online/): Pro tier with uncapped rooms, AI proxy, custom domains.

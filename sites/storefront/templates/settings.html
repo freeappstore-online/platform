@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — FreeAppStore</title>
+  <meta name="description" content="Customize your FreeAppStore experience — theme, text size, and more." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+  <script>
+    (function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})();
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  __CF_BEACON__
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container settings-page">
+    <h1>Settings</h1>
+    <p class="lede">Customize your FreeAppStore experience. Changes are saved automatically.</p>
+
+    <section class="settings-section">
+      <h2>Appearance</h2>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <strong>Theme</strong>
+          <span class="setting-desc">Choose between light and dark mode, or follow your system preference.</span>
+        </div>
+        <div class="setting-control theme-picker" id="themePicker">
+          <button class="setting-option" type="button" data-theme="light" aria-label="Light theme">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            Light
+          </button>
+          <button class="setting-option" type="button" data-theme="dark" aria-label="Dark theme">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+            Dark
+          </button>
+          <button class="setting-option" type="button" data-theme="system" aria-label="System theme">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            System
+          </button>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <strong>Text size</strong>
+          <span class="setting-desc">Adjust the reading size across all pages.</span>
+        </div>
+        <div class="setting-control text-size-picker" id="textSizePicker">
+          <button class="setting-option" type="button" data-size="sm" aria-label="Small text">A&minus;</button>
+          <button class="setting-option" type="button" data-size="" aria-label="Default text">A</button>
+          <button class="setting-option" type="button" data-size="lg" aria-label="Large text">A+</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  {{FOOTER}}
+
+
+  <script src="/settings.js?v={{VER_SETTINGS_JS}}" integrity="{{SRI_SETTINGS_JS}}" defer></script>
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

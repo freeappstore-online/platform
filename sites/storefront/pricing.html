@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pricing — FreeAppStore</title>
+  <meta name="description" content="FreeAppStore is free forever, with sensible caps. ProAppStore lifts the caps for $9/mo. Transparent pricing — we tell you exactly what costs us money and why." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Pricing — FreeAppStore" />
+  <meta property="og:description" content="Free forever, with sensible caps. Pro lifts them for $9/mo. Transparent." />
+  <meta property="og:url" content="https://freeappstore.online/pricing" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/pricing" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})()</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Pricing</h1>
+      <p>FreeAppStore is for <strong>apps</strong> (not games &mdash; see <a href="https://freegamestore.online">FreeGameStore</a>). Free forever. We're transparent about what costs us money, and we cap the things that scale dangerously. <a href="https://proappstore.online">ProAppStore</a> lifts the caps for creators who need more.</p>
+    </div>
+
+    <div class="page-content">
+      <div class="tier-grid">
+        <div class="tier free">
+          <h3>Free</h3>
+          <div class="price">$0<small>/forever</small></div>
+          <p class="blurb">Everything most apps need, with sensible caps. No credit card, no trial.</p>
+          <ul>
+            <li>Static hosting + GitHub CI<small>R2 + Actions, auto-deploy on push</small></li>
+            <li>Auth (GitHub OAuth, SSO)<small>One identity across all apps</small></li>
+            <li>Per-user KV storage<small>1 MB/user, 100 keys, prefix filter</small></li>
+            <li>Collections (document database)<small>Firestore-style, 10k docs/collection</small></li>
+            <li>Shared counters<small>Atomic cross-user (votes, views, leaderboards)</small></li>
+            <li>Real-time rooms (WebSocket)<small>32 peers/room, 64 rooms/app</small></li>
+            <li>Secret-injecting API proxy<small>5 secrets, 10k requests/day</small></li>
+            <li>User API key vault<small>Encrypted storage for OpenAI, Anthropic, etc.</small></li>
+            <li>App-level RBAC roles<small>owner, member, moderator, editor, viewer + custom</small></li>
+            <li>18 React UI components<small>Modal, Tabs, Card, Badge, Spinner, KeyPrompt, etc.</small></li>
+            <li>MCP server for AI agents<small>SDK reference, deploy status, app info</small></li>
+            <li>Compliance audit + quality reports<small>Automated on every push</small></li>
+            <li>Default subdomain<small>your-app.freeappstore.online</small></li>
+            <li>Open source, MIT-licensed<small>Required for publication</small></li>
+          </ul>
+          <a href="https://console.freeappstore.online/create" class="cta">Start building free</a>
+        </div>
+
+        <div class="tier pro">
+          <h3>Pro</h3>
+          <div class="price">$9<small>/month per creator</small></div>
+          <p class="blurb">All your apps under one subscription. Caps lifted, premium primitives unlocked.</p>
+          <ul>
+            <li>Everything in Free, caps lifted or 10x</li>
+            <li>Server-side AI (Workers AI)<small>Included quota, no user key needed</small></li>
+            <li>Custom domain<small>your-domain.com via CF for SaaS</small></li>
+            <li>File uploads + R2 storage<small>Per-app bucket for images, media, docs</small></li>
+            <li>Cron jobs + scheduled workers<small>Digests, reminders, batch processing</small></li>
+            <li>Transactional email<small>Resend, ~1k sends/mo included</small></li>
+            <li>Real-time rooms with no soft cap<small>Server-authoritative, persistent state</small></li>
+            <li>Per-app D1 database<small>Direct SQL, not just KV/collections</small></li>
+            <li>Higher KV: 10 MB/user, no cap</li>
+            <li>Payments + creator payouts<small>Stripe subscriptions, usage-based split</small></li>
+            <li>Proprietary source allowed<small>No MIT requirement</small></li>
+            <li>Priority support</li>
+          </ul>
+          <a href="https://proappstore.online" class="cta">Upgrade to Pro</a>
+        </div>
+      </div>
+
+      <h2>What the caps actually mean</h2>
+      <p>We chose caps that fit normal app patterns. The vast majority of apps never bump into them. The caps exist for the rare case where a single app suddenly handles thousands of concurrent users — and where the underlying CF cost would otherwise scale into four-figure-monthly territory overnight.</p>
+
+      <div class="caps">
+        <h3>Free-tier caps in detail</h3>
+        <table>
+          <thead>
+            <tr><th>Resource</th><th>Cap</th><th>What happens at the limit</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>KV ops per minute (per app)</td><td>1,000</td><td>HTTP 429 with retry-after</td></tr>
+            <tr><td>KV active users per day (per app)</td><td>100</td><td>Soft cap; new user reads still served</td></tr>
+            <tr><td>Storage per user (per app)</td><td>1MB</td><td>Writes return 413 once full</td></tr>
+            <tr><td>Active rooms per app</td><td>64</td><td>LRU eviction of oldest idle room</td></tr>
+            <tr><td>Peers per room</td><td>32</td><td>33rd connection refused</td></tr>
+            <tr><td>Messages per peer/sec</td><td>100</td><td>Excess messages dropped</td></tr>
+            <tr><td>Counters per app</td><td>1,000</td><td>New counter creation refused</td></tr>
+            <tr><td>Counter increment range</td><td>-1000 to +1000</td><td>Returns 400</td></tr>
+            <tr><td>Proxy secrets per app</td><td>5</td><td>6th secret refused with 409</td></tr>
+            <tr><td>Proxy requests per day</td><td>10,000</td><td>HTTP 429 for the rest of the day</td></tr>
+            <tr><td>User API keys per provider</td><td>1</td><td>Update replaces existing key</td></tr>
+            <tr><td>Server-side AI</td><td>not available</td><td>Pro feature (user key vault works)</td></tr>
+            <tr><td>File uploads</td><td>not available</td><td>Pro feature</td></tr>
+            <tr><td>Cron / scheduled jobs</td><td>not available</td><td>Pro feature</td></tr>
+            <tr><td>Custom domain</td><td>not available</td><td>Pro feature</td></tr>
+            <tr><td>Transactional email</td><td>not available</td><td>Pro feature</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="why-cap">
+        <strong>Why we cap rooms.</strong> Real-time WebSocket rooms run on Cloudflare Durable Objects, billed per GB-second of duration. A single popular app with 10,000 concurrent users 24/7 would cost us roughly <strong>$41,000/month</strong> in DO charges alone. The 32-peer/64-room cap keeps the worst case bounded. Most apps (chat, presence, WebRTC signaling) never hit these limits. If yours does, that's when Pro pays off.
+      </div>
+
+      <h2>How we count costs</h2>
+      <p>The honest version: most things on Cloudflare are basically free at the scale of small apps. The hard cliff is Durable Objects (rooms). Here's what we actually pay:</p>
+      <ul>
+        <li><strong>Static hosting (R2):</strong> $0 — even at high traffic. R2 has zero egress fees.</li>
+        <li><strong>Workers requests:</strong> 100k/day per Worker on the free tier; Workers Paid ($5/mo) covers 10M/mo.</li>
+        <li><strong>D1 (the database):</strong> 5M reads, 100k writes, 5GB free per day.</li>
+        <li><strong>KV (per-user storage):</strong> 100k reads + 1k writes/day free; cents per million beyond.</li>
+        <li><strong>Durable Objects (rooms):</strong> $0.15 per million requests + $12.50 per million GB-seconds duration. <em>This is the line item the cap protects.</em></li>
+        <li><strong>Workers AI:</strong> per-token billing; only available on Pro.</li>
+      </ul>
+
+      <h2>Why publish all this</h2>
+      <p>Most platforms hide costs behind marketing copy. We don't. If you're going to build on top of FreeAppStore, you deserve to know exactly what's free, what we pay for, and where the upgrade prompt will appear. Pre-launch we have no real users — these caps and prices are our best guess and may shift before launch. We'll never silently move a free feature behind the paywall.</p>
+
+      <p class="pricing-footer-links"><a href="https://proappstore.online/pricing" class="pricing-footer-link">See ProAppStore pricing in detail</a> | <a href="https://proappstore.online/docs" class="pricing-footer-link">Read the SDK docs</a> | <a href="https://proappstore.online/roadmap" class="pricing-footer-link">View the roadmap</a></p>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

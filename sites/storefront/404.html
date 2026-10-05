@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Page Not Found — FreeAppStore</title>
+  <meta name="robots" content="noindex, follow" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Page Not Found — FreeAppStore" />
+  <meta property="og:description" content="Free apps, forever. Open source, privacy-first." />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <script>(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})()</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="container">
+      <a href="/" class="logo">Free <span>Apps</span></a>
+      <nav>
+        <a href="/">Apps</a>
+        <a href="https://freegamestore.online">Games</a>
+        <a href="/about.html">About</a>
+        <a href="/build-with-ai.html">Build</a>
+        <a href="https://console.freeappstore.online/create">VibeCode</a>
+        <a href="/guidelines.html">Guidelines</a>
+        <a href="/app/">Console</a>
+        <a href="https://docs.freeappstore.online">Docs</a>
+        <a href="https://proappstore.online" class="pro-link">Pro</a>
+        <span id="navAuth"></span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="page-header notfound-header">
+      <h1>Page not found</h1>
+      <p>The page you're looking for doesn't exist or has been moved.</p>
+      <a href="/" class="btn notfound-cta">Browse apps &rarr;</a>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

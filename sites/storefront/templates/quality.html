@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quality Dashboard — FreeAppStore</title>
+  <meta name="description" content="Live audit of every free app on FreeAppStore. Each app loaded in iframes at every reference viewport — see fit, scroll, and clipping per device size." />
+  <link rel="canonical" href="https://freeappstore.online/quality.html" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/style.css" />
+  <!-- CF Web Analytics — cookieless, no PII. Token injected at build time. -->
+  __CF_BEACON__
+</head>
+<body>
+  
+  {{HEADER}}
+
+
+  <main class="container">
+    <!-- Code Quality Reports (powered by VibeCode QA) -->
+    <section class="q-section-spaced">
+      <h1>Code Quality</h1>
+      <p class="q-lede">
+        Every app is scanned with <a href="https://vibecodeqa.online" class="text-accent-bold">VibeCode QA</a> — 22 automated checks covering types, tests, security, architecture, and more. Click a grade to see the full report.
+      </p>
+      <div class="q-summary" id="code-quality-grid">{{CODE_QUALITY_CARDS}}</div>
+    </section>
+
+    <hr class="q-divider" />
+
+    <!-- Viewport Audit -->
+    <div id="q-summary-view">
+      <h1 class="q-mt-15">Viewport Audit</h1>
+      <p class="q-lede-plain">
+        Every app on FreeAppStore is loaded in iframes at every reference viewport
+        and audited live for fit, scroll, and clipping. Click an app to see its
+        layout at all 12 reference device sizes.
+      </p>
+      <div class="q-controls" id="q-store-tabs">
+        <button data-store="apps" class="active">Apps</button>
+        <button data-store="games">Games</button>
+        <button data-store="fixtures">Fixtures</button>
+        <button data-store="all">All</button>
+      </div>
+      <div class="q-summary" id="q-summary-list"></div>
+    </div>
+
+    <div id="q-detail-view" hidden>
+      <p class="q-mt-15">
+        <a href="/quality.html">← All apps</a>
+      </p>
+      <div class="q-detail-head">
+        <h1 id="q-detail-name" class="q-heading-flat"></h1>
+        <span class="index unknown" id="q-detail-index">—</span>
+      </div>
+      <p class="q-meta-line" id="q-detail-meta"></p>
+      <div class="q-controls" id="q-mode-tabs">
+        <button data-mode="all" class="active">All viewports</button>
+        <button data-mode="phone">Phones only</button>
+        <button data-mode="tablet">Tablets+</button>
+      </div>
+      <div class="q-grid" id="q-grid"></div>
+      <p class="q-fineprint">
+        Iframes are scaled-to-fit previews; pointer-events are disabled. Each
+        frame loads the app at the actual device pixel size, then the app's
+        embedded reporter posts its overflow / clipping numbers back here.
+      </p>
+    </div>
+  </main>
+  {{FOOTER}}
+
+
+  <script type="application/json" id="q-registry">{{REGISTRIES_JSON}}</script>
+  <script src="/quality.js?v={{VER_QUALITY_JS}}" integrity="{{SRI_QUALITY_JS}}"></script>
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>
