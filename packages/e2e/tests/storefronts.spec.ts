@@ -27,11 +27,15 @@ test('an app detail page has the modern layout: split + phone-frame + history', 
 }) => {
   // Pick whatever app is currently listed rather than hardcoding one —
   // apps get delisted (the old hardcoded `tip` now 404s), but the storefront
-  // detail *template* is what we're actually testing. Derive the id from the
-  // first grid card's link (it points at the app's live subdomain).
+  // detail *template* is what we're actually testing. Take the id from the
+  // card metadata rather than an inner link: cards may contain relative
+  // quality-badge links before their app-launch CTA.
   await page.goto('https://freeappstore.online');
-  const appHref = await page.locator('.app-card a').first().getAttribute('href');
-  const id = new URL(appHref!).hostname.split('.')[0];
+  const appCard = page.locator('.app-card').first();
+  const id =
+    (await appCard.getAttribute('data-id')) ||
+    (await appCard.getAttribute('data-about'))?.match(/^\/apps\/([^/]+)\/?$/)?.[1];
+  if (!id) throw new Error('The first storefront app card has no app id');
 
   await page.goto(`https://freeappstore.online/apps/${id}`);
   // The split container exists with both halves.
