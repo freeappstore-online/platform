@@ -15,18 +15,22 @@
  *   PUT  /v1/apps/:id/analytics
  *   GET  /v1/apps/:id/analytics/stats?days=N
  *
- * Auth: shared session cookie + bearer token via fas:token in localStorage
+ * Auth: shared session cookie + bearer token in fas:session localStorage
  * (set by auth.js after sign-in). No token → render the sign-in CTA.
  */
 
 (function () {
   var API = 'https://api.freeappstore.online';
-  var TOKEN_KEY = 'fas:token';
+  var SESSION_KEY = 'fas:session';
   var root = document.getElementById('a-content');
   if (!root) return;
 
   function token() {
-    try { return localStorage.getItem(TOKEN_KEY); } catch (e) { return null; }
+    try {
+      var raw = localStorage.getItem(SESSION_KEY);
+      var session = raw ? JSON.parse(raw) : null;
+      return session && typeof session.token === 'string' ? session.token : null;
+    } catch (e) { return null; }
   }
 
   function fmtViews(n) {
@@ -457,7 +461,7 @@
   }
 
   // The token might be set by auth.js after init runs; listen for the
-  // fas:auth-ready event that auth.js fires when it finishes hydrating.
+  // fas:auth-ready event that auth.js fires after it confirms a session.
   if (token()) main();
   else {
     window.addEventListener('fas:auth-ready', main, { once: true });

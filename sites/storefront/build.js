@@ -304,7 +304,7 @@ function escapeAttrCss(s) {
 function renderAppCard(app, published) {
   const q = qualityScores[app.id];
   const qualityBadge = q && q.grade
-    ? `<a href="/quality/${escapeHtml(app.id)}/" class="quality-badge grade-${q.grade.toLowerCase()}" title="Code quality: ${q.score}/100">${q.grade}</a>`
+    ? `<a href="/quality.html?app=${encodeURIComponent(app.id)}&amp;store=apps" class="quality-badge grade-${q.grade.toLowerCase()}" title="Code quality: ${q.score}/100">${q.grade}</a>`
     : '';
   // Letter fallback lives on a data-attribute; storefront.js binds the
   // img.error listener and reads it. No more JS-string-in-HTML-attribute splicing.
@@ -470,7 +470,7 @@ function renderCodeQualityBadge(appId) {
   const q = qualityScores[appId];
   if (!q || !q.grade) return '';
   const cls = q.score >= 80 ? 'audit-pass' : q.score >= 60 ? 'audit-warn' : 'audit-fail';
-  return `<p class="audit-badge ${cls}"><span class="dot"></span> Code quality: <strong>${q.grade}</strong> (${q.score}/100) &middot; <a href="/quality/${escapeHtml(appId)}/">full report</a></p>`;
+  return `<p class="audit-badge ${cls}"><span class="dot"></span> Code quality: <strong>${q.grade}</strong> (${q.score}/100) &middot; <a href="/quality.html?app=${encodeURIComponent(appId)}&amp;store=apps">full report</a></p>`;
 }
 
 function renderAuditBadge(summary) {
@@ -709,7 +709,7 @@ const codeQualityCards = apps
     const q = qualityScores[app.id];
     if (!q || !q.grade) return '';
     const gradeClass = q.score >= 80 ? 'ok' : q.score >= 60 ? 'warn' : 'bad';
-    return `<a href="/quality/${escapeHtml(app.id)}/" class="q-card"><div class="q-card-head"><span class="name">${escapeHtml(app.name)}</span><span class="index ${gradeClass}">${q.grade}</span></div><div class="meta">${q.score}/100</div></a>`;
+    return `<a href="/quality.html?app=${encodeURIComponent(app.id)}&amp;store=apps" class="q-card"><div class="q-card-head"><span class="name">${escapeHtml(app.name)}</span><span class="index ${gradeClass}">${q.grade}</span></div><div class="meta">${q.score}/100</div></a>`;
   })
   .filter(Boolean)
   .join('\n        ');
@@ -968,6 +968,8 @@ const filesToCopy = [
   'robots.txt',
   '404.html',
   'about.html',
+  'capabilities.html',
+  'browser-apis.html',
   'contribute.html',
   'privacy.html',
   'terms.html',

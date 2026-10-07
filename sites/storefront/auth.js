@@ -100,6 +100,14 @@
       && /^[A-Za-z0-9._~+/=:-]+$/.test(t);
   }
 
+  function notifyAuthReady() {
+    if (typeof window.dispatchEvent !== "function") return;
+    // Event is available in supported browsers. The object fallback keeps the
+    // shared script harmless in lightweight embedded test environments.
+    var event = typeof Event === "function" ? new Event("fas:auth-ready") : { type: "fas:auth-ready" };
+    window.dispatchEvent(event);
+  }
+
   if (session && session.token && session.user && isPlausibleToken(session.token)) {
     showUser(session.user);
     // Verify session is still valid in background. On 401/403 we clear the
@@ -111,6 +119,8 @@
           try { localStorage.removeItem("fas:session"); } catch (e) {}
           el.replaceChildren();
           showSignIn();
+        } else if (r.ok) {
+          notifyAuthReady();
         }
       })
       .catch(function () {});
@@ -132,6 +142,7 @@
             if (user && user.id) {
               try { localStorage.setItem("fas:session", JSON.stringify({ token: token, user: user })); } catch (e) {}
               showUser(user);
+              notifyAuthReady();
             } else {
               showSignIn();
             }

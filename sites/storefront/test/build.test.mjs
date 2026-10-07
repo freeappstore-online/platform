@@ -20,7 +20,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -33,7 +33,7 @@ const REAL_REGISTRY = join(REPO_ROOT, "registry.json");
 const XSS_PAYLOAD = "<script>alert(1)</script>";
 const FIXTURE_ID = "xss-fixture";
 
-function runBuild() {
+function runBuild({ withQualityScores = false } = {}) {
   // Use a unique temp dir per run so parallel test invocations don't
   // collide. The temp dir is cleaned up after each test below.
   const tmp = mkdtempSync(join(tmpdir(), "fas-build-test-"));
@@ -61,6 +61,13 @@ function runBuild() {
     developer: "FreeAppStore",
   });
   writeFileSync(tmpRegistry, JSON.stringify(realRegistry, null, 2));
+  if (withQualityScores) {
+    mkdirSync(join(tmpDist, "quality"), { recursive: true });
+    writeFileSync(
+      join(tmpDist, "quality", "scores.json"),
+      JSON.stringify(Object.fromEntries(realRegistry.apps.map((app) => [app.id, { score: 95, grade: "A" }])), null, 2),
+    );
+  }
 
   // Network calls inside build.js all degrade gracefully on failure;
   // both streams are suppressed so the test output stays readable
@@ -230,6 +237,35 @@ test("cards have no inline style attribute; iconBg lives in card-styles.css", ()
         css.includes(`.app-card[data-id="${app.id}"] .app-icon`),
         `card-styles.css missing rule for id "${app.id}"`,
       );
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("build ships the advertised capability pages and wraps analytics CSS", () => {
+  const { tmp, tmpDist } = runBuild();
+  try {
+    assert.ok(readFileSync(join(tmpDist, "capabilities.html"), "utf8").includes("Platform Capabilities"));
+    assert.ok(readFileSync(join(tmpDist, "browser-apis.html"), "utf8").includes("Browser APIs"));
+    const analyticsHtml = readFileSync(join(tmpDist, "analytics.html"), "utf8");
+    assert.match(analyticsHtml, /<style>\s*\.a-section\s*\{/);
+    assert.match(analyticsHtml, /\.a-diag-foot[^}]*}\s*<\/style>/);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test("quality report links use the query-parameter detail route", () => {
+  const { tmp, tmpDist, registry } = runBuild({ withQualityScores: true });
+  try {
+    const expected = `/quality.html?app=${registry.apps[0].id}&amp;store=apps`;
+    const indexHtml = readFileSync(join(tmpDist, "index.html"), "utf8");
+    const qualityHtml = readFileSync(join(tmpDist, "quality.html"), "utf8");
+    const detailHtml = readFileSync(join(tmpDist, "apps", `${registry.apps[0].id}.html`), "utf8");
+    for (const html of [indexHtml, qualityHtml, detailHtml]) {
+      assert.ok(html.includes(expected), `missing canonical quality detail link: ${expected}`);
+      assert.ok(!html.includes(`/quality/${registry.apps[0].id}/`), "legacy quality route was emitted");
     }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -513,7 +549,9 @@ test("HTML pages must not use inline styles (CSP: style-src self)", () => {
   for (const file of htmlFiles) {
     const content = readFileSync(file, "utf8");
     const name = file.replace(REPO_ROOT + "/", "");
-    if (/<style\b/i.test(content)) {
+    if (name === "analytics.html") {
+      assert.match(content, /<style>\s*\.a-section\s*\{[\s\S]*?\.a-diag-foot[^}]*}\s*<\/style>/);
+    } else if (/<style\b/i.test(content)) {
       violations.push(`${name}: contains <style> block (blocked by CSP style-src 'self')`);
     }
     const withoutJsonLd = content.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, "");
