@@ -1669,6 +1669,31 @@ footer .container {
 .ai-pane-pro-link { color: var(--pro, #7c3aed); font-weight: 600; }
 .ai-reading-list { font-size: 0.92rem; line-height: 2; }
 
+/* ---- /ai/<tool> guides ---- */
+.ai-guide-main { max-width: 720px; }
+.ai-guide-lead { font-size: 1.15rem; color: var(--muted); line-height: 1.6; margin-bottom: 2rem; }
+.ai-guide-callout { margin: 1.5rem 0; padding: 1.25rem 1.5rem; border-left: 4px solid var(--accent); border-radius: 0 0.75rem 0.75rem 0; background: var(--accent-soft, var(--panel)); }
+.ai-guide-callout strong { color: var(--ink); }
+.ai-guide-steps { counter-reset: step; list-style: none; padding: 0; }
+.ai-guide-steps > li { counter-increment: step; margin-bottom: 1.5rem; padding-left: 2.5rem; position: relative; }
+.ai-guide-steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
+.ai-guide-command { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 1rem; margin: 0.5rem 0; padding: 0.85rem 1.1rem; overflow-x: auto; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--panel); color: var(--ink); font: inherit; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88rem; line-height: 1.5; text-align: left; cursor: pointer; }
+.ai-guide-command:hover, .ai-guide-command:focus-visible { border-color: var(--accent); outline: none; }
+.ai-guide-command-text { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.ai-guide-command-status { flex: 0 0 auto; color: var(--muted); font-family: inherit; font-size: 0.75rem; }
+.ai-guide-command.is-copied .ai-guide-command-status::before { content: 'Copied'; }
+.ai-guide-command.is-copied .ai-guide-command-status { font-size: 0; color: var(--accent); }
+.ai-guide-command.is-copied .ai-guide-command-status::before { font-size: 0.75rem; }
+.ai-guide-copy-hint { margin-top: 0.5rem; color: var(--muted); font-size: 0.85rem; }
+.ai-guide-heading { margin: 2.5rem 0 1rem; font-size: 1.4rem; font-weight: 800; }
+.ai-guide-context { margin: 1rem 0; }
+.ai-guide-prompt { display: block; margin: 1rem 0; padding: 1rem 1.25rem; border: 1px dashed var(--line); border-radius: 0.75rem; background: var(--panel); color: var(--ink); font-size: 0.92rem; line-height: 1.55; }
+.ai-guide-prompt::before { display: block; margin-bottom: 0.5rem; color: var(--muted); content: 'Prompt'; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.ai-guide-tool-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0; }
+.ai-guide-tool-nav a { padding: 0.4rem 0.8rem; border: 1px solid var(--line); border-radius: 0.5rem; color: var(--muted); font-size: 0.82rem; font-weight: 600; text-decoration: none; }
+.ai-guide-tool-nav a:hover, .ai-guide-tool-nav a.active { border-color: var(--accent); color: var(--accent); }
+.ai-guide-links { margin-top: 2rem; }
+
 /* ---- Shared data table base ---- */
 .data-table,
 .spec-table,

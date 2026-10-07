@@ -47,6 +47,8 @@ const REFERENCE = [
 // summary list so it shows something useful before any iframes load.
 const CACHE_KEY = 'fas:quality:scores:v1';
 const REPORT_TIMEOUT_MS = 6000;
+const STORES = ['apps', 'games', 'fixtures', 'all'];
+const MODES = ['all', 'phone', 'tablet'];
 let cleanupDetail = () => {};
 
 // ---- helpers ----
@@ -84,6 +86,25 @@ function indexClass(score) {
   if (score >= 95) return 'ok';
   if (score >= 80) return 'warn';
   return 'bad';
+}
+
+function selectedValue(value, allowed, fallback) {
+  return allowed.includes(value) ? value : fallback;
+}
+
+function setControlState(tabs, dataName, value) {
+  Array.from(tabs.querySelectorAll('button')).forEach((button) => {
+    const selected = button.dataset[dataName] === value;
+    button.classList.toggle('active', selected);
+    button.setAttribute('aria-checked', String(selected));
+  });
+}
+
+function setUrlParam(name, value) {
+  const params = new URLSearchParams(location.search);
+  params.set(name, value);
+  const query = params.toString();
+  history.pushState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash || ''}`);
 }
 
 /**
@@ -150,15 +171,17 @@ function renderSummary(store) {
   }).join('');
 }
 
-function setupStoreTabs() {
+function setupStoreTabs(initialStore) {
   const tabs = document.getElementById('q-store-tabs');
   if (!tabs) return;
+  setControlState(tabs, 'store', initialStore);
   tabs.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
     if (target.tagName !== 'BUTTON') return;
-    Array.from(tabs.querySelectorAll('button')).forEach(b => b.classList.remove('active'));
-    target.classList.add('active');
-    renderSummary(target.dataset.store);
+    const store = selectedValue(target.dataset.store, STORES, 'apps');
+    setControlState(tabs, 'store', store);
+    setUrlParam('store', store);
+    renderSummary(store);
   });
 }
 
@@ -275,15 +298,17 @@ function renderDetail(appEntry, mode) {
   };
 }
 
-function setupModeTabs(appEntry) {
+function setupModeTabs(appEntry, initialMode) {
   const tabs = document.getElementById('q-mode-tabs');
   if (!tabs) return;
+  setControlState(tabs, 'mode', initialMode);
   tabs.addEventListener('click', (e) => {
     const target = /** @type {HTMLElement} */ (e.target);
     if (target.tagName !== 'BUTTON') return;
-    Array.from(tabs.querySelectorAll('button')).forEach(b => b.classList.remove('active'));
-    target.classList.add('active');
-    renderDetail(appEntry, target.dataset.mode);
+    const mode = selectedValue(target.dataset.mode, MODES, 'all');
+    setControlState(tabs, 'mode', mode);
+    setUrlParam('mode', mode);
+    renderDetail(appEntry, mode);
   });
 }
 
@@ -292,12 +317,13 @@ function setupModeTabs(appEntry) {
 function init() {
   const params = new URLSearchParams(location.search);
   const appId = params.get('app');
-  const store = params.get('store') || 'apps';
+  const store = selectedValue(params.get('store'), STORES, 'apps');
+  const mode = selectedValue(params.get('mode'), MODES, 'all');
   if (!appId) {
     document.getElementById('q-summary-view').hidden = false;
     document.getElementById('q-detail-view').hidden = true;
-    setupStoreTabs();
-    renderSummary('apps');
+    setupStoreTabs(store);
+    renderSummary(store);
     return;
   }
   const reg = loadRegistry();
@@ -309,16 +335,16 @@ function init() {
   if (!entry) {
     document.getElementById('q-summary-view').hidden = false;
     document.getElementById('q-detail-view').hidden = true;
-    setupStoreTabs();
-    renderSummary('apps');
+    setupStoreTabs(store);
+    renderSummary(store);
     return;
   }
   document.getElementById('q-summary-view').hidden = true;
   document.getElementById('q-detail-view').hidden = false;
   document.getElementById('q-detail-name').textContent = entry.name || entry.id;
   document.getElementById('q-detail-meta').textContent = entry.appUrl;
-  setupModeTabs(entry);
-  renderDetail(entry, 'all');
+  setupModeTabs(entry, mode);
+  renderDetail(entry, mode);
 }
 
 init();

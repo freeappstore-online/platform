@@ -42,7 +42,7 @@ const tools = [
       { cmd: 'fas init my-app && cd my-app && pnpm install', note: 'Scaffold your app' },
     ],
     build: 'Open the folder in Cursor and prompt: "Build me a tip splitter app using the Shell layout and brand tokens."',
-    context: `Add to <code>.cursorrules</code> in your project root:\n\n<div class="cmd">Read ${SKILLS_URL} for platform skills, brand mandates, compliance rules, and the publish flow.</div>`,
+    context: `Add to <code>.cursorrules</code> in your project root:\n\n${copyCommand(`Read ${SKILLS_URL} for platform skills, brand mandates, compliance rules, and the publish flow.`)}`,
     tips: [
       'Cursor reads <code>.cursorrules</code> automatically on every prompt.',
       'Run <code>fas check</code> before publishing to catch compliance issues.',
@@ -60,7 +60,7 @@ const tools = [
       { cmd: 'npm i -g @freeappstore/cli && fas login', note: 'Install FreeAppStore CLI' },
     ],
     build: `codex "Read ${SKILLS_URL} then scaffold and build a habit tracker for FreeAppStore"`,
-    context: `Codex reads the URL inline. For repeat use, add to your <code>codex.md</code>:\n\n<div class="cmd">Read ${SKILLS_URL} for FreeAppStore platform conventions.</div>`,
+    context: `Codex reads the URL inline. For repeat use, add to your <code>codex.md</code>:\n\n${copyCommand(`Read ${SKILLS_URL} for FreeAppStore platform conventions.`)}`,
     tips: [
       'After Codex finishes, run <code>fas check && fas publish</code> from the output directory.',
       'Codex builds in a sandbox — review the output before publishing.',
@@ -77,7 +77,7 @@ const tools = [
       { cmd: 'fas init my-app && cd my-app && pnpm install', note: 'Scaffold your app' },
     ],
     build: 'Open in Windsurf and prompt: "Build me a flashcard app using the Shell layout and brand tokens."',
-    context: `Add to your Windsurf global rules or <code>.windsurfrules</code>:\n\n<div class="cmd">Read ${SKILLS_URL} for platform skills, brand mandates, compliance rules, and the publish flow.</div>`,
+    context: `Add to your Windsurf global rules or <code>.windsurfrules</code>:\n\n${copyCommand(`Read ${SKILLS_URL} for platform skills, brand mandates, compliance rules, and the publish flow.`)}`,
     tips: [
       'Windsurf picks up rules files automatically.',
       'Run <code>fas check</code> before publishing.',
@@ -94,7 +94,7 @@ const tools = [
       { cmd: 'npm i -g @freeappstore/cli && fas login', note: 'Install FreeAppStore CLI' },
       { cmd: 'fas init my-app && cd my-app && pnpm install && code .', note: 'Scaffold and open in VS Code' },
     ],
-    build: `Start a Cline chat and paste:\n\n<div class="ai-prompt">Read ${SKILLS_URL} — then build me a weather dashboard app.</div>`,
+    build: `Start a Cline chat and paste:\n\n<span class="ai-guide-prompt">Read ${SKILLS_URL} — then build me a weather dashboard app.</span>`,
     context: `Add the skills URL to Cline's custom instructions in settings, or paste it at the start of each chat.`,
     tips: [
       'Cline can run terminal commands — it can handle <code>fas check</code> and <code>fas publish</code> for you.',
@@ -111,7 +111,7 @@ const tools = [
       { cmd: 'npm i -g @freeappstore/cli && fas login', note: 'Install FreeAppStore CLI' },
       { cmd: 'fas init my-app && cd my-app && pnpm install && code .', note: 'Scaffold and open in VS Code' },
     ],
-    build: `In Copilot Chat, type:\n\n<div class="ai-prompt">@workspace Read ${SKILLS_URL} — then build me a pomodoro timer app.</div>`,
+    build: `In Copilot Chat, type:\n\n<span class="ai-guide-prompt">@workspace Read ${SKILLS_URL} — then build me a pomodoro timer app.</span>`,
     context: `The <code>@workspace</code> prefix gives Copilot access to your project files. Paste the skills URL once per session.`,
     tips: [
       'Copilot Chat is better for full-file generation. Inline Copilot is better for line-by-line edits.',
@@ -189,19 +189,26 @@ const tools = [
   },
 ];
 
+function copyCommand(command) {
+  return `<button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">${esc(command)}</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>`;
+}
+
 function html(tool) {
   const quickstartBlock = tool.quickstart
-    ? `\n    <div class="callout">
+    ? `\n    <div class="ai-guide-callout">
       <strong>One command:</strong>
-      <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">${esc(tool.quickstart)}</div>
-      <p style="margin-top:0.5rem;font-size:0.85rem;color:var(--muted);">Click the command to copy.</p>
+      ${copyCommand(tool.quickstart)}
+      <p class="ai-guide-copy-hint">Select a command to copy it.</p>
     </div>\n`
     : '';
 
   const setupSteps = tool.setup.map(s =>
-    `      <li>
+      `      <li>
         <strong>${s.note}</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">${esc(s.cmd)}</div>
+        ${copyCommand(s.cmd)}
       </li>`
   ).join('\n');
 
@@ -221,81 +228,52 @@ function html(tool) {
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="/style.css" />
-  <style>
-    .ai-lead { font-size: 1.15rem; color: var(--muted); line-height: 1.6; max-width: 720px; margin-bottom: 2rem; }
-    .steps { counter-reset: step; list-style: none; padding: 0; }
-    .steps li { counter-increment: step; margin-bottom: 1.5rem; padding-left: 2.5rem; position: relative; }
-    .steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
-    .cmd { background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.85rem 1.1rem; margin: 0.5rem 0; font-family: ui-monospace, SF Mono, Menlo, monospace; font-size: 0.88rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-    .cmd:hover { border-color: var(--accent); }
-    .callout { padding: 1.25rem 1.5rem; border-left: 4px solid var(--accent); background: var(--accent-soft, var(--panel)); border-radius: 0 0.75rem 0.75rem 0; margin: 1.5rem 0; }
-    .callout strong { color: var(--ink); }
-    h2 { font-size: 1.4rem; font-weight: 800; margin: 2.5rem 0 1rem; }
-    .ai-prompt { background: var(--surface); border: 1px dashed var(--border); border-radius: 0.75rem; padding: 1rem 1.25rem; margin: 1rem 0; font-size: 0.92rem; line-height: 1.55; color: var(--ink); }
-    .ai-prompt::before { content: 'Prompt'; display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; }
-    .tool-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0; }
-    .tool-nav a { padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 0.5rem; font-size: 0.82rem; font-weight: 600; color: var(--muted); text-decoration: none; }
-    .tool-nav a:hover, .tool-nav a.active { border-color: var(--accent); color: var(--accent); }
-  </style>
+  __CF_BEACON__
 </head>
 <body>
-  <header>
-    <div class="container">
-      <a href="/" class="logo">Free <span>Apps</span></a>
-      <nav>
-        <a href="/">Apps</a>
-        <a href="https://freegamestore.online">Games</a>
-        <a href="/about.html">About</a>
-        <a href="/build-with-ai.html">Build</a>
-        <a href="https://console.freeappstore.online/create">VibeCode</a>
-        <a href="/guidelines.html">Guidelines</a>
-        <a href="https://proappstore.online" class="pro-link">Pro</a>
-        <span id="navAuth"></span>
-      </nav>
-    </div>
-  </header>
+  {{HEADER}}
 
-  <main class="container" style="max-width:720px;">
+  <main class="container ai-guide-main">
 
-    <div class="tool-nav">
+    <div class="ai-guide-tool-nav" aria-label="AI tool guides">
 ${tools.map(t => `      <a href="/ai/${t.slug}.html"${t.slug === tool.slug ? ' class="active"' : ''}>${t.name}</a>`).join('\n')}
     </div>
 
     <h1>${tool.name} on FreeAppStore</h1>
-    <p class="ai-lead">${tool.desc}</p>
+    <p class="ai-guide-lead">${tool.desc}</p>
 ${quickstartBlock}
-    <h2>Setup</h2>
-    <ol class="steps">
+    <h2 class="ai-guide-heading">Setup</h2>
+    <ol class="ai-guide-steps">
 ${setupSteps}
     </ol>
 
-    <h2>Build</h2>
+    <h2 class="ai-guide-heading">Build</h2>
     <p>${tool.build}</p>
 
-    <h2>Give it context</h2>
-    <p>${tool.context}</p>
+    <h2 class="ai-guide-heading">Give it context</h2>
+    <div class="ai-guide-context">${tool.context}</div>
 
-    <h2>Publish</h2>
-    <ol class="steps">
+    <h2 class="ai-guide-heading">Publish</h2>
+    <ol class="ai-guide-steps">
       <li>
         <strong>Check compliance</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">fas check</div>
+        ${copyCommand('fas check')}
       </li>
       <li>
         <strong>Publish to the store</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">fas publish</div>
+        ${copyCommand('fas publish')}
         <p>Creates repo, hosting route, custom subdomain, and store listing — all at once.</p>
       </li>
       <li>
         <strong>Future updates</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">git push origin main</div>
+        ${copyCommand('git push origin main')}
         <p>Auto-deploys in ~30 seconds.</p>
       </li>
     </ol>
 
-    <h2>Add user accounts &amp; cloud storage</h2>
+    <h2 class="ai-guide-heading">Add user accounts &amp; cloud storage</h2>
     <p>Standalone apps use localStorage. If you need GitHub sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
-    <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">cd web && pnpm add @freeappstore/sdk</div>
+    ${copyCommand('cd web && pnpm add @freeappstore/sdk')}
     <ul>
       <li><strong>Auth</strong> — GitHub OAuth. <code>fas.auth.signIn()</code></li>
       <li><strong>KV</strong> — Per-user storage. <code>fas.kv.set('key', value)</code></li>
@@ -304,41 +282,23 @@ ${setupSteps}
     </ul>
     <p><a href="${SDK_DOCS}">SDK docs</a></p>
 
-    <h2>MCP Server (optional)</h2>
+    <h2 class="ai-guide-heading">MCP Server (optional)</h2>
     <p>For deeper AI integration, connect the FreeAppStore MCP server. Your agent gets tools to check deploys, look up SDK docs, and list apps.</p>
-    <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">npx mcp-remote https://mcp.freeappstore.online/mcp</div>
+    ${copyCommand('npx mcp-remote https://mcp.freeappstore.online/mcp')}
     <p><a href="https://docs.freeappstore.online/mcp/">MCP setup guide &rarr;</a></p>
 
-    <h2>Tips</h2>
+    <h2 class="ai-guide-heading">Tips</h2>
     <ul>
 ${tipsList}
     </ul>
 
-    <p style="margin-top:2rem;"><a href="${PLATFORM_REPO}">Platform source</a> · <a href="${SKILLS_URL}">Full platform guide</a></p>
+    <p class="ai-guide-links"><a href="${PLATFORM_REPO}">Platform source</a> · <a href="${SKILLS_URL}">Full platform guide</a></p>
 
   </main>
 
-  <footer>
-    <div class="container">
-      <div class="footer-left">
-        <a href="/" class="logo">Free <span>Apps</span></a>
-        <p>Free forever, open source, privacy-first.</p>
-      </div>
-      <div class="footer-links">
-        <a href="/about.html">About</a>
-        <a href="/build-with-ai.html">Build</a>
-        <a href="https://console.freeappstore.online/create">VibeCode</a>
-        <a href="/guidelines.html">Guidelines</a>
-        <a href="/quality.html">Quality</a>
-        <a href="/pricing.html">Pricing</a>
-        <a href="/privacy.html">Privacy</a>
-        <a href="/terms.html">Terms</a>
-        <a href="https://github.com/freeappstore-online">GitHub</a>
-        <a href="https://proappstore.online" style="color:var(--pro);">Pro</a>
-      </div>
-    </div>
-  </footer>
-  <script src="/auth.js"></script>
+  {{FOOTER}}
+  <script src="/ai-guide.js?v={{VER_AI_GUIDE_JS}}" integrity="{{SRI_AI_GUIDE_JS}}" defer></script>
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
 </body>
 </html>`;
 }

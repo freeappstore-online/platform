@@ -37,11 +37,11 @@
         and audited live for fit, scroll, and clipping. Click an app to see its
         layout at all 12 reference device sizes.
       </p>
-      <div class="q-controls" id="q-store-tabs">
-        <button data-store="apps" class="active">Apps</button>
-        <button data-store="games">Games</button>
-        <button data-store="fixtures">Fixtures</button>
-        <button data-store="all">All</button>
+      <div class="q-controls" id="q-store-tabs" role="radiogroup" aria-label="Store">
+        <button type="button" role="radio" data-store="apps" class="active" aria-checked="true">Apps</button>
+        <button type="button" role="radio" data-store="games" aria-checked="false">Games</button>
+        <button type="button" role="radio" data-store="fixtures" aria-checked="false">Fixtures</button>
+        <button type="button" role="radio" data-store="all" aria-checked="false">All</button>
       </div>
       <div class="q-summary" id="q-summary-list"></div>
     </div>
@@ -55,10 +55,10 @@
         <span class="index unknown" id="q-detail-index">—</span>
       </div>
       <p class="q-meta-line" id="q-detail-meta"></p>
-      <div class="q-controls" id="q-mode-tabs">
-        <button data-mode="all" class="active">All viewports</button>
-        <button data-mode="phone">Phones only</button>
-        <button data-mode="tablet">Tablets+</button>
+      <div class="q-controls" id="q-mode-tabs" role="radiogroup" aria-label="Viewport mode">
+        <button type="button" role="radio" data-mode="all" class="active" aria-checked="true">All viewports</button>
+        <button type="button" role="radio" data-mode="phone" aria-checked="false">Phones only</button>
+        <button type="button" role="radio" data-mode="tablet" aria-checked="false">Tablets+</button>
       </div>
       <div class="q-grid" id="q-grid"></div>
       <p class="q-fineprint">

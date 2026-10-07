@@ -390,6 +390,7 @@ const sriHashes = {
   PRISM_JS: sriHash('prism.js'),
   PRISM_AUTODETECT_JS: sriHash('prism-autodetect.js'),
   SETTINGS_JS: sriHash('settings.js'),
+  AI_GUIDE_JS: sriHash('ai-guide.js'),
 };
 // Content-version tokens for the same set of assets (same read, different encoding).
 const contentVersions = {
@@ -403,6 +404,7 @@ const contentVersions = {
   PRISM_JS: contentVersion('prism.js'),
   PRISM_AUTODETECT_JS: contentVersion('prism-autodetect.js'),
   SETTINGS_JS: contentVersion('settings.js'),
+  AI_GUIDE_JS: contentVersion('ai-guide.js'),
 };
 
 const categoryMap = new Map();
@@ -982,6 +984,7 @@ const filesToCopy = [
   'prism.js',
   'prism-autodetect.js',
   'settings.js',
+  'ai-guide.js',
   '_redirects',
 ];
 
@@ -1037,29 +1040,32 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
   '',
 ].join('\n'));
 
-// Copy static assets. .html files get a substitution pass for {{SRI_*}} and
-// {{VER_*}} placeholders so integrity attributes and versioned src URLs match
-// the just-computed hashes — same pipeline as the index template. Everything
-// else is binary-copied.
+// Apply the normal static-page substitution pipeline. This keeps static and
+// generated pages on the shared shell, analytics, asset versioning, and SRI.
+function processStaticHtml(html, file) {
+  html = injectPartials(html);
+  for (const [k, v] of Object.entries(sriHashes)) {
+    html = html.replaceAll(`{{SRI_${k}}}`, v);
+  }
+  for (const [k, v] of Object.entries(contentVersions)) {
+    html = html.replaceAll(`{{VER_${k}}}`, v);
+  }
+  html = html.replaceAll('__CF_BEACON__', CF_BEACON_SNIPPET);
+  if (/{{(?:SRI|VER)_[A-Z_]+}}/.test(html)) {
+    console.error(`Unsubstituted asset placeholder in ${file}`);
+    process.exit(1);
+  }
+  return html;
+}
+
+// Copy static assets. .html files get the static-page substitution pipeline;
+// everything else is binary-copied.
 filesToCopy.forEach(file => {
   const src = path.join(ROOT, file);
   if (!fs.existsSync(src)) return;
   const dst = path.join(DIST, file);
   if (file.endsWith('.html')) {
-    let html = fs.readFileSync(src, 'utf8');
-    html = injectPartials(html);
-    for (const [k, v] of Object.entries(sriHashes)) {
-      html = html.replaceAll(`{{SRI_${k}}}`, v);
-    }
-    for (const [k, v] of Object.entries(contentVersions)) {
-      html = html.replaceAll(`{{VER_${k}}}`, v);
-    }
-    html = html.replaceAll('__CF_BEACON__', CF_BEACON_SNIPPET);
-    if (/{{SRI_[A-Z_]+}}/.test(html)) {
-      console.error(`Unsubstituted {{SRI_*}} placeholder in ${file}`);
-      process.exit(1);
-    }
-    fs.writeFileSync(dst, html);
+    fs.writeFileSync(dst, processStaticHtml(fs.readFileSync(src, 'utf8'), file));
   } else {
     fs.copyFileSync(src, dst);
   }
@@ -1092,7 +1098,9 @@ if (fs.existsSync(aiSrcDir)) {
   fs.mkdirSync(aiDestDir, { recursive: true });
   for (const f of fs.readdirSync(aiSrcDir)) {
     if (!f.endsWith('.html')) continue;
-    fs.copyFileSync(path.join(aiSrcDir, f), path.join(aiDestDir, f));
+    const source = path.join(aiSrcDir, f);
+    const dest = path.join(aiDestDir, f);
+    fs.writeFileSync(dest, processStaticHtml(fs.readFileSync(source, 'utf8'), `ai/${f}`));
   }
 }
 

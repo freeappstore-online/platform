@@ -2,7 +2,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 
 const analyticsSource = readFileSync(new URL("../analytics.js", import.meta.url), "utf8");
@@ -12,6 +13,8 @@ const searchSource = readFileSync(new URL("../search.js", import.meta.url), "utf
 const storefrontSource = readFileSync(new URL("../storefront.js", import.meta.url), "utf8");
 const buildSource = readFileSync(new URL("../build.js", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+const qualityTemplate = readFileSync(new URL("../templates/quality.html", import.meta.url), "utf8");
+const aiDir = new URL("../ai/", import.meta.url);
 
 function node() {
   return {
@@ -100,4 +103,59 @@ test("settings controls wrap and stack before they can overflow a narrow viewpor
   assert.match(styleSource, /\.setting-control\s*\{[\s\S]*?flex-wrap:\s*wrap/, "settings controls should wrap");
   assert.match(styleSource, /\.setting-control :is\(input, select, button\).*max-width:\s*100%/, "controls should be width constrained");
   assert.match(styleSource, /@media \(max-width: 480px\)[\s\S]*?\.setting-row \{[^}]*flex-direction:\s*column/, "settings rows should stack on narrow screens");
+});
+
+test("generated AI guides contain no inline styles or event handlers", () => {
+  for (const file of readdirSync(aiDir).filter((name) => name.endsWith(".html"))) {
+    const html = readFileSync(join(aiDir.pathname, file), "utf8");
+    assert.doesNotMatch(html, /\sstyle\s*=/i, `${file} must not emit inline style attributes`);
+    assert.doesNotMatch(html, /\sonclick\s*=/i, `${file} must not emit inline click handlers`);
+    assert.doesNotMatch(html, /<style\b/i, `${file} must not emit inline style blocks`);
+  }
+});
+
+test("AI guides expose shared-build placeholders for shell, beacon, SRI, and versioning", () => {
+  const html = readFileSync(join(aiDir.pathname, "codex.html"), "utf8");
+  assert.match(html, /\{\{HEADER\}\}/, "guide source should request the shared header");
+  assert.match(html, /\{\{FOOTER\}\}/, "guide source should request the shared footer");
+  assert.match(html, /__CF_BEACON__/, "guide source should request the analytics beacon");
+  assert.match(html, /ai-guide\.js\?v=\{\{VER_AI_GUIDE_JS\}\}.*\{\{SRI_AI_GUIDE_JS\}\}/, "guide source should request a versioned, integrity-protected interaction script");
+  assert.match(buildSource, /processStaticHtml\(fs\.readFileSync\(source, 'utf8'\), `ai\/\$\{f\}`\)/, "build should process AI guides through the static HTML pipeline");
+});
+
+test("quality controls use radio semantics and expose an initial checked state", () => {
+  assert.match(qualityTemplate, /id="q-store-tabs" role="radiogroup"/, "store controls should be a radio group");
+  assert.match(qualityTemplate, /data-store="apps" class="active" aria-checked="true"/, "Apps should be initially checked in source markup");
+  assert.match(qualityTemplate, /id="q-mode-tabs" role="radiogroup"/, "mode controls should be a radio group");
+  assert.match(qualityTemplate, /data-mode="all" class="active" aria-checked="true"/, "All viewports should be initially checked in source markup");
+});
+
+test("quality summary activates the valid store from the URL", () => {
+  function button(store) {
+    const attributes = {};
+    return {
+      dataset: { store },
+      attributes,
+      classList: { toggle() {} },
+      setAttribute(name, value) { attributes[name] = value; },
+    };
+  }
+  const apps = button("apps");
+  const games = button("games");
+  const tabs = { querySelectorAll: () => [apps, games], addEventListener() {} };
+  const elements = {
+    "q-registry": { textContent: '{"apps":[],"games":[]}' },
+    "q-summary-list": { innerHTML: "" },
+    "q-summary-view": {},
+    "q-detail-view": {},
+    "q-store-tabs": tabs,
+  };
+  runInNewContext(qualitySource, {
+    document: { getElementById: (id) => elements[id] },
+    location: { search: "?store=games", pathname: "/quality.html", hash: "" },
+    URLSearchParams,
+    history: { pushState() {} },
+  });
+  assert.equal(games.attributes["aria-checked"], "true");
+  assert.equal(apps.attributes["aria-checked"], "false");
 });

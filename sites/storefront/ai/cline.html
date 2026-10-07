@@ -12,43 +12,14 @@
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="/style.css" />
-  <style>
-    .ai-lead { font-size: 1.15rem; color: var(--muted); line-height: 1.6; max-width: 720px; margin-bottom: 2rem; }
-    .steps { counter-reset: step; list-style: none; padding: 0; }
-    .steps li { counter-increment: step; margin-bottom: 1.5rem; padding-left: 2.5rem; position: relative; }
-    .steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: var(--accent); color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
-    .cmd { background: var(--surface); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.85rem 1.1rem; margin: 0.5rem 0; font-family: ui-monospace, SF Mono, Menlo, monospace; font-size: 0.88rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
-    .cmd:hover { border-color: var(--accent); }
-    .callout { padding: 1.25rem 1.5rem; border-left: 4px solid var(--accent); background: var(--accent-soft, var(--panel)); border-radius: 0 0.75rem 0.75rem 0; margin: 1.5rem 0; }
-    .callout strong { color: var(--ink); }
-    h2 { font-size: 1.4rem; font-weight: 800; margin: 2.5rem 0 1rem; }
-    .ai-prompt { background: var(--surface); border: 1px dashed var(--border); border-radius: 0.75rem; padding: 1rem 1.25rem; margin: 1rem 0; font-size: 0.92rem; line-height: 1.55; color: var(--ink); }
-    .ai-prompt::before { content: 'Prompt'; display: block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.5rem; }
-    .tool-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1.5rem 0; }
-    .tool-nav a { padding: 0.4rem 0.8rem; border: 1px solid var(--border); border-radius: 0.5rem; font-size: 0.82rem; font-weight: 600; color: var(--muted); text-decoration: none; }
-    .tool-nav a:hover, .tool-nav a.active { border-color: var(--accent); color: var(--accent); }
-  </style>
+  __CF_BEACON__
 </head>
 <body>
-  <header>
-    <div class="container">
-      <a href="/" class="logo">Free <span>Apps</span></a>
-      <nav>
-        <a href="/">Apps</a>
-        <a href="https://freegamestore.online">Games</a>
-        <a href="/about.html">About</a>
-        <a href="/build-with-ai.html">Build</a>
-        <a href="https://console.freeappstore.online/create">VibeCode</a>
-        <a href="/guidelines.html">Guidelines</a>
-        <a href="https://proappstore.online" class="pro-link">Pro</a>
-        <span id="navAuth"></span>
-      </nav>
-    </div>
-  </header>
+  {{HEADER}}
 
-  <main class="container" style="max-width:720px;">
+  <main class="container ai-guide-main">
 
-    <div class="tool-nav">
+    <div class="ai-guide-tool-nav" aria-label="AI tool guides">
       <a href="/ai/claude-code.html">Claude Code</a>
       <a href="/ai/cursor.html">Cursor</a>
       <a href="/ai/codex.html">Codex</a>
@@ -62,49 +33,67 @@
     </div>
 
     <h1>Cline on FreeAppStore</h1>
-    <p class="ai-lead">Autonomous AI agent in VS Code. Paste the platform guide and let it build.</p>
+    <p class="ai-guide-lead">Autonomous AI agent in VS Code. Paste the platform guide and let it build.</p>
 
-    <h2>Setup</h2>
-    <ol class="steps">
+    <h2 class="ai-guide-heading">Setup</h2>
+    <ol class="ai-guide-steps">
       <li>
         <strong>Install FreeAppStore CLI</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">npm i -g @freeappstore/cli &amp;&amp; fas login</div>
+        <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">npm i -g @freeappstore/cli &amp;&amp; fas login</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>
       </li>
       <li>
         <strong>Scaffold and open in VS Code</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">fas init my-app &amp;&amp; cd my-app &amp;&amp; pnpm install &amp;&amp; code .</div>
+        <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">fas init my-app &amp;&amp; cd my-app &amp;&amp; pnpm install &amp;&amp; code .</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>
       </li>
     </ol>
 
-    <h2>Build</h2>
+    <h2 class="ai-guide-heading">Build</h2>
     <p>Start a Cline chat and paste:
 
-<div class="ai-prompt">Read https://freeappstore.online/skills.md — then build me a weather dashboard app.</div></p>
+<span class="ai-guide-prompt">Read https://freeappstore.online/skills.md — then build me a weather dashboard app.</span></p>
 
-    <h2>Give it context</h2>
-    <p>Add the skills URL to Cline's custom instructions in settings, or paste it at the start of each chat.</p>
+    <h2 class="ai-guide-heading">Give it context</h2>
+    <div class="ai-guide-context">Add the skills URL to Cline's custom instructions in settings, or paste it at the start of each chat.</div>
 
-    <h2>Publish</h2>
-    <ol class="steps">
+    <h2 class="ai-guide-heading">Publish</h2>
+    <ol class="ai-guide-steps">
       <li>
         <strong>Check compliance</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">fas check</div>
+        <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">fas check</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>
       </li>
       <li>
         <strong>Publish to the store</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">fas publish</div>
+        <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">fas publish</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>
         <p>Creates repo, hosting route, custom subdomain, and store listing — all at once.</p>
       </li>
       <li>
         <strong>Future updates</strong>
-        <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">git push origin main</div>
+        <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">git push origin main</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>
         <p>Auto-deploys in ~30 seconds.</p>
       </li>
     </ol>
 
-    <h2>Add user accounts &amp; cloud storage</h2>
+    <h2 class="ai-guide-heading">Add user accounts &amp; cloud storage</h2>
     <p>Standalone apps use localStorage. If you need GitHub sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
-    <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">cd web && pnpm add @freeappstore/sdk</div>
+    <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">cd web &amp;&amp; pnpm add @freeappstore/sdk</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>
     <ul>
       <li><strong>Auth</strong> — GitHub OAuth. <code>fas.auth.signIn()</code></li>
       <li><strong>KV</strong> — Per-user storage. <code>fas.kv.set('key', value)</code></li>
@@ -113,41 +102,26 @@
     </ul>
     <p><a href="https://github.com/freeappstore-online/platform/tree/main/packages/sdk#readme">SDK docs</a></p>
 
-    <h2>MCP Server (optional)</h2>
+    <h2 class="ai-guide-heading">MCP Server (optional)</h2>
     <p>For deeper AI integration, connect the FreeAppStore MCP server. Your agent gets tools to check deploys, look up SDK docs, and list apps.</p>
-    <div class="cmd" onclick="navigator.clipboard.writeText(this.textContent.trim())" style="cursor:pointer;" title="Click to copy">npx mcp-remote https://mcp.freeappstore.online/mcp</div>
+    <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
+  <span class="ai-guide-command-text">npx mcp-remote https://mcp.freeappstore.online/mcp</span>
+  <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
+</button>
     <p><a href="https://docs.freeappstore.online/mcp/">MCP setup guide &rarr;</a></p>
 
-    <h2>Tips</h2>
+    <h2 class="ai-guide-heading">Tips</h2>
     <ul>
       <li>Cline can run terminal commands — it can handle <code>fas check</code> and <code>fas publish</code> for you.</li>
       <li>Use "Plan" mode first to review what it will build, then switch to "Act".</li>
     </ul>
 
-    <p style="margin-top:2rem;"><a href="https://github.com/freeappstore-online/platform">Platform source</a> · <a href="https://freeappstore.online/skills.md">Full platform guide</a></p>
+    <p class="ai-guide-links"><a href="https://github.com/freeappstore-online/platform">Platform source</a> · <a href="https://freeappstore.online/skills.md">Full platform guide</a></p>
 
   </main>
 
-  <footer>
-    <div class="container">
-      <div class="footer-left">
-        <a href="/" class="logo">Free <span>Apps</span></a>
-        <p>Free forever, open source, privacy-first.</p>
-      </div>
-      <div class="footer-links">
-        <a href="/about.html">About</a>
-        <a href="/build-with-ai.html">Build</a>
-        <a href="https://console.freeappstore.online/create">VibeCode</a>
-        <a href="/guidelines.html">Guidelines</a>
-        <a href="/quality.html">Quality</a>
-        <a href="/pricing.html">Pricing</a>
-        <a href="/privacy.html">Privacy</a>
-        <a href="/terms.html">Terms</a>
-        <a href="https://github.com/freeappstore-online">GitHub</a>
-        <a href="https://proappstore.online" style="color:var(--pro);">Pro</a>
-      </div>
-    </div>
-  </footer>
-  <script src="/auth.js"></script>
+  {{FOOTER}}
+  <script src="/ai-guide.js?v={{VER_AI_GUIDE_JS}}" integrity="{{SRI_AI_GUIDE_JS}}" defer></script>
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
 </body>
 </html>
