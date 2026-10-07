@@ -7,6 +7,11 @@ import { runInNewContext } from "node:vm";
 
 const analyticsSource = readFileSync(new URL("../analytics.js", import.meta.url), "utf8");
 const authSource = readFileSync(new URL("../auth.js", import.meta.url), "utf8");
+const qualitySource = readFileSync(new URL("../quality.js", import.meta.url), "utf8");
+const searchSource = readFileSync(new URL("../search.js", import.meta.url), "utf8");
+const storefrontSource = readFileSync(new URL("../storefront.js", import.meta.url), "utf8");
+const buildSource = readFileSync(new URL("../build.js", import.meta.url), "utf8");
+const styleSource = readFileSync(new URL("../style.css", import.meta.url), "utf8");
 
 function node() {
   return {
@@ -58,4 +63,41 @@ test("auth dispatches fas:auth-ready after an OAuth session is confirmed", async
   });
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(events, ["fas:auth-ready"]);
+});
+
+test("analytics renders API-derived dashboard values with DOM nodes, not HTML sinks", () => {
+  assert.doesNotMatch(analyticsSource, /\.innerHTML\s*=/, "analytics must not interpolate API data into HTML");
+  assert.match(analyticsSource, /title\.textContent/, "chart titles should use textContent");
+  assert.match(analyticsSource, /node\.replaceChildren\.apply/, "live paths should be assembled from DOM nodes");
+});
+
+test("quality dashboard disposes the prior message listener and timeout before a rerender", () => {
+  assert.match(qualitySource, /cleanupDetail\(\);/, "each detail rerender should clean up the prior render");
+  assert.match(qualitySource, /window\.removeEventListener\('message', handler\)/, "message listener should be removed");
+  assert.match(qualitySource, /window\.clearTimeout\(timeoutId\)/, "report timeout should be cleared");
+});
+
+test("search and category filtering update the visible result count", () => {
+  assert.match(searchSource, /__fasUpdateAppsCount\(localShown\)/, "search should publish its filtered count");
+  assert.match(storefrontSource, /function updateAppsCount\(shown\)/, "storefront should own count rendering");
+  assert.match(storefrontSource, /updateAppsCount\(shown\)/, "category filtering should publish its filtered count");
+});
+
+test("desktop app cards expose keyboard button semantics and activate on Enter or Space", () => {
+  assert.match(buildSource, /class="app-card compact" role="button" tabindex="0"/, "generated card needs button semantics");
+  assert.match(storefrontSource, /e\.key !== 'Enter' && e\.key !== ' '/, "card should handle Enter and Space");
+  assert.match(storefrontSource, /card\.click\(\)/, "keyboard activation should use the same card action");
+});
+
+test("mobile drawer traps focus, restores it, and closes with Escape", () => {
+  assert.match(authSource, /aria-expanded/, "menu trigger should expose its state");
+  assert.match(authSource, /e\.key === "Escape"/, "drawer should close on Escape");
+  assert.match(authSource, /lastFocused\.focus\(\)/, "drawer should restore trigger focus");
+  assert.match(authSource, /e\.key !== "Tab"/, "drawer should handle Tab focus wrapping");
+});
+
+test("settings controls wrap and stack before they can overflow a narrow viewport", () => {
+  assert.match(styleSource, /\.setting-control\s*\{[\s\S]*?flex-wrap:\s*wrap/, "settings controls should wrap");
+  assert.match(styleSource, /\.setting-control :is\(input, select, button\).*max-width:\s*100%/, "controls should be width constrained");
+  assert.match(styleSource, /@media \(max-width: 480px\)[\s\S]*?\.setting-row \{[^}]*flex-direction:\s*column/, "settings rows should stack on narrow screens");
 });

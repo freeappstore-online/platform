@@ -107,6 +107,7 @@
         if (!el.hidden) localShown++;
       }
       emptyMsg.hidden = localShown > 0;
+      if (typeof window.__fasUpdateAppsCount === 'function') window.__fasUpdateAppsCount(localShown);
       crossSection.hidden = true;
       crossGrid.innerHTML = '';
       return;
@@ -122,6 +123,7 @@
       if (match) localShown++;
     }
     emptyMsg.hidden = localShown > 0;
+    if (typeof window.__fasUpdateAppsCount === 'function') window.__fasUpdateAppsCount(localShown);
 
     crossGrid.innerHTML = '';
     let crossShown = 0;

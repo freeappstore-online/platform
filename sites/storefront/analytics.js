@@ -44,7 +44,6 @@
     var node = document.createElement(tag);
     if (attrs) for (var k in attrs) {
       if (k === 'class') node.className = attrs[k];
-      else if (k === 'html') node.innerHTML = attrs[k];
       else if (k === 'onclick') node.addEventListener('click', attrs[k]);
       else node.setAttribute(k, attrs[k]);
     }
@@ -138,17 +137,37 @@
       return el('p', { class: 'meta' }, 'No ' + (bucket === 'hour' ? 'hourly' : 'daily') + ' data in this window.');
     }
     var W = 600, H = 100, gap = 2, slot = W / series.length;
-    var maxV = Math.max(1, ...series.map(function (d) { return d.views; }));
-    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:100px;display:block">';
-    svg += '<line x1="0" x2="' + W + '" y1="' + (H - 0.5) + '" y2="' + (H - 0.5) + '" stroke="currentColor" stroke-opacity="0.15" />';
+    var maxV = Math.max(1, ...series.map(function (d) { return Number(d.views) || 0; }));
+    var chart = el('div', { class: 'a-chart' });
+    var svg = document.createElementNS ? document.createElementNS('http://www.w3.org/2000/svg', 'svg') : document.createElement('svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('class', 'a-chart-svg');
+    var baseline = document.createElementNS ? document.createElementNS('http://www.w3.org/2000/svg', 'line') : document.createElement('line');
+    baseline.setAttribute('x1', '0'); baseline.setAttribute('x2', String(W));
+    baseline.setAttribute('y1', String(H - 0.5)); baseline.setAttribute('y2', String(H - 0.5));
+    baseline.setAttribute('stroke', 'currentColor'); baseline.setAttribute('stroke-opacity', '0.15');
+    svg.appendChild(baseline);
     series.forEach(function (d, i) {
-      var h = (d.views / maxV) * (H - 2);
-      svg += '<rect x="' + (i * slot) + '" y="' + (H - h) + '" width="' + Math.max(1, slot - gap) + '" height="' + h + '" fill="var(--accent)" opacity="' + (d.views > 0 ? 0.85 : 0.2) + '"><title>' + d.t + ': ' + d.views + ' views</title></rect>';
+      var views = Number(d.views) || 0;
+      var h = Math.max(0, Math.min(H - 2, (views / maxV) * (H - 2)));
+      var rect = document.createElementNS ? document.createElementNS('http://www.w3.org/2000/svg', 'rect') : document.createElement('rect');
+      rect.setAttribute('x', String(i * slot)); rect.setAttribute('y', String(H - h));
+      rect.setAttribute('width', String(Math.max(1, slot - gap))); rect.setAttribute('height', String(h));
+      rect.setAttribute('fill', 'var(--accent)'); rect.setAttribute('opacity', views > 0 ? '0.85' : '0.2');
+      var title = document.createElementNS ? document.createElementNS('http://www.w3.org/2000/svg', 'title') : document.createElement('title');
+      title.textContent = String(d.t || '') + ': ' + views + ' views';
+      rect.appendChild(title);
+      svg.appendChild(rect);
     });
-    svg += '</svg>';
-    var labels = '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:4px">';
-    labels += '<span>' + labelForT(series[0].t, bucket) + '</span><span>peak ' + maxV + '</span><span>' + labelForT(series[series.length - 1].t, bucket) + '</span></div>';
-    return el('div', { class: 'a-chart', html: svg + labels });
+    var labels = el('div', { class: 'a-chart-labels' }, [
+      el('span', null, labelForT(series[0].t, bucket)),
+      el('span', null, 'peak ' + maxV),
+      el('span', null, labelForT(series[series.length - 1].t, bucket))
+    ]);
+    chart.appendChild(svg);
+    chart.appendChild(labels);
+    return chart;
   }
 
   function renderRanked(title, rows, onPick) {
@@ -167,7 +186,13 @@
             el('span', null, r.label || '/'),
             el('span', { class: 'meta' }, fmtViews(r.value))
           ]),
-          el('div', { class: 'a-bar', html: '<div style="width:' + ((r.value / max) * 100) + '%"></div>' })
+          (function () {
+            var bar = el('div', { class: 'a-bar' });
+            var fill = el('div');
+            fill.style.width = Math.max(0, Math.min(100, (Number(r.value) / max) * 100)) + '%';
+            bar.appendChild(fill);
+            return bar;
+          })()
         ];
         if (typeof onPick === 'function') {
           var btn = el('button', { type: 'button', class: 'a-rank-row a-rank-row-button', title: 'Drill into ' + (r.label || '/') }, inner);
@@ -183,9 +208,8 @@
 
   function renderConfigForm(appId, config) {
     var form = el('form', { class: 'a-form' });
-    form.innerHTML =
-      '<h3 style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:700;margin-bottom:0.5rem">Add your own tags (optional)</h3>' +
-      '<p class="meta" style="margin-bottom:0.75rem">Wire Google Analytics, Plausible, or a custom &lt;head&gt; snippet on top of the cookieless first-party tracking already in place.</p>';
+    form.appendChild(el('h3', { class: 'a-form-heading' }, 'Add your own tags (optional)'));
+    form.appendChild(el('p', { class: 'meta a-form-copy' }, 'Wire Google Analytics, Plausible, or a custom <head> snippet on top of the cookieless first-party tracking already in place.'));
     form.appendChild(el('label', null, [el('span', null, 'Google Analytics 4 ID'), el('input', { type: 'text', name: 'ga4', placeholder: 'G-XXXXXXXXXX', value: config.ga4 || '' })]));
     form.appendChild(el('label', null, [el('span', null, 'Plausible domain'), el('input', { type: 'text', name: 'plausible', placeholder: 'mysite.com', value: config.plausible || '' })]));
     form.appendChild(el('label', null, [el('span', null, 'Custom <head> snippet (max 4 KB)'), el('textarea', { rows: '3', name: 'custom_head', placeholder: '<meta name="custom" content="..." />' }, config.customHead || '')]));
@@ -240,8 +264,10 @@
     var box = el('div', { class: 'a-diag-box' }, [heading]);
     var ul = el('ul', { class: 'a-diag-list' });
     function step(ok, content) {
-      var li = el('li', { class: ok ? 'a-diag-step ok' : 'a-diag-step bad' });
-      li.innerHTML = (ok ? '<span class="a-diag-mark ok">✓</span>' : '<span class="a-diag-mark bad">✕</span>') + ' ' + content;
+      var li = el('li', { class: ok ? 'a-diag-step ok' : 'a-diag-step bad' }, [
+        el('span', { class: ok ? 'a-diag-mark ok' : 'a-diag-mark bad' }, ok ? '✓' : '✕'),
+        ' ' + content
+      ]);
       ul.appendChild(li);
     }
     var trailing = null;
@@ -249,7 +275,10 @@
     if (diag.verdict === 'no_dataset_binding') {
       step(diag.checks.dataset_bound, 'Workers Analytics Engine dataset bound on the backend Worker.');
       step(diag.checks.stats_queryable, 'CF Analytics SQL API credentials present.');
-      trailing = el('p', { class: 'a-diag-foot', html: 'Platform-side config — the dashboard can\'t show numbers until the dataset binding is added to <code>wrangler.toml</code>. See <code>ANALYTICS-GO-LIVE.md</code> step 3.' });
+      trailing = el('p', { class: 'a-diag-foot' }, [
+        'Platform-side config — the dashboard can\'t show numbers until the dataset binding is added to ',
+        el('code', null, 'wrangler.toml'), '. See ', el('code', null, 'ANALYTICS-GO-LIVE.md'), ' step 3.'
+      ]);
     } else if (diag.verdict === 'no_stats_query') {
       step(true, 'Workers Analytics Engine dataset bound.');
       step(false, 'CF Analytics SQL API credentials missing — set <code>CF_ACCOUNT_ID</code> + <code>CF_ANALYTICS_API_TOKEN</code> as worker secrets.');
@@ -264,7 +293,11 @@
     } else if (diag.verdict === 'silent_24h') {
       step(true, 'Loader has fired before (events recorded historically).');
       step(false, 'No events in the last 24 hours.');
-      trailing = el('p', { class: 'a-diag-foot', html: 'Either the app has no traffic right now or the loader broke. Test directly: <a class="a-signin" href="' + diag.loader_url + '" target="_blank" rel="noreferrer"><code>' + diag.loader_url + '</code></a>' });
+      var loaderUrl = safeHttpUrl(diag.loader_url);
+      trailing = el('p', { class: 'a-diag-foot' }, [
+        'Either the app has no traffic right now or the loader broke. Test directly: ',
+        loaderUrl ? el('a', { class: 'a-signin', href: loaderUrl, target: '_blank', rel: 'noreferrer' }, [el('code', null, loaderUrl)]) : el('code', null, String(diag.loader_url || 'Unavailable'))
+      ]);
     }
 
     box.appendChild(ul);
@@ -276,10 +309,10 @@
     var panel = el('div', { class: 'a-events-panel' });
     panel.appendChild(el('div', { class: 'a-rank-title' }, 'Custom events'));
     if (!eventsList.length) {
-      var empty = el('p', { class: 'meta' });
-      empty.innerHTML =
-        'No custom events fired in the last ' + days + ' days. Fire one from your app code:' +
-        '<code class="a-code-block">window.fasAnalytics.event(\'purchase\', {amount: 999})</code>';
+      var empty = el('p', { class: 'meta' }, [
+        'No custom events fired in the last ' + days + ' days. Fire one from your app code:',
+        el('code', { class: 'a-code-block' }, "window.fasAnalytics.event('purchase', {amount: 999})")
+      ]);
       panel.appendChild(empty);
     } else {
       var list = el('ul', { class: 'a-events-list' });
@@ -436,17 +469,26 @@
 
   function renderLiveStrip(node, live) {
     if (!live) return;
-    var hot = '';
-    if (Array.isArray(live.top_paths) && live.top_paths.length > 0) {
-      hot = ' · hot now: ' + live.top_paths.slice(0, 3).map(function (p) {
-        return '<span class="a-live-path">' + (p.path || '/') + '</span> <span class="meta">(' + p.views + ')</span>';
-      }).join(', ');
-    }
+    var views = Number(live.views) || 0;
     var dotClass = live.views > 0 ? 'a-live-dot a-live-dot-on' : 'a-live-dot';
-    node.innerHTML =
-      '<span class="' + dotClass + '"></span>' +
-      '<span><b>' + fmtViews(live.views) + '</b> page view' + (live.views === 1 ? '' : 's') +
-      ' in the last 5 min' + hot + '</span>';
+    var summary = el('span', null, [el('b', null, fmtViews(views)), ' page view' + (views === 1 ? '' : 's') + ' in the last 5 min']);
+    var children = [el('span', { class: dotClass }), summary];
+    if (Array.isArray(live.top_paths) && live.top_paths.length > 0) {
+      children.push(document.createTextNode(' · hot now: '));
+      live.top_paths.slice(0, 3).forEach(function (p, index) {
+        if (index) children.push(document.createTextNode(', '));
+        children.push(el('span', { class: 'a-live-path' }, p.path || '/'));
+        children.push(el('span', { class: 'meta' }, ' (' + (Number(p.views) || 0) + ')'));
+      });
+    }
+    node.replaceChildren.apply(node, children);
+  }
+
+  function safeHttpUrl(value) {
+    try {
+      var parsed = new URL(String(value));
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null;
+    } catch (e) { return null; }
   }
 
   function main() {

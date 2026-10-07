@@ -56,26 +56,70 @@
     var btn = document.createElement("button");
     btn.className = "nav-toggle";
     btn.setAttribute("aria-label", "Menu");
-    btn.innerHTML = "&#9776;";
+    btn.setAttribute("aria-expanded", "false");
+    btn.textContent = "☰";
     headerContainer.appendChild(btn);
 
     var overlay = document.createElement("div");
     overlay.className = "nav-overlay";
+    overlay.setAttribute("aria-hidden", "true");
     document.body.appendChild(overlay);
 
     var closeBtn = document.createElement("button");
     closeBtn.className = "nav-close";
     closeBtn.setAttribute("aria-label", "Close menu");
-    closeBtn.innerHTML = "&#10005;";
+    closeBtn.textContent = "×";
     nav.insertBefore(closeBtn, nav.firstChild);
+    if (!nav.id) nav.id = "mobile-navigation";
+    btn.setAttribute("aria-controls", nav.id);
 
-    function openMenu() { nav.classList.add("open"); overlay.classList.add("open"); }
-    function closeMenu() { nav.classList.remove("open"); overlay.classList.remove("open"); }
+    var lastFocused = null;
+    function isOpen() { return nav.classList.contains("open"); }
+    function focusableItems() {
+      return Array.prototype.slice.call(nav.querySelectorAll('a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+    }
+    function openMenu() {
+      lastFocused = document.activeElement;
+      nav.classList.add("open");
+      overlay.classList.add("open");
+      nav.setAttribute("aria-hidden", "false");
+      btn.setAttribute("aria-expanded", "true");
+      var first = focusableItems()[0];
+      if (first && typeof first.focus === "function") first.focus();
+    }
+    function closeMenu(restoreFocus) {
+      if (!isOpen()) return;
+      nav.classList.remove("open");
+      overlay.classList.remove("open");
+      nav.setAttribute("aria-hidden", "true");
+      btn.setAttribute("aria-expanded", "false");
+      if (restoreFocus !== false && lastFocused && typeof lastFocused.focus === "function") lastFocused.focus();
+    }
 
     btn.addEventListener("click", openMenu);
     closeBtn.addEventListener("click", closeMenu);
     overlay.addEventListener("click", closeMenu);
-    nav.querySelectorAll("a").forEach(function (a) { a.addEventListener("click", closeMenu); });
+    nav.querySelectorAll("a").forEach(function (a) { a.addEventListener("click", function () { closeMenu(false); }); });
+    document.addEventListener("keydown", function (e) {
+      if (!isOpen()) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMenu();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      var items = focusableItems();
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
   }
 
   // ── Auth avatar ──

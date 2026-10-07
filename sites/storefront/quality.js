@@ -47,6 +47,7 @@ const REFERENCE = [
 // summary list so it shows something useful before any iframes load.
 const CACHE_KEY = 'fas:quality:scores:v1';
 const REPORT_TIMEOUT_MS = 6000;
+let cleanupDetail = () => {};
 
 // ---- helpers ----
 
@@ -170,6 +171,9 @@ function setupStoreTabs() {
  * - flips to ✓/✗ with reason text once the report comes in
  */
 function renderDetail(appEntry, mode) {
+  // Mode switches replace the iframe grid. Dispose the prior listener and
+  // timeout first so old reports cannot mutate the new grid.
+  cleanupDetail();
   const grid = document.getElementById('q-grid');
   const indexEl = document.getElementById('q-detail-index');
   const passing = new Set();
@@ -254,7 +258,7 @@ function renderDetail(appEntry, mode) {
 
   // Timeout: if a viewport never reports back, flag it as
   // "no quality reporter present" — opt-out / non-cooperative app.
-  setTimeout(() => {
+  const timeoutId = window.setTimeout(() => {
     grid.querySelectorAll('.q-cell.q-pending').forEach(cell => {
       cell.classList.remove('q-pending');
       cell.classList.add('bad');
@@ -264,6 +268,11 @@ function renderDetail(appEntry, mode) {
       r.classList.add('bad');
     });
   }, REPORT_TIMEOUT_MS);
+  cleanupDetail = () => {
+    window.removeEventListener('message', handler);
+    window.clearTimeout(timeoutId);
+    cleanupDetail = () => {};
+  };
 }
 
 function setupModeTabs(appEntry) {

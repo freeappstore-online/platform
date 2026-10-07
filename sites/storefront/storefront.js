@@ -9,6 +9,15 @@
  * Vendored — each store ships its own copy. Don't depend across stores.
  */
 (function () {
+  function updateAppsCount(shown) {
+    var count = document.getElementById('apps-count');
+    var grid = document.getElementById('apps-grid');
+    if (!count || !grid) return;
+    var total = grid.querySelectorAll('.app-card').length;
+    count.textContent = shown === total ? total + ' apps' : shown + ' of ' + total + ' apps';
+  }
+  window.__fasUpdateAppsCount = updateAppsCount;
+
   // ---------- Category filter ----------
   (function () {
     var filterBar = document.getElementById('categoryFilter');
@@ -34,9 +43,11 @@
       });
       var empty = document.getElementById('search-empty');
       if (empty) empty.hidden = shown > 0;
+      updateAppsCount(shown);
     });
 
     window.__fasActiveCategory = function () { return activeCategory; };
+    updateAppsCount(document.querySelectorAll('#apps-grid .app-card:not([hidden])').length);
   })();
 
   // ---------- Sort ----------
@@ -414,6 +425,13 @@
         }
         // Single-column: card body → about, CTA → app URL via default <a target="_blank">
         if (!onCta && aboutUrl) window.location.href = aboutUrl;
+      });
+      card.addEventListener('keydown', function (e) {
+        // The card itself is a keyboard trigger. Its nested buttons and link
+        // retain their native keyboard behavior.
+        if (e.target !== card || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        card.click();
       });
     });
 
