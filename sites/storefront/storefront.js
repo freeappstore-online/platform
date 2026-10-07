@@ -147,6 +147,18 @@
       });
     }
 
+    function showVoteCountsUnavailable() {
+      document.querySelectorAll('.vote-btn').forEach(function (btn) {
+        btn.dataset.voteUnavailable = '1';
+        btn.title = 'Vote count unavailable. You can still vote.';
+        var span = btn.querySelector('.vote-count');
+        if (span) {
+          span.textContent = 'Unavailable';
+          span.setAttribute('aria-label', 'Vote count unavailable');
+        }
+      });
+    }
+
     // Fetch aggregate votes once on page load. Resilient — failures leave
     // cards at count 0 and the sort still works (all tied at 0).
     fetch(API + '/v1/store/votes')
@@ -165,7 +177,7 @@
           }
         }
       })
-      .catch(function () { /* votes unavailable — cards stay at 0 */ });
+      .catch(showVoteCountsUnavailable);
   })();
 
   // ---------- Vote button click handler ----------
@@ -212,10 +224,11 @@
 
       // Optimistic update.
       var countSpan = btn.querySelector('.vote-count');
+      var countUnavailable = btn.dataset.voteUnavailable === '1';
       var current = parseInt(btn.closest('.app-card').dataset.votes || '0', 10) || 0;
-      var optimistic = alreadyVoted ? Math.max(0, current - 1) : current + 1;
-      if (countSpan) countSpan.textContent = String(optimistic);
-      btn.closest('.app-card').dataset.votes = String(optimistic);
+      var optimistic = countUnavailable ? null : (alreadyVoted ? Math.max(0, current - 1) : current + 1);
+      if (countSpan && optimistic !== null) countSpan.textContent = String(optimistic);
+      if (optimistic !== null) btn.closest('.app-card').dataset.votes = String(optimistic);
       btn.setAttribute('aria-pressed', alreadyVoted ? 'false' : 'true');
       btn.classList.toggle('voted', !alreadyVoted);
 
@@ -229,6 +242,9 @@
           var confirmed = typeof data.count === 'number' ? data.count : optimistic;
           if (countSpan) countSpan.textContent = String(confirmed);
           btn.closest('.app-card').dataset.votes = String(confirmed);
+          delete btn.dataset.voteUnavailable;
+          btn.removeAttribute('title');
+          if (countSpan) countSpan.removeAttribute('aria-label');
           if (data.voted) {
             votedSet[appId] = true;
           } else {
@@ -239,8 +255,8 @@
         })
         .catch(function () {
           // Roll back optimistic update on error.
-          if (countSpan) countSpan.textContent = String(current);
-          btn.closest('.app-card').dataset.votes = String(current);
+          if (countSpan && !countUnavailable) countSpan.textContent = String(current);
+          if (!countUnavailable) btn.closest('.app-card').dataset.votes = String(current);
           btn.setAttribute('aria-pressed', alreadyVoted ? 'true' : 'false');
           btn.classList.toggle('voted', alreadyVoted);
         });

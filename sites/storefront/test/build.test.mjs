@@ -103,6 +103,27 @@ test("build.js writes index.html containing every app id", () => {
   }
 });
 
+test("built pages provide the shared skip link and focusable main destination", () => {
+  const { tmp, tmpDist, registry } = runBuild();
+  try {
+    const pages = [
+      join(tmpDist, "index.html"),
+      join(tmpDist, "settings.html"),
+      join(tmpDist, "quality.html"),
+      join(tmpDist, "ai", "codex.html"),
+      join(tmpDist, "apps", `${registry.apps[0].id}.html`),
+      join(tmpDist, "u", `${registry.apps.find((app) => app.creatorGithub)?.creatorGithub}.html`),
+    ];
+    for (const page of pages) {
+      const html = readFileSync(page, "utf8");
+      assert.match(html, /class="skip-link" href="#main-content"/, `${page} needs the skip link`);
+      assert.match(html, /<main\b[^>]*id="main-content"[^>]*tabindex="-1"/, `${page} needs a focusable main target`);
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 test("build.js escapes <script> payloads in app descriptions", () => {
   const { tmp, tmpDist } = runBuild();
   try {

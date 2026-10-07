@@ -204,6 +204,17 @@ interface StatsRow {
   device_split: Array<{ device: string; views: number }>;
 }
 
+interface OwnedAppRow {
+  id: string;
+}
+
+interface SummaryRow {
+  appId: string;
+  views: number;
+  unique_paths?: number;
+  country?: string;
+}
+
 async function cfAnalyticsSql<T = Record<string, unknown>>(
   env: Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string },
   sql: string,
@@ -229,6 +240,64 @@ async function cfAnalyticsSql<T = Record<string, unknown>>(
   const json = (await res.json()) as { data?: T[] };
   return json.data ?? [];
 }
+
+// Creator list summary. This is deliberately separate from the per-app stats
+// endpoint below: the dashboard list needs only three small KPIs, and fetching
+// the full six-query report once per card made opening a large creator account
+// scale linearly with its app count.
+analyticsRoutes.get(
+  '/analytics/summary',
+  wrap(async (c) => {
+    const user = await requireUser(c);
+    const days = Math.min(
+      STATS_DAYS_MAX,
+      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+    );
+    const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_login = ?')
+      .bind(user.githubLogin)
+      .all<OwnedAppRow>();
+    // IDs originate in the apps table but retain the public app-id constraint
+    // before they are embedded in the Analytics Engine SQL literal list.
+    const appIds = (owned.results ?? []).map((row) => row.id).filter((id) => APP_ID_RE.test(id));
+    const summaries: Record<
+      string,
+      { total_views: number; unique_paths: number; top_country: string | null }
+    > = {};
+    for (const appId of appIds)
+      summaries[appId] = { total_views: 0, unique_paths: 0, top_country: null };
+    if (appIds.length === 0) return c.json({ days, summaries });
+
+    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    const ids = appIds.map((id) => `'${id}'`).join(', ');
+    const where = `WHERE index1 IN (${ids}) AND blob2 = 'pageview' AND ${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+    const totalsQ = `SELECT index1 AS appId, SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS unique_paths FROM ${STATS_DATASET} ${where} GROUP BY appId`;
+    // Analytics Engine speaks ClickHouse SQL; LIMIT 1 BY gives one top country
+    // per owned app without loading a country list per card into the browser.
+    const countriesQ = `SELECT index1 AS appId, blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY appId, country ORDER BY appId, views DESC LIMIT 1 BY appId`;
+    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+    try {
+      const [totals, countries] = await Promise.all([
+        cfAnalyticsSql<SummaryRow>(env, totalsQ),
+        cfAnalyticsSql<SummaryRow>(env, countriesQ),
+      ]);
+      for (const row of totals) {
+        const summary = summaries[row.appId];
+        if (summary) {
+          summary.total_views = Number(row.views) || 0;
+          summary.unique_paths = Number(row.unique_paths) || 0;
+        }
+      }
+      for (const row of countries) {
+        const summary = summaries[row.appId];
+        if (summary) summary.top_country = row.country || null;
+      }
+      return c.json({ days, summaries });
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(502, err instanceof Error ? err.message : 'summary query failed');
+    }
+  }),
+);
 
 analyticsRoutes.get(
   '/apps/:appId/analytics/stats',

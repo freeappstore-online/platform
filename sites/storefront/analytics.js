@@ -89,8 +89,9 @@
     ]));
   }
 
-  function renderList(apps) {
+  function renderList(apps, summaries) {
     if (!apps.length) return renderEmpty();
+    summaries = summaries || {};
     root.replaceChildren.apply(root, apps.map(function (app) {
       var card = el('div', { class: 'a-card' }, [
         el('div', { class: 'a-header-bar' }, [
@@ -101,25 +102,13 @@
           el('a', { class: 'a-signin', href: '?app=' + encodeURIComponent(app.id) }, 'View →')
         ])
       ]);
-      // Fire-and-forget mini KPI fetch per app
+      var summary = summaries[app.id];
       var kpi = el('div', { class: 'a-kpis' }, [
-        el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, '7d views'), el('div', { class: 'value' }, '…')]),
-        el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, 'Unique paths'), el('div', { class: 'value' }, '…')]),
-        el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, 'Top country'), el('div', { class: 'value' }, '…')])
+        el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, '7d views'), el('div', { class: 'value' }, summary ? fmtViews(summary.total_views) : 'Unavailable')]),
+        el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, 'Unique paths'), el('div', { class: 'value' }, summary ? String(summary.unique_paths) : 'Unavailable')]),
+        el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, 'Top country'), el('div', { class: 'value' }, summary ? (summary.top_country || '—') : 'Unavailable')])
       ]);
       card.appendChild(kpi);
-      call('/v1/apps/' + encodeURIComponent(app.id) + '/analytics/stats?days=7')
-        .then(function (r) {
-          var s = r.stats;
-          kpi.replaceChildren(
-            el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, '7d views'), el('div', { class: 'value' }, fmtViews(s.total_views))]),
-            el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, 'Unique paths'), el('div', { class: 'value' }, String(s.unique_paths))]),
-            el('div', { class: 'a-kpi' }, [el('div', { class: 'label' }, 'Top country'), el('div', { class: 'value' }, (s.top_countries[0] && s.top_countries[0].country) || '—')])
-          );
-        })
-        .catch(function () {
-          kpi.replaceChildren(el('p', { class: 'meta' }, 'No data yet.'));
-        });
       return card;
     }));
   }
@@ -456,7 +445,9 @@
         function tickLive() {
           call('/v1/apps/' + encodeURIComponent(appId) + '/analytics/live').then(function (live) {
             renderLiveStrip(liveStrip, live);
-          }).catch(function () { /* endpoint not deployed yet — stay silent */ });
+          }).catch(function () {
+            liveStrip.replaceChildren(el('span', { class: 'a-live-dot' }), el('span', { class: 'meta' }, 'Live analytics unavailable.'));
+          });
         }
         tickLive();
         livePollerId = window.setInterval(tickLive, 30000);
@@ -495,8 +486,11 @@
     if (!token()) return renderSignInCTA();
     var urlAppId = new URLSearchParams(location.search).get('app');
     if (urlAppId) return renderDetail(urlAppId);
-    call('/v1/apps/mine').then(function (r) {
-      renderList(r.apps || []);
+    Promise.all([
+      call('/v1/apps/mine'),
+      call('/v1/analytics/summary?days=7')
+    ]).then(function (responses) {
+      renderList(responses[0].apps || [], responses[1].summaries || {});
     }).catch(function (err) {
       root.replaceChildren(el('p', { class: 'a-empty' }, 'Error: ' + err.message));
     });

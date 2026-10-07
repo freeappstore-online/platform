@@ -108,15 +108,12 @@
     </div>
 
     <section class="app-section" id="rating-section">
-      <h2>Rate this app</h2>
+      <h2>Vote for this app</h2>
       <div id="rating-widget" class="rating-widget">
-        <button id="rate-up" type="button" class="rate-btn" title="Like">
-          <span class="rate-emoji">&#128077;</span><span id="count-up">0</span>
+        <button id="rate-vote" type="button" class="rate-btn vote-btn" aria-label="Vote for this app" aria-pressed="false" disabled>
+          <span class="rate-emoji" aria-hidden="true">&#10084;</span><span id="vote-count">Loading…</span>
         </button>
-        <button id="rate-down" type="button" class="rate-btn" title="Dislike">
-          <span class="rate-emoji">&#128078;</span><span id="count-down">0</span>
-        </button>
-        <span id="rating-status" class="rating-status"></span>
+        <span id="rating-status" class="rating-status" aria-live="polite">Loading votes…</span>
       </div>
     </section>
 

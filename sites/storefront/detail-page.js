@@ -26,52 +26,78 @@
     });
   });
 
-  // ── Local-only thumbs up / down ratings ──
-  // (Persisted in localStorage until a backend endpoint exists.)
-  var KEY = "fas_voted_" + APP_ID;
-  var upBtn = document.getElementById("rate-up");
-  var downBtn = document.getElementById("rate-down");
-  var countUp = document.getElementById("count-up");
-  var countDown = document.getElementById("count-down");
+  // ── Platform vote ──
+  // This mirrors the authenticated card vote behaviour on the storefront.
+  var API = "https://api.freeappstore.online";
+  var voteBtn = document.getElementById("rate-vote");
+  var countEl = document.getElementById("vote-count");
   var statusEl = document.getElementById("rating-status");
-  if (!upBtn || !downBtn || !countUp || !countDown || !statusEl) return;
+  if (!voteBtn || !countEl || !statusEl) return;
 
-  var stored;
-  try {
-    stored = JSON.parse(localStorage.getItem("fas_ratings_" + APP_ID) || '{"up":0,"down":0}');
-  } catch (e) {
-    stored = { up: 0, down: 0 };
-  }
-  countUp.textContent = stored.up;
-  countDown.textContent = stored.down;
+  var count = null;
+  var voted = false;
 
-  var voted = null;
-  try { voted = localStorage.getItem(KEY); } catch (e) {}
-  if (voted) {
-    statusEl.textContent = "You voted " + (voted === "up" ? "👍" : "👎");
-    upBtn.disabled = true;
-    downBtn.disabled = true;
-    upBtn.style.opacity = voted === "up" ? "1" : "0.4";
-    downBtn.style.opacity = voted === "down" ? "1" : "0.4";
+  function token() {
+    try {
+      var session = JSON.parse(localStorage.getItem("fas:session") || "null");
+      return session && typeof session.token === "string" ? session.token : null;
+    } catch (e) { return null; }
   }
 
-  function vote(dir) {
-    try { if (localStorage.getItem(KEY)) return; } catch (e) {}
-    try { localStorage.setItem(KEY, dir); } catch (e) {}
-    statusEl.textContent = "Thanks!";
-    upBtn.disabled = true;
-    downBtn.disabled = true;
-    upBtn.style.opacity = dir === "up" ? "1" : "0.4";
-    downBtn.style.opacity = dir === "down" ? "1" : "0.4";
-    var el = dir === "up" ? countUp : countDown;
-    el.textContent = parseInt(el.textContent, 10) + 1;
-    var r;
-    try { r = JSON.parse(localStorage.getItem("fas_ratings_" + APP_ID) || '{"up":0,"down":0}'); }
-    catch (e) { r = { up: 0, down: 0 }; }
-    r[dir]++;
-    try { localStorage.setItem("fas_ratings_" + APP_ID, JSON.stringify(r)); } catch (e) {}
+  function triggerSignIn() {
+    var url = new URL("/v1/auth/github/start", API);
+    url.searchParams.set("app_id", "store");
+    url.searchParams.set("return_to", window.location.href);
+    window.location.href = url.toString();
   }
 
-  upBtn.addEventListener("click", function () { vote("up"); });
-  downBtn.addEventListener("click", function () { vote("down"); });
+  function setVoteState(nextVoted, nextCount) {
+    voted = !!nextVoted;
+    count = typeof nextCount === "number" ? nextCount : null;
+    countEl.textContent = count === null ? "Unavailable" : String(count);
+    voteBtn.setAttribute("aria-pressed", voted ? "true" : "false");
+    voteBtn.classList.toggle("voted", voted);
+  }
+
+  fetch(API + "/v1/store/votes")
+    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+    .then(function (data) {
+      if (!data || !data.votes || typeof data.votes !== "object") return Promise.reject("invalid vote response");
+      setVoteState(false, typeof data.votes[APP_ID] === "number" ? data.votes[APP_ID] : 0);
+      voteBtn.disabled = false;
+      statusEl.textContent = "";
+    })
+    .catch(function () {
+      setVoteState(false, null);
+      voteBtn.disabled = false;
+      statusEl.textContent = "Vote count unavailable. You can still vote.";
+    });
+
+  voteBtn.addEventListener("click", function () {
+    var authToken = token();
+    if (!authToken) return triggerSignIn();
+
+    var previousVoted = voted;
+    var previousCount = count;
+    var nextVoted = !previousVoted;
+    var optimisticCount = previousCount === null ? null : Math.max(0, previousCount + (nextVoted ? 1 : -1));
+    setVoteState(nextVoted, optimisticCount);
+    voteBtn.disabled = true;
+    statusEl.textContent = "Saving vote…";
+
+    fetch(API + "/v1/store/apps/" + encodeURIComponent(APP_ID) + "/vote", {
+      method: nextVoted ? "POST" : "DELETE",
+      headers: { Authorization: "Bearer " + authToken }
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data) {
+        setVoteState(!!data.voted, typeof data.count === "number" ? data.count : optimisticCount);
+        statusEl.textContent = data.voted ? "Vote recorded." : "Vote removed.";
+      })
+      .catch(function () {
+        setVoteState(previousVoted, previousCount);
+        statusEl.textContent = "Could not save your vote. Please try again.";
+      })
+      .finally(function () { voteBtn.disabled = false; });
+  });
 })();

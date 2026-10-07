@@ -61,7 +61,19 @@ const qualityScores = fs.existsSync(scoresPath) ? JSON.parse(fs.readFileSync(sco
 // Shared header partial — injected into every page via {{HEADER}} placeholder
 const headerPartial = fs.readFileSync(path.join(ROOT, 'partials', 'header.html'), 'utf8');
 const footerPartial = fs.readFileSync(path.join(ROOT, 'partials', 'footer.html'), 'utf8');
-function injectPartials(html) { return html.replaceAll('{{HEADER}}', headerPartial).replaceAll('{{FOOTER}}', footerPartial); }
+// The shared skip link must have a focusable destination on every built page.
+// Applying this at build time also covers generated and legacy static sources
+// without requiring every template to duplicate the same attributes.
+function addMainTarget(html) {
+  return html.replace(/<main\b([^>]*)>/i, (match, attrs) => {
+    const withoutId = attrs.replace(/\s+id\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i, '');
+    const withoutTabindex = withoutId.replace(/\s+tabindex\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/i, '');
+    return `<main${withoutTabindex} id="main-content" tabindex="-1">`;
+  });
+}
+function injectPartials(html) {
+  return addMainTarget(html.replaceAll('{{HEADER}}', headerPartial).replaceAll('{{FOOTER}}', footerPartial));
+}
 
 // Read templates (partials injected on load)
 const indexTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'index.html'), 'utf8'));
@@ -1044,6 +1056,7 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
 // generated pages on the shared shell, analytics, asset versioning, and SRI.
 function processStaticHtml(html, file) {
   html = injectPartials(html);
+  html = addMainTarget(html);
   for (const [k, v] of Object.entries(sriHashes)) {
     html = html.replaceAll(`{{SRI_${k}}}`, v);
   }
@@ -1078,7 +1091,7 @@ if (fs.existsSync(docsSrcDir)) {
   fs.mkdirSync(docsDestDir, { recursive: true });
   for (const f of fs.readdirSync(docsSrcDir)) {
     if (!f.endsWith('.html')) continue;
-    let html = fs.readFileSync(path.join(docsSrcDir, f), 'utf8');
+    let html = addMainTarget(fs.readFileSync(path.join(docsSrcDir, f), 'utf8'));
     for (const [k, v] of Object.entries(sriHashes)) {
       html = html.replaceAll(`{{SRI_${k}}}`, v);
     }

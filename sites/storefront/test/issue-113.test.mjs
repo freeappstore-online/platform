@@ -11,6 +11,7 @@ const authSource = readFileSync(new URL("../auth.js", import.meta.url), "utf8");
 const qualitySource = readFileSync(new URL("../quality.js", import.meta.url), "utf8");
 const searchSource = readFileSync(new URL("../search.js", import.meta.url), "utf8");
 const storefrontSource = readFileSync(new URL("../storefront.js", import.meta.url), "utf8");
+const detailSource = readFileSync(new URL("../detail-page.js", import.meta.url), "utf8");
 const buildSource = readFileSync(new URL("../build.js", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("../style.css", import.meta.url), "utf8");
 const qualityTemplate = readFileSync(new URL("../templates/quality.html", import.meta.url), "utf8");
@@ -158,4 +159,25 @@ test("quality summary activates the valid store from the URL", () => {
   });
   assert.equal(games.attributes["aria-checked"], "true");
   assert.equal(apps.attributes["aria-checked"], "false");
+});
+
+test("app detail voting uses the shared authenticated vote API, never local-only ratings", () => {
+  assert.doesNotMatch(detailSource, /fas_ratings_|fas_voted_/, "detail votes must not use localStorage rating keys");
+  assert.match(detailSource, /\/v1\/store\/votes/, "detail page loads public aggregate vote counts");
+  assert.match(detailSource, /\/v1\/store\/apps\/.*\/vote/, "detail page submits through the established vote route");
+  assert.match(detailSource, /method: nextVoted \? "POST" : "DELETE"/, "detail page toggles authenticated votes");
+  assert.match(detailSource, /triggerSignIn\(\)/, "detail page redirects unauthenticated voters");
+  assert.match(detailSource, /Could not save your vote/, "detail page rolls back and reports a save failure");
+  assert.match(detailSource, /Vote count unavailable/, "detail page visibly reports unavailable aggregate counts");
+});
+
+test("creator analytics list requests one batch summary instead of per-app stats", () => {
+  assert.match(analyticsSource, /call\('\/v1\/analytics\/summary\?days=7'\)/, "list should request the batch summary");
+  assert.doesNotMatch(analyticsSource, /call\('\/v1\/apps\/' \+ encodeURIComponent\(app\.id\) \+ '\/analytics\/stats\?days=7'\)/, "list must not request one stats report per app");
+});
+
+test("unavailable vote and live analytics data is visibly reported", () => {
+  assert.match(storefrontSource, /function showVoteCountsUnavailable\(\)/, "aggregate vote failure needs a visible handler");
+  assert.match(storefrontSource, /Vote count unavailable\. You can still vote\./, "vote failure should not masquerade as zero");
+  assert.match(analyticsSource, /Live analytics unavailable\./, "live analytics failure should be visible");
 });
