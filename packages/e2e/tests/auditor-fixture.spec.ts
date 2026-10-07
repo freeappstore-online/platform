@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { expect, type Page, test } from '@playwright/test';
 import type { ViewportReport } from '../../quality/src/index.js';
 
@@ -8,12 +6,12 @@ import type { ViewportReport } from '../../quality/src/index.js';
 declare const process: { env: Record<string, string | undefined> };
 
 /**
- * Live mirror of the auditor fixture (auditor-fixture.freegamestore.online).
+ * Live mirror of the auditor fixture on the FreeAppStore storefront.
  *
  * Companion to packages/quality/src/fixture.test.ts. The unit suite
  * proves snapshot() handles the right *shapes* in jsdom; this suite
- * proves the deployed fixture, the published @freeappstore/quality on
- * esm.sh, and a real Chromium engine all agree on the verdict.
+ * proves the deployed fixture, the published @freeappstore/quality reporter,
+ * and a real Chromium engine all agree on the verdict under production CSP.
  *
  * Adding a new fixture scenario? Add its id to CANONICAL_SCENARIOS,
  * then either register a `scenario(id, ...)` block or add an entry
@@ -24,7 +22,7 @@ declare const process: { env: Record<string, string | undefined> };
 
 /**
  * Production URL. The fixture deploys path-based under the storefront
- * (build.js in the freegamestore repo copies audit-fixture/ into
+ * (build.js copies audit-fixture/ into
  * dist/audit-fixture/). A subdomain deploy would also work — and
  * snapshot()'s appId regex is biased toward subdomains — but path is
  * simpler since GitHub Actions auto-deploys the storefront on every push.
@@ -33,35 +31,8 @@ declare const process: { env: Record<string, string | undefined> };
  * Python http.server hosting audit-fixture/) or a staging URL.
  */
 const FIXTURE_BASE = (
-  process.env.FAS_FIXTURE_BASE ?? 'https://freegamestore.online/audit-fixture'
+  process.env.FAS_FIXTURE_BASE ?? 'https://freeappstore.online/audit-fixture'
 ).replace(/\/+$/, '');
-/**
- * The reporter this suite measures with. We inject the LOCAL built
- * @freeappstore/quality bundle into the page instead of `import()`-ing it
- * from esm.sh at runtime: the CDN import failed intermittently in CI
- * ("Failed to fetch dynamically imported module") and red-lit this monitor
- * even though prod was healthy. The dist bundle is self-contained (zero
- * imports — see packages/quality/dist/index.js), so a Blob-URL dynamic
- * import resolves offline with no third-party dependency in the hot path.
- *
- * This is the same version the spec's ViewportReport type is pinned to
- * (../../quality/src), so the measurement and the assertions stay in lockstep
- * automatically. The fixture HTML still imports its own copy from esm.sh to
- * render its on-page report, but that's cosmetic — snapshot() reads the raw
- * DOM, so a slow/failed fixture-side import can't affect our verdict.
- */
-const REPORTER_SOURCE = readFileSync(
-  fileURLToPath(new URL('../../quality/dist/index.js', import.meta.url)),
-  'utf8',
-);
-
-// The fixture ships a strict CSP (script-src 'self' + a sha256 inline hash +
-// cloudflareinsights only). That's correct for prod, but it blocks the way we
-// load the reporter — both the old esm.sh `import()` and the Blob-URL import
-// above are refused by script-src, which is what red-lit this monitor. Disable
-// CSP enforcement for THIS suite only: we're measuring layout, not the page's
-// CSP, and the storefront suites keep CSP intact.
-test.use({ bypassCSP: true });
 
 /**
  * If the fixture host has the production *.freegamestore.online shape,
@@ -117,10 +88,9 @@ function scenario(id: ScenarioId, fn: () => void): void {
 /**
  * Navigate to a fixture scenario at a specific viewport, then ask the
  * page for a snapshot via the published reporter. The fixture itself
- * already imports + initialises the reporter, so re-importing is a
- * cache hit; we call snapshot() directly because the reporter only
- * posts to a parent (which we don't have here — the page is loaded
- * top-level by Playwright).
+ * already imports + initialises the reporter; we import the same CDN module
+ * from the strict, route-scoped fixture CSP because a top-level page has no
+ * parent for the reporter to post to.
  */
 async function snapshotAt(
   page: Page,
@@ -128,22 +98,16 @@ async function snapshotAt(
   viewport: { width: number; height: number },
 ): Promise<ViewportReport> {
   await page.setViewportSize(viewport);
-  // networkidle waits for the fixture's `await import(esm.sh/...)` to
-  // settle; without it snapshot() can race the reporter's own load.
+  // networkidle waits for the fixture's reporter module to settle.
   await page.goto(`${FIXTURE_BASE}/?scenario=${id}`, { waitUntil: 'networkidle' });
   // Layout depends on font metrics; document.fonts.ready is the
   // browser's own "fonts settled" signal — deterministic and faster
   // than a fixed timeout.
   await page.evaluate(() => document.fonts?.ready ?? Promise.resolve());
-  return await page.evaluate(async (src) => {
-    const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
-    try {
-      const m = await import(/* @vite-ignore */ url);
-      return m.snapshot() as ViewportReport;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }, REPORTER_SOURCE);
+  return await page.evaluate(async () => {
+    const m = await import('https://esm.sh/@freeappstore/quality@0.1.0');
+    return m.snapshot() as ViewportReport;
+  });
 }
 
 /**
@@ -303,6 +267,67 @@ test('no-reporter: page never posts a fas:quality message', async ({ page }) => 
     reporterRequests,
     `no-reporter scenario must not import the reporter; saw: ${reporterRequests.join(', ')}`,
   ).toEqual([]);
+});
+
+/**
+ * The dashboard sees reports from an iframe, not from a top-level fixture.
+ * This is deliberately run with CSP enforcement enabled: it proves the
+ * route-specific esm.sh allowance, same-origin framing allowance, and the
+ * external fixture module all work together in a real browser.
+ */
+async function reportFromFrame(
+  page: Page,
+  id: Exclude<ScenarioId, 'no-reporter'>,
+  viewport: { width: number; height: number },
+): Promise<ViewportReport> {
+  return await page.evaluate(async ({ base, scenario, viewport }) => {
+    return await new Promise<ViewportReport>((resolve, reject) => {
+      let frame: HTMLIFrameElement;
+      const timeout = window.setTimeout(() => {
+        window.removeEventListener('message', onMessage);
+        reject(new Error(`timed out waiting for ${scenario} quality report`));
+      }, 8_000);
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data as ViewportReport | null;
+        if (!data || data.type !== 'fas:quality' || !frame || event.source !== frame.contentWindow) return;
+        window.clearTimeout(timeout);
+        window.removeEventListener('message', onMessage);
+        frame.remove();
+        resolve(data);
+      };
+      window.addEventListener('message', onMessage);
+      frame = document.createElement('iframe');
+      frame.width = String(viewport.width);
+      frame.height = String(viewport.height);
+      frame.src = `${base}/?scenario=${encodeURIComponent(scenario)}`;
+      document.body.append(frame);
+    });
+  }, { base: FIXTURE_BASE, scenario: id, viewport });
+}
+
+test('cooperating fixture scenarios post browser reports under production CSP', async ({ page }) => {
+  await page.goto('about:blank');
+  const cases: Array<{
+    id: Exclude<ScenarioId, 'no-reporter'>;
+    viewport: { width: number; height: number };
+    verify: (report: ViewportReport) => void;
+  }> = [
+    { id: 'fits', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.document.scrollsX).toBe(false) },
+    { id: 'scroll-x', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.document.scrollsX).toBe(true) },
+    { id: 'scroll-y', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.document.scrollsY).toBe(true) },
+    { id: 'clip-inner', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.clipping.some((c) => c.clipsX)).toBe(true) },
+    { id: 'clip-inner-y', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.clipping.some((c) => c.clipsY)).toBe(true) },
+    { id: 'vh-bug', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.type).toBe('fas:quality') },
+    { id: 'gap-mid', viewport: { width: 600, height: 800 }, verify: (r) => expect(r.document.scrollsX).toBe(true) },
+    { id: 'landscape-only-bad', viewport: { width: 852, height: 393 }, verify: (r) => expect(r.document.scrollsX).toBe(true) },
+    { id: 'large-scrollwidth-fp', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.clipping).toEqual([]) },
+  ];
+
+  for (const item of cases) {
+    const report = await reportFromFrame(page, item.id, item.viewport);
+    expect(report.type, `${item.id} must identify itself as a quality report`).toBe('fas:quality');
+    item.verify(report);
+  }
 });
 
 /**

@@ -217,7 +217,7 @@ describe("app-detail.html security", () => {
 // ── audit-fixture escapes reflected input ──
 
 describe("audit-fixture security", () => {
-  const fixture = readFileSync("audit-fixture/index.html", "utf-8");
+  const fixture = readFileSync("audit-fixture/fixture.js", "utf-8");
 
   it("escapes scenario parameter before innerHTML", () => {
     assert.ok(

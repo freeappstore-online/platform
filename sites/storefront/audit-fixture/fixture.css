@@ -1,0 +1,32 @@
+/* Deliberately minimal: scenario rules must remain easy to audit. */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; color: #1a1a1a; background: #fafbfc; }
+.fixture-padded { padding: 1rem; }
+.index { max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+.index h1 { font-size: 1.6rem; margin-bottom: 0.4rem; }
+.index .meta { color: #6b7280; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.index .banner { background: #fef3c7; border: 1px solid #fcd34d; border-radius: 0.5rem; padding: 0.75rem 1rem; margin: 1rem 0; font-size: 0.9rem; }
+.index ul { list-style: none; padding: 0; }
+.index li { padding: 0.6rem 0.8rem; border: 1px solid #e5e7eb; border-radius: 0.5rem; margin-bottom: 0.4rem; }
+.index li code { background: #f3f4f6; padding: 1px 6px; border-radius: 3px; }
+.index a { color: #2563eb; text-decoration: none; }
+.index a:hover { text-decoration: underline; }
+.index-foot { margin-top: 1.5rem; color: #6b7280; font-size: 0.85rem; }
+.scenario-banner { position: fixed; top: 0; right: 0; background: #fef2f2; color: #991b1b; padding: 4px 10px; font-size: 0.7rem; font-family: monospace; z-index: 99999; border-bottom-left-radius: 4px; pointer-events: none; }
+
+body[data-scenario="scroll-x"] .content { width: 9999px; height: 100px; background: #fee2e2; padding: 1rem; }
+body[data-scenario="scroll-y"] .content { width: 100%; height: 9999px; background: linear-gradient(#fee2e2, #fafbfc); padding: 1rem; }
+body[data-scenario="clip-inner"] .clipper { width: 100px; height: 100px; overflow: hidden; background: #fef3c7; padding: 0.5rem; }
+body[data-scenario="clip-inner"] .clipper .child { width: 9999px; background: #fde68a; }
+body[data-scenario="clip-inner-y"] .clipper { width: 100%; height: 50px; overflow: hidden; background: #fef3c7; padding: 0.25rem; }
+body[data-scenario="clip-inner-y"] .clipper .child { height: 999px; background: linear-gradient(#fef3c7, #fde68a); }
+body[data-scenario="vh-bug"] { display: flex; flex-direction: column; }
+body[data-scenario="vh-bug"] .full { height: 100vh; background: #dbeafe; padding: 1rem; }
+body[data-scenario="gap-mid"] .gap { width: 100%; padding: 1rem; }
+body[data-scenario="gap-mid"] .gap .force { min-width: 700px; height: 200px; background: #fde68a; padding: 1rem; }
+@media (min-width: 769px) { body[data-scenario="gap-mid"] .gap .force { min-width: 0; } }
+@media (max-width: 599px) { body[data-scenario="gap-mid"] .gap .force { min-width: 0; } }
+body[data-scenario="landscape-only-bad"] .ok { padding: 1rem; }
+@media (orientation: landscape) { body[data-scenario="landscape-only-bad"] .ok { width: 1500px; } }
+body[data-scenario="large-scrollwidth-fp"] .grid { width: 100%; overflow: hidden; display: grid; grid-template-columns: repeat(10, 1fr); gap: 0; padding: 0.5rem; }
+body[data-scenario="large-scrollwidth-fp"] .grid > div { aspect-ratio: 1; background: #dbeafe; }

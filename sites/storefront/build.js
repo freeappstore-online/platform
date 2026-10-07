@@ -107,6 +107,9 @@ function typeLabel(type) {
 // --- GitHub API helpers (used to source first-published + commit log) ---
 
 const GH_TOKEN = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
+// Tests and disconnected development builds must use the checked-in history
+// cache rather than waiting for GitHub's unauthenticated rate limit.
+const OFFLINE_BUILD = process.env.FAS_OFFLINE === '1';
 
 function ghFetch(urlPath) {
   return new Promise((resolve, reject) => {
@@ -179,6 +182,7 @@ function compactHistory(meta, commits) {
 }
 
 async function fetchAppHistory(repo) {
+  if (OFFLINE_BUILD) return { meta: null, commits: null };
   // repo is "owner/name". Two parallel calls: repo metadata for created_at,
   // and the last 3 commits for the changelog. Failures degrade gracefully.
   try {
@@ -1093,6 +1097,19 @@ const csp = [
   "report-uri /v1/csp-report",
 ].join('; ');
 
+// The audit fixture is a documented compatibility exercise for real apps:
+// it imports the published reporter from esm.sh. Its CSS and router are
+// same-origin external assets, but that one module import needs a narrow
+// exception. Keep it route-specific; the storefront-wide CSP must never
+// acquire a third-party script source for a test fixture.
+const fixtureCsp = csp
+  .replace(
+    `script-src 'self' '${inlineScriptHash}' https://static.cloudflareinsights.com`,
+    `script-src 'self' '${inlineScriptHash}' https://static.cloudflareinsights.com https://esm.sh`,
+  )
+  // The fixture is audited inside the same-origin /quality dashboard.
+  .replace("frame-ancestors 'none'", "frame-ancestors 'self'");
+
 fs.writeFileSync(path.join(DIST, '_headers'), [
   '/*',
   '  X-Frame-Options: DENY',
@@ -1106,6 +1123,12 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
   '  Reporting-Endpoints: csp-endpoint="/v1/csp-report"',
   `  Content-Security-Policy: ${csp}`,
   `  Content-Security-Policy-Report-Only: ${csp}`,
+  '',
+  '# The fixture deliberately imports the published reporter. This exception',
+  '# is route-scoped; no production storefront page can load esm.sh scripts.',
+  '/audit-fixture/*',
+  `  Content-Security-Policy: ${fixtureCsp}`,
+  `  Content-Security-Policy-Report-Only: ${fixtureCsp}`,
   '',
   '# Immutable cache for content-addressed assets. CSS uses a hash in its',
   '# filename, so these exact paths change whenever their contents change.',
