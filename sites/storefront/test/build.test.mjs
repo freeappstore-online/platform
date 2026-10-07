@@ -251,8 +251,10 @@ test("cards have no inline style attribute; iconBg lives in card-styles.css", ()
       !/<div class="app-icon" data-letter="[^"]*" style=/.test(indexHtml),
       "inline style= leaked onto .app-icon — registry → DOM inline-style vector is open",
     );
-    // card-styles.css exists with a rule per app.
-    const css = readFileSync(join(tmpDist, "card-styles.css"), "utf8");
+    // The generated card stylesheet is content-addressed and has a rule per app.
+    const cardStylesHref = indexHtml.match(/href="\/(card-styles\.[a-f0-9]{10}\.css)"/);
+    assert.ok(cardStylesHref, "index.html must reference a fingerprinted card stylesheet");
+    const css = readFileSync(join(tmpDist, cardStylesHref[1]), "utf8");
     for (const app of registry.apps) {
       assert.ok(
         css.includes(`.app-card[data-id="${app.id}"] .app-icon`),
@@ -264,14 +266,18 @@ test("cards have no inline style attribute; iconBg lives in card-styles.css", ()
   }
 });
 
-test("build ships the advertised capability pages and wraps analytics CSS", () => {
+test("build ships the advertised capability pages and external analytics CSS", () => {
   const { tmp, tmpDist } = runBuild();
   try {
     assert.ok(readFileSync(join(tmpDist, "capabilities.html"), "utf8").includes("Platform Capabilities"));
     assert.ok(readFileSync(join(tmpDist, "browser-apis.html"), "utf8").includes("Browser APIs"));
     const analyticsHtml = readFileSync(join(tmpDist, "analytics.html"), "utf8");
-    assert.match(analyticsHtml, /<style>\s*\.a-section\s*\{/);
-    assert.match(analyticsHtml, /\.a-diag-foot[^}]*}\s*<\/style>/);
+    const stylesheet = analyticsHtml.match(/href="\/(style\.[a-f0-9]{10}\.css)"/);
+    assert.ok(stylesheet, "analytics must reference the fingerprinted external stylesheet");
+    const css = readFileSync(join(tmpDist, stylesheet[1]), "utf8");
+    assert.match(css, /\.a-section\s*\{/);
+    assert.match(css, /\.a-diag-foot\s*\{/);
+    assert.doesNotMatch(analyticsHtml, /<style\b/i, "analytics CSS must remain CSP-compatible and external");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -570,9 +576,7 @@ test("HTML pages must not use inline styles (CSP: style-src self)", () => {
   for (const file of htmlFiles) {
     const content = readFileSync(file, "utf8");
     const name = file.replace(REPO_ROOT + "/", "");
-    if (name === "analytics.html") {
-      assert.match(content, /<style>\s*\.a-section\s*\{[\s\S]*?\.a-diag-foot[^}]*}\s*<\/style>/);
-    } else if (/<style\b/i.test(content)) {
+    if (/<style\b/i.test(content)) {
       violations.push(`${name}: contains <style> block (blocked by CSP style-src 'self')`);
     }
     const withoutJsonLd = content.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, "");

@@ -14,6 +14,11 @@ const DIST = process.env.FAS_DIST
 const REGISTRY_PATH = process.env.FAS_REGISTRY_PATH
   ? path.resolve(process.env.FAS_REGISTRY_PATH)
   : path.join(ROOT, 'registry.json');
+// Tests can supply a copy of style.css with modified content to verify that
+// its fingerprint changes. Production always uses the checked-in stylesheet.
+const STYLE_CSS_PATH = process.env.FAS_STYLE_CSS_PATH
+  ? path.resolve(process.env.FAS_STYLE_CSS_PATH)
+  : path.join(ROOT, 'style.css');
 
 // Read registry
 const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
@@ -397,6 +402,14 @@ function contentVersion(filename) {
   const content = fs.readFileSync(path.join(ROOT, filename));
   return crypto.createHash('sha256').update(content).digest('hex').slice(0, 10);
 }
+function contentVersionForContent(content) {
+  return crypto.createHash('sha256').update(content).digest('hex').slice(0, 10);
+}
+function contentVersionForPath(filename) {
+  const content = fs.readFileSync(filename);
+  return contentVersionForContent(content);
+}
+const styleCssFilename = `style.${contentVersionForPath(STYLE_CSS_PATH)}.css`;
 const sriHashes = {
   SEARCH_JS: sriHash('search.js'),
   STOREFRONT_JS: sriHash('storefront.js'),
@@ -424,6 +437,12 @@ const contentVersions = {
   SETTINGS_JS: contentVersion('settings.js'),
   AI_GUIDE_JS: contentVersion('ai-guide.js'),
 };
+
+function replaceStylesheetUrls(html, stylesheetUrls) {
+  return html
+    .replaceAll('{{STYLE_CSS_URL}}', stylesheetUrls.style)
+    .replaceAll('{{CARD_STYLES_CSS_URL}}', stylesheetUrls.cardStyles);
+}
 
 const categoryMap = new Map();
 for (const app of apps) {
@@ -682,6 +701,28 @@ crossRegistry.items = (Array.isArray(crossRegistry.items) ? crossRegistry.items 
   iconBg: safeIconBackground(item.iconBg),
 }));
 
+// Per-card icon backgrounds (registry-driven). Lives in its own file so a
+// malformed iconBg slipping past validation can never become an inline style
+// attribute on the card itself. Its filename is content-addressed because the
+// generated rules change with the registry and cross-store results.
+const crossStoreIconBackgrounds = crossRegistry.items
+  .map((item) => `.cross-store-card[data-style-id="${item.styleId}"] .app-icon { background: ${item.iconBg}; }`)
+  .join('\n');
+const cardStyles = `${cardIconBackgrounds}\n${crossStoreIconBackgrounds}\n`;
+const cardStylesFilename = `card-styles.${contentVersionForContent(cardStyles)}.css`;
+const stylesheetUrls = {
+  style: `/${styleCssFilename}`,
+  cardStyles: `/${cardStylesFilename}`,
+};
+// A local build may reuse dist/ from a pre-fingerprint build. Remove only the
+// two legacy names so neither unversioned URL can accidentally be deployed.
+for (const legacyStylesheet of ['style.css', 'card-styles.css']) {
+  const legacyPath = path.join(DIST, legacyStylesheet);
+  if (fs.existsSync(legacyPath)) fs.unlinkSync(legacyPath);
+}
+fs.copyFileSync(STYLE_CSS_PATH, path.join(DIST, styleCssFilename));
+fs.writeFileSync(path.join(DIST, cardStylesFilename), cardStyles);
+
 // Stamp each card with data-published from the fetched history, then inject
 // the grid into the index HTML. This is done here (inside the async IIFE) so
 // histories are available; the {{APPS_GRID}} placeholder was intentionally
@@ -699,6 +740,7 @@ indexHtml = indexHtml
     '{{CROSS_STORE_REGISTRY}}',
     JSON.stringify(crossRegistry).replace(/</g, '\\u003c'),
   );
+indexHtml = replaceStylesheetUrls(indexHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'index.html'), indexHtml);
 
 // --- Settings page ---
@@ -710,16 +752,8 @@ for (const [k, v] of Object.entries(sriHashes)) {
 for (const [k, v] of Object.entries(contentVersions)) {
   settingsHtml = settingsHtml.replaceAll(`{{VER_${k}}}`, v);
 }
+settingsHtml = replaceStylesheetUrls(settingsHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'settings.html'), settingsHtml);
-
-// Per-card icon backgrounds (registry-driven). Lives in its own file so
-// a malformed iconBg slipping past validation can never become an inline
-// style attribute on the card itself. Cross-store colors use the same safe
-// generated stylesheet instead of being assigned by search.js at runtime.
-const crossStoreIconBackgrounds = crossRegistry.items
-  .map((item) => `.cross-store-card[data-style-id="${item.styleId}"] .app-icon { background: ${item.iconBg}; }`)
-  .join('\n');
-fs.writeFileSync(path.join(DIST, 'card-styles.css'), `${cardIconBackgrounds}\n${crossStoreIconBackgrounds}\n`);
 
 // --- Quality Dashboard ---
 // Embeds both the local apps registry and the cross-store games registry
@@ -758,6 +792,7 @@ for (const [k, v] of Object.entries(sriHashes)) {
 for (const [k, v] of Object.entries(contentVersions)) {
   qualityHtml = qualityHtml.replaceAll(`{{VER_${k}}}`, v);
 }
+qualityHtml = replaceStylesheetUrls(qualityHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'quality.html'), qualityHtml);
 console.log(`  /quality dashboard generated for ${qualityRegistry.apps.length} apps + ${qualityRegistry.games.length} games`);
 console.log(`  ${crossRegistry.items.length} games available for cross-store search`);
@@ -811,6 +846,7 @@ apps.forEach((app, i) => {
   for (const [k, v] of Object.entries(contentVersions)) {
     html = html.replaceAll(`{{VER_${k}}}`, v);
   }
+  html = replaceStylesheetUrls(html, stylesheetUrls);
 
   fs.writeFileSync(path.join(DIST, 'apps', `${app.id}.html`), html);
 });
@@ -906,6 +942,7 @@ uniqueAuthors.forEach(username => {
   for (const [k, v] of Object.entries(contentVersions)) {
     html = html.replaceAll(`{{VER_${k}}}`, v);
   }
+  html = replaceStylesheetUrls(html, stylesheetUrls);
   fs.writeFileSync(path.join(DIST, 'u', `${username}.html`), html);
 });
 console.log(`Generated ${uniqueAuthors.length} author page(s) at /u/`);
@@ -937,6 +974,7 @@ for (const [k, v] of Object.entries(sriHashes)) {
 for (const [k, v] of Object.entries(contentVersions)) {
   creatorsHtml = creatorsHtml.replaceAll(`{{VER_${k}}}`, v);
 }
+creatorsHtml = replaceStylesheetUrls(creatorsHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'creators.html'), creatorsHtml);
 console.log(`Generated /creators page (${uniqueAuthors.length} creators)`);
 
@@ -988,7 +1026,6 @@ fs.writeFileSync(path.join(DIST, 'sitemap.xml'), sitemap);
 // --- Copy static assets ---
 
 const filesToCopy = [
-  'style.css',
   'search.js',
   'storefront.js',
   'detail-page.js',
@@ -1057,11 +1094,11 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
   `  Content-Security-Policy: ${csp}`,
   `  Content-Security-Policy-Report-Only: ${csp}`,
   '',
-  '# Immutable cache for versioned assets. JS and CSS are referenced with a',
-  '# content-hash query param (?v=<hash>) injected at build time, so the URL',
-  '# changes whenever the file changes. The edge may cache forever — a stale',
-  '# URL is never served because fresh HTML always points at the new URL.',
-  '/*.css',
+  '# Immutable cache for content-addressed assets. CSS uses a hash in its',
+  '# filename, so these exact paths change whenever their contents change.',
+  `/${styleCssFilename}`,
+  '  Cache-Control: public, max-age=31536000, immutable',
+  `/${cardStylesFilename}`,
   '  Cache-Control: public, max-age=31536000, immutable',
   '/*.js',
   '  Cache-Control: public, max-age=31536000, immutable',
@@ -1083,8 +1120,9 @@ function processStaticHtml(html, file) {
   for (const [k, v] of Object.entries(contentVersions)) {
     html = html.replaceAll(`{{VER_${k}}}`, v);
   }
+  html = replaceStylesheetUrls(html, stylesheetUrls);
   html = html.replaceAll('__CF_BEACON__', CF_BEACON_SNIPPET);
-  if (/{{(?:SRI|VER)_[A-Z_]+}}/.test(html)) {
+  if (/{{(?:SRI|VER)_[A-Z_]+}}|{{(?:STYLE_CSS_URL|CARD_STYLES_CSS_URL)}}/.test(html)) {
     console.error(`Unsubstituted asset placeholder in ${file}`);
     process.exit(1);
   }
@@ -1118,6 +1156,7 @@ if (fs.existsSync(docsSrcDir)) {
     for (const [k, v] of Object.entries(contentVersions)) {
       html = html.replaceAll(`{{VER_${k}}}`, v);
     }
+    html = replaceStylesheetUrls(html, stylesheetUrls);
     html = html.replaceAll('__CF_BEACON__', CF_BEACON_SNIPPET);
     fs.writeFileSync(path.join(docsDestDir, f), html);
   }
