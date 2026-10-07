@@ -149,7 +149,7 @@ export function Create() {
 
   const handleSend = async () => {
     const msg = inputValue.trim();
-    if (!msg || agent.isStreaming) return;
+    if (!msg) return;
     // Send any local key we still have (legacy fallback). If empty, the agent
     // worker resolves the key from the platform vault server-side using the
     // user's auth token — so keys never need to be retyped after Profile setup.
@@ -292,6 +292,38 @@ export function Create() {
             )}
             <div ref={messagesEndRef} />
           </div>
+          {agent.queuedMessages.length > 0 && (
+            <section className="shrink-0" aria-label="Queued messages" style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--line)", background: "var(--panel)" }}>
+              <p className="text-xs font-semibold mb-2" style={{ color: "var(--muted)" }}>
+                {agent.queuedMessages.length} queued {agent.queuedMessages.length === 1 ? "message" : "messages"} · sends when the current response finishes
+              </p>
+              <div className="flex flex-col gap-2" style={{ maxHeight: 180, overflowY: "auto" }}>
+                {agent.queuedMessages.map((message, index) => (
+                  <div key={message.id} className="flex gap-2 items-start" style={{ padding: "0.45rem", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", background: "var(--paper)" }}>
+                    <span className="text-xs font-semibold shrink-0" aria-hidden style={{ color: "var(--muted)", paddingTop: "0.45rem" }}>{index + 1}</span>
+                    <textarea
+                      value={message.content}
+                      onChange={(e) => agent.editQueuedMessage(message.id, e.target.value)}
+                      aria-label={`Queued message ${index + 1}`}
+                      rows={2}
+                      className="flex-1 resize-y"
+                      style={{ minWidth: 0, border: "1px solid var(--line)", borderRadius: "0.35rem", padding: "0.35rem 0.45rem", background: "var(--panel)", color: "var(--ink)", fontFamily: "inherit", fontSize: "0.875rem" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => agent.deleteQueuedMessage(message.id)}
+                      aria-label={`Remove queued message ${index + 1}`}
+                      title="Remove from queue"
+                      className="text-xs font-semibold shrink-0"
+                      style={{ padding: "0.45rem", background: "none", border: "none", color: "var(--danger)", cursor: "pointer" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
           <div className="flex gap-2 shrink-0" style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--line)", background: "var(--panel)" }}>
             <textarea
               value={inputValue}
@@ -302,7 +334,7 @@ export function Create() {
               className="flex-1 resize-none"
               style={{ border: "1px solid var(--line)", borderRadius: "0.5rem", padding: "0.55rem 0.7rem", background: "var(--paper)", color: "var(--ink)", fontSize: "1rem", minHeight: 44, maxHeight: 120, fontFamily: "inherit" }}
             />
-            <button onClick={handleSend} disabled={agent.isStreaming} className="self-end inline-flex items-center justify-center" title="Send" aria-label="Send" style={{ minHeight: 44, minWidth: 44, padding: "0.55rem 0.9rem", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius-sm)", fontWeight: 600, fontSize: "1.1rem", cursor: "pointer", opacity: agent.isStreaming ? 0.5 : 1 }}>
+            <button onClick={handleSend} className="self-end inline-flex items-center justify-center" title={agent.isStreaming ? "Add to queue" : "Send"} aria-label={agent.isStreaming ? "Add to queue" : "Send"} style={{ minHeight: 44, minWidth: 44, padding: "0.55rem 0.9rem", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius-sm)", fontWeight: 600, fontSize: "1.1rem", cursor: "pointer" }}>
               <span aria-hidden>↑</span>
             </button>
           </div>

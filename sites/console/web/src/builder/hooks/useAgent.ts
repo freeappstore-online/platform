@@ -1,6 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { AGENT_URL, API_URL, getSession } from "../lib/api";
 import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from "../lib/push";
+import {
+  addQueuedMessage,
+  editQueuedMessage as editQueueItem,
+  removeQueuedMessage,
+  takeNextQueuedMessage,
+  type QueuedMessage,
+} from "../lib/messageQueue";
 import { useProjects, type Project } from "./useProjects";
 
 export type { Project };
@@ -45,6 +52,9 @@ export function useAgent() {
   const sessionId = projectsMgr.currentId;
   const [messages, setMessages] = useState<ChatMessage[]>(DEFAULT_MSG);
   const [isStreaming, setIsStreaming] = useState(false);
+  // Waiting turns are intentionally UI-local: unlike messages, they have not
+  // been sent to the agent and must remain editable/removable until they are.
+  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage<AIConfig>[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState(false);
   const [tokensIn, setTokensIn] = useState(0);
@@ -192,6 +202,7 @@ export function useAgent() {
 
   const resetUI = useCallback(() => {
     setMessages(DEFAULT_MSG);
+    setQueuedMessages([]);
     setDeployState(null);
     setTokensIn(0);
     setTokensOut(0);
@@ -253,9 +264,12 @@ export function useAgent() {
     } catch { /* push subscription failed — continue without */ }
   }, [sessionId]);
 
-  const sendMessage = useCallback(async (message: string, aiConfig: AIConfig) => {
-    if (!sessionId || isStreaming) return;
+  const streamMessage = useCallback(async (message: string, aiConfig: AIConfig) => {
+    if (!sessionId || isStreamingRef.current) return;
     subscribePush();
+    // The ref changes synchronously so the auto-advance effect can never
+    // start two queued turns during React's state-update window.
+    isStreamingRef.current = true;
     setIsStreaming(true);
     setMessages((prev) => [...prev, { role: "user", content: message }, { role: "assistant", content: "" }]);
     let assistantText = "";
@@ -407,15 +421,49 @@ export function useAgent() {
         updateAssistant(`Connection error: ${errMsg}`);
       }
     } finally {
+      isStreamingRef.current = false;
       setIsStreaming(false);
     }
-  }, [sessionId, isStreaming, subscribePush, projectsMgr, loadHistory]);
+  }, [sessionId, subscribePush, projectsMgr, loadHistory]);
+
+  const sendMessage = useCallback(async (message: string, aiConfig: AIConfig) => {
+    if (!sessionId || !message.trim()) return;
+    if (isStreamingRef.current) {
+      setQueuedMessages((queue) => addQueuedMessage(queue, {
+        id: crypto.randomUUID(),
+        content: message,
+        config: aiConfig,
+      }));
+      return;
+    }
+    await streamMessage(message, aiConfig);
+  }, [sessionId, streamMessage]);
+
+  // Once a turn ends, claim exactly one waiting message and send it. The
+  // remaining items stay visible and editable while that newly-started run is
+  // in flight, then this effect advances the next one in FIFO order.
+  useEffect(() => {
+    if (isStreamingRef.current || queuedMessages.length === 0) return;
+    const { next, remaining } = takeNextQueuedMessage(queuedMessages);
+    if (!next) return;
+    setQueuedMessages(remaining);
+    if (next.content.trim()) void streamMessage(next.content, next.config);
+  }, [queuedMessages, streamMessage]);
+
+  const editQueuedMessage = useCallback((id: string, content: string) => {
+    setQueuedMessages((queue) => editQueueItem(queue, id, content));
+  }, []);
+
+  const deleteQueuedMessage = useCallback((id: string) => {
+    setQueuedMessages((queue) => removeQueuedMessage(queue, id));
+  }, []);
 
   return {
-    messages, isStreaming, isLoadingHistory, historyError, tokensIn, tokensOut, deployState,
+    messages, queuedMessages, isStreaming, isLoadingHistory, historyError, tokensIn, tokensOut, deployState,
     projects: projectsMgr.projects, currentProjectId: projectsMgr.currentId,
     projectsLoading: projectsMgr.loading, projectsError: projectsMgr.loadError, reloadProjects: projectsMgr.reload,
-    sendMessage, createProject, switchProject, openApp, retryHistory: loadHistory,
+    sendMessage, editQueuedMessage, deleteQueuedMessage,
+    createProject, switchProject, openApp, retryHistory: loadHistory,
   };
 }
 
