@@ -134,6 +134,10 @@
   // ---------- Vote counts (load on page open, populate data-votes + counts) ----------
   (function () {
     var API = 'https://api.freeappstore.online';
+    // This state is shared with the click handler below. It is hydrated from
+    // the authenticated aggregate request, never persisted in localStorage.
+    var votedSet = window.__fasVotedApps = {};
+    var voteMutations = window.__fasVoteMutations = {};
 
     // Populate data-votes on all cards and update visible vote-count spans.
     function applyVoteCounts(votes) {
@@ -145,6 +149,29 @@
         var span = card.querySelector('.vote-btn .vote-count');
         if (span) span.textContent = count > 0 ? String(count) : '0';
       });
+    }
+
+    function applyVoteStates(voted, mutationSnapshot) {
+      document.querySelectorAll('.vote-btn[data-app-id]').forEach(function (btn) {
+        var appId = btn.dataset.appId;
+        // Do not let a slow hydration response undo a click that happened
+        // while it was in flight (or after the click has completed).
+        if (!appId || voteMutations[appId] !== mutationSnapshot[appId]) return;
+        var isVoted = !!(voted && voted[appId] === true);
+        if (isVoted) votedSet[appId] = true;
+        else delete votedSet[appId];
+        btn.setAttribute('aria-pressed', isVoted ? 'true' : 'false');
+        btn.classList.toggle('voted', isVoted);
+      });
+    }
+
+    function getToken() {
+      try {
+        var raw = localStorage.getItem('fas:session');
+        if (!raw) return null;
+        var parsed = JSON.parse(raw);
+        return (parsed && typeof parsed.token === 'string') ? parsed.token : null;
+      } catch (e) { return null; }
     }
 
     function showVoteCountsUnavailable() {
@@ -161,11 +188,14 @@
 
     // Fetch aggregate votes once on page load. Resilient — failures leave
     // cards at count 0 and the sort still works (all tied at 0).
-    fetch(API + '/v1/store/votes')
+    var authToken = getToken();
+    var mutationSnapshot = Object.assign({}, voteMutations);
+    fetch(API + '/v1/store/votes', authToken ? { headers: { Authorization: 'Bearer ' + authToken } } : {})
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (data) {
         if (data && data.votes && typeof data.votes === 'object') {
           applyVoteCounts(data.votes);
+          applyVoteStates(data.voted, mutationSnapshot);
           // If the current sort is 'popular', re-apply so counts are reflected.
           if (typeof window.__fasActiveSort === 'function' && window.__fasActiveSort() === 'popular') {
             // Trigger a re-sort by simulating the sort button click sequence.
@@ -183,9 +213,9 @@
   // ---------- Vote button click handler ----------
   (function () {
     var API = 'https://api.freeappstore.online';
-    // voted state is tracked in memory (per page load); a future improvement
-    // could use localStorage for cross-session persistence.
-    var votedSet = {};
+    var votedSet = window.__fasVotedApps || (window.__fasVotedApps = {});
+    var voteMutations = window.__fasVoteMutations || (window.__fasVoteMutations = {});
+    var inFlight = {};
 
     function getToken() {
       try {
@@ -212,6 +242,7 @@
 
       var appId = btn.dataset.appId;
       if (!appId) return;
+      if (inFlight[appId]) return;
 
       var token = getToken();
       if (!token) {
@@ -221,6 +252,8 @@
 
       var alreadyVoted = !!votedSet[appId];
       var method = alreadyVoted ? 'DELETE' : 'POST';
+      voteMutations[appId] = (voteMutations[appId] || 0) + 1;
+      inFlight[appId] = true;
 
       // Optimistic update.
       var countSpan = btn.querySelector('.vote-count');
@@ -231,6 +264,7 @@
       if (optimistic !== null) btn.closest('.app-card').dataset.votes = String(optimistic);
       btn.setAttribute('aria-pressed', alreadyVoted ? 'false' : 'true');
       btn.classList.toggle('voted', !alreadyVoted);
+      btn.disabled = true;
 
       fetch(API + '/v1/store/apps/' + encodeURIComponent(appId) + '/vote', {
         method: method,
@@ -259,6 +293,10 @@
           if (!countUnavailable) btn.closest('.app-card').dataset.votes = String(current);
           btn.setAttribute('aria-pressed', alreadyVoted ? 'true' : 'false');
           btn.classList.toggle('voted', alreadyVoted);
+        })
+        .finally(function () {
+          delete inFlight[appId];
+          btn.disabled = false;
         });
     });
   })();

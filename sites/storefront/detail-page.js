@@ -59,11 +59,12 @@
     voteBtn.classList.toggle("voted", voted);
   }
 
-  fetch(API + "/v1/store/votes")
+  var hydrationToken = token();
+  fetch(API + "/v1/store/votes", hydrationToken ? { headers: { Authorization: "Bearer " + hydrationToken } } : {})
     .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function (data) {
       if (!data || !data.votes || typeof data.votes !== "object") return Promise.reject("invalid vote response");
-      setVoteState(false, typeof data.votes[APP_ID] === "number" ? data.votes[APP_ID] : 0);
+      setVoteState(!!(data.voted && data.voted[APP_ID] === true), typeof data.votes[APP_ID] === "number" ? data.votes[APP_ID] : 0);
       voteBtn.disabled = false;
       statusEl.textContent = "";
     })

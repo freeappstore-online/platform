@@ -21,7 +21,10 @@ export const votesRoutes = new Hono<{ Bindings: Env }>();
 /**
  * GET /v1/store/votes
  * Public — no auth required.
- * Returns aggregate vote counts for all apps: { votes: { [appId]: count } }
+ * Returns aggregate vote counts for all apps: { votes: { [appId]: count } }.
+ * When a valid bearer token is supplied, also returns that caller's own votes
+ * as { voted: { [appId]: true } }. Never expose that map in a public response:
+ * it is personal state, not aggregate storefront data.
  */
 votesRoutes.get('/store/votes', async (c) => {
   const { results } = await c.env.DB.prepare(
@@ -33,8 +36,27 @@ votesRoutes.get('/store/votes', async (c) => {
     votes[row.app_id] = row.count;
   }
 
-  c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-  return c.json({ votes });
+  const auth = c.req.header('authorization');
+  if (!auth) {
+    c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    return c.json({ votes });
+  }
+
+  // An Authorization header makes this a caller-specific response. Validate it
+  // rather than silently treating a bad credential as anonymous, and prevent a
+  // shared cache from ever serving one caller's vote map to another.
+  const user = await requireUser(c);
+  const { results: callerVoteRows } = await c.env.DB.prepare(
+    'SELECT app_id FROM app_votes WHERE user_id = ?',
+  )
+    .bind(user.id)
+    .all<{ app_id: string }>();
+  const voted: Record<string, true> = {};
+  for (const row of callerVoteRows ?? []) voted[row.app_id] = true;
+
+  c.header('Cache-Control', 'private, no-store');
+  c.header('Vary', 'Authorization');
+  return c.json({ votes, voted });
 });
 
 /**

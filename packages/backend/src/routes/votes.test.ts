@@ -10,6 +10,7 @@ function fakeDB(opts: {
   existingVote?: boolean;
   voteCount?: number;
   recentVoteCount?: number;
+  callerVotes?: string[];
 }) {
   return {
     prepare: (sql: string) => {
@@ -35,6 +36,9 @@ function fakeDB(opts: {
         all: async () => {
           if (trimmed.includes('FROM app_votes GROUP BY app_id')) {
             return { results: opts.voteCount ? [{ app_id: 'timer', count: opts.voteCount }] : [] };
+          }
+          if (trimmed.includes('SELECT app_id FROM app_votes WHERE user_id')) {
+            return { results: (opts.callerVotes ?? []).map((app_id) => ({ app_id })) };
           }
           return { results: [] };
         },
@@ -76,6 +80,41 @@ describe('vote routes', () => {
     const res = await app.request('/v1/store/votes', {}, env(fakeDB({})));
     expect(res.status).toBe(200);
     expect(res.headers.get('cache-control')).toContain('max-age=60');
+  });
+
+  it('GET /v1/store/votes exposes only the authenticated caller vote state', async () => {
+    const res = await app.request(
+      '/v1/store/votes',
+      { headers: { Authorization: await authHeader() } },
+      env(fakeDB({ user, voteCount: 7, callerVotes: ['timer', 'notes'] })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { votes: Record<string, number>; voted?: Record<string, true> };
+    expect(data.votes).toEqual({ timer: 7 });
+    expect(data.voted).toEqual({ timer: true, notes: true });
+    expect(res.headers.get('cache-control')).toBe('private, no-store');
+    expect(res.headers.get('vary')).toContain('Authorization');
+  });
+
+  it('GET /v1/store/votes keeps anonymous responses aggregate-only and publicly cacheable', async () => {
+    const res = await app.request('/v1/store/votes', {}, env(fakeDB({ voteCount: 7, callerVotes: ['timer'] })));
+    const data = (await res.json()) as { votes: Record<string, number>; voted?: Record<string, true> };
+    expect(data).toEqual({ votes: { timer: 7 } });
+    expect(res.headers.get('cache-control')).toContain('public');
+    expect(res.headers.get('vary')).not.toContain('Authorization');
+  });
+
+  it('returns caller state independently of concurrent aggregate changes', async () => {
+    const res = await app.request(
+      '/v1/store/votes',
+      { headers: { Authorization: await authHeader() } },
+      // The aggregate can change as other users vote; this caller's map must
+      // remain limited to their own row.
+      env(fakeDB({ user, voteCount: 12, callerVotes: ['timer'] })),
+    );
+    const data = (await res.json()) as { votes: Record<string, number>; voted: Record<string, true> };
+    expect(data.votes.timer).toBe(12);
+    expect(data.voted).toEqual({ timer: true });
   });
 
   // POST /v1/store/apps/:appId/vote — auth required
