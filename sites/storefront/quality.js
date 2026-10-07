@@ -210,23 +210,21 @@ function renderDetail(appEntry, mode) {
 
   grid.innerHTML = filtered.map((r) => {
     // We render iframes at their TRUE pixel size so the page layout
-    // inside is honest. A CSS `transform: scale()` makes the preview
-    // fit in our card without distorting layout numbers.
-    const cardWidth = 220;
-    const scale = Math.min(cardWidth / r.width, cardWidth / r.height);
-    const wrapH = Math.round(r.height * scale);
+    // inside is honest. The external stylesheet provides one fixed scale
+    // rule per reference viewport. Keeping those rules in style.css (rather
+    // than inline styles) lets this page work under style-src 'self'.
     return `
       <div class="q-cell q-pending" data-vp="${esc(r.id)}">
         <div class="q-cell-head">
           <span>${esc(r.label)}</span>
           <span class="badge">…</span>
         </div>
-        <div class="q-frame-wrap" style="height: ${wrapH}px;">
+        <div class="q-frame-wrap q-vp-${esc(r.id)}">
           <iframe
+            class="q-frame"
             src="${esc(appEntry.appUrl)}"
             width="${r.width}"
             height="${r.height}"
-            style="width:${r.width}px;height:${r.height}px;transform:scale(${scale.toFixed(4)});"
             loading="lazy"
             sandbox="allow-scripts allow-same-origin"
             referrerpolicy="no-referrer"

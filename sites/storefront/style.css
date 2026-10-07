@@ -443,6 +443,10 @@ footer .container {
   text-decoration: none;
 }
 
+.storefront-card-interactive { cursor: pointer; }
+.cross-store-card { text-decoration: none; }
+.cross-store-card .app-icon { background: #2563eb; }
+
 
 .app-card-header {
   display: flex;
@@ -1860,8 +1864,22 @@ footer .container {
 .q-cell.ok { border-color: #16a34a; }
 .q-cell-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.78rem; font-weight: 600; color: var(--muted); margin-bottom: 0.4rem; }
 .q-cell-head .badge { font-size: 0.95rem; }
-.q-frame-wrap { width: 100%; aspect-ratio: 1 / 1; overflow: hidden; background: #f6f7f9; border-radius: 0.5rem; position: relative; }
-.q-frame-wrap iframe { border: 0; transform-origin: top left; pointer-events: none; }
+.q-frame-wrap { width: 100%; overflow: hidden; background: #f6f7f9; border-radius: 0.5rem; position: relative; }
+.q-frame { border: 0; transform-origin: top left; pointer-events: none; }
+/* Each reference viewport has a fixed, CSP-safe external rule. The iframe
+ * itself retains matching width/height attributes, while these rules scale the
+ * true-size frame into the 220px-wide audit card. */
+.q-vp-p-320, .q-vp-p-360, .q-vp-p-393, .q-vp-p-414, .q-vp-p-600, .q-vp-p-768, .q-vp-p-1024 { height: 220px; }
+.q-vp-l-568, .q-vp-l-667, .q-vp-l-736 { height: 124px; }
+.q-vp-l-1024, .q-vp-l-1366 { height: 165px; }
+.q-vp-p-320 .q-frame, .q-vp-l-568 .q-frame { transform: scale(0.3873); }
+.q-vp-p-360 .q-frame, .q-vp-p-600 .q-frame { transform: scale(0.275); }
+.q-vp-p-393 .q-frame { transform: scale(0.2582); }
+.q-vp-p-414 .q-frame { transform: scale(0.2455); }
+.q-vp-p-768 .q-frame, .q-vp-l-1024 .q-frame { transform: scale(0.2148); }
+.q-vp-p-1024 .q-frame, .q-vp-l-1366 .q-frame { transform: scale(0.1611); }
+.q-vp-l-667 .q-frame { transform: scale(0.3298); }
+.q-vp-l-736 .q-frame { transform: scale(0.2989); }
 .q-cell .reasons { font-size: 0.72rem; color: var(--muted); margin-top: 0.4rem; min-height: 1.6em; }
 .q-cell .reasons.bad { color: #dc2626; }
 
@@ -2095,17 +2113,24 @@ footer .container {
     .a-kpi .label { color: var(--muted); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
     .a-kpi .value { font-size: 1.6rem; font-weight: 800; margin-top: 0.25rem; }
     .a-chart { border: 1px solid var(--line); border-radius: 0.75rem; padding: 0.5rem; background: var(--panel); margin-bottom: 1rem; }
+    .a-chart-svg { width: 100%; height: 100px; display: block; }
+    .a-chart-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-top: 4px; }
     .a-rank-title { color: var(--muted); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 0.5rem; }
     .a-rank-row { font-size: 0.85rem; margin-bottom: 0.5rem; }
     .a-rank-row .label { display: flex; justify-content: space-between; margin-bottom: 0.15rem; }
     .a-rank-row-button { width: 100%; display: block; padding: 0.3rem 0.4rem; margin: 0 -0.4rem 0.3rem; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; border-radius: 0.3rem; font: inherit; transition: background 120ms ease; }
     .a-rank-row-button:hover { background: var(--panel); }
     .a-bar { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
-    .a-bar > div { height: 4px; background: var(--accent); }
+    .a-bar-fill { display: block; width: 100%; height: 4px; border: 0; appearance: none; -webkit-appearance: none; }
+    .a-bar-fill::-webkit-progress-bar { background: var(--line); }
+    .a-bar-fill::-webkit-progress-value { background: var(--accent); }
+    .a-bar-fill::-moz-progress-bar { background: var(--accent); }
     .a-tabs { display: flex; gap: 0.25rem; }
     .a-tabs button { padding: 0.25rem 0.75rem; font-size: 0.85rem; border: 1px solid var(--line); border-radius: 0.5rem; background: transparent; color: var(--muted); cursor: pointer; }
     .a-tabs button.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
     .a-form { border-top: 1px solid var(--line); margin-top: 1.25rem; padding-top: 1.25rem; }
+    .a-form-heading { font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; margin-bottom: 0.5rem; }
+    .a-form-copy { margin-bottom: 0.75rem; }
     .a-form label { display: block; margin-bottom: 0.75rem; font-size: 0.85rem; }
     .a-form label span { display: block; color: var(--muted); font-size: 0.75rem; margin-bottom: 0.25rem; }
     .a-form input, .a-form textarea { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid var(--line); border-radius: 0.5rem; background: transparent; color: var(--ink); font-size: 0.9rem; font-family: inherit; }

@@ -91,22 +91,22 @@ describe("search.js security", () => {
       assert.ok(card);
       assert.ok(card.innerHTML.includes(esc(payload)));
       assert.ok(!card.innerHTML.includes(payload) || esc(payload) === payload);
-      assert.match(card.innerHTML, /background: #2563eb;/);
+      assert.doesNotMatch(card.innerHTML, /\sstyle\s*=/i, "cross-store cards must not emit inline styles");
       assert.ok(card.href.endsWith('/games/needle%2F..%2Fx.html'));
       assert.equal(card.rel, 'noopener');
     }
   });
 
-  it("escapes the derived letter and category and preserves valid colors", () => {
+  it("escapes the derived letter and category without emitting inline colors", () => {
     const card = searchCard({ id: 'needle', name: '<svg>', category: 'needle<img>', iconBg: '#abc' });
     assert.match(card.innerHTML, />&lt;<\/div>/);
     assert.match(card.innerHTML, /Needle&lt;img&gt;/);
-    assert.match(card.innerHTML, /background: #abc;/);
+    assert.doesNotMatch(card.innerHTML, /\sstyle\s*=/i);
   });
 
   it("rejects CSS declaration injection", () => {
     const card = searchCard({ id: 'needle', name: 'Needle', category: 'test', iconBg: 'red; background: url(https://evil.example/track)' });
-    assert.match(card.innerHTML, /background: #2563eb;/);
+    assert.doesNotMatch(card.innerHTML, /\sstyle\s*=/i);
     assert.ok(!card.innerHTML.includes('evil.example'));
   });
 

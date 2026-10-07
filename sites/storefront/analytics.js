@@ -177,8 +177,15 @@
           ]),
           (function () {
             var bar = el('div', { class: 'a-bar' });
-            var fill = el('div');
-            fill.style.width = Math.max(0, Math.min(100, (Number(r.value) / max) * 100)) + '%';
+            // Native progress reflects its value without an inline style.
+            // That matters because the storefront CSP deliberately has
+            // style-src 'self' and blocks all style="..." attributes.
+            var fill = el('progress', {
+              class: 'a-bar-fill',
+              value: String(Math.max(0, Math.min(100, (Number(r.value) / max) * 100))),
+              max: '100',
+              'aria-label': fmtViews(r.value) + ' views',
+            });
             bar.appendChild(fill);
             return bar;
           })()

@@ -67,19 +67,20 @@
 
   function buildCrossCard(item) {
     const a = document.createElement('a');
-    a.className = 'app-card compact';
+    a.className = 'app-card compact cross-store-card';
     // URL path segments: use encodeURIComponent, not HTML-escape. esc() is
     // the wrong context — it'd let `..` or `/` ride through. Build-time
     // validators already constrain `id`, but defense-in-depth.
     a.href = `https://${item.domain}/${encodeURIComponent(item.path)}/${encodeURIComponent(item.id)}.html`;
     a.target = '_blank';
     a.rel = 'noopener';
-    a.style.textDecoration = 'none';
+    // The build assigns each cross-store entry a safe, opaque style id and
+    // emits its icon color into card-styles.css. Do not set a runtime style:
+    // strict production CSP blocks style attributes, including custom props.
+    if (/^cross-\d+$/.test(item.styleId || '')) a.dataset.styleId = item.styleId;
     const letter = (item.name || '?').trim().charAt(0).toUpperCase();
-    // HTML escaping does not constrain CSS declarations. Accept colors only.
-    const iconBg = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(item.iconBg) ? item.iconBg : '#2563eb';
     a.innerHTML = `
-      <div class="app-icon" style="background: ${esc(iconBg)};">${esc(letter)}</div>
+      <div class="app-icon">${esc(letter)}</div>
       <div class="app-body">
         <span class="app-name">${esc(item.name)}</span>
         <span class="app-meta">${esc(categoryLabel(item.category))} · on ${esc(item.domain.replace('.online', ''))}</span>

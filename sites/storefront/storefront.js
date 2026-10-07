@@ -431,7 +431,7 @@
 
     document.querySelectorAll('#apps-grid .app-card.compact').forEach(function (card) {
       var aboutUrl = card.dataset.about;
-      card.style.cursor = 'pointer';
+      card.classList.add('storefront-card-interactive');
       card.addEventListener('click', function (e) {
         var onCta = !!e.target.closest('.app-cta');
         if (SPLIT_MQ.matches) {

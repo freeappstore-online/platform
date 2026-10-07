@@ -313,6 +313,12 @@ function escapeAttrCss(s) {
   return String(s).replace(/[^a-z0-9_-]/gi, '_');
 }
 
+function safeIconBackground(value) {
+  return /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(String(value))
+    ? value
+    : '#2563eb';
+}
+
 function renderAppCard(app, published) {
   const q = qualityScores[app.id];
   const qualityBadge = q && q.grade
@@ -666,6 +672,16 @@ const [histories, auditMap, crossRegistry, manifests, buildInfos] = await Promis
   Promise.all(apps.map((a) => fetchBuildInfo(a.appUrl))),
 ]);
 
+// Cross-store search cards are created at runtime, but their colors must be
+// available from a same-origin stylesheet under the strict storefront CSP.
+// Give each build-time entry an opaque id and sanitize its color before both
+// values are embedded in the JSON registry and generated CSS.
+crossRegistry.items = (Array.isArray(crossRegistry.items) ? crossRegistry.items : []).map((item, index) => ({
+  ...item,
+  styleId: `cross-${index}`,
+  iconBg: safeIconBackground(item.iconBg),
+}));
+
 // Stamp each card with data-published from the fetched history, then inject
 // the grid into the index HTML. This is done here (inside the async IIFE) so
 // histories are available; the {{APPS_GRID}} placeholder was intentionally
@@ -698,8 +714,12 @@ fs.writeFileSync(path.join(DIST, 'settings.html'), settingsHtml);
 
 // Per-card icon backgrounds (registry-driven). Lives in its own file so
 // a malformed iconBg slipping past validation can never become an inline
-// style attribute on the card itself.
-fs.writeFileSync(path.join(DIST, 'card-styles.css'), cardIconBackgrounds + '\n');
+// style attribute on the card itself. Cross-store colors use the same safe
+// generated stylesheet instead of being assigned by search.js at runtime.
+const crossStoreIconBackgrounds = crossRegistry.items
+  .map((item) => `.cross-store-card[data-style-id="${item.styleId}"] .app-icon { background: ${item.iconBg}; }`)
+  .join('\n');
+fs.writeFileSync(path.join(DIST, 'card-styles.css'), `${cardIconBackgrounds}\n${crossStoreIconBackgrounds}\n`);
 
 // --- Quality Dashboard ---
 // Embeds both the local apps registry and the cross-store games registry
