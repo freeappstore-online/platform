@@ -375,15 +375,28 @@ const renderAuthorChip = (app) => {
 
 // indexHtml is finalized inside the async IIFE below — cross-store
 // registry fetch is async, and we want to embed it into the page.
-// Compute SHA-256 of the inline no-flash theme bootstrap so the CSP can
-// whitelist that exact script without 'unsafe-inline'. The bootstrap is the
-// first <script>…</script> block inside <head> in the template.
-const inlineScriptMatch = indexTemplate.match(/<head>[\s\S]*?<script>([\s\S]*?)<\/script>/);
-if (!inlineScriptMatch) {
-  console.error('Could not locate the inline bootstrap <script> for CSP hashing');
-  process.exit(1);
+//
+// This must remain the one source of truth for the parser-blocking settings
+// bootstrap. Previously each static page maintained a near-copy of this
+// script, so harmless whitespace or semicolon differences made its bytes
+// diverge from the sole hash advertised in script-src. Keep it inline so the
+// theme and text-size preferences apply before first paint, and derive the CSP
+// hash from these exact bytes rather than from any individual template.
+const SETTINGS_BOOTSTRAP_SOURCE = "(function(){try{var p=localStorage.getItem('stores-theme');var d=p==='dark'||(!p||p==='system')&&matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.dataset.theme='dark';var t=localStorage.getItem('stores-text-size');if(t)document.documentElement.dataset.text=t;}catch(e){}})();";
+const SETTINGS_BOOTSTRAP_TAG = `<script>${SETTINGS_BOOTSTRAP_SOURCE}</script>`;
+const inlineScriptHash = 'sha256-' + crypto.createHash('sha256').update(SETTINGS_BOOTSTRAP_SOURCE).digest('base64');
+
+function injectSettingsBootstrap(html, file) {
+  const placeholders = html.match(/\{\{SETTINGS_BOOTSTRAP\}\}/g) || [];
+  if (placeholders.length > 1) {
+    throw new Error(`${file} has more than one settings bootstrap placeholder`);
+  }
+  if (placeholders.length === 1) return html.replace('{{SETTINGS_BOOTSTRAP}}', SETTINGS_BOOTSTRAP_TAG);
+  if (!/<head\b[^>]*>/i.test(html)) throw new Error(`${file} has no <head> for the settings bootstrap`);
+  // Pages which did not previously include the bootstrap (for example detail
+  // and author pages) get the same parser-blocking script at the start of head.
+  return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${SETTINGS_BOOTSTRAP_TAG}`);
 }
-const inlineScriptHash = 'sha256-' + crypto.createHash('sha256').update(inlineScriptMatch[1]).digest('base64');
 
 // Subresource Integrity hashes for local script files. Each <script src="...">
 // in the templates gets an integrity="sha256-..." attribute so the browser
@@ -456,7 +469,7 @@ const categoryFilters = categories
 
 // {{APPS_GRID}} is replaced inside the async IIFE after histories are fetched
 // so each card can carry data-published from histories[i].meta.created_at.
-let indexHtml = indexTemplate
+let indexHtml = injectSettingsBootstrap(indexTemplate, 'templates/index.html')
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
   .replace('{{INLINE_SCRIPT_HASH}}', inlineScriptHash)
   .replace('{{APPS_COUNT}}', String(apps.length))
@@ -745,7 +758,7 @@ fs.writeFileSync(path.join(DIST, 'index.html'), indexHtml);
 
 // --- Settings page ---
 const settingsTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'settings.html'), 'utf8'));
-let settingsHtml = settingsTemplate.replace('__CF_BEACON__', CF_BEACON_SNIPPET);
+let settingsHtml = injectSettingsBootstrap(settingsTemplate, 'templates/settings.html').replace('__CF_BEACON__', CF_BEACON_SNIPPET);
 for (const [k, v] of Object.entries(sriHashes)) {
   settingsHtml = settingsHtml.replaceAll(`{{SRI_${k}}}`, v);
 }
@@ -782,7 +795,7 @@ const codeQualityCards = apps
   .filter(Boolean)
   .join('\n        ');
 
-let qualityHtml = qualityTemplate
+let qualityHtml = injectSettingsBootstrap(qualityTemplate, 'templates/quality.html')
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
   .replace('{{CODE_QUALITY_CARDS}}', codeQualityCards)
   .replace('{{REGISTRIES_JSON}}', JSON.stringify(qualityRegistry).replace(/</g, '\\u003c'));
@@ -815,7 +828,7 @@ apps.forEach((app, i) => {
   // we pass it through raw. `id` is a slug constrained by the publish
   // pipeline and used inside URLs / JS strings, but we still escape it
   // for defense in depth.
-  let html = detailTemplate
+  let html = injectSettingsBootstrap(detailTemplate, 'templates/app-detail.html')
     .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
     .replace(/\{\{NAME\}\}/g, escapeHtml(app.name))
     .replace(/\{\{NAME_LOWER\}\}/g, escapeHtml(app.name.toLowerCase()))
@@ -929,7 +942,7 @@ uniqueAuthors.forEach(username => {
   const authorApps = apps.filter(a => a.creatorGithub === username);
   const appCardsHtml = authorApps.map(renderAppCard).join('\n\n');
   const badges = computeAuthorBadges(authorApps);
-  let html = authorTemplate
+  let html = injectSettingsBootstrap(authorTemplate, 'templates/author.html')
     .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
     .replace(/\{\{USERNAME\}\}/g, escapeHtml(username))
     .replace(/\{\{APP_COUNT\}\}/g, String(authorApps.length))
@@ -965,7 +978,7 @@ const devCards = uniqueAuthors.map(username => {
         </a>`;
 }).join('\n');
 
-let creatorsHtml = creatorsTemplate
+let creatorsHtml = injectSettingsBootstrap(creatorsTemplate, 'templates/creators.html')
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
   .replace('{{DEVELOPERS_GRID}}', devCards);
 for (const [k, v] of Object.entries(sriHashes)) {
@@ -1114,6 +1127,7 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
 function processStaticHtml(html, file) {
   html = injectPartials(html);
   html = addMainTarget(html);
+  html = injectSettingsBootstrap(html, file);
   for (const [k, v] of Object.entries(sriHashes)) {
     html = html.replaceAll(`{{SRI_${k}}}`, v);
   }
@@ -1149,7 +1163,7 @@ if (fs.existsSync(docsSrcDir)) {
   fs.mkdirSync(docsDestDir, { recursive: true });
   for (const f of fs.readdirSync(docsSrcDir)) {
     if (!f.endsWith('.html')) continue;
-    let html = addMainTarget(fs.readFileSync(path.join(docsSrcDir, f), 'utf8'));
+    let html = injectSettingsBootstrap(addMainTarget(fs.readFileSync(path.join(docsSrcDir, f), 'utf8')), `docs/${f}`);
     for (const [k, v] of Object.entries(sriHashes)) {
       html = html.replaceAll(`{{SRI_${k}}}`, v);
     }
