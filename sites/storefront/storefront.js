@@ -234,10 +234,27 @@
       window.location.href = url.toString();
     }
 
+    function voteButtonFor(target) {
+      return target && typeof target.closest === 'function' ? target.closest('.vote-btn') : null;
+    }
+
+    // Stop pointer/touch interactions at capture phase. Do not cancel their
+    // default action: browsers synthesize the accessible native button click
+    // from these events, and that click is what performs the vote below.
+    function shieldVotePointerInteraction(e) {
+      if (voteButtonFor(e.target)) e.stopPropagation();
+    }
+    document.addEventListener('pointerdown', shieldVotePointerInteraction, true);
+    document.addEventListener('touchstart', shieldVotePointerInteraction, true);
+
+    // This must be capture-phase. Card activation is registered directly on
+    // each card, so a document bubble listener would run after it.
     document.addEventListener('click', function (e) {
-      var btn = e.target.closest('.vote-btn');
+      var btn = voteButtonFor(e.target);
       if (!btn) return;
-      // Prevent click from propagating to the card body (which opens the preview pane).
+      // A vote control is not card activation: keep it out of the split-pane
+      // and prevent any browser/card default action before it reaches the card.
+      e.preventDefault();
       e.stopPropagation();
 
       var appId = btn.dataset.appId;
@@ -298,7 +315,7 @@
           delete inFlight[appId];
           btn.disabled = false;
         });
-    });
+    }, true);
   })();
 
   // ---------- Split-pane preview ----------
@@ -471,6 +488,13 @@
       var aboutUrl = card.dataset.about;
       card.classList.add('storefront-card-interactive');
       card.addEventListener('click', function (e) {
+        // Defense in depth for any synthetic or future listener which bypasses
+        // the document capture guard above.
+        if (e.target.closest('.vote-btn')) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         var onCta = !!e.target.closest('.app-cta');
         if (SPLIT_MQ.matches) {
           e.preventDefault();

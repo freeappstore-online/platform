@@ -66,14 +66,14 @@ test("storefront hydrates an existing authenticated vote after reload", async ()
 test("storefront adds then removes votes and serializes concurrent clicks", async () => {
   const ui = runStorefrontVotes();
   await settle();
-  ui.handlers.click({ target: ui.button, stopPropagation() {} });
-  ui.handlers.click({ target: ui.button, stopPropagation() {} });
+  ui.handlers.click({ target: ui.button, preventDefault() {}, stopPropagation() {} });
+  ui.handlers.click({ target: ui.button, preventDefault() {}, stopPropagation() {} });
   assert.equal(ui.requests.filter((request) => request.url.includes("/apps/")).length, 1);
   assert.equal(ui.requests.at(-1).options.method, "POST");
   ui.resolveMutations.shift()({ ok: true, json: async () => ({ voted: true, count: 4 }) });
   await settle();
   assert.equal(ui.button.attributes["aria-pressed"], "true");
-  ui.handlers.click({ target: ui.button, stopPropagation() {} });
+  ui.handlers.click({ target: ui.button, preventDefault() {}, stopPropagation() {} });
   assert.equal(ui.requests.at(-1).options.method, "DELETE");
   ui.resolveMutations.shift()({ ok: true, json: async () => ({ voted: false, count: 3 }) });
   await settle();
