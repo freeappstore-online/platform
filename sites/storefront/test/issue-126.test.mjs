@@ -1,13 +1,22 @@
 /** Accessibility regression coverage for issue #126: the custom 404 page. */
 
-import { test } from "node:test";
+import { before, test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const DIST = join(ROOT, "dist");
+
+before(() => {
+  execFileSync(process.execPath, [join(ROOT, "build.js")], {
+    cwd: ROOT,
+    env: { ...process.env, FAS_OFFLINE: "1" },
+    stdio: "inherit",
+  });
+});
 
 function findHtmlFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
