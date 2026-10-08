@@ -280,47 +280,94 @@ async function reportFromFrame(
   id: Exclude<ScenarioId, 'no-reporter'>,
   viewport: { width: number; height: number },
 ): Promise<ViewportReport> {
-  return await page.evaluate(async ({ base, scenario, viewport }) => {
-    return await new Promise<ViewportReport>((resolve, reject) => {
-      let frame: HTMLIFrameElement;
-      const timeout = window.setTimeout(() => {
-        window.removeEventListener('message', onMessage);
-        reject(new Error(`timed out waiting for ${scenario} quality report`));
-      }, 8_000);
-      const onMessage = (event: MessageEvent) => {
-        const data = event.data as ViewportReport | null;
-        if (!data || data.type !== 'fas:quality' || !frame || event.source !== frame.contentWindow) return;
-        window.clearTimeout(timeout);
-        window.removeEventListener('message', onMessage);
-        frame.remove();
-        resolve(data);
-      };
-      window.addEventListener('message', onMessage);
-      frame = document.createElement('iframe');
-      frame.width = String(viewport.width);
-      frame.height = String(viewport.height);
-      frame.src = `${base}/?scenario=${encodeURIComponent(scenario)}`;
-      document.body.append(frame);
-    });
-  }, { base: FIXTURE_BASE, scenario: id, viewport });
+  return await page.evaluate(
+    async ({ base, scenario, viewport }) => {
+      return await new Promise<ViewportReport>((resolve, reject) => {
+        let frame: HTMLIFrameElement;
+        const timeout = window.setTimeout(() => {
+          window.removeEventListener('message', onMessage);
+          reject(new Error(`timed out waiting for ${scenario} quality report`));
+        }, 8_000);
+        const onMessage = (event: MessageEvent) => {
+          const data = event.data as ViewportReport | null;
+          if (
+            !data ||
+            data.type !== 'fas:quality' ||
+            !frame ||
+            event.source !== frame.contentWindow
+          )
+            return;
+          window.clearTimeout(timeout);
+          window.removeEventListener('message', onMessage);
+          frame.remove();
+          resolve(data);
+        };
+        window.addEventListener('message', onMessage);
+        frame = document.createElement('iframe');
+        frame.width = String(viewport.width);
+        frame.height = String(viewport.height);
+        frame.src = `${base}/?scenario=${encodeURIComponent(scenario)}`;
+        document.body.append(frame);
+      });
+    },
+    { base: FIXTURE_BASE, scenario: id, viewport },
+  );
 }
 
-test('cooperating fixture scenarios post browser reports under production CSP', async ({ page }) => {
+test('cooperating fixture scenarios post browser reports under production CSP', async ({
+  page,
+}) => {
   await page.goto('about:blank');
   const cases: Array<{
     id: Exclude<ScenarioId, 'no-reporter'>;
     viewport: { width: number; height: number };
     verify: (report: ViewportReport) => void;
   }> = [
-    { id: 'fits', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.document.scrollsX).toBe(false) },
-    { id: 'scroll-x', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.document.scrollsX).toBe(true) },
-    { id: 'scroll-y', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.document.scrollsY).toBe(true) },
-    { id: 'clip-inner', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.clipping.some((c) => c.clipsX)).toBe(true) },
-    { id: 'clip-inner-y', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.clipping.some((c) => c.clipsY)).toBe(true) },
-    { id: 'vh-bug', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.type).toBe('fas:quality') },
-    { id: 'gap-mid', viewport: { width: 600, height: 800 }, verify: (r) => expect(r.document.scrollsX).toBe(true) },
-    { id: 'landscape-only-bad', viewport: { width: 852, height: 393 }, verify: (r) => expect(r.document.scrollsX).toBe(true) },
-    { id: 'large-scrollwidth-fp', viewport: { width: 393, height: 852 }, verify: (r) => expect(r.clipping).toEqual([]) },
+    {
+      id: 'fits',
+      viewport: { width: 393, height: 852 },
+      verify: (r) => expect(r.document.scrollsX).toBe(false),
+    },
+    {
+      id: 'scroll-x',
+      viewport: { width: 393, height: 852 },
+      verify: (r) => expect(r.document.scrollsX).toBe(true),
+    },
+    {
+      id: 'scroll-y',
+      viewport: { width: 393, height: 852 },
+      verify: (r) => expect(r.document.scrollsY).toBe(true),
+    },
+    {
+      id: 'clip-inner',
+      viewport: { width: 393, height: 852 },
+      verify: (r) => expect(r.clipping.some((c) => c.clipsX)).toBe(true),
+    },
+    {
+      id: 'clip-inner-y',
+      viewport: { width: 393, height: 852 },
+      verify: (r) => expect(r.clipping.some((c) => c.clipsY)).toBe(true),
+    },
+    {
+      id: 'vh-bug',
+      viewport: { width: 393, height: 852 },
+      verify: (r) => expect(r.type).toBe('fas:quality'),
+    },
+    {
+      id: 'gap-mid',
+      viewport: { width: 600, height: 800 },
+      verify: (r) => expect(r.document.scrollsX).toBe(true),
+    },
+    {
+      id: 'landscape-only-bad',
+      viewport: { width: 852, height: 393 },
+      verify: (r) => expect(r.document.scrollsX).toBe(true),
+    },
+    {
+      id: 'large-scrollwidth-fp',
+      viewport: { width: 393, height: 852 },
+      verify: (r) => expect(r.clipping).toEqual([]),
+    },
   ];
 
   for (const item of cases) {
