@@ -89,7 +89,10 @@ describe('vote routes', () => {
       env(fakeDB({ user, voteCount: 7, callerVotes: ['timer', 'notes'] })),
     );
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { votes: Record<string, number>; voted?: Record<string, true> };
+    const data = (await res.json()) as {
+      votes: Record<string, number>;
+      voted?: Record<string, true>;
+    };
     expect(data.votes).toEqual({ timer: 7 });
     expect(data.voted).toEqual({ timer: true, notes: true });
     expect(res.headers.get('cache-control')).toBe('private, no-store');
@@ -97,8 +100,15 @@ describe('vote routes', () => {
   });
 
   it('GET /v1/store/votes keeps anonymous responses aggregate-only and publicly cacheable', async () => {
-    const res = await app.request('/v1/store/votes', {}, env(fakeDB({ voteCount: 7, callerVotes: ['timer'] })));
-    const data = (await res.json()) as { votes: Record<string, number>; voted?: Record<string, true> };
+    const res = await app.request(
+      '/v1/store/votes',
+      {},
+      env(fakeDB({ voteCount: 7, callerVotes: ['timer'] })),
+    );
+    const data = (await res.json()) as {
+      votes: Record<string, number>;
+      voted?: Record<string, true>;
+    };
     expect(data).toEqual({ votes: { timer: 7 } });
     expect(res.headers.get('cache-control')).toContain('public');
     expect(res.headers.get('vary')).not.toContain('Authorization');
@@ -112,7 +122,10 @@ describe('vote routes', () => {
       // remain limited to their own row.
       env(fakeDB({ user, voteCount: 12, callerVotes: ['timer'] })),
     );
-    const data = (await res.json()) as { votes: Record<string, number>; voted: Record<string, true> };
+    const data = (await res.json()) as {
+      votes: Record<string, number>;
+      voted: Record<string, true>;
+    };
     expect(data.votes.timer).toBe(12);
     expect(data.voted).toEqual({ timer: true });
   });
