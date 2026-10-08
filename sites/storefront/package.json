@@ -4,7 +4,7 @@
   "scripts": {
     "lint": "bash scripts/check-design-system.sh .",
     "build": "node build.js",
-    "test": "FAS_OFFLINE=1 node --test test/build.test.mjs test/issue-113.test.mjs test/issue-120.test.mjs test/issue-121.test.mjs test/issue-122.test.mjs test/issue-124.test.mjs test/issue-125.test.mjs test/issue-127.test.mjs security.test.mjs",
+    "test": "FAS_OFFLINE=1 node --test test/build.test.mjs test/issue-113.test.mjs test/issue-120.test.mjs test/issue-121.test.mjs test/issue-122.test.mjs test/issue-123.test.mjs test/issue-124.test.mjs test/issue-125.test.mjs test/issue-127.test.mjs security.test.mjs",
     "test:security": "node --test security.test.mjs"
   }
 }
