@@ -106,8 +106,90 @@ describe("removeRegistryEntry", () => {
 
   it("fails when registry.json cannot be read", async () => {
     const gh: GhFn = async () => ({ message: "Not Found", __status: 404 });
-    const step = await removeRegistryEntry(gh, "gone", config);
+    const step = await removeRegistryEntry(gh, "gone", config, { wait: async () => {} });
     expect(step.status).toBe("fail");
+  });
+
+  it("registry read: retries on transient 404 then succeeds", async () => {
+    let reads = 0;
+    const waits: number[] = [];
+    const gh: GhFn = async (_path, method = "GET") => {
+      if (method === "GET") {
+        reads++;
+        return reads === 1 ? { __status: 404, message: "Not Found" } : registryFile([{ id: "gone" }]);
+      }
+      return { content: { sha: "new" }, __status: 200 };
+    };
+
+    const step = await removeRegistryEntry(gh, "gone", config, {
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    expect(step.status).toBe("ok");
+    expect(reads).toBe(2);
+    expect(waits).toEqual([1_000]);
+  });
+
+  it("registry read: retries on 5xx then succeeds", async () => {
+    let reads = 0;
+    const waits: number[] = [];
+    const gh: GhFn = async (_path, method = "GET") => {
+      if (method === "GET") {
+        reads++;
+        return reads === 1 ? { __status: 503, message: "Service Unavailable" } : registryFile([{ id: "gone" }]);
+      }
+      return { content: { sha: "new" }, __status: 200 };
+    };
+
+    const step = await removeRegistryEntry(gh, "gone", config, {
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    expect(step.status).toBe("ok");
+    expect(reads).toBe(2);
+    expect(waits).toEqual([1_000]);
+  });
+
+  it("registry read: fails with diagnostic HTTP status after max retries", async () => {
+    let reads = 0;
+    const waits: number[] = [];
+    const gh: GhFn = async () => {
+      reads++;
+      return { __status: 503, message: "Service Unavailable" };
+    };
+
+    const step = await removeRegistryEntry(gh, "gone", config, {
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    expect(step).toMatchObject({
+      name: "registry",
+      status: "fail",
+      detail: "Could not read registry.json (HTTP 503: Service Unavailable)",
+    });
+    expect(reads).toBe(4);
+    expect(waits).toEqual([1_000, 2_000, 4_000]);
+  });
+
+  it("registry read: does not retry a non-transient 422", async () => {
+    let reads = 0;
+    const waits: number[] = [];
+    const gh: GhFn = async () => {
+      reads++;
+      return { __status: 422, message: "Validation Failed" };
+    };
+
+    const step = await removeRegistryEntry(gh, "gone", config, {
+      wait: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    expect(step.detail).toBe("Could not read registry.json (HTTP 422: Validation Failed)");
+    expect(reads).toBe(1);
+    expect(waits).toEqual([]);
   });
 
   it("retries once on 409", async () => {

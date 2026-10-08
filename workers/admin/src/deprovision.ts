@@ -25,19 +25,54 @@ export interface DeprovisionEnv extends PublishEnv {
   APPS?: R2Bucket;
 }
 
+const REGISTRY_READ_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+
+type RegistryReadOptions = {
+  /** Injectable only to keep retry regression tests fast. */
+  wait?: (ms: number) => Promise<void>;
+};
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientRegistryReadFailure(registryFile: any): boolean {
+  const status = registryFile?.__status;
+  return status === 404 || status === 429 || (typeof status === "number" && status >= 500 && status < 600);
+}
+
+function registryReadFailureDetail(registryFile: any): string {
+  const status = typeof registryFile?.__status === "number" ? registryFile.__status : "unknown";
+  const message =
+    typeof registryFile?.message === "string"
+      ? registryFile.message
+      : typeof registryFile?.__raw === "string"
+        ? registryFile.__raw
+        : "GitHub returned no file content";
+  return `Could not read registry.json (HTTP ${status}: ${message})`;
+}
+
 /** Remove the app's entry from the storefront's registry.json, retry-once on
- *  409 like writeRegistryWithRetry. Done in-process: the previous
+ *  409 like writeRegistryWithRetry. Registry reads retry transient GitHub
+ *  responses because cleanup can follow a successful registry write before
+ *  GitHub's contents endpoint has caught up. Done in-process: the previous
  *  implementation fetched the worker's own public /api/unpublish URL, which
  *  goes through CF Access and was answered with a 302 to the login page — so
  *  every deprovision reported "Not in registry" while the entry stayed put. */
-export async function removeRegistryEntry(gh: GhFn, id: string, config: StoreConfig): Promise<Step> {
+export async function removeRegistryEntry(gh: GhFn, id: string, config: StoreConfig, options: RegistryReadOptions = {}): Promise<Step> {
   const registryPath = `/repos/${config.org}/${config.storeRepo}/contents/${config.registryPath}`;
   const key = config.registryKey;
+  const waitForRetry = options.wait ?? wait;
 
   const attempt = async (): Promise<Step | null> => {
-    const registryFile = await gh(registryPath);
-    if (!registryFile.content) {
-      return { name: "registry", status: "fail", detail: "Could not read registry.json" };
+    let registryFile: any;
+    for (let readAttempt = 0; readAttempt <= REGISTRY_READ_RETRY_DELAYS_MS.length; readAttempt++) {
+      registryFile = await gh(registryPath);
+      if (registryFile?.content) break;
+      if (!isTransientRegistryReadFailure(registryFile) || readAttempt === REGISTRY_READ_RETRY_DELAYS_MS.length) {
+        return { name: "registry", status: "fail", detail: registryReadFailureDetail(registryFile) };
+      }
+      await waitForRetry(REGISTRY_READ_RETRY_DELAYS_MS[readAttempt]);
     }
     const content = decodeRegistry(registryFile);
     const items: any[] = content[key] || [];
