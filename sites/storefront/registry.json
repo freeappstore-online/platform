@@ -2157,6 +2157,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "aymanzs-3184"
+    },
+    {
+      "id": "pulse-stack",
+      "name": "pulse-stack",
+      "category": "Productivity",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "A schedule optimiser that helps you get more done based on your energy levels at different times of the day.",
+      "appUrl": "https://pulse-stack.freeappstore.online",
+      "repo": "freeappstore-online/pulse-stack",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "aymanzs-3184"
     }
   ]
 }
