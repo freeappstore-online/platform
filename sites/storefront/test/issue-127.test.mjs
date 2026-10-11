@@ -36,12 +36,17 @@ test("issue #127: fixture is CSP-clean and the esm.sh exception is route-scoped"
   try {
     const headers = readFileSync(join(dist, "_headers"), "utf8");
     const globalCsp = headers.match(/^  Content-Security-Policy: (.+)$/m)?.[1] || "";
-    const fixtureCsp = headers.match(/^\/audit-fixture\/\*\n  Content-Security-Policy: (.+)$/m)?.[1] || "";
+    const fixtureCsp = headers.match(/^\/audit-fixture\/\*\n(?:  ! .+\n)*  Content-Security-Policy: (.+)$/m)?.[1] || "";
     assert.match(globalCsp, /script-src 'self'/);
     assert.doesNotMatch(globalCsp, /https:\/\/esm\.sh|unsafe-inline/);
     assert.match(fixtureCsp, /script-src 'self'[^;]*https:\/\/esm\.sh/);
     assert.match(fixtureCsp, /frame-ancestors 'self'/, "the same-origin quality dashboard must be able to frame the fixture");
     assert.doesNotMatch(fixtureCsp, /unsafe-inline/);
+    // Issue #133: Pages merges the /* rule into /audit-fixture/*, and browsers
+    // enforce both CSPs, so the global policy must be detached for the fixture.
+    const fixtureBlock = headers.match(/^\/audit-fixture\/\*\n((?:  .+\n)+)/m)?.[1] || "";
+    assert.match(fixtureBlock, /^  ! Content-Security-Policy$/m);
+    assert.match(fixtureBlock, /^  ! Content-Security-Policy-Report-Only$/m);
 
     const fixture = readFileSync(join(dist, "audit-fixture", "index.html"), "utf8");
     assert.match(fixture, /<link\b[^>]+href="\.\/fixture\.css"/i);

@@ -1,4 +1,6 @@
-import { expect, type Page, test } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { type BrowserContext, expect, type Page, test } from '@playwright/test';
 import type { ViewportReport } from '../../quality/src/index.js';
 
 // Provided by Node at runtime; declared inline because @playwright/test
@@ -33,6 +35,50 @@ declare const process: { env: Record<string, string | undefined> };
 const FIXTURE_BASE = (
   process.env.FAS_FIXTURE_BASE ?? 'https://freeappstore.online/audit-fixture'
 ).replace(/\/+$/, '');
+
+/** The reporter URL the fixture imports. Bump together with fixture.js. */
+const REPORTER_URL = 'https://esm.sh/@freeappstore/quality@0.1.0';
+
+/**
+ * The repository-built reporter (packages/quality/dist/index.js, built by
+ * e2e-live.yml before this suite runs). It is self-contained — zero
+ * imports — so it can be served for REPORTER_URL without touching esm.sh.
+ * It is also the version the ViewportReport type below comes from, so
+ * measurement and assertions stay in lockstep.
+ */
+const REPORTER_SOURCE = readFileSync(
+  fileURLToPath(new URL('../../quality/dist/index.js', import.meta.url)),
+  'utf8',
+);
+
+const FIXTURE_ORIGIN = new URL(FIXTURE_BASE).origin;
+
+/**
+ * Run the browser as if only the fixture host were reachable: the pinned
+ * reporter is fulfilled from REPORTER_SOURCE and every other off-origin
+ * request is aborted. The URL is unchanged, so the fixture's route-scoped
+ * production CSP is still enforced on the import — no bypassCSP.
+ */
+async function isolateNetwork(context: BrowserContext): Promise<void> {
+  await context.route('**/*', (route) => {
+    const url = route.request().url();
+    if (url === REPORTER_URL) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'text/javascript',
+        // Cross-origin module scripts must pass CORS.
+        headers: { 'access-control-allow-origin': '*' },
+        body: REPORTER_SOURCE,
+      });
+    }
+    if (new URL(url).origin === FIXTURE_ORIGIN) return route.continue();
+    return route.abort('internetdisconnected');
+  });
+}
+
+test.beforeEach(async ({ context }) => {
+  await isolateNetwork(context);
+});
 
 /**
  * If the fixture host has the production *.freegamestore.online shape,
@@ -87,10 +133,10 @@ function scenario(id: ScenarioId, fn: () => void): void {
 
 /**
  * Navigate to a fixture scenario at a specific viewport, then ask the
- * page for a snapshot via the published reporter. The fixture itself
- * already imports + initialises the reporter; we import the same CDN module
- * from the strict, route-scoped fixture CSP because a top-level page has no
- * parent for the reporter to post to.
+ * page for a snapshot via the reporter. The fixture itself already imports +
+ * initialises the reporter; we import the same pinned URL (served locally by
+ * isolateNetwork) under the strict, route-scoped fixture CSP because a
+ * top-level page has no parent for the reporter to post to.
  */
 async function snapshotAt(
   page: Page,
@@ -104,10 +150,10 @@ async function snapshotAt(
   // browser's own "fonts settled" signal — deterministic and faster
   // than a fixed timeout.
   await page.evaluate(() => document.fonts?.ready ?? Promise.resolve());
-  return await page.evaluate(async () => {
-    const m = await import('https://esm.sh/@freeappstore/quality@0.1.0');
+  return await page.evaluate(async (url) => {
+    const m = await import(url);
     return m.snapshot() as ViewportReport;
-  });
+  }, REPORTER_URL);
 }
 
 /**
@@ -273,7 +319,8 @@ test('no-reporter: page never posts a fas:quality message', async ({ page }) => 
  * The dashboard sees reports from an iframe, not from a top-level fixture.
  * This is deliberately run with CSP enforcement enabled: it proves the
  * route-specific esm.sh allowance, same-origin framing allowance, and the
- * external fixture module all work together in a real browser.
+ * external fixture module all work together in a real browser. The fixture's
+ * own reporter import is served locally by isolateNetwork.
  */
 async function reportFromFrame(
   page: Page,
@@ -317,7 +364,14 @@ async function reportFromFrame(
 test('cooperating fixture scenarios post browser reports under production CSP', async ({
   page,
 }) => {
-  await page.goto('about:blank');
+  // The fixture only allows same-origin framing (frame-ancestors 'self'), so
+  // the parent must share its origin. This blank page stands in for the
+  // /quality dashboard; the framed fixture keeps its real production headers.
+  const parentUrl = `${FIXTURE_ORIGIN}/__e2e-quality-parent`;
+  await page.route(parentUrl, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>parent</title>' }),
+  );
+  await page.goto(parentUrl);
   const cases: Array<{
     id: Exclude<ScenarioId, 'no-reporter'>;
     viewport: { width: number; height: number };
@@ -375,6 +429,27 @@ test('cooperating fixture scenarios post browser reports under production CSP', 
     expect(report.type, `${item.id} must identify itself as a quality report`).toBe('fas:quality');
     item.verify(report);
   }
+});
+
+/**
+ * Regression for #133: the suite used to fetch the reporter from esm.sh at
+ * runtime, so a CDN outage failed every scenario. Prove that the external
+ * network really is unavailable here and that the fixture still reports.
+ */
+test('fixture reports with external network unavailable', async ({ page }) => {
+  await page.goto(`${FIXTURE_BASE}/?scenario=fits`, { waitUntil: 'networkidle' });
+  // Same CSP-allowed CDN, different module: must not be reachable.
+  const external = await page.evaluate(() =>
+    import('https://esm.sh/@freeappstore/quality@0.1.1').then(
+      () => 'reachable',
+      () => 'unreachable',
+    ),
+  );
+  expect(external, 'external network must be unavailable in this suite').toBe('unreachable');
+
+  const s = await snapshotAt(page, 'fits', { width: 393, height: 852 });
+  expect(s.type).toBe('fas:quality');
+  expect(s.document.scrollsX).toBe(false);
 });
 
 /**
