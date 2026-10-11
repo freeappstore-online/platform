@@ -331,10 +331,20 @@ async function reportFromFrame(
     async ({ base, scenario, viewport }) => {
       return await new Promise<ViewportReport>((resolve, reject) => {
         let frame: HTMLIFrameElement;
+        let latest: ViewportReport | undefined;
         const timeout = window.setTimeout(() => {
           window.removeEventListener('message', onMessage);
           reject(new Error(`timed out waiting for ${scenario} quality report`));
         }, 8_000);
+        // The reporter posts at 0/250/1500ms and, like the dashboard, the
+        // latest report wins: an early post can predate settled layout
+        // (seen on WebKit). Collect past the 1500ms post, then resolve.
+        const settle = () => {
+          window.clearTimeout(timeout);
+          window.removeEventListener('message', onMessage);
+          frame.remove();
+          resolve(latest as ViewportReport);
+        };
         const onMessage = (event: MessageEvent) => {
           const data = event.data as ViewportReport | null;
           if (
@@ -344,10 +354,8 @@ async function reportFromFrame(
             event.source !== frame.contentWindow
           )
             return;
-          window.clearTimeout(timeout);
-          window.removeEventListener('message', onMessage);
-          frame.remove();
-          resolve(data);
+          if (!latest) window.setTimeout(settle, 1_600);
+          latest = data;
         };
         window.addEventListener('message', onMessage);
         frame = document.createElement('iframe');
@@ -364,6 +372,8 @@ async function reportFromFrame(
 test('cooperating fixture scenarios post browser reports under production CSP', async ({
   page,
 }) => {
+  // Nine scenarios × the reporter's ~1.6s settle window.
+  test.setTimeout(60_000);
   // The fixture only allows same-origin framing (frame-ancestors 'self'), so
   // the parent must share its origin. This blank page stands in for the
   // /quality dashboard; the framed fixture keeps its real production headers.
