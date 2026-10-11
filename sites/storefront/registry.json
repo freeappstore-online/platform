@@ -2143,6 +2143,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "Abrarcancode67"
+    },
+    {
+      "id": "pulsestack",
+      "name": "pulsestack",
+      "category": "Productivity",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "A schedule optimizer based on your daily energy levels.",
+      "appUrl": "https://pulsestack.freeappstore.online",
+      "repo": "freeappstore-online/pulsestack",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "aymanzs-3184"
     }
   ]
 }
