@@ -2171,6 +2171,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "aymanzs-3184"
+    },
+    {
+      "id": "quantlab",
+      "name": "quantlab",
+      "category": "Brain Training",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "free quant interview & exam prep in the browser",
+      "appUrl": "https://quantlab.freeappstore.online",
+      "repo": "freeappstore-online/quantlab",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "abid8195"
     }
   ]
 }
