@@ -2297,6 +2297,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "shelfmark",
+      "name": "shelfmark",
+      "category": "Productivity",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — a private reading log: shelves, progress and yearly goals, with Open Library search and ISBN scan. Your library stays on your device.",
+      "appUrl": "https://shelfmark.freeappstore.online",
+      "repo": "freeappstore-online/shelfmark",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
