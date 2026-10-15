@@ -2220,7 +2220,7 @@
       "category": "Utilities",
       "icon": "🎙️",
       "iconBg": "#d8574a",
-      "description": "Coming soon — record your voice and change it with fun effects, all on your device",
+      "description": "Record your voice and change it with fun effects: chipmunk, deep, robot, echo, reverb, radio and reverse. Audio stays on your device.",
       "appUrl": "https://voicerecorder.freeappstore.online",
       "repo": "freeappstore-online/voicerecorder",
       "hostedOn": "r2",
