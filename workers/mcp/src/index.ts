@@ -250,7 +250,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     // ── sdk_reference ──────────────────────────────────────────
     this.server.tool(
       "sdk_reference",
-      "Reference for @freeappstore/sdk. Start with feature \"shell\": every app wraps itself in <Shell> with a nav item per screen (topbar, <nav aria-label=\"Main\">, error boundary, toasts). \"components\" lists every UI component with its props. Also auth, KV, counters, collections, rooms, proxy, keys, hooks and free APIs.",
+      "Reference for @freeappstore/sdk. Start with feature \"shell\": every app wraps itself in <Shell> with a nav item per screen (topbar, <nav aria-label=\"Main\">, error boundary, toasts). \"components\" lists every UI component with its props. Also auth, KV, counters, collections, rooms, proxy, keys, push reminders, hooks and free APIs.",
       { feature: z.enum(["all", ...SDK_REFERENCE_FEATURES]).optional().describe("Specific feature to look up (start with 'shell', then 'components'), or 'all' for the full reference") },
       async ({ feature }) => txt(getSdkReference(feature)),
     );

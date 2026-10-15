@@ -177,6 +177,40 @@ await fas.email.send('user@example.com', 'Welcome', {
 });
 ```
 
+## Push reminders (`fas.push`)
+
+Scheduled Web Push notifications for the signed-in user. Register a device with `subscribe()`, then set reminders; the platform's cron sends a push to every device the user subscribed for your app when one comes due (every 15 minutes, so up to ~15 min late).
+
+```ts
+fas.push.isSupported();   // { supported, reason: 'ok' | 'requires-home-screen' | 'browser-unsupported' }
+fas.push.permission();    // 'default' | 'granted' | 'denied'
+
+await fas.push.subscribe();    // from a user gesture: asks permission, registers this device
+await fas.push.unsubscribe();  // this device only
+
+// One-shot, daily, or every N days; times are HH:MM in `tz` (default: the device's zone)
+await fas.push.schedule('period-due', { at: new Date('2026-11-02T09:00') });
+await fas.push.schedule('log', { daily: '21:00' }, { quietHours: { start: '22:00', end: '07:00' } });
+await fas.push.schedule('refill', { everyDays: 28, at: '09:00' }, { tz: 'Europe/London' });
+await fas.push.list();         // [{ reminderId, when, tz, quietHours, nextAt }]
+await fas.push.cancel('log');
+```
+
+- **iPhone and iPad:** web push only works once the app is added to the Home Screen and opened from there (`reason: 'requires-home-screen'`).
+- **Errors:** `PushNotSignedInError`, `PushNotSupportedError` (`.reason`), `PushPermissionDeniedError`, `PushNotConfiguredError` (the platform's push key isn't set).
+- **Repeats** keep their local time across daylight-saving changes. A reminder due in quiet hours is held until the window ends.
+- **No payload:** your service worker decides what the notification says, so nothing about the reminder passes through the browser's push service. With vite-plugin-pwa `injectManifest`:
+
+```ts
+// src/sw.ts
+import { registerFasPushHandler } from '@freeappstore/sdk/push-sw';
+registerFasPushHandler({ title: 'Cycle', body: 'Time to check in.', onClick: () => '/' });
+```
+
+It shows the notification on each push and focuses (or opens) the app when tapped. Keep the text generic for anything sensitive; it can show on a lock screen.
+
+**Limits:** 10 devices and 20 reminders per user per app. See [LIMITS.md](LIMITS.md#push-subscriptions-faspush).
+
 ## Webhooks (`fas.webhooks`)
 
 Outbound webhook subscriptions. HMAC-SHA256 signed.

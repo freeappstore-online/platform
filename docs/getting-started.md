@@ -150,7 +150,7 @@ import { initApp } from '@freeappstore/sdk';
 const fas = initApp({ appId: 'my-cool-app' });
 await fas.auth.init();
 
-// Now you can use fas.auth, fas.kv, fas.rooms, etc.
+// Now you can use fas.auth, fas.kv, fas.rooms, fas.push, etc.
 ```
 
 See the full [SDK Reference](sdk.md).

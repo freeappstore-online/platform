@@ -7,6 +7,7 @@ import { Keys } from './keys.js';
 import { Kv } from './kv.js';
 import { Logger } from './logger.js';
 import { ApiProxy } from './proxy.js';
+import { Push } from './push.js';
 import { Roles } from './roles.js';
 import { Rooms } from './rooms.js';
 import type { FasInitOptions } from './types.js';
@@ -16,6 +17,19 @@ export type { AuthProvider } from './auth.js';
 export type { Collection, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
+export type {
+  PushIsSupported,
+  PushReminder,
+  PushScheduleOptions,
+  PushSupportReason,
+  PushWhen,
+} from './push.js';
+export {
+  PushNotConfiguredError,
+  PushNotSignedInError,
+  PushNotSupportedError,
+  PushPermissionDeniedError,
+} from './push.js';
 export type { DefaultRole, RoleAssignment } from './roles.js';
 export { DEFAULT_ROLES } from './roles.js';
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
@@ -26,7 +40,7 @@ export type { FasInitOptions, Unsubscribe, User } from './types.js';
 // non-React consumer doing `import { initApp } from '@freeappstore/sdk'`
 // crashed with ERR_MODULE_NOT_FOUND: react. See prod-smoke steps 2 & 6.
 
-/** Root SDK instance — provides auth, kv, collections, counters, rooms, and proxy sub-clients. */
+/** Root SDK instance — provides auth, kv, collections, counters, rooms, proxy, push and the other sub-clients. */
 export class FreeAppStore {
   readonly auth: Auth;
   readonly kv: Kv;
@@ -40,6 +54,7 @@ export class FreeAppStore {
   readonly log: Logger;
   readonly webhooks: Webhooks;
   readonly friends: Friends;
+  readonly push: Push;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -55,6 +70,7 @@ export class FreeAppStore {
     this.log = new Logger(opts.appId, apiBase, this.auth);
     this.webhooks = new Webhooks(opts.appId, apiBase, this.auth);
     this.friends = new Friends(opts.appId, apiBase, this.auth);
+    this.push = new Push(opts.appId, apiBase, this.auth);
   }
 }
 

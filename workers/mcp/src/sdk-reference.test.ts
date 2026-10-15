@@ -113,6 +113,22 @@ describe("sdk_reference", () => {
     for (const hook of ["useToast", "useDocumentTitle", "useOnline"]) expect(hooks).toContain(hook);
   });
 
+  it("'push' covers subscribing, scheduling, the service-worker helper and the iOS rule", () => {
+    const push = getSdkReference("push");
+    for (const part of [
+      "fas.push.subscribe()",
+      "fas.push.schedule(",
+      "fas.push.cancel(",
+      "fas.push.list()",
+      "registerFasPushHandler",
+      "@freeappstore/sdk/push-sw",
+      "requires-home-screen",
+      "NO payload",
+    ]) {
+      expect(push).toContain(part);
+    }
+  });
+
   it("an unknown feature says so", () => {
     expect(getSdkReference("nope")).toContain("Unknown feature: nope");
   });

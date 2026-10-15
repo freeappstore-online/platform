@@ -226,6 +226,7 @@ const fas = initApp({ appId: 'my-app' })
 // fas.rooms    — real-time WebSocket rooms
 // fas.friends  — platform-level friend relationships
 // fas.proxy    — secret-injecting API proxy
+// fas.push     — scheduled push-notification reminders
 ```
 
 The `appId` must match the subdomain (e.g. `'timer'` for `timer.freeappstore.online`).
@@ -484,6 +485,22 @@ await fas.email.send('user@example.com', 'Welcome!', {
 ```
 
 Subject is auto-prefixed with `[appId]`. Limit: 100 emails/day per app. Requires auth (user must be signed in).
+
+### Push Reminders
+
+Scheduled Web Push notifications for the signed-in user. Register the device from a button tap, then schedule; the platform sends the push when a reminder is due (checked every 15 minutes).
+
+```tsx
+if (fas.push.isSupported().supported) {
+  await fas.push.subscribe() // from a tap: asks permission, registers this device
+  await fas.push.schedule('log', { daily: '21:00' }, { quietHours: { start: '22:00', end: '07:00' } })
+}
+await fas.push.schedule('refill', { everyDays: 28, at: '09:00' })   // or { at: Date } for one-shot
+await fas.push.list()
+await fas.push.cancel('log')
+```
+
+Pushes carry **no payload**: the app's service worker shows its own text. With vite-plugin-pwa `injectManifest`, call `registerFasPushHandler({ title, body })` from `@freeappstore/sdk/push-sw` in the service worker; keep the text generic, since it can show on a lock screen. On iPhone/iPad push only works after Add to Home Screen (`isSupported().reason === 'requires-home-screen'`), so say so in the app. Limits: 10 devices and 20 reminders per user per app.
 
 ### App Config & Secrets (what goes where)
 

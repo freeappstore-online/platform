@@ -229,6 +229,31 @@ const keys = await fas.keys.status()
 // [{ provider: 'openai', label: '...', createdAt: ..., lastUsedAt: ... }]
 \`\`\`
 Users store their API keys on the platform (encrypted AES-256-GCM). Apps never see plaintext keys. Use \`<KeyPrompt>\` component to prompt users when a key is missing. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.`,
+  push: `## Push Reminders (fas.push)
+\`\`\`tsx
+const { supported, reason } = fas.push.isSupported()
+// reason: 'ok' | 'requires-home-screen' (iPhone/iPad: Add to Home Screen first) | 'browser-unsupported'
+fas.push.permission()            // 'default' | 'granted' | 'denied'
+
+await fas.push.subscribe()       // call from a button tap: asks permission, registers this device
+await fas.push.unsubscribe()     // this device only
+
+// One-shot, daily, or every N days; times are HH:MM in tz (default: the device's zone)
+await fas.push.schedule('period-due', { at: new Date('2026-11-02T09:00') })
+await fas.push.schedule('log', { daily: '21:00' }, { quietHours: { start: '22:00', end: '07:00' } })
+await fas.push.schedule('refill', { everyDays: 28, at: '09:00' }, { tz: 'Europe/London' })
+await fas.push.list()            // [{ reminderId, when, tz, quietHours, nextAt }]
+await fas.push.cancel('log')
+\`\`\`
+Errors: PushNotSignedInError, PushNotSupportedError (.reason), PushPermissionDeniedError, PushNotConfiguredError. Sent by the platform every 15 minutes; repeats keep local time across DST; quiet hours hold a reminder until they end.
+
+Pushes carry NO payload: the service worker shows the text. With vite-plugin-pwa \`strategies: 'injectManifest'\`:
+\`\`\`ts
+// src/sw.ts
+import { registerFasPushHandler } from '@freeappstore/sdk/push-sw'
+registerFasPushHandler({ title: 'Cycle', body: 'Time to check in.', onClick: () => '/' })
+\`\`\`
+Keep the text generic for anything sensitive (it can show on a lock screen). Limits: 10 devices and 20 reminders per user per app.`,
   hooks: `## React Hooks
 \`\`\`tsx
 import { useAuth, useTheme } from '@freeappstore/sdk/hooks'

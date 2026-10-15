@@ -40,7 +40,7 @@ Note: `create_app`/`update_files` need no AI key (the client model is the author
 | `deploy_status` | None | Check GitHub Actions deploy status |
 | `app_info` | None | Get app URLs, repo, status |
 | `platform_guide` | None | Fetch SKILLS.md (full platform guide), then the current build rules |
-| `sdk_reference` | None | SDK reference: `shell` and `components` first, then auth, kv, counters, collections, rooms, proxy, keys, hooks, ui, free-apis |
+| `sdk_reference` | None | SDK reference: `shell` and `components` first, then auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui, free-apis |
 
 **Apps are built on the SDK Shell (#91).** Whatever an AI builds through this server, the output
 must tell it to wrap the app in `<Shell app={fas} nav={NAV}>` from `@freeappstore/sdk/ui` with a nav

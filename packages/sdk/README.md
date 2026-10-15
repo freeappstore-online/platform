@@ -161,6 +161,37 @@ const keys = await fas.keys.status();
 
 Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.
 
+### Push reminders (`fas.push`)
+
+Scheduled Web Push notifications for the signed-in user. The platform sends a push to each of the user's devices for your app when a reminder comes due (checked every 15 minutes).
+
+```ts
+const { supported, reason } = fas.push.isSupported();
+// reason 'requires-home-screen': on iPhone/iPad, add the app to the Home Screen first
+
+// From a button tap (browsers block permission prompts outside a user gesture):
+await fas.push.subscribe(); // asks permission, registers this device
+
+await fas.push.schedule('period-due', { at: new Date('2026-11-02T09:00') });
+await fas.push.schedule('log', { daily: '21:00' }, { quietHours: { start: '22:00', end: '07:00' } });
+await fas.push.schedule('refill', { everyDays: 28, at: '09:00' }, { tz: 'Europe/London' });
+
+const reminders = await fas.push.list(); // [{ reminderId, when, tz, quietHours, nextAt }]
+await fas.push.cancel('log');
+await fas.push.unsubscribe(); // this device only
+```
+
+Errors: `PushNotSignedInError`, `PushNotSupportedError` (with `reason`), `PushPermissionDeniedError`, `PushNotConfiguredError`.
+
+Pushes carry **no payload**: your service worker shows the notification text, so nothing about the reminder passes through the browser's push service. With vite-plugin-pwa's `injectManifest` strategy, add this to your service worker:
+
+```ts
+import { registerFasPushHandler } from '@freeappstore/sdk/push-sw';
+registerFasPushHandler({ title: 'Cycle', body: 'Time to check in.', onClick: () => '/' });
+```
+
+Keep the text generic for anything sensitive; it can show on a lock screen. Limits: 10 devices and 20 reminders per user per app.
+
 ### React Hooks
 
 Import from `@freeappstore/sdk/hooks`. Requires React 18+ as a peer dependency.

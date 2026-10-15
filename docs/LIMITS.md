@@ -96,7 +96,7 @@ Scoped to `(appId, userId)` like KV. One row per browser registration, keyed by 
 
 - File uploads / R2 storage — PAS gives each app its own bucket
 - Server-side AI — PAS includes Workers AI
-- Cron / scheduled tasks — PAS has Cron Workers
+- Cron / scheduled tasks — PAS has Cron Workers. (Scheduled push reminders for your users *are* in FAS: see `fas.push.schedule` above.)
 - Custom domains — PAS supports your-domain.com
 - Monetization — PAS has Stripe + creator payouts
 - Server-side compute — PAS gives each app a Worker + D1

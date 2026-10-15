@@ -1,6 +1,6 @@
 {
   "name": "@freeappstore/sdk",
-  "version": "0.14.36",
+  "version": "0.15.0",
   "description": "Browser SDK for apps on freeappstore.online — auth, per-user KV, shared counters, document collections, real-time rooms, API proxy, user API key vault, RBAC roles, React hooks, and 18 UI components.",
   "license": "MIT",
   "type": "module",
@@ -18,6 +18,10 @@
     "./ui": {
       "types": "./dist/ui.d.ts",
       "import": "./dist/ui.js"
+    },
+    "./push-sw": {
+      "types": "./dist/push-sw.d.ts",
+      "import": "./dist/push-sw.js"
     }
   },
   "homepage": "https://github.com/freeappstore-online/platform#readme",
