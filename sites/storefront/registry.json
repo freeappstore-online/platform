@@ -2244,10 +2244,10 @@
     },
     {
       "id": "clearday",
-      "name": "clearday",
+      "name": "ClearDay",
       "category": "Health & Fitness",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🌅",
+      "iconBg": "#e0f2fe",
       "description": "Coming soon — track the days since you quit any habit. Calm, private, offline.",
       "appUrl": "https://clearday.freeappstore.online",
       "repo": "freeappstore-online/clearday",
