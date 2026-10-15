@@ -9,6 +9,7 @@
     "dev": "pnpm --filter @fas-console/web dev",
     "build": "pnpm --filter @fas-console/web build",
     "preview": "pnpm --filter @fas-console/web preview",
-    "typecheck": "pnpm --filter @fas-console/web exec tsc -b"
+    "typecheck": "pnpm --filter @fas-console/web exec tsc -b",
+    "test": "pnpm --filter @fas-console/web test"
   }
 }

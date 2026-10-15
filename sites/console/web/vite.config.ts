@@ -1,7 +1,9 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { configDefaults } from 'vitest/config';
 
 export default defineConfig({
   // Relative base so assets load correctly from any path prefix.
@@ -48,4 +50,7 @@ export default defineConfig({
     }),
   ],
   server: { host: true },
+  // e2e/*.spec.ts are Playwright specs (run by playwright.config.ts), not vitest
+  // unit tests; vitest's default include glob would pick them up (#151).
+  test: { exclude: [...configDefaults.exclude, 'e2e/**'] },
 });
