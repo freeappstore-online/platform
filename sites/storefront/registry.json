@@ -2202,10 +2202,10 @@
     },
     {
       "id": "sleepsounds",
-      "name": "sleepsounds",
+      "name": "Sleep Sounds",
       "category": "Health & Fitness",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🌙",
+      "iconBg": "#1e2a4a",
       "description": "Coming soon — white noise and sleep sounds, generated on your device",
       "appUrl": "https://sleepsounds.freeappstore.online",
       "repo": "freeappstore-online/sleepsounds",
