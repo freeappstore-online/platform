@@ -164,7 +164,8 @@ describe("securityHeaders", () => {
     const pp = html.get("permissions-policy") ?? "";
     expect(pp).toContain("geolocation=(self)");
     expect(pp).toContain("camera=(self)");
-    expect(pp).toContain("microphone=()");
+    expect(pp).toContain("microphone=(self)");
+    expect(pp).not.toContain("microphone=()");
     expect(pp).toContain("payment=()");
     expect(pp).toContain("interest-cohort=()");
   });
