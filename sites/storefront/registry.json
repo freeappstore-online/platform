@@ -2272,10 +2272,10 @@
     },
     {
       "id": "tapbeat",
-      "name": "tapbeat",
+      "name": "TapBeat",
       "category": "Other (specify in description)",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🥁",
+      "iconBg": "#ede9fe",
       "description": "Coming soon — a free drum pad and beat maker: 16 synthesised pads and a step sequencer. Private and offline.",
       "appUrl": "https://tapbeat.freeappstore.online",
       "repo": "freeappstore-online/tapbeat",

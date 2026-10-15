@@ -2,9 +2,19 @@
   "freeappstore-online/language": {
     "meta": {
       "created_at": "2026-05-03T02:32:50Z",
-      "pushed_at": "2026-06-20T22:42:36Z"
+      "pushed_at": "2026-10-05T10:17:05Z"
     },
     "commits": [
+      {
+        "sha": "a164c81f693aacbfe036b7357c905064144ffef0",
+        "html_url": "https://github.com/freeappstore-online/language/commit/a164c81f693aacbfe036b7357c905064144ffef0",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml caller (batch 4)",
+          "author": {
+            "date": "2026-10-05T10:17:03Z"
+          }
+        }
+      },
       {
         "sha": "e5d742e3740de6e1b7a259762c4a19738fe779df",
         "html_url": "https://github.com/freeappstore-online/language/commit/e5d742e3740de6e1b7a259762c4a19738fe779df",
@@ -24,25 +34,25 @@
             "date": "2026-06-20T22:40:36Z"
           }
         }
-      },
-      {
-        "sha": "b943572f2d5106e2fd5a8a7e2d2900e56958b26b",
-        "html_url": "https://github.com/freeappstore-online/language/commit/b943572f2d5106e2fd5a8a7e2d2900e56958b26b",
-        "commit": {
-          "message": "docs: remove obsolete CLOUDFLARE-PAGES.md (legacy deployment doc)\n\nCo-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>",
-          "author": {
-            "date": "2026-05-31T11:35:18Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/quiz": {
     "meta": {
       "created_at": "2026-05-03T02:32:57Z",
-      "pushed_at": "2026-07-01T06:59:34Z"
+      "pushed_at": "2026-10-05T11:13:34Z"
     },
     "commits": [
+      {
+        "sha": "5f4b636ead2c3ecebe0d00130e4ce9ac9eb54996",
+        "html_url": "https://github.com/freeappstore-online/quiz/commit/5f4b636ead2c3ecebe0d00130e4ce9ac9eb54996",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml workflow (batch 5)",
+          "author": {
+            "date": "2026-10-05T11:13:32Z"
+          }
+        }
+      },
       {
         "sha": "a04c37c72ad82cd72c7ef1aab64dbdfa5fe2bead",
         "html_url": "https://github.com/freeappstore-online/quiz/commit/a04c37c72ad82cd72c7ef1aab64dbdfa5fe2bead",
@@ -62,25 +72,25 @@
             "date": "2026-07-01T02:19:50Z"
           }
         }
-      },
-      {
-        "sha": "99f7cd5587198a59fb660ca8c1b4093592217da3",
-        "html_url": "https://github.com/freeappstore-online/quiz/commit/99f7cd5587198a59fb660ca8c1b4093592217da3",
-        "commit": {
-          "message": "fix: restore compliance.yml with SDK dep check",
-          "author": {
-            "date": "2026-06-20T22:42:51Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/chessclock": {
     "meta": {
       "created_at": "2026-05-04T10:01:30Z",
-      "pushed_at": "2026-07-16T08:50:26Z"
+      "pushed_at": "2026-10-05T08:21:14Z"
     },
     "commits": [
+      {
+        "sha": "a617daae849a98dfa9c37a5d42fe9d54b7141c8e",
+        "html_url": "https://github.com/freeappstore-online/chessclock/commit/a617daae849a98dfa9c37a5d42fe9d54b7141c8e",
+        "commit": {
+          "message": "chore: adopt shared app-ci.yml@main workflow (#104)",
+          "author": {
+            "date": "2026-10-05T08:21:12Z"
+          }
+        }
+      },
       {
         "sha": "e44b37622fe81f86c11b1a3aa8f1ecca9feb678d",
         "html_url": "https://github.com/freeappstore-online/chessclock/commit/e44b37622fe81f86c11b1a3aa8f1ecca9feb678d",
@@ -100,25 +110,25 @@
             "date": "2026-07-06T20:40:16Z"
           }
         }
-      },
-      {
-        "sha": "78ceced181896a7cef991583a401c3677949a5a5",
-        "html_url": "https://github.com/freeappstore-online/chessclock/commit/78ceced181896a7cef991583a401c3677949a5a5",
-        "commit": {
-          "message": "fix: enable pinch-zoom (a11y)",
-          "author": {
-            "date": "2026-05-31T11:18:50Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/timer": {
     "meta": {
       "created_at": "2026-05-04T10:57:59Z",
-      "pushed_at": "2026-06-20T22:42:00Z"
+      "pushed_at": "2026-10-06T06:57:21Z"
     },
     "commits": [
+      {
+        "sha": "7870e181edd394e86c40f84db1de833bdbe72f21",
+        "html_url": "https://github.com/freeappstore-online/timer/commit/7870e181edd394e86c40f84db1de833bdbe72f21",
+        "commit": {
+          "message": "ci: use shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-06T06:57:19Z"
+          }
+        }
+      },
       {
         "sha": "482037f38ca5b6e228939e1b27c49dc65938fe3d",
         "html_url": "https://github.com/freeappstore-online/timer/commit/482037f38ca5b6e228939e1b27c49dc65938fe3d",
@@ -138,25 +148,25 @@
             "date": "2026-06-20T22:41:02Z"
           }
         }
-      },
-      {
-        "sha": "4034c250f306174e09325527db7db08794fa32e3",
-        "html_url": "https://github.com/freeappstore-online/timer/commit/4034c250f306174e09325527db7db08794fa32e3",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:24Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/books": {
     "meta": {
       "created_at": "2026-05-04T00:16:25Z",
-      "pushed_at": "2026-07-01T06:59:45Z"
+      "pushed_at": "2026-10-05T07:42:21Z"
     },
     "commits": [
+      {
+        "sha": "cb8a892ec37d1f66aeb07f9ec53c7b488c20a9c2",
+        "html_url": "https://github.com/freeappstore-online/books/commit/cb8a892ec37d1f66aeb07f9ec53c7b488c20a9c2",
+        "commit": {
+          "message": "ci: adopt shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-05T07:42:19Z"
+          }
+        }
+      },
       {
         "sha": "2c20f28b3dc42f6c7402a83ece5e3231053e0929",
         "html_url": "https://github.com/freeappstore-online/books/commit/2c20f28b3dc42f6c7402a83ece5e3231053e0929",
@@ -174,16 +184,6 @@
           "message": "fix: restore compliance.yml with SDK dep check",
           "author": {
             "date": "2026-06-20T22:42:19Z"
-          }
-        }
-      },
-      {
-        "sha": "9eb4732c1d0270be46fb11713ba4f7a4a9526d4a",
-        "html_url": "https://github.com/freeappstore-online/books/commit/9eb4732c1d0270be46fb11713ba4f7a4a9526d4a",
-        "commit": {
-          "message": "fix: CI compliance — check SDK dep instead of domain string",
-          "author": {
-            "date": "2026-06-20T22:40:16Z"
           }
         }
       }
@@ -230,9 +230,19 @@
   "freeappstore-online/notes": {
     "meta": {
       "created_at": "2026-05-04T10:58:03Z",
-      "pushed_at": "2026-06-20T22:42:43Z"
+      "pushed_at": "2026-10-06T06:57:16Z"
     },
     "commits": [
+      {
+        "sha": "83b3976498ba414c143c84e5fa8aada47011ae63",
+        "html_url": "https://github.com/freeappstore-online/notes/commit/83b3976498ba414c143c84e5fa8aada47011ae63",
+        "commit": {
+          "message": "ci: use shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-06T06:57:14Z"
+          }
+        }
+      },
       {
         "sha": "b26741775971dd7ce2a822e19eee2e56db224dce",
         "html_url": "https://github.com/freeappstore-online/notes/commit/b26741775971dd7ce2a822e19eee2e56db224dce",
@@ -252,25 +262,25 @@
             "date": "2026-06-20T22:40:46Z"
           }
         }
-      },
-      {
-        "sha": "c7a0a7aa7d799a6b7f4fd653af8ce7f3f2460be2",
-        "html_url": "https://github.com/freeappstore-online/notes/commit/c7a0a7aa7d799a6b7f4fd653af8ce7f3f2460be2",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:18Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/math": {
     "meta": {
       "created_at": "2026-05-03T02:32:52Z",
-      "pushed_at": "2026-07-01T06:59:28Z"
+      "pushed_at": "2026-10-05T10:21:15Z"
     },
     "commits": [
+      {
+        "sha": "3eb76b2acaefa634bc0fc01739ef7e9a050ad69c",
+        "html_url": "https://github.com/freeappstore-online/math/commit/3eb76b2acaefa634bc0fc01739ef7e9a050ad69c",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml caller (batch 4)",
+          "author": {
+            "date": "2026-10-05T10:21:12Z"
+          }
+        }
+      },
       {
         "sha": "101c98dc955362abcb4abb6790c5b3b63df97e43",
         "html_url": "https://github.com/freeappstore-online/math/commit/101c98dc955362abcb4abb6790c5b3b63df97e43",
@@ -290,25 +300,25 @@
             "date": "2026-07-01T02:19:50Z"
           }
         }
-      },
-      {
-        "sha": "14b79e213aba3f2c8b4ef1302370999616e529bd",
-        "html_url": "https://github.com/freeappstore-online/math/commit/14b79e213aba3f2c8b4ef1302370999616e529bd",
-        "commit": {
-          "message": "fix: restore compliance.yml with SDK dep check",
-          "author": {
-            "date": "2026-06-20T22:42:39Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/bandmates": {
     "meta": {
       "created_at": "2026-05-04T01:43:04Z",
-      "pushed_at": "2026-06-20T22:42:18Z"
+      "pushed_at": "2026-10-05T07:39:26Z"
     },
     "commits": [
+      {
+        "sha": "f949eb97335d33c1b3109aa9dee2ea93ae62edab",
+        "html_url": "https://github.com/freeappstore-online/bandmates/commit/f949eb97335d33c1b3109aa9dee2ea93ae62edab",
+        "commit": {
+          "message": "ci: adopt shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-05T07:39:24Z"
+          }
+        }
+      },
       {
         "sha": "52fd22f9e073f45edb35454ca75970e096ccbe3a",
         "html_url": "https://github.com/freeappstore-online/bandmates/commit/52fd22f9e073f45edb35454ca75970e096ccbe3a",
@@ -328,25 +338,25 @@
             "date": "2026-06-20T22:40:14Z"
           }
         }
-      },
-      {
-        "sha": "9dcedc6367c78d090ed4b6bc1571fada10f48371",
-        "html_url": "https://github.com/freeappstore-online/bandmates/commit/9dcedc6367c78d090ed4b6bc1571fada10f48371",
-        "commit": {
-          "message": "fix: enable pinch-zoom (a11y)",
-          "author": {
-            "date": "2026-05-31T11:18:48Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/converter": {
     "meta": {
       "created_at": "2026-05-04T10:58:01Z",
-      "pushed_at": "2026-06-20T22:42:26Z"
+      "pushed_at": "2026-10-05T07:48:32Z"
     },
     "commits": [
+      {
+        "sha": "44c1e10acd22c2ee8c23f4192286476652b71ba0",
+        "html_url": "https://github.com/freeappstore-online/converter/commit/44c1e10acd22c2ee8c23f4192286476652b71ba0",
+        "commit": {
+          "message": "ci: adopt shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-05T07:48:30Z"
+          }
+        }
+      },
       {
         "sha": "67b9755e2919debeafe22ad73772667cf1af0519",
         "html_url": "https://github.com/freeappstore-online/converter/commit/67b9755e2919debeafe22ad73772667cf1af0519",
@@ -366,25 +376,25 @@
             "date": "2026-06-20T22:40:24Z"
           }
         }
-      },
-      {
-        "sha": "77ac2cbd222b27d60cda8434b140bdfa8da5d608",
-        "html_url": "https://github.com/freeappstore-online/converter/commit/77ac2cbd222b27d60cda8434b140bdfa8da5d608",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:12Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/qrcode": {
     "meta": {
       "created_at": "2026-05-04T10:58:07Z",
-      "pushed_at": "2026-06-20T22:42:49Z"
+      "pushed_at": "2026-10-06T06:57:19Z"
     },
     "commits": [
+      {
+        "sha": "4184e4e54e052af5dc9295786eb4e2cb7b7f15fc",
+        "html_url": "https://github.com/freeappstore-online/qrcode/commit/4184e4e54e052af5dc9295786eb4e2cb7b7f15fc",
+        "commit": {
+          "message": "ci: use shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-06T06:57:17Z"
+          }
+        }
+      },
       {
         "sha": "3de801ac4aa9d3571cc0872f76396dd2f89f2278",
         "html_url": "https://github.com/freeappstore-online/qrcode/commit/3de801ac4aa9d3571cc0872f76396dd2f89f2278",
@@ -404,25 +414,25 @@
             "date": "2026-06-20T22:40:55Z"
           }
         }
-      },
-      {
-        "sha": "d1061381ab814ede2d795f8533692fe34aa6fac6",
-        "html_url": "https://github.com/freeappstore-online/qrcode/commit/d1061381ab814ede2d795f8533692fe34aa6fac6",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:21Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/meetup": {
     "meta": {
       "created_at": "2026-05-04T01:43:06Z",
-      "pushed_at": "2026-05-27T14:19:20Z"
+      "pushed_at": "2026-10-05T10:24:23Z"
     },
     "commits": [
+      {
+        "sha": "b4a8786af8657bc1a273157692c762bb5c7588ed",
+        "html_url": "https://github.com/freeappstore-online/meetup/commit/b4a8786af8657bc1a273157692c762bb5c7588ed",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml caller (batch 4)",
+          "author": {
+            "date": "2026-10-05T10:24:21Z"
+          }
+        }
+      },
       {
         "sha": "abf0f0a4913d0218da63603620872f6ccc5ed2dc",
         "html_url": "https://github.com/freeappstore-online/meetup/commit/abf0f0a4913d0218da63603620872f6ccc5ed2dc",
@@ -440,16 +450,6 @@
           "message": "fix: add PWA meta tags, update title for compliance",
           "author": {
             "date": "2026-05-27T14:12:43Z"
-          }
-        }
-      },
-      {
-        "sha": "4c14e8bb044262036ba27d647b9d1e56d3c10ef2",
-        "html_url": "https://github.com/freeappstore-online/meetup/commit/4c14e8bb044262036ba27d647b9d1e56d3c10ef2",
-        "commit": {
-          "message": "fix: compliance CSS check accepts Tailwind 4 variable naming",
-          "author": {
-            "date": "2026-05-27T14:10:48Z"
           }
         }
       }
@@ -496,9 +496,19 @@
   "freeappstore-online/colorpicker": {
     "meta": {
       "created_at": "2026-05-04T10:58:10Z",
-      "pushed_at": "2026-06-20T22:42:24Z"
+      "pushed_at": "2026-10-05T07:46:18Z"
     },
     "commits": [
+      {
+        "sha": "69021a26218926e5ac1c0bdde7e23c5c3e1b4bf8",
+        "html_url": "https://github.com/freeappstore-online/colorpicker/commit/69021a26218926e5ac1c0bdde7e23c5c3e1b4bf8",
+        "commit": {
+          "message": "ci: adopt shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-05T07:46:16Z"
+          }
+        }
+      },
       {
         "sha": "c0312d715472b39ab75e27db24e3f7ac9ade7718",
         "html_url": "https://github.com/freeappstore-online/colorpicker/commit/c0312d715472b39ab75e27db24e3f7ac9ade7718",
@@ -518,25 +528,35 @@
             "date": "2026-06-20T22:40:22Z"
           }
         }
-      },
-      {
-        "sha": "4cb0278a94b979a2dc4dd8acb858167b1aa012f9",
-        "html_url": "https://github.com/freeappstore-online/colorpicker/commit/4cb0278a94b979a2dc4dd8acb858167b1aa012f9",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:11Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/music": {
     "meta": {
       "created_at": "2026-05-03T02:32:53Z",
-      "pushed_at": "2026-07-06T23:18:02Z"
+      "pushed_at": "2026-10-05T11:12:04Z"
     },
     "commits": [
+      {
+        "sha": "07dd8deae476e98c934c48d8b4efc7f6f76aa527",
+        "html_url": "https://github.com/freeappstore-online/music/commit/07dd8deae476e98c934c48d8b4efc7f6f76aa527",
+        "commit": {
+          "message": "chore: restore generated SEO artifacts",
+          "author": {
+            "date": "2026-10-05T11:12:02Z"
+          }
+        }
+      },
+      {
+        "sha": "7ad20a03ac19d65f6846242a592ad60d020a4f04",
+        "html_url": "https://github.com/freeappstore-online/music/commit/7ad20a03ac19d65f6846242a592ad60d020a4f04",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml workflow (batch 5)",
+          "author": {
+            "date": "2026-10-05T11:11:38Z"
+          }
+        }
+      },
       {
         "sha": "4131b0120eb37712f46a1eff8dcca0760437e349",
         "html_url": "https://github.com/freeappstore-online/music/commit/4131b0120eb37712f46a1eff8dcca0760437e349",
@@ -546,35 +566,25 @@
             "date": "2026-07-06T20:40:17Z"
           }
         }
-      },
-      {
-        "sha": "2117c05defce67a9c57706ba94812f7f83cfe2c8",
-        "html_url": "https://github.com/freeappstore-online/music/commit/2117c05defce67a9c57706ba94812f7f83cfe2c8",
-        "commit": {
-          "message": "fix: restore compliance.yml with SDK dep check",
-          "author": {
-            "date": "2026-06-20T22:42:41Z"
-          }
-        }
-      },
-      {
-        "sha": "996a18976dead3ba1c9f72a55ad774cf64c750e0",
-        "html_url": "https://github.com/freeappstore-online/music/commit/996a18976dead3ba1c9f72a55ad774cf64c750e0",
-        "commit": {
-          "message": "fix: CI compliance — check SDK dep instead of domain string",
-          "author": {
-            "date": "2026-06-20T22:40:44Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/flashcards": {
     "meta": {
       "created_at": "2026-05-04T10:58:15Z",
-      "pushed_at": "2026-06-20T22:42:33Z"
+      "pushed_at": "2026-10-05T10:08:39Z"
     },
     "commits": [
+      {
+        "sha": "f512d7c3e48383fba1e81a90ad7074c4d81cfb48",
+        "html_url": "https://github.com/freeappstore-online/flashcards/commit/f512d7c3e48383fba1e81a90ad7074c4d81cfb48",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml caller (batch 4)",
+          "author": {
+            "date": "2026-10-05T10:08:37Z"
+          }
+        }
+      },
       {
         "sha": "2112be39284f18d30177d2c4679460f56ffd099a",
         "html_url": "https://github.com/freeappstore-online/flashcards/commit/2112be39284f18d30177d2c4679460f56ffd099a",
@@ -594,25 +604,25 @@
             "date": "2026-06-20T22:40:32Z"
           }
         }
-      },
-      {
-        "sha": "fd3958b013e4d80b2333d40c92f1b989408f600c",
-        "html_url": "https://github.com/freeappstore-online/flashcards/commit/fd3958b013e4d80b2333d40c92f1b989408f600c",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:14Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/whiteboard": {
     "meta": {
       "created_at": "2026-05-04T10:58:13Z",
-      "pushed_at": "2026-06-20T22:43:00Z"
+      "pushed_at": "2026-10-05T11:21:07Z"
     },
     "commits": [
+      {
+        "sha": "31ef430f3a4222fff280f494169c82debe6c461d",
+        "html_url": "https://github.com/freeappstore-online/whiteboard/commit/31ef430f3a4222fff280f494169c82debe6c461d",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml workflow (batch 5)",
+          "author": {
+            "date": "2026-10-05T11:21:04Z"
+          }
+        }
+      },
       {
         "sha": "d3157aa96c972fa43a3f704755f8f3b27c4ab074",
         "html_url": "https://github.com/freeappstore-online/whiteboard/commit/d3157aa96c972fa43a3f704755f8f3b27c4ab074",
@@ -632,25 +642,25 @@
             "date": "2026-06-20T22:41:13Z"
           }
         }
-      },
-      {
-        "sha": "6e39ba2657a690b6d5846aed685924a7fdfc8a2e",
-        "html_url": "https://github.com/freeappstore-online/whiteboard/commit/6e39ba2657a690b6d5846aed685924a7fdfc8a2e",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:29Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/password": {
     "meta": {
       "created_at": "2026-05-04T10:58:11Z",
-      "pushed_at": "2026-06-20T22:42:44Z"
+      "pushed_at": "2026-10-06T06:57:16Z"
     },
     "commits": [
+      {
+        "sha": "c7c63a3eca3bd503cd4fc3d639bddd0c231b2378",
+        "html_url": "https://github.com/freeappstore-online/password/commit/c7c63a3eca3bd503cd4fc3d639bddd0c231b2378",
+        "commit": {
+          "message": "ci: use shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-06T06:57:14Z"
+          }
+        }
+      },
       {
         "sha": "38f3648c64a4437f9ed9bb3a96d5550ff7cbf2a4",
         "html_url": "https://github.com/freeappstore-online/password/commit/38f3648c64a4437f9ed9bb3a96d5550ff7cbf2a4",
@@ -668,16 +678,6 @@
           "message": "fix: CI compliance — check SDK dep instead of domain string",
           "author": {
             "date": "2026-06-20T22:40:48Z"
-          }
-        }
-      },
-      {
-        "sha": "0ce2eac1b92ebf0528eb5db2ee4347c080041efc",
-        "html_url": "https://github.com/freeappstore-online/password/commit/0ce2eac1b92ebf0528eb5db2ee4347c080041efc",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:19Z"
           }
         }
       }
@@ -724,9 +724,19 @@
   "freeappstore-online/weather": {
     "meta": {
       "created_at": "2026-05-04T10:58:19Z",
-      "pushed_at": "2026-06-20T22:42:57Z"
+      "pushed_at": "2026-10-05T11:23:42Z"
     },
     "commits": [
+      {
+        "sha": "895e5552372d9f0aad3b8b47438a80e3b30384e8",
+        "html_url": "https://github.com/freeappstore-online/weather/commit/895e5552372d9f0aad3b8b47438a80e3b30384e8",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml workflow (batch 5)",
+          "author": {
+            "date": "2026-10-05T11:23:39Z"
+          }
+        }
+      },
       {
         "sha": "f6e5bc0b0f26fe7d80cb1b5e5f661634d49780f4",
         "html_url": "https://github.com/freeappstore-online/weather/commit/f6e5bc0b0f26fe7d80cb1b5e5f661634d49780f4",
@@ -746,25 +756,25 @@
             "date": "2026-06-20T22:41:08Z"
           }
         }
-      },
-      {
-        "sha": "c4729cb6b6c32245e0121f13856809922f0c554f",
-        "html_url": "https://github.com/freeappstore-online/weather/commit/c4729cb6b6c32245e0121f13856809922f0c554f",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:28Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/pomodoro": {
     "meta": {
       "created_at": "2026-05-04T10:58:05Z",
-      "pushed_at": "2026-06-20T22:42:48Z"
+      "pushed_at": "2026-10-06T06:57:19Z"
     },
     "commits": [
+      {
+        "sha": "bbb615eb4b6a9073534d0f0b6929c4cbd35df2bb",
+        "html_url": "https://github.com/freeappstore-online/pomodoro/commit/bbb615eb4b6a9073534d0f0b6929c4cbd35df2bb",
+        "commit": {
+          "message": "ci: use shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-06T06:57:17Z"
+          }
+        }
+      },
       {
         "sha": "cc825273c4ba4abc5781f0950e8b9dc74e08ae0e",
         "html_url": "https://github.com/freeappstore-online/pomodoro/commit/cc825273c4ba4abc5781f0950e8b9dc74e08ae0e",
@@ -784,25 +794,25 @@
             "date": "2026-06-20T22:40:53Z"
           }
         }
-      },
-      {
-        "sha": "10734bd7babb0df5eed0ca44dcde2844c9724c12",
-        "html_url": "https://github.com/freeappstore-online/pomodoro/commit/10734bd7babb0df5eed0ca44dcde2844c9724c12",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:20Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/stopwatch": {
     "meta": {
       "created_at": "2026-05-06T03:10:41Z",
-      "pushed_at": "2026-07-06T23:18:52Z"
+      "pushed_at": "2026-10-05T11:06:26Z"
     },
     "commits": [
+      {
+        "sha": "fbdc055a568750de4b674754402b0425749fd033",
+        "html_url": "https://github.com/freeappstore-online/stopwatch/commit/fbdc055a568750de4b674754402b0425749fd033",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml workflow (batch 5)",
+          "author": {
+            "date": "2026-10-05T11:06:23Z"
+          }
+        }
+      },
       {
         "sha": "9abb946fa282e79d58acb97476d542c240acee97",
         "html_url": "https://github.com/freeappstore-online/stopwatch/commit/9abb946fa282e79d58acb97476d542c240acee97",
@@ -822,25 +832,25 @@
             "date": "2026-06-20T22:42:53Z"
           }
         }
-      },
-      {
-        "sha": "41a66668be4568ba052fd092ac1d875f0ffecd02",
-        "html_url": "https://github.com/freeappstore-online/stopwatch/commit/41a66668be4568ba052fd092ac1d875f0ffecd02",
-        "commit": {
-          "message": "fix: CI compliance — check SDK dep instead of domain string",
-          "author": {
-            "date": "2026-06-20T22:41:00Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/calculator": {
     "meta": {
       "created_at": "2026-05-04T05:30:50Z",
-      "pushed_at": "2026-07-01T06:59:50Z"
+      "pushed_at": "2026-10-05T07:43:53Z"
     },
     "commits": [
+      {
+        "sha": "eef71d915c2eb000b22cf46c84b686c779ca6e21",
+        "html_url": "https://github.com/freeappstore-online/calculator/commit/eef71d915c2eb000b22cf46c84b686c779ca6e21",
+        "commit": {
+          "message": "ci: adopt shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-05T07:43:51Z"
+          }
+        }
+      },
       {
         "sha": "186921caa94a3af97891bb487d1deb076c982d1d",
         "html_url": "https://github.com/freeappstore-online/calculator/commit/186921caa94a3af97891bb487d1deb076c982d1d",
@@ -858,16 +868,6 @@
           "message": "fix: restore compliance.yml with SDK dep check",
           "author": {
             "date": "2026-06-20T22:42:20Z"
-          }
-        }
-      },
-      {
-        "sha": "df7aa45739803372c86b5ed6181f3b5f323a2231",
-        "html_url": "https://github.com/freeappstore-online/calculator/commit/df7aa45739803372c86b5ed6181f3b5f323a2231",
-        "commit": {
-          "message": "fix: CI compliance — check SDK dep instead of domain string",
-          "author": {
-            "date": "2026-06-20T22:40:18Z"
           }
         }
       }
@@ -932,9 +932,19 @@
   "freeappstore-online/mandarin-english": {
     "meta": {
       "created_at": "2026-05-06T04:25:18Z",
-      "pushed_at": "2026-06-20T22:42:37Z"
+      "pushed_at": "2026-10-05T10:19:19Z"
     },
     "commits": [
+      {
+        "sha": "288cbb8364ed772f2797531379ee60fd81e9ad47",
+        "html_url": "https://github.com/freeappstore-online/mandarin-english/commit/288cbb8364ed772f2797531379ee60fd81e9ad47",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml caller (batch 4)",
+          "author": {
+            "date": "2026-10-05T10:19:16Z"
+          }
+        }
+      },
       {
         "sha": "da1ffb8bf9252a3878416c61597ad1a7931db08e",
         "html_url": "https://github.com/freeappstore-online/mandarin-english/commit/da1ffb8bf9252a3878416c61597ad1a7931db08e",
@@ -952,16 +962,6 @@
           "message": "fix: CI compliance — check SDK dep instead of domain string",
           "author": {
             "date": "2026-06-20T22:40:38Z"
-          }
-        }
-      },
-      {
-        "sha": "2a0b3db5e60ddceef59f3bdf038aa9396f61e9e4",
-        "html_url": "https://github.com/freeappstore-online/mandarin-english/commit/2a0b3db5e60ddceef59f3bdf038aa9396f61e9e4",
-        "commit": {
-          "message": "docs: update CLAUDE.md — R2 not CF Pages",
-          "author": {
-            "date": "2026-05-31T11:36:17Z"
           }
         }
       }
@@ -1102,9 +1102,19 @@
   "freeappstore-online/snowman": {
     "meta": {
       "created_at": "2026-05-17T15:41:58Z",
-      "pushed_at": "2026-05-31T11:19:05Z"
+      "pushed_at": "2026-10-06T06:57:21Z"
     },
     "commits": [
+      {
+        "sha": "3a5aab851e34d74e8bee4733030f94f87b9bda93",
+        "html_url": "https://github.com/freeappstore-online/snowman/commit/3a5aab851e34d74e8bee4733030f94f87b9bda93",
+        "commit": {
+          "message": "ci: use shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-06T06:57:19Z"
+          }
+        }
+      },
       {
         "sha": "c962a025585adf12000c1704dfb134a7f3e83948",
         "html_url": "https://github.com/freeappstore-online/snowman/commit/c962a025585adf12000c1704dfb134a7f3e83948",
@@ -1124,25 +1134,25 @@
             "date": "2026-05-27T14:20:04Z"
           }
         }
-      },
-      {
-        "sha": "02326b252f74b9657eb82443a474e79ee4839749",
-        "html_url": "https://github.com/freeappstore-online/snowman/commit/02326b252f74b9657eb82443a474e79ee4839749",
-        "commit": {
-          "message": "feat: add Google sign-in alongside GitHub",
-          "author": {
-            "date": "2026-05-27T13:49:35Z"
-          }
-        }
       }
     ]
   },
   "freeappstore-online/typeflow": {
     "meta": {
       "created_at": "2026-05-18T09:59:33Z",
-      "pushed_at": "2026-05-31T11:19:07Z"
+      "pushed_at": "2026-10-06T06:57:23Z"
     },
     "commits": [
+      {
+        "sha": "c36efd7e8bff67c891697746d39dfcfeeeda93c2",
+        "html_url": "https://github.com/freeappstore-online/typeflow/commit/c36efd7e8bff67c891697746d39dfcfeeeda93c2",
+        "commit": {
+          "message": "ci: use shared platform compliance workflow",
+          "author": {
+            "date": "2026-10-06T06:57:21Z"
+          }
+        }
+      },
       {
         "sha": "32d053ef9b757fb939364e968f33fc7924c1ba3e",
         "html_url": "https://github.com/freeappstore-online/typeflow/commit/32d053ef9b757fb939364e968f33fc7924c1ba3e",
@@ -1160,16 +1170,6 @@
           "message": "Add apple-touch-icon",
           "author": {
             "date": "2026-05-27T14:20:07Z"
-          }
-        }
-      },
-      {
-        "sha": "fc1c6db6051f24f53c1ba5b89fd650cbb3d7dac9",
-        "html_url": "https://github.com/freeappstore-online/typeflow/commit/fc1c6db6051f24f53c1ba5b89fd650cbb3d7dac9",
-        "commit": {
-          "message": "fix: add --paper/--ink/--accent CSS vars for compliance",
-          "author": {
-            "date": "2026-05-27T14:16:20Z"
           }
         }
       }
@@ -1216,9 +1216,19 @@
   "freeappstore-online/artout": {
     "meta": {
       "created_at": "2026-05-18T19:12:27Z",
-      "pushed_at": "2026-07-01T06:59:39Z"
+      "pushed_at": "2026-10-05T06:52:18Z"
     },
     "commits": [
+      {
+        "sha": "5a964e395be5e96e693c6909d2b5e918ff262c89",
+        "html_url": "https://github.com/freeappstore-online/artout/commit/5a964e395be5e96e693c6909d2b5e918ff262c89",
+        "commit": {
+          "message": "ci: adopt shared app workflow",
+          "author": {
+            "date": "2026-10-05T06:52:15Z"
+          }
+        }
+      },
       {
         "sha": "3e1964eb63d9fb50419707363fd59934b9d15eb6",
         "html_url": "https://github.com/freeappstore-online/artout/commit/3e1964eb63d9fb50419707363fd59934b9d15eb6",
@@ -1236,16 +1246,6 @@
           "message": "fix: restore compliance.yml with SDK dep check",
           "author": {
             "date": "2026-06-20T22:42:16Z"
-          }
-        }
-      },
-      {
-        "sha": "d69b1e1ce8c36a515ac368915b48426055f3a6a1",
-        "html_url": "https://github.com/freeappstore-online/artout/commit/d69b1e1ce8c36a515ac368915b48426055f3a6a1",
-        "commit": {
-          "message": "fix: CI compliance — check SDK dep instead of domain string",
-          "author": {
-            "date": "2026-06-20T22:40:12Z"
           }
         }
       }
@@ -1634,9 +1634,19 @@
   "freeappstore-online/faces": {
     "meta": {
       "created_at": "2026-05-23T20:34:58Z",
-      "pushed_at": "2026-06-20T22:42:32Z"
+      "pushed_at": "2026-10-05T10:07:41Z"
     },
     "commits": [
+      {
+        "sha": "4decb217fccc433b224cba47762df99abd2e0f67",
+        "html_url": "https://github.com/freeappstore-online/faces/commit/4decb217fccc433b224cba47762df99abd2e0f67",
+        "commit": {
+          "message": "ci: adopt shared app-ci.yml caller (batch 4)",
+          "author": {
+            "date": "2026-10-05T10:07:38Z"
+          }
+        }
+      },
       {
         "sha": "4cb39f4370558a7d81dfe95ce53df63000070cde",
         "html_url": "https://github.com/freeappstore-online/faces/commit/4cb39f4370558a7d81dfe95ce53df63000070cde",
@@ -1654,16 +1664,6 @@
           "message": "fix: CI compliance — check SDK dep instead of domain string",
           "author": {
             "date": "2026-06-20T22:40:30Z"
-          }
-        }
-      },
-      {
-        "sha": "144d2a7d9b7af4397765f0b59d5329469e5bded0",
-        "html_url": "https://github.com/freeappstore-online/faces/commit/144d2a7d9b7af4397765f0b59d5329469e5bded0",
-        "commit": {
-          "message": "fix: enable pinch-zoom (a11y)",
-          "author": {
-            "date": "2026-05-31T11:19:11Z"
           }
         }
       }
