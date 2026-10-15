@@ -11,8 +11,8 @@ importers:
   web:
     dependencies:
       '@freeappstore/sdk':
-        specifier: ^0.10.0
-        version: 0.10.0(react@19.3.0)
+        specifier: ^0.14.35
+        version: 0.14.35(react@19.3.0)
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -560,8 +560,8 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
-  '@freeappstore/sdk@0.10.0':
-    resolution: {integrity: sha512-JbHT8BQv63bIR8fxPG9DQ8MhErn/VkINQOA1YqrYUZ0IhQ8lbiM5/ZKlJOYgwGf3qFKXG/d1ln/hC84o7U6U4Q==}
+  '@freeappstore/sdk@0.14.35':
+    resolution: {integrity: sha512-sZDPZy1PvCSBrpcGxjyH3pbB94l04dbLF7KpPY03L98DRKJtG77ubzuZS3y1jCYWEhwnUOb6lojcxvSmExMKKA==}
     peerDependencies:
       react: ^18.0.0 || ^19.0.0
     peerDependenciesMeta:
@@ -2947,7 +2947,7 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@freeappstore/sdk@0.10.0(react@19.3.0)':
+  '@freeappstore/sdk@0.14.35(react@19.3.0)':
     optionalDependencies:
       react: 19.3.0
 
