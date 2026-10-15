@@ -2227,6 +2227,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "quickcalc",
+      "name": "quickcalc",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — tip and split, percent, discount, age and date, and fuel calculators. Private and offline.",
+      "appUrl": "https://quickcalc.freeappstore.online",
+      "repo": "freeappstore-online/quickcalc",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
