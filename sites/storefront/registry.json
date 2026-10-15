@@ -2213,6 +2213,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "voicerecorder",
+      "name": "voicerecorder",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — record your voice and change it with fun effects, all on your device",
+      "appUrl": "https://voicerecorder.freeappstore.online",
+      "repo": "freeappstore-online/voicerecorder",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
