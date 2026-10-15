@@ -2258,10 +2258,10 @@
     },
     {
       "id": "fastclock",
-      "name": "fastclock",
+      "name": "FastClock",
       "category": "Health & Fitness",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "⏱️",
+      "iconBg": "#fef3c7",
       "description": "Coming soon — a free fasting timer with presets, history and streaks. Private and offline.",
       "appUrl": "https://fastclock.freeappstore.online",
       "repo": "freeappstore-online/fastclock",
