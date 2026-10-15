@@ -2234,7 +2234,7 @@
       "category": "Utilities",
       "icon": "🧮",
       "iconBg": "#2f8f57",
-      "description": "Coming soon — tip and split, percent, discount, age and date, and fuel calculators. Private and offline.",
+      "description": "Five everyday calculators: tip & split, percent, discount, age & date, fuel. Private and offline. Works without internet.",
       "appUrl": "https://quickcalc.freeappstore.online",
       "repo": "freeappstore-online/quickcalc",
       "hostedOn": "r2",
