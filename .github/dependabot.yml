@@ -40,3 +40,15 @@ updates:
       # as a deliberate SDK + agents + zod upgrade, not a Dependabot bump (#70).
       - dependency-name: zod
         update-types: [version-update:semver-major]
+      # The pin above is exact and only moves when `agents` moves: agents@0.7.9
+      # pins its own @modelcontextprotocol/sdk@1.26.0, so bumping ours alone
+      # leaves two SDK copies and FasMcpAgent.server stops type-checking
+      # against McpAgent (TS2416, #116).
+      - dependency-name: '@modelcontextprotocol/sdk'
+      # agents 0.24 (#83) needs zod ^4 and adds @modelcontextprotocol/client +
+      # /server 2.0.0 as peers (themselves zod ^4.2). Under zod 3 and
+      # legacy-peer-deps the wrangler build can't resolve them. That's the
+      # deliberate agents + SDK + zod upgrade described above, not a bump.
+      # Patch releases still come through.
+      - dependency-name: agents
+        update-types: [version-update:semver-minor, version-update:semver-major]
