@@ -2304,7 +2304,7 @@
       "category": "Lifestyle",
       "icon": "📚",
       "iconBg": "#fef3c7",
-      "description": "Coming soon — a private reading log: shelves, progress and yearly goals, with Open Library search and ISBN scan. Your library stays on your device.",
+      "description": "A private reading log: shelves, progress and yearly goals, with Open Library search and ISBN scan. Your library stays on your device.",
       "appUrl": "https://shelfmark.freeappstore.online",
       "repo": "freeappstore-online/shelfmark",
       "hostedOn": "r2",
