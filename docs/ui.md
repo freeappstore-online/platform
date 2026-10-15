@@ -237,8 +237,8 @@ onto the standard frame:
 
 | Component | Props | Description |
 |-----------|-------|-------------|
-| `Modal` | `open`, `onClose`, `title` | Modal dialog |
-| `ConfirmDialog` | `open`, `onConfirm`, `onCancel`, `title`, `message`, `variant` | Confirmation dialog |
+| `Modal` | `open`, `onClose`, `title`, `ariaLabel`, `closeOnEscape` | Accessible modal dialog: `role="dialog"` + `aria-modal`, named by `title` (or `ariaLabel`); focus moves in on open (`data-autofocus`, else the first control), Tab stays inside, Esc closes, focus returns to the opener |
+| `ConfirmDialog` | `open`, `onConfirm`, `onCancel`, `title`, `message`, `confirmLabel`, `variant`, `closeOnEscape` | Confirmation dialog (a `Modal`); focus starts on Cancel, Esc cancels |
 
 ## Input
 

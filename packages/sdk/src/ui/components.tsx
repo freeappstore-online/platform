@@ -1,4 +1,12 @@
-import { Component, type CSSProperties, type ReactNode, useEffect, useState } from 'react';
+import {
+  Component,
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 import type { FreeAppStore } from '../index.js';
 
 // Inject keyframes once
@@ -187,19 +195,121 @@ export interface ModalProps {
   open: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** Shown as the dialog's heading and used as its accessible name. */
   title?: string;
+  /** Accessible name when there is no visible `title`. */
+  ariaLabel?: string;
+  /** Esc closes the dialog (calls `onClose`). Default: true. */
+  closeOnEscape?: boolean;
   maxWidth?: number;
 }
 
-export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalProps) {
+const FOCUSABLE =
+  'a[href], area[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), iframe, [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+
+/** Focusable elements inside `root`, in tab order, skipping hidden ones. */
+function focusableIn(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+    (el) => !el.closest('[hidden], [inert], [aria-hidden="true"]'),
+  );
+}
+
+/** Open dialogs, innermost last: only the top one handles Tab and Esc. */
+const openDialogs: HTMLElement[] = [];
+
+/**
+ * An accessible modal dialog (`role="dialog"`, `aria-modal`), labelled by its
+ * title. On open, focus moves into it: to an element marked `data-autofocus`,
+ * else the first focusable element in the content, else the close button,
+ * else the dialog itself. Tab and Shift-Tab stay inside it, Esc closes it
+ * (unless `closeOnEscape={false}`), and on close focus returns to the element
+ * that had it before, usually the button that opened the dialog.
+ */
+export function Modal({
+  open,
+  onClose,
+  children,
+  title,
+  ariaLabel,
+  closeOnEscape = true,
+  maxWidth = 480,
+}: ModalProps) {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  // Read through refs so an inline `onClose={() => …}` doesn't re-run the
+  // open effect (and re-steal focus) on every render.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const closeOnEscapeRef = useRef(closeOnEscape);
+  closeOnEscapeRef.current = closeOnEscape;
+
   useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+    const dialog = dialogRef.current;
+    if (!open || !dialog) return;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Order by nesting, not by mount: React runs a nested dialog's effect
+    // before its parent's, so a parent goes below any dialog it contains.
+    const nested = openDialogs.findIndex((d) => dialog.contains(d));
+    if (nested === -1) openDialogs.push(dialog);
+    else openDialogs.splice(nested, 0, dialog);
+
+    if (openDialogs[openDialogs.length - 1] === dialog) {
+      const content = contentRef.current;
+      const initial =
+        dialog.querySelector<HTMLElement>('[data-autofocus]') ??
+        (content ? focusableIn(content)[0] : undefined) ??
+        focusableIn(dialog)[0] ??
+        dialog;
+      initial.focus();
+    }
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (openDialogs[openDialogs.length - 1] !== dialog) return;
+      if (e.key === 'Escape') {
+        if (!closeOnEscapeRef.current) return;
+        e.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const items = focusableIn(dialog);
+      if (items.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = items[0] as HTMLElement;
+      const last = items[items.length - 1] as HTMLElement;
+      const active = document.activeElement;
+      const inside = active instanceof Node && dialog.contains(active);
+      if (e.shiftKey && (active === first || !inside || active === dialog)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || !inside)) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open, onClose]);
+    // Focus that escapes some other way (a click on the backdrop, assistive
+    // tech) is pulled back in.
+    const onFocusIn = (e: FocusEvent) => {
+      if (openDialogs[openDialogs.length - 1] !== dialog) return;
+      if (e.target instanceof Node && !dialog.contains(e.target)) {
+        (focusableIn(dialog)[0] ?? dialog).focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocusIn);
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('focusin', onFocusIn);
+      const index = openDialogs.lastIndexOf(dialog);
+      if (index !== -1) openDialogs.splice(index, 1);
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -220,8 +330,15 @@ export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalP
       }}
     >
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : ariaLabel}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
         style={{
+          outline: 'none',
           background: 'var(--panel)',
           border: '1px solid var(--line)',
           borderRadius: 'var(--radius-lg, var(--radius, 0.75rem))',
@@ -242,10 +359,14 @@ export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalP
               borderBottom: '1px solid var(--line)',
             }}
           >
-            <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}>
+            <h2
+              id={titleId}
+              style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--ink)' }}
+            >
               {title}
             </h2>
             <button
+              type="button"
               onClick={onClose}
               aria-label="Close"
               style={{
@@ -263,7 +384,9 @@ export function Modal({ open, onClose, children, title, maxWidth = 480 }: ModalP
             </button>
           </div>
         )}
-        <div style={{ padding: '1.25rem' }}>{children}</div>
+        <div ref={contentRef} style={{ padding: '1.25rem' }}>
+          {children}
+        </div>
       </div>
     </div>
   );
@@ -281,6 +404,8 @@ export interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   variant?: 'danger' | 'default';
+  /** Esc cancels the dialog. Default: true. */
+  closeOnEscape?: boolean;
 }
 
 export function ConfirmDialog({
@@ -291,13 +416,22 @@ export function ConfirmDialog({
   message,
   confirmLabel = 'Confirm',
   variant = 'default',
+  closeOnEscape = true,
 }: ConfirmDialogProps) {
   const isDanger = variant === 'danger';
   return (
-    <Modal open={open} onClose={onCancel} title={title} maxWidth={400}>
+    // Focus starts on Cancel (the first button), the safe choice for a destructive confirm.
+    <Modal
+      open={open}
+      onClose={onCancel}
+      title={title}
+      maxWidth={400}
+      closeOnEscape={closeOnEscape}
+    >
       <p style={{ fontSize: '0.9rem', color: 'var(--muted)', margin: '0 0 1.25rem' }}>{message}</p>
       <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
         <button
+          type="button"
           onClick={onCancel}
           style={{
             padding: '0.5rem 1rem',
@@ -314,6 +448,7 @@ export function ConfirmDialog({
           Cancel
         </button>
         <button
+          type="button"
           onClick={onConfirm}
           style={{
             padding: '0.5rem 1rem',
