@@ -2188,10 +2188,10 @@
     },
     {
       "id": "cycle",
-      "name": "cycle",
+      "name": "Cycle",
       "category": "Health & Fitness",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🩸",
+      "iconBg": "#c74f5e",
       "description": "Coming soon — private period tracker",
       "appUrl": "https://cycle.freeappstore.online",
       "repo": "freeappstore-online/cycle",
