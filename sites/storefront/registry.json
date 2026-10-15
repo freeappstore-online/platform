@@ -2230,10 +2230,10 @@
     },
     {
       "id": "quickcalc",
-      "name": "quickcalc",
+      "name": "Everyday Calculators",
       "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🧮",
+      "iconBg": "#2f8f57",
       "description": "Coming soon — tip and split, percent, discount, age and date, and fuel calculators. Private and offline.",
       "appUrl": "https://quickcalc.freeappstore.online",
       "repo": "freeappstore-online/quickcalc",
