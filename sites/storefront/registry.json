@@ -2283,6 +2283,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "prayercompass",
+      "name": "prayercompass",
+      "category": "Health & Fitness",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — private, ad-free prayer times and Qibla direction: calculated on your device, location never leaves it.",
+      "appUrl": "https://prayercompass.freeappstore.online",
+      "repo": "freeappstore-online/prayercompass",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
