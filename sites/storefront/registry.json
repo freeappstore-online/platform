@@ -2216,10 +2216,10 @@
     },
     {
       "id": "voicerecorder",
-      "name": "voicerecorder",
+      "name": "Voice Recorder & Changer",
       "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🎙️",
+      "iconBg": "#d8574a",
       "description": "Coming soon — record your voice and change it with fun effects, all on your device",
       "appUrl": "https://voicerecorder.freeappstore.online",
       "repo": "freeappstore-online/voicerecorder",
