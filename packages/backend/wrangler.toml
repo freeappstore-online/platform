@@ -71,3 +71,5 @@ service = "freeappstore-admin"
 #   COMP_KEY_OPENAI          # platform-funded OpenAI key for complimentary VibeCode grants
 #   COMP_KEY_ANTHROPIC       # platform-funded Anthropic key for complimentary VibeCode grants
 #   COMP_KEY_GOOGLE          # platform-funded Google AI key for complimentary VibeCode grants
+#   VAPID_PUBLIC_KEY         # Web Push VAPID public key, base64url (fas.push, #145); not set yet
+#   VAPID_PRIVATE_KEY        # Web Push VAPID private key, base64url (fas.push, #145); not set yet

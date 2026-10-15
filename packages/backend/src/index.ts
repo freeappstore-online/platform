@@ -21,6 +21,7 @@ import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
 import { logsRoutes } from './routes/logs.js';
 import { publishRoutes } from './routes/publish.js';
+import { pushRoutes } from './routes/push.js';
 import { qualityRoutes } from './routes/quality.js';
 import { rolesRoutes } from './routes/roles.js';
 import { roomRoutes } from './routes/rooms.js';
@@ -102,6 +103,7 @@ v1.route('/', contentAdminRoutes);
 v1.route('/', agentSessionRoutes);
 v1.route('/', qualityRoutes);
 v1.route('/', votesRoutes);
+v1.route('/', pushRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;

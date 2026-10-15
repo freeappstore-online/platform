@@ -77,6 +77,16 @@ AI provider hosts (openai.com, anthropic.com, etc.) are blocked from app-level s
 | Counters per app | 1,000 |
 | Increment range | -1,000 to +1,000 per call |
 
+## Push subscriptions (`fas.push`)
+
+| Limit | Value | Status code on breach |
+|---|---|---|
+| Subscriptions (devices) per user per app | 10 | `413` |
+| Request body (`POST` / `DELETE /v1/apps/:appId/push/subscriptions`) | 4 KB | `413` |
+| Endpoint URL length | 2,048 chars | `400` |
+
+Scoped to `(appId, userId)` like KV. One row per browser registration, keyed by its endpoint: re-subscribing the same device updates it (and doesn't count again), and an endpoint re-registered by another user or app moves to them. Endpoints must be `https` on a known push service (FCM, Mozilla, WNS, Apple); `keys.p256dh` must be a 65-byte P-256 point and `keys.auth` 16 bytes (both base64url). `GET /v1/push/vapid-public-key` returns `503` until the platform VAPID key is configured.
+
 ## What FAS does NOT support (use ProAppStore)
 
 - File uploads / R2 storage — PAS gives each app its own bucket
@@ -93,6 +103,7 @@ See [proappstore.online](https://proappstore.online) for the Pro tier.
 Constants live next to the code that enforces them:
 
 - KV: `packages/backend/src/routes/kv.ts`
+- Push subscriptions: `PUSH_LIMITS` in `packages/backend/src/lib/quota.ts`
 - Rooms: `packages/backend/src/do/room.ts`
 - Session TTL: `packages/backend/src/lib/session.ts`
 

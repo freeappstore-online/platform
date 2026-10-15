@@ -90,6 +90,14 @@ export interface Env {
   ADMIN_GITHUB_LOGINS?: string;
   /** Comma-separated platform user ids allowed to call admin-only endpoints. */
   ADMIN_USER_IDS?: string;
+  /**
+   * VAPID key pair for Web Push (`fas.push`, #145): one platform pair, base64url
+   * (public = uncompressed P-256 point, private = the `d` scalar). Optional so
+   * the Worker boots without them; GET /v1/push/vapid-public-key returns 503
+   * while VAPID_PUBLIC_KEY is unset. Subscriptions can still be stored.
+   */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
   /** Platform-funded AI provider keys used by complimentary VibeCode grants. */
   COMP_KEY_OPENAI?: string;
   COMP_KEY_ANTHROPIC?: string;

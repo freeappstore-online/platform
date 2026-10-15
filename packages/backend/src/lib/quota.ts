@@ -48,3 +48,18 @@ export const KV_LIMITS: KvLimits = {
   maxTotalBytesPerUser: 1024 * 1024,
   maxKeysPerUser: 100,
 };
+
+export interface PushLimits {
+  /** Push subscriptions (devices) per user per app. */
+  maxSubscriptionsPerUser: number;
+  /** Max request body for POST/DELETE /push/subscriptions. */
+  maxBodyBytes: number;
+  /** Max length of the subscription endpoint URL. */
+  maxEndpointLength: number;
+}
+
+export const PUSH_LIMITS: PushLimits = {
+  maxSubscriptionsPerUser: 10,
+  maxBodyBytes: 4 * 1024,
+  maxEndpointLength: 2048,
+};
