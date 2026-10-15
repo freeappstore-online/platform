@@ -18,8 +18,12 @@ import type { FreeAppStore } from '../index.js';
 
 // Skip link, offline banner, toasts, error/loading fallbacks and PageHeader.
 // Tokens only, injected once by Shell like the navbar's stylesheet.
-export const SHELL_CSS = `.fas-skip-link:not(:focus){position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
-.fas-skip-link:focus{position:fixed;top:.5rem;left:.5rem;z-index:1200;padding:.7rem 1rem;border:2px solid var(--accent);border-radius:var(--radius-sm,10px);background:var(--panel);color:var(--ink);font-weight:600;text-decoration:none;outline:2px solid var(--accent);outline-offset:2px}
+//
+// The skip link hides by sitting just above the viewport (fixed, so it never
+// adds document scroll) and slides in on focus. Not the 1px overflow:hidden
+// "sr-only" box: `fas screencheck` reports that as content clipping (#149).
+export const SHELL_CSS = `.fas-skip-link{position:fixed;top:.5rem;left:.5rem;z-index:1200;padding:.7rem 1rem;border:2px solid var(--accent);border-radius:var(--radius-sm,10px);background:var(--panel);color:var(--ink);font-weight:600;white-space:nowrap;text-decoration:none;transform:translateY(calc(-100% - 1rem))}
+.fas-skip-link:focus{transform:none;outline:2px solid var(--accent);outline-offset:2px}
 .fas-main:focus{outline:none}
 .fas-offline{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.25rem .5rem .25rem 1rem;background:var(--panel);color:var(--ink);border-bottom:1px solid var(--line);border-left:3px solid var(--warning);font-size:.875rem}
 .fas-toast-region{position:fixed;bottom:1.25rem;left:50%;z-index:1100;display:flex;flex-direction:column;align-items:center;gap:.5rem;max-width:calc(100vw - 2rem);transform:translateX(-50%);pointer-events:none}

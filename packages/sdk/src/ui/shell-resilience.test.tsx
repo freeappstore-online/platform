@@ -382,6 +382,50 @@ describe('skip link', () => {
     expect(document.activeElement).toBe(main);
     expect(location.hash).toBe(''); // no history entry for routers to see
   });
+
+  // #149: the 1px overflow:hidden "sr-only" box made `fas screencheck` report the
+  // skip link as clipped content at every viewport, in every app on the Shell.
+  it('hides off-screen without clipping, so fas screencheck passes', async () => {
+    const { app } = fakeApp();
+    await mount(
+      <Shell app={app} nav={[{ label: 'Home', href: '/' }]}>
+        <p>content</p>
+      </Shell>,
+    );
+    const link = $<HTMLAnchorElement>('.fas-skip-link');
+    expect(link).not.toBeNull();
+    if (!link) return;
+
+    // screencheck flags overflow:hidden|clip elements whose content overflows them.
+    const noClipping = (style: CSSStyleDeclaration) => {
+      expect(['hidden', 'clip']).not.toContain(style.overflowX);
+      expect(['hidden', 'clip']).not.toContain(style.overflowY);
+      expect(['hidden', 'clip']).not.toContain(style.overflow);
+      expect(style.width).not.toBe('1px');
+      expect(style.height).not.toBe('1px');
+    };
+
+    // Unfocused: fixed (adds no document scroll) and moved up out of view.
+    const hidden = getComputedStyle(link);
+    noClipping(hidden);
+    expect(hidden.position).toBe('fixed');
+    expect(hidden.transform).toMatch(/translateY\(calc\(-100%/);
+
+    // Focused: slides into view, still unclipped. happy-dom doesn't match :focus
+    // in getComputedStyle, so read the rule from the stylesheet Shell injected.
+    const focusRules = [...document.styleSheets]
+      .flatMap((sheet) => [...sheet.cssRules])
+      .filter(
+        (rule): rule is CSSStyleRule =>
+          'selectorText' in rule &&
+          (rule as CSSStyleRule).selectorText.includes('.fas-skip-link:focus'),
+      );
+    expect(focusRules).toHaveLength(1);
+    const shown = focusRules[0]!.style;
+    expect(shown.transform).toBe('none');
+    expect(shown.position).toBe(''); // inherits position:fixed from the base rule
+    noClipping(shown);
+  });
 });
 
 // ── 8–9. Route changes: scroll and focus ────────────────────────
