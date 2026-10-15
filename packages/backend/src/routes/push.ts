@@ -1,14 +1,23 @@
 import { type Context, Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
+import {
+  firstOccurrence,
+  formatTime,
+  isValidTimeZone,
+  type PushRule,
+  parseRule,
+  parseTime,
+} from '../lib/push-schedule.js';
 import { PUSH_LIMITS } from '../lib/quota.js';
 import type { Env } from '../types.js';
 
 /**
- * `fas.push` subscription storage (#145). Apps register a browser's Web Push
- * subscription per (appId, userId), like kv; the platform VAPID key pair signs
- * the pushes. Sending is a separate concern: this file only stores devices
- * and hands out the public key that `pushManager.subscribe()` needs.
+ * `fas.push` (#145, #146). Apps register a browser's Web Push subscription
+ * per (appId, userId), like kv, and reminder schedules for the user; the
+ * backend's cron (lib/push-delivery.ts) sends a no-payload push to the
+ * user's devices when a schedule comes due. The platform VAPID key pair signs
+ * the pushes.
  */
 export const pushRoutes = new Hono<{ Bindings: Env }>();
 
@@ -242,6 +251,145 @@ pushRoutes.get('/apps/:appId/push/subscriptions', async (c) => {
         failureCount: r.failure_count,
       })),
     });
+  } catch (err) {
+    return errorResponse(c, err);
+  }
+});
+
+// ── Reminder schedules (#146) ───────────────────────────────────────────
+
+const REMINDER_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+interface ScheduleRow {
+  reminder_id: string;
+  next_at: number;
+  rule: string;
+  tz: string;
+  quiet_start: number | null;
+  quiet_end: number | null;
+  created_at: number;
+}
+
+const scheduleJson = (r: ScheduleRow) => ({
+  reminderId: r.reminder_id,
+  rule: JSON.parse(r.rule) as PushRule,
+  tz: r.tz,
+  quietHours:
+    r.quiet_start === null || r.quiet_end === null
+      ? null
+      : { start: formatTime(r.quiet_start), end: formatTime(r.quiet_end) },
+  nextAt: r.next_at,
+  createdAt: r.created_at,
+});
+
+/**
+ * Creates or replaces a reminder for the current user in this app. Body:
+ * `{ rule, tz, quietHours? }`: rule is `{ type: 'at', at }` (ms or ISO),
+ * `{ type: 'daily', time: 'HH:MM' }` or `{ type: 'every', days, time }`; tz is
+ * an IANA zone; quietHours is `{ start: 'HH:MM', end: 'HH:MM' }`. 201 when
+ * new, 200 when replaced.
+ */
+pushRoutes.put('/apps/:appId/push/schedules/:reminderId', async (c) => {
+  try {
+    const { user, appId } = await requireAppUser(c);
+    const reminderId = c.req.param('reminderId');
+    if (!REMINDER_ID_RE.test(reminderId)) {
+      return c.json({ error: 'reminderId must be 1-64 letters, digits, _ or -' }, 400);
+    }
+    const body = await readJsonBody(c);
+    if (!isValidTimeZone(body.tz)) return c.json({ error: 'tz must be an IANA time zone' }, 400);
+    const now = Date.now();
+    const parsed = parseRule(body.rule, now);
+    if ('error' in parsed) return c.json({ error: parsed.error }, 400);
+    let quietStart: number | null = null;
+    let quietEnd: number | null = null;
+    if (body.quietHours !== undefined && body.quietHours !== null) {
+      const q = body.quietHours as Record<string, unknown>;
+      quietStart = parseTime(q?.start);
+      quietEnd = parseTime(q?.end);
+      if (quietStart === null || quietEnd === null) {
+        return c.json(
+          { error: 'quietHours.start and quietHours.end must be HH:MM (24-hour)' },
+          400,
+        );
+      }
+    }
+
+    const usage = await c.env.DB.prepare(
+      `SELECT COUNT(*) AS n,
+         COALESCE(SUM(CASE WHEN reminder_id = ? THEN 1 ELSE 0 END), 0) AS mine
+       FROM push_schedules WHERE app_id = ? AND user_id = ?`,
+    )
+      .bind(reminderId, appId, user.id)
+      .first<{ n: number; mine: number }>();
+    const exists = (usage?.mine ?? 0) > 0;
+    if (!exists && (usage?.n ?? 0) >= PUSH_LIMITS.maxSchedulesPerUser) {
+      return c.json(
+        {
+          error: `per-user reminder limit (${PUSH_LIMITS.maxSchedulesPerUser}) exceeded for this app`,
+        },
+        413,
+      );
+    }
+
+    const nextAt = firstOccurrence(parsed.rule, body.tz, now);
+    const row = await c.env.DB.prepare(
+      `INSERT INTO push_schedules
+         (id, app_id, user_id, reminder_id, next_at, occurrence_at, rule, tz, quiet_start, quiet_end, attempts, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+       ON CONFLICT(app_id, user_id, reminder_id) DO UPDATE SET
+         next_at = excluded.next_at, occurrence_at = excluded.occurrence_at, rule = excluded.rule, tz = excluded.tz,
+         quiet_start = excluded.quiet_start, quiet_end = excluded.quiet_end, attempts = 0
+       RETURNING reminder_id, next_at, rule, tz, quiet_start, quiet_end, created_at`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        appId,
+        user.id,
+        reminderId,
+        nextAt,
+        nextAt,
+        JSON.stringify(parsed.rule),
+        body.tz,
+        quietStart,
+        quietEnd,
+        now,
+      )
+      .first<ScheduleRow>();
+    if (!row) throw new Error('push schedule upsert returned no row');
+    return c.json(scheduleJson(row), exists ? 200 : 201);
+  } catch (err) {
+    return errorResponse(c, err);
+  }
+});
+
+/** Cancels one reminder. 204, or 404 if this user has no such reminder in this app. */
+pushRoutes.delete('/apps/:appId/push/schedules/:reminderId', async (c) => {
+  try {
+    const { user, appId } = await requireAppUser(c);
+    const result = await c.env.DB.prepare(
+      'DELETE FROM push_schedules WHERE app_id = ? AND user_id = ? AND reminder_id = ?',
+    )
+      .bind(appId, user.id, c.req.param('reminderId'))
+      .run();
+    if (result.meta.changes === 0) return c.json({ error: 'not found' }, 404);
+    return c.body(null, 204);
+  } catch (err) {
+    return errorResponse(c, err);
+  }
+});
+
+/** This user's reminders for this app, soonest first. */
+pushRoutes.get('/apps/:appId/push/schedules', async (c) => {
+  try {
+    const { user, appId } = await requireAppUser(c);
+    const { results } = await c.env.DB.prepare(
+      `SELECT reminder_id, next_at, rule, tz, quiet_start, quiet_end, created_at
+       FROM push_schedules WHERE app_id = ? AND user_id = ? ORDER BY next_at`,
+    )
+      .bind(appId, user.id)
+      .all<ScheduleRow>();
+    return c.json({ schedules: (results ?? []).map(scheduleJson) });
   } catch (err) {
     return errorResponse(c, err);
   }

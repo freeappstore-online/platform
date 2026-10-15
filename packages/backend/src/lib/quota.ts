@@ -56,10 +56,13 @@ export interface PushLimits {
   maxBodyBytes: number;
   /** Max length of the subscription endpoint URL. */
   maxEndpointLength: number;
+  /** Reminder schedules per user per app (#146). */
+  maxSchedulesPerUser: number;
 }
 
 export const PUSH_LIMITS: PushLimits = {
   maxSubscriptionsPerUser: 10,
   maxBodyBytes: 4 * 1024,
   maxEndpointLength: 2048,
+  maxSchedulesPerUser: 20,
 };

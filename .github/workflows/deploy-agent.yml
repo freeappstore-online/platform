@@ -10,6 +10,8 @@ on:
     branches: [main]
     paths:
       - 'workers/agent/**'
+      # The agent imports the shared Web Push sender from the backend (#146).
+      - 'packages/backend/src/lib/web-push.ts'
       - '.github/workflows/deploy-agent.yml'
   workflow_dispatch:
 

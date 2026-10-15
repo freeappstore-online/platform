@@ -596,8 +596,8 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
 
 /**
  * Delete the signed-in account and its personal data across the platform:
- * API keys, KV, friendships, app roles, owned documents, logs and push
- * subscriptions, then the user row itself. Runs as one D1 batch (transactional).
+ * API keys, KV, friendships, app roles, owned documents, logs, push
+ * subscriptions and reminder schedules, then the user row itself. Runs as one D1 batch (transactional).
  *
  * Deliberately NOT deleted: apps the user owns (provisioned resources with their
  * own deprovision flow) and app-shared counters. NOTE: sessions are stateless
@@ -617,6 +617,7 @@ authRoutes.delete('/auth/me', async (c) => {
       db.prepare('DELETE FROM documents WHERE owner_id = ?').bind(user.id),
       db.prepare('DELETE FROM app_logs WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM push_schedules WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
     ]);
     return c.json({ ok: true });

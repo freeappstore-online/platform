@@ -84,6 +84,11 @@ AI provider hosts (openai.com, anthropic.com, etc.) are blocked from app-level s
 | Subscriptions (devices) per user per app | 10 | `413` |
 | Request body (`POST` / `DELETE /v1/apps/:appId/push/subscriptions`) | 4 KB | `413` |
 | Endpoint URL length | 2,048 chars | `400` |
+| Reminder schedules per user per app (`PUT /v1/apps/:appId/push/schedules/:reminderId`) | 20 | `413` |
+| One-shot reminder lead time | up to 1 year | `400` |
+| Repeat interval (`every`) | 1 to 365 days | `400` |
+
+Reminders are delivered by the backend's 15-minute cron, so they arrive up to ~15 minutes after their time. A reminder due inside the user's quiet hours is held until the window ends; one more than 6 hours overdue is skipped rather than sent late. Per device, `404`/`410` from the push service deletes the subscription, and 5 consecutive failures drop it. An occurrence that reached no device because of transient errors is retried up to 3 times, 15 minutes apart.
 
 Scoped to `(appId, userId)` like KV. One row per browser registration, keyed by its endpoint: re-subscribing the same device updates it (and doesn't count again), and an endpoint re-registered by another user or app moves to them. Endpoints must be `https` on a known push service (FCM, Mozilla, WNS, Apple); `keys.p256dh` must be a 65-byte P-256 point and `keys.auth` 16 bytes (both base64url). `GET /v1/push/vapid-public-key` returns `503` until the platform VAPID key is configured.
 

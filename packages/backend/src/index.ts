@@ -4,6 +4,7 @@ import { runAudit } from './lib/audit.js';
 import { HttpError } from './lib/auth.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { isAllowedOrigin } from './lib/origins.js';
+import { runPushDelivery } from './lib/push-delivery.js';
 import { runStatusChecks } from './lib/status.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
 import { agentSessionRoutes } from './routes/agent-sessions.js';
@@ -112,7 +113,10 @@ export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     if (event.cron === '*/15 * * * *') {
-      await runUptimeChecks(env);
+      // Independent jobs: a failing uptime probe mustn't hold back reminders.
+      const jobs = await Promise.allSettled([runUptimeChecks(env), runPushDelivery(env)]);
+      for (const job of jobs)
+        if (job.status === 'rejected') console.error('cron */15:', job.reason);
     } else if (event.cron === '0 4 * * *') {
       await runDailyBackup(env);
     } else if (event.cron === '0 3 * * *') {

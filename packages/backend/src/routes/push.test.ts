@@ -2,70 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { PUSH_LIMITS } from '../lib/quota.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
 import { isAllowedPushEndpoint } from './push.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
-// The push routes are exercised against real SQLite with every migration
-// applied (node:sqlite, as in content-admin.test.ts), so the upsert's
-// ON CONFLICT / RETURNING and the per-app scoping run as written.
-interface SqliteStatement {
-  all(...binds: unknown[]): unknown[];
-  get(...binds: unknown[]): unknown;
-  run(...binds: unknown[]): { changes: number | bigint };
-}
-interface SqliteModule {
-  DatabaseSync: new (
-    path: string,
-  ) => { exec(sql: string): void; prepare(sql: string): SqliteStatement };
-}
-interface FsModule {
-  readdirSync(dir: URL): string[];
-  readFileSync(file: URL, encoding: 'utf8'): string;
-}
-const nodeModule = <T>(name: string) => import(/* @vite-ignore */ name) as Promise<T>;
-const sqlite = await nodeModule<SqliteModule>('node:sqlite').catch(() => null);
-const fs = await nodeModule<FsModule>('node:fs');
-const MIGRATIONS = new URL('../../migrations/', (import.meta as unknown as { url: string }).url);
-
-function realDB() {
-  if (!sqlite) throw new Error('node:sqlite unavailable');
-  const db = new sqlite.DatabaseSync(':memory:');
-  for (const f of fs
-    .readdirSync(MIGRATIONS)
-    .filter((name) => name.endsWith('.sql'))
-    .sort()) {
-    db.exec(fs.readFileSync(new URL(f, MIGRATIONS), 'utf8'));
-  }
-  const d1 = {
-    prepare(sql: string) {
-      let binds: unknown[] = [];
-      const stmt = {
-        bind(...args: unknown[]) {
-          binds = args;
-          return stmt;
-        },
-        async all() {
-          return { results: db.prepare(sql).all(...binds) };
-        },
-        async first() {
-          return db.prepare(sql).get(...binds) ?? null;
-        },
-        async run() {
-          const r = db.prepare(sql).run(...binds);
-          return { meta: { changes: Number(r.changes) } };
-        },
-      };
-      return stmt;
-    },
-  } as unknown as D1Database;
-  return { db, d1 };
-}
+// The push routes run against real SQLite with every migration applied
+// (lib/sqlite-d1.testutil.ts), so the upserts' ON CONFLICT / RETURNING and the
+// per-app scoping run as written.
 
 /** Two users and two apps; push tests run against this. */
 function seeded() {
-  const { db, d1 } = realDB();
+  const { db, d1 } = sqliteD1();
   const now = Date.now();
   const user = db.prepare(
     'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
@@ -163,7 +112,7 @@ describe('GET /v1/push/vapid-public-key', () => {
   });
 });
 
-describe.skipIf(!sqlite)('push subscriptions (#145)', () => {
+describe.skipIf(!hasSqlite)('push subscriptions (#145)', () => {
   const path = (appId = 'cycle') => `/apps/${appId}/push/subscriptions`;
 
   describe('auth and app scoping', () => {
@@ -414,5 +363,126 @@ describe.skipIf(!sqlite)('push subscriptions (#145)', () => {
       const res = await call(env(d1), 'GET', path());
       expect(await res.json()).toEqual({ subscriptions: [] });
     });
+  });
+});
+
+describe.skipIf(!hasSqlite)('push reminder schedules (#146)', () => {
+  const path = (reminderId = 'period', appId = 'cycle') =>
+    `/apps/${appId}/push/schedules/${reminderId}`;
+  const daily = { rule: { type: 'daily', time: '09:00' }, tz: 'Europe/London' };
+  type Sched = {
+    reminderId: string;
+    nextAt: number;
+    tz: string;
+    quietHours: unknown;
+    rule: unknown;
+  };
+
+  it('returns 401 without a session and 404 for an unknown app', async () => {
+    const { d1 } = seeded();
+    for (const method of ['GET', 'PUT', 'DELETE']) {
+      const p = method === 'GET' ? '/apps/cycle/push/schedules' : path();
+      expect((await call(env(d1), method, p, { uid: null, body: daily })).status, method).toBe(401);
+      const unknown = method === 'GET' ? '/apps/nope/push/schedules' : path('period', 'nope');
+      expect((await call(env(d1), method, unknown, { body: daily })).status, method).toBe(404);
+    }
+  });
+
+  it('creates a schedule (201) with its first occurrence in the time zone, then replaces it (200)', async () => {
+    const { d1, db } = seeded();
+    const e = env(d1);
+    const created = await call(e, 'PUT', path(), {
+      body: { ...daily, quietHours: { start: '22:00', end: '07:00' } },
+    });
+    expect(created.status).toBe(201);
+    const s = (await created.json()) as Sched;
+    expect(s).toMatchObject({
+      reminderId: 'period',
+      tz: 'Europe/London',
+      rule: { type: 'daily', time: '09:00' },
+      quietHours: { start: '22:00', end: '07:00' },
+    });
+    expect(s.nextAt).toBeGreaterThan(Date.now());
+    const local = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Europe/London',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date(s.nextAt));
+    expect(local).toBe('09:00');
+
+    const replaced = await call(e, 'PUT', path(), {
+      body: { rule: { type: 'every', days: 2, time: '20:30' }, tz: 'UTC' },
+    });
+    expect(replaced.status).toBe(200);
+    expect(((await replaced.json()) as Sched).quietHours).toBeNull();
+    const stored = db
+      .prepare(
+        'SELECT COUNT(*) AS n, MAX(next_at) AS next, MAX(occurrence_at) AS occ FROM push_schedules',
+      )
+      .get() as {
+      n: number;
+      next: number;
+      occ: number;
+    };
+    expect(stored.n).toBe(1);
+    expect(stored.occ).toBe(stored.next);
+  });
+
+  it('accepts a one-shot with an ISO time and stores it as that instant', async () => {
+    const { d1 } = seeded();
+    const at = new Date(Date.now() + 3_600_000).toISOString();
+    const res = await call(env(d1), 'PUT', path('pill'), {
+      body: { rule: { type: 'at', at }, tz: 'UTC' },
+    });
+    expect(res.status).toBe(201);
+    expect(((await res.json()) as Sched).nextAt).toBe(Date.parse(at));
+  });
+
+  it.each([
+    ['a bad time zone', { ...daily, tz: 'Nowhere/City' }],
+    ['a missing time zone', { rule: daily.rule }],
+    ['a bad rule', { ...daily, rule: { type: 'hourly' } }],
+    ['a past one-shot', { rule: { type: 'at', at: Date.now() - 1000 }, tz: 'UTC' }],
+    ['bad quiet hours', { ...daily, quietHours: { start: '10pm', end: '07:00' } }],
+  ])('rejects %s with 400', async (_name, body) => {
+    const { d1, db } = seeded();
+    expect((await call(env(d1), 'PUT', path(), { body })).status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM push_schedules').get()).toEqual({ n: 0 });
+  });
+
+  it('rejects a bad reminder id with 400', async () => {
+    const { d1 } = seeded();
+    expect((await call(env(d1), 'PUT', path('has space'), { body: daily })).status).toBe(400);
+    expect((await call(env(d1), 'PUT', path('x'.repeat(65)), { body: daily })).status).toBe(400);
+  });
+
+  it(`allows ${PUSH_LIMITS.maxSchedulesPerUser} reminders per user per app, then 413`, async () => {
+    const { d1 } = seeded();
+    const e = env(d1);
+    for (let i = 0; i < PUSH_LIMITS.maxSchedulesPerUser; i++) {
+      expect((await call(e, 'PUT', path(`r${i}`), { body: daily })).status).toBe(201);
+    }
+    expect((await call(e, 'PUT', path('one-too-many'), { body: daily })).status).toBe(413);
+    expect((await call(e, 'PUT', path('r0'), { body: daily })).status).toBe(200); // replacing still works
+    expect((await call(e, 'PUT', path('r0', 'notes'), { body: daily })).status).toBe(201); // per app
+  });
+
+  it("lists and deletes only this user's reminders for this app", async () => {
+    const { d1 } = seeded();
+    const e = env(d1);
+    await call(e, 'PUT', path('mine'), { body: daily });
+    await call(e, 'PUT', path('other-app', 'notes'), { body: daily });
+    await call(e, 'PUT', path('bobs'), { uid: 'gh:2', body: daily });
+
+    const list = (await (await call(e, 'GET', '/apps/cycle/push/schedules')).json()) as {
+      schedules: Sched[];
+    };
+    expect(list.schedules.map((s) => s.reminderId)).toEqual(['mine']);
+
+    expect((await call(e, 'DELETE', path('bobs'))).status).toBe(404);
+    expect((await call(e, 'DELETE', path('other-app'))).status).toBe(404);
+    expect((await call(e, 'DELETE', path('mine'))).status).toBe(204);
+    expect((await call(e, 'DELETE', path('mine'))).status).toBe(404);
   });
 });
