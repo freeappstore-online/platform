@@ -25,5 +25,12 @@
     "vite": "^8.3.0",
     "vitest": "^4.1.11",
     "wrangler": "^4.131.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "sharp": "^0.35.5",
+      "smol-toml": "^1.9.1",
+      "source-map-js": "^1.2.2"
+    }
   }
 }
