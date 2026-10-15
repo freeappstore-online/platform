@@ -2286,10 +2286,10 @@
     },
     {
       "id": "prayercompass",
-      "name": "prayercompass",
+      "name": "PrayerCompass",
       "category": "Health & Fitness",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🧭",
+      "iconBg": "#dcfce7",
       "description": "Coming soon — private, ad-free prayer times and Qibla direction: calculated on your device, location never leaves it.",
       "appUrl": "https://prayercompass.freeappstore.online",
       "repo": "freeappstore-online/prayercompass",
