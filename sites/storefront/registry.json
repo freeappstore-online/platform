@@ -2241,6 +2241,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "clearday",
+      "name": "clearday",
+      "category": "Health & Fitness",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — track the days since you quit any habit. Calm, private, offline.",
+      "appUrl": "https://clearday.freeappstore.online",
+      "repo": "freeappstore-online/clearday",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
