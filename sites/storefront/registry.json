@@ -2199,6 +2199,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "sleepsounds",
+      "name": "sleepsounds",
+      "category": "Health & Fitness",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — white noise and sleep sounds, generated on your device",
+      "appUrl": "https://sleepsounds.freeappstore.online",
+      "repo": "freeappstore-online/sleepsounds",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
