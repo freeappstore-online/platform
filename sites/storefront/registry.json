@@ -2216,7 +2216,7 @@
     },
     {
       "id": "voicerecorder",
-      "name": "Voice Recorder & Changer",
+      "name": "Voice Recorder",
       "category": "Utilities",
       "icon": "🎙️",
       "iconBg": "#d8574a",
