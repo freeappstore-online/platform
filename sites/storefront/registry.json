@@ -2339,6 +2339,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "logic-gate-lab",
+      "name": "logic-gate-lab",
+      "category": "Learning",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Interactive digital circuit simulator to build, wire, and test logic gates in real time.",
+      "appUrl": "https://logic-gate-lab.freeappstore.online",
+      "repo": "freeappstore-online/logic-gate-lab",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "Abrarcancode67"
     }
   ]
 }
