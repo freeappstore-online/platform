@@ -2314,10 +2314,10 @@
     },
     {
       "id": "flatbed",
-      "name": "flatbed",
+      "name": "Flatbed",
       "category": "Productivity",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "📄",
+      "iconBg": "#e0f2fe",
       "description": "Coming soon — scan documents to PDF on your device: auto-crop, filters and multi-page export. Nothing leaves your phone.",
       "appUrl": "https://flatbed.freeappstore.online",
       "repo": "freeappstore-online/flatbed",
