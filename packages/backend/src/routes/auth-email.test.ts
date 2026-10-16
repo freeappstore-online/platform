@@ -132,6 +132,7 @@ describe('POST /v1/auth/email/start', () => {
 
     const [body] = emailSend.mock.calls[0]!;
     expect(body.from).toEqual({ email: 'auth@freeappstore.online', name: 'FreeAppStore' });
+    expect(body.replyTo).toBe('support@freeappstore.online');
     // Email normalized: trimmed + lowercased
     expect(body.to).toBe('alice@example.com');
     // Magic link contains a signed token pointing at the callback

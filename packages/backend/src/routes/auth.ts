@@ -465,6 +465,7 @@ authRoutes.post('/auth/email/start', async (c) => {
   await sendEmail(c.env.EMAIL, {
     to: email,
     subject: `Sign in to ${dest}`,
+    replyTo: 'support@freeappstore.online',
     text: `Click the link below to sign in to ${dest}.
 
 ${callbackUrl.toString()}

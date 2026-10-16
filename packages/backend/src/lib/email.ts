@@ -5,15 +5,25 @@ export interface SendEmailOpts {
   subject: string;
   html: string;
   text: string;
+  /** Mailbox that should receive replies from recipients. */
+  replyTo?: string;
+  /** Platform sender identity; only Cloudflare-allowlisted addresses are valid. */
+  sender?: 'auth' | 'noreply';
 }
+
+const FROM_ADDRESSES = {
+  auth: { email: 'auth@freeappstore.online', name: 'FreeAppStore' },
+  noreply: { email: 'noreply@freeappstore.online', name: 'FreeAppStore' },
+} as const;
 
 export async function sendEmail(email: SendEmail, opts: SendEmailOpts): Promise<void> {
   await email.send({
-    from: { email: 'auth@freeappstore.online', name: 'FreeAppStore' },
+    from: FROM_ADDRESSES[opts.sender ?? 'auth'],
     to: opts.to,
     subject: opts.subject,
     html: opts.html,
     text: opts.text,
+    ...(opts.replyTo ? { replyTo: opts.replyTo } : {}),
   });
 }
 

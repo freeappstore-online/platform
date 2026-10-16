@@ -106,6 +106,8 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
     await sendEmail(c.env.EMAIL, {
       to: body.to,
       subject: `[${appId}] ${body.subject}`,
+      sender: 'noreply',
+      replyTo: 'support@freeappstore.online',
       html: body.html ?? `<pre>${escapeHtml(body.text!)}</pre>`,
       text: body.text ?? stripHtml(body.html!),
     });
