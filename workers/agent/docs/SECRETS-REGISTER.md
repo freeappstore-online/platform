@@ -15,8 +15,7 @@ All infra secrets are managed in the private SOPS repo
 | 2 | **SESSION_SIGNING_KEY** | HMAC key for session tokens | SOPS + wrangler secret | API (auth) |
 | 3 | **APP_SECRET_KEK** | AES-256 key for app secrets encryption | SOPS + wrangler secret | API (secrets vault) |
 | 4 | **GITHUB_CLIENT_SECRET** | OAuth App secret | SOPS + wrangler secret | API (GitHub OAuth) |
-| 5 | **RESEND_API_KEY** | Transactional email | SOPS + wrangler secret | API (email) |
-| 6 | **CLOUDFLARE_API_TOKEN** | R2/D1 access for GitHub Actions | SOPS + GitHub org secret | GitHub Actions (deploy) |
+| 5 | **CLOUDFLARE_API_TOKEN** | R2/D1 access for GitHub Actions | SOPS + GitHub org secret | GitHub Actions (deploy) |
 
 ## Where each secret is deployed
 
@@ -26,7 +25,6 @@ GITHUB_TOKEN              ✓
 SESSION_SIGNING_KEY               ✓
 APP_SECRET_KEK                    ✓
 GITHUB_CLIENT_SECRET              ✓
-RESEND_API_KEY                    ✓
 CLOUDFLARE_API_TOKEN    (GH Actions — org-level, all repos)
 ```
 

@@ -1,10 +1,10 @@
 import type { Auth } from './auth.js';
 
 /**
- * App transactional email via the platform's Resend integration.
+ * App transactional email via the platform's Cloudflare Email Service integration.
  *
  * Apps don't need their own email provider. The platform sends on behalf
- * of the app using the platform's Resend account.
+ * of the app using the platform's managed sending domain.
  *
  * Rate limit: 100 emails/day per app (free tier).
  */

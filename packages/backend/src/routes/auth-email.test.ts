@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
 import { signPayload } from '../lib/session.js';
 import type { Env } from '../types.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 const VALID_RETURN_TO = 'https://demo.freeappstore.online/';
+let emailSend: ReturnType<typeof vi.fn>;
 
 interface UpsertCapture {
   sql: string;
@@ -39,8 +40,7 @@ function makeEnv(overrides: Record<string, unknown> = {}, db?: D1Database): Env 
     GITHUB_CLIENT_ID: 'cid',
     GITHUB_CLIENT_SECRET: 'csec',
     SESSION_SIGNING_KEY: SIGNING_KEY,
-    RESEND_API_KEY: 'resend-test-key',
-    EMAIL_FROM: 'FreeAppStore <auth@freeappstore.online>',
+    EMAIL: { send: emailSend },
   };
   for (const [k, v] of Object.entries(overrides)) {
     if (v === undefined) delete base[k];
@@ -50,18 +50,11 @@ function makeEnv(overrides: Record<string, unknown> = {}, db?: D1Database): Env 
 }
 
 describe('POST /v1/auth/email/start', () => {
-  const originalFetch = globalThis.fetch;
-  let fetchMock: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
-    fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
-    globalThis.fetch = fetchMock as typeof globalThis.fetch;
-  });
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
+    emailSend = vi.fn().mockResolvedValue({ messageId: 'test-message-id' });
   });
 
-  it('returns 503 when RESEND_API_KEY is unset', async () => {
+  it('returns 503 when the Email Service binding is unset', async () => {
     const res = await app.request(
       '/v1/auth/email/start',
       {
@@ -69,23 +62,10 @@ describe('POST /v1/auth/email/start', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: 'a@b.com', appId: 'demo', returnTo: VALID_RETURN_TO }),
       },
-      makeEnv({ RESEND_API_KEY: undefined }),
+      makeEnv({ EMAIL: undefined }),
     );
     expect(res.status).toBe(503);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('returns 503 when EMAIL_FROM is unset', async () => {
-    const res = await app.request(
-      '/v1/auth/email/start',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'a@b.com', appId: 'demo', returnTo: VALID_RETURN_TO }),
-      },
-      makeEnv({ EMAIL_FROM: undefined }),
-    );
-    expect(res.status).toBe(503);
+    expect(emailSend).not.toHaveBeenCalled();
   });
 
   it('returns 400 when email is missing', async () => {
@@ -129,10 +109,10 @@ describe('POST /v1/auth/email/start', () => {
       makeEnv(),
     );
     expect(res.status).toBe(400);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(emailSend).not.toHaveBeenCalled();
   });
 
-  it('queues an email to Resend with magic-link callback URL', async () => {
+  it('queues an email through Cloudflare Email Service with a magic-link callback URL', async () => {
     const res = await app.request(
       '/v1/auth/email/start',
       {
@@ -148,17 +128,10 @@ describe('POST /v1/auth/email/start', () => {
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(emailSend).toHaveBeenCalledTimes(1);
 
-    const call = fetchMock.mock.calls[0]!;
-    const [url, init] = call as [
-      string,
-      RequestInit & { body: string; headers: Record<string, string> },
-    ];
-    expect(url).toBe('https://api.resend.com/emails');
-    expect(init.headers.Authorization).toBe('Bearer resend-test-key');
-    const body = JSON.parse(init.body);
-    expect(body.from).toBe('FreeAppStore <auth@freeappstore.online>');
+    const [body] = emailSend.mock.calls[0]!;
+    expect(body.from).toEqual({ email: 'auth@freeappstore.online', name: 'FreeAppStore' });
     // Email normalized: trimmed + lowercased
     expect(body.to).toBe('alice@example.com');
     // Magic link contains a signed token pointing at the callback

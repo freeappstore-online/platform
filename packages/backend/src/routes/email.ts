@@ -5,7 +5,8 @@
  *
  * Rate-limited per app: 100 emails/day (free tier).
  * Auth required (user must be signed in).
- * Platform owns the Resend account — apps don't need their own email provider.
+ * Platform owns the Cloudflare Email Service binding — apps do not need their
+ * own email provider.
  */
 
 import { Hono } from 'hono';
@@ -25,12 +26,7 @@ const MAX_BODY_LENGTH = 50_000; // 50KB
 emailRoutes.post('/apps/:appId/email/send', async (c) => {
   const _user = await requireUser(c);
 
-  if (!c.env.RESEND_API_KEY || !c.env.EMAIL_FROM) {
-    return c.json(
-      { ok: false, error: 'Email not configured (RESEND_API_KEY or EMAIL_FROM missing).' },
-      503,
-    );
-  }
+  if (!c.env.EMAIL) return c.json({ ok: false, error: 'Email not configured.' }, 503);
 
   const appId = c.req.param('appId')!;
   // Require a real app — otherwise the per-app quota is trivially reset by
@@ -107,15 +103,12 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
   }
 
   try {
-    await sendEmail(
-      { apiKey: c.env.RESEND_API_KEY, from: c.env.EMAIL_FROM },
-      {
-        to: body.to,
-        subject: `[${appId}] ${body.subject}`,
-        html: body.html ?? `<pre>${escapeHtml(body.text!)}</pre>`,
-        text: body.text ?? stripHtml(body.html!),
-      },
-    );
+    await sendEmail(c.env.EMAIL, {
+      to: body.to,
+      subject: `[${appId}] ${body.subject}`,
+      html: body.html ?? `<pre>${escapeHtml(body.text!)}</pre>`,
+      text: body.text ?? stripHtml(body.html!),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown error';
     return c.json({ ok: false, error: `Email send failed: ${msg}` }, 502);

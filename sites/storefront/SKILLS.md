@@ -475,7 +475,7 @@ Apps should use the `KeyPrompt` component (see UI section below) to show a promp
 
 ### Transactional Email
 
-Send email through the platform's Resend integration. No email provider setup needed.
+Send email through the platform's Cloudflare Email Service integration. No email provider setup needed.
 
 ```tsx
 await fas.email.send('user@example.com', 'Welcome!', {

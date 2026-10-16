@@ -17,7 +17,7 @@ Platform owns the credentials. One account serves all apps. Devs call an SDK met
 | Integration | Status | FAS SDK method | Backed by | Notes |
 |---|---|---|---|---|
 | Auth (GitHub OAuth) | **Live** | `fas.auth.signIn()` | GitHub OAuth | Platform-managed OAuth app |
-| Transactional email | **Live** | `fas.email.send()` | Resend | 100/day per app, magic link auth + app-triggered |
+| Transactional email | **Live** | `fas.email.send()` | Cloudflare Email Service | 100/day per app, magic link auth + app-triggered |
 
 FAS is free-tier. Heavy platform-managed services (AI, maps, SMS, push) live on PAS only. FAS apps that need AI use Tier 2 (user's own key).
 

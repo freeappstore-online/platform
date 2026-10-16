@@ -24,16 +24,11 @@ export interface Env {
   /** Base64-encoded PKCS#8 private key (the .p8 file content, base64'd for env var storage). */
   APPLE_PRIVATE_KEY?: string;
   /**
-   * Resend API key for transactional email (magic-link auth).
-   * Optional so the Worker boots without it in dev; the /auth/email/*
-   * routes return 503 when unset.
+   * Native Cloudflare Email Service binding for transactional email.
+   * Optional in the type so local development can boot without it; email
+   * routes return 503 until the production Worker binding is configured.
    */
-  RESEND_API_KEY?: string;
-  /**
-   * From address for transactional email, e.g.
-   * "FreeAppStore <auth@freeappstore.online>". Required for email auth.
-   */
-  EMAIL_FROM?: string;
+  EMAIL?: SendEmail;
   SESSION_SIGNING_KEY: string;
   /**
    * Master key-encryption-key for the app-secret proxy. 32 random bytes,

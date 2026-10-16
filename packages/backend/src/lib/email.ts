@@ -1,14 +1,4 @@
-/**
- * Transactional email sender — Resend HTTPS API.
- *
- * Resend is the chosen provider because MailChannels removed the free
- * CF-Workers tier in 2024 and Resend has a generous free tier (3k/mo,
- * 100/day) plus a JSON API that works in Workers without an SDK.
- *
- * Set `RESEND_API_KEY` and `EMAIL_FROM` (e.g. "FreeAppStore <auth@freeappstore.online>")
- * as Worker secrets. If `RESEND_API_KEY` is unset, send() throws — routes
- * that depend on email should 503 in that case.
- */
+/** Transactional email sender — native Cloudflare Email Service binding. */
 
 export interface SendEmailOpts {
   to: string;
@@ -17,30 +7,14 @@ export interface SendEmailOpts {
   text: string;
 }
 
-export interface EmailConfig {
-  apiKey: string;
-  from: string;
-}
-
-export async function sendEmail(cfg: EmailConfig, opts: SendEmailOpts): Promise<void> {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${cfg.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: cfg.from,
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-      text: opts.text,
-    }),
+export async function sendEmail(email: SendEmail, opts: SendEmailOpts): Promise<void> {
+  await email.send({
+    from: { email: 'auth@freeappstore.online', name: 'FreeAppStore' },
+    to: opts.to,
+    subject: opts.subject,
+    html: opts.html,
+    text: opts.text,
   });
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`resend send failed: ${res.status} ${body}`);
-  }
 }
 
 /** Normalize for storage + dedup: trim + lowercase. No validation here. */

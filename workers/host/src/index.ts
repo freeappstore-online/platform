@@ -68,7 +68,7 @@ const PLATFORM_SUBDOMAINS: Record<string, PlatformDispatch> = {
   www: { type: "redirect", to: "https://freeappstore.online", status: 301 },
   // `auth.freeappstore.online` is NOT a real web subdomain — the OAuth
   // callback lives at api.freeappstore.online/v1/auth/*, and `auth@...` is
-  // only used as an email FROM address (RESEND_API_KEY, see
+  // only used as an email FROM address (Cloudflare Email Service, see
   // platform/packages/backend/src/lib/email.ts). Returning 404 (not 502)
   // because nothing is misconfigured — there is just no web target.
   auth: {

@@ -37,7 +37,7 @@ describe('email routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 503 when RESEND_API_KEY is missing', async () => {
+  it('returns 503 when the Email Service binding is missing', async () => {
     const res = await app.request(
       '/v1/apps/timer/email/send',
       {
@@ -58,7 +58,7 @@ describe('email routes', () => {
         headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ subject: 'hi', text: 'hello' }),
       },
-      env(fakeDB(user), { RESEND_API_KEY: 'test', EMAIL_FROM: 'test@test.com' }),
+      env(fakeDB(user), { EMAIL: { send: async () => ({ messageId: 'test' }) } }),
     );
     expect(res.status).toBe(400);
   });
@@ -71,7 +71,7 @@ describe('email routes', () => {
         headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: 'a@b.com', subject: 'hi' }),
       },
-      env(fakeDB(user), { RESEND_API_KEY: 'test', EMAIL_FROM: 'test@test.com' }),
+      env(fakeDB(user), { EMAIL: { send: async () => ({ messageId: 'test' }) } }),
     );
     expect(res.status).toBe(400);
   });

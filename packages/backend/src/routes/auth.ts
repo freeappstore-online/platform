@@ -66,7 +66,7 @@ const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 
 // Best-effort per-recipient throttle for magic-link sends (per-isolate, same
 // pattern as friends.ts rate limits). Stops an unauthenticated caller from
-// email-bombing a victim address / burning the Resend quota.
+// email-bombing a victim address / burning the transactional-email quota.
 const EMAIL_SEND_COOLDOWN_MS = 60_000;
 const emailSendMap = new Map<string, number>();
 
@@ -400,9 +400,7 @@ authRoutes.post('/auth/apple/callback', async (c) => {
 });
 
 authRoutes.post('/auth/email/start', async (c) => {
-  if (!c.env.RESEND_API_KEY || !c.env.EMAIL_FROM) {
-    return c.text('Email auth not configured', 503);
-  }
+  if (!c.env.EMAIL) return c.text('Email auth not configured', 503);
 
   const {
     email: rawEmail,
@@ -464,21 +462,18 @@ authRoutes.post('/auth/email/start', async (c) => {
   // can sanity-check where this is taking them before they click.
   const dest = new URL(returnTo).origin;
 
-  await sendEmail(
-    { apiKey: c.env.RESEND_API_KEY, from: c.env.EMAIL_FROM },
-    {
-      to: email,
-      subject: `Sign in to ${dest}`,
-      text: `Click the link below to sign in to ${dest}.
+  await sendEmail(c.env.EMAIL, {
+    to: email,
+    subject: `Sign in to ${dest}`,
+    text: `Click the link below to sign in to ${dest}.
 
 ${callbackUrl.toString()}
 
 This link expires in 15 minutes. If you didn't request it, ignore this email.`,
-      html: `<p>Click the link below to sign in to <strong>${dest}</strong>.</p>
+    html: `<p>Click the link below to sign in to <strong>${dest}</strong>.</p>
 <p><a href="${callbackUrl.toString()}">Sign in</a></p>
 <p style="color:#888;font-size:12px">This link expires in 15 minutes. If you didn't request it, ignore this email.</p>`,
-    },
-  );
+  });
 
   // 200 regardless of whether the email exists — don't leak account presence.
   return c.json({ ok: true });

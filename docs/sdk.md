@@ -169,7 +169,7 @@ await fas.friends.respond(userId, 'block');    // block user
 
 ## Email (`fas.email`)
 
-Send transactional email via Resend. 100/day per app.
+Send transactional email via Cloudflare Email Service. 100/day per app.
 
 ```ts
 await fas.email.send('user@example.com', 'Welcome', {
