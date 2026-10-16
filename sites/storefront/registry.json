@@ -2328,10 +2328,10 @@
     },
     {
       "id": "carebook",
-      "name": "carebook",
+      "name": "Carebook",
       "category": "Health & Fitness",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "💊",
+      "iconBg": "#fce7f3",
       "description": "Coming soon — a private medication and blood-pressure diary: log doses and vitals, see trends, and share a PDF with your clinician. Everything stays on your device.",
       "appUrl": "https://carebook.freeappstore.online",
       "repo": "freeappstore-online/carebook",
