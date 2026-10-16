@@ -2311,6 +2311,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "calcwright",
+      "name": "calcwright",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — pro calculators for money and the trade: time value of money, loans, NPV/IRR and conduit bending. Offline and private.",
+      "appUrl": "https://calcwright.freeappstore.online",
+      "repo": "freeappstore-online/calcwright",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
