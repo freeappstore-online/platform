@@ -2314,10 +2314,10 @@
     },
     {
       "id": "calcwright",
-      "name": "calcwright",
+      "name": "Calcwright",
       "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
+      "icon": "🧮",
+      "iconBg": "#ede9fe",
       "description": "Coming soon — pro calculators for money and the trade: time value of money, loans, NPV/IRR and conduit bending. Offline and private.",
       "appUrl": "https://calcwright.freeappstore.online",
       "repo": "freeappstore-online/calcwright",
