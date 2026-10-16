@@ -2311,6 +2311,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "flatbed",
+      "name": "flatbed",
+      "category": "Productivity",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Coming soon — scan documents to PDF on your device: auto-crop, filters and multi-page export. Nothing leaves your phone.",
+      "appUrl": "https://flatbed.freeappstore.online",
+      "repo": "freeappstore-online/flatbed",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
