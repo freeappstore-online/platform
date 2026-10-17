@@ -39,8 +39,7 @@ function makeEnv(): Env {
     GITHUB_CLIENT_ID: 'cid',
     GITHUB_CLIENT_SECRET: 'csec',
     SESSION_SIGNING_KEY: SIGNING_KEY,
-    // Magic-link email goes through the Cloudflare Email Service binding (03404ca).
-    EMAIL: { send: async () => {} },
+    EMAIL: { send: async () => ({ messageId: 'test-message-id' }) },
   } as unknown as Env;
 }
 

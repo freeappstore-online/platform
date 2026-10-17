@@ -113,7 +113,8 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown error';
-    return c.json({ ok: false, error: `Email send failed: ${msg}` }, 502);
+    console.error('App email send failed', { appId, error: msg });
+    return c.json({ ok: false, error: 'Email send failed.' }, 502);
   }
 
   return c.json({ ok: true });

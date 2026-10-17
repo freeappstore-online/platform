@@ -140,6 +140,22 @@ describe('POST /v1/auth/email/start', () => {
     expect(body.html).toContain('/v1/auth/email/callback?token=');
   });
 
+  it('does not apply the cooldown when Email Service rejects a send', async () => {
+    emailSend.mockRejectedValueOnce(new Error('temporary provider failure'));
+    const request = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'retry@example.com', appId: 'demo', returnTo: VALID_RETURN_TO }),
+    };
+
+    const first = await app.request('/v1/auth/email/start', request, makeEnv());
+    expect(first.status).toBe(502);
+
+    const second = await app.request('/v1/auth/email/start', request, makeEnv());
+    expect(second.status).toBe(200);
+    expect(emailSend).toHaveBeenCalledTimes(2);
+  });
+
   it('does not leak whether the email is already registered', async () => {
     // Caller can't tell if the email is new vs existing — both paths return 200.
     const res = await app.request(

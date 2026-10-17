@@ -441,7 +441,6 @@ authRoutes.post('/auth/email/start', async (c) => {
   if (nowMs - lastSend < EMAIL_SEND_COOLDOWN_MS) {
     return c.json({ ok: true });
   }
-  emailSendMap.set(email, nowMs);
 
   const token = await signPayload<EmailMagicState>(
     {
@@ -462,19 +461,27 @@ authRoutes.post('/auth/email/start', async (c) => {
   // can sanity-check where this is taking them before they click.
   const dest = new URL(returnTo).origin;
 
-  await sendEmail(c.env.EMAIL, {
-    to: email,
-    subject: `Sign in to ${dest}`,
-    replyTo: 'support@freeappstore.online',
-    text: `Click the link below to sign in to ${dest}.
+  try {
+    await sendEmail(c.env.EMAIL, {
+      to: email,
+      subject: `Sign in to ${dest}`,
+      replyTo: 'support@freeappstore.online',
+      text: `Click the link below to sign in to ${dest}.
 
 ${callbackUrl.toString()}
 
 This link expires in 15 minutes. If you didn't request it, ignore this email.`,
-    html: `<p>Click the link below to sign in to <strong>${dest}</strong>.</p>
+      html: `<p>Click the link below to sign in to <strong>${dest}</strong>.</p>
 <p><a href="${callbackUrl.toString()}">Sign in</a></p>
 <p style="color:#888;font-size:12px">This link expires in 15 minutes. If you didn't request it, ignore this email.</p>`,
-  });
+    });
+  } catch (err) {
+    console.error('Magic-link email send failed', err);
+    return c.text('Email delivery temporarily unavailable. Please try again.', 502);
+  }
+  // Only throttle after Email Service accepted the message. A failed send must
+  // be immediately retryable rather than returning a misleading success.
+  emailSendMap.set(email, nowMs);
 
   // 200 regardless of whether the email exists — don't leak account presence.
   return c.json({ ok: true });
