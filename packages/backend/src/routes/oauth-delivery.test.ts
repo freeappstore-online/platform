@@ -39,8 +39,8 @@ function makeEnv(): Env {
     GITHUB_CLIENT_ID: 'cid',
     GITHUB_CLIENT_SECRET: 'csec',
     SESSION_SIGNING_KEY: SIGNING_KEY,
-    RESEND_API_KEY: 'resend-test-key',
-    EMAIL_FROM: 'FreeAppStore <auth@freeappstore.online>',
+    // Magic-link email goes through the Cloudflare Email Service binding (03404ca).
+    EMAIL: { send: async () => {} },
   } as unknown as Env;
 }
 
