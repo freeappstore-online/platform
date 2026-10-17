@@ -1,6 +1,6 @@
 /**
  * Tests that the documented platform/app issue-routing policy is consistently
- * stated in CONTRIBUTING.md and AGENTS.md,
+ * stated in CONTRIBUTING.md, AGENTS.md, and docs/app-research/README.md,
  * and that no platform workflow creates issues in a hard-coded non-platform repo.
  */
 import { readFileSync } from 'node:fs';
@@ -14,16 +14,31 @@ function read(rel: string) {
 }
 
 describe('issue routing policy', () => {
+  // Each place an agent learns where to file app work must send app epics and
+  // tickets to the app repo (#265, #268).
+  const appRepoFiling = /gh issue create --repo freeappstore-online\/<app-id>/;
+
   it('CONTRIBUTING.md documents where app issues belong', () => {
     const text = read('CONTRIBUTING.md');
-    expect(text).toMatch(/app.*issues.*belong|where issues belong/i);
-    expect(text).toMatch(/freeappstore-online\/<app-id>/);
+    expect(text).toMatch(/issue placement|where issues belong/i);
+    expect(text).toMatch(/app epics/i);
+    expect(text).toMatch(/never\*{0,2} on platform/i);
+    expect(text).toMatch(appRepoFiling);
   });
 
   it('AGENTS.md documents the app-vs-platform split', () => {
     const text = read('AGENTS.md');
-    expect(text).toMatch(/app.*issues?|where issues/i);
-    expect(text).toMatch(/freeappstore-online\/<app-id>/);
+    expect(text).toMatch(/issue placement|where issues belong/i);
+    expect(text).toMatch(/epics/i);
+    expect(text).toMatch(/never\*{0,2} on platform/i);
+    expect(text).toMatch(appRepoFiling);
+  });
+
+  it('docs/app-research/README.md sends app epics to the app repo', () => {
+    const text = read('docs/app-research/README.md');
+    expect(text).toMatch(/issue routing/i);
+    expect(text).toMatch(/never in platform/i);
+    expect(text).toMatch(appRepoFiling);
   });
 
   it('platform alert workflows only open issues in the platform repo (context.repo.repo)', () => {

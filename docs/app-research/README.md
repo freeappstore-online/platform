@@ -1,5 +1,12 @@
 # App research: what to build on FreeAppStore
 
+> **Issue routing:** App epics and tickets (build, compliance, deploy) for anything on this list
+> belong in the app's own repository (`freeappstore-online/<app-id>`), never in platform (#265). Only
+> platform-level work (SDK, CLI, workers, storefront, CI, docs) belongs in the platform repository.
+> To start an app: provision it with `fas publish`, which creates the repository, then open its epic
+> and tickets there with `gh issue create --repo freeappstore-online/<app-id> …`. The one exception
+> is a provisioning ticket filed before the app repository exists.
+
 Research date 2026-10-15. Four reports, one decision list.
 
 | Report | Covers |

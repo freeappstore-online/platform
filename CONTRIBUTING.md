@@ -1,18 +1,20 @@
 # Contributing
 
-## Where issues belong
+## Issue placement: where issues belong
 
 | Topic | File issues in |
 |---|---|
-| App features, bugs, compliance checks, deploy tickets | `freeappstore-online/<app-id>` (the individual app repository) |
+| App epics, features, bugs, compliance checks, deploy tickets | `freeappstore-online/<app-id>` (the app's own repository, e.g. `freeappstore-online/cycle`, `freeappstore-online/carebook`) |
 | SDK (`packages/`), `fas` CLI, workers / backend, storefront, CI pipelines, platform docs | `freeappstore-online/platform` (this repo) |
 
-**Rule:** once an app repository exists, every issue that is specific to that app lives there.
-The only exception is provisioning (creating the app repo itself), which must be filed in platform
-because the app repo does not yet exist at that point.
+**Rule (#265):** app issues **must** be opened on the app's repository, **never** on platform.
+This repo is only for platform work.
 
-When a coding agent plans tickets for an app epic, it should file those tickets in the app
-repository (`gh issue create --repo freeappstore-online/<app-id> …`), not in platform.
+**New apps:** provision first with `fas publish`, which creates `freeappstore-online/<app-id>`. Then
+open the app's epic and its tickets there:
+`gh issue create --repo freeappstore-online/<app-id> …`. The one exception is a provisioning
+ticket filed before the app repository exists. That may live in platform, and it is the only
+app-related issue that does.
 
 ## Direct to `main`, no branches or pull requests
 

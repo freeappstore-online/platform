@@ -9,13 +9,15 @@
 Commit directly to `main`. Do not run `git checkout -b`, `git switch -c`, or `gh pr create`. If you
 find yourself on a non-`main` branch, stop and report it. (Declared 2026-08-16.)
 
-## Where issues belong
+## Issue placement: where issues belong
 
-- App issues (features, bugs, compliance, deploy) → file in `freeappstore-online/<app-id>`.
+- App issues (epics, features, bugs, compliance, deploy) **must** go on the app's repo,
+  `freeappstore-online/<app-id>`, **never** on platform (#265).
 - Platform issues (SDK, `fas` CLI, workers/backend, storefront, CI, docs) → file in
   `freeappstore-online/platform`.
-- Exception: provisioning tickets (creating the app repo) go in platform because the app repo
-  does not exist yet.
-- When planning tickets for an app epic, use `gh issue create --repo freeappstore-online/<app-id> …`.
+- New app: provision with `fas publish` first (it creates the app repo), then open the epic and
+  tickets there with `gh issue create --repo freeappstore-online/<app-id> …`.
+- Exception: a provisioning ticket filed before the app repo exists may live in platform. It is the
+  only app-related issue that does.
 
-See `CONTRIBUTING.md` → "Where issues belong".
+See `CONTRIBUTING.md` → "Issue placement".
