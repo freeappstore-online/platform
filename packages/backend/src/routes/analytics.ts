@@ -520,6 +520,142 @@ analyticsRoutes.get(
 );
 
 // -----------------------------------------------------------------------------
+// Admin cross-app usage (#271) — one row per published app, so the admin
+// dashboard can list every app with its page views, a daily trend, and a flag
+// for apps that recorded nothing (usually a missing analytics loader). Unlike
+// /analytics/admin/platform (top 20 only), apps come from the D1 `apps` table,
+// so zero-traffic apps are listed too. Uses only what the loader already
+// records: there is no visitor identifier in the dataset (cookieless, no IP),
+// so "unique paths" stands in where a per-visitor count would go.
+// -----------------------------------------------------------------------------
+
+export interface AdminAppUsage {
+  id: string;
+  owner: string;
+  views: number;
+  unique_paths: number;
+  /** One entry per UTC day in the window, oldest first; days without views are 0. */
+  series: Array<{ t: string; views: number }>;
+  /** True when the app recorded no page views in the window. */
+  no_views: boolean;
+}
+
+export interface AdminUsageReport {
+  days: number;
+  totals: {
+    views: number;
+    apps: number;
+    apps_with_views: number;
+    apps_without_views: number;
+    series: Array<{ t: string; views: number }>;
+  };
+  apps: AdminAppUsage[];
+  /** Views recorded under app ids that aren't in the apps table (e.g. since unpublished). */
+  unregistered: Array<{ id: string; views: number }>;
+}
+
+/** UTC day keys (YYYY-MM-DD) covering a rolling `days` window that ends at `now`. */
+export function usageDayKeys(days: number, now: number): string[] {
+  const keys: string[] = [];
+  const dayMs = 86_400_000;
+  const first = Math.floor((now - days * dayMs) / dayMs);
+  const last = Math.floor(now / dayMs);
+  for (let d = first; d <= last; d++) keys.push(new Date(d * dayMs).toISOString().slice(0, 10));
+  return keys;
+}
+
+/** Joins the registered apps with Analytics Engine rows into the dashboard report. */
+export function buildAdminUsage(
+  apps: Array<{ id: string; owner_login: string }>,
+  totals: Array<{ appId: string; views: number; unique_paths: number }>,
+  series: Array<{ appId: string; t: string; views: number }>,
+  days: number,
+  now: number,
+): AdminUsageReport {
+  const keys = usageDayKeys(days, now);
+  const byApp = new Map<string, AdminAppUsage>();
+  for (const a of apps) {
+    byApp.set(a.id, {
+      id: a.id,
+      owner: a.owner_login,
+      views: 0,
+      unique_paths: 0,
+      series: keys.map((t) => ({ t, views: 0 })),
+      no_views: true,
+    });
+  }
+  const unregistered: Array<{ id: string; views: number }> = [];
+  for (const row of totals) {
+    const views = Number(row.views) || 0;
+    const usage = byApp.get(row.appId);
+    if (!usage) {
+      if (views > 0) unregistered.push({ id: row.appId, views });
+      continue;
+    }
+    usage.views = views;
+    usage.unique_paths = Number(row.unique_paths) || 0;
+    usage.no_views = views === 0;
+  }
+  const keyIndex = new Map(keys.map((k, i) => [k, i]));
+  const totalSeries = keys.map((t) => ({ t, views: 0 }));
+  for (const row of series) {
+    const usage = byApp.get(row.appId);
+    const i = keyIndex.get(String(row.t).slice(0, 10));
+    const appPoint = i === undefined ? undefined : usage?.series[i];
+    const totalPoint = i === undefined ? undefined : totalSeries[i];
+    if (!appPoint || !totalPoint) continue;
+    const views = Number(row.views) || 0;
+    appPoint.views += views;
+    totalPoint.views += views;
+  }
+  const list = [...byApp.values()].sort((a, b) => b.views - a.views || a.id.localeCompare(b.id));
+  const withViews = list.filter((a) => !a.no_views).length;
+  return {
+    days,
+    totals: {
+      views: list.reduce((sum, a) => sum + a.views, 0),
+      apps: list.length,
+      apps_with_views: withViews,
+      apps_without_views: list.length - withViews,
+      series: totalSeries,
+    },
+    apps: list,
+    unregistered: unregistered.sort((a, b) => b.views - a.views).slice(0, 20),
+  };
+}
+
+analyticsRoutes.get(
+  '/analytics/admin/apps',
+  wrap(async (c) => {
+    await requireAdmin(c);
+    const days = Math.min(
+      STATS_DAYS_MAX,
+      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+    );
+    const registered = await c.env.DB.prepare(
+      "SELECT id, owner_login FROM apps WHERE store = 'apps' ORDER BY id",
+    ).all<{ id: string; owner_login: string }>();
+    const apps = (registered.results ?? []).filter((a) => APP_ID_RE.test(a.id));
+
+    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+    const where = `WHERE blob2 = 'pageview' AND ${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+    const totalsQ = `SELECT index1 AS appId, SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS unique_paths FROM ${STATS_DATASET} ${where} GROUP BY appId LIMIT 10000`;
+    const seriesQ = `SELECT index1 AS appId, toStartOfDay(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY appId, t LIMIT 10000`;
+    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+    try {
+      const [totals, series] = await Promise.all([
+        cfAnalyticsSql<{ appId: string; views: number; unique_paths: number }>(env, totalsQ),
+        cfAnalyticsSql<{ appId: string; t: string; views: number }>(env, seriesQ),
+      ]);
+      return c.json(buildAdminUsage(apps, totals, series, days, Date.now()));
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(502, err instanceof Error ? err.message : 'usage query failed');
+    }
+  }),
+);
+
+// -----------------------------------------------------------------------------
 // Diagnostics — what's blocking analytics from showing data for this app.
 // Called by the dashboard when total_views=0 so we render a smart empty
 // state instead of "no data yet :)". Each check is best-effort; failures

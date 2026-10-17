@@ -11,6 +11,7 @@ import {
   type AdminGithubDeployStatus,
   type FailingDeployRow,
 } from "../lib/adminDeployFailures";
+import { sortUsage, trendPercent, type SortDir, type UsagePoint, type UsageReport, type UsageSortKey } from "../lib/adminUsage";
 
 const ADMIN_ACCESS_MESSAGE = "Platform admin access required. Sign out and back in if your admin role was just added.";
 const ADMIN_WORKER_URL = "https://admin.freeappstore.online";
@@ -40,7 +41,7 @@ async function adminFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-type Tab = "overview" | "apps" | "users" | "sessions" | "grants" | "creators";
+type Tab = "overview" | "usage" | "apps" | "users" | "sessions" | "grants" | "creators";
 
 interface Stats {
   apps: number;
@@ -271,7 +272,7 @@ export function Admin() {
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-extrabold">Admin Dashboard</h1>
           <div className="flex gap-1 p-1 rounded-xl" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-            {(["overview", "apps", "users", "sessions", "grants", "creators"] as Tab[]).map((t) => (
+            {(["overview", "usage", "apps", "users", "sessions", "grants", "creators"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -290,6 +291,7 @@ export function Admin() {
         </div>
 
         {tab === "overview" && <OverviewTab />}
+        {tab === "usage" && <UsageTab />}
         {tab === "apps" && <AppsTab />}
         {tab === "users" && <UsersTab focusUserId={focusUserId} onClearFocus={() => setFocusUserId(null)} />}
         {tab === "sessions" && <SessionsTab onOpenUser={openUser} onOpenGrant={openGrant} />}
@@ -1533,6 +1535,220 @@ function TrafficCard({
         </div>
       )}
     </div>
+  );
+}
+
+// ── Usage Tab ──
+// Page views for every published app (#271), from GET /v1/analytics/admin/apps.
+
+const USAGE_COLUMNS: Array<{ key: UsageSortKey; label: string; numeric: boolean }> = [
+  { key: "id", label: "App", numeric: false },
+  { key: "owner", label: "Owner", numeric: false },
+  { key: "views", label: "Page views", numeric: true },
+  { key: "unique_paths", label: "Unique paths", numeric: true },
+  { key: "trend", label: "Trend", numeric: true },
+];
+
+function UsageTab() {
+  const [days, setDays] = useState<7 | 30>(7);
+  const [report, setReport] = useState<UsageReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [sortKey, setSortKey] = useState<UsageSortKey>("views");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [onlyZero, setOnlyZero] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    setError("");
+    adminFetchJson<UsageReport>(`${API_URL}/v1/analytics/admin/apps?days=${days}`)
+      .then(setReport)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, [days]);
+
+  const sortBy = (key: UsageSortKey, numeric: boolean) => {
+    if (key === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else {
+      setSortKey(key);
+      setSortDir(numeric ? "desc" : "asc");
+    }
+  };
+
+  const rows = report ? sortUsage(onlyZero ? report.apps.filter((a) => a.no_views) : report.apps, sortKey, sortDir) : [];
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <h2 className="text-lg font-bold">Usage across all apps</h2>
+        <div className="flex gap-2 items-center">
+          {([7, 30] as const).map((d) => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className="px-3 py-1.5 rounded-lg text-sm font-semibold"
+              style={{
+                background: days === d ? "var(--accent)" : "var(--panel)",
+                color: days === d ? "white" : "var(--muted)",
+                border: "1px solid var(--line)",
+                cursor: "pointer",
+              }}
+            >
+              {d} days
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && <p style={{ color: "var(--muted)" }}>Loading usage...</p>}
+      {!loading && (error || !report) && <AdminAccessError message={error || "No usage returned"} />}
+
+      {!loading && report && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <StatCard label={`Page views (${report.days}d)`} value={report.totals.views} color="var(--accent)" />
+            <StatCard label="Published apps" value={report.totals.apps} color="#8b5cf6" />
+            <StatCard label="Apps with views" value={report.totals.apps_with_views} color="#10b981" />
+            <StatCard label="Apps with no views" value={report.totals.apps_without_views} color="#f59e0b" />
+          </div>
+
+          <div className="p-4 rounded-xl border mb-6" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+            <div className="text-sm font-semibold mb-2">Daily page views, all apps</div>
+            <Sparkline series={report.totals.series} height={56} />
+          </div>
+
+          {report.totals.apps_without_views > 0 && (
+            <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+              {report.totals.apps_without_views} app{report.totals.apps_without_views === 1 ? "" : "s"} recorded no page views in this window. That
+              usually means the analytics loader (<code>/v1/analytics.js</code>) is missing from the app, or it isn't deployed.{" "}
+              <label className="inline-flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" checked={onlyZero} onChange={(e) => setOnlyZero(e.target.checked)} /> Show only these
+              </label>
+            </p>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                  {USAGE_COLUMNS.map((col) => (
+                    <th
+                      key={col.key}
+                      className={`p-2 font-semibold ${col.numeric ? "text-right" : "text-left"}`}
+                      style={{ color: "var(--muted)" }}
+                      aria-sort={sortKey === col.key ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => sortBy(col.key, col.numeric)}
+                        style={{ background: "none", border: "none", color: "inherit", font: "inherit", cursor: "pointer", padding: 0 }}
+                      >
+                        {col.label}
+                        {sortKey === col.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                      </button>
+                    </th>
+                  ))}
+                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                    Daily
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{ borderBottom: "2px solid var(--line)", background: "var(--panel)" }}>
+                  <td className="p-2 font-bold">All apps</td>
+                  <td className="p-2" style={{ color: "var(--muted)" }}>
+                    {report.totals.apps} apps
+                  </td>
+                  <td className="p-2 text-right font-bold">{report.totals.views.toLocaleString()}</td>
+                  <td className="p-2 text-right" style={{ color: "var(--muted)" }}>
+                    —
+                  </td>
+                  <td className="p-2 text-right">
+                    <TrendBadge series={report.totals.series} />
+                  </td>
+                  <td className="p-2">
+                    <Sparkline series={report.totals.series} height={20} />
+                  </td>
+                </tr>
+                {rows.map((app) => (
+                  <tr key={app.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                    <td className="p-2">
+                      <strong>{app.id}</strong>
+                      {app.no_views && (
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ background: "#f59e0b22", color: "#b45309" }}>
+                          no views
+                        </span>
+                      )}
+                    </td>
+                    <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>
+                      {app.owner}
+                    </td>
+                    <td className="p-2 text-right">{app.views.toLocaleString()}</td>
+                    <td className="p-2 text-right" style={{ color: "var(--muted)" }}>
+                      {app.unique_paths.toLocaleString()}
+                    </td>
+                    <td className="p-2 text-right">
+                      <TrendBadge series={app.series} />
+                    </td>
+                    <td className="p-2">
+                      <Sparkline series={app.series} height={20} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="mt-3 text-xs" style={{ color: "var(--muted)" }}>
+            Page views come from the cookieless platform loader. It stores no visitor identifier, so there is no unique-visitor
+            count; unique paths is the closest measure. Trend compares the second half of the window with the first.
+          </p>
+          {report.unregistered.length > 0 && (
+            <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+              Views under app ids that aren't registered:{" "}
+              {report.unregistered.map((u) => `${u.id} (${u.views.toLocaleString()})`).join(", ")}
+            </p>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function Sparkline({ series, height }: { series: UsagePoint[]; height: number }) {
+  const max = Math.max(...series.map((p) => p.views), 1);
+  const total = series.reduce((sum, p) => sum + p.views, 0);
+  return (
+    <div
+      className="flex items-end gap-px"
+      style={{ height, minWidth: 80 }}
+      role="img"
+      aria-label={`${total.toLocaleString()} page views over ${series.length} days`}
+    >
+      {series.map((p) => (
+        <div
+          key={p.t}
+          title={`${p.t}: ${p.views.toLocaleString()}`}
+          style={{ flex: 1, height: `${(p.views / max) * 100}%`, background: "var(--accent)", borderRadius: 1, minHeight: 1 }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TrendBadge({ series }: { series: UsagePoint[] }) {
+  const pct = trendPercent(series);
+  if (pct === null)
+    return (
+      <span className="text-xs" style={{ color: "var(--muted)" }}>
+        —
+      </span>
+    );
+  const color = pct > 0 ? "#10b981" : pct < 0 ? "#ef4444" : "var(--muted)";
+  return (
+    <span className="text-xs font-semibold" style={{ color }}>
+      {pct > 0 ? "▲" : pct < 0 ? "▼" : ""} {Math.abs(pct)}%
+    </span>
   );
 }
 

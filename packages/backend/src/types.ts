@@ -78,9 +78,9 @@ export interface Env {
   CF_ACCOUNT_ID?: string;
   /**
    * Comma-separated GitHub logins (e.g. "serge-ivo,other-admin") allowed to
-   * call admin-only endpoints — currently just /v1/analytics/admin/platform
-   * which aggregates across all apps. Optional; when unset, no user is admin
-   * and admin endpoints 403. Set via `wrangler secret put ADMIN_GITHUB_LOGINS`.
+   * call admin-only endpoints, e.g. /v1/analytics/admin/platform and
+   * /v1/analytics/admin/apps, which aggregate across all apps. Optional; when
+   * unset, no user is admin and admin endpoints 403. Set via `wrangler secret put ADMIN_GITHUB_LOGINS`.
    */
   ADMIN_GITHUB_LOGINS?: string;
   /** Comma-separated platform user ids allowed to call admin-only endpoints. */
