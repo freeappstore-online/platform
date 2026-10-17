@@ -2332,7 +2332,7 @@
       "category": "Health & Fitness",
       "icon": "💊",
       "iconBg": "#fce7f3",
-      "description": "Coming soon — a private medication and blood-pressure diary: log doses and vitals, see trends, and share a PDF with your clinician. Everything stays on your device.",
+      "description": "a private medication and blood-pressure diary: log doses and vitals, see trends, and share a PDF with your clinician. Everything stays on your device.",
       "appUrl": "https://carebook.freeappstore.online",
       "repo": "freeappstore-online/carebook",
       "hostedOn": "r2",
