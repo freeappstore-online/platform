@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { likePrefix } from '../lib/like.js';
 import { checkKvWrite, KV_LIMITS } from '../lib/quota.js';
 import type { Env } from '../types.js';
 
@@ -16,8 +17,10 @@ kvRoutes.get('/apps/:appId/kv', async (c) => {
     let query: string;
     let bindings: unknown[];
     if (prefix) {
-      query = 'SELECT key FROM kv WHERE app_id = ? AND user_id = ? AND key LIKE ? ORDER BY key';
-      bindings = [appId, user.id, `${prefix}%`];
+      // ESCAPE is required: without it a prefix of "score_" also matches "scoreX".
+      query =
+        "SELECT key FROM kv WHERE app_id = ? AND user_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key";
+      bindings = [appId, user.id, likePrefix(prefix)];
     } else {
       query = 'SELECT key FROM kv WHERE app_id = ? AND user_id = ? ORDER BY key';
       bindings = [appId, user.id];

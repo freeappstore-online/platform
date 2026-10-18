@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { likePrefix } from '../lib/like.js';
 import type { Env } from '../types.js';
 
 /**
@@ -29,8 +30,10 @@ counterRoutes.get('/apps/:appId/counters', async (c) => {
   let query: string;
   let bindings: unknown[];
   if (prefix) {
-    query = 'SELECT key, value FROM counters WHERE app_id = ? AND key LIKE ? ORDER BY key';
-    bindings = [appId, `${prefix}%`];
+    // ESCAPE is required: without it a prefix of "score_" also matches "scoreX".
+    query =
+      "SELECT key, value FROM counters WHERE app_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key";
+    bindings = [appId, likePrefix(prefix)];
   } else {
     query = 'SELECT key, value FROM counters WHERE app_id = ? ORDER BY key';
     bindings = [appId];

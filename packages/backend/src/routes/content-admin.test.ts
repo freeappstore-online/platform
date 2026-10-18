@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -786,5 +787,93 @@ describe.skipIf(!sqlite)('admin session debugging console (#15)', () => {
     const body = (await res.json()) as { users: Array<{ id: string }>; total: number };
     expect(body.users.map((u) => u.id)).toEqual(['gh:2']);
     expect(body.total).toBe(1);
+  });
+
+  it('deploy status treats _ and % as literal', async () => {
+    const d1 = seeded();
+    const token = await signSession('gh:99', SIGNING_KEY, { roles: ['admin'] });
+    const list = async (status: string) => {
+      const res = await app.request(
+        `https://backend/v1/admin/agent-deploys?status=${encodeURIComponent(status)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+        { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { sessions: Array<{ sessionId: string }> };
+      return body.sessions.map((s) => s.sessionId).sort();
+    };
+    expect(await list('error')).toEqual(['s-fail']);
+    // Unescaped, "_" matches any character, so "e_ror" would find phase "error".
+    expect(await list('e_ror')).toEqual([]);
+    // Unescaped, "%" matches every stored phase.
+    expect(await list('%')).toEqual([]);
+  });
+});
+
+describe.skipIf(!hasSqlite)('admin prefix filters are literal starts-with', () => {
+  it('kv and counter prefixes do not treat _ as a wildcard', async () => {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    ).run('gh:99', 99, 'ops', now);
+    const kv = db.prepare(
+      'INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    kv.run('timer', 'gh:1', 'score_a', 'x', 1, now);
+    kv.run('timer', 'gh:1', 'scoreXa', 'x', 1, now);
+    const counter = db.prepare(
+      'INSERT INTO counters (app_id, key, value, updated_at) VALUES (?, ?, ?, ?)',
+    );
+    counter.run('timer', 'score_a', 1, now);
+    counter.run('timer', 'scoreXa', 2, now);
+
+    const token = await signSession('gh:99', SIGNING_KEY, { roles: ['admin'] });
+    const adminEnv = {
+      DB: d1,
+      SESSION_SIGNING_KEY: SIGNING_KEY,
+      ADMIN_PROVISION_TOKEN: 'tok',
+    };
+    const keys = async (res: Response) =>
+      ((await res.json()) as { entries: Array<{ key: string }> }).entries.map((e) => e.key);
+    const names = async (res: Response) =>
+      ((await res.json()) as { counters: Array<{ name: string }> }).counters.map((c) => c.name);
+
+    expect(
+      await keys(
+        await app.request(
+          'https://backend/v1/admin/kv?prefix=score_',
+          { headers: { Authorization: `Bearer ${token}` } },
+          adminEnv,
+        ),
+      ),
+    ).toEqual(['score_a']);
+    expect(
+      await keys(
+        await app.request(
+          'https://backend/v1/internal/admin/kv?prefix=score_',
+          { headers: { 'X-Internal-Token': 'tok' } },
+          adminEnv,
+        ),
+      ),
+    ).toEqual(['score_a']);
+    expect(
+      await names(
+        await app.request(
+          'https://backend/v1/admin/counters?prefix=score_',
+          { headers: { Authorization: `Bearer ${token}` } },
+          adminEnv,
+        ),
+      ),
+    ).toEqual(['score_a']);
+    expect(
+      await names(
+        await app.request(
+          'https://backend/v1/internal/admin/counters?prefix=score_',
+          { headers: { 'X-Internal-Token': 'tok' } },
+          adminEnv,
+        ),
+      ),
+    ).toEqual(['score_a']);
   });
 });

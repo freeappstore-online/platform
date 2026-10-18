@@ -29,6 +29,7 @@
 
 import { Hono } from 'hono';
 import { requireAdmin } from '../lib/auth.js';
+import { escapeLike, likePrefix } from '../lib/like.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
@@ -55,8 +56,8 @@ contentAdminRoutes.get('/admin/kv', async (c) => {
     params.push(userId);
   }
   if (prefix) {
-    sql += ' AND key LIKE ?';
-    params.push(`${prefix}%`);
+    sql += " AND key LIKE ? ESCAPE '\\'";
+    params.push(likePrefix(prefix));
   }
 
   sql += ' ORDER BY updated_at DESC LIMIT ?';
@@ -163,8 +164,8 @@ contentAdminRoutes.get('/admin/counters', async (c) => {
     params.push(appId);
   }
   if (prefix) {
-    sql += ' AND key LIKE ?';
-    params.push(`${prefix}%`);
+    sql += " AND key LIKE ? ESCAPE '\\'";
+    params.push(likePrefix(prefix));
   }
 
   sql += ' ORDER BY app_id, key LIMIT ?';
@@ -706,9 +707,9 @@ contentAdminRoutes.get('/admin/agent-deploys', async (c) => {
 
   const result = await c.env.DB.prepare(
     `SELECT session_id, user_id, name, app_id, deploy_state, deploy_log, updated_at
-     FROM agent_sessions WHERE deploy_state LIKE ? ORDER BY updated_at DESC LIMIT ?`,
+     FROM agent_sessions WHERE deploy_state LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT ?`,
   )
-    .bind(`%"phase":"${statusFilter}"%`, limit)
+    .bind(`%"phase":"${escapeLike(statusFilter)}"%`, limit)
     .all();
 
   const sessions = (result.results ?? []).map((r: Record<string, unknown>) => ({
@@ -818,8 +819,8 @@ contentAdminRoutes.get('/internal/admin/kv', async (c) => {
     params.push(userId);
   }
   if (prefix) {
-    sql += ' AND key LIKE ?';
-    params.push(`${prefix}%`);
+    sql += " AND key LIKE ? ESCAPE '\\'";
+    params.push(likePrefix(prefix));
   }
   sql += ' ORDER BY updated_at DESC LIMIT ?';
   params.push(limit);
@@ -916,8 +917,8 @@ contentAdminRoutes.get('/internal/admin/counters', async (c) => {
     params.push(appId);
   }
   if (prefix) {
-    sql += ' AND key LIKE ?';
-    params.push(`${prefix}%`);
+    sql += " AND key LIKE ? ESCAPE '\\'";
+    params.push(likePrefix(prefix));
   }
   sql += ' ORDER BY app_id, key LIMIT ?';
   params.push(limit);

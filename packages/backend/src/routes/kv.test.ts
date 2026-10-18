@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
@@ -130,5 +131,42 @@ describe('PUT /v1/apps/:appId/kv/:key', () => {
       ),
     );
     expect(res.status).toBe(413);
+  });
+});
+
+describe.skipIf(!hasSqlite)('GET /v1/apps/:appId/kv prefix', () => {
+  it('treats % and _ in the prefix as literal characters', async () => {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    ).run('gh:1', 1, 'alice', now);
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+      'timer',
+      'alice',
+      now,
+    );
+    const kv = db.prepare(
+      'INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    for (const key of ['score_a', 'scoreXa', 'score%a', 'other']) {
+      kv.run('timer', 'gh:1', key, 'x', 1, now);
+    }
+    const token = await signSession('gh:1', SIGNING_KEY);
+
+    const list = async (prefix: string) => {
+      const res = await app.request(
+        `/v1/apps/timer/kv?prefix=${encodeURIComponent(prefix)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+        baseEnv(d1),
+      );
+      expect(res.status).toBe(200);
+      return (await res.json()) as string[];
+    };
+
+    // Unescaped, "score_" matches "scoreXa" and "score%" matches every score key.
+    expect(await list('score_')).toEqual(['score_a']);
+    expect(await list('score%')).toEqual(['score%a']);
+    expect(await list('score')).toEqual(['score%a', 'scoreXa', 'score_a']);
   });
 });

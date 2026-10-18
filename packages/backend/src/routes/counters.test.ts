@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -137,5 +138,33 @@ describe('counter routes', () => {
       env(fakeDB({ user })),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe.skipIf(!hasSqlite)('counter prefix is a literal starts-with', () => {
+  it('does not treat _ or % as wildcards', async () => {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    const ins = db.prepare(
+      'INSERT INTO counters (app_id, key, value, updated_at) VALUES (?, ?, ?, ?)',
+    );
+    ins.run('timer', 'score_a', 1, now);
+    ins.run('timer', 'scoreXa', 2, now);
+    ins.run('timer', 'score%a', 3, now);
+    ins.run('timer', 'other', 4, now);
+
+    const list = async (prefix: string) => {
+      const res = await app.request(
+        `/v1/apps/timer/counters?prefix=${encodeURIComponent(prefix)}`,
+        {},
+        env(d1),
+      );
+      expect(res.status).toBe(200);
+      return (await res.json()) as Record<string, number>;
+    };
+
+    expect(await list('score_')).toEqual({ score_a: 1 });
+    expect(await list('score%')).toEqual({ 'score%a': 3 });
+    expect(await list('score\\')).toEqual({});
   });
 });
