@@ -26,6 +26,7 @@ Requires Node 22+.
 | `fas proxy allow\|list\|deny` | Manage proxy URL allowlist |
 | `fas screencheck` | Responsive layout test across viewports |
 | `fas quality [id]` | VCQA code quality report |
+| `fas admin transfer-owner` | Admin-only ownership transfer (compare-and-set) |
 
 ## `fas login`
 
@@ -82,6 +83,26 @@ fas publish --yes              # non-interactive (CI)
 | `--yes` | Non-interactive mode |
 | `--issue` | Open GitHub Issue form instead of auto-provision |
 | `--skip-checks` | Skip compliance checks (not recommended) |
+
+## `fas admin transfer-owner <app>`
+
+Move an app to a new owner. Admin session only. The transfer is refused unless `--from` is the owner recorded right now, and the refusal names that owner. Every successful transfer is written to an audit record (who, when, from, to, reason).
+
+```bash
+fas admin transfer-owner watertracker \
+  --from mathanghial \
+  --to serge-ivo \
+  --reason "reuse the empty repo for wave 1"
+```
+
+| Flag | Purpose |
+|------|---------|
+| `--from <login>` | Current owner. Required. |
+| `--to <login>` | New owner. Must be an existing account. Required. |
+| `--reason <text>` | Stored on the audit row. Required. |
+| `--json` | Print the response JSON. |
+
+Undo is the same command with `--from` and `--to` swapped. `FAS_ADMIN_BASE` overrides the admin worker URL; otherwise it is derived from the API host (`api.` → `admin.`).
 
 ## `fas list`
 

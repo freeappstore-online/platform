@@ -42,6 +42,7 @@ Live in 30 seconds at `https://my-app.freeappstore.online`.
 | `fas proxy allow\|list\|deny` | Manage the URL allowlist for the per-app secret-injecting proxy. |
 | `fas screencheck` | Build the app and run a headless browser at every reference viewport to verify the layout fits without scrolling. |
 | `fas quality [app-id]` | Show the VCQA code quality report (score + grade) for an app. |
+| `fas admin transfer-owner <app>` | Admin-only. Move an app to a new owner when `--from` matches the current one, and write an audit record. |
 
 ---
 

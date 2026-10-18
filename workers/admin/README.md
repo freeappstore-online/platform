@@ -31,6 +31,7 @@ The rule: **this worker owns provisioning and anything that needs its privileged
 | `ping.ts` | `GET /api/ping` | Yes — backend `/status` probe of the service-binding auth path. |
 | `provision.ts` | `POST /api/provision` | Yes — creates repos, routes, DNS, registry entries. |
 | `deprovision.ts` | `POST /api/unpublish`, `POST /api/deprovision` | Yes — the inverse of provision. |
+| `transfer-owner.ts` | `POST /api/apps/transfer-owner`, `GET /api/apps/transfer-owner?app_id=` | Yes — compare-and-set owner change on the shared `apps` row, plus the audit read. Admin session only (a service token is not enough). |
 | `dns.ts` | `POST /api/fix-dns` | Yes — needs the CF DNS token. |
 | `reports.ts` | `PUT /api/test-report` (CI), `GET /test-report` | Yes — CI upload with `X-CI-Token`. |
 | `apps.ts` | `/api/apps/all`, `/api/apps/deploy-status`, `/api/apps/:id/{deploy-status,health,sessions}` | Yes for deploy-status (uses the org GitHub token; the backend proxies it to creators). The rest are admin-console reads. |

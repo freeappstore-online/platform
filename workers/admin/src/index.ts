@@ -15,6 +15,7 @@ import { pingRoutes } from "./routes/ping";
 import { provisionRoutes } from "./routes/provision";
 import { reportsRoutes } from "./routes/reports";
 import { statsRoutes } from "./routes/stats";
+import { transferOwnerRoutes } from "./routes/transfer-owner";
 import type { RouteHandler } from "./routes/types";
 
 export type { AppConfig, Env };
@@ -32,6 +33,7 @@ const ROUTES: RouteHandler[] = [
   creatorsRoutes,
   reportsRoutes,
   dnsRoutes,
+  transferOwnerRoutes,
   appsRoutes,
   agentSessionsRoutes,
 ];

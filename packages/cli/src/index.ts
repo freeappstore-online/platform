@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
+import { adminCommand } from './commands/admin.js';
 import { checkCommand } from './commands/check.js';
 import { doctorCommand } from './commands/doctor.js';
 import { initCommand } from './commands/init.js';
@@ -49,6 +50,7 @@ program.addCommand(listCommand);
 program.addCommand(secretCommand);
 program.addCommand(proxyCommand);
 program.addCommand(qualityCommand);
+program.addCommand(adminCommand);
 
 // `fas` with no subcommand → launch the TUI when stdout is a TTY.
 // Subcommands keep their normal one-shot behavior, scriptable for CI / agents.

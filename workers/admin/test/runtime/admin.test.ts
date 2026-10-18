@@ -102,3 +102,66 @@ describe("admin sessions over the BACKEND_FAS service binding", () => {
     expect((await provision("rl-svc", { "X-Internal-Token": PROVISION_TOKEN })).status).toBe(200);
   });
 });
+
+describe("POST /api/apps/transfer-owner (#274)", () => {
+  const admin = { Authorization: "Bearer admin-session", "Content-Type": "application/json" };
+
+  async function seed() {
+    await env.DB.prepare("DELETE FROM app_owner_transfers WHERE app_id = 'owner-xfer'").run();
+    await env.DB.prepare("DELETE FROM apps WHERE id = 'owner-xfer'").run();
+    await env.DB.prepare(
+      `INSERT OR REPLACE INTO users (id, github_id, github_login, created_at, provider, provider_id, display_name)
+       VALUES ('gh:xfer-to', 91001, 'xfer-to', 1, 'github', '91001', 'xfer-to')`,
+    ).run();
+    await env.DB.prepare("INSERT INTO apps (id, owner_login, created_at) VALUES ('owner-xfer', 'xfer-from', 1)").run();
+  }
+
+  function post(body: Record<string, string>, headers: Record<string, string>) {
+    return call("/api/apps/transfer-owner", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ app_id: "owner-xfer", reason: "runtime test", ...body }),
+    });
+  }
+
+  it("refuses a non-admin, a wrong owner, and an unknown app, then transfers and writes the audit", async () => {
+    await seed();
+
+    const forbidden = await post(
+      { from_login: "xfer-from", to_login: "xfer-to" },
+      { Authorization: "Bearer user-session", "Content-Type": "application/json" },
+    );
+    expect(forbidden.status).toBe(403);
+
+    const mismatch = await post({ from_login: "someone-else", to_login: "xfer-to" }, admin);
+    expect(mismatch.status).toBe(409);
+    expect(await mismatch.json()).toMatchObject({ error: "owner mismatch", owner_login: "xfer-from" });
+
+    const missing = await call("/api/apps/transfer-owner", {
+      method: "POST",
+      headers: admin,
+      body: JSON.stringify({ app_id: "no-such-app", from_login: "xfer-from", to_login: "xfer-to", reason: "nope" }),
+    });
+    expect(missing.status).toBe(404);
+
+    const unknownLogin = await post({ from_login: "xfer-from", to_login: "not-a-user" }, admin);
+    expect(unknownLogin.status).toBe(400);
+
+    // xfer-from is the recorded owner and has no users row. The new owner does.
+    const ok = await post({ from_login: "xfer-from", to_login: "xfer-to" }, admin);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ ok: true, from_login: "xfer-from", to_login: "xfer-to", owner_login: "xfer-to" });
+
+    const owner = await env.DB.prepare("SELECT owner_login FROM apps WHERE id = 'owner-xfer'").first<{ owner_login: string }>();
+    expect(owner).toEqual({ owner_login: "xfer-to" });
+    const audit = await env.DB.prepare(
+      "SELECT from_login, to_login, reason, actor_login FROM app_owner_transfers WHERE app_id = 'owner-xfer'",
+    ).first();
+    expect(audit).toEqual({ from_login: "xfer-from", to_login: "xfer-to", reason: "runtime test", actor_login: "ops" });
+
+    const listed = await call("/api/apps/transfer-owner?app_id=owner-xfer", { headers: { Authorization: "Bearer admin-session" } });
+    expect(listed.status).toBe(200);
+    const body = (await listed.json()) as { transfers: Array<{ actor_login: string }> };
+    expect(body.transfers.map((row) => row.actor_login)).toEqual(["ops"]);
+  });
+});
