@@ -415,6 +415,35 @@ describe("routes/apps deploy-status when GitHub partly fails (#72)", () => {
 });
 
 describe("routes/agent-sessions", () => {
+  it("escapes LIKE wildcards the same way for the page and the count", async () => {
+    const prepared: Array<{ sql: string; binds: unknown[] }> = [];
+    const db = {
+      prepare: (sql: string) => {
+        const stmt = {
+          binds: [] as unknown[],
+          bind(...args: unknown[]) {
+            this.binds = args;
+            prepared.push({ sql, binds: args });
+            return this;
+          },
+          first: async () => ({ count: 0 }),
+          all: async () => ({ results: [] }),
+        };
+        return stmt;
+      },
+    };
+    const res = await call(agentSessionsRoutes, `/api/agent/sessions?q=${encodeURIComponent("100%_\\")}`, {}, env({ DB: db }));
+    expect(res!.status).toBe(200);
+    const list = prepared.find((p) => p.sql.includes("ORDER BY"));
+    const count = prepared.find((p) => p.sql.startsWith("SELECT COUNT"));
+    const like = "%100\\%\\_\\\\%";
+    expect(list?.sql).toContain("ESCAPE '\\'");
+    expect(count?.sql).toContain("ESCAPE '\\'");
+    expect(list?.binds.slice(0, 3)).toEqual([like, like, like]);
+    expect(count?.binds).toEqual([like, like, like]);
+    expect(list?.binds.slice(3)).toEqual([50, 0]);
+  });
+
   it("404s an unknown session id", async () => {
     const db = { prepare: () => ({ bind: () => ({ first: async () => null }) }) };
     const res = await call(agentSessionsRoutes, "/api/agent/sessions/nope", {}, env({ DB: db }));

@@ -368,20 +368,23 @@ export async function handleAgentSessions(url: URL, env: Env) {
 
   let query = "SELECT session_id, user_id, name, app_id, app_url, deployed, deploy_state, created_at, updated_at FROM agent_sessions";
   const params: any[] = [];
+  // SQLite ignores a backslash unless ESCAPE is set, so the old replace did not
+  // make "%" or "_" literal — and the count query did not escape at all, so the
+  // page and the total disagreed whenever the search contained a wildcard.
+  const likeClause = "name LIKE ? ESCAPE '\\' OR app_id LIKE ? ESCAPE '\\' OR session_id LIKE ? ESCAPE '\\'";
+  const like = search ? `%${search.replace(/[\\%_]/g, "\\$&")}%` : "";
 
   if (search) {
-    query += " WHERE name LIKE ? OR app_id LIKE ? OR session_id LIKE ?";
-    const escaped = search.replace(/[%_]/g, "\\$&");
-    const like = `%${escaped}%`;
+    query += ` WHERE ${likeClause}`;
     params.push(like, like, like);
   }
   query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?";
   params.push(limit, offset);
 
   const countQuery = search
-    ? "SELECT COUNT(*) as count FROM agent_sessions WHERE name LIKE ? OR app_id LIKE ? OR session_id LIKE ?"
+    ? `SELECT COUNT(*) as count FROM agent_sessions WHERE ${likeClause}`
     : "SELECT COUNT(*) as count FROM agent_sessions";
-  const countParams = search ? [`%${search}%`, `%${search}%`, `%${search}%`] : [];
+  const countParams = search ? [like, like, like] : [];
 
   const [rows, total] = await Promise.all([
     env.DB.prepare(query)

@@ -9,22 +9,26 @@ function fakeDB(
   opts: {
     logs?: Array<Record<string, unknown>>;
     build?: Record<string, unknown> | null;
+    binds?: Array<{ sql: string; args: unknown[] }>;
   } = {},
 ) {
   return {
     prepare: (sql: string) => ({
-      bind: (..._args: unknown[]) => ({
-        first: async () => {
-          if (sql.includes('FROM users')) return user;
-          if (sql.includes('FROM apps'))
-            return user ? { owner_login: (user as Record<string, unknown>).github_login } : null;
-          if (sql.includes('FROM app_logs') && sql.includes('build_meta IS NOT NULL'))
-            return opts.build ?? { build_meta: '{"sdkVersion":"0.12.0"}', ts: 1000 };
-          return null;
-        },
-        all: async () => ({ results: opts.logs ?? [] }),
-        run: async () => ({ meta: { changes: 0 } }),
-      }),
+      bind: (...args: unknown[]) => {
+        opts.binds?.push({ sql, args });
+        return {
+          first: async () => {
+            if (sql.includes('FROM users')) return user;
+            if (sql.includes('FROM apps'))
+              return user ? { owner_login: (user as Record<string, unknown>).github_login } : null;
+            if (sql.includes('FROM app_logs') && sql.includes('build_meta IS NOT NULL'))
+              return opts.build ?? { build_meta: '{"sdkVersion":"0.12.0"}', ts: 1000 };
+            return null;
+          },
+          all: async () => ({ results: opts.logs ?? [] }),
+          run: async () => ({ meta: { changes: 0 } }),
+        };
+      },
     }),
     batch: async () => {},
   } as unknown as D1Database;
@@ -90,6 +94,30 @@ describe('logs routes', () => {
   it('GET /v1/apps/:appId/logs returns 401 without auth', async () => {
     const res = await app.request('/v1/apps/timer/logs', {}, env(fakeDB(null)));
     expect(res.status).toBe(401);
+  });
+
+  it('GET /v1/apps/:appId/logs does not bind NaN for a bad limit or since', async () => {
+    const binds: Array<{ sql: string; args: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/apps/timer/logs?limit=abc&since=nope',
+      { headers: { Authorization: await authHeader() } },
+      env(fakeDB(user, { binds })),
+    );
+    expect(res.status).toBe(200);
+    const list = binds.find((b) => b.sql.includes('ORDER BY ts DESC'));
+    expect(list?.args).toEqual(['timer', 100]);
+  });
+
+  it('GET /v1/apps/:appId/logs keeps a numeric since and caps the page size', async () => {
+    const binds: Array<{ sql: string; args: unknown[] }> = [];
+    const res = await app.request(
+      '/v1/apps/timer/logs?limit=9999&since=50',
+      { headers: { Authorization: await authHeader() } },
+      env(fakeDB(user, { binds })),
+    );
+    expect(res.status).toBe(200);
+    const list = binds.find((b) => b.sql.includes('ORDER BY ts DESC'));
+    expect(list?.args).toEqual(['timer', 50, 500]);
   });
 
   it('GET /v1/apps/:appId/logs returns logs list', async () => {

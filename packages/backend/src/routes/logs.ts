@@ -8,6 +8,7 @@
 
 import { Hono } from 'hono';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { queryLimit } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
 async function requireOwner(c: { req: { param: (n: string) => string }; env: Env }, appId: string) {
@@ -78,8 +79,10 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
 
   const level = c.req.query('level');
   const category = c.req.query('category');
-  const since = c.req.query('since');
-  const limit = Math.max(1, Math.min(Number(c.req.query('limit') || 100), 500));
+  const sinceRaw = c.req.query('since');
+  const since = Number(sinceRaw);
+  // Non-numeric limit is NaN, and Math.min(NaN, max) stays NaN, which D1 rejects.
+  const limit = queryLimit(c.req.query('limit'), 100, 500);
   const userId = c.req.query('user_id');
 
   let sql =
@@ -94,9 +97,10 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
     sql += ' AND category = ?';
     params.push(category);
   }
-  if (since) {
+  // "abc" is a truthy query string, so it used to bind Number("abc") === NaN.
+  if (sinceRaw && Number.isFinite(since)) {
     sql += ' AND ts >= ?';
-    params.push(Number(since));
+    params.push(since);
   }
   if (userId) {
     sql += ' AND user_id = ?';
