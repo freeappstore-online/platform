@@ -11,6 +11,7 @@
 
 import { Hono } from 'hono';
 import { requireUser } from '../lib/auth.js';
+import { queryLimit } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
 export const agentSessionRoutes = new Hono<{ Bindings: Env }>();
@@ -21,7 +22,7 @@ agentSessionRoutes.get('/agent/sessions', async (c) => {
   let user: Awaited<ReturnType<typeof requireUser>> | null = null;
   try {
     user = await requireUser(c);
-    const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+    const limit = queryLimit(c.req.query('limit'), 50, 200);
 
     const result = await c.env.DB.prepare(
       `SELECT session_id, name, app_id, app_url, deployed, deploy_state, created_at, updated_at

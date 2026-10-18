@@ -137,6 +137,60 @@ describe('db (collections) routes', () => {
   });
 
   // GET list
+  it('GET list keeps the row id when the document body also has id', async () => {
+    const docs = [
+      {
+        id: 'server-id',
+        data: '{"id":"client-chosen","title":"hi"}',
+        owner_id: 'u1',
+        created_at: 1000,
+        updated_at: 2000,
+      },
+    ];
+    const res = await app.request(
+      '/v1/apps/timer/db/posts',
+      {},
+      env(fakeDB({ docs, docCount: 1 })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { documents: Array<{ id: string; title: string }> };
+    expect(data.documents[0]?.id).toBe('server-id');
+    expect(data.documents[0]?.title).toBe('hi');
+  });
+
+  it('GET one keeps the row id when the document body also has id', async () => {
+    const doc = {
+      id: 'server-id',
+      data: '{"id":"client-chosen","title":"hi"}',
+      owner_id: 'u1',
+      created_at: 1000,
+      updated_at: 2000,
+    };
+    const res = await app.request('/v1/apps/timer/db/posts/server-id', {}, env(fakeDB({ doc })));
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { id: string; title: string; _owner: string };
+    expect(data.id).toBe('server-id');
+    expect(data.title).toBe('hi');
+    expect(data._owner).toBe('u1');
+  });
+
+  it('PUT response keeps the row id when the merged body has id', async () => {
+    const doc = { data: '{"id":"stored-id","title":"old"}', owner_id: 'u1', created_at: 1000 };
+    const res = await app.request(
+      '/v1/apps/timer/db/posts/server-id',
+      {
+        method: 'PUT',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'patched-id', title: 'new' }),
+      },
+      env(fakeDB({ user, doc })),
+    );
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as { id: string; title: string };
+    expect(data.id).toBe('server-id');
+    expect(data.title).toBe('new');
+  });
+
   it('GET /v1/apps/:appId/db/:collection lists documents (no auth)', async () => {
     const docs = [
       { id: 'd1', data: '{"title":"hi"}', owner_id: 'u1', created_at: 1000, updated_at: 2000 },

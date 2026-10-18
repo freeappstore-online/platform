@@ -29,6 +29,7 @@
 
 import { Hono } from 'hono';
 import { requireAdmin } from '../lib/auth.js';
+import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
 export const contentAdminRoutes = new Hono<{ Bindings: Env }>();
@@ -40,7 +41,7 @@ contentAdminRoutes.get('/admin/kv', async (c) => {
   const appId = c.req.query('app') ?? '';
   const userId = c.req.query('user') ?? '';
   const prefix = c.req.query('prefix') ?? '';
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
 
   let sql = 'SELECT app_id, user_id, key, value_size_bytes as size, updated_at FROM kv WHERE 1=1';
   const params: unknown[] = [];
@@ -104,7 +105,7 @@ contentAdminRoutes.get('/admin/collections', async (c) => {
   await requireAdmin(c);
   const appId = c.req.query('app') ?? '';
   const collection = c.req.query('collection') ?? '';
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
 
   let sql =
     'SELECT id, app_id, collection, owner_id, data, created_at, updated_at FROM documents WHERE 1=1';
@@ -152,7 +153,7 @@ contentAdminRoutes.get('/admin/counters', async (c) => {
   await requireAdmin(c);
   const appId = c.req.query('app') ?? '';
   const prefix = c.req.query('prefix') ?? '';
-  const limit = Math.min(Number(c.req.query('limit') || 100), 500);
+  const limit = queryLimit(c.req.query('limit'), 100, 500);
 
   let sql = 'SELECT app_id, key as name, value FROM counters WHERE 1=1';
   const params: unknown[] = [];
@@ -192,8 +193,8 @@ contentAdminRoutes.delete('/admin/counters', async (c) => {
 
 contentAdminRoutes.get('/admin/users', async (c) => {
   await requireAdmin(c);
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
-  const offset = Number(c.req.query('offset') || 0);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
+  const offset = queryOffset(c.req.query('offset'));
   // ?funded_by=: only users with a VibeCode session funded that way (#16).
   const fundedBy = (c.req.query('funded_by') ?? '').trim();
   if (fundedBy && !(fundedBy in FUNDED_BY)) {
@@ -568,8 +569,8 @@ function repoUrlFor(repo: unknown, appId: unknown): string | null {
  */
 contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
   await requireAdmin(c);
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
-  const offset = Number(c.req.query('offset') || 0);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
+  const offset = queryOffset(c.req.query('offset'));
   const q = (c.req.query('q') ?? '').trim();
 
   const fundedBy = (c.req.query('funded_by') ?? '').trim();
@@ -657,7 +658,7 @@ contentAdminRoutes.get('/admin/agent-sessions', async (c) => {
  */
 contentAdminRoutes.get('/admin/agent-errors', async (c) => {
   await requireAdmin(c);
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
   const since = Number(c.req.query('since') || 0);
   const userId = c.req.query('user') ?? '';
 
@@ -700,7 +701,7 @@ contentAdminRoutes.get('/admin/agent-errors', async (c) => {
  */
 contentAdminRoutes.get('/admin/agent-deploys', async (c) => {
   await requireAdmin(c);
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
   const statusFilter = c.req.query('status') ?? 'error';
 
   const result = await c.env.DB.prepare(
@@ -804,7 +805,7 @@ contentAdminRoutes.get('/internal/admin/kv', async (c) => {
   const appId = c.req.query('app') ?? '';
   const userId = c.req.query('user') ?? '';
   const prefix = c.req.query('prefix') ?? '';
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
 
   let sql = 'SELECT app_id, user_id, key, value_size_bytes as size, updated_at FROM kv WHERE 1=1';
   const params: unknown[] = [];
@@ -863,7 +864,7 @@ contentAdminRoutes.get('/internal/admin/collections', async (c) => {
   if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app') ?? '';
   const collection = c.req.query('collection') ?? '';
-  const limit = Math.min(Number(c.req.query('limit') || 50), 200);
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
 
   let sql =
     'SELECT id, app_id, collection, owner_id, data, created_at, updated_at FROM documents WHERE 1=1';
@@ -906,7 +907,7 @@ contentAdminRoutes.get('/internal/admin/counters', async (c) => {
   if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app') ?? '';
   const prefix = c.req.query('prefix') ?? '';
-  const limit = Math.min(Number(c.req.query('limit') || 100), 500);
+  const limit = queryLimit(c.req.query('limit'), 100, 500);
 
   let sql = 'SELECT app_id, key as name, value FROM counters WHERE 1=1';
   const params: unknown[] = [];

@@ -78,20 +78,24 @@ async function writeCache(entry: CachedCheck): Promise<void> {
  * Fetch the latest version from npm. Returns null on any failure.
  * Uses a short timeout so it never meaningfully delays the CLI.
  */
-async function fetchLatestVersion(): Promise<string | null> {
+/** Exported for tests. Callers on the CLI hot path use backgroundVersionCheck. */
+export async function fetchLatestVersion(): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3_000);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3_000);
     const res = await fetch(REGISTRY_URL, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
     });
-    clearTimeout(timer);
     if (!res.ok) return null;
     const body = (await res.json()) as { version?: string };
     return typeof body.version === 'string' ? body.version : null;
   } catch {
     return null;
+  } finally {
+    // A rejected fetch used to leave this timer pending, which kept the Node
+    // process alive for the rest of the 3s timeout after the command finished.
+    clearTimeout(timer);
   }
 }
 

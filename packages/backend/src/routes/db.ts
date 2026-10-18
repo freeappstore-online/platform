@@ -42,6 +42,25 @@ function sanitizeJsonField(name: string): string | null {
   return name;
 }
 
+/**
+ * Server id and row metadata win over same-named fields stored in the JSON
+ * body. Spreading the body first matches the create response, which already
+ * puts `id` last so a client-supplied `data.id` cannot shadow the row id.
+ */
+function withDocumentMeta(
+  id: string,
+  data: Record<string, unknown>,
+  meta: { ownerId: string; createdAt: number; updatedAt: number },
+) {
+  return {
+    ...data,
+    id,
+    _owner: meta.ownerId,
+    _createdAt: meta.createdAt,
+    _updatedAt: meta.updatedAt,
+  };
+}
+
 export const dbRoutes = new Hono<{ Bindings: Env }>();
 
 /** Create a document. Auth required. */
@@ -154,13 +173,13 @@ dbRoutes.get('/apps/:appId/db/:collection', async (c) => {
     .bind(...bindings, limit, offset)
     .all<{ id: string; data: string; owner_id: string; created_at: number; updated_at: number }>();
 
-  const documents = results.map((r) => ({
-    id: r.id,
-    ...(JSON.parse(r.data) as Record<string, unknown>),
-    _owner: r.owner_id,
-    _createdAt: r.created_at,
-    _updatedAt: r.updated_at,
-  }));
+  const documents = results.map((r) =>
+    withDocumentMeta(r.id, JSON.parse(r.data) as Record<string, unknown>, {
+      ownerId: r.owner_id,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }),
+  );
 
   return c.json({ documents, total: countResult?.total ?? 0 });
 });
@@ -186,13 +205,13 @@ dbRoutes.get('/apps/:appId/db/:collection/:id', async (c) => {
 
   if (!row) return c.text('not found', 404);
 
-  return c.json({
-    id: row.id,
-    ...(JSON.parse(row.data) as Record<string, unknown>),
-    _owner: row.owner_id,
-    _createdAt: row.created_at,
-    _updatedAt: row.updated_at,
-  });
+  return c.json(
+    withDocumentMeta(row.id, JSON.parse(row.data) as Record<string, unknown>, {
+      ownerId: row.owner_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    }),
+  );
 });
 
 /** Update a document. Auth required, owner only. */
@@ -244,13 +263,13 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
       .bind(mergedJson, now, appId, collection, id)
       .run();
 
-    return c.json({
-      id,
-      ...merged,
-      _owner: existing.owner_id,
-      _createdAt: existing.created_at,
-      _updatedAt: now,
-    });
+    return c.json(
+      withDocumentMeta(id, merged, {
+        ownerId: existing.owner_id,
+        createdAt: existing.created_at,
+        updatedAt: now,
+      }),
+    );
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
