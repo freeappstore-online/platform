@@ -145,7 +145,11 @@ describe('POST /v1/auth/email/start', () => {
     const request = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: 'retry@example.com', appId: 'demo', returnTo: VALID_RETURN_TO }),
+      body: JSON.stringify({
+        email: 'retry@example.com',
+        appId: 'demo',
+        returnTo: VALID_RETURN_TO,
+      }),
     };
 
     const first = await app.request('/v1/auth/email/start', request, makeEnv());
