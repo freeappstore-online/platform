@@ -1974,7 +1974,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "abid8195"
+      "creatorGithub": "abid8195",
+      "microphone": true
     },
     {
       "id": "devestimate",
@@ -2044,7 +2045,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "imhappyamber-design"
+      "creatorGithub": "imhappyamber-design",
+      "microphone": true
     },
     {
       "id": "taskflow-manager",
@@ -2128,7 +2130,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Abrarcancode67"
+      "creatorGithub": "Abrarcancode67",
+      "microphone": true
     },
     {
       "id": "pulsestack",
@@ -2212,7 +2215,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "microphone": true
     },
     {
       "id": "quickcalc",
@@ -2310,7 +2314,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "microphone": true
     },
     {
       "id": "calcwright",

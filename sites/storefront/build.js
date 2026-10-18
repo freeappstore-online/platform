@@ -337,9 +337,10 @@ function renderAppCard(app, published) {
   // img.error listener and reads it. No more JS-string-in-HTML-attribute splicing.
   const letter = escapeHtml((app.name || '?').trim().charAt(0).toUpperCase());
   const authAttr = app.requiresAuth ? ' data-requires-auth="1"' : '';
+  const micAttr = app.microphone ? ' data-microphone="1"' : '';
   const publishedAttr = published ? ` data-published="${escapeHtml(published)}"` : '';
   const iconEmoji = app.icon || `&#${(app.name || '?').codePointAt(0)};`;
-  return `        <div class="app-card compact" role="button" tabindex="0" aria-label="View details for ${escapeHtml(app.name)}" data-id="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name)}" data-category="${escapeHtml(app.category)}" data-about="/apps/${escapeHtml(app.id)}"${authAttr}${publishedAttr}>
+  return `        <div class="app-card compact" role="button" tabindex="0" aria-label="View details for ${escapeHtml(app.name)}" data-id="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name)}" data-category="${escapeHtml(app.category)}" data-about="/apps/${escapeHtml(app.id)}"${authAttr}${micAttr}${publishedAttr}>
           <div class="app-icon" data-letter="${letter}">
             <span class="app-emoji" aria-hidden="true">${iconEmoji}</span>
           </div>
@@ -601,6 +602,14 @@ function viewportCoverage(minWidth) {
   return 10;
 }
 
+const MIC_BANNER_COPY =
+  "This app uses your microphone, which isn't available in the preview. Open it in a new tab to use it.";
+
+function renderMicBanner(app) {
+  if (!app.microphone) return '';
+  return `<p class="preview-banner" role="status">${MIC_BANNER_COPY}</p>`;
+}
+
 function renderViewportBadge(manifest) {
   if (!manifest) {
     return '<p class="audit-badge audit-pending"><span class="dot"></span> Viewport support: unknown</p>';
@@ -854,6 +863,7 @@ apps.forEach((app, i) => {
     .replace(/\{\{AUDIT_BADGE\}\}/g, renderAuditBadge(auditMap.get(app.id)))
     .replace(/\{\{CODE_QUALITY_BADGE\}\}/g, renderCodeQualityBadge(app.id))
     .replace(/\{\{VIEWPORT_BADGE\}\}/g, renderViewportBadge(manifests[i]))
+    .replace(/\{\{MIC_BANNER\}\}/g, renderMicBanner(app))
     .replace(/\{\{SIZE\}\}/g, formatSize(buildInfos[i]?.size) || 'Unknown');
 
   // SRI hashes and content-version tokens (detail pages use auth.js + detail-page.js).

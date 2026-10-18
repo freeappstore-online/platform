@@ -330,6 +330,7 @@
     var btnAbout = document.getElementById('previewAbout');
     var btnClose = document.getElementById('previewClose');
     var modeBar = document.getElementById('previewModeBar');
+    var micBanner = document.getElementById('previewMicBanner');
     var current = null; // { id, name, url, aboutUrl }
     var loadTimeout = null;
     var loadToken = 0; // bumped on each loadInPane so stale fetches/timeouts no-op
@@ -353,10 +354,15 @@
       if (empty) empty.classList.remove('is-error');
     }
 
+    function setMicBanner(show) {
+      if (micBanner) micBanner.hidden = !show;
+    }
+
     function showLoadError(meta) {
       if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
       pane.classList.remove('is-loading');
       frame.hidden = true;
+      setMicBanner(false);
       if (empty) {
         empty.hidden = false;
         empty.classList.add('is-error');
@@ -398,6 +404,7 @@
       if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
       pane.classList.remove('is-loading');
       frame.hidden = true;
+      setMicBanner(false);
       if (modeBar) modeBar.hidden = true;
       if (empty) {
         empty.hidden = false;
@@ -416,6 +423,8 @@
       setTitle(meta.name, meta.url);
       activate(card);
       setUrlParam(meta.id);
+
+      setMicBanner(!!meta.microphone && !meta.requiresAuth);
 
       if (meta.requiresAuth) {
         showAuthRequired(meta);
@@ -459,6 +468,7 @@
       if (btnAbout) btnAbout.hidden = true;
       btnClose.hidden = true;
       if (modeBar) modeBar.hidden = true;
+      setMicBanner(false);
       setTitle(null, '');
       activate(null);
       pane.classList.remove('is-loading');
@@ -481,6 +491,7 @@
         url: cta ? cta.getAttribute('href') : null,
         aboutUrl: card.dataset.about || null,
         requiresAuth: card.dataset.requiresAuth === '1',
+        microphone: card.dataset.microphone === '1',
       };
     }
 
