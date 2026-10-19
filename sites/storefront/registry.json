@@ -2358,6 +2358,20 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "Abrarcancode67"
+    },
+    {
+      "id": "watertracker",
+      "name": "Water Tracker",
+      "category": "Health & Fitness",
+      "icon": "💧",
+      "iconBg": "#e0f2fe",
+      "description": "Coming soon — a private water tracker: daily goal, one-tap cups, a progress ring, history and streaks. Offline, and nothing leaves your device.",
+      "appUrl": "https://watertracker.freeappstore.online",
+      "repo": "freeappstore-online/watertracker",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
