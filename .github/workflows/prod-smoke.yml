@@ -70,11 +70,12 @@ jobs:
           csp=$(printf '%s\n' "$headers" | grep -i '^content-security-policy:' || true)
           echo "  $pp"
           fail=0
-          for f in microphone camera geolocation midi gyroscope accelerometer magnetometer usb serial hid bluetooth payment display-capture clipboard-read screen-wake-lock xr-spatial-tracking; do
+          for f in microphone camera geolocation midi gyroscope accelerometer magnetometer usb serial hid bluetooth display-capture clipboard-read screen-wake-lock xr-spatial-tracking; do
             printf '%s' "$pp" | grep -q "$f=(self)" || { echo "::error::Permissions-Policy does not grant $f=(self)"; fail=1; }
           done
           blocked=$(printf '%s' "$pp" | grep -o '[a-z-]*=()' | tr '\n' ' ')
-          [ "$blocked" = "browsing-topics=() " ] || { echo "::error::unexpected blocked features: $blocked"; fail=1; }
+          # browsing-topics: no tracking. payment: FreeAppStore apps take no payments (#289).
+          [ "$blocked" = "browsing-topics=() payment=() " ] || { echo "::error::unexpected blocked features: $blocked"; fail=1; }
           printf '%s' "$csp" | grep -q "worker-src 'self' blob:" || { echo "::error::CSP lacks worker-src blob:"; fail=1; }
           printf '%s' "$csp" | grep -q "'wasm-unsafe-eval'" || { echo "::error::CSP lacks 'wasm-unsafe-eval'"; fail=1; }
           # Storefront previews delegate the same features to app origins (#284).
