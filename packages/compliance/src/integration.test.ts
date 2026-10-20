@@ -84,6 +84,7 @@ describe('failing-app fixture', () => {
       'Dark mode support',
       'No unsafe 100vh',
       'PWA meta tags',
+      'Permissions declared',
       'Store link',
     ]);
     // Two passing checks on a maximally-broken app:

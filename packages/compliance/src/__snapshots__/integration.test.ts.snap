@@ -162,6 +162,15 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     ],
   },
   {
+    "detail": "uses microphone (web/src/recorder.ts) without declaring it",
+    "name": "Permissions declared",
+    "status": "warn",
+    "suggestions": [
+      "Add them to "permissions" in web/public/manifest.json, with a one-line reason shown on your listing: "permissions": [{ "name": "microphone", "reason": "…" }]",
+      "Valid names: microphone, camera, location, motion, notifications, midi, clipboard, screen, bluetooth, usb, serial, hid.",
+    ],
+  },
+  {
     "detail": "no link to freeappstore.online found in web/src/",
     "name": "Store link",
     "status": "warn",

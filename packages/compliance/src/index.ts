@@ -13,6 +13,7 @@ import { checkNoPayments } from './checks/no-payments.js';
 import { checkNoPlaceholders } from './checks/no-placeholders.js';
 import { checkNoScroll } from './checks/no-scroll.js';
 import { checkNoTracking } from './checks/no-tracking.js';
+import { checkPermissions } from './checks/permissions.js';
 import { checkMaskableIcon } from './checks/pwa-maskable-icon.js';
 import { checkPwaMeta } from './checks/pwa-meta.js';
 import { checkPwaOffline } from './checks/pwa-offline.js';
@@ -26,6 +27,12 @@ import { isGameProject } from './lib/project-type.js';
 import type { CheckResult } from './types.js';
 
 export type { FileSource } from './lib/file-source.js';
+export type { DeclaredPermission, PermissionId } from './lib/permissions.js';
+export {
+  detectPermissions,
+  PERMISSION_IDS,
+  readDeclaredPermissions,
+} from './lib/permissions.js';
 export type { LiveAuditInput, LiveAuditReport } from './live/index.js';
 // Live-URL audit (used by the compliance audit Worker; runs in
 // browser/Workers env, no filesystem). Separate export path so callers
@@ -56,6 +63,7 @@ export {
   checkNoPlaceholders,
   checkNoScroll,
   checkNoTracking,
+  checkPermissions,
   checkPwaMeta,
   checkPwaOffline,
   checkStoreLink,
@@ -93,6 +101,7 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkNoPlaceholders(source),
     checkNoTracking(source),
     checkNoPayments(source),
+    checkPermissions(source),
     checkBrandFonts(source),
     checkBrandTokens(source),
     checkNoBrandOverrides(source),
