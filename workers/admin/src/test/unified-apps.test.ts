@@ -260,13 +260,15 @@ describe("/api/agent/sessions", () => {
 });
 
 describe("/api/agent/sessions/:id", () => {
-  // With unreadable stored messages the handler falls back to the agent's
-  // /history over the network. Stub it: unstubbed, these tests reached the
-  // live agent and timed out at random.
+  // Messages come from the D1 transcript only (#283): the old fallback to the
+  // agent's /history always 401'd. Any network call here is a regression.
+  let fetchSpy: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.stubGlobal("fetch", async () => new Response("{}", { status: 404 }));
+    fetchSpy = vi.fn(async () => new Response("{}", { status: 404 }));
+    vi.stubGlobal("fetch", fetchSpy);
   });
   afterEach(() => {
+    expect(fetchSpy).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 
