@@ -191,23 +191,23 @@ export class Room {
 
     socket.addEventListener('message', (ev) => {
       if (this.debug) console.log('[rooms] ←', ev.data);
+      let parsed:
+        | { kind: 'msg'; from: RoomPeer; data: unknown; at: number }
+        | { kind: 'peers'; peers: RoomPeer[] };
       try {
-        const parsed = JSON.parse(ev.data as string) as
-          | { kind: 'msg'; from: RoomPeer; data: unknown; at: number }
-          | { kind: 'peers'; peers: RoomPeer[] };
-        if (parsed.kind === 'msg') {
-          if (this.debug)
-            console.log(`[rooms] msg from ${parsed.from.login}, ${this.listeners.size} listeners`);
-          for (const l of this.listeners) {
-            l({ from: parsed.from, data: parsed.data, at: parsed.at });
-          }
-        } else if (parsed.kind === 'peers') {
-          this._peers = parsed.peers;
-          if (this.debug) console.log(`[rooms] peers: ${this._peers.length}`);
-          for (const l of this.peerListeners) l(this._peers);
-        }
+        parsed = JSON.parse(ev.data as string);
       } catch (e) {
         if (this.debug) console.warn('[rooms] malformed frame', ev.data, e);
+        return;
+      }
+      if (parsed.kind === 'msg') {
+        if (this.debug)
+          console.log(`[rooms] msg from ${parsed.from.login}, ${this.listeners.size} listeners`);
+        callEach(this.listeners, { from: parsed.from, data: parsed.data, at: parsed.at });
+      } else if (parsed.kind === 'peers') {
+        this._peers = parsed.peers;
+        if (this.debug) console.log(`[rooms] peers: ${this._peers.length}`);
+        callEach(this.peerListeners, this._peers);
       }
     });
 
@@ -247,5 +247,16 @@ export class Room {
     if (this.connectionState === state) return;
     this.connectionState = state;
     for (const l of this.stateListeners) l(state);
+  }
+}
+
+/** Call every listener. One that throws is reported and doesn't stop the rest. */
+function callEach<T>(listeners: Iterable<(value: T) => void>, value: T): void {
+  for (const l of listeners) {
+    try {
+      l(value);
+    } catch (e) {
+      console.error('[rooms] listener threw', e);
+    }
   }
 }

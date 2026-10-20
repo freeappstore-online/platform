@@ -212,6 +212,23 @@ describe('Room.onMessage', () => {
     expect(messages).toEqual([]);
   });
 
+  it('still delivers to later listeners when an earlier one throws', async () => {
+    const room = await newRoom();
+    created[0]!.triggerOpen();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const messages: unknown[] = [];
+    room.onMessage(() => {
+      throw new Error('boom');
+    });
+    room.onMessage((m) => messages.push(m.data));
+    created[0]!.triggerMessage(
+      JSON.stringify({ kind: 'msg', from: { uid: 'gh:1', login: 'a' }, data: 1, at: 0 }),
+    );
+    expect(messages).toEqual([1]);
+    expect(errors).toHaveBeenCalledWith('[rooms] listener threw', expect.any(Error));
+    errors.mockRestore();
+  });
+
   it('ignores frames with unknown `kind`', async () => {
     const room = await newRoom();
     created[0]!.triggerOpen();
