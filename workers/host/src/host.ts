@@ -114,7 +114,7 @@ function xmlEscape(value: string): string {
  *
  * Default-open: an app gets what a normal website on its own origin would.
  * The browser itself asks the user before granting camera, microphone,
- * location, sensors, USB/serial/HID/Bluetooth devices, payment etc., so a
+ * location, sensors, USB/serial/HID/Bluetooth devices etc., so a
  * platform-level block only breaks apps (#267: `microphone=()` made a creator
  * delete a working feature) and protects nobody. `(self)` grants the app's own
  * origin but not cross-origin iframes it embeds.
@@ -122,9 +122,11 @@ function xmlEscape(value: string): string {
  * Only names Chromium recognises are listed: an unknown name logs a console
  * error on every page load of every app.
  *
- * The one block, with its reason:
+ * The blocks, each with its reason:
  *   - browsing-topics: the Topics API hands the user's ad-interest topics to
  *     third-party scripts. The store requires apps not to track users.
+ *   - payment: FreeAppStore apps take no payments (owner decision, #289).
+ *     Monetization is a ProAppStore feature; `fas check` rejects payment code.
  */
 export const PERMISSIONS_POLICY_SELF = [
   "accelerometer",
@@ -146,7 +148,6 @@ export const PERMISSIONS_POLICY_SELF = [
   "magnetometer",
   "microphone",
   "midi",
-  "payment",
   "picture-in-picture",
   "publickey-credentials-create",
   "publickey-credentials-get",
@@ -159,7 +160,7 @@ export const PERMISSIONS_POLICY_SELF = [
   "xr-spatial-tracking",
 ] as const;
 
-export const PERMISSIONS_POLICY_BLOCKED = ["browsing-topics"] as const;
+export const PERMISSIONS_POLICY_BLOCKED = ["browsing-topics", "payment"] as const;
 
 const PERMISSIONS_POLICY = [...PERMISSIONS_POLICY_SELF.map((f) => `${f}=(self)`), ...PERMISSIONS_POLICY_BLOCKED.map((f) => `${f}=()`)].join(
   ", ",

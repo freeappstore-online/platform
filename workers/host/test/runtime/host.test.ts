@@ -37,9 +37,11 @@ describe("serving an app: D1 routes row → R2 object", () => {
     expect(res.headers.get("cache-control")).toBe("public, max-age=60, must-revalidate");
     expect(res.headers.get("etag")).toBeTruthy();
     const pp = res.headers.get("permissions-policy") ?? "";
-    for (const f of ["microphone", "camera", "geolocation", "midi", "gyroscope", "accelerometer", "usb", "payment"]) {
+    for (const f of ["microphone", "camera", "geolocation", "midi", "gyroscope", "accelerometer", "usb"]) {
       expect(pp).toContain(`${f}=(self)`);
     }
+    // FreeAppStore apps take no payments (#289).
+    expect(pp).toContain("payment=()");
   });
 
   it("serves assets with their own type and a long immutable cache", async () => {

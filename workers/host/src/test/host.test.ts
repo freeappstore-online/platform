@@ -200,7 +200,6 @@ describe("securityHeaders", () => {
     "magnetometer",
     "microphone",
     "midi",
-    "payment",
     "picture-in-picture",
     "publickey-credentials-create",
     "publickey-credentials-get",
@@ -216,9 +215,10 @@ describe("securityHeaders", () => {
     expect(entries).toContain(`${feature}=(self)`);
   });
 
-  it("Permissions-Policy blocks only the Topics API (no-tracking rule)", () => {
+  it("Permissions-Policy blocks only the Topics API (no tracking) and payments (#289)", () => {
     const entries = (html.get("permissions-policy") ?? "").split(", ");
-    expect(entries.filter((e) => e.endsWith("=()"))).toEqual(["browsing-topics=()"]);
+    expect(entries.filter((e) => e.endsWith("=()"))).toEqual(["browsing-topics=()", "payment=()"]);
+    expect(entries).not.toContain("payment=(self)");
     // interest-cohort (FLoC) is unrecognised by current Chrome and logged a
     // console error on every page load.
     expect(entries.some((e) => e.startsWith("interest-cohort"))).toBe(false);
