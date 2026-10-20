@@ -153,6 +153,20 @@ describe("routes/deprovision", () => {
   it("ignores non-POST", async () => {
     expect(await call(deprovisionRoutes, "/api/deprovision")).toBeNull();
   });
+
+  it("answers 400, not 500, to a malformed body on every write endpoint", async () => {
+    const bad: RequestInit = { method: "POST", body: "{bad", headers: { "Content-Type": "application/json" } };
+    const cases: Array<[RouteHandler, string]> = [
+      [deprovisionRoutes, "/api/unpublish"],
+      [deprovisionRoutes, "/api/deprovision"],
+      [dnsRoutes, "/api/fix-dns"],
+      [provisionRoutes, "/api/provision"],
+    ];
+    for (const [handler, path] of cases) {
+      const res = await call(handler, path, { ...bad }, env(), { ok: true, kind: "service" });
+      expect(res!.status, path).toBe(400);
+    }
+  });
 });
 
 describe("routes/ai-keys-proxy", () => {

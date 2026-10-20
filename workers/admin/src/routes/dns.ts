@@ -5,8 +5,8 @@ import type { RouteHandler } from "./types";
 export const dnsRoutes: RouteHandler = async ({ request, env, url }) => {
   if (url.pathname !== "/api/fix-dns" || request.method !== "POST") return null;
   try {
-    const body = (await request.json()) as { id: string; store: "apps" | "games" };
-    if (!body.id || !body.store) return json({ error: "id and store required" }, 400, request);
+    const body = (await request.json().catch(() => null)) as { id: string; store: "apps" | "games" } | null;
+    if (!body?.id || !body.store) return json({ error: "id and store required" }, 400, request);
     const meta =
       body.store === "apps"
         ? { zone: env.FAS_ZONE_ID, domain: "freeappstore.online" }

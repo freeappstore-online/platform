@@ -13,8 +13,8 @@ export const deprovisionRoutes: RouteHandler = async ({ request, env, url }) => 
 
 async function unpublish(request: Request, env: Env): Promise<Response> {
   try {
-    const body = (await request.json()) as { id: string; store: "apps" | "games" };
-    if (!body.id || !body.store) return json({ error: "id and store required" }, 400, request);
+    const body = (await request.json().catch(() => null)) as { id: string; store: "apps" | "games" } | null;
+    if (!body?.id || !body.store) return json({ error: "id and store required" }, 400, request);
     const registryRepo = body.store === "apps" ? "freeappstore-online/platform" : "freegamestore-online/freegamestore";
     const registryPath = body.store === "apps" ? "sites/storefront/registry.json" : "registry.json";
     const key = body.store === "apps" ? "apps" : "games";
@@ -53,8 +53,8 @@ async function unpublish(request: Request, env: Env): Promise<Response> {
 
 async function deprovision(request: Request, env: Env): Promise<Response> {
   try {
-    const body = (await request.json()) as DeprovisionRequest;
-    if (!body.id || !body.store) return json({ error: "id and store required" }, 400, request);
+    const body = (await request.json().catch(() => null)) as DeprovisionRequest | null;
+    if (!body?.id || !body.store) return json({ error: "id and store required" }, 400, request);
     const result = await handleDeprovision(body, {
       CF_ACCOUNT_ID: env.CF_ACCOUNT_ID,
       CF_API_TOKEN: env.CF_API_TOKEN,

@@ -61,6 +61,16 @@ describe("a chat turn: entry → PLATFORM key lookup → Durable Object → D1",
     expect(JSON.parse(row!.messages).map((m: { content: string }) => m.content)).toContain("build a dictionary");
   });
 
+  it("answers 400, not 500, to a malformed chat body", async () => {
+    await indexRow("s-badjson", "gh:1");
+    const res = await call("/session/s-badjson/chat", {
+      method: "POST",
+      headers: { ...ALICE, "Content-Type": "application/json" },
+      body: "{bad",
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("records the backend's funding source for the turn (#16)", async () => {
     await indexRow("s-grant", "gh:2");
 

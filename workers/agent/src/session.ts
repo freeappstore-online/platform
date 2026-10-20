@@ -430,7 +430,10 @@ export class AgentSession implements DurableObject {
       return json({ error: "Request too large (max 200KB)" }, 413, request, this.config.domain);
     }
 
-    const body = await request.json<ChatBody>();
+    const body = await request.json<ChatBody>().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return json({ error: "invalid JSON body" }, 400, request, this.config.domain);
+    }
     await this.recordAiSource(body);
 
     if (!body.message || !body.aiConfig?.provider || !body.aiConfig?.model) {

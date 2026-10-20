@@ -22,7 +22,8 @@ export const provisionRoutes: RouteHandler = async ({ request, env, url, auth })
     }
   }
   try {
-    const body = (await request.json()) as any;
+    const body = (await request.json().catch(() => null)) as any;
+    if (!body || typeof body !== "object") return json({ error: "invalid JSON body" }, 400, request);
     const result = await handlePublish(body, {
       CF_ACCOUNT_ID: env.CF_ACCOUNT_ID,
       CF_API_TOKEN: env.CF_API_TOKEN,
