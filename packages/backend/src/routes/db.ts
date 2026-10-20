@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
 /**
@@ -128,8 +129,8 @@ dbRoutes.get('/apps/:appId/db/:collection', async (c) => {
   if (colErr) return c.text(colErr, 400);
 
   const owner = c.req.query('owner');
-  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 20, 1), 100);
-  const offset = Math.max(Number(c.req.query('offset')) || 0, 0);
+  const limit = queryLimit(c.req.query('limit'), 20, 100);
+  const offset = queryOffset(c.req.query('offset'));
   const orderBy = c.req.query('orderBy') === 'updated_at' ? 'updated_at' : 'created_at';
   const order = c.req.query('order') === 'asc' ? 'ASC' : 'DESC';
 

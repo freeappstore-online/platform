@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -329,4 +330,15 @@ describe('db (collections) routes', () => {
     const data = (await res.json()) as { documents: unknown[] };
     expect(data.documents).toHaveLength(1);
   });
+});
+
+describe.skipIf(!hasSqlite)('db list paging against real SQLite', () => {
+  it.each(['limit=1.5', 'offset=0.5', 'limit=-5&offset=-1', 'limit=abc'])(
+    'GET ?%s returns 200, not a datatype mismatch',
+    async (qs) => {
+      const { d1 } = sqliteD1();
+      const res = await app.request(`/v1/apps/timer/db/posts?${qs}`, {}, env(d1));
+      expect(res.status).toBe(200);
+    },
+  );
 });
