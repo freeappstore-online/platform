@@ -12,7 +12,7 @@ import {
 } from "./publish";
 
 /** Injectable Cloudflare API caller, mirroring GhFn. */
-export type CfFn = (path: string, method?: string, body?: any) => Promise<any>;
+export type CfFn = (path: string, method?: string, body?: unknown) => Promise<any>;
 
 export interface DeprovisionRequest {
   id: string;
