@@ -50,6 +50,8 @@ if (typeof window !== 'undefined') {
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     if (getStoredPreference() === 'system') {
       applyTheme(getSystemTheme());
+      // useSyncExternalStore only re-renders when the snapshot object changes.
+      cachedSnapshot = getThemeSnapshot();
       notifyThemeListeners();
     }
   });
