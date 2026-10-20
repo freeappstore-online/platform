@@ -1227,7 +1227,17 @@ footer .container {
   flex-wrap: wrap;
 }
 
+/* Category and permission icons share one line so cards keep an even
+   height; the category truncates, the icons stay whole (#285). */
+.app-card.compact .app-meta:has(.app-perms) { flex-wrap: nowrap; }
+.app-card.compact .app-cat {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .app-card.compact .app-perms {
+  flex-shrink: 0;
   font-size: 0.85rem;
   letter-spacing: 0.1em;
   line-height: 1;

@@ -432,7 +432,7 @@ function renderAppCard(app, published) {
           </div>
           <div class="app-body">
             <span class="app-name">${escapeHtml(app.name)}${qualityBadge}</span>
-            <span class="app-meta">${escapeHtml(categoryLabel(app.category))}${renderPermissionIcons(app)}</span>
+            <span class="app-meta"><span class="app-cat">${escapeHtml(categoryLabel(app.category))}</span>${renderPermissionIcons(app)}</span>
           </div>
           <button class="vote-btn" type="button" data-app-id="${escapeHtml(app.id)}" aria-label="Vote for ${escapeHtml(app.name)}" aria-pressed="false">
             <svg class="vote-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
