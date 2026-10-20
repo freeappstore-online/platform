@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Minimal mock of the admin worker to test the new endpoints.
 // We import the worker and call fetch() directly with a mock env.
@@ -260,6 +260,16 @@ describe("/api/agent/sessions", () => {
 });
 
 describe("/api/agent/sessions/:id", () => {
+  // With unreadable stored messages the handler falls back to the agent's
+  // /history over the network. Stub it: unstubbed, these tests reached the
+  // live agent and timed out at random.
+  beforeEach(() => {
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 404 }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("returns session with messages", async () => {
     const res = await callWorker("/api/agent/sessions/sess-123");
     expect(res.status).toBe(200);
