@@ -171,7 +171,10 @@ export function checkBrandFontsLive(html: string): CheckResult {
 
 export async function checkManifestLive(html: string, liveUrl: string): Promise<CheckResult> {
   // Find the manifest link in the HTML, then fetch + validate it.
-  const m = /<link[^>]*rel=["']manifest["'][^>]*href=["']([^"']+)["']/i.exec(html);
+  // rel and href can appear in either order (same as checkUnsafeVhLive).
+  const m =
+    /<link[^>]*rel=["']manifest["'][^>]*href=["']([^"']+)["']/i.exec(html) ??
+    /<link[^>]*href=["']([^"']+)["'][^>]*rel=["']manifest["']/i.exec(html);
   if (!m) {
     return {
       name: 'PWA manifest (live)',

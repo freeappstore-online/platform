@@ -92,6 +92,19 @@ describe('checkManifestLive', () => {
     expect(r.detail).toMatch(/404/);
   });
 
+  it('finds the manifest link when href comes before rel', async () => {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response(JSON.stringify({ name: 'X', display: 'standalone', start_url: '/' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    const html = '<link href="/manifest.webmanifest" rel="manifest">';
+    const r = await checkManifestLive(html, 'https://x.example');
+    expect(r.status).toBe('pass');
+    expect(fetch).toHaveBeenCalledWith('https://x.example/manifest.webmanifest', expect.anything());
+  });
+
   it('fails when manifest is missing required fields', async () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response(JSON.stringify({ name: 'X' }), {
