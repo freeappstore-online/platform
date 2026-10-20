@@ -375,6 +375,20 @@ describe("handlePublish never grants access to a repo that isn't the publisher's
     expect(result.steps.map((s) => s.name)).not.toContain("Collaborator");
   });
 
+  it("refuses an id claimed by someone else before its repo exists, and creates nothing", async () => {
+    const calls: string[] = [];
+    const inner = successGh();
+    const gh: GhFn = async (path, method, body) => {
+      calls.push(`${method ?? "GET"} ${path}`);
+      if (!method && path === "/repos/freeappstore-online/testapp") return { __status: 404 };
+      return inner(path, method, body);
+    };
+    const result = await handlePublish(baseReq({ creatorGithub: "mallory" }), baseEnv({ DB: fakeDB({ owner: "alice" }) }), gh);
+    expect(result.success).toBe(false);
+    expect(result.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("already claimed and isn't yours");
+    expect(calls.filter((c) => !c.startsWith("GET"))).toEqual([]);
+  });
+
   it("refuses an existing repo with no ownership record, and grants nothing", async () => {
     const { gh, granted } = recordingGh();
     const result = await handlePublish(baseReq(), baseEnv({ DB: fakeDB({ owner: null }) }), gh);

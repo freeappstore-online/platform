@@ -360,11 +360,17 @@ async function ensureRepo(req: PublishRequest, config: StoreConfig, env: Publish
   // auto_init: false — no initial README. GitHub Actions deploy won't run
   // until the user pushes their first commit, which is exactly what we tell
   // them to do in the fas publish "Push your code:" instructions.
+  // The apps row can exist before the repo does (the VibeCode agent claims the
+  // id first), so check the recorded owner whether or not the repo exists.
+  const owner = await recordedOwner(env, req.id);
+  const publisher = req.creatorGithub || config.org;
+  const isOwner = !!owner && owner.toLowerCase() === publisher.toLowerCase();
+  if (owner && !isOwner) {
+    return { name: "GitHub repo", status: "fail", detail: `${req.id} is already claimed and isn't yours to publish` };
+  }
   const repoCheck = await ghCall(`/repos/${config.org}/${req.id}`);
   if (repoCheck.id) {
-    const owner = await recordedOwner(env, req.id);
-    const publisher = req.creatorGithub || config.org;
-    if (!owner || owner.toLowerCase() !== publisher.toLowerCase()) {
+    if (!isOwner) {
       return { name: "GitHub repo", status: "fail", detail: `${config.org}/${req.id} already exists and isn't yours to publish` };
     }
     return { name: "GitHub repo", status: "skip", detail: `${config.org}/${req.id} already exists` };
