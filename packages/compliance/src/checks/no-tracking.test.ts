@@ -32,6 +32,15 @@ describe('checkNoTracking', () => {
     expect(r.detail).toMatch(/google-analytics/);
   });
 
+  it('fails on a tracker URL inside a JS string (the // is not a comment)', async () => {
+    await writeFile(
+      join(dir, 'web', 'app.ts'),
+      "const s = document.createElement('script'); s.src = 'https://www.google-analytics.com/analytics.js';",
+    );
+    const r = await checkNoTracking(fsFileSource(dir));
+    expect(r.status).toBe('fail');
+  });
+
   it('fails on plausible / posthog as deps even though those are privacy-respecting', async () => {
     // FreeAppStore policy is *no* analytics, even the privacy-respecting ones.
     await writeFile(join(dir, 'web', 'package.json'), '{"dependencies":{"posthog-js":"1.0.0"}}');

@@ -143,7 +143,10 @@ function stripCode(src: string, opts: { strings: boolean }): string {
       blank(out, start, i);
       continue;
     }
-    if (opts.strings && (c === '"' || c === "'" || c === '`')) {
+    // Strings are always skipped, so `//` or `/*` inside one ('https://…',
+    // './icons/*.svg') isn't read as a comment; their contents are only
+    // blanked when opts.strings is set.
+    if (c === '"' || c === "'" || c === '`') {
       const quote = c;
       const start = i + 1; // keep the opening quote in place
       i++;
@@ -151,7 +154,7 @@ function stripCode(src: string, opts: { strings: boolean }): string {
         if (src[i] === '\\' && i + 1 < src.length) i++;
         i++;
       }
-      blank(out, start, i);
+      if (opts.strings) blank(out, start, i);
       i++; // skip closing quote
       continue;
     }

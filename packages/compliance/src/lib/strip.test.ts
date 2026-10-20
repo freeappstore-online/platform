@@ -54,6 +54,15 @@ describe('stripCommentsOnly', () => {
     expect(stripCommentsOnly('const x = "hello" // comment')).toBe('const x = "hello"           ');
   });
 
+  it('does not treat // or /* inside a string as a comment', () => {
+    const src = "s.src = 'https://plausible.io/js/script.js'; const g = './icons/*.svg';";
+    expect(stripCommentsOnly(src)).toBe(src);
+  });
+
+  it('still blanks a real comment after a string containing //', () => {
+    expect(stripCommentsOnly("const u = 'http://x' // note")).toBe("const u = 'http://x'        ");
+  });
+
   it('preserves template literal contents', () => {
     expect(stripCommentsOnly('const x = `font-family: foo`')).toBe('const x = `font-family: foo`');
   });
