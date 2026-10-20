@@ -1,0 +1,46 @@
+name: Refresh app permissions
+
+# Keeps each storefront listing's Permissions section current (#285): scans
+# every listed app's public repo for the browser permissions it declares and
+# uses, and commits sites/storefront/registry.json when anything changed.
+# New apps get their permissions within a day of publishing; run it by hand
+# after publishing to update a listing right away.
+
+on:
+  schedule:
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write   # to dispatch deploy-storefront: GITHUB_TOKEN pushes don't trigger workflows
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Scan app repos
+        run: npx --yes tsx@4 scripts/refresh-app-permissions.mts
+      - name: Commit if changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add sites/storefront/registry.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Refresh app permissions in the storefront registry"
+          # admin's publish also commits registry.json; rebase and retry on a race.
+          for i in 1 2 3; do
+            if git pull --rebase --quiet && git push; then
+              gh workflow run deploy-storefront.yml --ref main
+              exit 0
+            fi
+            sleep 5
+          done
+          exit 1
