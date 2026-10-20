@@ -32,11 +32,22 @@ X-Content-Type-Options: nosniff
 Referrer-Policy: strict-origin-when-cross-origin
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 Cross-Origin-Opener-Policy: same-origin
-Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=(),
-                    magnetometer=(), gyroscope=(), accelerometer=(), midi=()
+Permissions-Policy: <feature>=(self "https://*.freeappstore.online") for every
+                    feature in build.js PREVIEW_FEATURES; browsing-topics=()
 Content-Security-Policy: <see build.js — locked-down, hash-based>
 Content-Security-Policy-Report-Only: <same, for telemetry>
 ```
+
+**Permissions-Policy (#284).** The storefront doesn't block browser features.
+It allows each feature the app host grants (camera, microphone, location,
+sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock,
+…) for itself and for `https://*.freeappstore.online` app origins only, and
+every preview iframe delegates them with `allow`, so previews behave like the
+app in its own tab. The browser still asks the user before granting anything
+sensitive. No other origin can receive a feature through the storefront. The
+only block is `browsing-topics` (the Topics API shares ad interests with third
+parties). `test/preview-capabilities.test.mjs` keeps the list in sync with
+`workers/host/src/host.ts`.
 
 The CSP **does not** appear in `<meta http-equiv>`. Headers are the only
 source of truth. Test `no <meta http-equiv=Content-Security-Policy>...`
@@ -76,7 +87,9 @@ These are *intentional* deferrals — listed so a security reviewer doesn't
 have to find them by archaeology.
 
 1. **Iframe sandbox** retains `allow-same-origin allow-scripts` because
-   iframed apps need their own cookies/localStorage to work. Acceptable
+   iframed apps need their own cookies/localStorage to work, and because
+   without it the app gets an opaque origin that never matches the
+   Permissions-Policy delegation above. Acceptable
    only as long as every iframed app is first-party (built under the
    `freeappstore-online` GitHub org and deployed by us). The moment
    third-party app submissions open, revisit this — likely route apps

@@ -883,22 +883,6 @@ footer .container {
   color: var(--muted);
   margin-top: 0.75rem;
 }
-.preview-banner {
-  font-size: 0.85rem;
-  line-height: 1.45;
-  color: var(--ink);
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius: var(--radius);
-  padding: 0.7rem 0.9rem;
-  margin: 0 auto 1rem;
-  max-width: 360px;
-  text-align: left;
-}
-.preview-banner[hidden] {
-  display: none;
-}
-
 /* === App detail: version log === */
 .version-log {
   list-style: none;
@@ -1443,15 +1427,6 @@ footer .container {
   }
   .preview-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .preview-btn[hidden] { display: none; }
-
-  .preview-pane > .preview-banner {
-    max-width: none;
-    margin: 0;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    border-top: 0;
-  }
 
   .preview-body {
     flex: 1;

@@ -131,7 +131,6 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
-          <p class="preview-banner" id="previewMicBanner" hidden role="status">This app uses your microphone, which isn't available in the preview. Open it in a new tab to use it.</p>
           <div class="preview-body">
             <div class="preview-empty" id="previewEmpty">
               <span class="empty-icon" aria-hidden="true">
@@ -140,7 +139,7 @@
               <span class="empty-title">Pick any app to launch it here</span>
               <span class="empty-tip">Click an app on the left and it loads instantly in this pane. Use <strong>↗</strong> to pop it into a new tab.</span>
             </div>
-            <iframe class="preview-frame" id="previewFrame" title="App preview" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer-when-downgrade" loading="lazy" hidden></iframe>
+            <iframe class="preview-frame" id="previewFrame" title="App preview" allow="{{PREVIEW_ALLOW}}" sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads" referrerpolicy="no-referrer-when-downgrade" loading="lazy" hidden></iframe>
           </div>
         </aside>
       </div>

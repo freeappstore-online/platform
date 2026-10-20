@@ -81,6 +81,31 @@ function injectPartials(html) {
 }
 
 // Read templates (partials injected on load)
+// Browser features the storefront's app previews may use (#284, owner
+// direction: the preview must work too). Same list the app host grants each
+// app on its own origin (workers/host/src/host.ts PERMISSIONS_POLICY_SELF; a
+// test keeps the two in sync). The storefront's Permissions-Policy allows them
+// for itself and *.freeappstore.online app origins, and every preview iframe
+// delegates them with `allow`. The browser still asks the user before granting
+// anything sensitive.
+const PREVIEW_FEATURES = [
+  'accelerometer', 'ambient-light-sensor', 'autoplay', 'bluetooth', 'camera',
+  'clipboard-read', 'clipboard-write', 'display-capture', 'encrypted-media',
+  'fullscreen', 'gamepad', 'geolocation', 'gyroscope', 'hid', 'idle-detection',
+  'local-fonts', 'magnetometer', 'microphone', 'midi', 'payment',
+  'picture-in-picture', 'publickey-credentials-create', 'publickey-credentials-get',
+  'screen-wake-lock', 'serial', 'storage-access', 'usb', 'web-share',
+  'window-management', 'xr-spatial-tracking',
+];
+const APP_ORIGINS = '"https://*.freeappstore.online"';
+// Topics API stays blocked: it shares ad interests with third parties.
+const STOREFRONT_PERMISSIONS_POLICY = [
+  ...PREVIEW_FEATURES.map((f) => `${f}=(self ${APP_ORIGINS})`),
+  'browsing-topics=()',
+].join(', ');
+// `allow` value for preview iframes: each feature defaults to the iframe's src origin.
+const PREVIEW_ALLOW = PREVIEW_FEATURES.join('; ');
+
 const indexTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'index.html'), 'utf8'));
 const detailTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'app-detail.html'), 'utf8'));
 
@@ -337,10 +362,9 @@ function renderAppCard(app, published) {
   // img.error listener and reads it. No more JS-string-in-HTML-attribute splicing.
   const letter = escapeHtml((app.name || '?').trim().charAt(0).toUpperCase());
   const authAttr = app.requiresAuth ? ' data-requires-auth="1"' : '';
-  const micAttr = app.microphone ? ' data-microphone="1"' : '';
   const publishedAttr = published ? ` data-published="${escapeHtml(published)}"` : '';
   const iconEmoji = app.icon || `&#${(app.name || '?').codePointAt(0)};`;
-  return `        <div class="app-card compact" role="button" tabindex="0" aria-label="View details for ${escapeHtml(app.name)}" data-id="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name)}" data-category="${escapeHtml(app.category)}" data-about="/apps/${escapeHtml(app.id)}"${authAttr}${micAttr}${publishedAttr}>
+  return `        <div class="app-card compact" role="button" tabindex="0" aria-label="View details for ${escapeHtml(app.name)}" data-id="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name)}" data-category="${escapeHtml(app.category)}" data-about="/apps/${escapeHtml(app.id)}"${authAttr}${publishedAttr}>
           <div class="app-icon" data-letter="${letter}">
             <span class="app-emoji" aria-hidden="true">${iconEmoji}</span>
           </div>
@@ -475,6 +499,7 @@ const categoryFilters = categories
 // {{APPS_GRID}} is replaced inside the async IIFE after histories are fetched
 // so each card can carry data-published from histories[i].meta.created_at.
 let indexHtml = injectSettingsBootstrap(indexTemplate, 'templates/index.html')
+  .replace('{{PREVIEW_ALLOW}}', PREVIEW_ALLOW)
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
   .replace('{{INLINE_SCRIPT_HASH}}', inlineScriptHash)
   .replace('{{APPS_COUNT}}', String(apps.length))
@@ -600,14 +625,6 @@ function viewportCoverage(minWidth) {
   if (minWidth <= 768) return 35;
   if (minWidth <= 1024) return 20;
   return 10;
-}
-
-const MIC_BANNER_COPY =
-  "This app uses your microphone, which isn't available in the preview. Open it in a new tab to use it.";
-
-function renderMicBanner(app) {
-  if (!app.microphone) return '';
-  return `<p class="preview-banner" role="status">${MIC_BANNER_COPY}</p>`;
 }
 
 function renderViewportBadge(manifest) {
@@ -787,6 +804,7 @@ fs.writeFileSync(path.join(DIST, 'settings.html'), settingsHtml);
 // the live iframe + postMessage logic lives in /quality.js.
 const qualityTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'quality.html'), 'utf8'));
 const qualityRegistry = {
+  previewAllow: PREVIEW_ALLOW,
   apps: apps.map(a => ({ id: a.id, name: a.name, appUrl: a.appUrl })),
   games: (crossRegistry.items || []).map(g => ({ id: g.id, name: g.name, appUrl: g.appUrl })),
   // Platform fixtures — deliberately-broken control cases used to verify
@@ -842,6 +860,7 @@ apps.forEach((app, i) => {
   // pipeline and used inside URLs / JS strings, but we still escape it
   // for defense in depth.
   let html = injectSettingsBootstrap(detailTemplate, 'templates/app-detail.html')
+    .replace(/\{\{PREVIEW_ALLOW\}\}/g, PREVIEW_ALLOW)
     .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
     .replace(/\{\{NAME\}\}/g, escapeHtml(app.name))
     .replace(/\{\{NAME_LOWER\}\}/g, escapeHtml(app.name.toLowerCase()))
@@ -863,7 +882,6 @@ apps.forEach((app, i) => {
     .replace(/\{\{AUDIT_BADGE\}\}/g, renderAuditBadge(auditMap.get(app.id)))
     .replace(/\{\{CODE_QUALITY_BADGE\}\}/g, renderCodeQualityBadge(app.id))
     .replace(/\{\{VIEWPORT_BADGE\}\}/g, renderViewportBadge(manifests[i]))
-    .replace(/\{\{MIC_BANNER\}\}/g, renderMicBanner(app))
     .replace(/\{\{SIZE\}\}/g, formatSize(buildInfos[i]?.size) || 'Unknown');
 
   // SRI hashes and content-version tokens (detail pages use auth.js + detail-page.js).
@@ -1127,7 +1145,7 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
   '  Referrer-Policy: strict-origin-when-cross-origin',
   '  Strict-Transport-Security: max-age=31536000; includeSubDomains',
   '  Cross-Origin-Opener-Policy: same-origin',
-  '  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), midi=()',
+  `  Permissions-Policy: ${STOREFRONT_PERMISSIONS_POLICY}`,
   // Reporting group referenced by CSP `report-to`. Same-origin endpoint
   // handled by functions/v1/csp-report.js.
   '  Reporting-Endpoints: csp-endpoint="/v1/csp-report"',

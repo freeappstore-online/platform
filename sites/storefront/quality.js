@@ -227,6 +227,7 @@ function renderDetail(appEntry, mode) {
             height="${r.height}"
             loading="lazy"
             sandbox="allow-scripts allow-same-origin"
+            allow="${esc(loadRegistry().previewAllow || '')}"
             referrerpolicy="no-referrer"
             data-vp="${r.id}"
           ></iframe>

@@ -89,7 +89,6 @@
       </div>
 
       <aside class="app-split-phone">
-        {{MIC_BANNER}}
         <div class="phone-frame">
           <iframe
             src="{{APP_URL}}"
@@ -97,7 +96,7 @@
             loading="lazy"
             referrerpolicy="no-referrer"
             sandbox="allow-scripts allow-same-origin"
-            allow="clipboard-write; fullscreen"
+            allow="{{PREVIEW_ALLOW}}"
           ></iframe>
         </div>
         <div class="preview-actions">
