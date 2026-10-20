@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { Nav } from "../components/Nav";
 import { Markdown } from "../components/Markdown";
 import { useAuth } from "../hooks/useAuth";
-import { API_URL, getSession } from "../lib/api";
+import { API_URL, authHeaders } from "../lib/api";
 import {
   buildFailingDeployRows,
   deployStatusForApp,
@@ -15,13 +15,6 @@ import { sortUsage, trendPercent, type SortDir, type UsagePoint, type UsageRepor
 
 const ADMIN_ACCESS_MESSAGE = "Platform admin access required. Sign out and back in if your admin role was just added.";
 const ADMIN_WORKER_URL = "https://admin.freeappstore.online";
-
-function authHeaders(): Record<string, string> {
-  const session = getSession();
-  return session?.token
-    ? { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" };
-}
 
 async function adminFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, { ...init, headers: { ...authHeaders(), ...init?.headers } });

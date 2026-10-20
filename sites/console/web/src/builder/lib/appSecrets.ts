@@ -6,7 +6,7 @@
  * server-side. Ownership is recorded at publish, so these endpoints 404 until
  * the app is published.
  */
-import { API_URL, getSession } from "./api";
+import { API_URL, authHeaders } from "./api";
 
 const FAS_ORG = "freeappstore-online";
 
@@ -25,13 +25,6 @@ export interface ManifestApi {
   pattern?: string;
   methods?: string[];
   description?: string;
-}
-
-function authHeaders(): Record<string, string> {
-  const s = getSession();
-  return s?.token
-    ? { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" };
 }
 
 /** List which secret names already have a value. `published:false` => app not in the store yet. */

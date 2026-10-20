@@ -26,6 +26,14 @@ export function getSession(): Session | null {
   }
 }
 
+/** JSON request headers, with the session's bearer token when signed in. */
+export function authHeaders(): Record<string, string> {
+  const s = getSession();
+  return s?.token
+    ? { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json" }
+    : { "Content-Type": "application/json" };
+}
+
 function setSession(session: Session): void {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }

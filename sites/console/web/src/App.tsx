@@ -12,43 +12,13 @@ import {
   formatTimeAgo,
 } from './deploy-status'
 import { PublishForm } from './PublishForm'
+import { useTextSize } from './builder/lib/text-size'
+
 // Lazy — the builder is a large react-router island; keep it out of the console's
 // initial bundle and load it only when the user opens /build.
 const BuilderApp = lazy(() => import('./builder/BuilderApp'))
 
 const fas = initApp({ appId: 'console' })
-
-// ---------------------------------------------------------------------------
-// Text-size preference — mirrors packages/sdk/src/ui/core.tsx logic.
-// The installed SDK (0.10.x) pre-dates the useTextSize export; implement here
-// until the console is upgraded to SDK >=0.14.
-// ---------------------------------------------------------------------------
-type TextSize = 'default' | 'lg' | 'sm'
-const TEXT_SIZE_KEY = 'stores-text-size'
-
-function getTextSize(): TextSize {
-  const stored = localStorage.getItem(TEXT_SIZE_KEY)
-  if (stored === 'lg' || stored === 'sm') return stored
-  return 'default'
-}
-
-function applyTextSize(size: TextSize): void {
-  if (size === 'default') {
-    delete document.documentElement.dataset.text
-  } else {
-    document.documentElement.dataset.text = size
-  }
-}
-
-function useTextSize() {
-  const [size, setSize] = useState<TextSize>(getTextSize)
-  useEffect(() => { applyTextSize(size) }, [size])
-  const set = useCallback((next: TextSize) => {
-    setSize(next)
-    localStorage.setItem(TEXT_SIZE_KEY, next)
-  }, [])
-  return { size, setSize: set }
-}
 
 // The console is served at console.freeappstore.online/ (no prefix) AND at
 // freeappstore.online/app/ (the storefront proxy strips /app server-side but the

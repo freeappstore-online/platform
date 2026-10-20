@@ -9,7 +9,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { useAuth } from "./useAuth";
-import { API_URL, getSession } from "../lib/api";
+import { API_URL, authHeaders } from "../lib/api";
 
 export interface Project {
   id: string;           // agent session UUID
@@ -22,13 +22,6 @@ export interface Project {
 }
 
 const CURRENT_KEY = "fas_current_project";
-
-function authHeaders(): Record<string, string> {
-  const s = getSession();
-  return s?.token
-    ? { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json" }
-    : { "Content-Type": "application/json" };
-}
 
 interface ServerSession {
   id: string;
