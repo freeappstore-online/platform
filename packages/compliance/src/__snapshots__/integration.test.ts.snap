@@ -98,6 +98,15 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     "status": "pass",
   },
   {
+    "detail": "1 file(s) take or register payments: web/src/checkout.ts (Payment Request API)",
+    "name": "No payments (free tier)",
+    "status": "fail",
+    "suggestions": [
+      "FreeAppStore apps are free forever and take no payments: remove the payment API, checkout SDK or payment link.",
+      "To charge for an app, publish it on ProAppStore (https://proappstore.online), which handles subscriptions and creator payouts.",
+    ],
+  },
+  {
     "detail": "not a game project — check skipped",
     "name": "No scroll (games only)",
     "status": "pass",

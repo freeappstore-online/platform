@@ -72,6 +72,7 @@ describe('failing-app fixture', () => {
       'MIT License',
       'No .env.production',
       'No brand overrides',
+      'No payments (free tier)',
       'No template placeholders',
       'PWA manifest',
       'PWA offline correctness',

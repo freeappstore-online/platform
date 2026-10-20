@@ -9,6 +9,7 @@ import { checkManifest } from './checks/manifest.js';
 import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
 import { checkNoCommittedArtifacts } from './checks/no-committed-artifacts.js';
 import { checkNoEnvProduction } from './checks/no-env-production.js';
+import { checkNoPayments } from './checks/no-payments.js';
 import { checkNoPlaceholders } from './checks/no-placeholders.js';
 import { checkNoScroll } from './checks/no-scroll.js';
 import { checkNoTracking } from './checks/no-tracking.js';
@@ -51,6 +52,7 @@ export {
   checkNoBrandOverrides,
   checkNoCommittedArtifacts,
   checkNoEnvProduction,
+  checkNoPayments,
   checkNoPlaceholders,
   checkNoScroll,
   checkNoTracking,
@@ -90,6 +92,7 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkNoEnvProduction(source),
     checkNoPlaceholders(source),
     checkNoTracking(source),
+    checkNoPayments(source),
     checkBrandFonts(source),
     checkBrandTokens(source),
     checkNoBrandOverrides(source),
