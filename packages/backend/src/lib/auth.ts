@@ -116,6 +116,20 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<Curre
   return user;
 }
 
+/** Require the signed-in user to own `appId`: 404 if no such app, 403 if not theirs. */
+export async function requireAppOwner(
+  c: Context<{ Bindings: Env }>,
+  appId: string,
+): Promise<CurrentUser> {
+  const user = await requireUser(c);
+  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+    .bind(appId)
+    .first<{ owner_login: string }>();
+  if (!row) throw new HttpError(404, 'app not found');
+  if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
+  return user;
+}
+
 /**
  * Service-to-service auth: the X-Internal-Token header must equal
  * ADMIN_PROVISION_TOKEN (constant-time compare). Used by the admin Worker,

@@ -11,6 +11,7 @@
 
 import { Hono } from 'hono';
 import { requireUser } from '../lib/auth.js';
+import { parseJsonArray, parseJsonObject } from '../lib/json.js';
 import { queryLimit } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
@@ -166,28 +167,6 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
 
   return c.json({ ok: true });
 });
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (!value || typeof value !== 'string') return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function parseJsonObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'string') return null;
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
 
 // ── Update messages only (called frequently during chat) ────────
 

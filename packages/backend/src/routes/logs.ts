@@ -7,19 +7,10 @@
  */
 
 import { Hono } from 'hono';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { requireAppOwner, requireUser } from '../lib/auth.js';
+import { parseJsonObject } from '../lib/json.js';
 import { queryLimit } from '../lib/paging.js';
 import type { Env } from '../types.js';
-
-async function requireOwner(c: { req: { param: (n: string) => string }; env: Env }, appId: string) {
-  const user = await requireUser(c as Parameters<typeof requireUser>[0]);
-  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId)
-    .first<{ owner_login: string }>();
-  if (!row) throw new HttpError(404, 'app not found');
-  if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
-  return user;
-}
 
 export const logsRoutes = new Hono<{ Bindings: Env }>();
 
@@ -75,7 +66,7 @@ logsRoutes.post('/apps/:appId/logs', async (c) => {
 
 logsRoutes.get('/apps/:appId/logs', async (c) => {
   const appId = c.req.param('appId')!;
-  await requireOwner(c, appId);
+  await requireAppOwner(c, appId);
 
   const level = c.req.query('level');
   const category = c.req.query('category');
@@ -131,7 +122,7 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
 
 logsRoutes.get('/apps/:appId/logs/build', async (c) => {
   const appId = c.req.param('appId')!;
-  await requireOwner(c, appId);
+  await requireAppOwner(c, appId);
 
   const row = await c.env.DB.prepare(
     `SELECT build_meta, ts FROM app_logs
@@ -148,15 +139,3 @@ logsRoutes.get('/apps/:appId/logs/build', async (c) => {
     ts: row.ts,
   });
 });
-
-function parseJsonObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'string') return null;
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}

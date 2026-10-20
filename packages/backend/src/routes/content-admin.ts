@@ -29,6 +29,7 @@
 
 import { Hono } from 'hono';
 import { hasInternalToken, requireAdmin } from '../lib/auth.js';
+import { parseJsonArray, parseJsonObject } from '../lib/json.js';
 import { escapeLike, likePrefix } from '../lib/like.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
@@ -470,34 +471,12 @@ function maxNumber(...values: Array<number | null>): number | null {
   return numbers.length ? Math.max(...numbers) : null;
 }
 
-function parseJsonObject(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== 'string') return null;
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function parseJsonValue(value: unknown): unknown {
   if (!value || typeof value !== 'string') return null;
   try {
     return JSON.parse(value) as unknown;
   } catch {
     return null;
-  }
-}
-
-function parseJsonArray(value: unknown): unknown[] {
-  if (!value || typeof value !== 'string') return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
   }
 }
 

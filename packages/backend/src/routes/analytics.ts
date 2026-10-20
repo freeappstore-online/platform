@@ -17,10 +17,10 @@
 import { type Context, Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
 import {
-  type CurrentUser,
   HttpError,
   hasInternalToken,
   requireAdmin,
+  requireAppOwner,
   requireUser,
 } from '../lib/auth.js';
 import type { Env } from '../types.js';
@@ -67,16 +67,6 @@ async function loadRow(c: Ctx, appId: string): Promise<AnalyticsRow | null> {
     .first<AnalyticsRow>();
 }
 
-async function requireOwner(c: Ctx, appId: string): Promise<CurrentUser> {
-  const user = await requireUser(c);
-  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId)
-    .first<{ owner_login: string }>();
-  if (!row) throw new HttpError(404, 'app not found');
-  if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
-  return user;
-}
-
 function wrap(handler: (c: Ctx) => Promise<Response>) {
   return async (c: Ctx) => {
     try {
@@ -96,7 +86,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     const row = await loadRow(c, appId);
     return c.json(rowToJson(row));
   }),
@@ -106,7 +96,7 @@ analyticsRoutes.put(
   '/apps/:appId/analytics',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     let body: AnalyticsBody;
     try {
       body = (await c.req.json()) as AnalyticsBody;
@@ -304,7 +294,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/stats',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     const days = Math.min(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
@@ -387,7 +377,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/events',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     const days = Math.min(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
@@ -424,7 +414,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/live',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     // Use server-write timestamp here (not the effectiveTime two-stage
     // expression) — offline-replayed events legitimately *are* recent
     // network arrivals even if their client-side `t` is older. The whole
@@ -667,7 +657,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/diagnostics',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
 
     const env = c.env as Env & {
       ANALYTICS?: AnalyticsEngineDataset;

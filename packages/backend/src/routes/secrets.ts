@@ -1,5 +1,5 @@
 import { type Context, Hono } from 'hono';
-import { type CurrentUser, HttpError, requireUser } from '../lib/auth.js';
+import { type CurrentUser, HttpError, requireAppOwner, requireUser } from '../lib/auth.js';
 import { openSecret, type SealedSecret, sealSecret } from '../lib/encryption.js';
 import {
   AllowlistError,
@@ -45,16 +45,6 @@ function wrap(handler: (c: Ctx) => Promise<Response>) {
   };
 }
 
-async function requireOwner(c: Ctx, appId: string): Promise<CurrentUser> {
-  const user = await requireUser(c);
-  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId)
-    .first<{ owner_login: string }>();
-  if (!row) throw new HttpError(404, 'app not found');
-  if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
-  return user;
-}
-
 function requireKek(c: Ctx): string {
   const kek = c.env.APP_SECRET_KEK;
   if (!kek) throw new HttpError(503, 'app-secret proxy not configured');
@@ -74,7 +64,7 @@ interface SecretListRow {
 secretsRoutes.get(
   '/apps/:appId/secrets',
   wrap(async (c) => {
-    await requireOwner(c, c.req.param('appId')!);
+    await requireAppOwner(c, c.req.param('appId')!);
     const result = await c.env.DB.prepare(
       `SELECT name, created_at, last_used_at FROM app_secrets
        WHERE app_id = ? ORDER BY name`,
@@ -99,7 +89,7 @@ secretsRoutes.put(
     if (!SECRET_NAME_RE.test(name)) {
       throw new HttpError(400, 'name must be uppercase + underscores (e.g. OPENWEATHER_KEY)');
     }
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     const kek = requireKek(c);
 
     const body = await c.req.json<{ value?: unknown }>().catch(() => ({}) as { value?: unknown });
@@ -151,7 +141,7 @@ secretsRoutes.delete(
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
     const name = c.req.param('name')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     const result = await c.env.DB.prepare('DELETE FROM app_secrets WHERE app_id = ? AND name = ?')
       .bind(appId, name)
       .run();
@@ -190,7 +180,7 @@ function rowToRule(r: AllowlistRow): AllowlistRule {
 secretsRoutes.get(
   '/apps/:appId/allowlist',
   wrap(async (c) => {
-    await requireOwner(c, c.req.param('appId')!);
+    await requireAppOwner(c, c.req.param('appId')!);
     const result = await c.env.DB.prepare(
       `SELECT pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at
        FROM app_proxy_allowlist WHERE app_id = ? ORDER BY pattern`,
@@ -226,7 +216,7 @@ secretsRoutes.put(
   '/apps/:appId/allowlist',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     const body = await c.req.json<PutAllowlistBody>().catch(() => ({}) as PutAllowlistBody);
     const rule = validateRule({
       pattern: String(body.pattern ?? ''),
@@ -312,7 +302,7 @@ secretsRoutes.delete(
   '/apps/:appId/allowlist',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireOwner(c, appId);
+    await requireAppOwner(c, appId);
     const body = await c.req
       .json<{ pattern?: unknown }>()
       .catch(() => ({}) as { pattern?: unknown });
