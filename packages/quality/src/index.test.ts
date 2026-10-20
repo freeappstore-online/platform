@@ -133,6 +133,24 @@ describe('initQualityReporter', () => {
     // Restore parent.
     Object.defineProperty(window, 'parent', { value: window, configurable: true });
   });
+
+  // #283: stop() used to leave the scheduled posts running.
+  it('posts nothing after stop(), including the scheduled 250ms/1500ms posts', () => {
+    vi.useFakeTimers();
+    const fakeParent = { postMessage: vi.fn() };
+    Object.defineProperty(window, 'parent', { value: fakeParent, configurable: true });
+    try {
+      const handle = initQualityReporter(); // document is ready: posts now, schedules two more
+      expect(fakeParent.postMessage).toHaveBeenCalledTimes(1);
+      handle.stop();
+      vi.advanceTimersByTime(2000);
+      window.dispatchEvent(new Event('resize'));
+      expect(fakeParent.postMessage).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      Object.defineProperty(window, 'parent', { value: window, configurable: true });
+    }
+  });
 });
 
 describe('REFERENCE_VIEWPORTS', () => {

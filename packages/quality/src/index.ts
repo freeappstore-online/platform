@@ -406,10 +406,12 @@ export function initQualityReporter(): ReporterHandle {
 
   // Fire on initial layout, after fonts settle, and after any subsequent
   // resize. The 250ms delay matches what fas screencheck waits for fonts.
+  // Tracked so stop() can cancel them (#283).
+  const timers: ReturnType<typeof setTimeout>[] = [];
   const initialPost = () => {
     post();
-    setTimeout(post, 250);
-    setTimeout(post, 1500); // catch late layout (web fonts, lazy images)
+    timers.push(setTimeout(post, 250));
+    timers.push(setTimeout(post, 1500)); // catch late layout (web fonts, lazy images)
   };
 
   const onResize = () => post();
@@ -428,6 +430,8 @@ export function initQualityReporter(): ReporterHandle {
 
   const handle: ReporterHandle = {
     stop: () => {
+      for (const t of timers) clearTimeout(t);
+      document.removeEventListener('DOMContentLoaded', initialPost);
       w.removeEventListener('resize', onResize);
       w.removeEventListener('message', onMessage);
       delete (w as unknown as { __FAS_QUALITY_REPORTER__?: ReporterHandle })
