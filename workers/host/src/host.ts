@@ -49,7 +49,13 @@ export async function resolveRoute(db: D1Database, host: string): Promise<Route 
  * keys are flat strings, not paths.
  */
 export function r2KeyFor(route: Route, pathname: string): string {
+  // Objects are uploaded under their literal filenames, but the URL pathname
+  // is percent-encoded (`/my%20photo.png`). Malformed escapes stay as-is and
+  // simply miss. R2 keys are flat, so a decoded `..` can't leave the prefix.
   let p = pathname;
+  try {
+    p = decodeURIComponent(pathname);
+  } catch {}
   if (p === "" || p === "/" || p.endsWith("/")) p += "index.html";
   return `${route.r2_prefix}/${p.replace(/^\/+/, "")}`;
 }

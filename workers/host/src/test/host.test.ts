@@ -65,6 +65,15 @@ describe("r2KeyFor", () => {
     expect(r2KeyFor(kanban, "/")).toBe("apps/kanban/index.html");
   });
 
+  it("decodes percent-encoded paths to the literal uploaded filename", () => {
+    expect(r2KeyFor(kanban, "/my%20photo.png")).toBe("apps/kanban/my photo.png");
+    expect(r2KeyFor(kanban, "/caf%C3%A9.svg")).toBe("apps/kanban/café.svg");
+  });
+
+  it("leaves a malformed escape as-is", () => {
+    expect(r2KeyFor(kanban, "/100%.png")).toBe("apps/kanban/100%.png");
+  });
+
   it("defaults directory paths to index.html", () => {
     expect(r2KeyFor(kanban, "/about/")).toBe("apps/kanban/about/index.html");
   });
