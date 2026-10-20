@@ -46,7 +46,7 @@ Each app type gets one decision:
 | # | App | Why first | Decision | Waits on |
 |---|---|---|---|---|
 | 1 | **Period / cycle tracker** | 100M+ installs each for Flo and Period Calendar; Flo's FTC settlement over sharing health data makes "your data never leaves your phone" the pitch. Not in the catalog. | Build now, upgrade later | P1 for period-due and pill reminders |
-| 2 | **Document scanner → PDF** | CamScanner 500M+, six or more scanners in Apple's top-grossing Business chart, weekly-subscription traps. Not in the catalog. | Build now (edge crop, filters, multi-page PDF); OCR in v2 | P2 for OCR |
+| 2 | **Document scanner → PDF** | CamScanner 500M+, six or more scanners in Apple's top-grossing Business chart, weekly-subscription traps. Already in the catalog as `flatbed` (#269 closed as a duplicate). | Upgrade existing: `flatbed` (epic freeappstore-online/flatbed#1); OCR in v2 | P2 for OCR |
 | 3 | **Prayer times & Qibla** | Muslim Pro 100M+; Qibla apps' location data reached US military contractors. Calculation is local (adhan-js). Not in the catalog. | Build now, upgrade later | P1 for prayer-time alerts |
 | 4 | **Intermittent fasting timer** | Zero, Fastic and Simple charge $40–100/yr for a clock; Google Play's top fasting app has 50M+ installs. Not in the catalog. | Build now, upgrade later | P1 for window alerts |
 | 5 | **Water tracker** | Water Reminder 10M+; incumbents paywall reminder customisation. Not in the catalog. | Build now, upgrade later | P1 (the reminder *is* the product, so ship P1 soon after) |
