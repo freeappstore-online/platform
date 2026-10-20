@@ -6,6 +6,11 @@ const MAX_MESSAGE_BYTES = 4 * 1024;
 const MAX_MSGS_PER_SEC = 100;
 const IDLE_EVICT_MS = 24 * 60 * 60 * 1000;
 
+/** Wire size in bytes. A string's .length counts UTF-16 units, not UTF-8 bytes. */
+export function messageBytes(data: string | ArrayBuffer): number {
+  return typeof data === 'string' ? new TextEncoder().encode(data).byteLength : data.byteLength;
+}
+
 interface Peer {
   socket: WebSocket;
   uid: string;
@@ -72,8 +77,7 @@ export class Room {
       }
 
       const data = ev.data;
-      const size = typeof data === 'string' ? data.length : (data as ArrayBuffer).byteLength;
-      if (size > MAX_MESSAGE_BYTES) {
+      if (messageBytes(data) > MAX_MESSAGE_BYTES) {
         server.send(JSON.stringify({ kind: 'error', error: 'message_too_large' }));
         return;
       }
