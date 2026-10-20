@@ -105,6 +105,7 @@ const DEVELOPER_DOCS = [
   'docs/publishing.md',
   'docs/proxy-and-keys.md',
   'docs/platform-limits.md',
+  'docs/capabilities.md',
   'docs/architecture.md',
   'docs/mcp.md',
   'README.md',
