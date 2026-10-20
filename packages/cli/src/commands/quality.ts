@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Command } from 'commander';
+import { isValidAppId } from '../lib/app-id.js';
 import { readConfig } from '../lib/config.js';
 import { bold, cyan, dim, green, red, yellow } from '../lib/style.js';
 
@@ -55,7 +56,7 @@ async function detectAppId(): Promise<string | null> {
     if (pkg.name) {
       // Strip npm scope: @freeappstore/timer → timer
       const bare = pkg.name.replace(/^@[^/]+\//, '');
-      if (/^[a-z][a-z0-9-]{1,30}$/.test(bare)) return bare;
+      if (isValidAppId(bare)) return bare;
     }
   } catch {
     // no package.json, continue

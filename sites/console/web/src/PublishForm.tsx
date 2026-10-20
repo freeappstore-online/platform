@@ -39,12 +39,12 @@ interface Props {
   getToken: () => string | null
 }
 
-// Mirror the backend's APP_ID_RE: /^[a-z][a-z0-9-]{1,30}$/ (2–31 chars, starts
-// with a letter). Client-side check just gives a friendlier error than a 400.
+// Mirror the backend's APP_ID_RE: /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/ (2–31 chars, starts
+// with a letter, ends with a letter or digit). Client-side check just gives a friendlier error than a 400.
 function validateId(id: string): string | null {
   if (!id) return null
-  if (!/^[a-z][a-z0-9-]{1,30}$/.test(id))
-    return '2–31 chars: lowercase letters, digits, hyphens; must start with a letter.'
+  if (!/^[a-z][a-z0-9-]{0,29}[a-z0-9]$/.test(id))
+    return '2–31 chars: lowercase letters, digits, hyphens; must start with a letter and not end with a hyphen.'
   if (id.startsWith('free') || id.startsWith('pro')) return "Cannot start with 'free' or 'pro'"
   return null
 }

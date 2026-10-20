@@ -7,6 +7,25 @@ import { deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./dep
 import { checkDeployStatus, fetchUrl, getAuditResults, getBuildLogs, getCIResults, listDeployed } from "./infra";
 import type { ToolCall } from "./providers/types";
 
+// FreeAppStore's app-id rule, vendored from packages/backend/src/lib/apps.ts
+// APP_ID_RE (a root test keeps the copies equal, #279). The backend, the
+// storefront listing, unpublish and admin transfer all use it, so an id the
+// agent deployed outside it went live but couldn't be listed or managed.
+// Games publish through FreeGameStore, which keeps its own rule.
+export const FAS_APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
+const FAS_APP_ID_MAX = 31;
+const GAME_ID_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
+
+function isValidId(config: { store: string }, id: string): boolean {
+  return config.store === "apps" ? FAS_APP_ID_RE.test(id) : GAME_ID_RE.test(id) && id.length <= 58;
+}
+
+function idRuleText(config: { store: string }): string {
+  return config.store === "apps"
+    ? "Must be 2-31 characters: a lowercase letter first, then lowercase letters, numbers and hyphens."
+    : "Must be lowercase, numbers, hyphens. Max 58 chars.";
+}
+
 interface ExecContext {
   appId: string | null;
   ownerLogin: string | null;
@@ -62,14 +81,8 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
       "mail",
       "status",
     ];
-    if (
-      !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(id) ||
-      id.length > 58 ||
-      id.startsWith("free") ||
-      id.startsWith("pro") ||
-      RESERVED.includes(id)
-    ) {
-      return `Error: invalid ${config.noun} ID "${id}". Must be lowercase, numbers, hyphens. No "free"/"pro" prefix, no reserved names. Max 58 chars.`;
+    if (!isValidId(config, id) || id.startsWith("free") || id.startsWith("pro") || RESERVED.includes(id)) {
+      return `Error: invalid ${config.noun} ID "${id}". ${idRuleText(config)} No "free"/"pro" prefix, no reserved names.`;
     }
     if (ctx.appId && ctx.appId !== id) {
       return `Error: this session already deployed "${ctx.appId}". Create a new project for a different ${config.noun}.`;
@@ -213,9 +226,10 @@ async function isAvailableTo(id: string, ctx: ExecContext): Promise<boolean> {
  */
 async function resolveAvailableId(baseId: string, ctx: ExecContext): Promise<string> {
   if (await isAvailableTo(baseId, ctx)) return baseId;
+  const maxLen = ctx.config.store === "apps" ? FAS_APP_ID_MAX : 58;
   for (let n = 2; n <= 50; n++) {
     const suffix = `-${n}`;
-    const candidate = `${baseId.slice(0, 58 - suffix.length).replace(/-+$/, "")}${suffix}`;
+    const candidate = `${baseId.slice(0, maxLen - suffix.length).replace(/-+$/, "")}${suffix}`;
     if (await isAvailableTo(candidate, ctx)) return candidate;
   }
   throw new Error(`Could not find an available ${ctx.config.noun} ID based on "${baseId}". Try a different name.`);

@@ -7,7 +7,13 @@
  */
 import type { Env } from '../types.js';
 
-export const APP_ID_RE = /^[a-z][a-z0-9-]{1,30}$/;
+/**
+ * App ids: 2-31 chars, a lowercase letter first, a letter or digit last,
+ * lowercase letters, digits and hyphens between. They become DNS labels
+ * (<id>.freeappstore.online), which can't end with a hyphen. Vendored into
+ * the CLI, console, admin and agent; apps.test.ts keeps the copies equal (#279).
+ */
+export const APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
 
 /**
  * Repos the platform itself lives in (#9). An app may never take one of these

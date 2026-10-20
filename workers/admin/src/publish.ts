@@ -13,6 +13,8 @@
 //
 // FAS admin now serves only the FreeAppStore.
 
+import { APP_ID_RE } from "./transfer-owner";
+
 export type Store = "apps";
 
 export interface PublishEnv {
@@ -159,9 +161,9 @@ export function isReservedId(id: string): boolean {
 function validateId(id: string): string | null {
   if (!id) return "ID is required";
   if (isReservedId(id)) return `"${id}" is reserved for the platform`;
-  if (id.length > 58) return "ID must be 58 characters or less";
-  if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(id))
-    return "ID must be lowercase letters, numbers, and dashes only. Cannot start/end with a dash.";
+  // The FreeAppStore id rule, shared with the backend, agent and transfer (#279).
+  if (!APP_ID_RE.test(id))
+    return "ID must be 2-31 characters: a lowercase letter first, a letter or number last, lowercase letters, numbers and dashes between.";
   if (id.startsWith("free") || id.startsWith("pro")) return "ID must not start with 'free' or 'pro'";
   return null;
 }

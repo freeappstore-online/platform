@@ -19,8 +19,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // The backend uses `name` as the app ID and validates ^[a-z][a-z0-9-]{1,30}$.
-  const idValid = /^[a-z][a-z0-9-]{1,30}$/.test(appId);
+  // The backend uses `name` as the app ID and validates ^[a-z][a-z0-9-]{0,29}[a-z0-9]$.
+  const idValid = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/.test(appId);
 
   const handlePublish = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

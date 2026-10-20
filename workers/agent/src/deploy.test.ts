@@ -194,14 +194,29 @@ describe("deploy ID validation edge cases", () => {
     expect(result).not.toContain("invalid");
   });
 
-  it("allows single character ID", async () => {
+  // #279: apps follow FreeAppStore's id rule (packages/backend/src/lib/apps.ts),
+  // so the agent can't deploy an id the store then can't list or manage.
+  it.each([
+    ["x", "one character"],
+    ["2048-clone", "starts with a digit"],
+    ["a".repeat(32), "32 characters"],
+  ])("rejects app ID %s (%s)", async (id) => {
+    const result = await executeInfraTool(
+      { id: "1", name: "deploy", input: { id, name: "X", category: "utilities", icon: "x", iconBg: "#fff", description: "test" } },
+      { appId: null, files: new Map(), env: mockEnv, config: appsConfig, onDeployStatus: vi.fn(), onAppDeployed: vi.fn() },
+    );
+    expect(result).toContain("invalid");
+    expect(result).toContain("2-31 characters");
+  });
+
+  it.each(["ab", "a".repeat(31), "clone-2048"])("allows app ID %s", async (id) => {
     globalThis.fetch = vi
       .fn()
       .mockResolvedValueOnce({ status: 404 })
       .mockResolvedValue({ status: 200, json: () => Promise.resolve({ id: null }) }) as any;
 
     const result = await executeInfraTool(
-      { id: "1", name: "deploy", input: { id: "x", name: "X", category: "utilities", icon: "x", iconBg: "#fff", description: "test" } },
+      { id: "1", name: "deploy", input: { id, name: "X", category: "utilities", icon: "x", iconBg: "#fff", description: "test" } },
       { appId: null, files: new Map(), env: mockEnv, config: appsConfig, onDeployStatus: vi.fn(), onAppDeployed: vi.fn() },
     );
     expect(result).not.toContain("invalid");
