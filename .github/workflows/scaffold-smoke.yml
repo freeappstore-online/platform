@@ -22,6 +22,7 @@ on:
     paths:
       - 'packages/cli/**'
       - 'packages/compliance/**'
+      - 'packages/quality/**'      # a CLI dependency since #281
       - 'scripts/check-scaffold-shell.sh'
       - 'packages/sdk/**'
       - 'packages/e2e/scaffold/**'
@@ -34,6 +35,7 @@ on:
     paths:
       - 'packages/cli/**'
       - 'packages/compliance/**'
+      - 'packages/quality/**'      # a CLI dependency since #281
       - 'scripts/check-scaffold-shell.sh'
       - 'packages/sdk/**'
       - 'packages/e2e/scaffold/**'
