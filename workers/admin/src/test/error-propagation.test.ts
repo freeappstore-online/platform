@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchGhRuns, fetchRegistry, handleAppHealth, UpstreamFetchError, type Env } from "../helpers";
+import { type Env, fetchGhRuns, fetchRegistry, handleAppHealth, UpstreamFetchError } from "../helpers";
 
 const env = { GITHUB_TOKEN: "gh-test" } as Env;
 
