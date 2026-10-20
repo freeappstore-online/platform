@@ -90,6 +90,7 @@ jobs:
             - Publishing: publishing.md
             - Proxy & Keys: proxy-and-keys.md
             - Limits: platform-limits.md
+            - Browser Capabilities: capabilities.md
             - Architecture: architecture.md
             - MCP: mcp.md
           YAML

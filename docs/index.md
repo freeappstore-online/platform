@@ -20,6 +20,7 @@ toasts and an offline banner; you write the screens.
 - **[Publishing](publishing.md)** -- how `fas publish` provisions and deploys your app
 - **[Proxy & Keys](proxy-and-keys.md)** -- secret-injecting proxy and user API key vault
 - **[Limits](platform-limits.md)** -- server-enforced quotas and caps
+- **[Browser Capabilities](capabilities.md)** -- which browser features (mic, camera, sensors, MIDI, USB, workers, wasm…) your app can use
 
 ## For AI agents
 
