@@ -1,6 +1,7 @@
 /** Admin compare-and-set app ownership transfer (#274). */
 
 import type { AuthResult } from "./auth";
+import type { GhFn } from "./publish";
 
 /** FreeAppStore app ids; same as packages/backend/src/lib/apps.ts APP_ID_RE (#279). */
 export const APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
@@ -172,4 +173,53 @@ export async function listOwnerTransfers(db: D1Database, appId: string): Promise
     .bind(appId)
     .all<TransferAudit>();
   return res.results ?? [];
+}
+
+export interface RepoAccessResult {
+  /** New owner given push access (or already had it). */
+  granted: boolean;
+  /** Previous owner's collaborator access and pending invite removed (or none). */
+  revoked: boolean;
+  errors: string[];
+}
+
+const ok = (status: unknown, codes: number[]) => typeof status === "number" && codes.includes(status);
+
+/**
+ * Move repo push access with the ownership (#279): grant the new owner push,
+ * then remove the previous owner as a collaborator and cancel any pending
+ * invite they never accepted (accepting it later would restore push). The
+ * grant goes first so the repo is never left without its owner. The previous
+ * owner is skipped when it's the org itself. Errors are reported, not thrown:
+ * the D1 ownership change has already happened.
+ */
+export async function moveRepoAccess(gh: GhFn, org: string, appId: string, fromLogin: string, toLogin: string): Promise<RepoAccessResult> {
+  const repo = `/repos/${org}/${appId}`;
+  const errors: string[] = [];
+
+  const grant = await gh(`${repo}/collaborators/${toLogin}`, "PUT", { permission: "push" }).catch((e) => ({ __error: String(e) }));
+  const granted = ok(grant?.__status, [200, 201, 204]);
+  if (!granted) errors.push(`grant ${toLogin}: ${grant?.message ?? grant?.__error ?? `status ${grant?.__status}`}`);
+
+  let revoked = true;
+  if (!same(fromLogin, org)) {
+    const removal = await gh(`${repo}/collaborators/${fromLogin}`, "DELETE").catch((e) => ({ __error: String(e) }));
+    // 404: not a collaborator (never accepted, or already removed).
+    if (!ok(removal?.__status, [204, 404])) {
+      revoked = false;
+      errors.push(`remove ${fromLogin}: ${removal?.message ?? removal?.__error ?? `status ${removal?.__status}`}`);
+    }
+    const invites = await gh(`${repo}/invitations`).catch(() => null);
+    const pending = Array.isArray(invites?.__body) ? (invites.__body as { id: number; invitee?: { login?: string } }[]) : [];
+    for (const invite of pending) {
+      if (!invite.invitee?.login || !same(invite.invitee.login, fromLogin)) continue;
+      const cancel = await gh(`${repo}/invitations/${invite.id}`, "DELETE").catch((e) => ({ __error: String(e) }));
+      if (!ok(cancel?.__status, [204, 404])) {
+        revoked = false;
+        errors.push(`cancel invite for ${fromLogin}: ${cancel?.message ?? cancel?.__error ?? `status ${cancel?.__status}`}`);
+      }
+    }
+  }
+
+  return { granted, revoked, errors };
 }

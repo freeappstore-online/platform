@@ -131,7 +131,7 @@ export async function cfApi(env: PublishEnv, path: string, method = "GET", body?
  * supply a mock to exercise retry paths without hitting the network. */
 export type GhFn = (path: string, method?: string, body?: unknown) => Promise<any>;
 
-export async function ghApi(env: PublishEnv, path: string, method = "GET", body?: unknown) {
+export async function ghApi(env: Pick<PublishEnv, "GITHUB_TOKEN">, path: string, method = "GET", body?: unknown) {
   const res = await fetch(`https://api.github.com${path}`, {
     method,
     headers: {

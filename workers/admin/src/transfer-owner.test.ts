@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AuthResult } from "./auth";
 import type { Env } from "./helpers";
 import worker from "./index";
+import type { GhFn } from "./publish";
 import { transferOwnerRoutes } from "./routes/transfer-owner";
-import { actorLogin, listOwnerTransfers, parseTransferBody, type TransferAudit, transferAppOwner } from "./transfer-owner";
+import { actorLogin, listOwnerTransfers, moveRepoAccess, parseTransferBody, type TransferAudit, transferAppOwner } from "./transfer-owner";
 
 interface Mem {
   apps: Map<string, string>;
@@ -229,6 +230,37 @@ describe("transferAppOwner", () => {
 describe("POST /api/apps/transfer-owner", () => {
   const admin: AuthResult = { ok: true, kind: "admin", user: { id: "gh:1", login: "serge-ivo", githubLogin: "serge-ivo" } };
 
+  // The route moves repo access through the GitHub API (#279); never the network.
+  let ghCalls: string[];
+  beforeEach(() => {
+    ghCalls = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      ghCalls.push(`${init?.method ?? "GET"} ${url.replace("https://api.github.com", "")}`);
+      if (url.endsWith("/invitations")) return new Response("[]", { status: 200 });
+      return new Response(null, { status: 204 });
+    });
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("moves repo push access to the new owner and reports it", async () => {
+    const res = await call(seeded(), admin, post(input));
+    expect(res!.status).toBe(200);
+    expect(await res!.json()).toMatchObject({ ok: true, repo_access: { granted: true, revoked: true, errors: [] } });
+    expect(ghCalls).toEqual([
+      "PUT /repos/freeappstore-online/watertracker/collaborators/serge-ivo",
+      "DELETE /repos/freeappstore-online/watertracker/collaborators/mathanghial",
+      "GET /repos/freeappstore-online/watertracker/invitations",
+    ]);
+  });
+
+  it("doesn't touch GitHub when the transfer is refused", async () => {
+    const res = await call(seeded(), admin, post({ ...input, from_login: "someone-else" }));
+    expect(res!.status).toBe(409);
+    expect(ghCalls).toEqual([]);
+  });
+
   function call(db: D1Database, auth: AuthResult | null, init: RequestInit, path = "/api/apps/transfer-owner") {
     const request = new Request(`https://admin.freeappstore.online${path}`, init);
     const env = { DB: db } as Env;
@@ -299,5 +331,61 @@ describe("transfer route through the worker auth gate", () => {
   it("rejects a missing session", async () => {
     const res = await fetchAs({}, { error: "nope" }, 401);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("moveRepoAccess (#279)", () => {
+  function fakeGh(responses: Record<string, unknown> = {}) {
+    const calls: string[] = [];
+    const gh: GhFn = async (path, method) => {
+      const key = `${method ?? "GET"} ${path}`;
+      calls.push(key);
+      return responses[key] ?? (key.endsWith("/invitations") ? { __status: 200, __body: [] } : { __status: 204, __empty: true });
+    };
+    return { gh, calls };
+  }
+  const repo = "/repos/freeappstore-online/timer";
+
+  it("grants the new owner push before removing the previous owner", async () => {
+    const { gh, calls } = fakeGh();
+    expect(await moveRepoAccess(gh, "freeappstore-online", "timer", "alice", "bob")).toEqual({ granted: true, revoked: true, errors: [] });
+    expect(calls).toEqual([`PUT ${repo}/collaborators/bob`, `DELETE ${repo}/collaborators/alice`, `GET ${repo}/invitations`]);
+  });
+
+  it("cancels the previous owner's pending invite (only theirs)", async () => {
+    const { gh, calls } = fakeGh({
+      [`GET ${repo}/invitations`]: {
+        __status: 200,
+        __body: [
+          { id: 7, invitee: { login: "Alice" } },
+          { id: 8, invitee: { login: "carol" } },
+        ],
+      },
+    });
+    const r = await moveRepoAccess(gh, "freeappstore-online", "timer", "alice", "bob");
+    expect(r.revoked).toBe(true);
+    expect(calls).toContain(`DELETE ${repo}/invitations/7`);
+    expect(calls).not.toContain(`DELETE ${repo}/invitations/8`);
+  });
+
+  it("treats a previous owner who isn't a collaborator (404) as revoked", async () => {
+    const { gh } = fakeGh({ [`DELETE ${repo}/collaborators/alice`]: { __status: 404, message: "Not Found" } });
+    expect((await moveRepoAccess(gh, "freeappstore-online", "timer", "alice", "bob")).revoked).toBe(true);
+  });
+
+  it("leaves the org's own access alone", async () => {
+    const { gh, calls } = fakeGh();
+    await moveRepoAccess(gh, "freeappstore-online", "timer", "FreeAppStore-Online", "bob");
+    expect(calls).toEqual([`PUT ${repo}/collaborators/bob`]);
+  });
+
+  it("reports GitHub failures instead of throwing", async () => {
+    const { gh } = fakeGh({
+      [`PUT ${repo}/collaborators/bob`]: { __status: 422, message: "Validation Failed" },
+      [`DELETE ${repo}/collaborators/alice`]: { __status: 500, message: "Server Error" },
+    });
+    const r = await moveRepoAccess(gh, "freeappstore-online", "timer", "alice", "bob");
+    expect(r).toMatchObject({ granted: false, revoked: false });
+    expect(r.errors).toEqual(["grant bob: Validation Failed", "remove alice: Server Error"]);
   });
 });

@@ -1,5 +1,6 @@
 import { json } from "../http";
-import { APP_ID_RE, actorLogin, listOwnerTransfers, parseTransferBody, transferAppOwner } from "../transfer-owner";
+import { ghApi, STORE_CONFIG } from "../publish";
+import { APP_ID_RE, actorLogin, listOwnerTransfers, moveRepoAccess, parseTransferBody, transferAppOwner } from "../transfer-owner";
 import type { RouteHandler } from "./types";
 
 const PATH = "/api/apps/transfer-owner";
@@ -38,7 +39,17 @@ export const transferOwnerRoutes: RouteHandler = async ({ request, env, url, aut
 
   try {
     const outcome = await transferAppOwner(env.DB, parsed.value, actor);
-    return noStore(json(outcome.body, outcome.status, request));
+    if (outcome.status !== 200) return noStore(json(outcome.body, outcome.status, request));
+    // Repo push access follows the owner (#279). Reported, not fatal: the
+    // ownership change above is committed either way.
+    const repoAccess = await moveRepoAccess(
+      (path, method, body) => ghApi(env, path, method, body),
+      STORE_CONFIG.apps.org,
+      outcome.body.app_id,
+      outcome.body.from_login,
+      outcome.body.to_login,
+    );
+    return noStore(json({ ...outcome.body, repo_access: repoAccess }, 200, request));
   } catch {
     return noStore(json({ error: "transfer failed" }, 500, request));
   }
