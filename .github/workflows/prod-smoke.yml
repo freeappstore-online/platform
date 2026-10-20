@@ -58,6 +58,27 @@ jobs:
           echo "GET /health → $code"
           test "$code" = "200"
 
+      # Hosted apps get every browser feature on their own origin (#284). A
+      # platform-level block once made a creator delete a working feature
+      # (#267: microphone=()), so assert the live host headers, not just the
+      # unit tests in workers/host.
+      - name: 1b. hosted app gets default-open capability headers
+        run: |
+          set -euo pipefail
+          headers=$(curl -sSI --max-time 10 "https://$TEST_APP_ID.freeappstore.online/" | tr -d '\r')
+          pp=$(printf '%s\n' "$headers" | grep -i '^permissions-policy:' || true)
+          csp=$(printf '%s\n' "$headers" | grep -i '^content-security-policy:' || true)
+          echo "  $pp"
+          fail=0
+          for f in microphone camera geolocation midi gyroscope accelerometer magnetometer usb serial hid bluetooth payment display-capture clipboard-read screen-wake-lock xr-spatial-tracking; do
+            printf '%s' "$pp" | grep -q "$f=(self)" || { echo "::error::Permissions-Policy does not grant $f=(self)"; fail=1; }
+          done
+          blocked=$(printf '%s' "$pp" | grep -o '[a-z-]*=()' | tr '\n' ' ')
+          [ "$blocked" = "browsing-topics=() " ] || { echo "::error::unexpected blocked features: $blocked"; fail=1; }
+          printf '%s' "$csp" | grep -q "worker-src 'self' blob:" || { echo "::error::CSP lacks worker-src blob:"; fail=1; }
+          printf '%s' "$csp" | grep -q "'wasm-unsafe-eval'" || { echo "::error::CSP lacks 'wasm-unsafe-eval'"; fail=1; }
+          exit $fail
+
       - name: 2. published SDK has all 4 modules
         run: |
           set -euo pipefail
