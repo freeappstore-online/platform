@@ -186,11 +186,15 @@ export function securityHeaders(opts: { htmlCache: boolean }): Headers {
   }
   const csp = [
     "default-src 'self' https: data: blob:",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https: https://api.freeappstore.online https://static.cloudflareinsights.com https://www.googletagmanager.com https://plausible.io",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https: https://api.freeappstore.online https://static.cloudflareinsights.com https://www.googletagmanager.com https://plausible.io",
     "style-src 'self' 'unsafe-inline' https:",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https:",
-    "connect-src 'self' https: wss: https://api.freeappstore.online https://cloudflareinsights.com https://www.google-analytics.com https://plausible.io",
+    "connect-src 'self' data: blob: https: wss: https://api.freeappstore.online https://cloudflareinsights.com https://www.google-analytics.com https://plausible.io",
+    // Without worker-src, workers fall back to script-src; list blob: so
+    // libraries that spawn Blob-URL workers (pdf.js, ffmpeg.wasm, Monaco,
+    // emscripten pthreads) work (#284).
+    "worker-src 'self' blob: https:",
     "frame-src 'self' https:",
     "frame-ancestors 'self' https://freeappstore.online https://*.freeappstore.online",
     "base-uri 'self'",

@@ -224,6 +224,18 @@ describe("securityHeaders", () => {
     expect(entries.some((e) => e.startsWith("interest-cohort"))).toBe(false);
   });
 
+  // #284: same-origin blob:/data: URLs and WebAssembly must work.
+  it("CSP allows WebAssembly, Blob-URL workers and blob:/data: fetches", () => {
+    const csp = html.get("content-security-policy") ?? "";
+    const directive = (name: string) => csp.split("; ").find((d) => d.startsWith(`${name} `)) ?? "";
+    expect(directive("script-src")).toContain("'wasm-unsafe-eval'");
+    expect(directive("script-src")).toContain("blob:");
+    expect(directive("worker-src")).toBe("worker-src 'self' blob: https:");
+    expect(directive("connect-src")).toContain("data:");
+    expect(directive("connect-src")).toContain("blob:");
+    expect(directive("connect-src")).toContain("wss:");
+  });
+
   it("sets nosniff + strict referrer policy", () => {
     expect(html.get("x-content-type-options")).toBe("nosniff");
     expect(html.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
