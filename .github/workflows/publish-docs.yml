@@ -91,6 +91,7 @@ jobs:
             - Proxy & Keys: proxy-and-keys.md
             - Limits: platform-limits.md
             - Browser Capabilities: capabilities.md
+            - Permissions: permissions.md
             - Architecture: architecture.md
             - MCP: mcp.md
           YAML

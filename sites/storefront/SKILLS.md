@@ -176,6 +176,7 @@ No further API calls or manual steps needed. Ever.
 - Backend (if needed): `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice). `npm i @freeappstore/sdk`.
 - Free means free forever. No monetization in the free version: no payments of any kind. The host blocks the Payment Request API (`payment=()`) and `fas check` fails on Payment Request, Apple Pay, Stripe/PayPal/Paddle/Lemon Squeezy/Gumroad/Google Pay SDKs or checkout links, and payment manifest members. Paid apps go on ProAppStore.
 - Browser capabilities are open on your app's own origin: microphone, camera, location, motion sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock, Web Workers (including `blob:` workers) and WebAssembly all work. The browser asks the user, so handle `NotAllowedError` and missing hardware; the storefront preview delegates the same features to your app, so they work there too. Not available: payments (see the rule above), `SharedArrayBuffer` (needs cross-origin isolation) and the Topics API. Full matrix: https://docs.freeappstore.online/capabilities/
+- Declare the browser permissions your app asks for (microphone, camera, location, motion, notifications, midi, clipboard, screen, bluetooth, usb, serial, hid) in `web/public/manifest.json` as `"permissions": [{ "name": "microphone", "reason": "one line shown on the listing" }]`. `fas check` warns about undeclared ones, and the storefront listing shows them. Guide: https://docs.freeappstore.online/permissions/
 
 ## Tech Stack (required)
 

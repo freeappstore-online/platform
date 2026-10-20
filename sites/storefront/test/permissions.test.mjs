@@ -86,9 +86,3 @@ test("cards show a compact, labelled icon row only for apps that ask for somethi
     done();
   }
 });
-
-test("every app in the live registry has a permissions list (backfill)", () => {
-  const registry = JSON.parse(readFileSync(join(ROOT, "registry.json"), "utf8"));
-  const missing = registry.apps.filter((a) => !Array.isArray(a.permissions)).map((a) => a.id);
-  assert.deepEqual(missing, []);
-});

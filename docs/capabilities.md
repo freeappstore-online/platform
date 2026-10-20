@@ -36,7 +36,8 @@ embeds don't receive them, even with an `allow` attribute.
 | Topics API | `document.browsingTopics()` | ad targeting | **blocked**: shares the user's ad interests with third parties; the store requires apps not to track users |
 
 The browser still asks the user, needs a secure context (always true on the host), and for most of these
-needs a user gesture. Handle `NotAllowedError` (the user said no) and missing hardware.
+needs a user gesture. Handle `NotAllowedError` (the user said no) and missing hardware. Declare the
+ones that prompt in your manifest so your listing explains them: see [Permissions](permissions.md).
 
 **Inside the storefront preview** (the phone frame on an app's listing, the homepage preview and
 the quality dashboard), the same features work. The storefront delegates every feature above to
