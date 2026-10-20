@@ -8,6 +8,7 @@
 
 import { Hono } from 'hono';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 import { dispatchWebhookPlatform } from './webhooks.js';
 
@@ -219,8 +220,8 @@ friendsRoutes.post('/friends/request', async (c) => {
 friendsRoutes.get('/friends', async (c) => {
   const me = await requireUser(c);
   const statusFilter = c.req.query('status') || 'accepted';
-  const limit = Math.min(Math.max(parseInt(c.req.query('limit') ?? '200', 10) || 200, 1), 200);
-  const offset = Math.max(parseInt(c.req.query('offset') ?? '0', 10) || 0, 0);
+  const limit = queryLimit(c.req.query('limit'), 200, 200);
+  const offset = queryOffset(c.req.query('offset'));
 
   let sql: string;
   let params: unknown[];

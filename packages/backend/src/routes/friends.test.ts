@@ -23,6 +23,7 @@ function fakeDB(opts: {
   deleteChanges?: number;
   // For webhook queries
   webhooks?: Array<Record<string, unknown>>;
+  onBind?: (sql: string, args: unknown[]) => void;
 }) {
   return {
     prepare: (sql: string) => {
@@ -68,7 +69,13 @@ function fakeDB(opts: {
           return { meta: { changes: opts.deleteChanges ?? 1 } };
         },
       };
-      return { ...result, bind: (..._args: unknown[]) => result };
+      return {
+        ...result,
+        bind: (...args: unknown[]) => {
+          opts.onBind?.(trimmed, args);
+          return result;
+        },
+      };
     },
   } as unknown as D1Database;
 }
@@ -379,6 +386,29 @@ describe('friends routes', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { friends: unknown[] };
     expect(data.friends).toHaveLength(1);
+  });
+
+  it.each([
+    ['', 200, 0],
+    ['?limit=50&offset=10', 50, 10],
+    ['?limit=9999', 200, 0],
+    ['?limit=-5&offset=-3', 200, 0],
+    ['?limit=abc&offset=xyz', 200, 0],
+  ])('GET /v1/friends%s binds LIMIT %i OFFSET %i', async (qs, limit, offset) => {
+    let paging: unknown[] = [];
+    const db = fakeDB({
+      user: user1,
+      onBind: (sql, args) => {
+        if (sql.includes('FROM friendships f')) paging = args.slice(-2);
+      },
+    });
+    const res = await app.request(
+      `/v1/friends${qs}`,
+      { headers: { Authorization: await authHeader() } },
+      env(db),
+    );
+    expect(res.status).toBe(200);
+    expect(paging).toEqual([limit, offset]);
   });
 
   it('GET /v1/friends?status=pending_incoming returns incoming requests', async () => {
