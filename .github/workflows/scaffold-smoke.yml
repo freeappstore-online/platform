@@ -81,12 +81,13 @@ jobs:
       - name: Install platform deps + build CLIs
         run: |
           pnpm install --frozen-lockfile
-          # Build the CLI we're about to exercise (and its compliance dep).
-          # The CLI clones the template repo from GitHub via plain `git clone`,
-          # so we don't need to set up the templates locally — just need a
-          # runnable CLI binary with compliance available on disk.
-          pnpm --filter @freeappstore/compliance build
-          pnpm --filter "./packages/${{ matrix.cli }}" build
+          # Build the CLI we're about to exercise plus every workspace package
+          # it depends on (the trailing "..." makes pnpm include them, in
+          # order), so a new dependency can't break this step again. Listing
+          # them by hand missed @freeappstore/quality (#281). The CLI clones
+          # the template repo from GitHub via plain `git clone`, so templates
+          # don't need setting up locally.
+          pnpm --filter "{./packages/${{ matrix.cli }}}..." build
 
       - name: Configure git identity (init runs a git commit on the scaffold)
         # The CLI's `init` does `git init` + `git commit -m ...` after
