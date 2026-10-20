@@ -1,13 +1,6 @@
 import { type CheckResult, runChecks } from '@freeappstore/compliance';
 import { Command } from 'commander';
-
-const isTTY = Boolean(process.stdout.isTTY) && process.env.NO_COLOR !== '1';
-const c = (open: string) => (s: string) => (isTTY ? `\x1b[${open}m${s}\x1b[39m` : s);
-const green = c('32');
-const yellow = c('33');
-const red = c('31');
-const dim = (s: string) => (isTTY ? `\x1b[2m${s}\x1b[22m` : s);
-const bold = (s: string) => (isTTY ? `\x1b[1m${s}\x1b[22m` : s);
+import { bold, dim, green, red, yellow } from '../lib/style.js';
 
 const ICON: Record<CheckResult['status'], string> = {
   pass: '✓',
