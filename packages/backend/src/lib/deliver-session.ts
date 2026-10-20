@@ -24,7 +24,7 @@
  */
 
 import type { Env } from '../types.js';
-import { timingSafeEqual } from './session.js';
+import { b64urlBytes, timingSafeEqual } from './session.js';
 
 /** Codes are redeemed immediately by a server-side caller; keep the window tight. */
 export const AUTH_CODE_TTL_SECONDS = 60;
@@ -114,13 +114,13 @@ export async function exchangeAuthCode(
 /** base64url(SHA-256(verifier)) — the PKCE S256 transformation. */
 export async function s256Challenge(verifier: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  return b64url(new Uint8Array(digest));
+  return b64urlBytes(new Uint8Array(digest));
 }
 
 function randomCode(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
-  return b64url(bytes);
+  return b64urlBytes(bytes);
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -128,10 +128,4 @@ async function sha256Hex(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-function b64url(bytes: Uint8Array): string {
-  let bin = '';
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }

@@ -79,7 +79,7 @@ function b64url(s: string): string {
   return b64urlBytes(new TextEncoder().encode(s));
 }
 
-function b64urlBytes(bytes: Uint8Array): string {
+export function b64urlBytes(bytes: Uint8Array): string {
   let bin = '';
   for (const b of bytes) bin += String.fromCharCode(b);
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

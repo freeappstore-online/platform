@@ -1,6 +1,8 @@
 // FAS session token verification — vendored from fas/platform/packages/backend/src/lib/session.ts.
 // Tokens are HMAC-SHA256 signed: base64url(payload) + "." + base64url(hmac).
 
+import { timingSafeEqual } from "./pkce.js";
+
 export interface SessionPayload {
   uid: string;
   roles?: string[];
@@ -50,11 +52,4 @@ function b64urlBytes(bytes: Uint8Array): string {
 function b64urlDecode(s: string): string {
   const padded = s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4);
   return atob(padded);
-}
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const maxLen = Math.max(a.length, b.length);
-  let diff = a.length ^ b.length;
-  for (let i = 0; i < maxLen; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
-  return diff === 0;
 }
