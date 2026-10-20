@@ -22,9 +22,21 @@ export const logsCommand = new Command('logs')
           rejectFn(err);
         }
       });
-      child.on('exit', (code) => {
-        if (code === 0 || code === null) resolveFn();
-        else rejectFn(new Error(`gh exited with code ${code}`));
+      child.on('exit', (code, signal) => {
+        const err = ghExitError(code, signal);
+        if (err) rejectFn(err);
+        else resolveFn();
       });
     });
   });
+
+/**
+ * Success only on exit code 0. A process killed by a signal exits with code
+ * null, which used to count as success (#283).
+ */
+export function ghExitError(code: number | null, signal: NodeJS.Signals | null): Error | null {
+  if (code === 0) return null;
+  return new Error(
+    code === null ? `gh was stopped by ${signal ?? 'a signal'}` : `gh exited with code ${code}`,
+  );
+}
