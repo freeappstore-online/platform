@@ -193,12 +193,24 @@ describe('roles routes', () => {
         method: 'POST',
         headers: { Authorization: await authHeader() },
       },
-      env(fakeDB({ user: owner, existingRole: false })),
+      env(fakeDB({ user: owner, appCreator: 'alice', existingRole: false })),
     );
     expect(res.status).toBe(200);
     const data = (await res.json()) as { ok: boolean; assigned: boolean };
     expect(data.ok).toBe(true);
     expect(data.assigned).toBe(true);
+  });
+
+  it('POST /v1/apps/:appId/roles/ensure-member returns 404 for an unknown app', async () => {
+    const res = await app.request(
+      '/v1/apps/no-such-app/roles/ensure-member',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader() },
+      },
+      env(fakeDB({ user: owner, appCreator: null, existingRole: false })),
+    );
+    expect(res.status).toBe(404);
   });
 
   it('POST /v1/apps/:appId/roles/ensure-member skips if already has role', async () => {
@@ -208,7 +220,7 @@ describe('roles routes', () => {
         method: 'POST',
         headers: { Authorization: await authHeader() },
       },
-      env(fakeDB({ user: owner, existingRole: true })),
+      env(fakeDB({ user: owner, appCreator: 'alice', existingRole: true })),
     );
     expect(res.status).toBe(200);
     const data = (await res.json()) as { ok: boolean; assigned: boolean };

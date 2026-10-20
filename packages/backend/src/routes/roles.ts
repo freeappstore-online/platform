@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { appExists } from '../lib/apps.js';
 import { HttpError, requireUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -159,6 +160,9 @@ rolesRoutes.get('/apps/:appId/roles/check/:role', async (c) => {
 rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
   const user = await requireUser(c);
   const appId = c.req.param('appId');
+  // Otherwise any string mints an app_roles row, and computeRoles copies every
+  // row into the user's session token.
+  if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
 
   // Skip if user already has any role in this app
   const existing = await c.env.DB.prepare(
