@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
-import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
+import { hasSqlite, sqliteD1, withBarrier } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
@@ -168,5 +168,74 @@ describe.skipIf(!hasSqlite)('GET /v1/apps/:appId/kv prefix', () => {
     expect(await list('score_')).toEqual(['score_a']);
     expect(await list('score%')).toEqual(['score%a']);
     expect(await list('score')).toEqual(['score%a', 'scoreXa', 'score_a']);
+  });
+});
+
+// #277: the caps hold under concurrency, not just sequentially.
+describe.skipIf(!hasSqlite)('PUT /v1/apps/:appId/kv/:key under concurrency', () => {
+  // `parallel` requests all read the quota before any of them writes.
+  async function setup(existingKeys: number, parallel: number, valueBytes = 1) {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    ).run('gh:1', 1, 'alice', now);
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+      'timer',
+      'alice',
+      now,
+    );
+    const kv = db.prepare(
+      'INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    );
+    for (let i = 0; i < existingKeys; i++) kv.run('timer', 'gh:1', `k${i}`, 'x', valueBytes, now);
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const env = baseEnv(withBarrier(d1, /AS total, COUNT\(\*\) AS keys/, parallel));
+    const put = async (key: string, bytes: number) =>
+      app.request(
+        `/v1/apps/timer/kv/${key}`,
+        {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}` },
+          body: new Uint8Array(bytes),
+        },
+        env,
+      );
+    const count = () =>
+      db
+        .prepare(
+          "SELECT COUNT(*) AS n, SUM(value_size_bytes) AS bytes FROM kv WHERE app_id = 'timer'",
+        )
+        .get() as {
+        n: number;
+        bytes: number;
+      };
+    return { put, count };
+  }
+
+  it('20 parallel new keys at 99/100: exactly one lands', async () => {
+    const { put, count } = await setup(99, 20);
+    const statuses = await Promise.all(
+      Array.from({ length: 20 }, (_, i) => put(`new${i}`, 1).then((r) => r.status)),
+    );
+    expect(statuses.filter((s) => s === 204)).toHaveLength(1);
+    expect(statuses.filter((s) => s === 413)).toHaveLength(19);
+    expect(count().n).toBe(100);
+  });
+
+  it('parallel writes cannot push a user past 1MB', async () => {
+    // 15 keys of 64KB = 960KB stored; each 40KB write fits alone, only one fits.
+    const { put, count } = await setup(15, 10, 64 * 1024);
+    const statuses = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => put(`big${i}`, 40 * 1024).then((r) => r.status)),
+    );
+    expect(statuses.filter((s) => s === 204)).toHaveLength(1);
+    expect(count().bytes).toBeLessThanOrEqual(1024 * 1024);
+  });
+
+  it('overwriting an existing key at the cap still works', async () => {
+    const { put, count } = await setup(100, 1);
+    expect((await put('k5', 10)).status).toBe(204);
+    expect(count().n).toBe(100);
   });
 });

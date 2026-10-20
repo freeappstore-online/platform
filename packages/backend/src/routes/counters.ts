@@ -90,15 +90,19 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
       }
     }
 
-    await c.env.DB.prepare(
+    // The write re-checks the cap in the same statement (#277), so parallel
+    // new keys that all passed the count above can't exceed it.
+    const write = await c.env.DB.prepare(
       `INSERT INTO counters (app_id, key, value, updated_at)
-       VALUES (?, ?, ?, ?)
+       SELECT ?, ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM counters WHERE app_id = ? AND key <> ?) < ?
        ON CONFLICT(app_id, key) DO UPDATE SET
          value = counters.value + excluded.value,
          updated_at = excluded.updated_at`,
     )
-      .bind(appId, key, increment, Date.now())
+      .bind(appId, key, increment, Date.now(), appId, key, MAX_COUNTERS_PER_APP)
       .run();
+    if (!write.meta.changes) return c.text(`max ${MAX_COUNTERS_PER_APP} counters per app`, 413);
 
     // Return new value
     const row = await c.env.DB.prepare('SELECT value FROM counters WHERE app_id = ? AND key = ?')

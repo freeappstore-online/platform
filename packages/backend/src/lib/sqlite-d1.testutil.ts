@@ -41,7 +41,8 @@ export function sqliteD1(): { db: SqliteDb; d1: D1Database } {
       let binds: unknown[] = [];
       const stmt = {
         bind(...args: unknown[]) {
-          binds = args;
+          // D1 binds an ArrayBuffer as a BLOB; node:sqlite only takes typed arrays.
+          binds = args.map((a) => (a instanceof ArrayBuffer ? new Uint8Array(a) : a));
           return stmt;
         },
         async all() {
@@ -59,4 +60,47 @@ export function sqliteD1(): { db: SqliteDb; d1: D1Database } {
     },
   } as unknown as D1Database;
   return { db, d1 };
+}
+
+/**
+ * Wraps a D1 so that statements matching `match` wait until `n` of them have
+ * started, then all proceed. Forces concurrent requests to interleave exactly
+ * at a read-then-write race (every request reads before any writes), which
+ * Promise.all alone doesn't guarantee.
+ */
+export function withBarrier(d1: D1Database, match: RegExp, n: number): D1Database {
+  let waiting = 0;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const arrive = async () => {
+    if (++waiting >= n) release();
+    await gate;
+  };
+  return {
+    prepare(sql: string) {
+      const stmt = d1.prepare(sql);
+      if (!match.test(sql.replace(/\s+/g, ' '))) return stmt;
+      const wrapped = {
+        bind(...args: unknown[]) {
+          stmt.bind(...args);
+          return wrapped;
+        },
+        async first<T>() {
+          await arrive();
+          return stmt.first<T>();
+        },
+        async all<T>() {
+          await arrive();
+          return stmt.all<T>();
+        },
+        async run<T>() {
+          await arrive();
+          return stmt.run<T>();
+        },
+      };
+      return wrapped;
+    },
+  } as unknown as D1Database;
 }

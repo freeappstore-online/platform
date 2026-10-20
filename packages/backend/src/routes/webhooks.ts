@@ -104,11 +104,17 @@ webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
   const id = crypto.randomUUID();
   const secret = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
 
-  await c.env.DB.prepare(
-    'INSERT INTO app_webhooks (id, app_id, event, url, secret) VALUES (?, ?, ?, ?, ?)',
+  // Re-check the cap in the insert itself (#277).
+  const write = await c.env.DB.prepare(
+    `INSERT INTO app_webhooks (id, app_id, event, url, secret)
+     SELECT ?, ?, ?, ?, ?
+     WHERE (SELECT COUNT(*) FROM app_webhooks WHERE app_id = ?) < ?`,
   )
-    .bind(id, appId, body.event, body.url, secret)
+    .bind(id, appId, body.event, body.url, secret, appId, MAX_WEBHOOKS_PER_APP)
     .run();
+  if (!write.meta.changes) {
+    return c.json({ ok: false, error: `Max ${MAX_WEBHOOKS_PER_APP} webhooks per app` }, 409);
+  }
 
   return c.json({ id, secret });
 });

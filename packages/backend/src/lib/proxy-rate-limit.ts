@@ -24,6 +24,11 @@ export interface ProxyUsageStore {
   read(appId: string, day: string): Promise<number>;
   /** Increments the count for (appId, day) by `by`, creating the row if needed. */
   bump(appId: string, day: string, by: number): Promise<void>;
+  /**
+   * Increments by `by` only if the result stays within `limit`, in one atomic
+   * statement. Returns whether it incremented. Used for exact caps (#277).
+   */
+  bumpIfBelow?(appId: string, day: string, by: number, limit: number): Promise<boolean>;
 }
 
 /**
@@ -47,6 +52,18 @@ export function d1UsageStore(db: D1Database): ProxyUsageStore {
         )
         .bind(appId, day, by)
         .run();
+    },
+    async bumpIfBelow(appId, day, by, limit) {
+      const r = await db
+        .prepare(
+          `INSERT INTO app_proxy_usage (app_id, day, count)
+           SELECT ?1, ?2, ?3
+           WHERE COALESCE((SELECT count FROM app_proxy_usage WHERE app_id = ?1 AND day = ?2), 0) + ?3 <= ?4
+           ON CONFLICT(app_id, day) DO UPDATE SET count = count + ?3`,
+        )
+        .bind(appId, day, by, limit)
+        .run();
+      return !!r.meta.changes;
     },
   };
 }
@@ -97,6 +114,15 @@ export async function checkAndBump(
 
   if (current >= opts.dailyLimit) {
     return { allowed: false, count: current, wrote: false };
+  }
+
+  // Exact counting (denominator 1) is a hard cap, e.g. email: the bump itself
+  // re-checks the limit so concurrent calls can't all pass the read above.
+  if (denom === 1 && store.bumpIfBelow) {
+    const bumped = await store.bumpIfBelow(opts.appId, day, 1, opts.dailyLimit);
+    return bumped
+      ? { allowed: true, count: current + 1, wrote: true }
+      : { allowed: false, count: opts.dailyLimit, wrote: false };
   }
 
   // Roll the die. denom=1 means always write; denom=10 means 10% chance.

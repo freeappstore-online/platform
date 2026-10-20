@@ -84,39 +84,67 @@ kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
       return c.text('empty values are not allowed; use DELETE to remove a key', 400);
     }
 
-    const row = await c.env.DB.prepare(
-      `SELECT
-         COALESCE(SUM(value_size_bytes), 0) AS total,
-         COUNT(*) AS keys,
-         COALESCE(SUM(CASE WHEN key = ? THEN 1 ELSE 0 END), 0) AS key_exists,
-         COALESCE(SUM(CASE WHEN key = ? THEN value_size_bytes ELSE 0 END), 0) AS existing
-       FROM kv WHERE app_id = ? AND user_id = ?`,
-    )
-      .bind(key, key, appId, user.id)
-      .first<{ total: number; keys: number; key_exists: number; existing: number }>();
-
-    const check = checkKvWrite(
-      {
-        totalBytes: row?.total ?? 0,
-        keyCount: row?.keys ?? 0,
-        existingKeyBytes: row?.existing ?? 0,
-        keyExists: (row?.key_exists ?? 0) > 0,
-      },
-      body.byteLength,
-      KV_LIMITS,
-    );
+    const quota = async () => {
+      const row = await c.env.DB.prepare(
+        `SELECT
+           COALESCE(SUM(value_size_bytes), 0) AS total,
+           COUNT(*) AS keys,
+           COALESCE(SUM(CASE WHEN key = ? THEN 1 ELSE 0 END), 0) AS key_exists,
+           COALESCE(SUM(CASE WHEN key = ? THEN value_size_bytes ELSE 0 END), 0) AS existing
+         FROM kv WHERE app_id = ? AND user_id = ?`,
+      )
+        .bind(key, key, appId, user.id)
+        .first<{ total: number; keys: number; key_exists: number; existing: number }>();
+      return checkKvWrite(
+        {
+          totalBytes: row?.total ?? 0,
+          keyCount: row?.keys ?? 0,
+          existingKeyBytes: row?.existing ?? 0,
+          keyExists: (row?.key_exists ?? 0) > 0,
+        },
+        body.byteLength,
+        KV_LIMITS,
+      );
+    };
+    const check = await quota();
     if (!check.ok) return c.text(check.reason, 413);
 
-    await c.env.DB.prepare(
+    // The write re-checks both caps in the same statement (#277): parallel
+    // writes each passing the read above can't take the user past them.
+    const write = await c.env.DB.prepare(
       `INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+       SELECT ?, ?, ?, ?, ?, ?
+       WHERE (SELECT COALESCE(SUM(value_size_bytes), 0) FROM kv
+              WHERE app_id = ? AND user_id = ? AND key <> ?) + ? <= ?
+         AND (SELECT COUNT(*) FROM kv
+              WHERE app_id = ? AND user_id = ? AND key <> ?) < ?
        ON CONFLICT(app_id, user_id, key) DO UPDATE SET
          value = excluded.value,
          value_size_bytes = excluded.value_size_bytes,
          updated_at = excluded.updated_at`,
     )
-      .bind(appId, user.id, key, body, body.byteLength, Date.now())
+      .bind(
+        appId,
+        user.id,
+        key,
+        body,
+        body.byteLength,
+        Date.now(),
+        appId,
+        user.id,
+        key,
+        body.byteLength,
+        KV_LIMITS.maxTotalBytesPerUser,
+        appId,
+        user.id,
+        key,
+        KV_LIMITS.maxKeysPerUser,
+      )
       .run();
+    if (!write.meta.changes) {
+      const now = await quota();
+      return c.text(now.ok ? 'per-user kv quota exceeded' : now.reason, 413);
+    }
 
     return c.body(null, 204);
   } catch (err) {

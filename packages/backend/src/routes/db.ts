@@ -105,12 +105,29 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
     const id = generateId();
     const now = Date.now();
 
-    await c.env.DB.prepare(
+    // Re-check the cap in the insert itself (#277): parallel creates that all
+    // passed the count above can't take a collection past it.
+    const write = await c.env.DB.prepare(
       `INSERT INTO documents (app_id, collection, id, data, owner_id, visibility, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, 'public', ?, ?)`,
+       SELECT ?, ?, ?, ?, ?, 'public', ?, ?
+       WHERE (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ?) < ?`,
     )
-      .bind(appId, collection, id, body, user.id, now, now)
+      .bind(
+        appId,
+        collection,
+        id,
+        body,
+        user.id,
+        now,
+        now,
+        appId,
+        collection,
+        MAX_DOCS_PER_COLLECTION,
+      )
       .run();
+    if (!write.meta.changes) {
+      return c.text(`max ${MAX_DOCS_PER_COLLECTION} documents per collection`, 413);
+    }
 
     // `id` last: a client-supplied `data.id` must not shadow the server id in
     // the response (the row is stored under the generated id).
@@ -224,15 +241,6 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
     const colErr = validateCollection(collection);
     if (colErr) return c.text(colErr, 400);
 
-    const existing = await c.env.DB.prepare(
-      'SELECT data, owner_id, created_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
-    )
-      .bind(appId, collection, id)
-      .first<{ data: string; owner_id: string; created_at: number }>();
-
-    if (!existing) return c.text('not found', 404);
-    if (existing.owner_id !== user.id) return c.text('forbidden', 403);
-
     const body = await c.req.text();
     if (new TextEncoder().encode(body).length > MAX_DOC_BYTES) {
       return c.text(`document exceeds ${MAX_DOC_BYTES} bytes`, 413);
@@ -248,21 +256,39 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
       return c.text('patch must be a JSON object', 400);
     }
 
-    const existingData = JSON.parse(existing.data) as Record<string, unknown>;
-    const merged = { ...existingData, ...patch };
-    const mergedJson = JSON.stringify(merged);
+    // Read-merge-write as compare-and-set (#277): the UPDATE only applies if
+    // the document is still what we merged into. If a concurrent PUT changed
+    // it first, re-read and merge again, so neither patch is lost.
+    let existing: { data: string; owner_id: string; created_at: number } | null = null;
+    let merged: Record<string, unknown> = {};
+    let now = 0;
+    for (let attempt = 0; ; attempt++) {
+      existing = await c.env.DB.prepare(
+        'SELECT data, owner_id, created_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
+      )
+        .bind(appId, collection, id)
+        .first<{ data: string; owner_id: string; created_at: number }>();
 
-    if (new TextEncoder().encode(mergedJson).length > MAX_DOC_BYTES) {
-      return c.text(`merged document exceeds ${MAX_DOC_BYTES} bytes`, 413);
+      if (!existing) return c.text('not found', 404);
+      if (existing.owner_id !== user.id) return c.text('forbidden', 403);
+
+      const existingData = JSON.parse(existing.data) as Record<string, unknown>;
+      merged = { ...existingData, ...patch };
+      const mergedJson = JSON.stringify(merged);
+
+      if (new TextEncoder().encode(mergedJson).length > MAX_DOC_BYTES) {
+        return c.text(`merged document exceeds ${MAX_DOC_BYTES} bytes`, 413);
+      }
+
+      now = Date.now();
+      const write = await c.env.DB.prepare(
+        'UPDATE documents SET data = ?, updated_at = ? WHERE app_id = ? AND collection = ? AND id = ? AND data = ?',
+      )
+        .bind(mergedJson, now, appId, collection, id, existing.data)
+        .run();
+      if (write.meta.changes) break;
+      if (attempt === 4) return c.text('document is being updated concurrently; retry', 409);
     }
-
-    const now = Date.now();
-
-    await c.env.DB.prepare(
-      'UPDATE documents SET data = ?, updated_at = ? WHERE app_id = ? AND collection = ? AND id = ?',
-    )
-      .bind(mergedJson, now, appId, collection, id)
-      .run();
 
     return c.json(
       withDocumentMeta(id, merged, {
