@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { Env } from '../types.js';
-import { verifySession } from './session.js';
+import { timingSafeEqual, verifySession } from './session.js';
 
 export interface CurrentUser {
   id: string;
@@ -134,6 +134,20 @@ export async function requireRole(
  * Check if a user id is in the admin list (env var). Used at sign-in
  * to compute the 'admin' role for the session token.
  */
+/**
+ * Service-to-service auth: the X-Internal-Token header must equal
+ * ADMIN_PROVISION_TOKEN (constant-time compare). Used by the admin Worker,
+ * which can't hold a user session.
+ */
+export function hasInternalToken(c: {
+  env: Env;
+  req: { header: (name: string) => string | undefined };
+}): boolean {
+  const expected = c.env.ADMIN_PROVISION_TOKEN;
+  const provided = c.req.header('X-Internal-Token');
+  return !!expected && !!provided && timingSafeEqual(provided, expected);
+}
+
 export function isAdminLogin(login: string, env: Env): boolean {
   const admins = (env.ADMIN_GITHUB_LOGINS ?? '')
     .split(',')

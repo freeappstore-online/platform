@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { APP_ID_RE, isReservedAppId } from '../lib/apps.js';
 import { HttpError, isAdminLogin, requireUser } from '../lib/auth.js';
+import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
 export const publishRoutes = new Hono<{ Bindings: Env }>();
@@ -348,7 +349,9 @@ export function extractFailedSteps(body: unknown): AdminStep[] {
 publishRoutes.post('/internal/register-app', async (c) => {
   const provided = c.req.header('X-Internal-Token');
   const expected = c.env.CROSS_STORE_REGISTER_TOKEN;
-  if (!expected || provided !== expected) return c.text('forbidden', 403);
+  if (!expected || !provided || !timingSafeEqual(provided, expected)) {
+    return c.text('forbidden', 403);
+  }
 
   const body = await c.req
     .json<{ appId?: string; ownerLogin?: string }>()

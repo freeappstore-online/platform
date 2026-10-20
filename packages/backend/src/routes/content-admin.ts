@@ -28,7 +28,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAdmin } from '../lib/auth.js';
+import { hasInternalToken, requireAdmin } from '../lib/auth.js';
 import { escapeLike, likePrefix } from '../lib/like.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
@@ -792,17 +792,8 @@ contentAdminRoutes.get('/admin/stats', async (c) => {
 // Used by the standalone admin worker (behind CF Access) which cannot hold
 // a FAS user session JWT. Auth is the shared ADMIN_PROVISION_TOKEN.
 
-function requireInternalToken(c: {
-  env: Env;
-  req: { header: (name: string) => string | undefined };
-}): boolean {
-  const expected = c.env.ADMIN_PROVISION_TOKEN;
-  const provided = c.req.header('X-Internal-Token');
-  return !!expected && provided === expected;
-}
-
 contentAdminRoutes.get('/internal/admin/kv', async (c) => {
-  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!hasInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app') ?? '';
   const userId = c.req.query('user') ?? '';
   const prefix = c.req.query('prefix') ?? '';
@@ -832,7 +823,7 @@ contentAdminRoutes.get('/internal/admin/kv', async (c) => {
 });
 
 contentAdminRoutes.get('/internal/admin/kv/value', async (c) => {
-  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!hasInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app');
   const userId = c.req.query('user');
   const key = c.req.query('key');
@@ -849,7 +840,7 @@ contentAdminRoutes.get('/internal/admin/kv/value', async (c) => {
 });
 
 contentAdminRoutes.delete('/internal/admin/kv', async (c) => {
-  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!hasInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app');
   const userId = c.req.query('user');
   const key = c.req.query('key');
@@ -862,7 +853,7 @@ contentAdminRoutes.delete('/internal/admin/kv', async (c) => {
 });
 
 contentAdminRoutes.get('/internal/admin/collections', async (c) => {
-  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!hasInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app') ?? '';
   const collection = c.req.query('collection') ?? '';
   const limit = queryLimit(c.req.query('limit'), 50, 200);
@@ -892,7 +883,7 @@ contentAdminRoutes.get('/internal/admin/collections', async (c) => {
 });
 
 contentAdminRoutes.delete('/internal/admin/collections', async (c) => {
-  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!hasInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app');
   const collection = c.req.query('collection');
   const id = c.req.query('id');
@@ -905,7 +896,7 @@ contentAdminRoutes.delete('/internal/admin/collections', async (c) => {
 });
 
 contentAdminRoutes.get('/internal/admin/counters', async (c) => {
-  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!hasInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app') ?? '';
   const prefix = c.req.query('prefix') ?? '';
   const limit = queryLimit(c.req.query('limit'), 100, 500);
@@ -930,7 +921,7 @@ contentAdminRoutes.get('/internal/admin/counters', async (c) => {
 });
 
 contentAdminRoutes.delete('/internal/admin/counters', async (c) => {
-  if (!requireInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
+  if (!hasInternalToken(c)) return c.json({ error: 'unauthorized' }, 401);
   const appId = c.req.query('app');
   const name = c.req.query('name');
   if (!appId || !name) return c.json({ error: 'app, name required' }, 400);

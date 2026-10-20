@@ -16,8 +16,13 @@
 
 import { type Context, Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { type CurrentUser, HttpError, requireAdmin, requireUser } from '../lib/auth.js';
-import { timingSafeEqual } from '../lib/session.js';
+import {
+  type CurrentUser,
+  HttpError,
+  hasInternalToken,
+  requireAdmin,
+  requireUser,
+} from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const analyticsRoutes = new Hono<{ Bindings: Env }>();
@@ -154,12 +159,8 @@ function normalize(v: string | null | undefined): string | null {
 analyticsRoutes.put('/internal/apps/:appId/analytics/cf-token', async (c) => {
   const appId = c.req.param('appId')!;
   if (!APP_ID_RE.test(appId)) return c.text('invalid app id', 400);
-  const provided = c.req.header('X-Internal-Token');
   // admin → backend runs on the provisioning control plane → ADMIN_PROVISION_TOKEN.
-  const expected = c.env.ADMIN_PROVISION_TOKEN;
-  if (!expected || !provided || !timingSafeEqual(provided, expected)) {
-    return c.text('forbidden', 403);
-  }
+  if (!hasInternalToken(c)) return c.text('forbidden', 403);
 
   let body: { cf_beacon_token?: string };
   try {

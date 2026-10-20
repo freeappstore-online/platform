@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeRoles } from '../routes/auth.js';
-import { isAdminLogin, requireUser } from './auth.js';
+import { hasInternalToken, isAdminLogin, requireUser } from './auth.js';
 import { signSession, verifySession } from './session.js';
 
 const KEY = 'a'.repeat(64);
@@ -205,4 +205,25 @@ describe('requireUser githubLogin', () => {
       expect(user.login).toBe('serge-ivo');
     },
   );
+});
+
+describe('hasInternalToken', () => {
+  const ctx = (expected: string | undefined, provided: string | undefined) =>
+    ({
+      env: { ADMIN_PROVISION_TOKEN: expected },
+      req: { header: () => provided },
+    }) as unknown as Parameters<typeof hasInternalToken>[0];
+
+  it('accepts the configured token', () => {
+    expect(hasInternalToken(ctx('s3cret', 's3cret'))).toBe(true);
+  });
+
+  it.each([
+    ['wrong token', 's3cret', 's3creX'],
+    ['missing header', 's3cret', undefined],
+    ['unconfigured secret', undefined, undefined],
+    ['unconfigured secret, empty header', '', ''],
+  ])('rejects %s', (_label, expected, provided) => {
+    expect(hasInternalToken(ctx(expected, provided))).toBe(false);
+  });
 });

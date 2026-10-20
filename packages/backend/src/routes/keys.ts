@@ -13,7 +13,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAdmin, requireUser } from '../lib/auth.js';
+import { hasInternalToken, requireAdmin, requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
 import type { Env } from '../types.js';
 
@@ -51,12 +51,6 @@ const COMP_SCHEMA = `CREATE TABLE IF NOT EXISTS complimentary_grants (
   last_used_at INTEGER
 )`;
 let compSchemaReady = false;
-
-function hasInternalToken(c: { env: Env; req: { header: (name: string) => string | undefined } }) {
-  const expected = c.env.ADMIN_PROVISION_TOKEN;
-  const provided = c.req.header('X-Internal-Token');
-  return !!expected && provided === expected;
-}
 
 async function ensureCompSchema(db: D1Database): Promise<void> {
   if (compSchemaReady) return;
