@@ -41,6 +41,23 @@ function textToB64(text: string): string {
   return btoa(bin);
 }
 
+// Repo names and file paths come from tool input and are interpolated into
+// API URLs sent with the server's org token. URL parsing collapses `..`
+// segments, so an unchecked `../other-org/repo` reads any repo that token can
+// reach. Allow only a plain repo name and plain path segments.
+const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+function repoBase(org: string, repo: string): string {
+  if (!REPO_RE.test(repo) || repo.includes("..")) throw new Error(`invalid repo name: ${repo}`);
+  return `https://api.github.com/repos/${org}/${repo}`;
+}
+
+function encodePath(path: string): string {
+  const segments = path.split("/");
+  if (segments.some((s) => s === "" || s === "." || s === "..")) throw new Error(`invalid file path: ${path}`);
+  return segments.map(encodeURIComponent).join("/");
+}
+
 export interface RepoFile {
   content: string; // base64
   encoding: "base64";
@@ -54,7 +71,7 @@ export async function fetchTemplateFiles(
   token: string,
   appId: string,
 ): Promise<Map<string, RepoFile>> {
-  const base = `https://api.github.com/repos/${org}/${templateRepo}`;
+  const base = repoBase(org, templateRepo);
   const ref = await gh(token, `${base}/git/ref/heads/main`);
   const headSha = ref?.object?.sha;
   if (!headSha) throw new Error(`template ${templateRepo}: no main ref (${ref.message ?? ref.__status})`);
@@ -87,7 +104,7 @@ export async function pushFiles(
   files: Map<string, RepoFile>,
   message: string,
 ): Promise<string> {
-  const base = `https://api.github.com/repos/${org}/${repo}`;
+  const base = repoBase(org, repo);
 
   let parentSha: string | undefined;
   let baseTree: string | undefined;
@@ -132,7 +149,7 @@ export async function pushFiles(
 
 /** List file paths in a repo (recursive). Read-only; works on public repos. */
 export async function listRepoFiles(org: string, repo: string, token?: string): Promise<string[]> {
-  const base = `https://api.github.com/repos/${org}/${repo}`;
+  const base = repoBase(org, repo);
   const ref = await gh(token, `${base}/git/ref/heads/main`);
   const headSha = ref?.object?.sha;
   if (!headSha) return [];
@@ -143,8 +160,8 @@ export async function listRepoFiles(org: string, repo: string, token?: string): 
 
 /** Read one file's text content from a repo. */
 export async function readRepoFile(org: string, repo: string, token: string | undefined, path: string): Promise<string | null> {
-  const base = `https://api.github.com/repos/${org}/${repo}`;
-  const res = await gh(token, `${base}/contents/${path.split("/").map(encodeURIComponent).join("/")}`);
+  const base = repoBase(org, repo);
+  const res = await gh(token, `${base}/contents/${encodePath(path)}`);
   if (typeof res?.content !== "string") return null;
   return b64ToText(res.content);
 }
