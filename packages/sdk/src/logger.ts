@@ -245,7 +245,10 @@ export class Logger {
     // Send the oldest not-yet-uploaded entries (a watermark over the stream),
     // so each entry uploads exactly once instead of re-sending the tail every
     // tick (which previously created duplicate rows server-side every 30s).
-    const startIdx = Math.max(0, this.uploadedThrough - this.evicted);
+    // Snapshot `evicted`: entries logged during the await can evict more of the
+    // buffer, and the watermark must count from where this batch was sliced.
+    const evicted = this.evicted;
+    const startIdx = Math.max(0, this.uploadedThrough - evicted);
     const batch = this.buffer.slice(startIdx, startIdx + UPLOAD_BATCH_SIZE);
     if (batch.length === 0) return;
     try {
@@ -259,7 +262,7 @@ export class Logger {
       });
       // On failure leave the watermark untouched and retry next interval.
       if (!res.ok) return;
-      this.uploadedThrough = this.evicted + startIdx + batch.length;
+      this.uploadedThrough = evicted + startIdx + batch.length;
     } catch {
       // Network failure, watermark unchanged — will retry next interval
     }

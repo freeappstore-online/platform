@@ -63,4 +63,24 @@ describe('Logger upload watermark', () => {
     await log.flush();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('does not skip entries when the full buffer evicts during an upload', async () => {
+    const log = new Logger('app3', 'https://api.test', auth);
+    log.clear();
+    for (let i = 0; i < 200; i++) log.info(`m${i}`); // buffer at its 200-entry cap
+
+    let release!: () => void;
+    fetchMock.mockImplementationOnce(
+      () => new Promise<Response>((r) => (release = () => r(new Response(null, { status: 204 })))),
+    );
+    const first = log.flush(); // sends m0..m49
+    for (let i = 200; i < 210; i++) log.info(`m${i}`); // evicts m0..m9 mid-upload
+    release();
+    await first;
+    await log.flush();
+    log.destroy();
+
+    const second = (bodies(fetchMock)[1]!.entries as { message: string }[]).map((e) => e.message);
+    expect(second[0]).toBe('m50');
+  });
 });
