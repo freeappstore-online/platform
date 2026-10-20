@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type CfFn, deleteDnsRecords } from "../deprovision";
+import { STORE_CONFIG } from "../publish";
 
 // Test the actual deprovision handler by importing the worker and calling
 // its fetch() with a mock env + mock external APIs.
@@ -244,5 +246,48 @@ describe("fix-dns endpoint", () => {
     await callFixDns({ id: "my-app", store: "apps" });
     const pagesCall = fetchCalls.find((c) => c.url.includes("/pages/projects"));
     expect(pagesCall).toBeUndefined();
+  });
+});
+
+// #283: the DNS step reported success without checking the results.
+describe("deleteDnsRecords", () => {
+  const env = { FAS_ZONE_ID: "z1" } as never;
+  const fakeCf =
+    (
+      deleteRes: Record<string, unknown>,
+      listRes: Record<string, unknown> = { success: true, result: [{ id: "r1" }, { id: "r2" }] },
+    ): CfFn =>
+    async (_path, method) =>
+      method === "DELETE" ? deleteRes : listRes;
+
+  it("is ok when every record is deleted (or already gone)", async () => {
+    expect(await deleteDnsRecords(fakeCf({ success: true }), env, "timer", STORE_CONFIG.apps)).toMatchObject({
+      status: "ok",
+      detail: "2 record(s) deleted",
+    });
+    expect((await deleteDnsRecords(fakeCf({ success: false, __status: 404 }), env, "timer", STORE_CONFIG.apps)).status).toBe("ok");
+  });
+
+  it("fails, with Cloudflare's error, when a delete fails", async () => {
+    const step = await deleteDnsRecords(
+      fakeCf({ success: false, __status: 403, errors: [{ message: "Authentication error" }] }),
+      env,
+      "timer",
+      STORE_CONFIG.apps,
+    );
+    expect(step.status).toBe("fail");
+    expect(step.detail).toContain("0/2 record(s) deleted");
+    expect(step.detail).toContain("Authentication error");
+  });
+
+  it("fails when listing the records fails, instead of reporting 0 deleted", async () => {
+    const step = await deleteDnsRecords(
+      fakeCf({ success: true }, { success: false, __status: 500, errors: [{ message: "Internal" }] }),
+      env,
+      "timer",
+      STORE_CONFIG.apps,
+    );
+    expect(step).toMatchObject({ status: "fail" });
+    expect(step.detail).toContain("Internal");
   });
 });

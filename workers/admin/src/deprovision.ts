@@ -139,14 +139,30 @@ export async function purgeR2Objects(env: DeprovisionEnv, id: string, config: St
   }
 }
 
+function cfError(res: any): string {
+  return res?.errors?.[0]?.message ?? `HTTP ${res?.__status ?? "?"}`;
+}
+
 export async function deleteDnsRecords(cf: CfFn, env: DeprovisionEnv, id: string, config: StoreConfig): Promise<Step> {
   const zone = config.zoneIdFromEnv(env);
   if (!zone) return { name: "dns", status: "fail", detail: "zone id not configured" };
   try {
     const list = await cf(`/zones/${zone}/dns_records?type=CNAME&name=${id}.${config.domain}`);
+    // A failed list used to read as "0 records deleted" (#283).
+    if (list?.success === false) return { name: "dns", status: "fail", detail: `listing DNS records failed: ${cfError(list)}` };
     const records: { id: string }[] = list.result ?? [];
+    const failed: string[] = [];
     for (const rec of records) {
-      await cf(`/zones/${zone}/dns_records/${rec.id}`, "DELETE");
+      const del = await cf(`/zones/${zone}/dns_records/${rec.id}`, "DELETE");
+      // 404: already gone. Anything else unsuccessful used to count as deleted.
+      if (del?.success !== true && del?.__status !== 404) failed.push(`${rec.id} (${cfError(del)})`);
+    }
+    if (failed.length) {
+      return {
+        name: "dns",
+        status: "fail",
+        detail: `${records.length - failed.length}/${records.length} record(s) deleted; failed: ${failed.join(", ")}`,
+      };
     }
     return { name: "dns", status: "ok", detail: `${records.length} record(s) deleted` };
   } catch (e: any) {
