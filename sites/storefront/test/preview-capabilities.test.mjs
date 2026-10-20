@@ -21,7 +21,6 @@ const ROOT = resolve(dirname(__filename), "..");
 const BUILD_JS = join(ROOT, "build.js");
 const HOST_TS = join(ROOT, "..", "..", "workers", "host", "src", "host.ts");
 
-const MIC_APPS = ["echoshift", "voicerecorder", "flatbed", "forktuner", "soundboard-pro"];
 
 /** The features the app host grants each app on its own origin. */
 function hostFeatures() {
@@ -67,11 +66,15 @@ const allowOf = (html, marker) => {
   return { tag, allow: (tag.match(/allow="([^"]*)"/)?.[1] ?? "").split("; ").filter(Boolean) };
 };
 
-test("registry still marks known microphone apps (#272 data)", () => {
+test("registry lists permissions instead of the old #272 microphone flag", () => {
   const registry = JSON.parse(readFileSync(join(ROOT, "registry.json"), "utf8"));
   const byId = Object.fromEntries(registry.apps.map((app) => [app.id, app]));
-  for (const id of MIC_APPS) assert.equal(byId[id]?.microphone, true, `${id} must declare microphone`);
-  assert.notEqual(byId.calculator?.microphone, true, "non-mic apps must not declare microphone");
+  const ids = (app) => (app.permissions ?? []).map((p) => (typeof p === "string" ? p : p.name));
+  for (const id of ["echoshift", "voicerecorder", "forktuner", "soundboard-pro"]) {
+    assert.ok(ids(byId[id]).includes("microphone"), `${id} lists microphone`);
+  }
+  assert.deepEqual(ids(byId.flatbed), ["camera"], "flatbed scans with the camera, no microphone");
+  assert.ok(registry.apps.every((app) => !("microphone" in app)), "the microphone flag is gone");
 });
 
 test("preview iframes delegate every host capability, and the storefront policy lets them through", () => {

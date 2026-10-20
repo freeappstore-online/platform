@@ -14,7 +14,10 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "serge-ivo",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "math",
@@ -29,7 +32,10 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "music",
@@ -44,7 +50,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "quiz",
@@ -59,7 +66,10 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "books",
@@ -74,7 +84,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "bandmates",
@@ -90,7 +101,8 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "serge-ivo",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": []
     },
     {
       "id": "meetup",
@@ -106,7 +118,8 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "serge-ivo",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": []
     },
     {
       "id": "calculator",
@@ -121,7 +134,10 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "clipboard"
+      ]
     },
     {
       "id": "chessclock",
@@ -136,7 +152,10 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "motion"
+      ]
     },
     {
       "id": "timer",
@@ -151,7 +170,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "converter",
@@ -166,7 +186,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "notes",
@@ -181,7 +202,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "pomodoro",
@@ -196,7 +218,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "qrcode",
@@ -211,7 +234,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "colorpicker",
@@ -226,7 +250,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "password",
@@ -241,7 +266,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "whiteboard",
@@ -256,7 +282,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "flashcards",
@@ -271,7 +298,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "habits",
@@ -286,7 +314,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "weather",
@@ -301,7 +330,10 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "location"
+      ]
     },
     {
       "id": "stopwatch",
@@ -316,7 +348,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "mandarin-english",
@@ -331,7 +364,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "snowman",
@@ -347,7 +381,8 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "dawsonhuang0",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": []
     },
     {
       "id": "typeflow",
@@ -362,7 +397,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "abid8195"
+      "creatorGithub": "abid8195",
+      "permissions": []
     },
     {
       "id": "streak",
@@ -377,7 +413,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "spending",
@@ -392,7 +429,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "artout",
@@ -408,7 +446,10 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "serge-ivo",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": [
+        "location"
+      ]
     },
     {
       "id": "faces",
@@ -423,7 +464,10 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "location"
+      ]
     },
     {
       "id": "whenly",
@@ -439,7 +483,8 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "serge-ivo",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": []
     },
     {
       "id": "kanban",
@@ -454,7 +499,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "docbot",
@@ -469,7 +515,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "population-agent",
@@ -485,7 +532,8 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "serge-ivo",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": []
     },
     {
       "id": "facer",
@@ -500,7 +548,10 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "camera"
+      ]
     },
     {
       "id": "pdfreader",
@@ -515,7 +566,8 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "flight-search",
@@ -530,7 +582,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "qrreader",
@@ -545,7 +598,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "TommyHoang2911"
+      "creatorGithub": "TommyHoang2911",
+      "permissions": []
     },
     {
       "id": "decision-wheel",
@@ -560,7 +614,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "ChaoLIUqaq"
+      "creatorGithub": "ChaoLIUqaq",
+      "permissions": []
     },
     {
       "id": "smart-planner",
@@ -575,7 +630,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "kirantikoo"
+      "creatorGithub": "kirantikoo",
+      "permissions": []
     },
     {
       "id": "message",
@@ -591,7 +647,8 @@
       "developer": "FreeAppStore",
       "hostedOn": "r2",
       "creatorGithub": "serge-ivo",
-      "requiresAuth": true
+      "requiresAuth": true,
+      "permissions": []
     },
     {
       "id": "spreadsheet",
@@ -606,7 +663,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "periodic-table",
@@ -621,7 +679,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "physics",
@@ -636,7 +695,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "graphing",
@@ -651,7 +711,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "anatomy",
@@ -666,7 +727,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "chemistry",
@@ -681,7 +743,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "solar-system",
@@ -696,7 +759,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "cell-biology",
@@ -711,7 +775,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "circuits",
@@ -726,7 +791,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "statistics",
@@ -741,7 +807,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "star-map",
@@ -756,7 +823,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "geography",
@@ -771,7 +839,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "math-reference",
@@ -786,7 +855,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "workout",
@@ -801,7 +871,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "meditation",
@@ -816,7 +887,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "calories",
@@ -831,7 +903,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "sleep",
@@ -846,7 +919,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "budget",
@@ -861,7 +935,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "split",
@@ -876,7 +951,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "pixel-art",
@@ -891,7 +967,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "sketch",
@@ -906,7 +983,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "palette",
@@ -921,7 +999,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "recipes",
@@ -936,7 +1015,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "morse",
@@ -951,7 +1031,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "music-theory",
@@ -966,7 +1047,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "typing",
@@ -981,7 +1063,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "markdown",
@@ -996,7 +1079,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "dictionary",
@@ -1011,7 +1095,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "journal",
@@ -1026,7 +1111,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "regex",
@@ -1041,7 +1127,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "json",
@@ -1056,7 +1143,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "loan",
@@ -1071,7 +1159,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "metronome",
@@ -1086,7 +1175,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "quotes",
@@ -1101,7 +1191,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "motion"
+      ]
     },
     {
       "id": "countdown",
@@ -1116,7 +1209,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "plants",
@@ -1131,7 +1225,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "hiit",
@@ -1146,7 +1241,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "resume",
@@ -1161,7 +1257,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "wordcount",
@@ -1176,7 +1273,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "clipboard"
+      ]
     },
     {
       "id": "focus",
@@ -1191,7 +1291,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "mood",
@@ -1206,7 +1307,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "expense",
@@ -1221,7 +1323,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "type-spec",
@@ -1236,7 +1339,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "encode",
@@ -1251,7 +1355,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "mindmap",
@@ -1266,7 +1371,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "tides",
@@ -1281,7 +1387,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "location"
+      ]
     },
     {
       "id": "photo",
@@ -1296,7 +1405,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "invoice",
@@ -1311,7 +1421,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "lol-app",
@@ -1326,7 +1437,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "hello-world-greetings",
@@ -1341,7 +1453,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "shoplist",
@@ -1356,7 +1469,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "tranchaungoctri"
+      "creatorGithub": "tranchaungoctri",
+      "permissions": []
     },
     {
       "id": "agentcoder",
@@ -1371,7 +1485,10 @@
       "hostedOn": "r2",
       "type": "connected",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "soccer-live",
@@ -1386,7 +1503,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "convert-color",
@@ -1400,7 +1518,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "TommyHoang2911"
+      "creatorGithub": "TommyHoang2911",
+      "permissions": []
     },
     {
       "id": "crontab-explain",
@@ -1414,7 +1533,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "TommyHoang2911"
+      "creatorGithub": "TommyHoang2911",
+      "permissions": []
     },
     {
       "id": "planning-poker",
@@ -1428,7 +1548,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "ChaoLIUqaq"
+      "creatorGithub": "ChaoLIUqaq",
+      "permissions": []
     },
     {
       "id": "mcp-live-demo",
@@ -1442,7 +1563,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "extract-color",
@@ -1456,7 +1578,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "TommyHoang2911"
+      "creatorGithub": "TommyHoang2911",
+      "permissions": []
     },
     {
       "id": "lens-journal",
@@ -1470,7 +1593,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "TommyHoang2911"
+      "creatorGithub": "TommyHoang2911",
+      "permissions": []
     },
     {
       "id": "whisper-room",
@@ -1484,7 +1608,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "TommyHoang2911"
+      "creatorGithub": "TommyHoang2911",
+      "permissions": [
+        "camera"
+      ]
     },
     {
       "id": "slowdown",
@@ -1498,7 +1625,8 @@
       "hostedOn": "r2",
       "type": "connected",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "webshare",
@@ -1512,7 +1640,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "dawsonhuang0"
+      "creatorGithub": "dawsonhuang0",
+      "permissions": [
+        "camera"
+      ]
     },
     {
       "id": "quickslotwebfas",
@@ -1526,7 +1657,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Shivam2434"
+      "creatorGithub": "Shivam2434",
+      "permissions": []
     },
     {
       "id": "study-room",
@@ -1540,7 +1672,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "ChaoLIUqaq"
+      "creatorGithub": "ChaoLIUqaq",
+      "permissions": []
     },
     {
       "id": "piano",
@@ -1554,7 +1687,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "pillcount",
@@ -1568,7 +1702,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "my-todo-app",
@@ -1582,7 +1717,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "James1234804"
+      "creatorGithub": "James1234804",
+      "permissions": []
     },
     {
       "id": "taskflow",
@@ -1596,7 +1732,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Reetu23"
+      "creatorGithub": "Reetu23",
+      "permissions": []
     },
     {
       "id": "dodge-drop",
@@ -1610,7 +1747,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "viri543"
+      "creatorGithub": "viri543",
+      "permissions": []
     },
     {
       "id": "stock-tracker",
@@ -1624,7 +1762,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "James1234804"
+      "creatorGithub": "James1234804",
+      "permissions": []
     },
     {
       "id": "future-letters",
@@ -1638,7 +1777,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "imhappyamber-design"
+      "creatorGithub": "imhappyamber-design",
+      "permissions": []
     },
     {
       "id": "shopping-list",
@@ -1652,7 +1792,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Pumpkin12345678910"
+      "creatorGithub": "Pumpkin12345678910",
+      "permissions": []
     },
     {
       "id": "face-morpher",
@@ -1666,7 +1807,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "camera"
+      ]
     },
     {
       "id": "grade-goal",
@@ -1680,7 +1824,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Mateysh3112"
+      "creatorGithub": "Mateysh3112",
+      "permissions": []
     },
     {
       "id": "my-todo-app-2",
@@ -1694,7 +1839,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "buildlessonline-spec"
+      "creatorGithub": "buildlessonline-spec",
+      "permissions": []
     },
     {
       "id": "petdo",
@@ -1708,7 +1854,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "PATRICIA-AU"
+      "creatorGithub": "PATRICIA-AU",
+      "permissions": []
     },
     {
       "id": "my-todos",
@@ -1722,7 +1869,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "kaitlyn531"
+      "creatorGithub": "kaitlyn531",
+      "permissions": []
     },
     {
       "id": "pizza-maker-game",
@@ -1736,7 +1884,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "kaitlyn531"
+      "creatorGithub": "kaitlyn531",
+      "permissions": []
     },
     {
       "id": "my-todo-app-3",
@@ -1750,7 +1899,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "ElliT-coder"
+      "creatorGithub": "ElliT-coder",
+      "permissions": []
     },
     {
       "id": "focus-timer",
@@ -1764,7 +1914,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "BUDDY-KIWI-BERRY"
+      "creatorGithub": "BUDDY-KIWI-BERRY",
+      "permissions": [
+        "notifications"
+      ]
     },
     {
       "id": "colour-timer",
@@ -1778,7 +1931,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Pumpkin12345678910"
+      "creatorGithub": "Pumpkin12345678910",
+      "permissions": []
     },
     {
       "id": "smart-study-coach",
@@ -1792,7 +1946,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "thatonenerdykidinclass"
+      "creatorGithub": "thatonenerdykidinclass",
+      "permissions": []
     },
     {
       "id": "dual-timezone",
@@ -1806,7 +1961,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "wandaaulia"
+      "creatorGithub": "wandaaulia",
+      "permissions": []
     },
     {
       "id": "a11y-fixlist",
@@ -1820,7 +1976,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "esmelui"
+      "creatorGithub": "esmelui",
+      "permissions": []
     },
     {
       "id": "votepool",
@@ -1834,7 +1991,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "buildlessonline-spec"
+      "creatorGithub": "buildlessonline-spec",
+      "permissions": []
     },
     {
       "id": "asmr-boards",
@@ -1848,7 +2006,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "BUDDY-KIWI-BERRY"
+      "creatorGithub": "BUDDY-KIWI-BERRY",
+      "permissions": []
     },
     {
       "id": "room-bloom",
@@ -1862,7 +2021,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "SASASKIA"
+      "creatorGithub": "SASASKIA",
+      "permissions": [
+        "notifications"
+      ]
     },
     {
       "id": "chore-list",
@@ -1876,7 +2038,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "SASASKIA"
+      "creatorGithub": "SASASKIA",
+      "permissions": []
     },
     {
       "id": "family-hub",
@@ -1890,7 +2053,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Crystal12341"
+      "creatorGithub": "Crystal12341",
+      "permissions": [
+        "notifications"
+      ]
     },
     {
       "id": "bill-reminders",
@@ -1904,7 +2070,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "SASASKIA"
+      "creatorGithub": "SASASKIA",
+      "permissions": []
     },
     {
       "id": "bag-buddy",
@@ -1918,7 +2085,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "OperationBannana"
+      "creatorGithub": "OperationBannana",
+      "permissions": []
     },
     {
       "id": "habitquest-rpg",
@@ -1932,7 +2100,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "imhappyamber-design"
+      "creatorGithub": "imhappyamber-design",
+      "permissions": []
     },
     {
       "id": "asmr-keyboard",
@@ -1946,7 +2115,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "BUDDY-KIWI-BERRY"
+      "creatorGithub": "BUDDY-KIWI-BERRY",
+      "permissions": []
     },
     {
       "id": "chefai-recipes",
@@ -1960,7 +2130,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Boris-The-Pug"
+      "creatorGithub": "Boris-The-Pug",
+      "permissions": []
     },
     {
       "id": "forktuner",
@@ -1975,7 +2146,9 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "abid8195",
-      "microphone": true
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "devestimate",
@@ -1989,7 +2162,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "DeepAshishThapa"
+      "creatorGithub": "DeepAshishThapa",
+      "permissions": []
     },
     {
       "id": "datalens",
@@ -2003,7 +2177,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "abid8195"
+      "creatorGithub": "abid8195",
+      "permissions": []
     },
     {
       "id": "decision-compass",
@@ -2017,7 +2192,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "jessicacastello"
+      "creatorGithub": "jessicacastello",
+      "permissions": []
     },
     {
       "id": "kpop-diary",
@@ -2031,7 +2207,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "BUDDY-KIWI-BERRY"
+      "creatorGithub": "BUDDY-KIWI-BERRY",
+      "permissions": [
+        "camera"
+      ]
     },
     {
       "id": "soundboard-pro",
@@ -2046,7 +2225,9 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "imhappyamber-design",
-      "microphone": true
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "taskflow-manager",
@@ -2060,7 +2241,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "imhappyamber-design"
+      "creatorGithub": "imhappyamber-design",
+      "permissions": []
     },
     {
       "id": "learner-coder",
@@ -2074,7 +2256,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "dawsonhuang0"
+      "creatorGithub": "dawsonhuang0",
+      "permissions": []
     },
     {
       "id": "formulapad",
@@ -2088,7 +2271,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Abrarcancode67"
+      "creatorGithub": "Abrarcancode67",
+      "permissions": []
     },
     {
       "id": "smoke-sandbox",
@@ -2102,7 +2286,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-the-dev"
+      "creatorGithub": "serge-the-dev",
+      "permissions": []
     },
     {
       "id": "reactionlab",
@@ -2116,7 +2301,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "abid8195"
+      "creatorGithub": "abid8195",
+      "permissions": []
     },
     {
       "id": "echoshift",
@@ -2131,7 +2317,9 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "Abrarcancode67",
-      "microphone": true
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "pulsestack",
@@ -2145,7 +2333,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "aymanzs-3184"
+      "creatorGithub": "aymanzs-3184",
+      "permissions": [
+        "notifications"
+      ]
     },
     {
       "id": "pulse-stack",
@@ -2159,7 +2350,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "aymanzs-3184"
+      "creatorGithub": "aymanzs-3184",
+      "permissions": []
     },
     {
       "id": "quantlab",
@@ -2173,7 +2365,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "abid8195"
+      "creatorGithub": "abid8195",
+      "permissions": []
     },
     {
       "id": "cycle",
@@ -2187,7 +2380,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "notifications"
+      ]
     },
     {
       "id": "sleepsounds",
@@ -2201,7 +2397,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "voicerecorder",
@@ -2216,7 +2413,9 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
-      "microphone": true
+      "permissions": [
+        "microphone"
+      ]
     },
     {
       "id": "quickcalc",
@@ -2230,7 +2429,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "clearday",
@@ -2244,7 +2444,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "fastclock",
@@ -2258,7 +2459,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "tapbeat",
@@ -2272,7 +2474,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "prayercompass",
@@ -2286,7 +2489,11 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "location",
+        "motion"
+      ]
     },
     {
       "id": "shelfmark",
@@ -2300,7 +2507,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "camera"
+      ]
     },
     {
       "id": "flatbed",
@@ -2315,7 +2525,9 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
-      "microphone": true
+      "permissions": [
+        "camera"
+      ]
     },
     {
       "id": "calcwright",
@@ -2329,7 +2541,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "carebook",
@@ -2343,7 +2556,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "logic-gate-lab",
@@ -2357,7 +2571,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "Abrarcancode67"
+      "creatorGithub": "Abrarcancode67",
+      "permissions": []
     },
     {
       "id": "watertracker",
@@ -2371,7 +2586,8 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     }
   ]
 }
