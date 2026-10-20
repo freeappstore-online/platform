@@ -99,7 +99,7 @@ describe.skipIf(!hasSqlite)('caps under concurrency (#277)', () => {
         new Request(url('/db/posts/p1'), {
           method: 'PUT',
           headers: { ...auth, 'Content-Type': 'application/json' },
-          body: patches[i],
+          body: patches[i] ?? '{}',
         }),
     );
     expect(statuses).toEqual([200, 200, 200]);
