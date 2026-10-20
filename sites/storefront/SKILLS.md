@@ -175,7 +175,7 @@ No further API calls or manual steps needed. Ever.
 - Static hosting on Cloudflare R2 (served by the host Worker). No server-side code in apps.
 - Backend (if needed): `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice). `npm i @freeappstore/sdk`.
 - Free means free forever. No monetization in the free version.
-- Browser capabilities are open on your app's own origin: microphone, camera, location, motion sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock, Web Workers (including `blob:` workers) and WebAssembly all work. The browser asks the user, so handle `NotAllowedError` and missing hardware; don't remove a feature because it fails in the storefront preview (users get an Open-in-new-tab link). Not available: `SharedArrayBuffer` (needs cross-origin isolation) and the Topics API. Full matrix: https://docs.freeappstore.online/capabilities/
+- Browser capabilities are open on your app's own origin: microphone, camera, location, motion sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock, Web Workers (including `blob:` workers) and WebAssembly all work. The browser asks the user, so handle `NotAllowedError` and missing hardware; the storefront preview delegates the same features to your app, so they work there too. Not available: `SharedArrayBuffer` (needs cross-origin isolation) and the Topics API. Full matrix: https://docs.freeappstore.online/capabilities/
 
 ## Tech Stack (required)
 

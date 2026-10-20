@@ -38,10 +38,12 @@ embeds don't receive them, even with an `allow` attribute.
 The browser still asks the user, needs a secure context (always true on the host), and for most of these
 needs a user gesture. Handle `NotAllowedError` (the user said no) and missing hardware.
 
-**Inside the storefront preview** (the phone frame on an app's listing), these features are blocked,
-because the preview iframe is sandboxed and runs under the storefront's own policy. Users get an
-**Open in new tab** link, and apps that use the microphone get a banner saying so. Extending the
-banner to every capability is [#287](https://github.com/freeappstore-online/platform/issues/287).
+**Inside the storefront preview** (the phone frame on an app's listing, the homepage preview and
+the quality dashboard), the same features work. The storefront delegates every feature above to
+`*.freeappstore.online` app origins through its Permissions-Policy and the preview iframe's `allow`
+attribute. Users still get an **Open in new tab** link. One difference: the browser's permission
+prompt in the preview names freeappstore.online, the page the user is on, and a grant there is
+separate from a grant in the app's own tab.
 
 ## Content-Security-Policy
 
