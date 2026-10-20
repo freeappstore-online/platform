@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeRoles } from '../routes/auth.js';
-import { isAdminLogin } from './auth.js';
+import { isAdminLogin, requireUser } from './auth.js';
 import { signSession, verifySession } from './session.js';
 
 const KEY = 'a'.repeat(64);
@@ -167,4 +167,42 @@ describe('computeRoles admin (#22)', () => {
     const env = makeEnv({});
     expect((await computeRoles('google:1', 'serge-ivo', env, 'google')).roles).toEqual(['user']);
   });
+});
+
+describe('requireUser githubLogin', () => {
+  async function userFor(id: string, githubLogin: string) {
+    const token = await signSession(id, KEY);
+    const db = {
+      prepare: () => ({
+        bind: () => ({
+          first: async () => ({
+            id,
+            github_login: githubLogin,
+            avatar_url: null,
+            display_name: null,
+            email: null,
+            date_of_birth: null,
+          }),
+        }),
+      }),
+    };
+    const c = {
+      req: { header: () => `Bearer ${token}` },
+      env: { DB: db, SESSION_SIGNING_KEY: KEY },
+    } as unknown as Parameters<typeof requireUser>[0];
+    return requireUser(c);
+  }
+
+  it('is the GitHub username for GitHub accounts', async () => {
+    expect((await userFor('gh:42', 'octocat')).githubLogin).toBe('octocat');
+  });
+
+  it.each(['email:serge-ivo@attacker.example', 'google:123', 'apple:456'])(
+    'is empty for %s, whose github_login is an email local-part',
+    async (id) => {
+      const user = await userFor(id, 'serge-ivo');
+      expect(user.githubLogin).toBe('');
+      expect(user.login).toBe('serge-ivo');
+    },
+  );
 });

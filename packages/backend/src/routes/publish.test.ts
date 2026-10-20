@@ -270,6 +270,32 @@ describe('POST /v1/publish', () => {
     expect(inserts.some((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'))).toBe(false);
   });
 
+  it('refuses a non-GitHub account whose login matches an admin (no provisioning)', async () => {
+    // Email sign-in stores the email local-part in github_login, so
+    // serge-ivo@attacker.example lands with github_login 'serge-ivo'.
+    const token = await signSession('email:serge-ivo@attacker.example', SIGNING_KEY);
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({ response: new Response('{}', { status: 200 }), capture: calls });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, creatorGithub: 'victim' }),
+      },
+      baseEnv(
+        userLookupDB({
+          id: 'email:serge-ivo@attacker.example',
+          github_login: 'serge-ivo',
+          avatar_url: null,
+        }),
+        { ADMIN: admin, ADMIN_GITHUB_LOGINS: 'serge-ivo' },
+      ),
+    );
+    expect(res.status).toBe(403);
+    expect(calls).toHaveLength(0);
+  });
+
   it('forbids a non-admin from attributing the app to someone else', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
     const res = await app.request(

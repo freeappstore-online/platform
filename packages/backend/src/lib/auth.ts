@@ -72,7 +72,10 @@ export async function requireUser(c: Context<{ Bindings: Env }>): Promise<Curren
   return {
     id: row.id,
     login: row.display_name || row.github_login,
-    githubLogin: row.github_login,
+    // Non-GitHub providers store the email local-part in github_login. It is
+    // attacker-chosen, so it must never match an app owner or admin login
+    // (same rule as computeRoles).
+    githubLogin: /^(google|apple|email):/.test(row.id) ? '' : row.github_login,
     avatarUrl: row.avatar_url,
     dateOfBirth: row.date_of_birth,
     roles: payload.roles ?? ['user'],

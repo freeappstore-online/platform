@@ -133,6 +133,9 @@ publishRoutes.post('/publish', async (c) => {
   // Resolve the creator. Defaults to the publisher; only an admin may attribute
   // an app to a different user (contributor onboarding), so a regular publisher
   // can't spoof credit to (or blame) someone else.
+  if (!user.githubLogin) {
+    return c.text('publishing requires signing in with GitHub', 403);
+  }
   let creatorGithub = user.githubLogin;
   if (body.creatorGithub && body.creatorGithub !== user.githubLogin) {
     if (!isAdminLogin(user.githubLogin, c.env)) {

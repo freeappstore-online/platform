@@ -37,7 +37,7 @@ roomRoutes.post('/apps/:appId/rooms/:roomId/ticket', async (c) => {
       appId,
       roomId,
       uid: user.id,
-      login: user.githubLogin,
+      login: user.githubLogin || user.login,
       exp: Math.floor(Date.now() / 1000) + ROOM_TICKET_TTL_SECONDS,
     },
     c.env.SESSION_SIGNING_KEY,
