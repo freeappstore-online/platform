@@ -194,11 +194,20 @@ export class Logger {
     });
   }
 
+  // Stored as { entries, uploaded }: how many of `entries` (from the front)
+  // were already uploaded, so a reload doesn't send them again (#280) while
+  // entries a crash left behind still go out once.
   private saveToStorage() {
     if (typeof localStorage === 'undefined') return;
     try {
       const entries = this.buffer.slice(-STORAGE_LIMIT);
-      localStorage.setItem(`${STORAGE_KEY_PREFIX}${this.appId}`, JSON.stringify(entries));
+      const skipped = this.buffer.length - entries.length;
+      const uploadedInBuffer = this.uploadedThrough - this.evicted - skipped;
+      const uploaded = Math.min(Math.max(uploadedInBuffer, 0), entries.length);
+      localStorage.setItem(
+        `${STORAGE_KEY_PREFIX}${this.appId}`,
+        JSON.stringify({ entries, uploaded }),
+      );
     } catch {
       // Storage full or unavailable, ignore
     }
@@ -208,12 +217,18 @@ export class Logger {
     if (typeof localStorage === 'undefined') return;
     try {
       const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${this.appId}`);
-      if (raw) {
-        const entries = JSON.parse(raw) as LogEntry[];
-        if (Array.isArray(entries)) {
-          this.buffer = entries.slice(-MEMORY_LIMIT);
-        }
-      }
+      if (!raw) return;
+      const saved = JSON.parse(raw) as LogEntry[] | { entries?: unknown; uploaded?: unknown };
+      // A bare array is the pre-#280 format, which didn't record uploads:
+      // treat it as not uploaded rather than risk dropping crash logs.
+      const entries = Array.isArray(saved) ? saved : saved?.entries;
+      if (!Array.isArray(entries)) return;
+      const uploaded =
+        !Array.isArray(saved) && typeof saved.uploaded === 'number' ? saved.uploaded : 0;
+      this.buffer = (entries as LogEntry[]).slice(-MEMORY_LIMIT);
+      const dropped = entries.length - this.buffer.length;
+      this.evicted = 0;
+      this.uploadedThrough = Math.min(Math.max(uploaded - dropped, 0), this.buffer.length);
     } catch {
       // Corrupted, ignore
     }
@@ -263,6 +278,7 @@ export class Logger {
       // On failure leave the watermark untouched and retry next interval.
       if (!res.ok) return;
       this.uploadedThrough = evicted + startIdx + batch.length;
+      this.saveToStorage();
     } catch {
       // Network failure, watermark unchanged — will retry next interval
     }
