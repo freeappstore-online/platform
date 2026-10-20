@@ -5,6 +5,8 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { extname, join, normalize, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { extractInlineManifest } from '@freeappstore/compliance';
+import { computeQualityIndex, REFERENCE_VIEWPORTS, viewportKey } from '@freeappstore/quality';
 import { Command } from 'commander';
 
 /**
@@ -137,7 +139,9 @@ export const screencheckCommand = new Command('screencheck')
       } else {
         const manifest = await readManifest(opts.dir);
         if (!manifest) {
-          process.stdout.write('\n✗ web/public/manifest.json not found or unparseable.\n');
+          process.stdout.write(
+            '\n✗ No manifest found: neither web/public/manifest.json nor an inline VitePWA manifest in web/vite.config.ts.\n',
+          );
           process.exit(1);
         }
         minWidth =
@@ -208,18 +212,10 @@ export const screencheckCommand = new Command('screencheck')
           process.stdout.write(
             `✗ ${failed}/${results.length} reference viewports have layout issues.\n`,
           );
-          // Coverage failure is a fail. But: failing only at the very
-          // top end of the matrix (1024+ desktop) above what the manifest
-          // claims doesn't necessarily warrant a non-zero exit; the
-          // creator can opt out via orientation=portrait, and the badge
-          // already conveys reality. So we exit non-zero only if the
-          // *declared* min fails.
-          const declaredMinFails = matrix.some(
-            (t) => t.width === minWidth && !passing.has(t.label),
-          );
-          if (declaredMinFails) {
+          const blocking = blockingFailures(matrix, passing, minWidth);
+          if (blocking.length > 0) {
             process.stdout.write(
-              `  At least one failing viewport is at or below your declared min_viewport_width (${minWidth}px).\n`,
+              `  ${blocking.length} failing viewport(s) are within your declared range (${minWidth}px and up): ${blocking.map((t) => t.label).join('; ')}.\n`,
             );
             process.stdout.write(
               '  Either fix the layout or raise min_viewport_width in your manifest.\n',
@@ -227,7 +223,7 @@ export const screencheckCommand = new Command('screencheck')
             exitCode = 1;
           } else {
             process.stdout.write(
-              `  All failures are above your declared min (${minWidth}px). Consider raising it to claim coverage that's actually true.\n`,
+              `  The failures are below your declared min (${minWidth}px) or at desktop widths, so they don't fail the run.\n`,
             );
           }
         } else {
@@ -248,105 +244,63 @@ export const screencheckCommand = new Command('screencheck')
     },
   );
 
-/**
- * The reference device matrix. Each entry pairs a width with a real-world
- * device class and the *cumulative device share* at that width — used to
- * answer "what % of users does this break for?". Numbers match the
- * storefront's viewport-coverage badge so the CLI and the badge agree.
- *
- * Cumulative means: `share` is the % of devices whose viewport is at
- * LEAST this wide. So 360px = 96% means 96% of devices have ≥360px
- * available; if the app fails at 360, you've lost those 96%.
- *
- * Source: blended StatCounter + caniuse share-of-screens, rounded.
- */
-const REFERENCE_PORTRAIT: Array<{ width: number; height: number; label: string; share: number }> = [
-  { width: 320, height: 568, label: 'iPhone SE (1st gen)', share: 99 },
-  { width: 360, height: 800, label: 'Android baseline', share: 96 },
-  { width: 414, height: 896, label: 'iPhone 11/Pro Max', share: 88 },
-  { width: 600, height: 800, label: 'Small tablet', share: 60 },
-  { width: 768, height: 1024, label: 'iPad portrait', share: 35 },
-  { width: 1024, height: 1366, label: 'iPad Pro portrait', share: 20 },
-];
-
-const REFERENCE_LANDSCAPE: Array<{ width: number; height: number; label: string; share: number }> =
-  [
-    { width: 568, height: 320, label: 'iPhone SE landscape', share: 99 },
-    { width: 667, height: 375, label: 'iPhone 8 landscape', share: 96 },
-    { width: 736, height: 414, label: 'iPhone Plus landscape', share: 88 },
-    { width: 800, height: 600, label: 'Small tablet landscape', share: 60 },
-    { width: 1024, height: 768, label: 'iPad landscape', share: 35 },
-    { width: 1366, height: 1024, label: 'iPad Pro landscape', share: 20 },
-  ];
-
 interface ViewportTestExpanded extends ViewportTest {
   share: number;
   orientation: 'portrait' | 'landscape';
 }
 
+// The device matrix and coverage math come from @freeappstore/quality, the
+// same source as the /quality dashboard and the storefront badge, so the CLI
+// and the dashboard report the same numbers (#281).
 export function pickMatrix(_minWidth: number, orientation: string): ViewportTestExpanded[] {
   const isPortrait = orientation === 'portrait' || orientation === 'portrait-primary';
   const isLandscape = orientation === 'landscape' || orientation === 'landscape-primary';
   const isAny = orientation === 'any' || orientation === 'unspecified' || !orientation;
-  const matrix: ViewportTestExpanded[] = [];
-  if (isPortrait || isAny) {
-    for (const r of REFERENCE_PORTRAIT) {
-      matrix.push({
-        label: `portrait ${r.width}×${r.height} (${r.label})`,
-        width: r.width,
-        height: r.height,
-        share: r.share,
-        orientation: 'portrait',
-      });
-    }
-  }
-  if (isLandscape || isAny) {
-    for (const r of REFERENCE_LANDSCAPE) {
-      matrix.push({
-        label: `landscape ${r.width}×${r.height} (${r.label})`,
-        width: r.width,
-        height: r.height,
-        share: r.share,
-        orientation: 'landscape',
-      });
-    }
-  }
-  return matrix;
+  return REFERENCE_VIEWPORTS.filter(
+    (r) =>
+      ((isPortrait || isAny) && r.orientation === 'portrait') ||
+      ((isLandscape || isAny) && r.orientation === 'landscape'),
+  ).map((r) => ({
+    label: `${r.orientation} ${r.width}×${r.height} (${r.label})`,
+    width: r.width,
+    height: r.height,
+    share: r.share,
+    orientation: r.orientation,
+  }));
 }
 
 /**
- * Given the matrix and pass/fail per size, compute device coverage.
- * Coverage = max share among passing widths, per orientation.
- *
- * Why max(share): share is cumulative-from-this-width-up. The smallest
- * passing width has the highest share; passing larger widths is implied
- * by passing the smallest. We pick the lowest passing width's share.
+ * Device coverage for a pass/fail result: quality's computeQualityIndex, which
+ * sums the device share of each passing width bucket (so a layout that breaks
+ * in the middle of the range isn't scored by its narrowest passing width).
  */
 export function computeCoverage(
   matrix: ViewportTestExpanded[],
   passing: Set<string>,
 ): { portrait: number; landscape: number; overall: number; brokenSizes: ViewportTestExpanded[] } {
-  let portrait = 0;
-  let landscape = 0;
-  const broken: ViewportTestExpanded[] = [];
-  for (const t of matrix) {
-    if (passing.has(t.label)) {
-      if (t.orientation === 'portrait') portrait = Math.max(portrait, t.share);
-      else landscape = Math.max(landscape, t.share);
-    } else {
-      broken.push(t);
-    }
-  }
-  // For 'any' orientation, the user needs BOTH to work, so coverage is
-  // the lower of the two. For one-orientation apps, only that side
-  // matters.
-  const hasPortrait = matrix.some((t) => t.orientation === 'portrait');
-  const hasLandscape = matrix.some((t) => t.orientation === 'landscape');
-  let overall = 0;
-  if (hasPortrait && hasLandscape) overall = Math.min(portrait, landscape);
-  else if (hasPortrait) overall = portrait;
-  else overall = landscape;
-  return { portrait, landscape, overall, brokenSizes: broken };
+  const passingKeys = new Set(matrix.filter((t) => passing.has(t.label)).map(viewportKey));
+  const index = computeQualityIndex(matrix, passingKeys);
+  return { ...index, brokenSizes: matrix.filter((t) => !passing.has(t.label)) };
+}
+
+/** Phones and tablets: failures above this width are reported but don't fail the run. */
+const DESKTOP_WIDTH = 1024;
+
+/**
+ * Viewports whose failure fails the run: every tested width from the
+ * declared min_viewport_width up to tablet size. Desktop-class widths only
+ * fail it when the declared minimum is itself that wide. The old rule only
+ * counted a width exactly equal to the minimum, so a 375px minimum (no such
+ * test width) never failed, even when every viewport did (#281).
+ */
+export function blockingFailures(
+  matrix: ViewportTestExpanded[],
+  passing: Set<string>,
+  minWidth: number,
+): ViewportTestExpanded[] {
+  const declared = matrix.filter((t) => t.width >= minWidth);
+  const handheld = declared.filter((t) => t.width < DESKTOP_WIDTH);
+  return (handheld.length ? handheld : declared).filter((t) => !passing.has(t.label));
 }
 
 async function measure(
@@ -503,10 +457,22 @@ function renderResult(r: MeasureResult): void {
   }
 }
 
-async function readManifest(dir: string): Promise<Record<string, unknown> | null> {
+/**
+ * The app's manifest: web/public/manifest.json, or else the inline manifest in
+ * VitePWA({ manifest: {...} }) in web/vite.config.ts, the same two sources
+ * `fas check` accepts (#281).
+ */
+export async function readManifest(dir: string): Promise<Record<string, unknown> | null> {
   try {
     const raw = await readFile(join(dir, 'web', 'public', 'manifest.json'), 'utf8');
     return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    // fall through to the inline manifest
+  }
+  try {
+    const vite = await readFile(join(dir, 'web', 'vite.config.ts'), 'utf8');
+    if (!/\bVitePWA\s*\(/.test(vite)) return null;
+    return (extractInlineManifest(vite) as Record<string, unknown> | null) ?? null;
   } catch {
     return null;
   }
@@ -541,7 +507,8 @@ async function loadPlaywright(
 
 function runShell(cmd: string, args: string[], cwd: string): Promise<void> {
   return new Promise((res, rej) => {
-    const child = spawn(cmd, args, { cwd, stdio: 'inherit' });
+    // On Windows pnpm is pnpm.cmd, which spawn() only finds through a shell.
+    const child = spawn(cmd, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
     child.on('exit', (code) => (code === 0 ? res() : rej(new Error(`${cmd} exited ${code}`))));
     child.on('error', rej);
   });

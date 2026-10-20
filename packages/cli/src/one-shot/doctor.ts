@@ -143,12 +143,20 @@ async function checkApiReachable(): Promise<CheckResult> {
   }
 }
 
+/** The PATH lookup command: Windows has `where`, not `which` (#281). */
+export function pathLookupCommand(platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? 'where' : 'which';
+}
+
 function which(cmd: string): Promise<string | null> {
   return new Promise((resolveFn) => {
-    const child = spawn('which', [cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
+    const child = spawn(pathLookupCommand(), [cmd], { stdio: ['ignore', 'pipe', 'ignore'] });
     let buf = '';
     child.stdout.on('data', (chunk: Buffer) => (buf += chunk.toString()));
-    child.on('close', (code) => resolveFn(code === 0 ? buf.trim() : null));
+    // `where` lists every match, one per line; the first is the one that runs.
+    child.on('close', (code) =>
+      resolveFn(code === 0 ? (buf.trim().split(/\r?\n/)[0] ?? null) : null),
+    );
     child.on('error', () => resolveFn(null));
   });
 }

@@ -1,17 +1,24 @@
-import { describe, expect, it } from 'vitest';
-import { computeCoverage, pickMatrix } from './screencheck.js';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { REFERENCE_VIEWPORTS } from '@freeappstore/quality';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { pathLookupCommand } from '../one-shot/doctor.js';
+import { blockingFailures, computeCoverage, pickMatrix, readManifest } from './screencheck.js';
 
 describe('pickMatrix', () => {
-  it('returns 6 portrait + 6 landscape sizes for orientation=any', () => {
+  it('is the /quality dashboard matrix (#281)', () => {
     const m = pickMatrix(320, 'any');
-    expect(m).toHaveLength(12);
-    expect(m.filter((t) => t.orientation === 'portrait')).toHaveLength(6);
+    expect(m.map((t) => `${t.orientation}:${t.width}x${t.height}@${t.share}`)).toEqual(
+      REFERENCE_VIEWPORTS.map((r) => `${r.orientation}:${r.width}x${r.height}@${r.share}`),
+    );
+    expect(m.filter((t) => t.orientation === 'portrait')).toHaveLength(7);
     expect(m.filter((t) => t.orientation === 'landscape')).toHaveLength(6);
   });
 
   it('returns only portrait sizes for orientation=portrait', () => {
     const m = pickMatrix(320, 'portrait');
-    expect(m).toHaveLength(6);
+    expect(m).toHaveLength(7);
     expect(m.every((t) => t.orientation === 'portrait')).toBe(true);
   });
 
@@ -22,14 +29,14 @@ describe('pickMatrix', () => {
   });
 
   it('treats missing/unknown orientation as any', () => {
-    expect(pickMatrix(320, '')).toHaveLength(12);
-    expect(pickMatrix(320, 'unspecified')).toHaveLength(12);
+    expect(pickMatrix(320, '')).toHaveLength(13);
+    expect(pickMatrix(320, 'unspecified')).toHaveLength(13);
   });
 
   it('shares are cumulative — smaller width = higher share', () => {
     const m = pickMatrix(320, 'portrait');
     const widths = m.map((t) => t.width);
-    expect(widths).toEqual([320, 360, 414, 600, 768, 1024]);
+    expect(widths).toEqual([320, 360, 393, 414, 600, 768, 1024]);
     // 320 should have the highest share (almost everyone)
     expect(m[0]!.share).toBeGreaterThan(m[m.length - 1]!.share);
   });
@@ -84,7 +91,83 @@ describe('computeCoverage', () => {
     const m = pickMatrix(320, 'portrait');
     const passing = new Set(m.filter((t) => t.width >= 600).map((t) => t.label));
     const c = computeCoverage(m, passing);
-    expect(c.brokenSizes).toHaveLength(3);
-    expect(c.brokenSizes.map((t) => t.width)).toEqual([320, 360, 414]);
+    expect(c.brokenSizes).toHaveLength(4);
+    expect(c.brokenSizes.map((t) => t.width)).toEqual([320, 360, 393, 414]);
+  });
+
+  // #281: the old max-share math called this ~99%; the dashboard says ~3%.
+  it('an app that fits only at 320px covers ~3%, matching the dashboard', () => {
+    const m = pickMatrix(320, 'portrait');
+    const c = computeCoverage(m, new Set(m.filter((t) => t.width === 320).map((t) => t.label)));
+    expect(c.portrait).toBe(3);
+  });
+});
+
+describe('blockingFailures (#281)', () => {
+  const m = pickMatrix(320, 'portrait');
+  const passingExcept = (...widths: number[]) =>
+    new Set(m.filter((t) => !widths.includes(t.width)).map((t) => t.label));
+
+  it('fails on any handheld width at or above the declared minimum', () => {
+    expect(blockingFailures(m, passingExcept(414, 600), 360).map((t) => t.width)).toEqual([
+      414, 600,
+    ]);
+  });
+
+  it('fails with a 375px minimum even though no test width equals it', () => {
+    expect(blockingFailures(m, new Set(), 375).map((t) => t.width)).toEqual([393, 414, 600, 768]);
+  });
+
+  it("doesn't fail below the declared minimum or at desktop widths only", () => {
+    expect(blockingFailures(m, passingExcept(320, 1024), 360)).toEqual([]);
+  });
+
+  it('counts desktop widths when the declared minimum is that wide', () => {
+    expect(blockingFailures(m, passingExcept(1024), 1024).map((t) => t.width)).toEqual([1024]);
+  });
+});
+
+describe('readManifest (#281)', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fas-screencheck-'));
+    await mkdir(join(dir, 'web', 'public'), { recursive: true });
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('reads web/public/manifest.json', async () => {
+    await writeFile(
+      join(dir, 'web', 'public', 'manifest.json'),
+      JSON.stringify({ orientation: 'portrait', min_viewport_width: 360 }),
+    );
+    expect(await readManifest(dir)).toMatchObject({
+      orientation: 'portrait',
+      min_viewport_width: 360,
+    });
+  });
+
+  it('falls back to an inline VitePWA manifest', async () => {
+    await writeFile(
+      join(dir, 'web', 'vite.config.ts'),
+      "import { VitePWA } from 'vite-plugin-pwa';\nexport default { plugins: [VitePWA({ manifest: { name: 'G', orientation: 'landscape', min_viewport_width: 568 } })] };",
+    );
+    expect(await readManifest(dir)).toMatchObject({
+      orientation: 'landscape',
+      min_viewport_width: 568,
+    });
+  });
+
+  it('returns null with neither', async () => {
+    expect(await readManifest(dir)).toBeNull();
+  });
+});
+
+describe('pathLookupCommand (#281)', () => {
+  it('uses where on Windows and which elsewhere', () => {
+    expect(pathLookupCommand('win32')).toBe('where');
+    expect(pathLookupCommand('darwin')).toBe('which');
+    expect(pathLookupCommand('linux')).toBe('which');
   });
 });
