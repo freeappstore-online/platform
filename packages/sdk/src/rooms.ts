@@ -131,6 +131,7 @@ export class Room {
     }
     this.socket?.close();
     this.socket = null;
+    this._peers = [];
     this.setState('closed');
     this.listeners.clear();
     this.peerListeners.clear();
@@ -213,7 +214,15 @@ export class Room {
 
     socket.addEventListener('close', (ev) => {
       if (this.debug) console.log(`[rooms] closed (code=${ev.code} reason=${ev.reason || 'none'})`);
-      if (this.socket === socket) this.socket = null;
+      if (this.socket === socket) {
+        this.socket = null;
+        // Nobody is reachable while disconnected; the server resends the
+        // list on reconnect. room.peers used to keep the stale list (#283).
+        if (this._peers.length > 0) {
+          this._peers = [];
+          callEach(this.peerListeners, this._peers);
+        }
+      }
       if (this.explicitlyClosed) return;
       this.setState('closed');
       this.scheduleReconnect();

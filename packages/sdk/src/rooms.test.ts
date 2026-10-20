@@ -267,6 +267,31 @@ describe('Room.onPeers', () => {
       { uid: 'gh:2', login: 'bob' },
     ]);
   });
+
+  // #283: room.peers kept the last list while disconnected.
+  it('empties the peer list (and tells listeners) when the connection drops', async () => {
+    const room = await newRoom();
+    created[0]!.triggerOpen();
+    created[0]!.triggerMessage(
+      JSON.stringify({ kind: 'peers', peers: [{ uid: 'gh:1', login: 'alice' }] }),
+    );
+    const calls: RoomPeer[][] = [];
+    room.onPeers((peers) => calls.push(peers));
+    created[0]!.triggerClose();
+    expect(room.peers).toEqual([]);
+    expect(calls.at(-1)).toEqual([]);
+    room.close();
+  });
+
+  it('empties the peer list on close()', async () => {
+    const room = await newRoom();
+    created[0]!.triggerOpen();
+    created[0]!.triggerMessage(
+      JSON.stringify({ kind: 'peers', peers: [{ uid: 'gh:1', login: 'alice' }] }),
+    );
+    room.close();
+    expect(room.peers).toEqual([]);
+  });
 });
 
 describe('Room.close', () => {
