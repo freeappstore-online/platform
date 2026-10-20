@@ -33,7 +33,7 @@ Referrer-Policy: strict-origin-when-cross-origin
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 Cross-Origin-Opener-Policy: same-origin
 Permissions-Policy: <feature>=(self "https://*.freeappstore.online") for every
-                    feature in build.js PREVIEW_FEATURES; browsing-topics=()
+                    feature in build.js PREVIEW_FEATURES; browsing-topics=(), payment=()
 Content-Security-Policy: <see build.js — locked-down, hash-based>
 Content-Security-Policy-Report-Only: <same, for telemetry>
 ```
@@ -45,8 +45,8 @@ sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock,
 every preview iframe delegates them with `allow`, so previews behave like the
 app in its own tab. The browser still asks the user before granting anything
 sensitive. No other origin can receive a feature through the storefront. The
-only block is `browsing-topics` (the Topics API shares ad interests with third
-parties). `test/preview-capabilities.test.mjs` keeps the list in sync with
+blocks are `browsing-topics` (the Topics API shares ad interests with third
+parties) and `payment` (FreeAppStore apps take no payments, #289). `test/preview-capabilities.test.mjs` keeps the list in sync with
 `workers/host/src/host.ts`.
 
 The CSP **does not** appear in `<meta http-equiv>`. Headers are the only

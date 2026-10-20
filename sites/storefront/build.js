@@ -92,16 +92,18 @@ const PREVIEW_FEATURES = [
   'accelerometer', 'ambient-light-sensor', 'autoplay', 'bluetooth', 'camera',
   'clipboard-read', 'clipboard-write', 'display-capture', 'encrypted-media',
   'fullscreen', 'gamepad', 'geolocation', 'gyroscope', 'hid', 'idle-detection',
-  'local-fonts', 'magnetometer', 'microphone', 'midi', 'payment',
+  'local-fonts', 'magnetometer', 'microphone', 'midi',
   'picture-in-picture', 'publickey-credentials-create', 'publickey-credentials-get',
   'screen-wake-lock', 'serial', 'storage-access', 'usb', 'web-share',
   'window-management', 'xr-spatial-tracking',
 ];
 const APP_ORIGINS = '"https://*.freeappstore.online"';
-// Topics API stays blocked: it shares ad interests with third parties.
+// Blocked, as on the app host: the Topics API (shares ad interests with third
+// parties) and payments (FreeAppStore apps take no payments, #289).
 const STOREFRONT_PERMISSIONS_POLICY = [
   ...PREVIEW_FEATURES.map((f) => `${f}=(self ${APP_ORIGINS})`),
   'browsing-topics=()',
+  'payment=()',
 ].join(', ');
 // `allow` value for preview iframes: each feature defaults to the iframe's src origin.
 const PREVIEW_ALLOW = PREVIEW_FEATURES.join('; ');

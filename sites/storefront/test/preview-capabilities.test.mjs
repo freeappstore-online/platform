@@ -76,7 +76,8 @@ test("registry still marks known microphone apps (#272 data)", () => {
 
 test("preview iframes delegate every host capability, and the storefront policy lets them through", () => {
   const features = hostFeatures();
-  assert.ok(features.includes("microphone") && features.length >= 30, "host feature list parsed");
+  assert.ok(features.includes("microphone") && features.length > 20, "host feature list parsed");
+  assert.ok(!features.includes("payment"), "the host never grants payment (#289)");
   const { tmp, dist } = runBuild([
     validApp({ id: "echoshift", name: "echoshift", appUrl: "https://echoshift.freeappstore.online", microphone: true }),
     validApp({ id: "calculator", name: "Calculator", appUrl: "https://calculator.freeappstore.online" }),
@@ -103,12 +104,15 @@ test("preview iframes delegate every host capability, and the storefront policy 
     assert.deepEqual(qualityData.previewAllow.split("; "), features, "quality frames delegate the host features");
     assert.match(readFileSync(join(ROOT, "quality.js"), "utf8"), /allow="\$\{esc\(loadRegistry\(\)\.previewAllow/);
 
-    // Storefront policy: each feature for self + app origins, Topics API blocked.
+    // Storefront policy: each feature for self + app origins; Topics API and payments blocked (#289).
     const pp = headers.match(/Permissions-Policy: ([^\n]*)/)?.[1] ?? "";
     for (const f of features) {
       assert.ok(pp.split(", ").includes(`${f}=(self "https://*.freeappstore.online")`), `storefront policy must allow ${f}`);
     }
-    assert.deepEqual(pp.split(", ").filter((e) => e.endsWith("=()")), ["browsing-topics=()"]);
+    assert.deepEqual(pp.split(", ").filter((e) => e.endsWith("=()")), ["browsing-topics=()", "payment=()"]);
+    for (const [name, frame] of [["listing", allowOf(listing, 'src="https://echoshift')], ["homepage", allowOf(indexHtml, 'id="previewFrame"')]]) {
+      assert.ok(!frame.allow.includes("payment"), `${name} preview must not delegate payment`);
+    }
 
     // The #272 banner is retired; the Open in new tab link stays.
     for (const html of [listing, indexHtml]) {
