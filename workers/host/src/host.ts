@@ -55,6 +55,16 @@ export function r2KeyFor(route: Route, pathname: string): string {
 }
 
 /**
+ * Only Vite's content-hashed build output (`/assets/*`) may be cached as
+ * immutable. Everything else in `public/` (manifest.json, icons, sw.js) keeps
+ * its name across deploys, so a year-long immutable cache would pin the old
+ * copy in returning browsers.
+ */
+export function isImmutablePath(pathname: string): boolean {
+  return pathname.startsWith("/assets/");
+}
+
+/**
  * Compare a client's `If-None-Match` request header against an R2 object's
  * httpEtag. Returns true iff the browser already has a fresh copy and we
  * should respond 304 Not Modified.

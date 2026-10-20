@@ -21,6 +21,7 @@ beforeAll(async () => {
   ]);
   await env.APPS.put("apps/dict/index.html", INDEX_HTML);
   await env.APPS.put("apps/dict/assets/app.js", APP_JS);
+  await env.APPS.put("apps/dict/manifest.json", "{}");
   await env.APPS.put("apps/agentcoder/index.html", "<!doctype html><title>AgentCoder</title>");
 });
 
@@ -43,6 +44,13 @@ describe("serving an app: D1 routes row → R2 object", () => {
     expect(await res.text()).toBe(APP_JS);
     expect(res.headers.get("content-type")).toMatch(/javascript/);
     expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+  });
+
+  it("keeps unhashed public files (manifest, icons, sw.js) on a short, revalidating cache", async () => {
+    const res = await get("https://dict.freeappstore.online/manifest.json");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=60, must-revalidate");
+    await res.body?.cancel();
   });
 
   it("falls back to index.html for client-side routes, but not for missing assets", async () => {

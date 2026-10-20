@@ -11,6 +11,7 @@ import {
   contentType,
   type Env,
   etagsMatch,
+  isImmutablePath,
   type Route,
   r2KeyFor,
   resolveRoute,
@@ -193,17 +194,19 @@ async function serve(
   // no extension and would resolve to `application/octet-stream`. With
   // X-Content-Type-Options: nosniff that downloads instead of rendering.
   const ct = servedKey === key ? contentType(key) : "text/html; charset=utf-8";
+  // htmlCache is the short, revalidating policy; only hashed assets are immutable.
+  const shortCache = ct.startsWith("text/html") || !isImmutablePath(url.pathname);
 
   // 304 Not Modified: skip the body transfer when the browser already has
   // a fresh copy. Saves bandwidth on every refresh of every asset. The
   // R2 object metadata fetch still happens, but the body stream isn't read.
   if (etagsMatch(ifNoneMatch, obj.httpEtag)) {
-    const headers = securityHeaders({ htmlCache: ct.startsWith("text/html") });
+    const headers = securityHeaders({ htmlCache: shortCache });
     headers.set("etag", obj.httpEtag);
     return new Response(null, { status: 304, headers });
   }
 
-  return respond(obj, ct, method);
+  return respond(obj, ct, method, shortCache);
 }
 
 function generatedCrawlResponse(url: URL, method: string, origin = url.origin): Response | null {
@@ -217,11 +220,10 @@ function generatedCrawlResponse(url: URL, method: string, origin = url.origin): 
   return new Response(method === "HEAD" ? null : body, { headers });
 }
 
-function respond(obj: R2ObjectBody, ct: string, method: string): Response {
+function respond(obj: R2ObjectBody, ct: string, method: string, shortCache: boolean): Response {
   // Headers are constructed in securityHeaders() so the policy lives in one
   // testable place. We just layer content-type + etag on top.
-  const isHtml = ct.startsWith("text/html");
-  const headers = securityHeaders({ htmlCache: isHtml });
+  const headers = securityHeaders({ htmlCache: shortCache });
   headers.set("content-type", ct);
   headers.set("etag", obj.httpEtag);
   // HEAD requests get headers only.

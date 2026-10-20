@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { contentType, etagsMatch, type Route, r2KeyFor, resolveRoute, robotsTxtFor, securityHeaders, sitemapXmlFor } from "../host";
+import {
+  contentType,
+  etagsMatch,
+  isImmutablePath,
+  type Route,
+  r2KeyFor,
+  resolveRoute,
+  robotsTxtFor,
+  securityHeaders,
+  sitemapXmlFor,
+} from "../host";
 
 // Minimal D1 stub — verifies the SQL shape and parameter binding without
 // spinning up a real D1. Real schema integration is exercised by the
@@ -222,5 +232,14 @@ Sitemap: https://agentcoder.space/sitemap.xml
 
   it("escapes XML-sensitive origin characters defensively", () => {
     expect(sitemapXmlFor("https://example.com/?a=1&b=2")).toContain("<loc>https://example.com/?a=1&amp;b=2/</loc>");
+  });
+});
+
+describe("isImmutablePath", () => {
+  it("is true only for Vite's hashed /assets/ output", () => {
+    expect(isImmutablePath("/assets/index-3f9a1c.js")).toBe(true);
+    for (const p of ["/manifest.json", "/sw.js", "/icon-192.png", "/favicon.svg", "/", "/assetsx/a.js"]) {
+      expect(isImmutablePath(p)).toBe(false);
+    }
   });
 });
