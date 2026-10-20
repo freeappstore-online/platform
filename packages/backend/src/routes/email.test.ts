@@ -106,20 +106,27 @@ describe.skipIf(!hasSqlite)('email daily quota against real SQLite', () => {
     user.run('u1', 1, 'alice', now);
     user.run('u2', 2, 'bob', now);
     let sent = 0;
-    const e = env(d1, { EMAIL: { send: async () => ((sent += 1), { messageId: 'm' }) } });
-    const send = async (userId: string) =>
+    const send = async () => {
+      sent += 1;
+      return { messageId: 'm' };
+    };
+    const e = env(d1, { EMAIL: { send } });
+    const request = async (userId: string) =>
       (
         await app.request(
           '/v1/apps/timer/email/send',
           {
             method: 'POST',
-            headers: { Authorization: await authHeader(userId), 'Content-Type': 'application/json' },
+            headers: {
+              Authorization: await authHeader(userId),
+              'Content-Type': 'application/json',
+            },
             body: JSON.stringify({ to: 'a@b.com', subject: 'hi', text: 'hello' }),
           },
           e,
         )
       ).status;
-    return { send, sent: () => sent };
+    return { send: request, sent: () => sent };
   }
 
   it('sends exactly 50 per user per day, then 429', async () => {
