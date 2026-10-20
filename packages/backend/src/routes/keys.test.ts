@@ -113,6 +113,24 @@ describe('keys routes', () => {
     expect(res.status).toBe(503);
   });
 
+  it.each(['{bad', 'null'])(
+    'PUT /v1/keys/:provider returns 400 for a malformed body (%s)',
+    async (body) => {
+      const res = await app.request(
+        '/v1/keys/openai',
+        {
+          method: 'PUT',
+          headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+          body,
+        },
+        env(fakeDB({ user, provider: { id: 'openai', key_prefix: 'sk-' } }), {
+          APP_SECRET_KEK: 'b'.repeat(64),
+        }),
+      );
+      expect(res.status).toBe(400);
+    },
+  );
+
   it('PUT /v1/keys/:provider returns 400 for unknown provider', async () => {
     const res = await app.request(
       '/v1/keys/unknown',

@@ -579,8 +579,8 @@ keysRoutes.put('/keys/:provider', async (c) => {
   }
 
   const provider = c.req.param('provider');
-  const body = await c.req.json<{ value: string; label?: string }>();
-  if (!body.value || typeof body.value !== 'string' || body.value.length > 500) {
+  const body = await c.req.json<{ value: string; label?: string } | null>().catch(() => null);
+  if (!body?.value || typeof body.value !== 'string' || body.value.length > 500) {
     return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
   }
 

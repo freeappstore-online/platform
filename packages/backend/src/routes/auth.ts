@@ -402,6 +402,17 @@ authRoutes.post('/auth/apple/callback', async (c) => {
 authRoutes.post('/auth/email/start', async (c) => {
   if (!c.env.EMAIL) return c.text('Email auth not configured', 503);
 
+  const body = await c.req
+    .json<{
+      email?: string;
+      appId?: string;
+      returnTo?: string;
+      responseMode?: string;
+      codeChallenge?: string;
+      codeChallengeMethod?: string;
+    } | null>()
+    .catch(() => null);
+  if (!body) return c.text('invalid JSON body', 400);
   const {
     email: rawEmail,
     appId,
@@ -409,14 +420,7 @@ authRoutes.post('/auth/email/start', async (c) => {
     responseMode,
     codeChallenge: rawCodeChallenge,
     codeChallengeMethod,
-  } = await c.req.json<{
-    email?: string;
-    appId?: string;
-    returnTo?: string;
-    responseMode?: string;
-    codeChallenge?: string;
-    codeChallengeMethod?: string;
-  }>();
+  } = body;
 
   if (!rawEmail || !appId || !returnTo) {
     return c.text('missing email, appId, or returnTo', 400);

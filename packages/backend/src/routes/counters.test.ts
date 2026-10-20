@@ -113,6 +113,19 @@ describe('counter routes', () => {
     expect(typeof data.value).toBe('number');
   });
 
+  it('POST /v1/apps/:appId/counters/:key treats a null body as the default increment', async () => {
+    const res = await app.request(
+      '/v1/apps/timer/counters/views',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: 'null',
+      },
+      env(fakeDB({ user, counters: { views: 15 }, counterCount: 1 })),
+    );
+    expect(res.status).toBe(200);
+  });
+
   it('POST /v1/apps/:appId/counters/:key rejects too-long key', async () => {
     const longKey = 'a'.repeat(200);
     const res = await app.request(
