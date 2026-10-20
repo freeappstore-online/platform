@@ -8,9 +8,14 @@ interface StmtCapture {
   binds: unknown[];
 }
 
-/** `owner`: the apps.owner_login an existing repo is recorded under (default: the test creator). */
-function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?: string | null }) {
-  const owner = opts?.owner === undefined ? "testuser" : opts.owner;
+/**
+ * `owner`: the apps.owner_login already recorded (default: the test creator;
+ * null = unclaimed). A claim (INSERT OR IGNORE INTO apps) records an owner if
+ * none exists. `failBatch`: the hosting-route batch throws, as a mid-publish
+ * D1 failure would.
+ */
+function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?: string | null; failBatch?: boolean }) {
+  let owner = opts?.owner === undefined ? "testuser" : opts.owner;
   const makeStmt = (sql: string) => {
     const stmt: {
       sql: string;
@@ -27,6 +32,7 @@ function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?:
       },
       run: async () => {
         if (opts?.shouldThrow) throw new Error("D1 constraint error");
+        if (sql.includes("INSERT OR IGNORE INTO apps") && !owner) owner = stmt.binds[1] as string;
         return { meta: { changes: 1 } };
       },
       first: async () => (sql.includes("SELECT owner_login FROM apps") && owner ? { owner_login: owner } : null),
@@ -36,7 +42,7 @@ function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?:
   return {
     prepare: (sql: string) => makeStmt(sql),
     batch: async (stmts: StmtCapture[]) => {
-      if (opts?.shouldThrow) throw new Error("D1 constraint error");
+      if (opts?.shouldThrow || opts?.failBatch) throw new Error("D1 constraint error");
       opts?.capture?.push(...stmts.map((s) => ({ sql: s.sql, binds: s.binds })));
       return stmts.map(() => ({ meta: { changes: 1 } }));
     },
@@ -182,7 +188,13 @@ describe("writeRegistryWithRetry", () => {
   it("adds entry to registry on success", async () => {
     const gh = successGh();
     const req = baseReq();
-    const config = { org: "freeappstore-online", storeRepo: "platform", registryPath: "sites/storefront/registry.json", registryKey: "apps", domain: "freeappstore.online" } as any;
+    const config = {
+      org: "freeappstore-online",
+      storeRepo: "platform",
+      registryPath: "sites/storefront/registry.json",
+      registryKey: "apps",
+      domain: "freeappstore.online",
+    } as any;
     const result = await writeRegistryWithRetry(gh, req, config, "testapp.freeappstore.online");
     expect(result.status).toBe("ok");
     expect(result.detail).toContain("Test App");
@@ -197,7 +209,13 @@ describe("writeRegistryWithRetry", () => {
       return { __status: 200 };
     };
     const req = baseReq();
-    const config = { org: "freeappstore-online", storeRepo: "platform", registryPath: "sites/storefront/registry.json", registryKey: "apps", domain: "freeappstore.online" } as any;
+    const config = {
+      org: "freeappstore-online",
+      storeRepo: "platform",
+      registryPath: "sites/storefront/registry.json",
+      registryKey: "apps",
+      domain: "freeappstore.online",
+    } as any;
     const result = await writeRegistryWithRetry(gh, req, config, "testapp.freeappstore.online");
     expect(result.status).toBe("skip");
     expect(result.detail).toContain("Already listed");
@@ -218,7 +236,13 @@ describe("writeRegistryWithRetry", () => {
       return { __status: 200 };
     };
     const req = baseReq();
-    const config = { org: "freeappstore-online", storeRepo: "platform", registryPath: "sites/storefront/registry.json", registryKey: "apps", domain: "freeappstore.online" } as any;
+    const config = {
+      org: "freeappstore-online",
+      storeRepo: "platform",
+      registryPath: "sites/storefront/registry.json",
+      registryKey: "apps",
+      domain: "freeappstore.online",
+    } as any;
     const result = await writeRegistryWithRetry(gh, req, config, "testapp.freeappstore.online");
     expect(result.status).toBe("ok");
     expect(callCount).toBe(2);
@@ -261,14 +285,24 @@ describe("handlePublish", () => {
     expect(stepNames).toContain("Store registry");
   });
 
-  it("skips registry when hosting route fails (no DB)", async () => {
-    // A new repo: an existing one can't be re-published without an ownership record (#9).
-    const newRepo: GhFn = async (path, method, body) =>
-      path.includes("/repos/freeappstore-online/testapp") && !method ? { message: "Not Found" } : successGh()(path, method, body);
+  it("without D1, fails before creating a repo it couldn't record an owner for", async () => {
+    const calls: string[] = [];
+    const newRepo: GhFn = async (path, method, body) => {
+      calls.push(`${method ?? "GET"} ${path}`);
+      return path.includes("/repos/freeappstore-online/testapp") && !method ? { message: "Not Found" } : successGh()(path, method, body);
+    };
     const result = await handlePublish(baseReq(), baseEnv({ DB: undefined }), newRepo);
     expect(result.success).toBe(false);
-    const hostStep = result.steps.find((s) => s.name === "Hosting route");
-    expect(hostStep?.status).toBe("fail");
+    expect(result.steps[0]).toMatchObject({ name: "GitHub repo", status: "fail" });
+    expect(calls.filter((c) => !c.startsWith("GET"))).toEqual([]);
+  });
+
+  it("skips registry when hosting route fails", async () => {
+    const newRepo: GhFn = async (path, method, body) =>
+      path.includes("/repos/freeappstore-online/testapp") && !method ? { message: "Not Found" } : successGh()(path, method, body);
+    const result = await handlePublish(baseReq(), baseEnv({ DB: fakeDB({ owner: null, failBatch: true }) }), newRepo);
+    expect(result.success).toBe(false);
+    expect(result.steps.find((s) => s.name === "Hosting route")?.status).toBe("fail");
     const regStep = result.steps.find((s) => s.name === "Store registry");
     expect(regStep?.status).toBe("skip");
     expect(regStep?.detail).toContain("hosting route insert failed");
@@ -387,6 +421,34 @@ describe("handlePublish never grants access to a repo that isn't the publisher's
     expect(result.success).toBe(false);
     expect(result.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("already claimed and isn't yours");
     expect(calls.filter((c) => !c.startsWith("GET"))).toEqual([]);
+  });
+
+  it("a publish that fails after creating the repo can be retried by its publisher (#279)", async () => {
+    let repoExists = false;
+    const gh: GhFn = async (path, method, body) => {
+      if (!method && path === "/repos/freeappstore-online/testapp") return repoExists ? { id: 1 } : { __status: 404 };
+      if (method === "POST" && path === "/orgs/freeappstore-online/repos") {
+        repoExists = true;
+        return { id: 1 };
+      }
+      return successGh()(path, method, body);
+    };
+    const dbOpts = { owner: null, failBatch: true };
+    const db = fakeDB(dbOpts);
+
+    const first = await handlePublish(baseReq({ creatorGithub: "alice" }), baseEnv({ DB: db }), gh);
+    expect(first.success).toBe(false);
+    expect(first.steps.find((s) => s.name === "Hosting route")?.status).toBe("fail");
+    expect(repoExists).toBe(true);
+
+    dbOpts.failBatch = false; // the transient D1 failure is gone
+    const retry = await handlePublish(baseReq({ creatorGithub: "alice" }), baseEnv({ DB: db }), gh);
+    expect(retry.steps.find((s) => s.name === "GitHub repo")).toMatchObject({ status: "skip" });
+    expect(retry.success).toBe(true);
+
+    // Someone else still can't take the id.
+    const other = await handlePublish(baseReq({ creatorGithub: "mallory" }), baseEnv({ DB: db }), gh);
+    expect(other.success).toBe(false);
   });
 
   it("refuses an existing repo with no ownership record, and grants nothing", async () => {

@@ -298,6 +298,27 @@ export async function writeRegistryWithRetry(gh: GhFn, req: PublishRequest, conf
  *  bumps updated_at); `apps` uses INSERT OR IGNORE so a re-publish never
  *  clobbers an existing owner. The r2_prefix follows `{registryKey}/{id}`
  *  (e.g. `apps/kanban`) — the path the per-app deploy.yml uploads to. */
+/** The apps row that records an app's owner. INSERT OR IGNORE: the first claim wins. */
+function claimAppStmt(db: D1Database, req: PublishRequest, ownerLogin: string, now: number): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT OR IGNORE INTO apps
+         (id, owner_login, created_at, category, type, oneliner, repo, demo, store)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+    )
+    .bind(
+      req.id,
+      ownerLogin,
+      now,
+      req.category ?? null,
+      req.type || "standalone",
+      req.description ?? null,
+      req.repo ?? null,
+      req.demo ?? null,
+      req.store,
+    );
+}
+
 export async function insertHostRoute(env: PublishEnv, req: PublishRequest, config: StoreConfig): Promise<Step> {
   const slug = req.id;
   const zone = config.domain;
@@ -320,22 +341,7 @@ export async function insertHostRoute(env: PublishEnv, req: PublishRequest, conf
            hosted_on = excluded.hosted_on,
            updated_at = excluded.updated_at`,
     ).bind(slug, zone, r2Prefix, req.store, now);
-    const appsStmt = env.DB.prepare(
-      `INSERT OR IGNORE INTO apps
-         (id, owner_login, created_at, category, type, oneliner, repo, demo, store)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
-    ).bind(
-      req.id,
-      ownerLogin,
-      now,
-      req.category ?? null,
-      req.type || "standalone",
-      req.description ?? null,
-      req.repo ?? null,
-      req.demo ?? null,
-      req.store,
-    );
-    await env.DB.batch([routesStmt, appsStmt]);
+    await env.DB.batch([routesStmt, claimAppStmt(env.DB, req, ownerLogin, now)]);
     return { name: "Hosting route", status: "ok", detail: `${slug}.${zone} → r2://fas-apps/${r2Prefix} (owner ${ownerLogin})` };
   } catch (e: any) {
     return { name: "Hosting route", status: "fail", detail: e?.message ?? "D1 write failed" };
@@ -374,6 +380,18 @@ async function ensureRepo(req: PublishRequest, config: StoreConfig, env: Publish
       return { name: "GitHub repo", status: "fail", detail: `${config.org}/${req.id} already exists and isn't yours to publish` };
     }
     return { name: "GitHub repo", status: "skip", detail: `${config.org}/${req.id} already exists` };
+  }
+  // Claim the id before creating anything (#279). The repo used to be created
+  // first and the apps row written in a later step, so a failure in between
+  // left a repo with no recorded owner, which every retry then refused. With
+  // the row written first, a retry finds its own claim and resumes.
+  if (!owner) {
+    if (!env.DB) return { name: "GitHub repo", status: "fail", detail: "D1 binding not available; can't record the owner" };
+    await claimAppStmt(env.DB, req, publisher, Date.now()).run();
+    const claimed = await recordedOwner(env, req.id);
+    if (!claimed || claimed.toLowerCase() !== publisher.toLowerCase()) {
+      return { name: "GitHub repo", status: "fail", detail: `${req.id} is already claimed and isn't yours to publish` };
+    }
   }
   const createRepo = await ghCall(`/orgs/${config.org}/repos`, "POST", {
     name: req.id,

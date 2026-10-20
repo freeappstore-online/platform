@@ -1,7 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handlePublish } from "../publish.js";
 
+/** Minimal D1: remembers the apps owner row, accepts everything else. */
+function fakeDB(): D1Database {
+  const owners = new Map<string, string>();
+  const stmt = (sql: string) => {
+    let args: unknown[] = [];
+    const s = {
+      bind: (...a: unknown[]) => {
+        args = a;
+        return s;
+      },
+      run: async () => {
+        if (sql.includes("INSERT OR IGNORE INTO apps") && !owners.has(args[0] as string)) owners.set(args[0] as string, args[1] as string);
+        return { meta: { changes: 1 } };
+      },
+      first: async () =>
+        sql.includes("SELECT owner_login FROM apps") && owners.has(args[0] as string)
+          ? { owner_login: owners.get(args[0] as string) }
+          : null,
+    };
+    return s;
+  };
+  return {
+    prepare: stmt,
+    batch: async (stmts: { run: () => Promise<unknown> }[]) => Promise.all(stmts.map((x) => x.run())),
+  } as unknown as D1Database;
+}
+
 const fakeEnv = {
+  DB: fakeDB(),
   CF_ACCOUNT_ID: "fake-cf-account",
   CF_API_TOKEN: "fake-cf-token",
   GITHUB_TOKEN: "fake-gh-token",
@@ -26,6 +54,7 @@ describe("handlePublish collaborator step", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    fakeEnv.DB = fakeDB(); // fresh claims per test
     fetchCalls = [];
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
