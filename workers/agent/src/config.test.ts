@@ -10,7 +10,8 @@ describe("getConfig", () => {
     expect(c.noun).toBe("app");
     expect(c.Noun).toBe("App");
     expect(c.nounPlural).toBe("apps");
-    expect(c.storeRepo).toBe("freeappstore");
+    expect(c.storeRepo).toBe("platform");
+    expect(c.registryPath).toBe("sites/storefront/registry.json");
     expect(c.storeName).toBe("FreeAppStore");
     expect(c.agentName).toBe("freeappstore-agent");
     expect(c.accentColor).toBe("#2563eb");
@@ -25,7 +26,8 @@ describe("getConfig", () => {
     expect(c.noun).toBe("game");
     expect(c.Noun).toBe("Game");
     expect(c.nounPlural).toBe("games");
-    expect(c.storeRepo).toBe("freegamestore");
+    expect(c.storeRepo).toBe("platform");
+    expect(c.registryPath).toBe("sites/freegamestore/registry.json");
     expect(c.storeName).toBe("FreeGameStore");
     expect(c.agentName).toBe("freegamestore-agent");
     expect(c.accentColor).toBe("#10b981");

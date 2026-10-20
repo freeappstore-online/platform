@@ -60,8 +60,9 @@ function safeJson(raw: unknown): any {
 }
 
 const REGISTRY_URLS = {
-  apps: "https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/registry.json",
-  games: "https://raw.githubusercontent.com/freegamestore-online/freegamestore/main/registry.json",
+  // The standalone store repos are archived; the registries live in each platform monorepo.
+  apps: "https://raw.githubusercontent.com/freeappstore-online/platform/main/sites/storefront/registry.json",
+  games: "https://raw.githubusercontent.com/freegamestore-online/platform/main/sites/freegamestore/registry.json",
 };
 
 const STORE_META = {

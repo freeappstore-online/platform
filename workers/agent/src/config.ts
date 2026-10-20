@@ -7,7 +7,9 @@ export interface StoreConfig {
   noun: string;
   Noun: string;
   nounPlural: string;
+  /** Repo + path of the storefront registry (the old per-store repos are archived). */
   storeRepo: string;
+  registryPath: string;
   storeName: string;
   agentName: string;
   accentColor: string;
@@ -26,7 +28,8 @@ const CONFIGS: Record<string, StoreConfig> = {
     noun: "app",
     Noun: "App",
     nounPlural: "apps",
-    storeRepo: "freeappstore",
+    storeRepo: "platform",
+    registryPath: "sites/storefront/registry.json",
     storeName: "FreeAppStore",
     agentName: "freeappstore-agent",
     accentColor: "#2563eb",
@@ -41,7 +44,8 @@ const CONFIGS: Record<string, StoreConfig> = {
     noun: "game",
     Noun: "Game",
     nounPlural: "games",
-    storeRepo: "freegamestore",
+    storeRepo: "platform",
+    registryPath: "sites/freegamestore/registry.json",
     storeName: "FreeGameStore",
     agentName: "freegamestore-agent",
     accentColor: "#10b981",

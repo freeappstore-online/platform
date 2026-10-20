@@ -241,7 +241,7 @@ describe("routes/stats", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) =>
-        String(input).includes("freeappstore/main/registry.json")
+        String(input).includes("freeappstore-online/platform/main/sites/storefront/registry.json")
           ? new Response(JSON.stringify({ apps: [{ id: "a" }, { id: "b" }] }))
           : new Response("down", { status: 503 }),
       ),

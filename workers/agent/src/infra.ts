@@ -22,7 +22,7 @@ export async function checkDeployStatus(appId: string, env: DeployEnv, config: S
 /** List all items from the store registry. */
 export async function listDeployed(env: DeployEnv, config: StoreConfig): Promise<string> {
   const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
-  const file = await ghApi(`/repos/${config.org}/${config.storeRepo}/contents/registry.json`);
+  const file = await ghApi(`/repos/${config.org}/${config.storeRepo}/contents/${config.registryPath}`);
   if (!file.content) return "Could not read registry.";
   const rawBytes = Uint8Array.from(atob(file.content.replace(/\n/g, "")), (c) => c.charCodeAt(0));
   const registry = JSON.parse(new TextDecoder().decode(rawBytes));
