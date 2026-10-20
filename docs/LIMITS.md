@@ -28,7 +28,8 @@ Keys are arbitrary UTF-8 strings; values are stored as opaque JSON blobs. Scoped
 | Concurrent peers per room | 32 | New connections rejected (`503 room full`) |
 | Messages per peer per second | 100 | Excess messages dropped, peer warned (`{"kind":"error","error":"rate_limited"}`) |
 | Bytes per message | 4 KB | Message dropped, peer warned (`message_too_large`) |
-| Active rooms per app | 64 | LRU eviction; oldest idle room is evicted |
+| Active rooms per app | 64 | `429` for a new room; existing rooms keep working. A room stops counting after 24h without a join |
+| Room id | 1–64 chars of `A-Z a-z 0-9 . _ ~ : @ -` | `400` |
 | Idle TTL | 24 h | Room state cleared if no activity for 24h |
 
 Rooms are **ephemeral**. Messages are not persisted. Use `fas.kv` for anything that needs to survive a refresh.

@@ -38,7 +38,8 @@ Server-enforced quotas for the free tier. These are deliberately conservative --
 | Peers per room | 32 | `503 room full` |
 | Messages per peer per second | 100 | Excess dropped |
 | Message size | 4KB | Message dropped |
-| Active rooms per app | 64 | LRU eviction |
+| Active rooms per app | 64 (a room stops counting after 24h without a join) | `429` for a new room |
+| Room id | 1–64 chars of `A-Z a-z 0-9 . _ ~ : @ -` | `400` |
 | Idle TTL | 24h | Room state cleared |
 
 Rooms are ephemeral. Messages are not persisted.

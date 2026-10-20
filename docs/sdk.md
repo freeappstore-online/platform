@@ -111,7 +111,7 @@ room.close();
 
 Room properties: `room.state`, `room.peers`, `room.isReconnecting`, `room.reconnectAttempts`.
 
-**Limits:** 32 peers/room, 100 msgs/sec/peer, 4KB/message, 64 rooms/app, 24h idle eviction.
+**Limits:** 32 peers/room, 100 msgs/sec/peer, 4KB/message, 64 active rooms/app (a new room past that gets `429`), 24h idle eviction. Room ids: 1–64 characters of letters, digits and `. _ ~ : @ -`.
 
 ## Secret-injecting proxy (`fas.proxy`)
 

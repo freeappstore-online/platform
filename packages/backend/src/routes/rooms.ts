@@ -17,6 +17,34 @@ interface RoomTicket {
 
 const ROOM_TICKET_TTL_SECONDS = 30;
 
+// Room ids are app-chosen names (`canvas`, a session code). Bound them so a
+// name can't smuggle path segments or grow without limit (#278).
+const ROOM_ID_RE = /^[A-Za-z0-9._~:@-]{1,64}$/;
+export const MAX_ROOMS_PER_APP = 64;
+// Same window as the Room DO's idle eviction (do/room.ts IDLE_EVICT_MS).
+const ROOM_LIVE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Register use of a room, or refuse a new one when the app already has
+ * MAX_ROOMS_PER_APP live rooms. One statement, so parallel claims can't
+ * overshoot the cap. Rooms idle past ROOM_LIVE_MS stop counting.
+ */
+export async function claimRoom(env: Env, appId: string, roomId: string): Promise<boolean> {
+  const now = Date.now();
+  const r = await env.DB.prepare(
+    `INSERT INTO app_rooms (app_id, room_id, last_active)
+     SELECT ?, ?, ?
+     WHERE EXISTS (SELECT 1 FROM app_rooms WHERE app_id = ? AND room_id = ?)
+        OR (SELECT COUNT(*) FROM app_rooms WHERE app_id = ? AND last_active > ?) < ?
+     ON CONFLICT(app_id, room_id) DO UPDATE SET last_active = excluded.last_active`,
+  )
+    .bind(appId, roomId, now, appId, roomId, appId, now - ROOM_LIVE_MS, MAX_ROOMS_PER_APP)
+    .run();
+  return !!r.meta.changes;
+}
+
+const ROOM_LIMIT_MESSAGE = `room limit reached: an app can have ${MAX_ROOMS_PER_APP} active rooms`;
+
 /**
  * Issue a short-lived, room-scoped WebSocket ticket.
  *
@@ -29,7 +57,9 @@ const ROOM_TICKET_TTL_SECONDS = 30;
 roomRoutes.post('/apps/:appId/rooms/:roomId/ticket', async (c) => {
   const user = await requireUser(c);
   const { appId, roomId } = c.req.param();
+  if (!ROOM_ID_RE.test(roomId)) return c.text('invalid room id', 400);
   if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
+  if (!(await claimRoom(c.env, appId, roomId))) return c.text(ROOM_LIMIT_MESSAGE, 429);
 
   const ticket = await signPayload<RoomTicket>(
     {
@@ -48,6 +78,7 @@ roomRoutes.post('/apps/:appId/rooms/:roomId/ticket', async (c) => {
 roomRoutes.get('/apps/:appId/rooms/:roomId', async (c) => {
   if (c.req.header('upgrade') !== 'websocket') return c.text('expected websocket', 400);
   const { appId, roomId } = c.req.param();
+  if (!ROOM_ID_RE.test(roomId)) return c.text('invalid room id', 400);
 
   let uid: string;
   let login: string;
@@ -78,6 +109,9 @@ roomRoutes.get('/apps/:appId/rooms/:roomId', async (c) => {
     uid = session.uid;
     login = user?.github_login ?? '';
   }
+
+  // Checked here too: the deprecated token path above opens rooms without a ticket.
+  if (!(await claimRoom(c.env, appId, roomId))) return c.text(ROOM_LIMIT_MESSAGE, 429);
 
   const id = c.env.ROOM.idFromName(`${appId}:${roomId}`);
   const stub = c.env.ROOM.get(id);
