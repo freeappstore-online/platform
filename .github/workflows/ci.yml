@@ -42,14 +42,35 @@ jobs:
       - name: Test
         run: pnpm test
 
-  # workers/admin is its own pnpm project (own lockfile), so the root `pnpm test`
-  # above does not reach it. Its suite otherwise only runs as the pre-deploy gate
-  # in deploy-admin.yml, i.e. after merge. It makes no network calls (#51).
-  admin-tests:
+  # Each Worker is its own project (own lockfile), so the root `pnpm test` and
+  # `pnpm lint` reach none of them. Agent, host and mcp unit suites used to
+  # run only in their deploy workflows, i.e. after the push, so a red change
+  # could land on main (#282). Every push now runs, per Worker, what its deploy
+  # gate runs: lint (where the Worker has one), typecheck and unit tests. None
+  # of these suites makes network calls.
+  worker-tests:
+    name: worker-tests (${{ matrix.worker }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # admin has no pnpm-workspace.yaml, so it must not resolve the root one.
+          - worker: admin
+            install: pnpm install --frozen-lockfile --ignore-workspace
+            lint: true
+          - worker: agent
+            install: pnpm install --frozen-lockfile
+            lint: true
+          - worker: host
+            install: pnpm install --frozen-lockfile
+            lint: true
+          - worker: mcp
+            install: npm ci
+            lint: false
     defaults:
       run:
-        working-directory: workers/admin
+        working-directory: workers/${{ matrix.worker }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -58,10 +79,17 @@ jobs:
           node-version: 22
 
       - name: Install
-        run: pnpm install --frozen-lockfile --ignore-workspace
+        run: ${{ matrix.install }}
 
-      - name: Test
-        run: pnpm test
+      - name: Lint
+        if: matrix.lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
 
   # The agent, host and admin Workers in workerd (@cloudflare/vitest-pool-workers)
   # with real D1 (real migrations), R2, KV and Durable Objects, and stand-ins for
