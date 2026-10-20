@@ -77,6 +77,13 @@ jobs:
           [ "$blocked" = "browsing-topics=() " ] || { echo "::error::unexpected blocked features: $blocked"; fail=1; }
           printf '%s' "$csp" | grep -q "worker-src 'self' blob:" || { echo "::error::CSP lacks worker-src blob:"; fail=1; }
           printf '%s' "$csp" | grep -q "'wasm-unsafe-eval'" || { echo "::error::CSP lacks 'wasm-unsafe-eval'"; fail=1; }
+          # Storefront previews delegate the same features to app origins (#284).
+          sf=$(curl -sSI --max-time 10 "https://freeappstore.online/apps/echoshift" | tr -d '\r' | grep -i '^permissions-policy:' || true)
+          for f in microphone camera geolocation midi gyroscope; do
+            printf '%s' "$sf" | grep -q "$f=(self \"https://\*.freeappstore.online\")" || { echo "::error::storefront policy does not delegate $f to app origins"; fail=1; }
+          done
+          curl -sS --max-time 10 "https://freeappstore.online/apps/echoshift" | tr '\n' ' ' | grep -o '<iframe[^>]*src="https://echoshift[^>]*>' | grep -q 'allow="[^"]*microphone' \
+            || { echo "::error::EchoShift listing preview iframe does not delegate microphone"; fail=1; }
           exit $fail
 
       - name: 2. published SDK has all 4 modules
