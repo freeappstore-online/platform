@@ -16,7 +16,7 @@ export async function authenticateApiRequest(request: Request, env: Env): Promis
   // Trusted server-to-server callers (the FAS backend → /api/provision via the
   // ADMIN service binding) present the shared ADMIN_PROVISION_TOKEN.
   const internalToken = request.headers.get("X-Internal-Token");
-  if (env.ADMIN_PROVISION_TOKEN && internalToken && internalToken === env.ADMIN_PROVISION_TOKEN) {
+  if (env.ADMIN_PROVISION_TOKEN && internalToken && timingSafeEqual(internalToken, env.ADMIN_PROVISION_TOKEN)) {
     return { ok: true, kind: "service" };
   }
 
@@ -51,7 +51,20 @@ export async function authenticateApiRequest(request: Request, env: Env): Promis
  * and the CI-token branch is unreachable.
  */
 export function isCiTestReport(request: Request, url: URL, env: Env): boolean {
+  const provided = request.headers.get("X-CI-Token");
   return (
-    url.pathname === "/api/test-report" && request.method === "PUT" && !!env.CI_TOKEN && request.headers.get("X-CI-Token") === env.CI_TOKEN
+    url.pathname === "/api/test-report" &&
+    request.method === "PUT" &&
+    !!env.CI_TOKEN &&
+    !!provided &&
+    timingSafeEqual(provided, env.CI_TOKEN)
   );
+}
+
+/** Constant-time string compare for shared secrets (=== leaks the matching prefix through timing). */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
