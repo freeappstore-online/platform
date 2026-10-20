@@ -355,6 +355,66 @@ function safeIconBackground(value) {
     : '#2563eb';
 }
 
+// Browser permissions an app asks for, shown on its listing and card (#285).
+// Ids match packages/compliance/src/lib/permissions.ts PERMISSION_IDS (a test
+// keeps them in sync); registry entries list them as "camera" or
+// { name, reason } from scripts/refresh-app-permissions.mts.
+const PERMISSION_INFO = {
+  microphone: { icon: '&#127897;&#65039;', label: 'Microphone', does: 'Listens through your microphone.' },
+  camera: { icon: '&#128247;', label: 'Camera', does: 'Uses your camera.' },
+  location: { icon: '&#128205;', label: 'Location', does: 'Uses your location.' },
+  motion: { icon: '&#129517;', label: 'Motion sensors', does: "Reads your device's tilt and movement." },
+  notifications: { icon: '&#128276;', label: 'Notifications', does: 'Can send you notifications.' },
+  midi: { icon: '&#127929;', label: 'MIDI devices', does: 'Connects to MIDI instruments.' },
+  clipboard: { icon: '&#128203;', label: 'Clipboard', does: 'Reads text you copied.' },
+  screen: { icon: '&#128421;&#65039;', label: 'Screen sharing', does: 'Captures your screen when you share it.' },
+  bluetooth: { icon: '&#128246;', label: 'Bluetooth devices', does: 'Connects to Bluetooth devices you pick.' },
+  usb: { icon: '&#128268;', label: 'USB devices', does: 'Connects to USB devices you pick.' },
+  serial: { icon: '&#128279;', label: 'Serial devices', does: 'Connects to serial devices you pick.' },
+  hid: { icon: '&#128377;&#65039;', label: 'HID devices', does: 'Connects to game controllers and other input devices you pick.' },
+};
+
+/** Registry permissions as [{ id, reason }], known ids only, in display order. */
+function appPermissions(app) {
+  if (!Array.isArray(app.permissions)) return null;
+  const byId = new Map();
+  for (const p of app.permissions) {
+    const id = typeof p === 'string' ? p : p && p.name;
+    if (!PERMISSION_INFO[id] || byId.has(id)) continue;
+    byId.set(id, typeof p === 'object' && typeof p.reason === 'string' ? p.reason : '');
+  }
+  return Object.keys(PERMISSION_INFO).filter((id) => byId.has(id)).map((id) => ({ id, reason: byId.get(id) }));
+}
+
+function renderPermissionsSection(app) {
+  const perms = appPermissions(app);
+  const name = escapeHtml(app.name);
+  let body;
+  if (perms === null) {
+    body = `<p class="perm-none">Not checked yet.</p>`;
+  } else if (perms.length === 0) {
+    body = `<p class="perm-none">${name} doesn't ask for any permissions: no microphone, camera, location or device access.</p>`;
+  } else {
+    const items = perms
+      .map(({ id, reason }) => {
+        const info = PERMISSION_INFO[id];
+        return `<li class="perm-item"><span class="perm-icon" aria-hidden="true">${info.icon}</span><span class="perm-text"><strong>${info.label}</strong><span class="perm-reason">${escapeHtml(reason || info.does)}</span></span></li>`;
+      })
+      .join('');
+    body = `<p class="perm-intro">Your browser asks before ${name} can use any of these.</p><ul class="perm-list">${items}</ul>`;
+  }
+  return `<section class="app-section" id="permissions"><h2>Permissions</h2>${body}</section>`;
+}
+
+/** Compact icon row for app cards; empty when the app asks for nothing. */
+function renderPermissionIcons(app) {
+  const perms = appPermissions(app);
+  if (!perms || perms.length === 0) return '';
+  const labels = perms.map(({ id }) => PERMISSION_INFO[id].label);
+  const icons = perms.map(({ id }) => PERMISSION_INFO[id].icon).join('');
+  return `<span class="app-perms" role="img" aria-label="Asks for: ${labels.join(', ')}" title="Asks for: ${labels.join(', ')}">${icons}</span>`;
+}
+
 function renderAppCard(app, published) {
   const q = qualityScores[app.id];
   const qualityBadge = q && q.grade
@@ -372,7 +432,7 @@ function renderAppCard(app, published) {
           </div>
           <div class="app-body">
             <span class="app-name">${escapeHtml(app.name)}${qualityBadge}</span>
-            <span class="app-meta">${escapeHtml(categoryLabel(app.category))}</span>
+            <span class="app-meta">${escapeHtml(categoryLabel(app.category))}${renderPermissionIcons(app)}</span>
           </div>
           <button class="vote-btn" type="button" data-app-id="${escapeHtml(app.id)}" aria-label="Vote for ${escapeHtml(app.name)}" aria-pressed="false">
             <svg class="vote-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
@@ -863,6 +923,7 @@ apps.forEach((app, i) => {
   // for defense in depth.
   let html = injectSettingsBootstrap(detailTemplate, 'templates/app-detail.html')
     .replace(/\{\{PREVIEW_ALLOW\}\}/g, PREVIEW_ALLOW)
+    .replace(/\{\{PERMISSIONS_SECTION\}\}/g, renderPermissionsSection(app))
     .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
     .replace(/\{\{NAME\}\}/g, escapeHtml(app.name))
     .replace(/\{\{NAME_LOWER\}\}/g, escapeHtml(app.name.toLowerCase()))
