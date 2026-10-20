@@ -179,14 +179,49 @@ describe("securityHeaders", () => {
     expect(html.get("strict-transport-security")).toContain("includeSubDomains");
   });
 
-  it("scopes powerful APIs via Permissions-Policy", () => {
-    const pp = html.get("permissions-policy") ?? "";
-    expect(pp).toContain("geolocation=(self)");
-    expect(pp).toContain("camera=(self)");
-    expect(pp).toContain("microphone=(self)");
-    expect(pp).not.toContain("microphone=()");
-    expect(pp).toContain("payment=()");
-    expect(pp).toContain("interest-cohort=()");
+  // #284 default-open: every feature on the app's own origin, one written block.
+  it.each([
+    "accelerometer",
+    "ambient-light-sensor",
+    "autoplay",
+    "bluetooth",
+    "camera",
+    "clipboard-read",
+    "clipboard-write",
+    "display-capture",
+    "encrypted-media",
+    "fullscreen",
+    "gamepad",
+    "geolocation",
+    "gyroscope",
+    "hid",
+    "idle-detection",
+    "local-fonts",
+    "magnetometer",
+    "microphone",
+    "midi",
+    "payment",
+    "picture-in-picture",
+    "publickey-credentials-create",
+    "publickey-credentials-get",
+    "screen-wake-lock",
+    "serial",
+    "storage-access",
+    "usb",
+    "web-share",
+    "window-management",
+    "xr-spatial-tracking",
+  ])("Permissions-Policy grants %s to the app's own origin", (feature) => {
+    const entries = (html.get("permissions-policy") ?? "").split(", ");
+    expect(entries).toContain(`${feature}=(self)`);
+  });
+
+  it("Permissions-Policy blocks only the Topics API (no-tracking rule)", () => {
+    const entries = (html.get("permissions-policy") ?? "").split(", ");
+    expect(entries.filter((e) => e.endsWith("=()"))).toEqual(["browsing-topics=()"]);
+    // interest-cohort (FLoC) is unrecognised by current Chrome and logged a
+    // console error on every page load.
+    expect(entries.some((e) => e.startsWith("interest-cohort"))).toBe(false);
   });
 
   it("sets nosniff + strict referrer policy", () => {

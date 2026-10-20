@@ -110,6 +110,62 @@ function xmlEscape(value: string): string {
 }
 
 /**
+ * Browser features granted to every hosted app on its own origin (#284).
+ *
+ * Default-open: an app gets what a normal website on its own origin would.
+ * The browser itself asks the user before granting camera, microphone,
+ * location, sensors, USB/serial/HID/Bluetooth devices, payment etc., so a
+ * platform-level block only breaks apps (#267: `microphone=()` made a creator
+ * delete a working feature) and protects nobody. `(self)` grants the app's own
+ * origin but not cross-origin iframes it embeds.
+ *
+ * Only names Chromium recognises are listed: an unknown name logs a console
+ * error on every page load of every app.
+ *
+ * The one block, with its reason:
+ *   - browsing-topics: the Topics API hands the user's ad-interest topics to
+ *     third-party scripts. The store requires apps not to track users.
+ */
+export const PERMISSIONS_POLICY_SELF = [
+  "accelerometer",
+  "ambient-light-sensor",
+  "autoplay",
+  "bluetooth",
+  "camera",
+  "clipboard-read",
+  "clipboard-write",
+  "display-capture",
+  "encrypted-media",
+  "fullscreen",
+  "gamepad",
+  "geolocation",
+  "gyroscope",
+  "hid",
+  "idle-detection",
+  "local-fonts",
+  "magnetometer",
+  "microphone",
+  "midi",
+  "payment",
+  "picture-in-picture",
+  "publickey-credentials-create",
+  "publickey-credentials-get",
+  "screen-wake-lock",
+  "serial",
+  "storage-access",
+  "usb",
+  "web-share",
+  "window-management",
+  "xr-spatial-tracking",
+] as const;
+
+export const PERMISSIONS_POLICY_BLOCKED = ["browsing-topics"] as const;
+
+const PERMISSIONS_POLICY = [...PERMISSIONS_POLICY_SELF.map((f) => `${f}=(self)`), ...PERMISSIONS_POLICY_BLOCKED.map((f) => `${f}=()`)].join(
+  ", ",
+);
+
+/**
  * Build the security headers we attach to every R2-served response. Split
  * out from the index.ts respond() helper so the policy is unit-testable
  * without spinning up the full Worker, and so the next person to tighten
@@ -142,10 +198,7 @@ export function securityHeaders(opts: { htmlCache: boolean }): Headers {
     "upgrade-insecure-requests",
   ].join("; ");
   headers.set("content-security-policy", csp);
-  headers.set(
-    "permissions-policy",
-    "geolocation=(self), microphone=(self), camera=(self), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=(), midi=(), interest-cohort=()",
-  );
+  headers.set("permissions-policy", PERMISSIONS_POLICY);
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
   headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
