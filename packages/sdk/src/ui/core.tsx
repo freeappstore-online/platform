@@ -166,7 +166,10 @@ type TextSize = 'default' | 'lg' | 'sm';
 
 function getTextSize(): TextSize {
   if (typeof window === 'undefined') return 'default';
-  const stored = window.localStorage.getItem(TEXT_SIZE_KEY);
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(TEXT_SIZE_KEY);
+  } catch {} // storage blocked
   if (stored === 'lg' || stored === 'sm') return stored;
   return 'default';
 }
@@ -191,7 +194,9 @@ export function useTextSize() {
   const set = useCallback((next: TextSize) => {
     setSize(next);
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(TEXT_SIZE_KEY, next);
+      try {
+        window.localStorage.setItem(TEXT_SIZE_KEY, next);
+      } catch {} // storage blocked: the size applies but isn't saved
     }
   }, []);
 

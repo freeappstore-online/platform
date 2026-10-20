@@ -22,7 +22,10 @@ function getSystemTheme(): ResolvedTheme {
 
 function getStoredPreference(): ThemePreference {
   if (typeof window === 'undefined') return 'system';
-  const stored = window.localStorage.getItem(THEME_KEY);
+  let stored: string | null = null;
+  try {
+    stored = window.localStorage.getItem(THEME_KEY);
+  } catch {} // storage blocked: fall back to the system theme
   if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
   return 'system';
 }
@@ -89,7 +92,9 @@ export function useTheme() {
 
   const setPreference = useCallback((pref: ThemePreference) => {
     if (typeof window === 'undefined') return;
-    window.localStorage.setItem(THEME_KEY, pref);
+    try {
+      window.localStorage.setItem(THEME_KEY, pref);
+    } catch {} // storage blocked: the choice is applied but not saved
     applyTheme(resolveTheme(pref));
     cachedSnapshot = getThemeSnapshot();
     notifyThemeListeners();

@@ -95,7 +95,9 @@ export class Auth {
   signOut(): void {
     this.session = null;
     if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(STORAGE_KEY);
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {}
     }
     this.emit();
   }
@@ -242,19 +244,23 @@ export class Auth {
     }).catch(() => {}); // silent — non-blocking
   }
 
+  // Storage access throws SecurityError when site data is blocked or in a
+  // sandboxed iframe, and setItem throws when full. A memory-only session is
+  // fine, so none of these may throw.
   private readStorage(): Session | null {
     if (typeof window === 'undefined') return null;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
     try {
-      return JSON.parse(raw) as Session;
+      const raw = window.localStorage.getItem(STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as Session) : null;
     } catch {
       return null;
     }
   }
 
   private writeStorage(session: Session): void {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    } catch {}
   }
 
   private emit(): void {

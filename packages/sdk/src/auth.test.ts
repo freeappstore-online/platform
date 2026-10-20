@@ -250,3 +250,32 @@ describe('Auth — storage round-trip', () => {
     expect(auth.user).toBeNull();
   });
 });
+
+describe('Auth with storage blocked (SecurityError on access)', () => {
+  function blockStorage(window: FakeWindow) {
+    Object.defineProperty(window, 'localStorage', {
+      get() {
+        throw new DOMException('The operation is insecure.', 'SecurityError');
+      },
+    });
+  }
+
+  it('constructs signed-out instead of throwing', () => {
+    const { window } = makeWindow({ href: 'https://app.freeappstore.online/' });
+    blockStorage(window);
+    (globalThis as Record<string, unknown>).window = window;
+    const auth = new Auth('demo', 'https://api.example');
+    expect(auth.user).toBeNull();
+  });
+
+  it('signOut still notifies listeners', () => {
+    const { window } = makeWindow({ href: 'https://app.freeappstore.online/' });
+    blockStorage(window);
+    (globalThis as Record<string, unknown>).window = window;
+    const auth = new Auth('demo', 'https://api.example');
+    const seen: unknown[] = [];
+    auth.onChange((u) => seen.push(u));
+    expect(() => auth.signOut()).not.toThrow();
+    expect(seen).toContain(null);
+  });
+});
