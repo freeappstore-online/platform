@@ -1,4 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+// The CF Web Analytics step calls the Cloudflare API with fetch. Unstubbed, it
+// reached the real API with a fake token, so these tests took 0.6-5s each
+// depending on the network and timed out at random. It's non-fatal either way.
+beforeEach(() => {
+  vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ success: true, result: [] })));
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 import { type GhFn, handlePublish, insertHostRoute, writeRegistryWithRetry } from "./publish";
 
 // ── Helpers ──
