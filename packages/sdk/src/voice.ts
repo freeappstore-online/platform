@@ -40,7 +40,11 @@ export interface UseVoiceInputReturn {
 
 function getSpeechRecognitionCtor(): (new () => SpeechRecognitionInstance) | null {
   if (typeof window === 'undefined') return null;
-  return (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition || null;
+  const w = window as Window & {
+    SpeechRecognition?: new () => SpeechRecognitionInstance;
+    webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
+  };
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
 
 /**
