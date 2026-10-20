@@ -117,24 +117,6 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<Curre
 }
 
 /**
- * Require a specific platform role. Reads from session token claims.
- */
-export async function requireRole(
-  c: Context<{ Bindings: Env }>,
-  role: string,
-): Promise<CurrentUser> {
-  const user = await requireUser(c);
-  if (!user.roles.includes(role)) {
-    throw new HttpError(403, `requires role: ${role}`);
-  }
-  return user;
-}
-
-/**
- * Check if a user id is in the admin list (env var). Used at sign-in
- * to compute the 'admin' role for the session token.
- */
-/**
  * Service-to-service auth: the X-Internal-Token header must equal
  * ADMIN_PROVISION_TOKEN (constant-time compare). Used by the admin Worker,
  * which can't hold a user session.
@@ -148,6 +130,10 @@ export function hasInternalToken(c: {
   return !!expected && !!provided && timingSafeEqual(provided, expected);
 }
 
+/**
+ * Check if a user id is in the admin list (env var). Used at sign-in
+ * to compute the 'admin' role for the session token.
+ */
 export function isAdminLogin(login: string, env: Env): boolean {
   const admins = (env.ADMIN_GITHUB_LOGINS ?? '')
     .split(',')

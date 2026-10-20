@@ -284,21 +284,6 @@ interface ViewportTestExpanded extends ViewportTest {
   orientation: 'portrait' | 'landscape';
 }
 
-/**
- * Pick the full reference matrix to test, gated by manifest orientation.
- * For orientation='any', test both. For 'portrait'/'landscape', test only
- * that side. Sizes below `minWidth` are still tested — failing below the
- * declared min is *expected*, but if it passes, the creator can claim a
- * wider device coverage than they declared.
- */
-export function pickTests(minWidth: number, orientation: string): ViewportTest[] {
-  return pickMatrix(minWidth, orientation).map(({ orientation: o, ...t }) => ({
-    label: t.label,
-    width: t.width,
-    height: t.height,
-  }));
-}
-
 export function pickMatrix(_minWidth: number, orientation: string): ViewportTestExpanded[] {
   const isPortrait = orientation === 'portrait' || orientation === 'portrait-primary';
   const isLandscape = orientation === 'landscape' || orientation === 'landscape-primary';

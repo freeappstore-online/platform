@@ -78,19 +78,6 @@ export async function requirePermission(
   return null;
 }
 
-/** Require an exact confirm value for destructive operations. Audits denials. */
-export async function requireConfirmation(
-  ctx: SafetyContext,
-  tool: string,
-  confirm: string | undefined,
-  expected: string,
-  input?: Record<string, unknown>,
-): Promise<TextResult | null> {
-  if (confirm === expected) return null;
-  await audit(ctx, { tool, action: "denied", reason: "missing_confirmation", expected, input });
-  return text(`Error: ${tool} requires confirm="${expected}".`);
-}
-
 /** Return (and audit) a dry-run preview without performing the action. */
 export async function dryRun(
   ctx: SafetyContext,
