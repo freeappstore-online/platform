@@ -59,6 +59,12 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
   }
 
   // Validate body (at least one of html or text required)
+  if (
+    (body.html !== undefined && typeof body.html !== 'string') ||
+    (body.text !== undefined && typeof body.text !== 'string')
+  ) {
+    return c.json({ ok: false, error: '"html" and "text" must be strings.' }, 400);
+  }
   if (!body.html && !body.text) {
     return c.json({ ok: false, error: 'At least one of "html" or "text" is required.' }, 400);
   }
@@ -69,34 +75,37 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
     return c.json({ ok: false, error: `Text body too large (max ${MAX_BODY_LENGTH} chars).` }, 413);
   }
 
-  // Daily rate limit per app…
+  // Exact counts (denominator 1): these are hard caps on a relay from the
+  // platform's sending domain, not the proxy's soft budget. Check the user
+  // first so a user already over their limit can't drain the app's quota.
   const now = Date.now();
-  const usage = await checkAndBump(d1UsageStore(c.env.DB), {
-    appId: `email:${appId}`,
-    dailyLimit: DAILY_EMAIL_LIMIT,
-    nowMs: now,
-  });
-  if (!usage.allowed) {
-    return c.json(
-      {
-        ok: false,
-        error: `Daily email limit reached (${DAILY_EMAIL_LIMIT}/day per app). Resets at midnight UTC.`,
-      },
-      429,
-    );
-  }
-  // …and per user, so one account can't burn an app's whole quota (and can't
-  // reset it by rotating appId).
   const userUsage = await checkAndBump(d1UsageStore(c.env.DB), {
     appId: `email-user:${_user.id}`,
     dailyLimit: DAILY_EMAIL_LIMIT_PER_USER,
     nowMs: now,
+    denominator: 1,
   });
   if (!userUsage.allowed) {
     return c.json(
       {
         ok: false,
         error: `Daily email limit reached (${DAILY_EMAIL_LIMIT_PER_USER}/day per user). Resets at midnight UTC.`,
+      },
+      429,
+    );
+  }
+  // …and per app, so the per-user cap can't be multiplied by many accounts.
+  const usage = await checkAndBump(d1UsageStore(c.env.DB), {
+    appId: `email:${appId}`,
+    dailyLimit: DAILY_EMAIL_LIMIT,
+    nowMs: now,
+    denominator: 1,
+  });
+  if (!usage.allowed) {
+    return c.json(
+      {
+        ok: false,
+        error: `Daily email limit reached (${DAILY_EMAIL_LIMIT}/day per app). Resets at midnight UTC.`,
       },
       429,
     );
