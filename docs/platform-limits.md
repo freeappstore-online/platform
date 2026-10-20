@@ -92,5 +92,5 @@ These features require [ProAppStore](https://proappstore.online):
 - Server-side AI (Workers AI)
 - Cron / scheduled tasks
 - Custom domains
-- Monetization (Stripe + creator payouts)
+- Monetization (Stripe + creator payouts). FAS apps take no payments: the host blocks the Payment Request API and `fas check` rejects payment code. See [Browser Capabilities](capabilities.md#no-payments).
 - Server-side compute (per-app Worker + D1)

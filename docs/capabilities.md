@@ -3,9 +3,9 @@
 What a hosted app (`<id>.freeappstore.online`) can use in the browser, and what the platform still limits.
 
 The rule is **default-open**: an app gets everything a normal website on its own origin gets. The browser
-asks the user before granting anything sensitive (microphone, camera, location, sensors, devices,
-payments), so the platform doesn't block those features as well. A feature stays blocked only with a
-written reason, listed below.
+asks the user before granting anything sensitive (microphone, camera, location, sensors, devices),
+so the platform doesn't block those features as well. A feature stays blocked only with a written
+reason, listed below.
 
 The headers are set by the host Worker (`workers/host/src/host.ts`), unit-tested there, and checked on a
 live app every 30 minutes by the prod smoke workflow.
@@ -26,13 +26,13 @@ embeds don't receive them, even with an `allow` attribute.
 | Gamepad | `navigator.getGamepads()` | games, controller testers | allowed |
 | Screen capture | `getDisplayMedia()` | screen recorders, sharing | allowed |
 | Clipboard read & write | `navigator.clipboard` | editors, paste-in tools | allowed |
-| Payments | Payment Request API | see [#289](https://github.com/freeappstore-online/platform/issues/289) for the free-tier policy | allowed |
 | Passkeys | WebAuthn `navigator.credentials` | app-level sign-in | allowed |
 | Screen wake lock | `navigator.wakeLock` | timers, recipes, workouts | allowed |
 | Fullscreen, picture-in-picture | `requestFullscreen()`, `requestPictureInPicture()` | games, video | allowed |
 | Autoplay, encrypted media | `<audio>`/`<video>` autoplay, EME | sound apps, media players | allowed |
 | Web Share | `navigator.share()` | sharing results | allowed |
 | Idle detection, local fonts, storage access, window management, WebXR | respective APIs | design tools, multi-screen, AR/VR | allowed |
+| Payments | Payment Request API, Apple Pay | checkout, tips | **blocked**: FreeAppStore apps take no payments ([#289](https://github.com/freeappstore-online/platform/issues/289)) |
 | Topics API | `document.browsingTopics()` | ad targeting | **blocked**: shares the user's ad interests with third parties; the store requires apps not to track users |
 
 The browser still asks the user, needs a secure context (always true on the host), and for most of these
@@ -58,6 +58,21 @@ separate from a grant in the app's own tab.
 | Plain `http:` requests | upgraded to `https:` |
 | `<object>`/`<embed>` plugins | blocked: obsolete plugin content, a common script-injection vector |
 | Your app framed by other sites | blocked: only `freeappstore.online` and its subdomains may frame your app, which prevents clickjacking |
+
+## No payments
+
+FreeAppStore apps are free forever and take **no payments** (owner decision,
+[#289](https://github.com/freeappstore-online/platform/issues/289)). It's enforced in two places:
+
+- The host sends `Permissions-Policy: payment=()`, so the Payment Request API can't run, in your app
+  or in its storefront preview.
+- `fas check` fails the **No payments (free tier)** check on the Payment Request API, Apple Pay,
+  payment-provider SDKs and checkout endpoints (Stripe, PayPal, Paddle, Lemon Squeezy, Gumroad,
+  Google Pay), payment SDK dependencies, and payment members in the web app manifest.
+
+Words like "payment" in your own code are fine (a loan calculator passes). A link to your own external
+donation or sponsor page isn't covered by the check. To charge for an app, publish it on
+[ProAppStore](https://proappstore.online), which handles subscriptions and creator payouts.
 
 ## Cross-origin isolation
 
