@@ -4,6 +4,12 @@ Your app's storefront listing has a **Permissions** section that tells people, b
 what the browser will ask them for: microphone, camera, location and so on. Cards on the store also
 show a small icon for each one. Nobody gets a surprise prompt.
 
+| Light | Dark |
+|---|---|
+| ![Permissions section, light](screenshots/permissions-listing-light.png) | ![Permissions section, dark](screenshots/permissions-listing-dark.png) |
+| ![App card with permission icons, light](screenshots/permissions-card-light.png) | ![App card with permission icons, dark](screenshots/permissions-card-dark.png) |
+| ![An app that asks for nothing, light](screenshots/permissions-none-light.png) | ![An app that asks for nothing, dark](screenshots/permissions-none-dark.png) |
+
 ## Declare them in your manifest
 
 Add a `permissions` list to `web/public/manifest.json`. Give each permission a one-line reason; it's
