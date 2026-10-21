@@ -123,6 +123,7 @@ const CF_BEACON_SNIPPET = CF_BEACON_TOKEN && /^[a-f0-9]{32,}$/i.test(CF_BEACON_T
 
 // Helper: format category label (brain-training -> Brain Training)
 function categoryLabel(cat) {
+  if (cat.toLowerCase() === 'other (specify in description)') return 'Other';
   return cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
@@ -418,7 +419,7 @@ function renderPermissionIcons(app) {
 function renderAppCard(app, published) {
   const q = qualityScores[app.id];
   const qualityBadge = q && q.grade
-    ? `<a href="/quality.html?app=${encodeURIComponent(app.id)}&amp;store=apps" class="quality-badge grade-${q.grade.toLowerCase()}" title="Code quality: ${q.score}/100">${q.grade}</a>`
+    ? `<a href="/quality.html?app=${encodeURIComponent(app.id)}&amp;store=apps" class="quality-badge grade-${q.grade.toLowerCase()}" aria-label="Code quality: ${q.grade}, ${q.score}/100" title="Code quality: ${q.score}/100">${q.grade}</a>`
     : '';
   // Letter fallback lives on a data-attribute; storefront.js binds the
   // img.error listener and reads it. No more JS-string-in-HTML-attribute splicing.
@@ -431,7 +432,7 @@ function renderAppCard(app, published) {
             <span class="app-emoji" aria-hidden="true">${iconEmoji}</span>
           </div>
           <div class="app-body">
-            <span class="app-name">${escapeHtml(app.name)}${qualityBadge}</span>
+            <span class="app-name"><span class="app-name-text">${escapeHtml(app.name)}</span>${qualityBadge}</span>
             <span class="app-meta"><span class="app-cat">${escapeHtml(categoryLabel(app.category))}</span>${renderPermissionIcons(app)}</span>
           </div>
           <button class="vote-btn" type="button" data-app-id="${escapeHtml(app.id)}" aria-label="Vote for ${escapeHtml(app.name)}" aria-pressed="false">
@@ -555,7 +556,7 @@ for (const app of apps) {
 }
 const categories = [...categoryMap.entries()].sort((a, b) => a[1].localeCompare(b[1]));
 const categoryFilters = categories
-  .map(([key, label]) => `<button class="filter-btn" type="button" data-category="${escapeHtml(key)}">${escapeHtml(label)}</button>`)
+  .map(([key, label]) => `<button class="filter-btn" type="button" data-category="${escapeHtml(key)}" aria-pressed="false">${escapeHtml(label)}</button>`)
   .join('\n        ');
 
 // {{APPS_GRID}} is replaced inside the async IIFE after histories are fetched

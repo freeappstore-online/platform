@@ -67,7 +67,11 @@
 
 
   <main class="container">
-    <h1 class="sr-only">FreeAppStore — Free-Forever Web Apps</h1>
+    <div class="catalog-intro">
+      <p class="catalog-eyebrow">Free forever. Open source.</p>
+      <h1>Find your next everyday app.</h1>
+      <p>Useful web apps that work right in your browser. No installs, no subscriptions.</p>
+    </div>
     <section class="apps-section" id="apps">
       <div class="apps-toolbar">
         <div class="input-wrap" id="searchInputWrap">
@@ -82,15 +86,15 @@
           />
         </div>
         <div class="filter-bar" id="categoryFilter" role="toolbar" aria-label="Filter by category">
-          <button class="filter-btn active" type="button" data-category="all">All</button>
+          <button class="filter-btn active" type="button" data-category="all" aria-pressed="true">All</button>
           {{CATEGORY_FILTERS}}
         </div>
         <div class="filter-bar" id="sortBar" role="toolbar" aria-label="Sort apps">
-          <button class="filter-btn" type="button" data-sort="az">A→Z</button>
-          <button class="filter-btn active" type="button" data-sort="newest">Newest</button>
-          <button class="filter-btn" type="button" data-sort="popular">Most popular</button>
+          <button class="filter-btn" type="button" data-sort="az" aria-pressed="false">A→Z</button>
+          <button class="filter-btn active" type="button" data-sort="newest" aria-pressed="true">Newest</button>
+          <button class="filter-btn" type="button" data-sort="popular" aria-pressed="false">Most popular</button>
         </div>
-        <div class="apps-count" id="apps-count">{{APPS_COUNT}} apps</div>
+        <div class="apps-count" id="apps-count" role="status">{{APPS_COUNT}} apps</div>
       </div>
 
       <div class="split-layout">
@@ -147,49 +151,6 @@
 
     <script type="application/json" id="cross-store-registry">{{CROSS_STORE_REGISTRY}}</script>
     <script src="/search.js?v={{VER_SEARCH_JS}}" integrity="{{SRI_SEARCH_JS}}" defer></script>
-
-    <aside class="aside-note">
-      Looking for games? Visit <a href="https://freegamestore.online" class="text-accent-bold">FreeGameStore</a> — free-forever web games.
-    </aside>
-
-    <section id="where" class="section-spaced">
-      <h2 class="section-h2">Where everything lives</h2>
-      <p class="lede">A map of every URL across the stores. Bookmark this page.</p>
-      <div class="tile-grid">
-        <div class="tile">
-          <strong>For users</strong>
-          <p class="mt-half-small"><a href="https://freeappstore.online" class="text-accent-bold">freeappstore.online</a> — free apps (you are here)<br/><a href="https://freegamestore.online" class="text-accent-bold">freegamestore.online</a> — free games<br/><a href="https://freewebstore.online" class="text-accent-bold">freewebstore.online</a> — one-page sites</p>
-        </div>
-        <div class="tile">
-          <strong>For developers</strong>
-          <p class="mt-half-small"><a href="https://console.freeappstore.online/create" class="text-accent-bold">console.freeappstore.online/create</a> — VibeCode (browser scaffolder)<br/><a href="/build-with-ai" class="text-accent-bold">/build-with-ai</a> — AI-assisted dev guide<br/><a href="/skills.md" class="text-accent-bold">/skills.md</a> — SDK reference<br/><a href="https://github.com/freeappstore-online" class="text-accent-bold">github.com/freeappstore-online</a> — source</p>
-        </div>
-        <div class="tile">
-          <strong>CLI</strong>
-          <p class="mt-half-mono">npm i -g @freeappstore/cli<br/>fas init &lt;id&gt;<br/>fas publish<br/>fas check</p>
-        </div>
-        <div class="tile">
-          <strong>Admin / submission</strong>
-          <p class="mt-half-small"><a href="https://admin.freeappstore.online" class="text-accent-bold">admin.freeappstore.online</a> — admin UI (Google sign-in)<br/><a href="https://github.com/freeappstore-online/submissions/issues/new" class="text-accent-bold">file a creator application</a></p>
-        </div>
-        <div class="tile">
-          <strong>Pro sister stores</strong>
-          <p class="mt-half-small"><a href="https://proappstore.online" class="text-pro-bold">proappstore.online</a> — pro apps<br/><a href="https://console.proappstore.online" class="text-pro-bold">console.proappstore.online</a> — pro dev console<br/><a href="https://dashboard.proappstore.online" class="text-pro-bold">dashboard.proappstore.online</a> — pro user account<br/><a href="https://prowebstore.online" class="text-pro-bold">prowebstore.online</a> — KG-CMS sites</p>
-        </div>
-        <div class="tile">
-          <strong>Backend APIs</strong>
-          <p class="mt-half-small"><a href="https://api.freeappstore.online" class="text-accent-bold">api.freeappstore.online</a> — free side<br/><a href="https://api.proappstore.online" class="text-pro-bold">api.proappstore.online</a> — pro side</p>
-        </div>
-        <div class="tile">
-          <strong>Reference</strong>
-          <p class="mt-half-small"><a href="/about" class="text-accent-bold">/about</a> · <a href="/pricing" class="text-accent-bold">/pricing</a> · <a href="https://docs.freeappstore.online" class="text-accent-bold">docs</a><br/><a href="/quality" class="text-accent-bold">/quality</a> — store audit dashboard<br/><a href="/privacy" class="text-accent-bold">/privacy</a> · <a href="/terms" class="text-accent-bold">/terms</a></p>
-        </div>
-        <div class="tile">
-          <strong>All five orgs on GitHub</strong>
-          <p class="mt-half-mono">freeappstore-online<br/>freegamestore-online<br/>freewebstore-online<br/>proappstore-online<br/>prowebstore-online</p>
-        </div>
-      </div>
-    </section>
   </main>
   {{FOOTER}}
 

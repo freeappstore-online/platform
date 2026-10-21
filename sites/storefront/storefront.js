@@ -29,8 +29,10 @@
       if (!btn) return;
       filterBar.querySelectorAll('.filter-btn').forEach(function (b) {
         b.classList.remove('active');
+        b.setAttribute('aria-pressed', 'false');
       });
       btn.classList.add('active');
+      btn.setAttribute('aria-pressed', 'true');
       activeCategory = btn.dataset.category || 'all';
       var cards = document.querySelectorAll('#apps-grid .app-card');
       var shown = 0;
@@ -65,6 +67,7 @@
       // Update active pill.
       sortBar.querySelectorAll('.filter-btn').forEach(function (b) {
         b.classList.toggle('active', b.dataset.sort === sort);
+        b.setAttribute('aria-pressed', String(b.dataset.sort === sort));
       });
 
       // Reflect in URL (same replaceState pattern as search.js).
@@ -330,6 +333,8 @@
     var btnAbout = document.getElementById('previewAbout');
     var btnClose = document.getElementById('previewClose');
     var modeBar = document.getElementById('previewModeBar');
+    var layout = pane.parentElement;
+    var selectedCard = null;
     var current = null; // { id, name, url, aboutUrl }
     var loadTimeout = null;
     var loadToken = 0; // bumped on each loadInPane so stale fetches/timeouts no-op
@@ -409,6 +414,15 @@
 
     function loadInPane(meta, card) {
       current = meta;
+      selectedCard = card;
+      var token = ++loadToken;
+      if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
+      frame.removeAttribute('src');
+      if (layout) {
+        layout.classList.add('has-preview');
+        layout.scrollIntoView({ block: 'start' });
+        if (card) card.scrollIntoView({ block: 'nearest' });
+      }
       restoreEmpty();
       btnNewTab.hidden = false;
       if (btnAbout) btnAbout.hidden = !meta.aboutUrl;
@@ -427,7 +441,6 @@
       empty.hidden = true;
       if (modeBar) modeBar.hidden = false;
 
-      var token = ++loadToken;
       fetch(meta.url, { method: 'GET', mode: 'no-cors', cache: 'no-store', credentials: 'omit' })
         .then(function () {
           if (token !== loadToken) return;
@@ -435,8 +448,9 @@
           if (loadTimeout) clearTimeout(loadTimeout);
           loadTimeout = setTimeout(function () { showLoadError(meta); }, 10000);
           frame.addEventListener('load', function once() {
-            pane.classList.remove('is-loading');
             frame.removeEventListener('load', once);
+            if (token !== loadToken) return;
+            pane.classList.remove('is-loading');
             if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
           });
         })
@@ -462,22 +476,20 @@
       setTitle(null, '');
       activate(null);
       pane.classList.remove('is-loading');
+      if (layout) layout.classList.remove('has-preview');
       setUrlParam(null);
+      if (selectedCard) {
+        selectedCard.focus({ preventScroll: true });
+        selectedCard.scrollIntoView({ block: 'nearest' });
+        selectedCard = null;
+      }
     }
 
     function cardMeta(card) {
       var cta = card.querySelector('.app-cta');
-      var name = card.querySelector('.app-name');
-      // .app-name may contain a quality-badge child — only the first text node is the name.
-      var nameText = 'App';
-      if (name) {
-        var n = name.firstChild;
-        while (n && n.nodeType !== Node.TEXT_NODE) n = n.nextSibling;
-        nameText = (n && n.textContent.trim()) || name.textContent.trim();
-      }
       return {
         id: card.dataset.id || '',
-        name: nameText,
+        name: card.dataset.name || 'App',
         url: cta ? cta.getAttribute('href') : null,
         aboutUrl: card.dataset.about || null,
         requiresAuth: card.dataset.requiresAuth === '1',
@@ -495,6 +507,8 @@
           e.stopPropagation();
           return;
         }
+        // Quality-report links keep their own destination.
+        if (e.target.closest('a:not(.app-cta)')) return;
         var onCta = !!e.target.closest('.app-cta');
         if (SPLIT_MQ.matches) {
           e.preventDefault();
@@ -549,7 +563,7 @@
     // Viewport shrinks below split breakpoint → clear active state.
     if (SPLIT_MQ.addEventListener) {
       SPLIT_MQ.addEventListener('change', function (e) {
-        if (!e.matches) activate(null);
+        if (!e.matches && current) clearPane();
       });
     }
   })();

@@ -30,8 +30,10 @@ function runStorefront({ desktop = true } = {}) {
   const cardHandlers = {};
   const requests = [];
   const card = {
-    dataset: { id: "timer", about: "/apps/timer", votes: "2" },
+    dataset: { id: "timer", name: "Timer", about: "/apps/timer", votes: "2" },
     classList: classList(),
+    focus() { this.focused = true; },
+    scrollIntoView() {},
     addEventListener(type, handler) { cardHandlers[type] = handler; },
     querySelector(selector) {
       if (selector === ".app-cta") return { getAttribute: () => "https://timer.freeappstore.online" };
@@ -48,13 +50,15 @@ function runStorefront({ desktop = true } = {}) {
     setAttribute(name, value) { this.attributes[name] = value; },
     removeAttribute(name) { delete this.attributes[name]; },
   };
-  const pane = { classList: classList() };
+  const layout = { classList: classList(), scrollIntoView() {} };
+  const pane = { classList: classList(), parentElement: layout };
   const frame = { classList: classList(), addEventListener() {}, removeEventListener() {}, removeAttribute() {}, hidden: true };
   const empty = { classList: classList(), querySelector: () => null, hidden: false };
   const title = { innerHTML: "", appendChild() {} };
   const toolbarButton = { hidden: true, addEventListener() {} };
+  const closeButton = { hidden: true, addEventListener(type, handler) { this[type] = handler; } };
   const modeBar = { hidden: true, addEventListener() {}, querySelectorAll: () => [] };
-  const elements = { previewPane: pane, previewFrame: frame, previewEmpty: empty, previewTitle: title, previewNewTab: toolbarButton, previewAbout: toolbarButton, previewClose: toolbarButton, previewModeBar: modeBar };
+  const elements = { previewPane: pane, previewFrame: frame, previewEmpty: empty, previewTitle: title, previewNewTab: toolbarButton, previewAbout: toolbarButton, previewClose: closeButton, previewModeBar: modeBar };
   const location = { href: "https://freeappstore.online/" };
   const context = {
     Node: { TEXT_NODE: 3 }, URL, history: { replaceState() {} }, setTimeout() { return 1; }, clearTimeout() {},
@@ -80,7 +84,7 @@ function runStorefront({ desktop = true } = {}) {
     },
   };
   runInNewContext(storefrontSource, context);
-  return { card, vote, cardHandlers, documentHandlers, requests, location };
+  return { card, vote, cardHandlers, documentHandlers, requests, location, layout, frame, closeButton };
 }
 
 function captureHandler(ui, type) {
@@ -131,4 +135,25 @@ test("issue #124: direct card fallback also rejects a vote target while ordinary
   ui.card.closest = () => null;
   ui.cardHandlers.click(bodyEvent);
   assert.equal(ui.card.classList.has("is-active"), true, "ordinary card activation must still open preview");
+});
+
+test("preview opens on selection and close restores the catalogue and keyboard focus", () => {
+  const ui = runStorefront();
+  assert.equal(ui.layout.classList.has("has-preview"), false);
+  ui.card.closest = () => null;
+  ui.cardHandlers.click(event(ui.card));
+  assert.equal(ui.layout.classList.has("has-preview"), true);
+  ui.closeButton.click();
+  assert.equal(ui.layout.classList.has("has-preview"), false);
+  assert.equal(ui.frame.hidden, true);
+  assert.equal(ui.card.focused, true);
+});
+
+test("quality report links retain native navigation without launching a preview", () => {
+  const ui = runStorefront();
+  const qualityLink = { closest: (selector) => selector === 'a:not(.app-cta)' ? qualityLink : null };
+  const click = event(qualityLink);
+  ui.cardHandlers.click(click);
+  assert.equal(click.prevented, false);
+  assert.equal(ui.layout.classList.has("has-preview"), false);
 });

@@ -271,6 +271,12 @@ test("build ships the advertised capability pages and external analytics CSS", (
   try {
     assert.ok(readFileSync(join(tmpDist, "capabilities.html"), "utf8").includes("Platform Capabilities"));
     assert.ok(readFileSync(join(tmpDist, "browser-apis.html"), "utf8").includes("Browser APIs"));
+    const indexHtml = readFileSync(join(tmpDist, "index.html"), "utf8");
+    assert.ok(indexHtml.includes('href="/build-with-ai#resources"'), "footer must link to a shipped developer resource page");
+    assert.ok(!indexHtml.includes('id="resources"'), "the technical directory belongs on the developer guide");
+    const guideHtml = readFileSync(join(tmpDist, "build-with-ai.html"), "utf8");
+    assert.ok(guideHtml.includes('id="resources"'), "developer resource link must have a destination");
+    assert.ok(guideHtml.includes('https://api.freeappstore.online'), "the technical directory must remain available");
     const analyticsHtml = readFileSync(join(tmpDist, "analytics.html"), "utf8");
     const stylesheet = analyticsHtml.match(/href="\/(style\.[a-f0-9]{10}\.css)"/);
     assert.ok(stylesheet, "analytics must reference the fingerprinted external stylesheet");
