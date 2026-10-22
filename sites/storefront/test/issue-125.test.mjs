@@ -22,7 +22,7 @@ async function settle() {
   await flush();
 }
 
-function runStorefrontVotes({ token = "session-token", response = { votes: { timer: 3 }, voted: {} } } = {}) {
+function runStorefrontVotes({ token = "session-token", response = { votes: { timer: 3 }, voted: {} }, aggregate } = {}) {
   const card = { dataset: { id: "timer", votes: "0" }, querySelector: () => count };
   const button = {
     dataset: { appId: "timer" }, classList: classList(), disabled: false, attributes: {},
@@ -35,24 +35,131 @@ function runStorefrontVotes({ token = "session-token", response = { votes: { tim
   const handlers = {};
   const requests = [];
   const resolveMutations = [];
+  const windowHandlers = {};
+  const status = { textContent: "", hidden: true };
   const context = {
-    window: {}, CSS: { escape: (value) => value }, localStorage: { getItem: () => token ? JSON.stringify({ token }) : null },
+    window: { location: { href: "https://freeappstore.online/" }, addEventListener(type, fn) { windowHandlers[type] = fn; } }, CSS: { escape: (value) => value }, localStorage: { getItem: () => token ? JSON.stringify({ token }) : null, removeItem() { token = null; } },
     document: {
       querySelector(selector) { return selector.indexOf(".app-card") === 0 ? card : null; },
       querySelectorAll(selector) { return selector.indexOf(".vote-btn") === 0 ? [button] : []; },
-      getElementById() { return null; },
+      getElementById(id) { return id === "vote-status" ? status : null; },
       addEventListener(type, handler) { handlers[type] = handler; },
     },
     MouseEvent: function () {}, URL, console,
     fetch(url, options = {}) {
       requests.push({ url, options });
-      if (url.endsWith("/v1/store/votes")) return Promise.resolve({ ok: true, json: async () => response });
+      if (url.endsWith("/v1/store/votes")) return aggregate ? aggregate(options) : Promise.resolve({ ok: true, json: async () => response });
       return new Promise((resolve) => { resolveMutations.push(resolve); });
     },
   };
   runInNewContext(storefrontSource, context);
-  return { button, card, count, context, handlers, requests, resolveMutations };
+  return { button, card, count, context, handlers, requests, resolveMutations, status, windowHandlers, setToken(value) { token = value; } };
 }
+
+function runDetailVotes({ token = "session-token", aggregate } = {}) {
+  const handlers = {};
+  const windowHandlers = {};
+  const button = {
+    disabled: true, attributes: {}, classList: classList(),
+    setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(type, fn) { handlers[type] = fn; },
+  };
+  const count = { textContent: "Loading…" };
+  const status = { textContent: "Loading votes…" };
+  const requests = [];
+  const resolveMutations = [];
+  const context = {
+    window: { location: { href: "https://freeappstore.online/apps/timer" }, addEventListener(type, fn) { windowHandlers[type] = fn; } }, URL,
+    localStorage: { getItem: () => token ? JSON.stringify({ token }) : null, removeItem() { token = null; } },
+    document: {
+      getElementById(id) { return { "page-data": { textContent: '{"id":"timer"}' }, "rate-vote": button, "vote-count": count, "rating-status": status }[id]; },
+      querySelectorAll() { return []; },
+    },
+    fetch(url, options = {}) {
+      requests.push({ url, options });
+      if (url.endsWith("/v1/store/votes")) return aggregate ? aggregate(options) : Promise.resolve({ ok: true, json: async () => ({ votes: { timer: 3 }, voted: {} }) });
+      return new Promise((resolve) => resolveMutations.push(resolve));
+    },
+  };
+  runInNewContext(detailSource, context);
+  return { button, count, status, context, handlers, requests, resolveMutations, windowHandlers, setToken(value) { token = value; } };
+}
+
+const click = (ui) => ui.handlers.click({ target: ui.button, preventDefault() {}, stopPropagation() {} });
+const ok = (data) => ({ ok: true, status: 200, json: async () => data });
+
+for (const [page, run] of [["storefront", runStorefrontVotes], ["detail", runDetailVotes]]) {
+  test(`${page}: an expired session falls back to real public counts`, async () => {
+    const ui = run({ aggregate: (options) => Promise.resolve(options.headers ? { ok: false, status: 401 } : ok({ votes: { timer: 8 } })) });
+    await settle();
+    assert.equal(ui.count.textContent, "8");
+    assert.equal(ui.button.attributes["aria-pressed"], "false");
+    assert.equal(ui.requests.length, 2);
+    assert.equal(ui.requests[1].options.headers, undefined);
+    assert.equal(ui.status.textContent.includes("unavailable"), false);
+  });
+
+  test(`${page}: API failures and malformed data never pretend to be zero votes`, async () => {
+    for (const response of [{ ok: false, status: 500 }, ok({ error: "bad response" })]) {
+      const ui = run({ aggregate: () => Promise.resolve(response) });
+      await settle();
+      assert.equal(ui.count.textContent, "Unavailable");
+    }
+  });
+
+  test(`${page}: delayed OAuth hydration restores the caller's vote`, async () => {
+    const ui = run({ token: null, aggregate: (options) => Promise.resolve(ok({ votes: { timer: 3 }, voted: options.headers ? { timer: true } : {} })) });
+    await settle();
+    ui.setToken("fresh-session");
+    ui.windowHandlers["fas:auth-ready"]();
+    await settle();
+    assert.equal(ui.button.attributes["aria-pressed"], "true");
+    click(ui);
+    assert.equal(ui.requests.at(-1).options.method, "DELETE");
+    ui.resolveMutations.shift()(ok({ voted: false, count: 2 }));
+    await settle();
+    assert.equal(ui.count.textContent, "2");
+  });
+
+  test(`${page}: expired vote saves restart sign-in instead of silently failing`, async () => {
+    const ui = run();
+    await settle();
+    click(ui);
+    ui.resolveMutations.shift()({ ok: false, status: 401 });
+    await settle();
+    const target = new URL(ui.context.window.location.href);
+    assert.equal(target.pathname, "/v1/auth/github/start");
+    assert.equal(target.searchParams.get("app_id"), "store");
+    assert.equal(ui.count.textContent, "3");
+    assert.equal(ui.context.localStorage.getItem("fas:session"), null);
+  });
+
+  test(`${page}: failed and rate-limited votes roll back with visible feedback`, async () => {
+    for (const responseStatus of [500, 429]) {
+      const ui = run();
+      await settle();
+      click(ui);
+      ui.resolveMutations.shift()({ ok: false, status: responseStatus });
+      await settle();
+      assert.equal(ui.count.textContent, "3");
+      assert.equal(ui.button.attributes["aria-pressed"], "false");
+      assert.match(ui.status.textContent, responseStatus === 429 ? /wait a minute/ : /Could not save/);
+      assert.equal(ui.button.disabled, false);
+    }
+  });
+}
+
+test("storefront: a slow initial count response cannot overwrite a saved vote", async () => {
+  let resolveAggregate;
+  const ui = runStorefrontVotes({ aggregate: () => new Promise(resolve => { resolveAggregate = resolve; }) });
+  click(ui);
+  ui.resolveMutations.shift()(ok({ voted: true, count: 4 }));
+  await settle();
+  resolveAggregate(ok({ votes: { timer: 3 }, voted: {} }));
+  await settle();
+  assert.equal(ui.count.textContent, "4");
+  assert.equal(ui.button.attributes["aria-pressed"], "true");
+});
 
 test("storefront hydrates an existing authenticated vote after reload", async () => {
   const ui = runStorefrontVotes({ response: { votes: { timer: 3 }, voted: { timer: true } } });

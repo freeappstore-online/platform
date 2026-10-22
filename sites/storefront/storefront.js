@@ -9,6 +9,14 @@
  * Vendored — each store ships its own copy. Don't depend across stores.
  */
 (function () {
+  function voteStatus(message) {
+    var status = document.getElementById('vote-status');
+    if (status) {
+      status.textContent = message;
+      status.hidden = !message;
+    }
+  }
+
   function updateAppsCount(shown) {
     var count = document.getElementById('apps-count');
     var grid = document.getElementById('apps-grid');
@@ -143,14 +151,19 @@
     var voteMutations = window.__fasVoteMutations = {};
 
     // Populate data-votes on all cards and update visible vote-count spans.
-    function applyVoteCounts(votes) {
-      Object.keys(votes).forEach(function (appId) {
+    function applyVoteCounts(votes, mutationSnapshot) {
+      document.querySelectorAll('.vote-btn[data-app-id]').forEach(function (btn) {
+        var appId = btn.dataset.appId;
+        if (voteMutations[appId] !== mutationSnapshot[appId]) return;
         var count = votes[appId] || 0;
-        var card = document.querySelector('.app-card[data-id="' + CSS.escape(appId) + '"]');
+        var card = btn.closest('.app-card');
         if (!card) return;
         card.dataset.votes = String(count);
-        var span = card.querySelector('.vote-btn .vote-count');
+        var span = btn.querySelector('.vote-count');
         if (span) span.textContent = count > 0 ? String(count) : '0';
+        delete btn.dataset.voteUnavailable;
+        btn.removeAttribute('title');
+        if (span) span.removeAttribute('aria-label');
       });
     }
 
@@ -177,8 +190,9 @@
       } catch (e) { return null; }
     }
 
-    function showVoteCountsUnavailable() {
+    function showVoteCountsUnavailable(mutationSnapshot) {
       document.querySelectorAll('.vote-btn').forEach(function (btn) {
+        if (voteMutations[btn.dataset.appId] !== mutationSnapshot[btn.dataset.appId]) return;
         btn.dataset.voteUnavailable = '1';
         btn.title = 'Vote count unavailable. You can still vote.';
         var span = btn.querySelector('.vote-count');
@@ -189,15 +203,25 @@
       });
     }
 
-    // Fetch aggregate votes once on page load. Resilient — failures leave
-    // cards at count 0 and the sort still works (all tied at 0).
-    var authToken = getToken();
-    var mutationSnapshot = Object.assign({}, voteMutations);
-    fetch(API + '/v1/store/votes', authToken ? { headers: { Authorization: 'Bearer ' + authToken } } : {})
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (data) {
-        if (data && data.votes && typeof data.votes === 'object') {
-          applyVoteCounts(data.votes);
+    var requestVersion = 0;
+    var lastToken;
+    function loadVoteCounts() {
+      var authToken = getToken();
+      lastToken = authToken;
+      var version = ++requestVersion;
+      var mutationSnapshot = Object.assign({}, voteMutations);
+      fetch(API + '/v1/store/votes', authToken ? { headers: { Authorization: 'Bearer ' + authToken } } : {})
+        .then(function (r) {
+          // Public counts must survive a stale session. Keep the API's private
+          // caller-state endpoint strict; retry only the public read anonymously.
+          if (r.status === 401 && authToken) return fetch(API + '/v1/store/votes');
+          return r;
+        })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (data) {
+          if (version !== requestVersion) return;
+          if (!data || !data.votes || typeof data.votes !== 'object') throw new Error('Invalid vote response');
+          applyVoteCounts(data.votes, mutationSnapshot);
           applyVoteStates(data.voted, mutationSnapshot);
           // If the current sort is 'popular', re-apply so counts are reflected.
           if (typeof window.__fasActiveSort === 'function' && window.__fasActiveSort() === 'popular') {
@@ -208,9 +232,16 @@
               if (btn) btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             }
           }
-        }
-      })
-      .catch(showVoteCountsUnavailable);
+        })
+        .catch(function () {
+          if (version === requestVersion) showVoteCountsUnavailable(mutationSnapshot);
+        });
+    }
+    loadVoteCounts();
+    // OAuth callback validation finishes asynchronously in auth.js.
+    if (typeof window.addEventListener === 'function') window.addEventListener('fas:auth-ready', function () {
+      if (getToken() !== lastToken) loadVoteCounts();
+    });
   })();
 
   // ---------- Vote button click handler ----------
@@ -285,6 +316,7 @@
       btn.setAttribute('aria-pressed', alreadyVoted ? 'false' : 'true');
       btn.classList.toggle('voted', !alreadyVoted);
       btn.disabled = true;
+      voteStatus('Saving vote…');
 
       fetch(API + '/v1/store/apps/' + encodeURIComponent(appId) + '/vote', {
         method: method,
@@ -306,13 +338,25 @@
           }
           btn.setAttribute('aria-pressed', data.voted ? 'true' : 'false');
           btn.classList.toggle('voted', !!data.voted);
+          voteStatus(data.voted ? 'Vote recorded.' : 'Vote removed.');
         })
-        .catch(function () {
+        .catch(function (status) {
           // Roll back optimistic update on error.
           if (countSpan && !countUnavailable) countSpan.textContent = String(current);
           if (!countUnavailable) btn.closest('.app-card').dataset.votes = String(current);
           btn.setAttribute('aria-pressed', alreadyVoted ? 'true' : 'false');
           btn.classList.toggle('voted', alreadyVoted);
+          if (status === 401) {
+            // Do not leave the rejected cached session hiding the OAuth
+            // callback on return. Never clear a newer session from another tab.
+            if (getToken() === token) {
+              try { localStorage.removeItem('fas:session'); } catch (e) {}
+            }
+            voteStatus('Please sign in again to vote.');
+            triggerSignIn();
+          } else {
+            voteStatus(status === 429 ? 'Too many votes at once. Please wait a minute and try again.' : 'Could not save your vote. Please try again.');
+          }
         })
         .finally(function () {
           delete inFlight[appId];

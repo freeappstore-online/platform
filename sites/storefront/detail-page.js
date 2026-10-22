@@ -59,26 +59,45 @@
     voteBtn.classList.toggle("voted", voted);
   }
 
-  var hydrationToken = token();
-  fetch(API + "/v1/store/votes", hydrationToken ? { headers: { Authorization: "Bearer " + hydrationToken } } : {})
-    .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-    .then(function (data) {
-      if (!data || !data.votes || typeof data.votes !== "object") return Promise.reject("invalid vote response");
-      setVoteState(!!(data.voted && data.voted[APP_ID] === true), typeof data.votes[APP_ID] === "number" ? data.votes[APP_ID] : 0);
-      voteBtn.disabled = false;
-      statusEl.textContent = "";
-    })
-    .catch(function () {
-      setVoteState(false, null);
-      voteBtn.disabled = false;
-      statusEl.textContent = "Vote count unavailable. You can still vote.";
-    });
+  var requestVersion = 0;
+  var lastToken;
+  function loadVotes() {
+    var hydrationToken = token();
+    lastToken = hydrationToken;
+    var version = ++requestVersion;
+    fetch(API + "/v1/store/votes", hydrationToken ? { headers: { Authorization: "Bearer " + hydrationToken } } : {})
+      .then(function (r) {
+        if (r.status === 401 && hydrationToken) return fetch(API + "/v1/store/votes");
+        return r;
+      })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data) {
+        if (version !== requestVersion) return;
+        if (!data || !data.votes || typeof data.votes !== "object") return Promise.reject("invalid vote response");
+        setVoteState(!!(data.voted && data.voted[APP_ID] === true), typeof data.votes[APP_ID] === "number" ? data.votes[APP_ID] : 0);
+        voteBtn.disabled = false;
+        statusEl.textContent = "";
+      })
+      .catch(function () {
+        if (version !== requestVersion) return;
+        setVoteState(false, null);
+        voteBtn.disabled = false;
+        statusEl.textContent = "Vote count unavailable. You can still vote.";
+      });
+  }
+  loadVotes();
+  if (typeof window.addEventListener === "function") window.addEventListener("fas:auth-ready", function () {
+    if (token() !== lastToken) loadVotes();
+  });
 
   voteBtn.addEventListener("click", function () {
+    if (voteBtn.disabled) return;
     var authToken = token();
     if (!authToken) return triggerSignIn();
 
     var previousVoted = voted;
+    // Ignore a pending refresh once this user has started a newer mutation.
+    requestVersion++;
     var previousCount = count;
     var nextVoted = !previousVoted;
     var optimisticCount = previousCount === null ? null : Math.max(0, previousCount + (nextVoted ? 1 : -1));
@@ -95,9 +114,17 @@
         setVoteState(!!data.voted, typeof data.count === "number" ? data.count : optimisticCount);
         statusEl.textContent = data.voted ? "Vote recorded." : "Vote removed.";
       })
-      .catch(function () {
+      .catch(function (status) {
         setVoteState(previousVoted, previousCount);
-        statusEl.textContent = "Could not save your vote. Please try again.";
+        if (status === 401) {
+          if (token() === authToken) {
+            try { localStorage.removeItem("fas:session"); } catch (e) {}
+          }
+          statusEl.textContent = "Please sign in again to vote.";
+          triggerSignIn();
+        } else {
+          statusEl.textContent = status === 429 ? "Too many votes at once. Please wait a minute and try again." : "Could not save your vote. Please try again.";
+        }
       })
       .finally(function () { voteBtn.disabled = false; });
   });

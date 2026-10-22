@@ -177,7 +177,7 @@ test("creator analytics list requests one batch summary instead of per-app stats
 });
 
 test("unavailable vote and live analytics data is visibly reported", () => {
-  assert.match(storefrontSource, /function showVoteCountsUnavailable\(\)/, "aggregate vote failure needs a visible handler");
+  assert.match(storefrontSource, /function showVoteCountsUnavailable\(/, "aggregate vote failure needs a visible handler");
   assert.match(storefrontSource, /Vote count unavailable\. You can still vote\./, "vote failure should not masquerade as zero");
   assert.match(analyticsSource, /Live analytics unavailable\./, "live analytics failure should be visible");
 });
