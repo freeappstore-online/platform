@@ -165,7 +165,7 @@ const SECTIONS = {
 \`\`\`tsx
 import { initApp } from '@freeappstore/sdk'
 const fas = initApp({ appId: 'my-app' })
-// fas.auth.signIn()  — GitHub OAuth
+// fas.auth.signIn()  — GitHub by default; google, apple, email when configured
 // fas.auth.signOut()
 // fas.auth.token     — current session token (string | null)
 // fas.auth.user      — current user ({ id, login, avatarUrl } | null)
@@ -179,7 +179,7 @@ const keys = await fas.kv.list()                // all keys
 const filtered = await fas.kv.list({ prefix: 'draft:' })
 const many = await fas.kv.getMany(['k1', 'k2']) // batch read
 \`\`\`
-Limits: 1MB/user, 100 active users/day, 1k ops/min.`,
+Limits: 1 MiB/user/app, 100 keys/user/app, 64 KiB/value. The KV routes do not enforce separate daily-active-user or per-minute KV caps.`,
   counters: `## Shared Counters
 \`\`\`tsx
 const count = await fas.counters.get('likes')        // public, no auth
@@ -192,12 +192,13 @@ const filtered = await fas.counters.list({ prefix: 'vote:' })
 Not user-scoped. Atomic. Use for votes, views, leaderboards.`,
   collections: `## Collections (Document Database)
 \`\`\`tsx
-const doc = await fas.collections.create('posts', { title: 'Hello', body: '...' })
-const post = await fas.collections.get('posts', doc.id)
-const all = await fas.collections.list('posts')
-const mine = await fas.collections.list('posts', { mine: true })
-await fas.collections.update('posts', doc.id, { title: 'Updated' })
-await fas.collections.delete('posts', doc.id)
+const posts = fas.collections.collection('posts')
+const doc = await posts.create({ title: 'Hello', body: '...' })
+const post = await posts.get(doc.id)
+const all = await posts.query()
+const mine = await posts.query({ owner: fas.auth.user?.id })
+await posts.update(doc.id, { title: 'Updated' })
+await posts.delete(doc.id)
 \`\`\`
 Firestore-style. Public queryable JSON documents with ownership.`,
   rooms: `## Real-time Rooms (WebSocket)
@@ -205,11 +206,11 @@ Firestore-style. Public queryable JSON documents with ownership.`,
 const room = fas.rooms.join('my-room')
 room.onMessage((msg) => console.log(msg.from.login, msg.data))
 room.onPeers((peers) => console.log('peers:', peers))
-room.onState((state) => console.log('connection:', state))
+room.onConnectionState((state) => console.log('connection:', state))
 room.send({ type: 'move', x: 10, y: 20 })
-room.leave()
+room.close()
 \`\`\`
-Limits: 5 rooms x 25 peers x 50 user-hours/day per app.`,
+Limits: 32 peers/room, 64 active rooms/app, 100 messages/second/peer, 4 KiB/message. New rooms return 429 at capacity; messages are ephemeral.`,
   proxy: `## Secret-injecting API Proxy
 \`\`\`tsx
 const weather = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London')

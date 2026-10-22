@@ -16,8 +16,8 @@ Go to [freeappstore.online/app/build](https://freeappstore.online/app/build), de
 
 ## What `fas publish` does
 
-1. **Compliance gate** -- runs the same checks as `fas check`. Hard failures abort.
-2. **Auth check** -- confirms a valid session token (re-login if expired).
+1. **Auth check** -- confirms a cached session and rejects expired sessions (re-login if needed).
+2. **Compliance gate** -- runs the same checks as `fas check`. Hard failures abort.
 3. **Provision** -- POSTs to the platform API, which calls the admin Worker via service binding. Admin creates:
    - An empty GitHub repo in the `freeappstore-online` org
    - A D1 hosting route (subdomain -> R2 prefix)
@@ -26,7 +26,7 @@ Go to [freeappstore.online/app/build](https://freeappstore.online/app/build), de
 5. **Ownership** -- records the app in the platform DB.
 6. **Output** -- prints the live URL, repo URL, storefront URL, and `git remote add` + `git push` commands.
 
-If the API is unavailable (503), publish falls back to opening a prefilled GitHub Issue form. Use `--issue` to force this path.
+If provisioning is unavailable, the command reports the error and exits. Nothing is queued and no submission form opens. Retry after checking the platform status; `--issue` is not a supported flag.
 
 ## Deploy flow
 
@@ -37,11 +37,11 @@ After the initial publish, every `git push` to `main` triggers auto-deploy:
 3. Uploads `web/dist/` to the `fas-apps` R2 bucket under `apps/<app-id>/`
 4. The host Worker at `*.freeappstore.online` serves from R2
 
-Deploys take ~30 seconds.
+The URL starts serving your code after a successful first push and deploy. Runtime depends on build time and the Actions queue; use `fas logs <id>` or the console to check it.
 
 ## Storefront listing
 
-Your app appears on [freeappstore.online](https://freeappstore.online) with:
+The homepage lists app names, categories, permissions, and quality badges. Selecting an app on desktop opens a live preview. Its detail page adds:
 
 - Phone-frame preview
 - App name, category, and one-liner

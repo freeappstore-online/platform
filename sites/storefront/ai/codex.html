@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Codex — FreeAppStore</title>
   <meta name="description" content="Build a free app on FreeAppStore with Codex." />
   <meta property="og:title" content="Codex — FreeAppStore" />
@@ -33,7 +33,7 @@
     </div>
 
     <h1>Codex on FreeAppStore</h1>
-    <p class="ai-guide-lead">OpenAI's CLI agent. Give it the platform guide and a description — it builds in a sandbox.</p>
+    <p class="ai-guide-lead">OpenAI's coding agent. Give it the platform guide and an app description.</p>
 
     <div class="ai-guide-callout">
       <strong>One command:</strong>
@@ -66,7 +66,7 @@
     <p>codex "Read https://freeappstore.online/skills.md then scaffold and build a habit tracker for FreeAppStore"</p>
 
     <h2 class="ai-guide-heading">Give it context</h2>
-    <div class="ai-guide-context">Codex reads the URL inline. For repeat use, add to your <code>codex.md</code>:
+    <div class="ai-guide-context">Ask Codex to read the platform guide; provide its text if network access is unavailable. For repeat use, add to your <code>AGENTS.md</code>:
 
 <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
   <span class="ai-guide-command-text">Read https://freeappstore.online/skills.md for FreeAppStore platform conventions.</span>
@@ -93,26 +93,26 @@
       <li>
         <strong>Future updates</strong>
         <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
-  <span class="ai-guide-command-text">git push origin main</span>
+  <span class="ai-guide-command-text">git push upstream main</span>
   <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
 </button>
-        <p>Auto-deploys in ~30 seconds.</p>
+        <p>First add the remote printed by <code>fas publish</code>. Push your app code and wait for its deploy workflow to succeed.</p>
       </li>
     </ol>
 
     <h2 class="ai-guide-heading">Add user accounts &amp; cloud storage</h2>
-    <p>Standalone apps use localStorage. If you need GitHub sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
+    <p>Standalone apps use localStorage. If you need platform sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
     <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
   <span class="ai-guide-command-text">cd web &amp;&amp; pnpm add @freeappstore/sdk</span>
   <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
 </button>
     <ul>
-      <li><strong>Auth</strong> — GitHub OAuth. <code>fas.auth.signIn()</code></li>
+      <li><strong>Auth</strong> — GitHub, Google, Apple, or email (when configured). <code>fas.auth.signIn()</code></li>
       <li><strong>KV</strong> — Per-user storage. <code>fas.kv.set('key', value)</code></li>
       <li><strong>Rooms</strong> — Realtime WebSocket. <code>fas.rooms.join('lobby')</code></li>
       <li><strong>Proxy</strong> — Server-side API keys. <code>fas.proxy.fetch('api.example.com/data')</code></li>
     </ul>
-    <p><a href="https://github.com/freeappstore-online/platform/tree/main/packages/sdk#readme">SDK docs</a></p>
+    <p><a href="https://docs.freeappstore.online/sdk/">SDK docs</a></p>
 
     <h2 class="ai-guide-heading">MCP Server (optional)</h2>
     <p>For deeper AI integration, connect the FreeAppStore MCP server. Your agent gets tools to check deploys, look up SDK docs, and list apps.</p>
@@ -125,7 +125,7 @@
     <h2 class="ai-guide-heading">Tips</h2>
     <ul>
       <li>After Codex finishes, run <code>fas check && fas publish</code> from the output directory.</li>
-      <li>Codex builds in a sandbox — review the output before publishing.</li>
+      <li>Review the generated app and run compliance checks before publishing. <a href="https://learn.chatgpt.com/docs/agent-configuration/agents-md">Official Codex project-instructions reference</a>.</li>
     </ul>
 
     <p class="ai-guide-links"><a href="https://github.com/freeappstore-online/platform">Platform source</a> · <a href="https://freeappstore.online/skills.md">Full platform guide</a></p>

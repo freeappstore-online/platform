@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Privacy Policy — FreeAppStore</title>
-  <meta name="description" content="FreeAppStore privacy policy. We collect no data, use no cookies, and perform no tracking." />
+  <meta name="description" content="How FreeAppStore handles accounts, app data, permissions, analytics, and third-party services." />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Privacy Policy — FreeAppStore" />
-  <meta property="og:description" content="FreeAppStore privacy policy. We collect no data, use no cookies, and perform no tracking." />
+  <meta property="og:description" content="How FreeAppStore handles accounts, app data, permissions, analytics, and third-party services." />
   <meta property="og:url" content="https://freeappstore.online/privacy" />
   <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
   <meta name="twitter:card" content="summary" />
@@ -28,56 +28,32 @@
   <main class="container">
     <div class="page-header">
       <h1>Privacy Policy</h1>
-      <p>We believe privacy is a right, not a feature. Here is exactly what we collect: nothing.</p>
+      <p>What stays on your device, what platform features store, and what you control.</p>
     </div>
-
     <div class="page-content">
-      <p class="legal-date">Last updated: May 4, 2026</p>
-
-      <h2>Overview</h2>
-      <p>FreeAppStore and all applications hosted on the freeappstore.online domain are designed with a strict no-data-collection policy. We do not collect, store, process, or transmit any personal information, usage data, or behavioral data of any kind.</p>
-
-      <h2>Data Collection</h2>
-      <p>We collect <strong>no data whatsoever</strong>. Specifically:</p>
-      <ul>
-        <li>No personal information (name, email, phone number, etc.)</li>
-        <li>No usage analytics or behavioral tracking</li>
-        <li>No device fingerprinting</li>
-        <li>No IP address logging</li>
-        <li>No location data</li>
-        <li>No search history or browsing patterns</li>
-      </ul>
-
-      <h2>Cookies and Local Storage</h2>
-      <p>Our applications <strong>do not use cookies</strong> of any kind — no session cookies, no tracking cookies, no third-party cookies. Applications may use your browser's local storage (localStorage or IndexedDB) solely to save your in-app progress and preferences on your own device. This data never leaves your device and is never transmitted to any server.</p>
-
-      <h2>Third-Party Services</h2>
-      <p>We do not integrate with, embed, or load resources from any third-party analytics, advertising, or tracking services. There are no third-party scripts, pixels, beacons, or SDKs in our applications. Specifically:</p>
-      <ul>
-        <li>No Google Analytics or similar analytics platforms</li>
-        <li>No advertising networks or ad trackers</li>
-        <li>No social media tracking pixels</li>
-        <li>No customer data platforms</li>
-        <li>No A/B testing or experimentation platforms</li>
-      </ul>
-
-      <h2>Data Sharing</h2>
-      <p>Since we collect no data, we have no data to share. We do not sell, rent, trade, or otherwise disclose any information to third parties because no such information exists in our systems.</p>
-
-      <h2>Accounts</h2>
-      <p>FreeAppStore applications do not require user accounts. There is no registration, no login, and no authentication. You use the apps anonymously by default.</p>
-
-      <h2>Data Storage</h2>
-      <p>All application data (progress, preferences, saved content) is stored exclusively in your browser's local storage on your device. This data is under your complete control. You can clear it at any time through your browser settings. We have no access to this data and no ability to retrieve it.</p>
-
-      <h2>Children's Privacy</h2>
-      <p>Because we collect no data from any user, we inherently comply with all children's data protection requirements. Our apps are safe for users of all ages.</p>
-
-      <h2>Changes to This Policy</h2>
-      <p>If we ever change this policy, it will only become more protective of your privacy, never less. Our commitment to zero data collection is foundational to this platform.</p>
-
-      <h2>Contact</h2>
-      <p>If you have questions about this privacy policy, you can reach us through our <a href="https://github.com/freeappstore-online">GitHub organization</a>.</p>
+      <p class="legal-date">Last updated: October 22, 2026</p>
+      <h2>Using apps without an account</h2>
+      <p>Standalone apps can save progress in localStorage or IndexedDB on your device. Clearing browser storage removes that local copy. Features that fetch information, sync data, or call external services require network requests; an app being free does not mean all of its data stays on your device.</p>
+      <h2>Accounts and connected apps</h2>
+      <p>When you sign in through GitHub, Google, Apple, or an email magic link, the platform stores an account identifier and profile information such as your login, name, avatar, and email when provided. Sign-in providers process their own authentication requests. Some features request a date of birth for an age check; if supplied, it becomes part of your platform account.</p>
+      <p>Connected apps can save per-user data on the platform, manage friendships and roles, send email, and use realtime rooms. Per-user key-value storage is scoped to your account and app. Collections are public, queryable data: do not put private information into a public collection. Realtime room messages are relayed to the room's participants and are not persisted as message history by the rooms service.</p>
+      <h2>Browser storage and cookies</h2>
+      <p>The platform uses localStorage for session tokens and preferences, and apps may use local storage for their own content. We do not use advertising cookies on the storefront. Authentication providers and third-party services may use their own cookies or browser storage; their policies also apply when you use them.</p>
+      <h2>Permissions and notifications</h2>
+      <p>Apps may ask your browser for camera, microphone, location, notifications, or device access. Each listing explains the permissions detected or declared for that app. A permission allows the app to use that feature; it does not by itself tell you whether the app transmits the resulting data.</p>
+      <p>If you subscribe to push reminders, the platform stores the browser subscription endpoint, encryption key material, and your reminder schedule. Reminders use your browser's push service. The platform sends an empty push payload; the app's service worker supplies the notification text. You can unsubscribe or cancel reminders in the app.</p>
+      <h2>API keys and AI builders</h2>
+      <p>API keys saved to the platform vault or an app's secret store are encrypted at rest. The platform decrypts and injects them when making the requested upstream call. The app does not receive the plaintext key from the vault. The upstream provider receives the request and applies its own data policy and usage charges.</p>
+      <p>VibeCode sends your prompts, relevant source code, and build context to the selected AI provider to build or update your app. Published app repositories and their source code are public on GitHub. Do not put secrets or private personal data in app source or build prompts.</p>
+      <h2>Analytics, diagnostics, and infrastructure</h2>
+      <p>The storefront can use Cloudflare Web Analytics when its beacon is configured. App analytics settings can also load Cloudflare analytics or creator-configured third-party tags. What those services receive depends on the app's configuration. The platform's compliance checks reject known tracking SDKs in submitted source, but that is not a promise that every network request or configured integration collects no data.</p>
+      <p>The platform processes operational information needed to serve requests, investigate errors, measure app quality, and prevent abuse. SDK error logs can be uploaded to the platform and are pruned after seven days by the scheduled cleanup. Hosting, authentication, fonts, avatars, email, analytics, AI, and other requested integrations involve service providers such as Cloudflare, GitHub, and Google Fonts. Request metadata can be processed by those providers.</p>
+      <h2>Managing and deleting data</h2>
+      <p>Use an app's controls to manage its content and permissions. Signing out clears the local session; it does not delete the server account. The SDK profile menu supports account deletion, which removes the account's keys, per-user storage, owned documents, friendships, roles, logs, push subscriptions, and reminder schedules from the active database. Published apps and shared counters are retained. Clearing browser storage only removes local data, and copies may remain in operational backups.</p>
+      <h2>Children and age-restricted features</h2>
+      <p>The platform's date-of-birth flow rejects ages under 13. Individual apps can have stricter age requirements. We do not claim that every app or feature is suitable for every age.</p>
+      <h2>Changes and contact</h2>
+      <p>This page describes the platform's current features and will be updated as they change. For questions, use the contact options on our <a href="https://github.com/freeappstore-online">GitHub organization</a>. Do not include secrets or private personal information in public issues.</p>
     </div>
   </main>
   {{FOOTER}}

@@ -106,7 +106,7 @@ Limits (server-enforced): 32 peers per room, 100 msgs/sec per peer, 4KB per mess
 Simple document store for apps that need public, queryable data. No SQL required — just JSON in, JSON out.
 
 ```ts
-const posts = fas.db.collection('posts');
+const posts = fas.collections.collection('posts');
 
 // Create (auth required, you become the owner)
 const post = await posts.create({ title: 'Hello', body: '...' });

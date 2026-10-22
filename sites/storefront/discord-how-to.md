@@ -51,7 +51,7 @@ Scaffold: `fas init my-app && cd my-app && pnpm install`. Open in Zed, start the
 Go to [chatgpt.com](https://chatgpt.com), paste the contents of `https://freeappstore.online/skills.md` into the chat, then describe your app. Copy the generated code into your scaffold (`fas init my-app`), run `fas check && fas publish`. Guide: <https://freeappstore.online/ai/chatgpt-web>
 
 ## VibeCode (no-install, browser)
-No CLI needed. Go to [console.freeappstore.online/create](https://console.freeappstore.online/create), sign in with GitHub, describe your app, and the AI agent builds and deploys it for you.
+No CLI needed. Go to [console.freeappstore.online/create](https://freeappstore.online/app/build), sign in with GitHub, describe your app, and the AI agent builds and deploys it for you.
 
 ---
 

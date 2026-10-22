@@ -7,7 +7,7 @@ name: Publish Platform Docs
 on:
   push:
     branches: [main]
-    paths: ['docs/**', '.github/workflows/publish-docs.yml']
+    paths: ['docs/**', 'sites/storefront/favicon.svg', '.github/workflows/publish-docs.yml']
   workflow_dispatch:
 
 permissions:
@@ -36,22 +36,20 @@ jobs:
           rm -f zensical-src/FRIENDS-SPEC.md zensical-src/INTEGRATIONS-STRATEGY.md
           rm -f zensical-src/VCQA-INTEGRATION-SPEC.md zensical-src/LIMITS.md
           rm -rf zensical-src/app-research
-          cat > zensical-src/assets/logo.svg <<'SVG'
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#10b981"/></linearGradient></defs><rect width="512" height="512" rx="96" fill="url(#bg)"/><text x="256" y="346" font-family="Manrope, -apple-system, BlinkMacSystemFont, sans-serif" font-weight="800" font-size="300" fill="white" text-anchor="middle">F</text></svg>
-          SVG
+          cp sites/storefront/favicon.svg zensical-src/assets/logo.svg
           cp zensical-src/assets/logo.svg zensical-src/assets/favicon.svg
           cat > zensical-src/stylesheets/extra.css <<'CSS'
           :root > * {
-            --md-primary-fg-color: #10b981;
-            --md-primary-fg-color--light: #34d399;
-            --md-primary-fg-color--dark: #059669;
-            --md-accent-fg-color: #10b981;
+            --md-primary-fg-color: #2563eb;
+            --md-primary-fg-color--light: #60a5fa;
+            --md-primary-fg-color--dark: #1d4ed8;
+            --md-accent-fg-color: #2563eb;
           }
           [data-md-color-scheme="slate"] {
-            --md-primary-fg-color: #34d399;
-            --md-primary-fg-color--light: #6ee7b7;
-            --md-primary-fg-color--dark: #10b981;
-            --md-accent-fg-color: #34d399;
+            --md-primary-fg-color: #60a5fa;
+            --md-primary-fg-color--light: #93c5fd;
+            --md-primary-fg-color--dark: #2563eb;
+            --md-accent-fg-color: #60a5fa;
           }
           .md-header__title { font-weight: 700; letter-spacing: -0.01em; }
           CSS

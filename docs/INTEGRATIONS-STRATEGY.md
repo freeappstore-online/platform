@@ -84,5 +84,5 @@ Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier,
 ## Implementation priority for FAS
 
 1. ~~**Transactional email**~~ — **Shipped.** `fas.email.send()` live, 100/day per app.
-2. ~~**Outbound webhooks**~~ — **Shipped.** `fas.webhooks` CRUD + HMAC-SHA256, 5 per app, 8 events.
+2. ~~**Outbound webhooks**~~ — **Shipped.** `fas.webhooks` CRUD + HMAC-SHA256, 5 per app, 12 events.
 3. **Full-text search** -- D1 FTS5 on the shared database. Low effort, useful for apps with collections.

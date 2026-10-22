@@ -1,3 +1,5 @@
+> Historical design specification. For implemented behavior and current quotas, use [Proxy & Keys](proxy-and-keys.md) and [Platform Limits](platform-limits.md); proposals and comparison figures below are not the live service contract.
+
 # App Secret Proxy
 
 Lets a free FAS app safely call third-party APIs that need an API key (OpenWeather, Last.fm, CoinGecko, etc.) without exposing the key to the browser.

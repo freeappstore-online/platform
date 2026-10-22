@@ -2,7 +2,7 @@
 
 ## Stack
 
-- **TypeScript 5.7**, Node 22, pnpm workspaces
+- **TypeScript** (versions are declared per package), Node 22, pnpm workspaces
 - **Backend:** Cloudflare Workers + D1 + Durable Objects + R2
 - **Auth:** GitHub, Google, Apple, Email (magic link) OAuth. HMAC-signed sessions, 30-day TTL
 - **Realtime:** one Durable Object per room with WebSocket fan-out
@@ -33,6 +33,7 @@ fas/platform/
 ├── workers/agent        VibeCode AI app builder
 ├── workers/host         R2 host worker — *.freeappstore.online
 ├── workers/mcp          MCP server (12 tools) — mcp.freeappstore.online
+├── sites/storefront     Static storefront and public guides — freeappstore.online
 ├── sites/console        Creator portal + VibeCode builder (/app/build) — freeappstore.online/app/ (proxied)
 ├── brand/               Brand assets + BRAND.md / SKILLS.md
 └── ops/                 Ops docs (DR, infra, submission) + scripts
@@ -61,12 +62,11 @@ fas/platform/
 All platform tooling (admin, agent, host, mcp, console, create, brand, ops) lives
 **in this monorepo** since the 2026-06-30 consolidation — those former standalone
 repos are archived. `publisher` was decommissioned (its provisioning is redundant
-with `backend /v1/publish`). Only these repos remain standalone:
+with `backend /v1/publish`). The storefront also lives in `sites/storefront` in this monorepo. These repositories remain separate:
 
 | Repo | Purpose |
 |------|---------|
-| `freeappstore/` | Static HTML storefront (own deploy) |
-| `submissions/` | Public issue-intake repo (referenced by CLI + app READMEs) |
+| `submissions/` | Legacy public intake; the current CLI uses self-service provisioning |
 | `template-connected/` | Clone-to-scaffold seed for `fas init` (must stay standalone) |
 | `template-standalone/` | Clone-to-scaffold seed for `fas init` (must stay standalone) |
 
@@ -109,12 +109,13 @@ All data lives in a single D1 database (`fas`):
 - `health_checks` -- uptime check results
 - `audit_results` -- compliance audit results
 - `agent_sessions` -- VibeCode sessions, messages, deploy state, deploy logs, and errors
+- `push_subscriptions`, `push_schedules` -- user devices and scheduled reminders
 
 ## Cron jobs
 
 | Schedule | Task |
 |----------|------|
-| `*/15 * * * *` | Uptime checks for all apps |
+| `*/15 * * * *` | Uptime checks and scheduled push reminders |
 | `0 3 * * *` | Log prune (>7 days) |
 | `0 4 * * *` | D1 -> R2 backup |
 | `0 6 * * SUN` | Weekly compliance audit |

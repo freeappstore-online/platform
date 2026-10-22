@@ -372,8 +372,8 @@ function PublishView({ getToken }: { getToken: () => string | null }) {
           </p>
           <pre className="rounded-lg bg-[var(--panel)] border border-[var(--line)] p-3 text-xs font-mono text-[var(--ink)] overflow-x-auto mb-3">
 {`npm i -g @freeappstore/cli
-fas create my-app
-cd my-app && pnpm dev`}
+fas init my-app
+cd my-app && pnpm install && pnpm dev`}
           </pre>
           <a
             href="https://freeappstore.online/get-started"

@@ -93,15 +93,16 @@ People join as creators to build apps/games. The flow:
 |---|---|---|
 | **Domain** | freeappstore.online | freegamestore.online |
 | **GitHub org** | freeappstore-online | freegamestore-online |
-| **Store repo** | freeappstore-online/freeappstore | freegamestore-online/freegamestore |
-| **Registry file** | `registry.json` in store repo | `registry.json` in store repo |
+| **Store repo** | freeappstore-online/platform (`sites/storefront`) | freegamestore-online/freegamestore |
+| **Registry file** | `sites/storefront/registry.json` in platform repo | `registry.json` in store repo |
 | **Templates** | template-standalone | template-game-canvas, template-game-cards, template-game-grid, template-game-3d |
-| **SDK (connected apps)** | `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice) | — || **Accent color** | Blue (#2563eb) | Emerald (#10b981) |
+| **SDK (connected apps)** | `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice) | — |
+| **Accent color** | Blue (#2563eb) | Emerald (#10b981) |
 | **Logo** | Free **Apps** | Free **Games** |
 | **Admin** | admin.freeappstore.online | admin.freegamestore.online |
 | **Publish** | freeappstore.online/app/publish | publish.freegamestore.online |
 | **Local path** | ~/dev/fas/ | ~/dev/fgs/ |
-| **Storefront repo** | ~/dev/fas/freeappstore/ | ~/dev/fgs/freegamestore/ |
+| **Storefront repo** | ~/dev/stores/fas/platform/sites/storefront/ | ~/dev/fgs/freegamestore/ |
 
 ## Workspace Layout
 
@@ -273,7 +274,7 @@ const filtered = await fas.kv.list({ prefix: 'draft:' })
 const batch = await fas.kv.getMany(['k1', 'k2', 'k3'])
 ```
 
-Limits: 1MB total per user, 100 keys max, 64KB per value, 128 char max key length. 100 active users/day, 1k ops/min per app.
+Limits: 1MB total per user, 100 keys max, 64KB per value, No separate daily-active-user or per-minute KV quota is enforced by the KV routes.
 
 ### Shared Counters
 
@@ -327,7 +328,7 @@ room.onPeers((peers) => {
   console.log('connected:', peers.map(p => p.login))
 })
 
-room.onState((state) => {
+room.onConnectionState((state) => {
   // 'connecting' | 'open' | 'closed' | 'error'
 })
 
@@ -335,7 +336,7 @@ room.send({ type: 'move', x: 10, y: 20 })
 room.close()
 ```
 
-Limits: 32 peers/room, 100 msg/sec/peer, 4KB max message, 64 active rooms/app, 24h idle eviction. Free tier: 5 rooms x 25 peers x 50 user-hours/day per app.
+Limits: 32 peers/room, 100 msg/sec/peer, 4KB max message, 64 active rooms/app, 24h idle eviction. New rooms return 429 at capacity; existing rooms continue. No separate 50-user-hours/day limit is implemented.
 
 ### Roles (App-level RBAC)
 
@@ -372,7 +373,7 @@ await fas.friends.list()                           // all accepted friends
 await fas.friends.list('pending_incoming')         // incoming requests
 await fas.friends.list('pending_outgoing')         // outgoing requests
 await fas.friends.request(userId)                  // send friend request
-await fas.friends.accept(userId)                   // accept request
+await fas.friends.respond(userId, 'accept')                   // accept request
 await fas.friends.remove(userId)                   // remove friend
 await fas.friends.search('username')               // search users
 
@@ -455,11 +456,11 @@ const res = await fas.proxy.fetch('api.openai.com/v1/chat/completions', {
 
 If the user has no key, the proxy returns `{ error: "no_key", provider: "openai" }`. Show `<KeyPrompt>` (see UI section).
 
-**Pick the provider your users most likely already have.** OpenAI is the most common. Google AI (Gemini) has the most generous free tier. OpenRouter is a power-user option that gives access to 100+ models with one key. Default to OpenAI unless you have a reason not to.
+**Let users choose a supported provider.** Check the provider's current model availability, pricing, and account requirements rather than promising a free tier or relying on a hardcoded model count.
 
 ### User API Key Vault
 
-Users store their own API keys (OpenAI, Anthropic, etc.) on the platform. Apps never see the plaintext keys. Keys are encrypted at rest (AES-256-GCM envelope encryption) and injected server-side when apps call `fas.proxy.fetch()`. One key works across all apps on the platform.
+Users store their own API keys (OpenAI, Anthropic, etc.) on the platform. Apps never see the plaintext keys. Keys are encrypted at rest (AES-256-GCM envelope encryption) and injected server-side when apps call `fas.proxy.fetch()`. One key works across apps; user-key proxy calls are capped at 1,000/day per user across all apps.
 
 ```tsx
 // Check if user has a key configured
@@ -477,7 +478,7 @@ Apps should use the `KeyPrompt` component (see UI section below) to show a promp
 
 ### Transactional Email
 
-Send email through the platform's Cloudflare Email Service integration. No email provider setup needed.
+Send email through the platform's Cloudflare Email Service integration. Apps use the platform sending service; it must be configured for delivery.
 
 ```tsx
 await fas.email.send('user@example.com', 'Welcome!', {
@@ -486,7 +487,7 @@ await fas.email.send('user@example.com', 'Welcome!', {
 })
 ```
 
-Subject is auto-prefixed with `[appId]`. Limit: 100 emails/day per app. Requires auth (user must be signed in).
+Subject is auto-prefixed with `[appId]`. Limits: 100 emails/day per app and 50/day per sender. Requires auth (user must be signed in).
 
 ### Push Reminders
 
@@ -531,45 +532,22 @@ VITE_FIREBASE_API_KEY=AIzaSy...
 **Production:**
 Set the same variables in your GitHub repo: Settings > Secrets and variables > Actions > Variables (not Secrets). The deploy.yml workflow passes them through at build time.
 
-## What FAS cannot do (use ProAppStore instead)
+## Free platform boundaries
 
-FreeAppStore is free forever with real features, but some things need the Pro tier. If your app needs any of these, build on **[ProAppStore](https://proappstore.online)** instead.
+FreeAppStore exposes the shared SDK services described here, not a dedicated server for each app.
 
-| Need | FAS (free) | PAS (pro, $9/mo) |
-|---|---|---|
-| **Server-side AI** | User brings own key via vault | Platform-managed Workers AI (included) |
-| **Real-time multiplayer** | Rooms: 32 peers, ephemeral | Server-authoritative DOs, persistent state |
-| **Custom domain** | `appname.freeappstore.online` only | `your-domain.com` via CF for SaaS |
-| **Scheduled tasks** | Not available | Cron Workers (digests, reminders, daily jobs) |
-| **Transactional email** | 100/day per app via `fas.email.send()` | Higher quota (included) |
-| **File storage** | Not available | R2 bucket per app (images, uploads, media) |
-| **Server-side compute** | Static + client-side only | Per-app Worker with D1 database |
-| **Monetization** | Free forever, no payments | Stripe integration, creator payouts |
-| **User storage** | 1 MB/user, 100 keys | 10 MB/user, no key cap |
-| **Source code** | MIT (open source required) | Proprietary allowed |
+- Static hosting and SDK services are free. There are no app payments or subscription gates.
+- User-owned API keys can incur third-party charges. User-key proxy calls are limited to 1,000/day per user across apps.
+- KV, public collections, counters, rooms, email, friendships, roles, and push reminders are supported with service-specific limits.
+- Scheduled user push reminders are supported; arbitrary app cron jobs and per-app server compute are not exposed.
+- Browser maps, local file pickers, IndexedDB, camera access, workers, and wasm are browser capabilities, not paid platform features.
+- There is no direct SQL API, hosted file-upload API, or custom-domain management API in this SDK.
+- The app-secret proxy accepts five secrets and five rules per app, with 10,000 app-secret requests/day. Both request and response bodies are capped at 100 KiB.
+- AI builds, email, sign-in, and push depend on configured platform/provider credentials. Handle configuration and permission errors.
 
-### Example: when to choose PAS over FAS
+[ProAppStore](https://proappstore.online) is a separate platform with its own SDK, pricing, and capabilities. Consult its current documentation before promising a paid feature, unlimited quota, automatic migration, or a corresponding Pro version of a FreeAppStore app.
 
-**AI writing app** -- FAS works if users bring their own OpenAI key (vault + proxy). But if you want to offer AI out of the box with zero setup, PAS includes Workers AI.
-
-**Multiplayer game** -- FAS rooms are ephemeral (chat, cursors, lightweight). For turn-based games (chess vs a remote opponent) or persistent worlds, PAS gives you server-authoritative Durable Objects.
-
-**SaaS with billing** -- FAS has no payments. PAS has Stripe subscriptions, license keys, and per-app creator payouts.
-
-**Business app with cron** -- FAS apps are static. If you need daily email digests, scheduled reports, or background processing, PAS has Cron Workers.
-
-**App with file uploads** -- FAS has no R2 storage. PAS gives each app its own R2 bucket for images, documents, and media.
-
-**App needing a custom domain** -- FAS is subdomain-only. PAS supports `your-domain.com` via Cloudflare for SaaS Custom Hostnames.
-
-### The upgrade path
-
-FAS and PAS use the same SDK pattern (`initApp`, auth, KV, proxy). Moving an app from FAS to PAS means:
-1. Change `@freeappstore/sdk` to `@proappstore/sdk` in `package.json`
-2. Update `appId` domain from `freeappstore.online` to `proappstore.online`
-3. Add PAS-only features (AI, cron, storage, payments)
-
-The core app code stays the same. Auth, KV, collections, counters, and proxy all work identically on both platforms.
+The maintained free limits are at https://docs.freeappstore.online/platform-limits/.
 
 ## App UI Components (`@freeappstore/sdk/ui` + `@freeappstore/sdk/hooks`)
 
@@ -970,7 +948,7 @@ npm i -g @freeappstore/cli
 | `fas init <id>` | Scaffold from template (`--template standalone\|connected\|game-canvas\|game-grid\|game-3d`) |
 | `fas check` | Run compliance checks (brand, bundle size, PWA, tracking, license) |
 | `fas screencheck` | Build + viewport test in real Chromium (portrait + landscape) |
-| `fas publish` | Provision repo + hosting + DNS + store listing. Flags: `--name`, `--category`, `--type`, `--oneliner`, `--demo`, `--yes`, `--skip-checks`, `--issue` |
+| `fas publish` | Provision repo + hosting + DNS + store listing. Flags: `--name`, `--category`, `--type`, `--oneliner`, `--demo`, `--yes`, `--skip-checks` |
 | `fas list` | List your published apps (`--json` for machine output) |
 | `fas doctor` | Health check: Node, git, pnpm, auth, API reachability |
 
@@ -1079,7 +1057,7 @@ Direct creators and users to the right place:
 
 | Need | Where |
 |------|-------|
-| **Developer questions** | [GitHub Discussions](https://github.com/freegamestore-online/freegamestore/discussions) (games) or [GitHub Discussions](https://github.com/freeappstore-online/freeappstore/discussions) (apps) |
+| **Developer questions** | [GitHub Discussions](https://github.com/freegamestore-online/freegamestore/discussions) (games) or [GitHub Discussions](https://github.com/freeappstore-online/platform (`sites/storefront`)/discussions) (apps) |
 | **Bug reports** | Open an issue on the game/app's GitHub repo |
 | **Feature ideas** | Discussions → Ideas category |
 | **Creator applications** | [Submissions repo](https://github.com/freeappstore-online/submissions/issues/new) |

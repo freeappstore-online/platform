@@ -45,11 +45,11 @@
       <div class="contrib-cards">
         <div class="contrib-card">
           <h3>Browse apps</h3>
-          <p>Explore the <a href="/">app catalog</a> and use what's already built. All apps are free, private, and work offline.</p>
+          <p>Explore the <a href="/">app catalog</a> and use what's already built. Apps are free to use; each app's listing and features explain its permissions, sign-in, and connectivity needs.</p>
         </div>
         <div class="contrib-card">
           <h3>Fix bugs</h3>
-          <p>Found a bug? Every app has a public repo on <a href="https://github.com/freeappstore-online">GitHub</a>. Fork it, fix it, open a PR. We review within 48 hours.</p>
+          <p>Found a bug? Every app has a public repo on <a href="https://github.com/freeappstore-online">GitHub</a>. Open an issue on that app's repository with reproduction steps or a proposed patch. Platform maintainers land changes directly on main.</p>
         </div>
         <div class="contrib-card">
           <h3>Suggest features</h3>
@@ -57,42 +57,11 @@
         </div>
       </div>
 
-      <!-- Section 2: Become a Creator -->
-      <h2>Become a Creator</h2>
-      <p>Apply to join the creators program and ship your own app under the FreeAppStore platform.</p>
-
-      <div class="contrib-highlight">
-        <h3>What creators get</h3>
-        <ul>
-          <li>Your own app at <code>yourapp.freeappstore.online</code></li>
-          <li>Auto-deploy on every push to main via GitHub Actions</li>
-          <li>Listed in the FreeAppStore catalog for all users to discover</li>
-        </ul>
-      </div>
-
-      <h3>How to apply</h3>
-      <ol class="contrib-steps">
-        <li>
-          <strong>Open an issue</strong>
-          <p>Go to <a href="https://github.com/freeappstore-online/submissions/issues/new">github.com/freeappstore-online/submissions</a> and describe your app idea. Include your GitHub username.</p>
-        </li>
-        <li>
-          <strong>We review within 48 hours</strong>
-          <p>We check the idea fits the platform — unique category, genuinely useful, buildable as a PWA.</p>
-        </li>
-        <li>
-          <strong>Get provisioned</strong>
-          <p>Once approved, we add you to the creators team, create your repo, set up your subdomain, and configure auto-deploy. You start coding.</p>
-        </li>
-      </ol>
-
+      <h2>Become a creator</h2>
+      <p>Publishing is self-service. Sign in with <code>fas login</code>, scaffold and build your app, run <code>fas check</code>, and use <code>fas publish</code>. It provisions the repository, hosting route, and store listing; then follow its printed commands to push your code.</p>
+      <p>Prefer a browser workflow? Open <a href="/app/build">VibeCode</a>. AI builds require a usable AI key in your vault or a supported platform-configured provider connection.</p>
       <h3>Requirements</h3>
-      <ul>
-        <li><strong>Free forever</strong> — no monetization, no ads, no paywalls</li>
-        <li><strong>No tracking</strong> — zero analytics, cookies, or data collection</li>
-        <li><strong>Open source</strong> — MIT license, public repo</li>
-        <li><strong>Uses our tech stack</strong> — TypeScript, React, Vite, Tailwind. See <a href="/guidelines">Guidelines</a></li>
-      </ul>
+      <ul><li>Free forever: no app payments, ads, or paywalls.</li><li>MIT-licensed source in a public app repository.</li><li>Pass the platform's compliance checks and declare requested browser permissions.</li><li>Build on the SDK Shell and the documented brand conventions.</li></ul>
 
       <!-- Section 3: Workspace Setup -->
       <h2>Workspace Setup</h2>
@@ -143,7 +112,7 @@
         <li>
           <strong>Verify the layout fits (recommended)</strong>
           <div class="contrib-cmd">fas screencheck</div>
-          <p>Builds, serves the dist locally, and drives a real Chromium at the <code>min_viewport_width</code> declared in your manifest in both portrait and landscape. Fails if the page actually scrolls — the static check only sees what you declared, this proves it works. Playwright is an opt-in peer dep; the command prompts to install on first run.</p>
+          <p>Builds, serves the dist locally, and drives a real Chromium at the <code>min_viewport_width</code> declared in your manifest in both portrait and landscape. Fails if the page actually scrolls — the static check only sees what you declared, this proves it works. Playwright is an optional local dependency; the command prompts to install on first run.</p>
         </li>
         <li>
           <strong>Publish</strong>
@@ -153,7 +122,8 @@
         </li>
         <li>
           <strong>Push your code</strong>
-          <div class="contrib-cmd">git push upstream main</div>
+          <div class="contrib-cmd">git remote add upstream https://github.com/freeappstore-online/my-app.git
+git push upstream main</div>
           <p>Auto-deploys via GitHub Actions in ~30 seconds. Future commits to <code>main</code> deploy automatically too.</p>
         </li>
       </ol>
@@ -161,7 +131,7 @@
       <h3>Other commands</h3>
       <ul>
         <li><code>fas list</code> — see all apps you've published</li>
-        <li><code>fas logs my-app</code> — tail deployment logs</li>
+        <li><code>fas logs my-app</code> — show recent deployment runs</li>
         <li><code>fas doctor</code> — health check (Node, git, pnpm, auth, API reachability)</li>
         <li><code>fas whoami</code> — show signed-in GitHub user</li>
       </ul>
@@ -169,7 +139,7 @@
       <p>Full reference: <a href="https://github.com/freeappstore-online/platform/tree/main/packages/cli#readme">github.com/freeappstore-online/platform/packages/cli</a></p>
 
       <h2>Brand and UI rules (mandated)</h2>
-      <p>Every app on the platform looks predictable and consistent. The storefront, the detail pages, and every app share the same visual language so visitors learn the rhythm once and never relearn it. This is not a style guide suggestion — it's enforced by <code>fas check</code> and the CI workflow that runs before merge.</p>
+      <p>Every app on the platform looks predictable and consistent. The storefront, the detail pages, and every app share the same visual language so visitors learn the rhythm once and never relearn it. This is not a style guide suggestion — it's enforced by <code>fas check</code> and the CI workflow that runs before deployment.</p>
 
       <ul>
         <li><strong>Use the template's CSS tokens.</strong> Colors, surfaces, lines, and spacing come from <code>--paper</code>, <code>--ink</code>, <code>--muted</code>, <code>--accent</code>, <code>--line</code>, <code>--line-strong</code>, <code>--panel</code>. Reference them via <code>var(--accent)</code>, etc. Don't redefine them in component CSS or inline styles.</li>
@@ -181,7 +151,7 @@
       <p>The <code>fas check</code> compliance suite (run automatically before <code>fas publish</code> and again in your repo's CI) enforces:</p>
       <ul>
         <li><code>No template placeholders</code> — every <code>APPNAME</code> substituted</li>
-        <li><code>No tracking SDKs</code> — none of the 8 known trackers (Google Analytics, Plausible, Mixpanel, etc.)</li>
+        <li><code>No tracking SDKs</code> — no known tracking SDKs (Google Analytics, Plausible, Mixpanel, etc.)</li>
         <li><code>Brand fonts present</code> — Manrope and Fraunces both referenced</li>
         <li><code>No brand overrides</code> — no app redefines a platform CSS token outside the canonical theme file; no non-brand <code>font-family</code> declarations</li>
         <li><code>PWA manifest</code> — <code>web/public/manifest.json</code> with <code>name</code>, <code>display</code>, <code>start_url</code></li>

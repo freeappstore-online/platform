@@ -19,10 +19,11 @@ cd my-app
 pnpm install && pnpm dev
 fas check              # compliance checks
 fas publish            # provisions repo + hosting + DNS
-git push upstream main # auto-deploys via CI
+git remote add upstream https://github.com/freeappstore-online/my-app.git
+git push upstream main # follow the commands printed by fas publish
 ```
 
-Live in 30 seconds at `https://my-app.freeappstore.online`.
+After the first successful code push and deploy, live at `https://my-app.freeappstore.online`.
 
 ## Commands
 
@@ -33,14 +34,14 @@ Live in 30 seconds at `https://my-app.freeappstore.online`.
 | `fas logout` | Clear the cached session. |
 | `fas whoami` | Print the currently signed-in GitHub login. |
 | `fas doctor` | Health check — Node version, git, pnpm, config, signed-in state, API reachability. |
-| `fas init <app-id>` | Scaffold a new free app or game from a platform template. Replaces `APPNAME` placeholders, runs `git init`, makes the first commit. |
+| `fas init <app-id>` | Scaffold an app from a platform template. Game templates remain available; games are published with the separate fgs CLI. Replaces `APPNAME` placeholders, runs `git init`, makes the first commit. |
 | `fas check` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
 | `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing, then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
 | `fas list` (alias `fas ls`) | List apps and games you have published. `--json` for scripting, `-v` for recent commits. |
-| `fas logs <app-id>` | Tail live deployment logs for an app (GitHub Actions workflow runs). |
+| `fas logs <app-id>` | Show recent deployment runs and links for an app (GitHub Actions). |
 | `fas secret set\|list\|rm` | Manage server-side encrypted API keys for an app. |
 | `fas proxy allow\|list\|deny` | Manage the URL allowlist for the per-app secret-injecting proxy. |
-| `fas screencheck` | Build the app and run a headless browser at every reference viewport to verify the layout fits without scrolling. |
+| `fas screencheck` | Build the app and run a browser at the manifest-declared minimum width in portrait and landscape to verify the layout fits without scrolling. |
 | `fas quality [app-id]` | Show the VCQA code quality report (score + grade) for an app. |
 | `fas admin transfer-owner <app>` | Admin-only. Move an app to a new owner when `--from` matches the current one, and write an audit record. |
 
@@ -81,7 +82,7 @@ fas doctor
 
 ### `fas init <app-id>`
 
-Scaffold a new free app or game from a platform template. Clones the template repo, substitutes all `APPNAME` placeholders with the given id, and creates the first git commit.
+Scaffold an app from a platform template. Game templates remain available; games are published with the separate fgs CLI. Clones the template repo, substitutes all `APPNAME` placeholders with the given id, and creates the first git commit.
 
 ```bash
 fas init my-app                        # default: standalone template
@@ -108,13 +109,13 @@ fas check --dir ../my-app
 
 ### `fas publish`
 
-Provision and publish an app to FreeAppStore (or FreeGameStore). Runs compliance checks, authenticates, creates a GitHub repo + R2 hosting route + storefront registry entry via the admin Worker, and injects a deploy workflow.
+Provision and publish an app to FreeAppStore. Runs compliance checks, authenticates, creates a GitHub repo + R2 hosting route + storefront registry entry via the admin Worker, and injects a deploy workflow.
 
 By default, `publish` is interactive — it asks for category, type, oneliner, and demo URL. Skip prompts by passing flag values; combine with `--yes` to fail fast in CI rather than hang on a missing field.
 
 ```bash
 fas publish                          # interactive
-fas publish --store games            # publish to FreeGameStore instead
+fgs publish                          # FreeGameStore projects use their own CLI
 fas publish \
   --name my-app \
   --category Utilities \
@@ -125,13 +126,13 @@ fas publish \
 
 | Flag | Purpose |
 |---|---|
+| `--store apps` | Legacy selector; the FAS backend rejects games with 410. Use the separate `fgs` CLI for FreeGameStore. |
 | `--name <id>` | App id (lowercase, used as subdomain). Defaults to `package.json#name`. |
 | `--category <name>` | Storefront category. Case-insensitive (e.g. `utilities`, `brain training`). |
 | `--type standalone\|connected` | Standalone (localStorage only) or Connected (uses platform backend). |
 | `--oneliner <text>` | One-line description shown on the storefront. |
 | `--demo <url>` | Optional demo URL. Pass `""` to clear. |
 | `--yes` | Non-interactive: missing required fields abort instead of prompting. |
-| `--issue` | Skip auto-provision; open the GitHub Issue submission form instead. |
 | `--skip-checks` | Skip `fas check` before publish (not recommended). |
 
 ### `fas list` (alias `fas ls`)
@@ -292,7 +293,7 @@ Every app and game on the platform shares the same visual language — colors, f
 5. **Ownership**: records the app in the platform DB so `fas list` returns it.
 6. **Output**: prints the live URL, repo URL, storefront listing URL, and the `git remote add` + `git push` commands to populate the new repo.
 
-If auto-provision is unavailable (503 from the API), `publish` falls back to opening a prefilled GitHub Issue form for maintainer review. Use `--issue` to force this path.
+If provisioning is unavailable, the command reports the error and exits. Nothing is queued and no submission form opens. Retry after checking the platform status; `--issue` is not a supported flag.
 
 ## For AI Agents
 

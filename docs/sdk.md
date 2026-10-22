@@ -1,6 +1,6 @@
 # SDK Reference
 
-`@freeappstore/sdk` v0.14 -- browser SDK for apps on freeappstore.online.
+`@freeappstore/sdk` -- browser SDK for apps on freeappstore.online.
 
 ```bash
 npm i @freeappstore/sdk
@@ -28,6 +28,7 @@ fas.auth.signIn('apple');               // Apple Sign In
 fas.auth.signIn('email');               // prompts for email, sends magic link
 fas.auth.signInWithEmail('user@x.com'); // send magic link directly
 fas.auth.signOut();                     // clears local session
+await fas.auth.deleteAccount();         // deletes the signed-in account and associated active data
 fas.auth.onChange(cb);                  // fires immediately + on change, returns Unsubscribe
 fas.auth.setDateOfBirth('2000-01-15'); // set user date of birth
 await fas.auth.init();                  // capture callback, must be called once
@@ -65,12 +66,12 @@ await fas.counters.increment('lives', -1);                 // decrement
 
 **Limits:** 1000 counters per app, increment range -1000 to +1000 per call.
 
-## Collections (`fas.db`)
+## Collections (`fas.collections`)
 
 Simple document store for public, queryable data.
 
 ```ts
-const posts = fas.db.collection('posts');
+const posts = fas.collections.collection('posts');
 
 // Create (auth required, you become the owner)
 const post = await posts.create({ title: 'Hello', body: '...' });
@@ -126,7 +127,7 @@ The developer registers secrets and allowlist rules via the CLI. The proxy decry
 
 ## User API key vault (`fas.keys`)
 
-Users store their own API keys on the platform (encrypted AES-256-GCM). Apps never see plaintext keys.
+Users store their own API keys on the platform (encrypted AES-256-GCM). Keys are injected by `fas.proxy.fetch()` when the upstream host matches a supported provider; the requesting app does not receive the plaintext key.
 
 ```ts
 const hasKey = await fas.keys.has('openai');
@@ -165,11 +166,15 @@ const result = await fas.friends.request(userId);              // send friend re
 await fas.friends.respond(userId, 'accept');   // accept request
 await fas.friends.respond(userId, 'decline');  // decline request
 await fas.friends.respond(userId, 'block');    // block user
+await fas.friends.remove(userId);              // unfriend, cancel outgoing request, or unblock
+const status = await fas.friends.check(userId);
+const isFriend = await fas.friends.isFriend(userId);
+const matches = await fas.friends.search('alice');
 ```
 
 ## Email (`fas.email`)
 
-Send transactional email via Cloudflare Email Service. 100/day per app.
+Send transactional email via Cloudflare Email Service. 100/day per app and 50/day per sender; requires sign-in and a configured sending service.
 
 ```ts
 await fas.email.send('user@example.com', 'Welcome', {
@@ -209,7 +214,7 @@ registerFasPushHandler({ title: 'Cycle', body: 'Time to check in.', onClick: () 
 
 It shows the notification on each push and focuses (or opens) the app when tapped. Keep the text generic for anything sensitive; it can show on a lock screen.
 
-**Limits:** 10 devices and 20 reminders per user per app. See [LIMITS.md](LIMITS.md#push-subscriptions-faspush).
+**Limits:** 10 devices and 20 reminders per user per app. See [Platform Limits](platform-limits.md#push-subscriptions-faspush).
 
 ## Webhooks (`fas.webhooks`)
 
@@ -217,12 +222,12 @@ Outbound webhook subscriptions. HMAC-SHA256 signed.
 
 ```ts
 const { webhooks, supported_events } = await fas.webhooks.list();
-const { id, secret } = await fas.webhooks.create('app.published', 'https://example.com/hook');
+const { id, secret } = await fas.webhooks.create('kv.changed', 'https://example.com/hook');
 const result = await fas.webhooks.test(id);
 await fas.webhooks.delete(id);
 ```
 
-**Limits:** 5 webhooks per app, 8 event types.
+**Limits:** 5 webhooks per app, 12 event types. Management requires app ownership. Read `supported_events` from `list()` rather than inventing event names.
 
 ## Logging (`fas.log`)
 

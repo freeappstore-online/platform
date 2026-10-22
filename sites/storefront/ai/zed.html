@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Zed — FreeAppStore</title>
   <meta name="description" content="Build a free app on FreeAppStore with Zed." />
   <meta property="og:title" content="Zed — FreeAppStore" />
@@ -57,7 +57,7 @@
     <p>Open the AI assistant panel, paste "Read https://freeappstore.online/skills.md" as context, then describe your app.</p>
 
     <h2 class="ai-guide-heading">Give it context</h2>
-    <div class="ai-guide-context">Zed doesn't have a rules file — paste the URL at the start of each AI session.</div>
+    <div class="ai-guide-context">Add the guide to project instructions or paste its text into the session.</div>
 
     <h2 class="ai-guide-heading">Publish</h2>
     <ol class="ai-guide-steps">
@@ -79,26 +79,26 @@
       <li>
         <strong>Future updates</strong>
         <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
-  <span class="ai-guide-command-text">git push origin main</span>
+  <span class="ai-guide-command-text">git push upstream main</span>
   <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
 </button>
-        <p>Auto-deploys in ~30 seconds.</p>
+        <p>First add the remote printed by <code>fas publish</code>. Push your app code and wait for its deploy workflow to succeed.</p>
       </li>
     </ol>
 
     <h2 class="ai-guide-heading">Add user accounts &amp; cloud storage</h2>
-    <p>Standalone apps use localStorage. If you need GitHub sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
+    <p>Standalone apps use localStorage. If you need platform sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
     <button type="button" class="ai-guide-command" data-copy-command title="Copy command">
   <span class="ai-guide-command-text">cd web &amp;&amp; pnpm add @freeappstore/sdk</span>
   <span class="ai-guide-command-status" aria-hidden="true">Copy</span>
 </button>
     <ul>
-      <li><strong>Auth</strong> — GitHub OAuth. <code>fas.auth.signIn()</code></li>
+      <li><strong>Auth</strong> — GitHub, Google, Apple, or email (when configured). <code>fas.auth.signIn()</code></li>
       <li><strong>KV</strong> — Per-user storage. <code>fas.kv.set('key', value)</code></li>
       <li><strong>Rooms</strong> — Realtime WebSocket. <code>fas.rooms.join('lobby')</code></li>
       <li><strong>Proxy</strong> — Server-side API keys. <code>fas.proxy.fetch('api.example.com/data')</code></li>
     </ul>
-    <p><a href="https://github.com/freeappstore-online/platform/tree/main/packages/sdk#readme">SDK docs</a></p>
+    <p><a href="https://docs.freeappstore.online/sdk/">SDK docs</a></p>
 
     <h2 class="ai-guide-heading">MCP Server (optional)</h2>
     <p>For deeper AI integration, connect the FreeAppStore MCP server. Your agent gets tools to check deploys, look up SDK docs, and list apps.</p>

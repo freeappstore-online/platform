@@ -129,7 +129,7 @@ function categoryLabel(cat) {
 
 // Helper: type label
 function typeLabel(type) {
-  return type === 'standalone' ? 'Standalone (works offline)' : 'Connected (requires internet)';
+  return type === 'standalone' ? 'Standalone (device-first)' : 'Connected (uses platform services)';
 }
 
 // --- GitHub API helpers (used to source first-published + commit log) ---
@@ -909,8 +909,8 @@ console.log(`  ${okCount}/${apps.length} apps got commit history`);
 console.log(`  ${auditMap.size} apps have audit results`);
 
 apps.forEach((app, i) => {
-  const offline = app.type === 'standalone' ? 'Yes' : 'When cached';
-  const account = app.type === 'standalone' ? 'Not required' : 'Not required';
+  const offline = app.type === 'standalone' ? 'App-dependent' : 'Online features need internet';
+  const account = app.requiresAuth ? 'Required' : 'May be needed for connected features';
   const history = histories[i];
 
   // Every user-controlled registry field gets HTML-escaped before

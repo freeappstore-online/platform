@@ -21,7 +21,7 @@ Requires Node 22+.
 | `fas check` | Run compliance checks |
 | `fas publish` | Provision repo + hosting + DNS and publish |
 | `fas list` | List your published apps |
-| `fas logs <id>` | Tail deploy logs (GitHub Actions) |
+| `fas logs <id>` | Show recent deploy runs (GitHub Actions) |
 | `fas secret set\|list\|rm` | Manage app API keys |
 | `fas proxy allow\|list\|deny` | Manage proxy URL allowlist |
 | `fas screencheck` | Responsive layout test across viewports |
@@ -57,7 +57,7 @@ Runs compliance checks against the app in the current directory.
 | Check | Rule |
 |-------|------|
 | No template placeholders | Every `APPNAME` substituted |
-| No tracking SDKs | 8 known trackers blocked |
+| No tracking SDKs | Known tracking SDKs blocked |
 | Brand fonts present | Manrope + Fraunces referenced |
 | No brand overrides | No redefined platform CSS tokens |
 | PWA manifest | Valid `manifest.json` with name, display, start_url |
@@ -69,19 +69,19 @@ Provisions and publishes your app. Runs `fas check` first.
 
 ```bash
 fas publish                    # interactive
-fas publish --store games      # publish to FreeGameStore
+fgs publish                  # use the separate FreeGameStore CLI for games
 fas publish --yes              # non-interactive (CI)
 ```
 
 | Flag | Purpose |
 |------|---------|
+| `--store apps` | Legacy selector; the FAS backend rejects games with 410. Use the separate `fgs` CLI for FreeGameStore. |
 | `--name <id>` | App id (defaults to `package.json` name) |
 | `--category <name>` | Storefront category |
 | `--type standalone\|connected` | App type |
 | `--oneliner <text>` | One-line description |
 | `--demo <url>` | Demo URL |
 | `--yes` | Non-interactive mode |
-| `--issue` | Open GitHub Issue form instead of auto-provision |
 | `--skip-checks` | Skip compliance checks (not recommended) |
 
 ## `fas admin transfer-owner <app>`
@@ -151,7 +151,7 @@ Injection modes: `query:<name>`, `header:<name>`, `bearer`, `oauth2_cc`.
 
 ## `fas screencheck`
 
-Headless browser test across all reference viewports (iPhone SE to iPad Pro).
+Browser layout check at the manifest's `min_viewport_width`, in portrait and landscape. Install the optional Playwright browser dependency when prompted.
 
 ```bash
 fas screencheck                      # build + test

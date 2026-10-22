@@ -13,8 +13,8 @@ Every FreeAppStore app wraps itself in `Shell` from `@freeappstore/sdk/ui`, with
 entry per screen. The Shell provides the topbar, the app's navigation, an error boundary,
 toasts and an offline banner; you write the screens.
 
-- **[Getting Started](getting-started.md)** -- scaffold, build, and publish your first app in 60 seconds
-- **[SDK Reference](sdk.md)** -- auth, KV, counters, collections, rooms, proxy, keys, roles, friends, email
+- **[Getting Started](getting-started.md)** -- scaffold, build, and publish your first app with the CLI
+- **[SDK Reference](sdk.md)** -- auth, KV, counters, collections, rooms, proxy, keys, roles, friends, email, and push reminders
 - **[UI Components](ui.md)** -- the standard app `Shell` (topbar, navigation, error boundary, toasts) and 25+ drop-in React components
 - **[CLI Reference](cli.md)** -- the `fas` command-line tool
 - **[Publishing](publishing.md)** -- how `fas publish` provisions and deploys your app

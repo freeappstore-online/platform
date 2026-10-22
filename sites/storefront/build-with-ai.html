@@ -36,9 +36,9 @@
     <h2 class="ai-h2">Prerequisites</h2>
     <p class="ai-note-small">You need Node.js and pnpm installed. If you already have them, skip to Step 1.</p>
 
-    <div class="ai-cmd"><span class="comment"># Check if Node is installed (need v20+)</span>
+    <div class="ai-cmd"><span class="comment"># Check if Node is installed (need v22+)</span>
 node --version
-<span class="output"># v20.x.x or higher? You're good. If not:</span>
+<span class="output"># v22.x.x or higher? You're good. If not:</span>
 
 <span class="comment"># Install Node.js (macOS)</span>
 brew install node
@@ -91,7 +91,7 @@ fas init my-app
 <span class="output"># Output:
 #   Creating my-app...
 #   [1/3] Cloning template-standalone...
-#   [2/3] Installing dependencies...
+#   [2/3] Replacing APPNAME placeholders...
 #   [3/3] Initializing git...
 #   Done!</span>
 
@@ -327,11 +327,11 @@ npx mcp-remote https://mcp.freeappstore.online/mcp</div>
     <div class="ai-two-col-mid">
       <div class="ai-pane">
         <h3>VibeCode (no-code)</h3>
-        <p>Don't want to use a terminal? <a href="https://console.freeappstore.online/create">console.freeappstore.online/create</a> lets you describe your app in plain English and AI builds it for you in the browser.</p>
+        <p>Don't want to use a terminal? <a href="https://freeappstore.online/app/build">console.freeappstore.online/create</a> lets you describe your app in plain English and AI builds it for you in the browser.</p>
       </div>
       <div class="ai-pane is-pro">
         <h3 class="is-pro">Need a database?</h3>
-        <p>Free apps use localStorage. If you need SQL databases, file uploads, maps, or payments, check <a href="https://proappstore.online/build-with-ai" class="ai-pane-pro-link">ProAppStore</a>.</p>
+        <p>Free apps can use local device storage and the platform SDK for auth, cloud storage, rooms, email, and push reminders. Maps and local files are browser features. For a separate platform with paid apps and other server-side services, check <a href="https://proappstore.online/build-with-ai" class="ai-pane-pro-link">ProAppStore</a>.</p>
       </div>
     </div>
 
@@ -355,15 +355,15 @@ npx mcp-remote https://mcp.freeappstore.online/mcp</div>
         </div>
         <div class="tile">
           <strong>For developers</strong>
-          <p class="mt-half-small"><a href="https://console.freeappstore.online/create" class="text-accent-bold">console.freeappstore.online/create</a> — VibeCode (browser scaffolder)<br/><a href="/build-with-ai" class="text-accent-bold">/build-with-ai</a> — AI-assisted dev guide<br/><a href="/skills.md" class="text-accent-bold">/skills.md</a> — SDK reference<br/><a href="https://github.com/freeappstore-online" class="text-accent-bold">github.com/freeappstore-online</a> — source</p>
+          <p class="mt-half-small"><a href="https://freeappstore.online/app/build" class="text-accent-bold">console.freeappstore.online/create</a> — VibeCode builder<br/><a href="/build-with-ai" class="text-accent-bold">/build-with-ai</a> — AI-assisted dev guide<br/><a href="/skills.md" class="text-accent-bold">/skills.md</a> — SDK reference<br/><a href="https://github.com/freeappstore-online" class="text-accent-bold">github.com/freeappstore-online</a> — source</p>
         </div>
         <div class="tile">
           <strong>CLI</strong>
           <p class="mt-half-mono">npm i -g @freeappstore/cli<br/>fas init &lt;id&gt;<br/>fas publish<br/>fas check</p>
         </div>
         <div class="tile">
-          <strong>Admin / submission</strong>
-          <p class="mt-half-small"><a href="https://admin.freeappstore.online" class="text-accent-bold">admin.freeappstore.online</a> — admin UI (Google sign-in)<br/><a href="https://github.com/freeappstore-online/submissions/issues/new" class="text-accent-bold">file a creator application</a></p>
+          <strong>Platform operations</strong>
+          <p class="mt-half-small"><a href="https://admin.freeappstore.online" class="text-accent-bold">admin.freeappstore.online</a> — admin UI (Google sign-in)<br/><a href="https://github.com/freeappstore-online/platform/issues" class="text-accent-bold">report a platform issue</a></p>
         </div>
         <div class="tile">
           <strong>Pro sister stores</strong>

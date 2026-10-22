@@ -54,6 +54,7 @@ function runBuild({ withQualityScores = false } = {}) {
     icon: "&#9888;",
     iconBg: "#fee2e2",
     description: XSS_PAYLOAD,
+    requiresAuth: true,
     appUrl: "https://xss-fixture.freeappstore.online",
     repo: "freeappstore-online/xss-fixture",
     cfProject: "xss-fixture",
@@ -133,6 +134,10 @@ test("build.js escapes <script> payloads in app descriptions", () => {
       join(tmpDist, "apps", `${FIXTURE_ID}.html`),
       "utf8",
     );
+    assert.match(detailHtml, /label">Account<\/div>\s*<div class="value">Required/,
+      "the detail page must honor the registry's requiresAuth flag");
+    assert.doesNotMatch(detailHtml, /collects zero data|Nothing leaves your browser/,
+      "app listings cannot promise that connected data never leaves the browser");
 
     // The literal escaped form must appear …
     assert.ok(

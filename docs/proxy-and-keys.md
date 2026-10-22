@@ -29,7 +29,8 @@ The key never reaches the browser.
 - Keys encrypted at rest with AES-256-GCM (envelope encryption)
 - Strict per-app URL allowlist -- proxy refuses unregistered hosts
 - AI provider hosts (openai.com, anthropic.com, etc.) are **blocked** -- use the user key vault instead
-- Per-app daily request cap (10,000/day)
+- App-secret requests: 10,000/day per app
+- User-key requests: 1,000/day per user across all apps
 
 ### Limits
 
@@ -50,7 +51,7 @@ For APIs that need an **end-user-owned** API key (OpenAI, Anthropic, etc.). User
 1. User configures their API key on the platform key management page
 2. App checks if the user has a key: `await fas.keys.has('openai')`
 3. If not, prompt them: `<KeyPrompt app={fas} provider="openai" providerName="OpenAI" />`
-4. App calls APIs through the platform proxy, which injects the user's key
+4. App calls `fas.proxy.fetch('api.openai.com/v1/...', options)` (or another supported provider host). When no app rule matches, the proxy maps the host to the user's provider key and injects it automatically.
 
 ### SDK
 
@@ -70,6 +71,7 @@ OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, S
 - Per-user, per-provider isolation
 - Apps never see plaintext keys
 - Users can revoke keys at any time
+- Provider usage and charges belong to the user's upstream account
 
 ## Free APIs (no proxy needed)
 

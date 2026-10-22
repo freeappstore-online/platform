@@ -56,7 +56,7 @@ claude mcp add freeappstore -- npx mcp-remote https://mcp.freeappstore.online/mc
   --header "Authorization: Bearer <token>"
 ```
 
-Full guide: https://freeappstore.online/docs/mcp
+Full guide: https://docs.freeappstore.online/mcp/
 
 ## Tech stack (mandatory, no substitutions)
 

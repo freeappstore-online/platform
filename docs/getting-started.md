@@ -1,6 +1,6 @@
 # Getting Started
 
-Scaffold, build, and publish a free app in under a minute.
+Scaffold a free app, develop it locally, then publish it with the CLI.
 
 ## Prerequisites
 
@@ -110,6 +110,11 @@ fas init racing --template game-3d         # 3D game
 
 Both app templates route screens by `location.pathname` with `onNavigate`, so adding
 a screen is one `nav` entry plus one branch in `App`.
+
+Game templates are available for scaffolding, but publish games with the separate `fgs` CLI:
+
+| Template | Use case |
+|----------|----------|
 | `game-canvas` | HTML5 Canvas games. |
 | `game-grid` | Grid/tile-based games. |
 | `game-3d` | Three.js 3D games. |
@@ -131,10 +136,11 @@ fas publish
 This provisions a GitHub repo, R2 hosting route, storefront entry, and injects a deploy workflow. Then:
 
 ```bash
+git remote add upstream https://github.com/freeappstore-online/my-cool-app.git
 git push upstream main
 ```
 
-Your app is live at `https://my-cool-app.freeappstore.online` and listed on the storefront within ~30 seconds.
+Your app is live at `https://my-cool-app.freeappstore.online` and listed on the storefront after the generated deploy workflow succeeds. Follow the exact remote and push commands printed by `fas publish`.
 
 ## Using the SDK
 

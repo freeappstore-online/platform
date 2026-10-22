@@ -257,11 +257,11 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       <div>
         <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-3">Platform Features</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <FeatureCard title="Auth" desc="GitHub OAuth SSO across all apps" />
+          <FeatureCard title="Auth" desc="Platform sign-in (GitHub, Google, Apple, email)" />
           <FeatureCard title="Per-user KV" desc="1MB/user, 100 keys, scoped storage" />
           <FeatureCard title="Collections" desc="Firestore-style document database" />
           <FeatureCard title="Counters" desc="Atomic shared counters (votes, views)" />
-          <FeatureCard title="Rooms" desc="WebSocket real-time (25 peers/room)" />
+          <FeatureCard title="Rooms" desc="WebSocket realtime (32 peers/room, 64 active rooms/app)" />
           <FeatureCard title="Proxy" desc="Secret-injecting API proxy (manage above)" />
         </div>
       </div>

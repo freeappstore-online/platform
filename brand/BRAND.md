@@ -271,7 +271,7 @@ app-name/
 | Framework | React | ^19.0 |
 | Bundler | Vite | ^6.0 |
 | Styling | Tailwind CSS | ^4.1 |
-| Hosting | Cloudflare Pages | — |
+| Hosting | Cloudflare R2 + host Worker | — |
 | Package Manager | pnpm | ^10.30 |
 
 ## Naming Conventions

@@ -1,7 +1,7 @@
 {
   "name": "@freeappstore/sdk",
   "version": "0.15.8",
-  "description": "Browser SDK for apps on freeappstore.online — auth, per-user KV, shared counters, document collections, real-time rooms, API proxy, user API key vault, RBAC roles, React hooks, and 18 UI components.",
+  "description": "Browser SDK for FreeAppStore \u2014 auth, KV, collections, counters, rooms, proxy, encrypted user keys, roles, friends, email, push reminders, React hooks, and UI components.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",

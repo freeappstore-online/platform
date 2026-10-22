@@ -49,7 +49,7 @@ only** (least privilege — keeps the deploy creds away from `fas-backups`,
 ## When things go wrong
 
 - Worker itself failing → [Bad Worker deploy recovery](../../ops/DR.md#scenario-3-bad-worker-deploy)
-- R2 bucket lost data (backup limitations) → [Backup limitations](../../ops/DR.md#backups-gap-to-close)
+- R2 bucket lost data (backup limitations) → [Backup limitations](../../ops/DR.md#backups-and-recovery-limits)
 - D1 `routes` table drift → [D1 corruption recovery](../../ops/DR.md#scenario-2-d1-corruption-accidental-drop-bad-migration)
 - Wildcard DNS broken → [DNS recovery](../../ops/DR.md#scenario-4-dns-misconfiguration)
 

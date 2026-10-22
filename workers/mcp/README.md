@@ -35,7 +35,7 @@ Streamable HTTP transport at `https://mcp.freeappstore.online/mcp`
 |------|------|-------------|
 | `deploy_status` | None | Check last 5 GitHub Actions runs for any app |
 | `app_info` | None | Live URL, repo, store listing, up/down status |
-| `sdk_reference` | None | SDK docs. Start with `shell` (the standard app frame), then `components` (every UI component); also auth, KV, counters, collections, rooms, proxy, hooks |
+| `sdk_reference` | None | SDK docs. Start with `shell` (the standard app frame), then `components` (every UI component); also auth, KV, counters, collections, rooms, proxy, keys, push, hooks |
 | `platform_guide` | None | Fetch full SKILLS.md, followed by the current app-building rules |
 | `list_apps` | FAS token | List your published apps |
 
@@ -60,7 +60,7 @@ SDK's `packages/sdk/src/ui/index.ts` exports, and the tools are pinned to return
 - MCP Registry: [`io.github.freeappstore-online/mcp`](https://registry.modelcontextprotocol.io)
 - Auto-discovery: [`freeappstore.online/.well-known/mcp.json`](https://freeappstore.online/.well-known/mcp.json)
 - Platform guide: [`freeappstore.online/llms.txt`](https://freeappstore.online/llms.txt)
-- Docs: [`freeappstore.online/docs/mcp`](https://freeappstore.online/docs/mcp)
+- Docs: [`freeappstore.online/docs/mcp`](https://docs.freeappstore.online/mcp/)
 
 ## Architecture
 

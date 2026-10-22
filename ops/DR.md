@@ -11,7 +11,7 @@ What to do when production breaks. One-page, scenario-by-scenario. Read the **fi
 | Bad Worker deploy | `api.freeappstore.online` (auth, KV, rooms) | <2 min (rollback) |
 | DNS misconfiguration | One subdomain, or all of `*.freeappstore.online` | 1-30 min |
 | GitHub OAuth App revoked / secret rotated | All sign-ins via `fas` SDK | Minutes (re-secret) |
-| GitHub repo deleted | One app's source; CF Pages deploys frozen until repo restored | 30 min - hours (GitHub support) |
+| GitHub repo deleted | One app's source and future Actions deploys; the existing R2 bundle may still serve | 30 min - hours (GitHub support) |
 
 ## Scenario 1: CF account locked or suspended
 
@@ -28,14 +28,14 @@ What to do when production breaks. One-page, scenario-by-scenario. Read the **fi
 **Prevention now:**
 - Add a second Cloudflare account admin (Account Members → Invite). Audit P1.
 - Use a non-personal admin email tied to a domain you control, not a free Gmail.
-- Daily/weekly D1 export to R2 (not yet implemented; see the Backups section below).
+- Verify the implemented daily D1 export to R2; see Backups below. It is not cross-account replication.
 
 ## Scenario 2: D1 corruption, accidental drop, bad migration
 
 **Symptom:** Sign-in returns "user not found" for everyone; KV reads return 404; route handlers throw `D1_ERROR` in logs.
 
 **Recovery (point-in-time restore):**
-1. Cloudflare D1 supports automatic backups for any D1 database.
+1. Check the target D1 database's available Time Travel history before selecting a restore point.
    ```bash
    wrangler d1 time-travel info fas
    wrangler d1 time-travel restore fas --timestamp '<ISO-8601 5 minutes before the bad event>'
@@ -64,7 +64,7 @@ A rollback takes effect in seconds. Then identify the actual bug, fix forward, a
 
 **Prevention now:**
 - `pnpm test && node scripts/e2e-local.mjs` (against `wrangler dev`) before every prod deploy.
-- CI green on `main` is necessary but not sufficient — CI doesn't run e2e.
+- Check the current unit, runtime, production probe, and live browser workflow results. A previous green run is not a current health check.
 
 ## Scenario 4: DNS misconfiguration
 
@@ -97,7 +97,7 @@ A rollback takes effect in seconds. Then identify the actual bug, fix forward, a
 
 ## Scenario 6: GitHub repo deleted
 
-**Symptom:** CF Pages auto-deploy fails; the app's source code is gone.
+**Symptom:** the app source or Actions deployment is unavailable; the previously deployed R2 bundle may still serve.
 
 **Recovery:**
 - GitHub keeps deleted repos for 90 days. Within that window, contact GitHub support to restore.
@@ -111,16 +111,18 @@ These values live in places other than the dashboard, so they're recoverable eve
 |---|---|
 | CF account ID, zone IDs, admin email | Bitwarden / 1Password (or wherever the team's secrets vault is — **not** in any public repo) |
 | Worker source code | `github.com/freeappstore-online/platform` |
-| Storefront source code | `github.com/freeappstore-online/freeappstore` |
-| Admin Worker source | `github.com/freeappstore-online/admin` |
+| Storefront source code | `github.com/freeappstore-online/platform/tree/main/sites/storefront` |
+| Admin Worker source | `github.com/freeappstore-online/platform/tree/main/workers/admin` |
 | Per-app source code | `github.com/freeappstore-online/<app-id>` |
 | GitHub OAuth App | `github.com/organizations/freeappstore-online/settings/applications/3576238` (org owner can rotate) |
 
-## Backups (gap to close)
+## Backups and recovery limits
 
-There is **no automated D1 backup** today. Cloudflare's time-travel covers ~30 days but does not survive a CF account loss.
+The API implements a daily D1 JSON export at 04:00 UTC to `fas-backups`, under `db-backups/<date>/fas.json`. See `packages/backend/src/lib/backup.ts` and the backend cron configuration. It exports selected tables and reports missing tables on a best-effort basis. Check the actual object, table coverage, and encoded binary fields before relying on it for recovery.
 
-Action item (not yet implemented): a Worker cron that dumps D1 contents to R2 daily, with R2 cross-account replication, so a CF account loss survives.
+This is not a complete Cloudflare account backup. There is no cross-account replication or automated JSON-import restore in this implementation. Keep independent copies and verify a recovery procedure before an incident. For D1 Time Travel retention and restoration options, consult the currently configured database and Cloudflare documentation; do not assume a fixed retention period from this runbook.
+
+App source is in each app's GitHub repository; the deployed bundle is in R2. Restoring source, routes, bundles, bindings, and secrets are separate recovery steps. After any restoration, validate sign-in, user/app isolation, deployed app responses, and the relevant service before declaring recovery complete.
 
 ## Bus factor
 

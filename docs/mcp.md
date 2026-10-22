@@ -42,7 +42,7 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 | `create_app` | Provision repo + hosting + listing, scaffold template, deploy live at `<id>.freeappstore.online` |
 | `update_files` | Write/overwrite files in an app you own; auto-redeploys in ~30-60s |
 
-### Build — let the VibeCode agent write code (auth + vaulted AI key)
+### Build — let the VibeCode agent write code (auth + usable AI provider connection)
 
 | Tool | Description |
 |------|-------------|
@@ -65,7 +65,7 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 | `deploy_status` | None | Check last 5 GitHub Actions runs |
 | `app_logs` | Owner | Recent errors, warnings, SDK calls, build info |
 | `platform_guide` | None | Fetch full SKILLS.md platform guide, followed by the current app-building rules |
-| `sdk_reference` | None | SDK reference. Start with `shell` (the standard app frame), then `components`; also auth, kv, counters, collections, rooms, proxy, keys, hooks, ui |
+| `sdk_reference` | None | SDK reference. Start with `shell` (the standard app frame), then `components`; also auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui |
 
 ## Workflow Recipes
 
@@ -104,7 +104,7 @@ Expected tool flow:
 ```
 "Build me a pomodoro timer and deploy it as pomodoro."
 Expected tool flow:
-1. agent_build      → VibeCode agent writes + deploys (uses your vaulted AI key)
+1. agent_build      → VibeCode agent writes + deploys (uses a supported provider connection or vaulted key)
 2. agent_status     → poll until live URL is ready
 ```
 
@@ -136,7 +136,7 @@ Expected tool flow:
 - Create new apps (provision + scaffold + deploy)
 - Update files in apps you own (auto-redeploys)
 
-**Agent** (auth + vaulted AI key):
+**Agent** (auth + usable AI provider connection):
 - Trigger VibeCode agent builds
 - Poll agent build status
 
@@ -155,7 +155,7 @@ The MCP server supports two auth methods:
 1. **OAuth 2.1** (automatic via `mcp-remote`) — recommended. The OAuth flow redirects to GitHub sign-in and provisions a scoped access token.
 2. **Bearer token** — pass a FAS session token directly via `Authorization: Bearer <token>`.
 
-Write tools (`create_app`, `update_files`) additionally verify app ownership via the backend `/v1/apps/mine` endpoint. Agent tools (`agent_build`) require a funded AI key in your FreeAppStore vault.
+Write tools (`create_app`, `update_files`) additionally verify app ownership via the backend `/v1/apps/mine` endpoint. Agent tools (`agent_build`) require a usable AI key in your vault or a supported platform-configured provider connection. The selected provider controls availability and charges.
 
 ## Security
 

@@ -44,7 +44,7 @@ Hosted on Cloudflare Pages. Push to `main` auto-deploys via GitHub Actions.
 |------|------|-------------|
 | Home | `index.html` (generated) | App grid with category filters |
 | App detail | `dist/<id>/index.html` | Per-app detail page |
-| Developer | `developers.html` | Developer profile pages |
+| Developer | `templates/creators.html` | Generated creator index and `u/` profiles |
 | About | `about.html` | Platform info |
 | Contribute | `contribute.html` | How to publish |
 | Build with AI | `build-with-ai.html` | VibeCode guide |
@@ -57,4 +57,4 @@ Hosted on Cloudflare Pages. Push to `main` auto-deploys via GitHub Actions.
 - `build.js` — Static site generator (reads `registry.json`, emits HTML)
 - `registry.json` — Source of truth for all published apps
 - `SECURITY.md` — CSP, headers, threat model
-- `_headers` — Cloudflare Pages headers (CSP, HSTS, etc.)
+- `build.js` → `dist/_headers` — generated Cloudflare Pages headers (CSP, HSTS, etc.)

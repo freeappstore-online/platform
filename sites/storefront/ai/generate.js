@@ -9,7 +9,7 @@ const path = require('path');
 
 const SKILLS_URL = 'https://freeappstore.online/skills.md';
 const CLAUDE_GUIDE_URL = 'https://freeappstore.online/claude-code.md';
-const SDK_DOCS = 'https://github.com/freeappstore-online/platform/tree/main/packages/sdk#readme';
+const SDK_DOCS = 'https://docs.freeappstore.online/sdk/';
 const PLATFORM_REPO = 'https://github.com/freeappstore-online/platform';
 
 const tools = [
@@ -52,7 +52,7 @@ const tools = [
   {
     slug: 'codex',
     name: 'Codex',
-    desc: 'OpenAI\'s CLI agent. Give it the platform guide and a description — it builds in a sandbox.',
+    desc: 'OpenAI\'s coding agent. Give it the platform guide and an app description.',
     type: 'cli',
     quickstart: `codex "Read ${SKILLS_URL} then scaffold and build a [describe your app] for FreeAppStore"`,
     setup: [
@@ -60,10 +60,10 @@ const tools = [
       { cmd: 'npm i -g @freeappstore/cli && fas login', note: 'Install FreeAppStore CLI' },
     ],
     build: `codex "Read ${SKILLS_URL} then scaffold and build a habit tracker for FreeAppStore"`,
-    context: `Codex reads the URL inline. For repeat use, add to your <code>codex.md</code>:\n\n${copyCommand(`Read ${SKILLS_URL} for FreeAppStore platform conventions.`)}`,
+    context: `Ask Codex to read the platform guide; provide its text if network access is unavailable. For repeat use, add to your <code>AGENTS.md</code>:\n\n${copyCommand(`Read ${SKILLS_URL} for FreeAppStore platform conventions.`)}`,
     tips: [
       'After Codex finishes, run <code>fas check && fas publish</code> from the output directory.',
-      'Codex builds in a sandbox — review the output before publishing.',
+      'Review the generated app and run compliance checks before publishing. <a href="https://learn.chatgpt.com/docs/agent-configuration/agents-md">Official Codex project-instructions reference</a>.',
     ],
   },
   {
@@ -123,14 +123,14 @@ const tools = [
     name: 'Aider',
     desc: 'Terminal-based AI pair programmer. Load the platform guide with --read.',
     type: 'cli',
-    quickstart: `fas init my-app && cd my-app && pnpm install && aider --read ${SKILLS_URL}`,
+    quickstart: `fas init my-app && cd my-app && pnpm install && curl -fsSL ${SKILLS_URL} -o PLATFORM.md && aider --read PLATFORM.md`,
     setup: [
       { cmd: 'pip install aider-chat', note: 'Install Aider' },
       { cmd: 'npm i -g @freeappstore/cli && fas login', note: 'Install FreeAppStore CLI' },
       { cmd: 'fas init my-app && cd my-app && pnpm install', note: 'Scaffold your app' },
     ],
-    build: `aider --read ${SKILLS_URL}`,
-    context: `The <code>--read</code> flag loads the URL as read-only context for the entire session.`,
+    build: `curl -fsSL ${SKILLS_URL} -o PLATFORM.md && aider --read PLATFORM.md`,
+    context: `Download the guide first, then pass the local file to <code>--read</code>.`,
     tips: [
       'Aider edits files in-place — review diffs with <code>/diff</code>.',
       'Run <code>fas check && fas publish</code> when done.',
@@ -164,7 +164,7 @@ const tools = [
       { cmd: 'fas init my-app && cd my-app && pnpm install', note: 'Scaffold your app' },
     ],
     build: `Open the AI assistant panel, paste "Read ${SKILLS_URL}" as context, then describe your app.`,
-    context: `Zed doesn't have a rules file — paste the URL at the start of each AI session.`,
+    context: `Add the guide to project instructions or paste its text into the session.`,
     tips: [
       'Zed\'s AI assistant supports inline edits and multi-file generation.',
       'Run <code>fas check && fas publish</code> from the terminal.',
@@ -181,7 +181,7 @@ const tools = [
       { cmd: 'fas init my-app && cd my-app && pnpm install', note: 'Scaffold your app' },
     ],
     build: `Go to <a href="https://chatgpt.com">chatgpt.com</a>, paste the contents of <a href="${SKILLS_URL}">${SKILLS_URL}</a>, then describe your app. Copy the generated code into your scaffold.`,
-    context: `Paste the full skills.md text at the start of each conversation. ChatGPT can't fetch URLs directly.`,
+    context: `Paste the full skills.md text at the start of each conversation. If your session cannot open the guide URL, paste the full text instead.`,
     tips: [
       'Copy generated files into <code>web/src/App.tsx</code> and <code>web/src/components/</code>.',
       'Run <code>fas check && fas publish</code> locally.',
@@ -218,7 +218,7 @@ function html(tool) {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${tool.name} — FreeAppStore</title>
   <meta name="description" content="Build a free app on FreeAppStore with ${tool.name}." />
   <meta property="og:title" content="${tool.name} — FreeAppStore" />
@@ -266,16 +266,16 @@ ${setupSteps}
       </li>
       <li>
         <strong>Future updates</strong>
-        ${copyCommand('git push origin main')}
-        <p>Auto-deploys in ~30 seconds.</p>
+        ${copyCommand('git push upstream main')}
+        <p>First add the remote printed by <code>fas publish</code>. Push your app code and wait for its deploy workflow to succeed.</p>
       </li>
     </ol>
 
     <h2 class="ai-guide-heading">Add user accounts &amp; cloud storage</h2>
-    <p>Standalone apps use localStorage. If you need GitHub sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
+    <p>Standalone apps use localStorage. If you need platform sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
     ${copyCommand('cd web && pnpm add @freeappstore/sdk')}
     <ul>
-      <li><strong>Auth</strong> — GitHub OAuth. <code>fas.auth.signIn()</code></li>
+      <li><strong>Auth</strong> — GitHub, Google, Apple, or email (when configured). <code>fas.auth.signIn()</code></li>
       <li><strong>KV</strong> — Per-user storage. <code>fas.kv.set('key', value)</code></li>
       <li><strong>Rooms</strong> — Realtime WebSocket. <code>fas.rooms.join('lobby')</code></li>
       <li><strong>Proxy</strong> — Server-side API keys. <code>fas.proxy.fetch('api.example.com/data')</code></li>

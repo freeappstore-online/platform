@@ -11,7 +11,7 @@ import type { Unsubscribe } from './types.js';
  * - max 32 concurrent peers per room
  * - max 100 messages/sec per peer
  * - max 4KB per message
- * - max 64 active rooms per app (LRU evicts the oldest)
+ * - max 64 active rooms per app (new rooms rejected with 429 at capacity)
  * - rooms idle for 24h are auto-evicted
  */
 export interface RoomPeer {
