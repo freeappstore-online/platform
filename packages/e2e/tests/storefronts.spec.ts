@@ -13,6 +13,36 @@ test('freeappstore.online homepage renders the apps grid', async ({ page }) => {
   const cards = page.locator('.app-card');
   await expect(cards.first()).toBeVisible();
   expect(await cards.count()).toBeGreaterThan(5);
+  // Detail-page metadata styles must never add padding and divider lines to cards.
+  const meta = cards.first().locator('.app-meta');
+  expect(await meta.evaluate((el) => getComputedStyle(el).paddingTop)).toBe('0px');
+  expect(await meta.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe('0px');
+  const cardBox = await cards.first().boundingBox();
+  expect(cardBox?.height).toBeLessThan(110);
+  await expect(page.locator('#previewPane')).toBeHidden();
+
+  // The footer must remain in normal flow, including at the mobile breakpoint.
+  const footer = page.getByRole('navigation', { name: 'Footer', exact: true });
+  expect(await footer.evaluate((el) => getComputedStyle(el).position)).toBe('static');
+  await footer.scrollIntoViewIfNeeded();
+  await expect(footer.getByRole('link', { name: 'Developer resources' })).toBeInViewport();
+});
+
+test('desktop app preview opens on selection and close restores the catalogue', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'Mobile cards navigate to app details.');
+  await page.goto('https://freeappstore.online');
+  const card = page.locator('#apps-grid .app-card').first();
+  await card.focus();
+  await card.press('Enter');
+  await expect(page.locator('#previewPane')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open in new tab', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await expect(page.locator('#previewPane')).toBeHidden();
+  await expect(card).toBeFocused();
+  expect(new URL(page.url()).searchParams.has('app')).toBe(false);
 });
 
 test('freegamestore.online homepage renders the games grid', async ({ page }) => {
