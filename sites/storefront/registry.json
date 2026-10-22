@@ -2588,20 +2588,6 @@
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
       "permissions": []
-    },
-    {
-      "id": "e2e-canary-mvjt4ptcuu4y",
-      "name": "e2e-canary-mvjt4ptcuu4y",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mvjt4ptcuu4y.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mvjt4ptcuu4y",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
