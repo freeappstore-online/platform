@@ -183,6 +183,36 @@ describe('checkBundleSizeLive', () => {
     expect(r.status).toBe('fail');
     expect(r.detail).toMatch(/over 300 KB/);
   });
+
+  it('fails when a modulepreload vendor exceeds 300 KB even if the entry is small', async () => {
+    const small = randomBytes(50_000);
+    const large = randomBytes(400_000);
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+      const body = String(url).includes('vendor') ? large : small;
+      return Promise.resolve(new Response(body.buffer as ArrayBuffer, { status: 200 }));
+    });
+    const html = `
+      <link rel="modulepreload" href="/assets/vendor-xyz.js">
+      <script type="module" src="/assets/index-abc.js"></script>
+    `;
+    const r = await checkBundleSizeLive(html, 'https://x.example');
+    expect(r.status).toBe('fail');
+    expect(r.detail).toMatch(/vendor-xyz\.js/);
+  });
+
+  it('does not fetch JS that is only mentioned in the page body (lazy chunks stay unmeasured)', async () => {
+    const small = randomBytes(20_000);
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(new Response(small.buffer as ArrayBuffer, { status: 200 }));
+    const html = `
+      <script type="module" src="/assets/index-abc.js"></script>
+      <p>See /assets/ocr-chunk.js for the worker.</p>
+    `;
+    const r = await checkBundleSizeLive(html, 'https://x.example');
+    expect(r.status).toBe('pass');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toMatch(/index-abc\.js/);
+  });
 });
 
 describe('auditLive (integration)', () => {

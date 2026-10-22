@@ -26,6 +26,7 @@ import { githubTreeSource } from './lib/github-tree-source.js';
 import { isGameProject } from './lib/project-type.js';
 import type { CheckResult } from './types.js';
 
+export { INITIAL_LOAD_MAX_GZIP_BYTES, LAZY_ASSET_MAX_BYTES } from './lib/bundle-limits.js';
 export type { FileSource } from './lib/file-source.js';
 export { extractInlineManifest, type InlineManifest } from './lib/inline-manifest.js';
 export type { DeclaredPermission, PermissionId } from './lib/permissions.js';

@@ -158,7 +158,7 @@ Before publishing, run:
 fas check
 ```
 
-This verifies: MIT license, no tracking SDKs, brand fonts (Manrope + Fraunces), CSS variables, HTML meta tags (lang, viewport, title), PWA manifest, mobile-web-app-capable, store link in source, dark mode support, pnpm workspace, no unreplaced template placeholders, bundle under 300KB gzipped.
+This verifies: MIT license, no tracking SDKs, brand fonts (Manrope + Fraunces), CSS variables, HTML meta tags (lang, viewport, title), PWA manifest, mobile-web-app-capable, store link in source, dark mode support, pnpm workspace, no unreplaced template placeholders, initial-load JS under 300KB gzipped (lazy wasm, workers, and dynamic chunks up to 25MB each).
 
 ## Publishing
 

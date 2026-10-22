@@ -61,7 +61,7 @@ Runs compliance checks against the app in the current directory.
 | Brand fonts present | Manrope + Fraunces referenced |
 | No brand overrides | No redefined platform CSS tokens |
 | PWA manifest | Valid `manifest.json` with name, display, start_url |
-| Bundle size | Under 300KB gzipped |
+| Bundle size | Initial-load JS under 300 KB gzipped; lazy wasm/workers under 25 MB each |
 
 ## `fas publish`
 

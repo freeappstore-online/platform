@@ -280,7 +280,7 @@ Every app and game on the platform shares the same visual language — colors, f
 | `Brand fonts present` | Manrope (body) + Fraunces (display) both referenced in CSS / HTML. |
 | `No brand overrides` | No app redefines a platform CSS token (`--paper`, `--ink`, `--accent`, `--line`, `--line-strong`, `--panel`, `--muted`) outside the canonical theme file; no non-brand `font-family` declarations. |
 | `PWA manifest` | `web/public/manifest.json` with `name`, `display`, `start_url`. |
-| `Bundle size` | Main bundle under 300 KB gzipped. |
+| `Bundle size` | Initial-load JS under 300 KB gzipped; lazy wasm/workers/dynamic chunks under 25 MB each. |
 
 `fas publish` auto-runs `fas check` and aborts on hard failures (override with `--skip-checks`, admin review will still catch issues).
 

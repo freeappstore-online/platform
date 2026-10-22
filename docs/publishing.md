@@ -54,7 +54,7 @@ The homepage lists app names, categories, permissions, and quality badges. Selec
 All published apps must:
 
 - Be open source (MIT license)
-- Pass `fas check` compliance (no tracking, brand fonts, valid manifest, <300KB bundle)
+- Pass `fas check` compliance (no tracking, brand fonts, valid manifest, initial-load JS <300KB gzipped)
 - Have a valid `package.json` with a unique name
 
 ## Managing your app

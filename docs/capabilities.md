@@ -84,5 +84,11 @@ A per-app opt-in is [#286](https://github.com/freeappstore-online/platform/issue
 ## Platform services
 
 The SDK's server-side limits (KV, collections, rooms, proxy, email, push) are in [Limits](platform-limits.md).
-`fas check` measures the largest JavaScript file. Making it ignore lazily loaded WebAssembly and workers
-is [#290](https://github.com/freeappstore-online/platform/issues/290).
+
+`fas check` **bundle-size** measures the **initial load** only: the HTML entry chunk plus its static
+imports (from the Vite manifest, or from `<script>` / `modulepreload` and static `import` statements).
+That graph must stay under **300 KB gzipped** per JS file. Dynamically imported chunks, workers,
+`.wasm` and data files are not in that graph; each of those lazy assets may be up to **25 MB**.
+Put OCR (tesseract), pdf.js workers, ffmpeg.wasm, ONNX/Transformers.js models and Pyodide behind
+`import()` / `new Worker()` / `new URL(..., import.meta.url)` so they download only when the user
+opens the feature.

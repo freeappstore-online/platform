@@ -908,7 +908,7 @@ The canonical list lives in [`workflows/compliance.yml`](./workflows/compliance.
 - `freeappstore.online` link somewhere in `web/src/`
 - Dark-mode support (`prefers-color-scheme` / `data-theme` / `color-scheme`)
 - Root pnpm workspace (`pnpm-workspace.yaml` + `pnpm` in `package.json`)
-- Largest JS asset under 300KB gzipped (307200 bytes)
+- Initial-load JS (entry chunk + static imports) under 300KB gzipped (307200 bytes). Lazy-loaded wasm, workers, and dynamic chunks may be up to 25MB each — put OCR, pdf.js, ffmpeg.wasm, ONNX behind `import()` / `new Worker()` so they are not in the initial graph.
 
 ### Runtime viewport check (pre-publish)
 

@@ -101,6 +101,18 @@ Reminders are delivered by the backend's 15-minute cron, so they arrive up to ~1
 
 Scoped to `(appId, userId)` like KV. One row per browser registration, keyed by its endpoint: re-subscribing the same device updates it (and doesn't count again), and an endpoint re-registered by another user or app moves to them. Endpoints must be `https` on a known push service (FCM, Mozilla, WNS, Apple); `keys.p256dh` must be a 65-byte P-256 point and `keys.auth` 16 bytes (both base64url). `GET /v1/push/vapid-public-key` returns `503` until the platform VAPID key is configured.
 
+## Client bundle (`fas check` bundle-size)
+
+| Limit | Value | On breach |
+|-------|-------|-----------|
+| Initial-load JS (entry chunk + static imports) | 300 KB gzipped per file | `fas check` **fail** |
+| Lazy asset (dynamic chunk, worker, `.wasm`, model/data file) | 25 MB uncompressed per file | `fas check` **fail** |
+
+Initial load is what the browser downloads from the HTML parse: the entry `<script>` plus its static
+imports (`<link rel="modulepreload">` and ESM `import`). `import()`, `new Worker()`, and
+`new URL(..., import.meta.url)` assets are lazy. Source of truth:
+`packages/compliance/src/lib/bundle-limits.ts`.
+
 ## What FAS does NOT support
 
 These features are not exposed by the FreeAppStore SDK. For a separate paid platform, see [ProAppStore](https://proappstore.online); its current plans and limits are defined there:
@@ -124,5 +136,6 @@ Implementation and configuration define the limits:
 - `packages/backend/src/routes/secrets.ts`: app-secret proxy
 - `packages/backend/src/lib/session.ts`: session lifetime
 - `packages/backend/src/do/room.ts` and `routes/rooms.ts`: realtime limits
+- `packages/compliance/src/lib/bundle-limits.ts`: initial JS and lazy-asset caps
 
 Browser APIs are a separate concern: see [Browser Capabilities](capabilities.md). A documented API can still require configured platform credentials, user sign-in, browser support, and permission.

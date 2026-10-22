@@ -7,7 +7,7 @@
  *   - Tracking SDK injection (script src, inline scripts, fetched JS)
  *   - Brand fonts presence (link href to fonts.googleapis.com)
  *   - PWA manifest reachable + valid
- *   - Main bundle size (HEAD request)
+ *   - Initial-load JS size (entry script + modulepreload chunks)
  *
  * What we CAN'T check post-publish:
  *   - APPNAME placeholders (build erases these)
@@ -18,8 +18,15 @@
  * time without leaving the storefront.
  */
 
+import { INITIAL_LOAD_MAX_GZIP_BYTES } from '../lib/bundle-limits.js';
 import { gzipByteLength } from '../lib/gzip.js';
+import { collectInitialJsRefs, jsAssetFileName } from '../lib/html-initial-js.js';
 import type { CheckResult } from '../types.js';
+
+/** Cap live fetches of the initial graph so a page with many modulepreloads
+ *  cannot blow the Worker subrequest budget. 6 is well above a typical
+ *  Vite split (entry + 1–2 vendors). */
+const MAX_LIVE_INITIAL_FETCHES = 6;
 
 const TRACKER_PATTERNS = [
   /google-analytics\.com/i,
@@ -221,13 +228,11 @@ export async function checkManifestLive(html: string, liveUrl: string): Promise<
 }
 
 export async function checkBundleSizeLive(html: string, liveUrl: string): Promise<CheckResult> {
-  // Find the largest-looking bundled JS reference. Vite output looks like
-  // src="/assets/index-XYZ.js" — starts with `/`, no chars before. Use
-  // `[^"']*` (zero or more) instead of `[^"']+` (one or more) so the
-  // root-relative path matches; with `+` every Vite app was misreported
-  // as "non-Vite layout" and the audit silently skipped bundle-size.
-  const m = /<script[^>]+src=["']([^"']*\/assets\/[^"']+\.js)["']/i.exec(html);
-  if (!m) {
+  // Same initial-load graph the source-side check uses: <script src>
+  // plus <link rel="modulepreload">. Dynamic chunks are not in the HTML,
+  // so a large lazy worker/wasm cannot fail the live 300 KB cap.
+  const assetRefs = collectInitialJsRefs(html).filter((r) => jsAssetFileName(r) !== null);
+  if (assetRefs.length === 0) {
     // Plausible miss for non-Vite apps — not a fail, just skip.
     return {
       name: 'Bundle size (live)',
@@ -235,31 +240,28 @@ export async function checkBundleSizeLive(html: string, liveUrl: string): Promis
       detail: 'no /assets/*.js found — non-Vite layout?',
     };
   }
-  const jsUrl = new URL(m[1]!, liveUrl).toString();
+
+  let largestName = '';
+  let largestGzip = 0;
+  let largestRaw = 0;
   try {
-    const res = await fetchWithTimeout(jsUrl);
-    if (!res.ok) {
-      return { name: 'Bundle size (live)', status: 'fail', detail: `${jsUrl} → ${res.status}` };
+    for (const ref of assetRefs.slice(0, MAX_LIVE_INITIAL_FETCHES)) {
+      const jsUrl = new URL(ref, liveUrl).toString();
+      const res = await fetchWithTimeout(jsUrl);
+      if (!res.ok) {
+        return { name: 'Bundle size (live)', status: 'fail', detail: `${jsUrl} → ${res.status}` };
+      }
+      const body = await res.arrayBuffer();
+      // Real gzip via the shared helper — same math the source-side
+      // check uses, so live and source verdicts can never disagree on
+      // a borderline app.
+      const gzippedBytes = await gzipByteLength(new Uint8Array(body));
+      if (gzippedBytes > largestGzip) {
+        largestGzip = gzippedBytes;
+        largestRaw = body.byteLength;
+        largestName = jsAssetFileName(ref) ?? ref;
+      }
     }
-    const body = await res.arrayBuffer();
-    // Real gzip via the shared helper — same math the source-side
-    // check uses, so live and source verdicts can never disagree on
-    // a borderline app.
-    const rawKb = Math.round(body.byteLength / 1024);
-    const gzippedBytes = await gzipByteLength(new Uint8Array(body));
-    const gzipKb = Math.round(gzippedBytes / 1024);
-    if (gzipKb > 300) {
-      return {
-        name: 'Bundle size (live)',
-        status: 'fail',
-        detail: `${gzipKb} KB gzipped (raw ${rawKb} KB) — over 300 KB limit`,
-      };
-    }
-    return {
-      name: 'Bundle size (live)',
-      status: 'pass',
-      detail: `${gzipKb} KB gzipped (raw ${rawKb} KB)`,
-    };
   } catch (err) {
     const skipped = isSubrequestCapError(err);
     return {
@@ -272,6 +274,22 @@ export async function checkBundleSizeLive(html: string, liveUrl: string): Promis
           : 'bundle fetch failed',
     };
   }
+
+  const gzipKb = Math.round(largestGzip / 1024);
+  const rawKb = Math.round(largestRaw / 1024);
+  const limitKb = Math.round(INITIAL_LOAD_MAX_GZIP_BYTES / 1024);
+  if (largestGzip > INITIAL_LOAD_MAX_GZIP_BYTES) {
+    return {
+      name: 'Bundle size (live)',
+      status: 'fail',
+      detail: `${largestName}: ${gzipKb} KB gzipped (raw ${rawKb} KB) — over ${limitKb} KB limit`,
+    };
+  }
+  return {
+    name: 'Bundle size (live)',
+    status: 'pass',
+    detail: `${largestName}: ${gzipKb} KB gzipped (raw ${rawKb} KB)`,
+  };
 }
 
 /**

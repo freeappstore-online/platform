@@ -81,9 +81,98 @@ jobs:
 
       - name: Bundle size
         run: |
-          BUNDLE=$(find web/dist -name "*.js" -path "*/assets/*" | sort -rn | head -1)
-          if [ -n "$BUNDLE" ]; then
-            GZIP_SIZE=$(gzip -c "$BUNDLE" | wc -c)
-            echo "Bundle gzipped: $((GZIP_SIZE / 1024))KB"
-            test "$GZIP_SIZE" -lt 307200
-          fi
+          # Initial-load JS (HTML entry + static imports) ≤ 300KB gzip.
+          # Lazy JS/wasm/workers/data ≤ 25MB each. Mirrors fas check bundle-size.
+          node --input-type=module <<'EOF'
+          import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+          import { join } from 'node:path';
+          import { gzipSync } from 'node:zlib';
+
+          const INITIAL_MAX = 300 * 1024;
+          const LAZY_MAX = 25 * 1024 * 1024;
+          const dir = 'web/dist/assets';
+          if (!existsSync(dir)) process.exit(0);
+          const names = readdirSync(dir).filter((n) => {
+            try { return statSync(join(dir, n)).isFile(); } catch { return false; }
+          });
+          const isJs = (n) => /\.(?:m|c)?js$/i.test(n);
+          const isLazy = (n) =>
+            !/\.map$/i.test(n) &&
+            (isJs(n) || /\.(?:wasm|data|bin|onnx|tflite|traineddata|gz|zst)$/i.test(n));
+          const attr = (tag, name) => {
+            const m = new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`, 'i').exec(tag);
+            return m?.[1] ?? m?.[2];
+          };
+          const initial = new Set();
+          const htmlPath = 'web/dist/index.html';
+          if (existsSync(htmlPath)) {
+            const html = readFileSync(htmlPath, 'utf8');
+            const refs = [];
+            for (const m of html.matchAll(/<script\b[^>]*>/gi)) {
+              const src = attr(m[0], 'src');
+              if (src) refs.push(src);
+            }
+            for (const m of html.matchAll(/<link\b[^>]*>/gi)) {
+              if ((attr(m[0], 'rel') || '').toLowerCase() === 'modulepreload') {
+                const href = attr(m[0], 'href');
+                if (href) refs.push(href);
+              }
+            }
+            for (const ref of refs) {
+              const path = ref.split(/[?#]/, 1)[0].replace(/^\.\//, '');
+              const mm = /(?:^|\/)assets\/(.+\.m?js)$/i.exec(path);
+              if (mm) initial.add(mm[1]);
+            }
+            const seen = new Set();
+            const queue = [...initial];
+            const importRe =
+              /(?:^|[\n;])\s*(?:import|export)\s*(?:type\s+)?(?:[^\n'"()]*?from\s*)?["'](\.[^"']+)["']/g;
+            while (queue.length) {
+              const file = queue.pop();
+              if (!file || seen.has(file)) continue;
+              seen.add(file);
+              const full = join(dir, file);
+              if (!existsSync(full)) continue;
+              const text = readFileSync(full, 'utf8');
+              for (const m of text.matchAll(importRe)) {
+                const spec = m[1].split(/[?#]/, 1)[0];
+                if (!isJs(spec)) continue;
+                const fromDir = file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '';
+                const parts = [...(fromDir ? fromDir.split('/') : []), ...spec.split('/')];
+                const out = [];
+                for (const p of parts) {
+                  if (p === '.' || p === '') continue;
+                  if (p === '..') out.pop();
+                  else out.push(p);
+                }
+                const resolved = out.join('/');
+                if (resolved && !seen.has(resolved)) {
+                  initial.add(resolved);
+                  queue.push(resolved);
+                }
+              }
+            }
+          }
+          let initialJs = [...initial].filter((n) => names.includes(n));
+          if (initialJs.length === 0) initialJs = names.filter(isJs);
+          const initialSet = new Set(initialJs);
+          let failed = false;
+          for (const name of initialJs) {
+            const gz = gzipSync(readFileSync(join(dir, name))).length;
+            if (gz > INITIAL_MAX) {
+              console.error(`${name}: ${(gz / 1024).toFixed(1)} KB gzipped (limit 300 KB initial load)`);
+              failed = true;
+            } else {
+              console.log(`${name}: ${(gz / 1024).toFixed(1)} KB gzipped (initial load)`);
+            }
+          }
+          for (const name of names) {
+            if (initialSet.has(name) || !isLazy(name)) continue;
+            const size = statSync(join(dir, name)).size;
+            if (size > LAZY_MAX) {
+              console.error(`${name}: ${(size / (1024 * 1024)).toFixed(1)} MB (limit 25 MB per lazy asset)`);
+              failed = true;
+            }
+          }
+          process.exit(failed ? 1 : 0);
+          EOF
