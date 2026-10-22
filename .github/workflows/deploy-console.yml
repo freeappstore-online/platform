@@ -3,7 +3,7 @@ name: Deploy console
 # Deploys the creator console SPA to R2 (prefix apps/console).
 #
 # User-facing URL is https://freeappstore.online/app/ — the storefront Pages
-# Function freeappstore/functions/app/[[path]].ts strips the /app prefix and
+# Function sites/storefront/functions/app/[[path]].ts strips the /app prefix and
 # proxies to the console origin console.freeappstore.online (which serves this
 # apps/console prefix). The build MUST use a relative Vite base ('./') or the
 # HTML asks for assets at the apex root and 404s. See sites/console/CLAUDE.md.
@@ -19,9 +19,8 @@ name: Deploy console
 #  - console is a nested pnpm workspace; `working-directory: sites/console` makes
 #    pnpm root at the nearest pnpm-workspace.yaml (G3).
 #
-# Dispatch-only until the R2 S3 secrets (G4) are provisioned on this repo and the
-# deploy is verified green; then archive freeappstore-online/console and enable
-# the push trigger below.
+# Changes to sites/console on main deploy automatically from this monorepo.
+# workflow_dispatch supports explicit redeployment of the same source.
 
 on:
   push:

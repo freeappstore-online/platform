@@ -26,7 +26,7 @@ cookie problems. Same pattern as the PAS console.
 
 The wiring:
 
-1. `freeappstore/functions/app/[[path]].ts` (a CF Pages Function on the
+1. `sites/storefront/functions/app/[[path]].ts` (a CF Pages Function on the
    storefront) catches `freeappstore.online/app/*`, **strips the `/app` prefix**,
    and proxies to the console origin `console.freeappstore.online`.
 2. `console.freeappstore.online` is the internal R2 origin (`apps/console`) the

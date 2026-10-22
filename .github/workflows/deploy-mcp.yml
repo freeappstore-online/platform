@@ -8,9 +8,8 @@ name: Deploy mcp
 # Worker name `freeappstore-mcp` is unchanged, so the Durable Object namespace
 # (FasMcpAgent) and its applied migrations carry over (G5).
 #
-# Dispatch-only for now: the standalone freeappstore-online/mcp repo still owns
-# auto-deploy until this is verified, then we archive that remote and enable the
-# push trigger below.
+# Changes to workers/mcp on main deploy automatically from this monorepo.
+# workflow_dispatch supports explicit redeployment of the same source.
 
 on:
   push:
