@@ -35,7 +35,7 @@ STORE = "apps"
 # real Durable Object (test/runtime/alarm-loop.test.ts, epic #38); set "false"
 # and redeploy to roll back.
 ALARM_LOOP = "true"
-VAPID_PUBLIC_KEY = "BB9nIKmrVFJQJWZ4MiXzv3eN2UfGtuXESqVlQMobPiZiTmS8cQuldiXNreIV03dCo3Jkkflk6UDoAzWMvhNXCuw"
+VAPID_PUBLIC_KEY = "BIlVvIX9EX-NSIUGqt_DNiQWC_-SRUO7aLeu-SWNSWXqMC0ilLSCIkJ_Noa6GBn2UhC5z0OLJ2Pu2Yk8NcoSqyg"
 
 # Cloudflare AI Gateway (opt-in). Account is shared with PAS. Routing only
 # activates once BOTH ACCOUNT_ID and ID are set, so this stays inert until the
@@ -46,5 +46,5 @@ AI_GATEWAY_ACCOUNT_ID = "c1089bfcc43c1c6c2aa89e584e86f0bc"
 
 # Secrets (set via `wrangler secret put`):
 # GITHUB_TOKEN       — org-level PAT for provisioning + pushing code
-# VAPID_PRIVATE_KEY  — VAPID private key for web push notifications
+# VAPID_PRIVATE_KEY  — shared FAS Web Push private key; managed as fas/VAPID_PRIVATE_KEY in ~/dev/ops
 # AI_GATEWAY_TOKEN   — only for an authenticated gateway (optional; SOPS-managed)

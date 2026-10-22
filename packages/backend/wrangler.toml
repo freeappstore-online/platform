@@ -14,6 +14,7 @@ custom_domain = true
 # https://github.com/organizations/freeappstore-online/settings/applications/3576238
 [vars]
 GITHUB_CLIENT_ID = "Ov23liuUpYPXc1ikEFm2"
+VAPID_PUBLIC_KEY = "BIlVvIX9EX-NSIUGqt_DNiQWC_-SRUO7aLeu-SWNSWXqMC0ilLSCIkJ_Noa6GBn2UhC5z0OLJ2Pu2Yk8NcoSqyg"
 
 # Native Cloudflare Email Service is used for magic-link and app
 # transactional email. The sending domain must be onboarded in the
@@ -82,5 +83,4 @@ service = "freeappstore-admin"
 #   COMP_KEY_OPENAI          # platform-funded OpenAI key for complimentary VibeCode grants
 #   COMP_KEY_ANTHROPIC       # platform-funded Anthropic key for complimentary VibeCode grants
 #   COMP_KEY_GOOGLE          # platform-funded Google AI key for complimentary VibeCode grants
-#   VAPID_PUBLIC_KEY         # Web Push VAPID public key, base64url (fas.push, #145); not set yet
-#   VAPID_PRIVATE_KEY        # Web Push VAPID private key, base64url (fas.push, #145); not set yet
+#   VAPID_PRIVATE_KEY        # Web Push VAPID private key, base64url (fas.push, #145); managed as fas/VAPID_PRIVATE_KEY in ~/dev/ops

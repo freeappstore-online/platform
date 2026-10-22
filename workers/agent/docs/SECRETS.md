@@ -9,8 +9,8 @@ through its `env` parameter (constructor injection — no header passing).
 
 ```
 GITHUB_TOKEN     ← wrangler secret (org repo access)
-VAPID_PUBLIC_KEY ← wrangler secret (web push notifications)
-VAPID_PRIVATE_KEY← wrangler secret (web push notifications)
+VAPID_PUBLIC_KEY ← public `[vars]` value shared with freeappstore-api
+VAPID_PRIVATE_KEY← wrangler secret shared with freeappstore-api; managed as fas/VAPID_PRIVATE_KEY in `~/dev/ops`
 ```
 
 **Note:** `CF_API_TOKEN` is no longer needed. Deploy creates a GitHub repo and
