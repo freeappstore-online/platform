@@ -33,7 +33,7 @@ const REAL_REGISTRY = join(REPO_ROOT, "registry.json");
 const XSS_PAYLOAD = "<script>alert(1)</script>";
 const FIXTURE_ID = "xss-fixture";
 
-function runBuild({ withQualityScores = false, withStalePages = false } = {}) {
+function runBuild({ withQualityScores = false, withStalePages = false, discoveryStatus } = {}) {
   // Use a unique temp dir per run so parallel test invocations don't
   // collide. The temp dir is cleaned up after each test below.
   const tmp = mkdtempSync(join(tmpdir(), "fas-build-test-"));
@@ -61,6 +61,7 @@ function runBuild({ withQualityScores = false, withStalePages = false } = {}) {
     type: "standalone",
     developer: "FreeAppStore",
   });
+  if (discoveryStatus) realRegistry.apps.push({ id: 'first-deploy-fixture', name: 'First Deploy Fixture', category: 'utilities', appUrl: 'https://first-deploy-fixture.freeappstore.online/', repo: 'freeappstore-online/first-deploy-fixture', discoveryStatus });
   writeFileSync(tmpRegistry, JSON.stringify(realRegistry, null, 2));
   if (withQualityScores) {
     mkdirSync(join(tmpDist, "quality"), { recursive: true });
@@ -632,6 +633,22 @@ test("sitemap identities match built pages and unavailable apps stay out of disc
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });
 
+
+test("pending discovery is absent from home, detail, embedded search, public registry and sitemap until promoted", () => {
+  for (const discoveryStatus of ['pending', 'live']) {
+    const { tmp, tmpDist } = runBuild({ discoveryStatus });
+    try {
+      const eligible = discoveryStatus === 'live';
+      const home = readFileSync(join(tmpDist, 'index.html'), 'utf8');
+      const publicRegistry = JSON.parse(readFileSync(join(tmpDist, 'registry.json'), 'utf8'));
+      const sitemap = readFileSync(join(tmpDist, 'sitemap.xml'), 'utf8');
+      assert.equal(home.includes('first-deploy-fixture'), eligible);
+      assert.equal(publicRegistry.apps.some(app => app.id === 'first-deploy-fixture'), eligible);
+      assert.equal(sitemap.includes('/apps/first-deploy-fixture<'), eligible);
+      assert.equal(readdirSync(join(tmpDist, 'apps')).includes('first-deploy-fixture.html'), eligible);
+    } finally { rmSync(tmp, { recursive: true, force: true }); }
+  }
+});
 
 test("reused build output removes withdrawn app and author pages", () => {
   const { tmp, tmpDist } = runBuild({ withStalePages: true });

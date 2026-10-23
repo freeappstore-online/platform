@@ -10,7 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-import { type GhFn, handlePublish, insertHostRoute, writeRegistryWithRetry } from "./publish";
+import { type GhFn, handlePublish, insertHostRoute, STORE_CONFIG, writeRegistryWithRetry } from "./publish";
 
 // ── Helpers ──
 
@@ -196,6 +196,42 @@ describe("insertHostRoute", () => {
 // ── writeRegistryWithRetry ──
 
 describe("writeRegistryWithRetry", () => {
+  it("queues only a new record for discovery while retaining the provisioned launch route", async () => {
+    let entry: Record<string, unknown> | undefined;
+    const gh: GhFn = async (_path, method, body) => {
+      if (method === "PUT") {
+        entry = JSON.parse(atob(String((body as { content: string }).content))).apps[0];
+        return { content: { sha: "new" } };
+      }
+      return { content: btoa(JSON.stringify({ apps: [] })), sha: "old" };
+    };
+    const result = await writeRegistryWithRetry(gh, baseReq(), STORE_CONFIG.apps, "testapp.freeappstore.online");
+    expect(entry).toMatchObject({ id: "testapp", appUrl: "https://testapp.freeappstore.online", discoveryStatus: "pending" });
+    expect(Number.isNaN(Date.parse(String(entry?.discoveryRequestedAt)))).toBe(false);
+    expect(result.detail).toContain("awaiting a successful deployment");
+  });
+
+  it("idempotent reprovision preserves legacy, live, pending and unavailable publication decisions", async () => {
+    for (const state of [
+      {},
+      { discoveryStatus: "live" },
+      { discoveryStatus: "pending", discoveryRequestedAt: "original" },
+      { status: "unavailable" },
+    ]) {
+      const existing = { id: "testapp", ...state };
+      const writes: unknown[] = [];
+      const gh: GhFn = async (_path, method, body) => {
+        if (method === "PUT") writes.push(body);
+        return { content: btoa(JSON.stringify({ apps: [existing] })), sha: "old" };
+      };
+      const result = await writeRegistryWithRetry(gh, baseReq(), STORE_CONFIG.apps, "testapp.freeappstore.online");
+      expect(result.status).toBe("skip");
+      expect(writes).toEqual([]);
+      if ("discoveryStatus" in state && state.discoveryStatus === "pending")
+        expect(result.detail).toContain("awaiting a successful deployment");
+    }
+  });
+
   it("adds entry to registry on success", async () => {
     const gh = successGh();
     const req = baseReq();
@@ -229,7 +265,7 @@ describe("writeRegistryWithRetry", () => {
     } as any;
     const result = await writeRegistryWithRetry(gh, req, config, "testapp.freeappstore.online");
     expect(result.status).toBe("skip");
-    expect(result.detail).toContain("Already listed");
+    expect(result.detail).toContain("Already provisioned");
   });
 
   it("retries once on 409 conflict", async () => {
@@ -321,7 +357,7 @@ describe("handlePublish", () => {
 
   it("creates new repo when it does not exist", async () => {
     let repoCreated = false;
-    const gh: GhFn = async (path, method, body) => {
+    const gh: GhFn = async (path, method, _body) => {
       if (path.includes("/repos/freeappstore-online/testapp") && !method) {
         return { __status: 404 }; // repo doesn't exist
       }

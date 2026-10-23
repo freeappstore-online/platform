@@ -21,10 +21,10 @@ Go to [freeappstore.online/app/build](https://freeappstore.online/app/build), de
 3. **Provision** -- POSTs to the platform API, which calls the admin Worker via service binding. Admin creates:
    - An empty GitHub repo in the `freeappstore-online` org
    - A D1 hosting route (subdomain -> R2 prefix)
-   - A storefront registry entry
+   - A pending storefront registry entry (kept out of public discovery until deployment)
 4. **Deploy workflow** -- injects `.github/workflows/deploy.yml` locally if missing.
 5. **Ownership** -- records the app in the platform DB.
-6. **Output** -- prints the live URL, repo URL, storefront URL, and `git remote add` + `git push` commands.
+6. **Output** -- prints the launch URL, repo URL, future storefront URL, and `git remote add` + `git push` commands.
 
 If provisioning is unavailable, the command reports the error and exits. Nothing is queued and no submission form opens. Retry after checking the platform status; `--issue` is not a supported flag.
 
@@ -40,6 +40,12 @@ After the initial publish, every `git push` to `main` triggers auto-deploy:
 The URL starts serving your code after a successful first push and deploy. Runtime depends on build time and the Actions queue; use `fas logs <id>` or the console to check it.
 
 ## Storefront listing
+
+Provisioning creates the repo and route early so a failed first build can be retried by pushing corrected code. A new listing starts with `discoveryStatus: pending`; it is absent from the homepage, search, public registry, sitemap and cached detail routes while pending.
+
+The automated **Reconcile pending app discovery** workflow runs every ten minutes and can also be run manually. It promotes a pending entry only when its latest main production deploy succeeded for the current main commit and the current launch URL serves healthy HTML without an explicit noindex directive or conflicting canonical. The host's fallback metadata is added after publication, so missing fallback metadata does not block the first listing. Promotion requests the existing storefront deployment; publication timing also depends on the Actions queue and storefront build.
+
+Existing legacy/live entries retain their publication state and are never delisted for a temporary outage. Reprovisioning preserves existing publication choices. Removed, unavailable or private entries are not automatically republished; concurrent edits to the launch target or provisioning generation are rechecked before promotion.
 
 The homepage lists app names, categories, permissions, and quality badges. Selecting an app on desktop opens a live preview. Its detail page adds:
 

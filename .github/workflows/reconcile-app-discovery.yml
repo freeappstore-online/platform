@@ -1,0 +1,33 @@
+name: Reconcile pending app discovery
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/reconcile-app-discovery*'
+      - 'sites/storefront/registry.json'
+      - 'sites/storefront/lib/discovery.cjs'
+      - '.github/workflows/reconcile-app-discovery.yml'
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: reconcile-app-discovery
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test publication lifecycle
+        run: node --test scripts/reconcile-app-discovery.test.mjs
+      - name: Promote deployed, indexable pending listings
+        run: node scripts/reconcile-app-discovery.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

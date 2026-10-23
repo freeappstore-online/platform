@@ -192,6 +192,8 @@ function buildRegistryEntry(req: PublishRequest, config: StoreConfig, subdomain:
     hostedOn: "r2",
     type: req.type || "standalone",
     developer: config.developer,
+    discoveryStatus: "pending",
+    discoveryRequestedAt: new Date().toISOString(),
   };
   // Persist the creator's GitHub username so the storefront can render
   // author chips + per-author profile pages at /u/<username>. The admin
@@ -240,12 +242,17 @@ export async function writeRegistryWithRetry(gh: GhFn, req: PublishRequest, conf
     }
     const content = decodeRegistry(registryFile);
     const items = content[key] || [];
-    const alreadyListed = items.some((a: any) => a.id === req.id);
-    if (alreadyListed) {
+    const existing = items.find((a: any) => a.id === req.id);
+    if (existing) {
       return {
         name: "Store registry",
         status: "skip",
-        detail: isRetry ? "Added by a concurrent provision" : "Already listed",
+        detail:
+          existing.discoveryStatus === "pending"
+            ? "Provisioned; awaiting a successful deployment before listing"
+            : isRetry
+              ? "Added by a concurrent provision"
+              : "Already provisioned; existing publication settings preserved",
       };
     }
     items.push(entry);
@@ -257,7 +264,7 @@ export async function writeRegistryWithRetry(gh: GhFn, req: PublishRequest, conf
       sha: registryFile.sha,
     });
     if (updateResult.content) {
-      return { name: "Store registry", status: "ok", detail: `Added ${req.name}` };
+      return { name: "Store registry", status: "ok", detail: `Provisioned ${req.name}; awaiting a successful deployment before listing` };
     }
     if (updateResult.__status === 409) {
       return null; // caller decides whether to retry

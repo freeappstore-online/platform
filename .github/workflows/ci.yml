@@ -41,6 +41,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+      - name: Discovery lifecycle tests
+        run: node --test scripts/reconcile-app-discovery.test.mjs
 
   # Each Worker is its own project (own lockfile), so the root `pnpm test` and
   # `pnpm lint` reach none of them. Agent, host and mcp unit suites used to

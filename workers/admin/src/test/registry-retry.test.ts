@@ -60,7 +60,11 @@ describe("writeRegistryWithRetry", () => {
 
     const step = await writeRegistryWithRetry(gh, req, config, subdomain);
 
-    expect(step).toEqual({ name: "Store registry", status: "ok", detail: "Added Calendar" });
+    expect(step).toEqual({
+      name: "Store registry",
+      status: "ok",
+      detail: "Provisioned Calendar; awaiting a successful deployment before listing",
+    });
     expect(gh).toHaveBeenCalledTimes(2); // 1 GET + 1 PUT
     expect(gh.mock.calls[0][1]).toBeUndefined(); // first call is a GET (default method)
     expect(gh.mock.calls[1][1]).toBe("PUT");
@@ -86,7 +90,11 @@ describe("writeRegistryWithRetry", () => {
 
     const step = await writeRegistryWithRetry(gh, req, config, subdomain);
 
-    expect(step).toEqual({ name: "Store registry", status: "ok", detail: "Added Calendar" });
+    expect(step).toEqual({
+      name: "Store registry",
+      status: "ok",
+      detail: "Provisioned Calendar; awaiting a successful deployment before listing",
+    });
     // 1 GET + 1 PUT(409) + 1 GET (retry) + 1 PUT(200) = 4 calls
     expect(gh).toHaveBeenCalledTimes(4);
   });
@@ -139,7 +147,7 @@ describe("writeRegistryWithRetry", () => {
     expect(gh).toHaveBeenCalledTimes(3);
   });
 
-  it("already-listed on first try → skip with 'Already listed', no PUT", async () => {
+  it("already-provisioned on first try → preserve existing publication settings, no PUT", async () => {
     const gh = vi.fn(async (_path: string, method?: string) => {
       if (method === undefined || method === "GET") {
         return encodeFile([{ id: "calendar", name: "Calendar" }], "sha-1");
@@ -149,7 +157,11 @@ describe("writeRegistryWithRetry", () => {
 
     const step = await writeRegistryWithRetry(gh, req, config, subdomain);
 
-    expect(step).toEqual({ name: "Store registry", status: "skip", detail: "Already listed" });
+    expect(step).toEqual({
+      name: "Store registry",
+      status: "skip",
+      detail: "Already provisioned; existing publication settings preserved",
+    });
     // Only 1 GET, no PUT.
     expect(gh).toHaveBeenCalledTimes(1);
   });

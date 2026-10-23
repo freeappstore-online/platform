@@ -23,7 +23,8 @@ const STYLE_CSS_PATH = process.env.FAS_STYLE_CSS_PATH
 // Read registry
 const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
 // Provisioned/retired entries remain in source, but are not public listings.
-const apps = registry.apps.filter(app => app.status === undefined || ['live', 'published', 'approved'].includes(app.status));
+const { isPublicListing } = require('./lib/discovery.cjs');
+const apps = registry.apps.filter(isPublicListing);
 
 // --- Registry shape validator (security: stop malformed/malicious entries at
 // build time before they get a chance to render). Loud failure is intentional

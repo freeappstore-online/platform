@@ -1,8 +1,9 @@
 import registry from '../../registry.json';
+import discovery from '../../lib/discovery.cjs';
 
 // A removed static asset can remain in an edge cache. Check public eligibility
 // before Pages serves it, including legacy .html URLs. No customer data is read.
-const published = new Set(registry.apps.filter(app => app.status === undefined || ['live', 'published', 'approved'].includes(app.status)).map(app => app.id));
+const published = new Set(registry.apps.filter(discovery.isPublicListing).map(app => app.id));
 
 export async function onRequest(context) {
   const path = new URL(context.request.url).pathname;

@@ -224,9 +224,13 @@ export const publishCommand = new Command('publish')
         const workflowResult = await ensureDeployWorkflow();
 
         process.stdout.write(`\n✓ Provisioned!\n`);
-        process.stdout.write(`  Live at:  ${autoResult.appUrl}\n`);
+        process.stdout.write(`  Launch URL: ${autoResult.appUrl}\n`);
         process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
         process.stdout.write(`  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`);
+        if (store === 'apps')
+          process.stdout.write(
+            '  The listing appears after the first successful, publicly accessible deployment.\n\n',
+          );
         if (workflowResult === 'created') {
           process.stdout.write(`  Added .github/workflows/deploy.yml (R2 deploy workflow)\n\n`);
         } else if (workflowResult === 'upgraded') {
