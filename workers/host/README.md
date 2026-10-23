@@ -85,3 +85,8 @@ unavailable and unlisted apps get no sitemap. Explicit noindex roots remain
 crawlable so crawlers can read that instruction, but are omitted from sitemaps.
 Metadata lookup failure never prevents app serving. App metadata can change
 without an R2 deploy, so transformed HTML has no R2 ETag and uses `no-store`.
+
+Existing registered custom-domain sites retain their crawl behavior even when
+there is no separate platform catalogue URL for that hostname. Generated root
+sitemaps are withheld on secondary hosts when the HTML selects another canonical;
+robots stays crawlable so crawlers can read that canonical or a noindex tag.
