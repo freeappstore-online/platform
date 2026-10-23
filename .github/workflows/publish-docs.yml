@@ -56,6 +56,7 @@ jobs:
           cat > mkdocs.yml <<'YAML'
           site_name: FreeAppStore Platform Docs
           site_url: https://docs.freeappstore.online/
+          site_description: Build, publish and operate free web apps with the FreeAppStore SDK, CLI, hosting and MCP platform.
           docs_dir: zensical-src
           copyright: Built on FreeAppStore · freeappstore.online
           theme:
