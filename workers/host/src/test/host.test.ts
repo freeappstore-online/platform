@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   contentType,
+  crawlAssetResponse,
   etagsMatch,
   isImmutablePath,
   type Route,
@@ -10,6 +11,30 @@ import {
   securityHeaders,
   sitemapXmlFor,
 } from "../host";
+
+describe("authored crawl file responses", () => {
+  const object = (body: string) => ({ body: new Response(body).body, httpEtag: '"crawl-v1"' }) as R2ObjectBody;
+  it.each([
+    ["/robots.txt", "text/plain"],
+    ["/sitemap.xml", "application/xml"],
+  ])("preserves %s with its MIME type, security and revalidating cache", async (path, type) => {
+    const response = crawlAssetResponse(object("authored content"), path, "GET", null);
+    expect(await response.text()).toBe("authored content");
+    expect(response.headers.get("content-type")).toBe(`${type}; charset=utf-8`);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=60, must-revalidate");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("etag")).toBe('"crawl-v1"');
+  });
+  it("answers HEAD and conditional requests without transferring an authored body", async () => {
+    const head = crawlAssetResponse(object("authored content"), "/sitemap.xml", "HEAD", null);
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+    const cached = crawlAssetResponse(object("authored content"), "/sitemap.xml", "GET", 'W/"crawl-v1"');
+    expect(cached.status).toBe(304);
+    expect(await cached.text()).toBe("");
+    expect(cached.headers.get("etag")).toBe('"crawl-v1"');
+  });
+});
 
 // Minimal D1 stub — verifies the SQL shape and parameter binding without
 // spinning up a real D1. Real schema integration is exercised by the

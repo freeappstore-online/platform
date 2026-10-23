@@ -107,6 +107,36 @@ describe("serving an app: D1 routes row → R2 object", () => {
     const sitemap = await get("https://seo.freeappstore.online/sitemap.xml");
     expect(sitemap.headers.get("content-type")).toMatch(/^application\/xml/);
   });
+
+  it("serves authored crawl files with all lesson URLs, exclusions and normal HEAD/ETag behavior", async () => {
+    const xml = '<urlset><url><loc>https://seo.freeappstore.online/lesson/one</loc></url><url><loc>https://seo.freeappstore.online/lesson/two</loc></url></urlset>';
+    const robots = 'User-agent: *\nDisallow: /workspace/\nSitemap: https://seo.freeappstore.online/sitemap.xml\n';
+    await env.APPS.put("apps/seo/sitemap.xml", xml);
+    await env.APPS.put("apps/seo/robots.txt", robots);
+    for (const [file, body, type] of [["sitemap.xml", xml, "application/xml"], ["robots.txt", robots, "text/plain"]]) {
+      const url = `https://seo.freeappstore.online/${file}`;
+      const response = await get(url);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(body);
+      expect(response.headers.get("content-type")).toBe(`${type}; charset=utf-8`);
+      expect(response.headers.get("cache-control")).toBe("public, max-age=60, must-revalidate");
+      const etag = response.headers.get("etag")!;
+      const head = await get(url, { method: "HEAD" });
+      expect(head.status).toBe(200);
+      expect(await head.text()).toBe("");
+      expect(head.headers.get("etag")).toBe(etag);
+      const cached = await get(url, { headers: { "if-none-match": etag } });
+      expect(cached.status).toBe(304);
+      expect(await cached.text()).toBe("");
+    }
+  });
+
+  it("generates only the missing crawl file when the other file is authored", async () => {
+    await env.APPS.put("apps/seo/sitemap.xml", "<urlset><url><loc>https://seo.freeappstore.online/lesson</loc></url></urlset>");
+    const robots = await get("https://seo.freeappstore.online/robots.txt");
+    expect(await robots.text()).toContain("Sitemap: https://seo.freeappstore.online/sitemap.xml");
+    expect(await (await get("https://seo.freeappstore.online/sitemap.xml")).text()).toContain("/lesson</loc>");
+  });
 });
 
 describe("custom domains", () => {
@@ -187,17 +217,23 @@ describe("public root metadata", () => {
   });
   it("does not advertise a secondary host when the app declares another canonical", async () => {
     await env.APPS.put("apps/seo/index.html", '<html><head><link rel="canonical" href="https://custom.example/"></head><body>Public app</body></html>');
+    await env.APPS.put("apps/seo/sitemap.xml", "<urlset>must remain hidden</urlset>");
+    await env.APPS.put("apps/seo/robots.txt", "User-agent: *\nSitemap: must remain hidden\n");
     expect((await get("https://seo.freeappstore.online/sitemap.xml")).status).toBe(404);
     expect(await (await get("https://seo.freeappstore.online/robots.txt")).text()).toBe("User-agent: *\nAllow: /\n");
   });
 
   it("does not advertise an explicitly noindex root", async () => {
     await env.APPS.put("apps/seo/index.html", '<html><head><meta name="robots" content="noindex"></head><body>Private workspace</body></html>');
+    await env.APPS.put("apps/seo/sitemap.xml", "<urlset>must remain hidden</urlset>");
+    await env.APPS.put("apps/seo/robots.txt", "User-agent: *\nSitemap: must remain hidden\n");
     expect((await get("https://seo.freeappstore.online/sitemap.xml")).status).toBe(404);
     expect(await (await get("https://seo.freeappstore.online/robots.txt")).text()).toBe("User-agent: *\nAllow: /\n");
   });
   it("does not advertise unbuilt or unlisted apps", async () => {
     for (const slug of ["unbuilt", "dict"]) {
+      await env.APPS.put(`apps/${slug}/sitemap.xml`, "<urlset>must remain hidden</urlset>");
+      await env.APPS.put(`apps/${slug}/robots.txt`, "User-agent: *\nSitemap: must remain hidden\n");
       expect((await get(`https://${slug}.freeappstore.online/sitemap.xml`)).status).toBe(404);
       expect(await (await get(`https://${slug}.freeappstore.online/robots.txt`)).text()).toContain("Disallow: /");
     }

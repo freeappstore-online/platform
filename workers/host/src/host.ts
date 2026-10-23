@@ -83,7 +83,9 @@ export function etagsMatch(headerValue: string | null, objectEtag: string): bool
   if (!headerValue) return false;
   const trimmed = headerValue.trim();
   if (trimmed === "*") return true;
-  return trimmed.split(",").some((t) => t.trim() === objectEtag);
+  // If-None-Match on GET/HEAD uses weak comparison (RFC 9110).
+  const weak = (value: string) => value.trim().replace(/^W\//, "");
+  return trimmed.split(",").some((t) => weak(t) === weak(objectEtag));
 }
 
 export function robotsTxtFor(origin: string): string {
@@ -257,4 +259,16 @@ export function contentType(path: string): string {
     default:
       return "application/octet-stream";
   }
+}
+
+/** Authored crawl files are mutable public assets, with normal conditional/HEAD semantics. */
+export function crawlAssetResponse(obj: R2ObjectBody, pathname: string, method: string, ifNoneMatch: string | null): Response {
+  const headers = securityHeaders({ htmlCache: true });
+  headers.set("content-type", contentType(pathname));
+  headers.set("etag", obj.httpEtag);
+  const unchanged = etagsMatch(ifNoneMatch, obj.httpEtag);
+  return new Response(unchanged || method === "HEAD" ? null : obj.body, {
+    status: unchanged ? 304 : 200,
+    headers,
+  });
 }

@@ -9,6 +9,7 @@
 
 import {
   contentType,
+  crawlAssetResponse,
   type Env,
   etagsMatch,
   isImmutablePath,
@@ -174,7 +175,7 @@ async function serve(
   const isRoot = url.pathname === "/" || url.pathname === "/index.html";
   const isCrawl = url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml";
   const app = isRoot || isCrawl ? await publicApp(route) : undefined;
-  if (isCrawl) return appCrawlResponse(bucket, route, url, method, app);
+  if (isCrawl) return appCrawlResponse(bucket, route, url, method, app, ifNoneMatch);
 
   const key = r2KeyFor(route, url.pathname);
   let obj = await bucket.get(key);
@@ -220,6 +221,7 @@ async function appCrawlResponse(
   url: URL,
   method: string,
   app: Awaited<ReturnType<typeof publicApp>>,
+  ifNoneMatch: string | null,
 ): Promise<Response> {
   const root = (app || route.zone !== "freeappstore.online") && (await bucket.get(`${route.r2_prefix}/index.html`));
   let noindex = false;
@@ -251,6 +253,10 @@ async function appCrawlResponse(
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
   }
+  // Preserve an app's multipage sitemap and robots exclusions only after
+  // the public/root/canonical checks shared with generated crawl files.
+  const authored = await bucket.get(r2KeyFor(route, url.pathname));
+  if (authored) return crawlAssetResponse(authored, url.pathname, method, ifNoneMatch);
   return generatedCrawlResponse(url, method)!;
 }
 
