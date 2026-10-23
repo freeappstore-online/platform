@@ -33,7 +33,7 @@ const REAL_REGISTRY = join(REPO_ROOT, "registry.json");
 const XSS_PAYLOAD = "<script>alert(1)</script>";
 const FIXTURE_ID = "xss-fixture";
 
-function runBuild({ withQualityScores = false } = {}) {
+function runBuild({ withQualityScores = false, withStalePages = false } = {}) {
   // Use a unique temp dir per run so parallel test invocations don't
   // collide. The temp dir is cleaned up after each test below.
   const tmp = mkdtempSync(join(tmpdir(), "fas-build-test-"));
@@ -68,6 +68,13 @@ function runBuild({ withQualityScores = false } = {}) {
       join(tmpDist, "quality", "scores.json"),
       JSON.stringify(Object.fromEntries(realRegistry.apps.map((app) => [app.id, { score: 95, grade: "A" }])), null, 2),
     );
+  }
+
+  if (withStalePages) {
+    for (const directory of ["apps", "u"]) {
+      mkdirSync(join(tmpDist, directory), { recursive: true });
+      writeFileSync(join(tmpDist, directory, "withdrawn.html"), "Stale public listing");
+    }
   }
 
   // Network calls inside build.js all degrade gracefully on failure;
@@ -622,5 +629,13 @@ test("sitemap identities match built pages and unavailable apps stay out of disc
       assert.ok(!readFileSync(join(tmpDist, "index.html"), "utf8").includes(`data-id="${id}"`));
     }
     assert.ok(!xml.includes("<lastmod>"));
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+
+test("reused build output removes withdrawn app and author pages", () => {
+  const { tmp, tmpDist } = runBuild({ withStalePages: true });
+  try {
+    for (const directory of ["apps", "u"]) assert.ok(!readdirSync(join(tmpDist, directory)).includes("withdrawn.html"));
   } finally { rmSync(tmp, { recursive: true, force: true }); }
 });

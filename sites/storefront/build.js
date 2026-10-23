@@ -325,7 +325,8 @@ function renderPublishedLine(history) {
   return `<p class="published-line">${parts.join(' &middot; ')}</p>`;
 }
 
-// Ensure dist directories exist
+// Generated detail pages must not survive unpublishing in a reused build directory.
+fs.rmSync(path.join(DIST, 'apps'), { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'apps'), { recursive: true });
 
 // --- Generate index.html ---
@@ -969,6 +970,7 @@ apps.forEach((app, i) => {
 // page — they render as plain "by FreeAppStore" text via renderAuthorChip.
 const authorTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'author.html'), 'utf8'));
 const uniqueAuthors = [...new Set(apps.map(a => a.creatorGithub).filter(Boolean))];
+fs.rmSync(path.join(DIST, 'u'), { recursive: true, force: true });
 fs.mkdirSync(path.join(DIST, 'u'), { recursive: true });
 
 /**
