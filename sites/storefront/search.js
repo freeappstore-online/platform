@@ -71,7 +71,7 @@
     // URL path segments: use encodeURIComponent, not HTML-escape. esc() is
     // the wrong context — it'd let `..` or `/` ride through. Build-time
     // validators already constrain `id`, but defense-in-depth.
-    a.href = `https://${item.domain}/${encodeURIComponent(item.path)}/${encodeURIComponent(item.id)}.html`;
+    a.href = `https://${item.domain}/${encodeURIComponent(item.path)}/${encodeURIComponent(item.id)}`;
     a.target = '_blank';
     a.rel = 'noopener';
     // The build assigns each cross-store entry a safe, opaque style id and

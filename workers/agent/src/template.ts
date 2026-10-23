@@ -139,6 +139,10 @@ const APP_FILES: Record<string, string> = {
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>APPNAME — FreeAppStore</title>
+    <link rel="canonical" href="https://APPID.freeappstore.online/" />
+    <meta property="og:title" content="APPNAME — FreeAppStore" />
+    <meta property="og:url" content="https://APPID.freeappstore.online/" />
+    <meta name="twitter:card" content="summary" />
   </head>
   <body>
     <div id="root"></div>
@@ -769,6 +773,7 @@ export function substituteAppName(files: Record<string, string>, appId: string, 
   const out: Record<string, string> = {};
   for (const [path, content] of Object.entries(files)) {
     out[path] = content.replace(/APPNAME/g, path.includes("package.json") || path.includes("pnpm-workspace") ? appId : displayName);
+    if (path === "web/index.html") out[path] = out[path].replace(/APPID/g, appId);
   }
   // Fix package.json files to use the ID (lowercase, no spaces)
   if (out["package.json"]) {

@@ -17,9 +17,12 @@ beforeAll(async () => {
   );
   await env.DB.batch([
     route.bind("dict", "freeappstore.online", "apps/dict", now, now),
+    route.bind("seo", "freeappstore.online", "apps/seo", now, now),
+    route.bind("unbuilt", "freeappstore.online", "apps/unbuilt", now, now),
     route.bind("agentcoder", "space", "apps/agentcoder", now, now),
   ]);
   await env.APPS.put("apps/dict/index.html", INDEX_HTML);
+  await env.APPS.put("apps/seo/index.html", '<!doctype html><html><head><title>My custom title</title><meta name="robots" content="index,follow"><meta property="og:image" content="/my.png"></head><body><div id="root"></div><script>const x="<title>preserved</title>";</script></body></html>');
   await env.APPS.put("apps/dict/assets/app.js", APP_JS);
   await env.APPS.put("apps/dict/manifest.json", "{}");
   await env.APPS.put("apps/agentcoder/index.html", "<!doctype html><title>AgentCoder</title>");
@@ -96,12 +99,12 @@ describe("serving an app: D1 routes row → R2 object", () => {
   });
 
   it("generates robots.txt and sitemap.xml for an app", async () => {
-    const robots = await get("https://dict.freeappstore.online/robots.txt");
+    const robots = await get("https://seo.freeappstore.online/robots.txt");
     expect(robots.status).toBe(200);
     expect(robots.headers.get("content-type")).toMatch(/^text\/plain/);
-    expect(await robots.text()).toContain("https://dict.freeappstore.online/sitemap.xml");
+    expect(await robots.text()).toContain("https://seo.freeappstore.online/sitemap.xml");
 
-    const sitemap = await get("https://dict.freeappstore.online/sitemap.xml");
+    const sitemap = await get("https://seo.freeappstore.online/sitemap.xml");
     expect(sitemap.headers.get("content-type")).toMatch(/^application\/xml/);
   });
 });
@@ -155,5 +158,34 @@ describe("reserved platform subdomains", () => {
   it("does not treat a custom domain's api.* as the platform API", async () => {
     const res = await get("https://api.agentcoder.space/");
     expect(res.status).toBe(404);
+  });
+});
+
+
+describe("public root metadata", () => {
+  it("fills metadata without changing app markup, noindex, or custom tags", async () => {
+    const response = await get("https://seo.freeappstore.online/?utm_source=test", { headers: { "if-none-match": '"old"' } });
+    const body = await response.text();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("etag")).toBeNull();
+    expect(body).toContain('<title>My custom title</title>');
+    expect(body).toContain('name="robots" content="index,follow"');
+    expect(body).toContain('property="og:image" content="/my.png"');
+    expect(body).toContain('<link rel="canonical" href="https://seo.freeappstore.online/">');
+    expect(body).toContain('content="Useful &lt;app&gt; &amp; &quot;safe&quot;"');
+    expect(body).toContain('const x="<title>preserved</title>";');
+    expect(body.match(/name="description"/g)).toHaveLength(1);
+    expect(await (await get("https://seo.freeappstore.online/private/path")).text()).not.toContain('rel="canonical"');
+  });
+  it("does not advertise an explicitly noindex root", async () => {
+    await env.APPS.put("apps/seo/index.html", '<html><head><meta name="robots" content="noindex"></head><body>Private workspace</body></html>');
+    expect((await get("https://seo.freeappstore.online/sitemap.xml")).status).toBe(404);
+    expect(await (await get("https://seo.freeappstore.online/robots.txt")).text()).toBe("User-agent: *\nAllow: /\n");
+  });
+  it("does not advertise unbuilt or unlisted apps", async () => {
+    for (const slug of ["unbuilt", "dict"]) {
+      expect((await get(`https://${slug}.freeappstore.online/sitemap.xml`)).status).toBe(404);
+      expect(await (await get(`https://${slug}.freeappstore.online/robots.txt`)).text()).toContain("Disallow: /");
+    }
   });
 });

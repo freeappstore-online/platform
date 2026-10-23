@@ -1814,6 +1814,7 @@
     },
     {
       "id": "grade-goal",
+      "status": "unavailable",
       "name": "grade-goal",
       "category": "Utilities",
       "icon": "🚀",
@@ -2340,6 +2341,7 @@
     },
     {
       "id": "pulse-stack",
+      "status": "unavailable",
       "name": "pulse-stack",
       "category": "Productivity",
       "icon": "🚀",

@@ -22,7 +22,8 @@ const STYLE_CSS_PATH = process.env.FAS_STYLE_CSS_PATH
 
 // Read registry
 const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
-const apps = registry.apps;
+// Provisioned/retired entries remain in source, but are not public listings.
+const apps = registry.apps.filter(app => app.status === undefined || ['live', 'published', 'approved'].includes(app.status));
 
 // --- Registry shape validator (security: stop malformed/malicious entries at
 // build time before they get a chance to render). Loud failure is intentional
@@ -419,7 +420,7 @@ function renderPermissionIcons(app) {
 function renderAppCard(app, published) {
   const q = qualityScores[app.id];
   const qualityBadge = q && q.grade
-    ? `<a href="/quality.html?app=${encodeURIComponent(app.id)}&amp;store=apps" class="quality-badge grade-${q.grade.toLowerCase()}" aria-label="Code quality: ${q.grade}, ${q.score}/100" title="Code quality: ${q.score}/100">${q.grade}</a>`
+    ? `<a href="/quality?app=${encodeURIComponent(app.id)}&amp;store=apps" class="quality-badge grade-${q.grade.toLowerCase()}" aria-label="Code quality: ${q.grade}, ${q.score}/100" title="Code quality: ${q.score}/100">${q.grade}</a>`
     : '';
   // Letter fallback lives on a data-attribute; storefront.js binds the
   // img.error listener and reads it. No more JS-string-in-HTML-attribute splicing.
@@ -454,7 +455,7 @@ function renderAppCard(app, published) {
 const renderAuthorChip = (app) => {
   if (app.creatorGithub) {
     const user = escapeHtml(app.creatorGithub);
-    return `<a href="/u/${user}.html" class="author-chip">` +
+    return `<a href="/u/${user}" class="author-chip">` +
       `<img src="https://avatars.githubusercontent.com/${user}?size=40" alt="" class="author-chip-avatar" loading="lazy" width="20" height="20" />` +
       `<span class="author-chip-name">@${user}</span>` +
       `</a>`;
@@ -615,7 +616,7 @@ function renderCodeQualityBadge(appId) {
   const q = qualityScores[appId];
   if (!q || !q.grade) return '';
   const cls = q.score >= 80 ? 'audit-pass' : q.score >= 60 ? 'audit-warn' : 'audit-fail';
-  return `<p class="audit-badge ${cls}"><span class="dot"></span> Code quality: <strong>${q.grade}</strong> (${q.score}/100) &middot; <a href="/quality.html?app=${encodeURIComponent(appId)}&amp;store=apps">full report</a></p>`;
+  return `<p class="audit-badge ${cls}"><span class="dot"></span> Code quality: <strong>${q.grade}</strong> (${q.score}/100) &middot; <a href="/quality?app=${encodeURIComponent(appId)}&amp;store=apps">full report</a></p>`;
 }
 
 function renderAuditBadge(summary) {
@@ -884,7 +885,7 @@ const codeQualityCards = apps
     const q = qualityScores[app.id];
     if (!q || !q.grade) return '';
     const gradeClass = q.score >= 80 ? 'ok' : q.score >= 60 ? 'warn' : 'bad';
-    return `<a href="/quality.html?app=${encodeURIComponent(app.id)}&amp;store=apps" class="q-card"><div class="q-card-head"><span class="name">${escapeHtml(app.name)}</span><span class="index ${gradeClass}">${q.grade}</span></div><div class="meta">${q.score}/100</div></a>`;
+    return `<a href="/quality?app=${encodeURIComponent(app.id)}&amp;store=apps" class="q-card"><div class="q-card-head"><span class="name">${escapeHtml(app.name)}</span><span class="index ${gradeClass}">${q.grade}</span></div><div class="meta">${q.score}/100</div></a>`;
   })
   .filter(Boolean)
   .join('\n        ');
@@ -1064,7 +1065,7 @@ const devCards = uniqueAuthors.map(username => {
   const badgesHtml = badges.length > 0
     ? `<div class="dev-badges">${badges.map(b => `<span class="dev-badge" title="${escapeHtml(b.title)}">${b.icon} ${escapeHtml(b.label)}</span>`).join('')}</div>`
     : '';
-  return `        <a class="dev-card" href="/u/${escapeHtml(username)}.html">
+  return `        <a class="dev-card" href="/u/${escapeHtml(username)}">
           <img class="dev-avatar" src="https://avatars.githubusercontent.com/${escapeHtml(username)}?size=200" alt="" loading="lazy" />
           <div class="dev-card-body">
             <span class="dev-card-name">@${escapeHtml(username)}</span>
@@ -1089,38 +1090,37 @@ console.log(`Generated /creators page (${uniqueAuthors.length} creators)`);
 
 // --- Generate sitemap.xml ---
 
-const today = new Date().toISOString().split('T')[0];
 const sitemapEntries = [
-  `  <url><loc>https://freeappstore.online/</loc><lastmod>${today}</lastmod><priority>1.0</priority></url>`,
-  `  <url><loc>https://freeappstore.online/about.html</loc><lastmod>${today}</lastmod><priority>0.8</priority></url>`,
-  `  <url><loc>https://freeappstore.online/contribute.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/get-started.html</loc><lastmod>${today}</lastmod><priority>0.9</priority></url>`,
-  `  <url><loc>https://freeappstore.online/pricing.html</loc><lastmod>${today}</lastmod><priority>0.8</priority></url>`,
-  `  <url><loc>https://freeappstore.online/build-with-ai.html</loc><lastmod>${today}</lastmod><priority>0.85</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/claude-code.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/cursor.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/github-copilot.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/aider.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/codex.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/windsurf.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/zed.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/continue.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/cline.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/ai/chatgpt-web.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://docs.freeappstore.online/</loc><lastmod>${today}</lastmod><priority>0.85</priority></url>`,
-  `  <url><loc>https://freeappstore.online/capabilities.html</loc><lastmod>${today}</lastmod><priority>0.85</priority></url>`,
-  `  <url><loc>https://freeappstore.online/browser-apis.html</loc><lastmod>${today}</lastmod><priority>0.85</priority></url>`,
-  `  <url><loc>https://freeappstore.online/skills.md</loc><lastmod>${today}</lastmod><priority>0.9</priority></url>`,
-  `  <url><loc>https://freeappstore.online/llms.txt</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/quality.html</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/creators</loc><lastmod>${today}</lastmod><priority>0.7</priority></url>`,
-  `  <url><loc>https://freeappstore.online/privacy.html</loc><lastmod>${today}</lastmod><priority>0.5</priority></url>`,
-  `  <url><loc>https://freeappstore.online/terms.html</loc><lastmod>${today}</lastmod><priority>0.5</priority></url>`,
+  `  <url><loc>https://freeappstore.online/</loc><priority>1.0</priority></url>`,
+  `  <url><loc>https://freeappstore.online/about</loc><priority>0.8</priority></url>`,
+  `  <url><loc>https://freeappstore.online/contribute</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/get-started</loc><priority>0.9</priority></url>`,
+  `  <url><loc>https://freeappstore.online/pricing</loc><priority>0.8</priority></url>`,
+  `  <url><loc>https://freeappstore.online/build-with-ai</loc><priority>0.85</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/claude-code</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/cursor</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/github-copilot</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/aider</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/codex</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/windsurf</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/zed</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/continue</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/cline</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ai/chatgpt-web</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://docs.freeappstore.online/</loc><priority>0.85</priority></url>`,
+  `  <url><loc>https://freeappstore.online/capabilities</loc><priority>0.85</priority></url>`,
+  `  <url><loc>https://freeappstore.online/browser-apis</loc><priority>0.85</priority></url>`,
+  `  <url><loc>https://freeappstore.online/skills.md</loc><priority>0.9</priority></url>`,
+  `  <url><loc>https://freeappstore.online/llms.txt</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/quality</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/creators</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/privacy</loc><priority>0.5</priority></url>`,
+  `  <url><loc>https://freeappstore.online/terms</loc><priority>0.5</priority></url>`,
   ...apps.map(app =>
-    `  <url><loc>https://freeappstore.online/apps/${app.id}.html</loc><lastmod>${today}</lastmod><priority>0.9</priority></url>`
+    `  <url><loc>https://freeappstore.online/apps/${app.id}</loc><priority>0.9</priority></url>`
   ),
   ...uniqueAuthors.map(username =>
-    `  <url><loc>https://freeappstore.online/u/${username}.html</loc><lastmod>${today}</lastmod><priority>0.6</priority></url>`
+    `  <url><loc>https://freeappstore.online/u/${username}</loc><priority>0.6</priority></url>`
   )
 ];
 
@@ -1131,6 +1131,7 @@ ${sitemapEntries.join('\n')}
 `;
 
 fs.writeFileSync(path.join(DIST, 'sitemap.xml'), sitemap);
+fs.writeFileSync(path.join(DIST, 'registry.json'), JSON.stringify({ ...registry, apps }, null, 2) + '\n');
 
 // --- Copy static assets ---
 

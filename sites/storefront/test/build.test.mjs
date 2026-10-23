@@ -86,7 +86,7 @@ function runBuild({ withQualityScores = false } = {}) {
     timeout: 60_000,
   });
 
-  return { tmp, tmpDist, registry: realRegistry };
+  return { tmp, tmpDist, registry: { ...realRegistry, apps: realRegistry.apps.filter(app => app.status === undefined || ["live", "published", "approved"].includes(app.status)) } };
 }
 
 test("build.js writes index.html containing every app id", () => {
@@ -297,7 +297,7 @@ test("build ships the advertised capability pages and external analytics CSS", (
 test("quality report links use the query-parameter detail route", () => {
   const { tmp, tmpDist, registry } = runBuild({ withQualityScores: true });
   try {
-    const expected = `/quality.html?app=${registry.apps[0].id}&amp;store=apps`;
+    const expected = `/quality?app=${registry.apps[0].id}&amp;store=apps`;
     const indexHtml = readFileSync(join(tmpDist, "index.html"), "utf8");
     const qualityHtml = readFileSync(join(tmpDist, "quality.html"), "utf8");
     const detailHtml = readFileSync(join(tmpDist, "apps", `${registry.apps[0].id}.html`), "utf8");
@@ -599,4 +599,28 @@ test("HTML pages must not use inline styles (CSP: style-src self)", () => {
   if (violations.length > 0) {
     assert.fail("CSP violations found:\n  " + violations.join("\n  "));
   }
+});
+
+
+test("sitemap identities match built pages and unavailable apps stay out of discovery", () => {
+  const { tmp, tmpDist } = runBuild();
+  try {
+    const xml = readFileSync(join(tmpDist, "sitemap.xml"), "utf8");
+    const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
+    for (const url of urls) {
+      const u = new URL(url);
+      if (u.origin !== "https://freeappstore.online" || /\.(txt|md)$/.test(u.pathname)) continue;
+      assert.ok(!u.pathname.endsWith(".html"), url);
+      const file = u.pathname === "/" ? "index.html" : `${u.pathname.slice(1)}.html`;
+      const html = readFileSync(join(tmpDist, file), "utf8");
+      assert.ok(html.includes(`<link rel="canonical" href="${url}"`), `${url}: canonical disagrees`);
+    }
+    const published = JSON.parse(readFileSync(join(tmpDist, "registry.json"), "utf8")).apps;
+    for (const id of ["grade-goal", "pulse-stack"]) {
+      assert.ok(!published.some(app => app.id === id));
+      assert.ok(!xml.includes(`/apps/${id}<`));
+      assert.ok(!readFileSync(join(tmpDist, "index.html"), "utf8").includes(`data-id="${id}"`));
+    }
+    assert.ok(!xml.includes("<lastmod>"));
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
 });

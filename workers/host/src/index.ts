@@ -20,6 +20,8 @@ import {
   sitemapXmlFor,
 } from "./host";
 
+import { injectMetadata, publicApp } from "./seo";
+
 /**
  * Platform-infra subdomains: NOT apps. The wildcard route catches them just
  * like apps, but they're dispatched explicitly:
@@ -169,8 +171,10 @@ async function serve(
     return new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } });
   }
 
-  const crawlResponse = generatedCrawlResponse(url, method);
-  if (crawlResponse) return crawlResponse;
+  const isRoot = url.pathname === "/" || url.pathname === "/index.html";
+  const isCrawl = url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml";
+  const app = isRoot || isCrawl ? await publicApp(route) : undefined;
+  if (isCrawl) return appCrawlResponse(bucket, route, url, method, app);
 
   const key = r2KeyFor(route, url.pathname);
   let obj = await bucket.get(key);
@@ -200,13 +204,43 @@ async function serve(
   // 304 Not Modified: skip the body transfer when the browser already has
   // a fresh copy. Saves bandwidth on every refresh of every asset. The
   // R2 object metadata fetch still happens, but the body stream isn't read.
-  if (etagsMatch(ifNoneMatch, obj.httpEtag)) {
+  if (!(app && isRoot && ct.startsWith("text/html")) && etagsMatch(ifNoneMatch, obj.httpEtag)) {
     const headers = securityHeaders({ htmlCache: shortCache });
     headers.set("etag", obj.httpEtag);
     return new Response(null, { status: 304, headers });
   }
 
-  return respond(obj, ct, method, shortCache);
+  const response = respond(obj, ct, method, shortCache);
+  return app && isRoot && ct.startsWith("text/html") ? injectMetadata(response, app) : response;
+}
+
+async function appCrawlResponse(
+  bucket: R2Bucket,
+  route: Route,
+  url: URL,
+  method: string,
+  app: Awaited<ReturnType<typeof publicApp>>,
+): Promise<Response> {
+  const root = app && (await bucket.get(`${route.r2_prefix}/index.html`));
+  let noindex = false;
+  if (root) {
+    await new HTMLRewriter()
+      .on('meta[name="robots"], meta[name="googlebot"]', {
+        element(el: Element) {
+          if (/\bnoindex\b/i.test(el.getAttribute("content") ?? "")) noindex = true;
+        },
+      })
+      .transform(new Response(root.body))
+      .text();
+  }
+  const ready = root && !noindex;
+  if (!ready) {
+    if (url.pathname === "/sitemap.xml") return notFound(url.pathname, route.slug);
+    return new Response(method === "HEAD" ? null : root ? "User-agent: *\nAllow: /\n" : "User-agent: *\nDisallow: /\n", {
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
+  return generatedCrawlResponse(url, method)!;
 }
 
 function generatedCrawlResponse(url: URL, method: string, origin = url.origin): Response | null {

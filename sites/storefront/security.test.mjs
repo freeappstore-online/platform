@@ -92,7 +92,7 @@ describe("search.js security", () => {
       assert.ok(card.innerHTML.includes(esc(payload)));
       assert.ok(!card.innerHTML.includes(payload) || esc(payload) === payload);
       assert.doesNotMatch(card.innerHTML, /\sstyle\s*=/i, "cross-store cards must not emit inline styles");
-      assert.ok(card.href.endsWith('/games/needle%2F..%2Fx.html'));
+      assert.ok(card.href.endsWith('/games/needle%2F..%2Fx'));
       assert.equal(card.rel, 'noopener');
     }
   });

@@ -71,3 +71,17 @@ wrangler deploy
 
 Migrations are applied automatically by wrangler against the bound D1
 database the first time they're seen.
+
+## Public app SEO
+
+The deployed storefront `registry.json` is the authority for public root metadata.
+The host fills missing title, description, canonical and social tags at `/` and
+`/index.html`, preserving app overrides and noindex tags. It never assigns a root
+canonical to arbitrary SPA routes. Public listing pages provide server-rendered
+app descriptions; interactive workspace screens remain app-controlled.
+
+Generated crawl files require an eligible listing and a deployed root. Unbuilt,
+unavailable and unlisted apps get no sitemap. Explicit noindex roots remain
+crawlable so crawlers can read that instruction, but are omitted from sitemaps.
+Metadata lookup failure never prevents app serving. App metadata can change
+without an R2 deploy, so transformed HTML has no R2 ETag and uses `no-store`.
