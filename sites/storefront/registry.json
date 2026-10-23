@@ -2590,6 +2590,20 @@
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
       "permissions": []
+    },
+    {
+      "id": "karaoke",
+      "name": "karaoke",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Make a sing-along from your recording and lyrics, with word highlighting and microphone follow.",
+      "appUrl": "https://karaoke.freeappstore.online",
+      "repo": "freeappstore-online/karaoke",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
