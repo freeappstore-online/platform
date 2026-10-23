@@ -2603,7 +2603,13 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        {
+          "name": "microphone",
+          "reason": "Find the position of your associated recording so lyrics follow nearby music."
+        }
+      ]
     }
   ]
 }
