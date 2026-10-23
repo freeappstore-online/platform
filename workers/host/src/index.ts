@@ -221,8 +221,9 @@ async function appCrawlResponse(
   method: string,
   app: Awaited<ReturnType<typeof publicApp>>,
 ): Promise<Response> {
-  const root = app && (await bucket.get(`${route.r2_prefix}/index.html`));
+  const root = (app || route.zone !== "freeappstore.online") && (await bucket.get(`${route.r2_prefix}/index.html`));
   let noindex = false;
+  let canonical = new URL(app?.appUrl || url.origin).href;
   if (root) {
     await new HTMLRewriter()
       .on('meta[name="robots"], meta[name="googlebot"]', {
@@ -230,10 +231,20 @@ async function appCrawlResponse(
           if (/\bnoindex\b/i.test(el.getAttribute("content") ?? "")) noindex = true;
         },
       })
+      .on('link[rel="canonical"]', {
+        element(el: Element) {
+          const href = el.getAttribute("href");
+          if (href?.trim()) {
+            try {
+              canonical = new URL(href, url.origin).href;
+            } catch {}
+          }
+        },
+      })
       .transform(new Response(root.body))
       .text();
   }
-  const ready = root && !noindex;
+  const ready = root && !noindex && canonical === `${url.origin}/`;
   if (!ready) {
     if (url.pathname === "/sitemap.xml") return notFound(url.pathname, route.slug);
     return new Response(method === "HEAD" ? null : root ? "User-agent: *\nAllow: /\n" : "User-agent: *\nDisallow: /\n", {

@@ -116,6 +116,14 @@ describe("custom domains", () => {
     expect(await res.text()).toContain("AgentCoder");
   });
 
+  it("preserves crawl discovery for an existing custom-domain site", async () => {
+    const robots = await get("https://agentcoder.space/robots.txt");
+    expect(await robots.text()).toContain("Sitemap: https://agentcoder.space/sitemap.xml");
+    const sitemap = await get("https://agentcoder.space/sitemap.xml");
+    expect(sitemap.status).toBe(200);
+    expect(await sitemap.text()).toContain("https://agentcoder.space/");
+  });
+
   it("redirects www to the apex, but serves www crawl files directly", async () => {
     const www = await get("https://www.agentcoder.space/docs?x=1", { redirect: "manual" });
     expect(www.status).toBe(301);
@@ -177,6 +185,12 @@ describe("public root metadata", () => {
     expect(body.match(/name="description"/g)).toHaveLength(1);
     expect(await (await get("https://seo.freeappstore.online/private/path")).text()).not.toContain('rel="canonical"');
   });
+  it("does not advertise a secondary host when the app declares another canonical", async () => {
+    await env.APPS.put("apps/seo/index.html", '<html><head><link rel="canonical" href="https://custom.example/"></head><body>Public app</body></html>');
+    expect((await get("https://seo.freeappstore.online/sitemap.xml")).status).toBe(404);
+    expect(await (await get("https://seo.freeappstore.online/robots.txt")).text()).toBe("User-agent: *\nAllow: /\n");
+  });
+
   it("does not advertise an explicitly noindex root", async () => {
     await env.APPS.put("apps/seo/index.html", '<html><head><meta name="robots" content="noindex"></head><body>Private workspace</body></html>');
     expect((await get("https://seo.freeappstore.online/sitemap.xml")).status).toBe(404);

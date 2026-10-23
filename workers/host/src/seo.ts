@@ -47,7 +47,7 @@ function eligible(apps: PublicApp[], route: Route): PublicApp | undefined {
       return false;
     if (app.status !== undefined && !["live", "published", "approved"].includes(app.status)) return false;
     try {
-      return new URL(app.appUrl).href === `https://${route.slug}.${route.zone}/`;
+      return new URL(app.appUrl).href === `https://${route.slug}.freeappstore.online/`;
     } catch {
       return false;
     }
