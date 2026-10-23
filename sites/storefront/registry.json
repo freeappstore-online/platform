@@ -2610,20 +2610,6 @@
           "reason": "Find the position of your associated recording so lyrics follow nearby music."
         }
       ]
-    },
-    {
-      "id": "e2e-canary-mvlhj6jtrg0m",
-      "name": "e2e-canary-mvlhj6jtrg0m",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mvlhj6jtrg0m.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mvlhj6jtrg0m",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
