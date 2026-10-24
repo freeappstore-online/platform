@@ -2642,6 +2642,22 @@
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-10-24T06:48:21.937Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "mytunes",
+      "name": "mytunes",
+      "category": "Social",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Record tab audio, organize songs into playlists, and share listening links.",
+      "appUrl": "https://mytunes.freeappstore.online",
+      "repo": "freeappstore-online/mytunes",
+      "hostedOn": "r2",
+      "type": "connected",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-10-24T06:49:43.428Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
