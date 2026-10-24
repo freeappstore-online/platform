@@ -2641,8 +2641,7 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-10-24T06:48:21.937Z",
-      "creatorGithub": "serge-ivo",
-      "discoveryDeliveryPending": "81e5e109-3d6e-4303-881a-bbc21220150d"
+      "creatorGithub": "serge-ivo"
     },
     {
       "id": "mytunes",
