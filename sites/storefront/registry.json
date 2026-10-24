@@ -2608,6 +2608,10 @@
         {
           "name": "microphone",
           "reason": "Find the position of your associated recording so lyrics follow nearby music."
+        },
+        {
+          "name": "screen",
+          "reason": "Record audio from a browser tab you explicitly choose in the source picker."
         }
       ]
     },
@@ -2625,7 +2629,10 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-10-24T05:47:34.074Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        "screen"
+      ]
     },
     {
       "id": "music-share",
@@ -2641,7 +2648,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-10-24T06:48:21.937Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "mytunes",
@@ -2657,7 +2665,17 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-10-24T06:49:43.428Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        {
+          "name": "clipboard",
+          "reason": "Copy song and playlist listening links."
+        },
+        {
+          "name": "screen",
+          "reason": "Record audio from a tab you choose in the browser picker."
+        }
+      ]
     }
   ]
 }
