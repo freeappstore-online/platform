@@ -212,19 +212,26 @@ describe("writeRegistryWithRetry", () => {
   });
 
   it("records crossOriginIsolated on a new registry entry only when opted in", async () => {
-    let entry: Record<string, unknown> | undefined;
-    const gh: GhFn = async (_path, method, body) => {
-      if (method === "PUT") {
-        entry = JSON.parse(atob(String((body as { content: string }).content))).apps[0];
-        return { content: { sha: "new" } };
-      }
-      return { content: btoa(JSON.stringify({ apps: [] })), sha: "old" };
+    // One `let` per publish. Resetting a shared binding to undefined before the
+    // async callback writes it again narrows that binding to undefined, and
+    // `entry?.crossOriginIsolated` then fails tsc as a property of `never`.
+    const captureFreshEntry = async (req: Parameters<typeof writeRegistryWithRetry>[1]): Promise<Record<string, unknown> | undefined> => {
+      let entry: Record<string, unknown> | undefined;
+      const gh: GhFn = async (_path, method, body) => {
+        if (method === "PUT") {
+          entry = JSON.parse(atob(String((body as { content: string }).content))).apps[0];
+          return { content: { sha: "new" } };
+        }
+        return { content: btoa(JSON.stringify({ apps: [] })), sha: "old" };
+      };
+      await writeRegistryWithRetry(gh, req, STORE_CONFIG.apps, "testapp.freeappstore.online");
+      return entry;
     };
-    await writeRegistryWithRetry(gh, { ...baseReq(), crossOriginIsolated: true }, STORE_CONFIG.apps, "testapp.freeappstore.online");
-    expect(entry?.crossOriginIsolated).toBe(true);
-    entry = undefined;
-    await writeRegistryWithRetry(gh, baseReq(), STORE_CONFIG.apps, "testapp.freeappstore.online");
-    expect(entry?.crossOriginIsolated).toBeUndefined();
+
+    const optedIn = await captureFreshEntry({ ...baseReq(), crossOriginIsolated: true });
+    expect(optedIn?.crossOriginIsolated).toBe(true);
+    const defaultOff = await captureFreshEntry(baseReq());
+    expect(defaultOff?.crossOriginIsolated).toBeUndefined();
   });
 
   it("idempotent reprovision preserves legacy, live, pending and unavailable publication decisions", async () => {
