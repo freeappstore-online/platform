@@ -2639,9 +2639,10 @@
       "hostedOn": "r2",
       "type": "connected",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-10-24T06:48:21.937Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "discoveryDeliveryPending": "81e5e109-3d6e-4303-881a-bbc21220150d"
     },
     {
       "id": "mytunes",
