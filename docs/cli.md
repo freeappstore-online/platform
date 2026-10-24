@@ -65,7 +65,10 @@ Runs compliance checks against the app in the current directory.
 
 ## `fas publish`
 
-Provisions and publishes your app. Runs `fas check` first.
+Provisions and publishes your app. Runs `fas check` first. If `fas.json` at the
+repo root contains `"crossOriginIsolated": true`, the hosted origin gets COOP/COEP
+headers so `SharedArrayBuffer` and threaded wasm work. Off by default; see
+[Browser Capabilities](capabilities.md#cross-origin-isolation).
 
 ```bash
 fas publish                    # interactive

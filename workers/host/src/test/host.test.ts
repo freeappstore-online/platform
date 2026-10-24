@@ -10,6 +10,7 @@ import {
   robotsTxtFor,
   securityHeaders,
   sitemapXmlFor,
+  wantsCrossOriginIsolation,
 } from "../host";
 
 describe("authored crawl file responses", () => {
@@ -33,6 +34,14 @@ describe("authored crawl file responses", () => {
     expect(cached.status).toBe(304);
     expect(await cached.text()).toBe("");
     expect(cached.headers.get("etag")).toBe('"crawl-v1"');
+  });
+
+  it("forwards COOP/COEP onto authored crawl files only when the app opted in", async () => {
+    const plain = crawlAssetResponse(object("authored content"), "/robots.txt", "GET", null);
+    expect(plain.headers.get("cross-origin-opener-policy")).toBeNull();
+    const iso = crawlAssetResponse(object("authored content"), "/robots.txt", "GET", null, { crossOriginIsolated: true });
+    expect(iso.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+    expect(iso.headers.get("cross-origin-embedder-policy")).toBe("credentialless");
   });
 });
 
@@ -82,6 +91,13 @@ describe("resolveRoute", () => {
     const db = mockDb([kanban, games]);
     expect((await resolveRoute(db, "kanban.freeappstore.online"))?.r2_prefix).toBe("apps/kanban");
     expect((await resolveRoute(db, "kanban.freegamestore.online"))?.r2_prefix).toBe("games/kanban");
+  });
+
+  it("returns the isolation flag stored on the route", async () => {
+    const flagged: Route = { ...kanban, slug: "wasm", r2_prefix: "apps/wasm", cross_origin_isolated: 1 };
+    const row = await resolveRoute(mockDb([flagged]), "wasm.freeappstore.online");
+    expect(row?.cross_origin_isolated).toBe(1);
+    expect(wantsCrossOriginIsolation(row!)).toBe(true);
   });
 });
 
@@ -264,6 +280,40 @@ describe("securityHeaders", () => {
   it("sets nosniff + strict referrer policy", () => {
     expect(html.get("x-content-type-options")).toBe("nosniff");
     expect(html.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+  });
+
+  // #286: isolation is opt-in. Default apps must not send COOP/COEP, or
+  // third-party images, embeds and window.opener break for everyone.
+  it("does not send COOP/COEP or cross-origin-isolated by default", () => {
+    expect(html.get("cross-origin-opener-policy")).toBeNull();
+    expect(html.get("cross-origin-embedder-policy")).toBeNull();
+    expect(html.get("permissions-policy")).not.toContain("cross-origin-isolated");
+    expect(asset.get("cross-origin-opener-policy")).toBeNull();
+    expect(asset.get("cross-origin-embedder-policy")).toBeNull();
+  });
+
+  it("sends COOP/COEP and Permissions-Policy isolation only when opted in", () => {
+    const iso = securityHeaders({ htmlCache: true, crossOriginIsolated: true });
+    expect(iso.get("cross-origin-opener-policy")).toBe("same-origin");
+    expect(iso.get("cross-origin-embedder-policy")).toBe("credentialless");
+    const entries = (iso.get("permissions-policy") ?? "").split(", ");
+    expect(entries).toContain("cross-origin-isolated=(self)");
+    expect(entries.filter((e) => e.endsWith("=()"))).toEqual(["browsing-topics=()", "payment=()"]);
+    // Other default-open grants stay in place.
+    expect(entries).toContain("microphone=(self)");
+    expect(entries).toContain("camera=(self)");
+  });
+});
+
+describe("wantsCrossOriginIsolation", () => {
+  it("is off for missing, 0, or junk values", () => {
+    expect(wantsCrossOriginIsolation({})).toBe(false);
+    expect(wantsCrossOriginIsolation({ cross_origin_isolated: 0 })).toBe(false);
+    expect(wantsCrossOriginIsolation({ cross_origin_isolated: 2 })).toBe(false);
+  });
+
+  it("is on only for the integer 1 stored on the route", () => {
+    expect(wantsCrossOriginIsolation({ cross_origin_isolated: 1 })).toBe(true);
   });
 });
 

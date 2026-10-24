@@ -7,6 +7,7 @@ import {
   ensureDeployWorkflow,
   humanizeProvisionError,
   parseGitHubRepo,
+  readCrossOriginIsolatedFlag,
   resolveCategory,
   resolveFromFlags,
   resolveType,
@@ -230,6 +231,41 @@ describe('ensureDeployWorkflow', () => {
     expect(result).toBe('upgraded');
     const content = readFileSync(join(dir, 'deploy.yml'), 'utf8');
     expect(content).toBe(DEPLOY_YML);
+  });
+});
+
+describe('readCrossOriginIsolatedFlag', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = join(import.meta.dirname, '..', '..', 'node_modules', '.cache', `coi-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    const { rmSync } = require('node:fs');
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns undefined when fas.json is missing', async () => {
+    expect(await readCrossOriginIsolatedFlag(tmpDir)).toBeUndefined();
+  });
+
+  it('returns undefined when the field is absent or not a boolean', async () => {
+    writeFileSync(join(tmpDir, 'fas.json'), JSON.stringify({ apis: [] }));
+    expect(await readCrossOriginIsolatedFlag(tmpDir)).toBeUndefined();
+    writeFileSync(join(tmpDir, 'fas.json'), JSON.stringify({ crossOriginIsolated: 'yes' }));
+    expect(await readCrossOriginIsolatedFlag(tmpDir)).toBeUndefined();
+  });
+
+  it('returns the boolean when set', async () => {
+    writeFileSync(join(tmpDir, 'fas.json'), JSON.stringify({ crossOriginIsolated: true }));
+    expect(await readCrossOriginIsolatedFlag(tmpDir)).toBe(true);
+    writeFileSync(
+      join(tmpDir, 'fas.json'),
+      JSON.stringify({ crossOriginIsolated: false, apis: [] }),
+    );
+    expect(await readCrossOriginIsolatedFlag(tmpDir)).toBe(false);
   });
 });
 

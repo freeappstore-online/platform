@@ -19,6 +19,7 @@ import {
   robotsTxtFor,
   securityHeaders,
   sitemapXmlFor,
+  wantsCrossOriginIsolation,
 } from "./host";
 
 import { injectMetadata, publicApp } from "./seo";
@@ -174,8 +175,9 @@ async function serve(
 
   const isRoot = url.pathname === "/" || url.pathname === "/index.html";
   const isCrawl = url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml";
+  const isolated = wantsCrossOriginIsolation(route);
   const app = isRoot || isCrawl ? await publicApp(route) : undefined;
-  if (isCrawl) return appCrawlResponse(bucket, route, url, method, app, ifNoneMatch);
+  if (isCrawl) return appCrawlResponse(bucket, route, url, method, app, ifNoneMatch, isolated);
 
   const key = r2KeyFor(route, url.pathname);
   let obj = await bucket.get(key);
@@ -206,12 +208,12 @@ async function serve(
   // a fresh copy. Saves bandwidth on every refresh of every asset. The
   // R2 object metadata fetch still happens, but the body stream isn't read.
   if (!(app && isRoot && ct.startsWith("text/html")) && etagsMatch(ifNoneMatch, obj.httpEtag)) {
-    const headers = securityHeaders({ htmlCache: shortCache });
+    const headers = securityHeaders({ htmlCache: shortCache, crossOriginIsolated: isolated });
     headers.set("etag", obj.httpEtag);
     return new Response(null, { status: 304, headers });
   }
 
-  const response = respond(obj, ct, method, shortCache);
+  const response = respond(obj, ct, method, shortCache, isolated);
   return app && isRoot && ct.startsWith("text/html") ? injectMetadata(response, app) : response;
 }
 
@@ -222,6 +224,7 @@ async function appCrawlResponse(
   method: string,
   app: Awaited<ReturnType<typeof publicApp>>,
   ifNoneMatch: string | null,
+  isolated: boolean,
 ): Promise<Response> {
   const root = (app || route.zone !== "freeappstore.online") && (await bucket.get(`${route.r2_prefix}/index.html`));
   let noindex = false;
@@ -256,25 +259,25 @@ async function appCrawlResponse(
   // Preserve an app's multipage sitemap and robots exclusions only after
   // the public/root/canonical checks shared with generated crawl files.
   const authored = await bucket.get(r2KeyFor(route, url.pathname));
-  if (authored) return crawlAssetResponse(authored, url.pathname, method, ifNoneMatch);
-  return generatedCrawlResponse(url, method)!;
+  if (authored) return crawlAssetResponse(authored, url.pathname, method, ifNoneMatch, { crossOriginIsolated: isolated });
+  return generatedCrawlResponse(url, method, url.origin, isolated)!;
 }
 
-function generatedCrawlResponse(url: URL, method: string, origin = url.origin): Response | null {
+function generatedCrawlResponse(url: URL, method: string, origin = url.origin, isolated = false): Response | null {
   if (url.pathname !== "/robots.txt" && url.pathname !== "/sitemap.xml") return null;
 
   const isRobots = url.pathname === "/robots.txt";
   const body = isRobots ? robotsTxtFor(origin) : sitemapXmlFor(origin);
-  const headers = securityHeaders({ htmlCache: true });
+  const headers = securityHeaders({ htmlCache: true, crossOriginIsolated: isolated });
   headers.set("content-type", isRobots ? "text/plain; charset=utf-8" : "application/xml; charset=utf-8");
   headers.set("cache-control", "public, max-age=3600, must-revalidate");
   return new Response(method === "HEAD" ? null : body, { headers });
 }
 
-function respond(obj: R2ObjectBody, ct: string, method: string, shortCache: boolean): Response {
+function respond(obj: R2ObjectBody, ct: string, method: string, shortCache: boolean, isolated = false): Response {
   // Headers are constructed in securityHeaders() so the policy lives in one
   // testable place. We just layer content-type + etag on top.
-  const headers = securityHeaders({ htmlCache: shortCache });
+  const headers = securityHeaders({ htmlCache: shortCache, crossOriginIsolated: isolated });
   headers.set("content-type", ct);
   headers.set("etag", obj.httpEtag);
   // HEAD requests get headers only.

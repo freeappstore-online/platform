@@ -78,6 +78,13 @@ jobs:
           [ "$blocked" = "browsing-topics=() payment=() " ] || { echo "::error::unexpected blocked features: $blocked"; fail=1; }
           printf '%s' "$csp" | grep -q "worker-src 'self' blob:" || { echo "::error::CSP lacks worker-src blob:"; fail=1; }
           printf '%s' "$csp" | grep -q "'wasm-unsafe-eval'" || { echo "::error::CSP lacks 'wasm-unsafe-eval'"; fail=1; }
+          # Isolation is opt-in (#286). A typical app must not send COOP/COEP.
+          printf '%s\n' "$headers" | grep -qi '^cross-origin-opener-policy:' \
+            && { echo "::error::COOP set on default app $TEST_APP_ID"; fail=1; }
+          printf '%s\n' "$headers" | grep -qi '^cross-origin-embedder-policy:' \
+            && { echo "::error::COEP set on default app $TEST_APP_ID"; fail=1; }
+          printf '%s' "$pp" | grep -q 'cross-origin-isolated' \
+            && { echo "::error::Permissions-Policy grants cross-origin-isolated on default app"; fail=1; }
           # Storefront previews delegate the same features to app origins (#284).
           sf=$(curl -sSI --max-time 10 "https://freeappstore.online/apps/echoshift" | tr -d '\r' | grep -i '^permissions-policy:' || true)
           for f in microphone camera geolocation midi gyroscope; do

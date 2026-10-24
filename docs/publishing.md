@@ -55,6 +55,14 @@ The homepage lists app names, categories, permissions, and quality badges. Selec
 - VCQA quality score badge
 - Direct link to `yourapp.freeappstore.online`
 
+## Cross-origin isolation
+
+Off by default. To enable `SharedArrayBuffer` and threaded WebAssembly, add
+`"crossOriginIsolated": true` to `fas.json` at the repo root and run `fas publish`.
+The host then sends COOP/COEP for your app only. Third-party images and embeds
+need CORS or CORP, and popups lose `window.opener`. See
+[Browser Capabilities](capabilities.md#cross-origin-isolation).
+
 ## Requirements
 
 All published apps must:

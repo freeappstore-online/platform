@@ -235,6 +235,32 @@ describe('POST /v1/publish', () => {
     expect(sentBody.description).toBe('A simple test'); // oneliner → apps.oneliner
     expect(sentBody.repo).toBe('https://github.com/me/my-app');
     expect(sentBody.demo).toBeNull();
+    expect(sentBody.crossOriginIsolated).toBeUndefined();
+  });
+
+  it('forwards crossOriginIsolated to admin when the client opts in', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+      capture: calls,
+    });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, crossOriginIsolated: true }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), {
+        ADMIN: admin,
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(JSON.parse(calls[0]!.init.body as string).crossOriginIsolated).toBe(true);
   });
 
   it('lets an admin attribute the app to a different creator (contributor onboarding)', async () => {

@@ -17,6 +17,8 @@ export interface Route {
   zone: string;
   r2_prefix: string;
   store: string;
+  /** 1 when the app opted into cross-origin isolation (#286). Default 0. */
+  cross_origin_isolated?: number;
 }
 
 /**
@@ -37,10 +39,15 @@ export async function resolveRoute(db: D1Database, host: string): Promise<Route 
   if (!slug || !zone) return null;
 
   const row = await db
-    .prepare("SELECT slug, zone, r2_prefix, store FROM routes WHERE slug = ?1 AND zone = ?2")
+    .prepare("SELECT slug, zone, r2_prefix, store, cross_origin_isolated FROM routes WHERE slug = ?1 AND zone = ?2")
     .bind(slug, zone)
     .first<Route>();
   return row ?? null;
+}
+
+/** True when this route opted into COOP/COEP (#286). Missing/0 stays off. */
+export function wantsCrossOriginIsolation(route: Pick<Route, "cross_origin_isolated">): boolean {
+  return Number(route.cross_origin_isolated) === 1;
 }
 
 /**
@@ -164,9 +171,12 @@ export const PERMISSIONS_POLICY_SELF = [
 
 export const PERMISSIONS_POLICY_BLOCKED = ["browsing-topics", "payment"] as const;
 
-const PERMISSIONS_POLICY = [...PERMISSIONS_POLICY_SELF.map((f) => `${f}=(self)`), ...PERMISSIONS_POLICY_BLOCKED.map((f) => `${f}=()`)].join(
-  ", ",
-);
+function permissionsPolicy(crossOriginIsolated: boolean): string {
+  const self = crossOriginIsolated ? [...PERMISSIONS_POLICY_SELF, "cross-origin-isolated"] : PERMISSIONS_POLICY_SELF;
+  return [...self.map((f) => `${f}=(self)`), ...PERMISSIONS_POLICY_BLOCKED.map((f) => `${f}=()`)].join(", ");
+}
+
+const PERMISSIONS_POLICY = permissionsPolicy(false);
 
 /**
  * Build the security headers we attach to every R2-served response. Split
@@ -180,7 +190,7 @@ const PERMISSIONS_POLICY = [...PERMISSIONS_POLICY_SELF.map((f) => `${f}=(self)`)
  * an allowlist) doesn't silently break the platform analytics loader,
  * CF Web Analytics, or BYO GA4 / Plausible tags.
  */
-export function securityHeaders(opts: { htmlCache: boolean }): Headers {
+export function securityHeaders(opts: { htmlCache: boolean; crossOriginIsolated?: boolean }): Headers {
   const headers = new Headers();
   if (opts.htmlCache) {
     headers.set("cache-control", "public, max-age=60, must-revalidate");
@@ -205,10 +215,18 @@ export function securityHeaders(opts: { htmlCache: boolean }): Headers {
     "upgrade-insecure-requests",
   ].join("; ");
   headers.set("content-security-policy", csp);
-  headers.set("permissions-policy", PERMISSIONS_POLICY);
+  headers.set("permissions-policy", opts.crossOriginIsolated ? permissionsPolicy(true) : PERMISSIONS_POLICY);
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
   headers.set("strict-transport-security", "max-age=31536000; includeSubDomains");
+  // Opt-in only (#286). Default-off so existing apps keep third-party images,
+  // embeds, and window.opener. credentialless lets no-cors subresources load
+  // without cookies; Safari does not support it, so those browsers stay
+  // non-isolated.
+  if (opts.crossOriginIsolated) {
+    headers.set("cross-origin-opener-policy", "same-origin");
+    headers.set("cross-origin-embedder-policy", "credentialless");
+  }
   return headers;
 }
 
@@ -262,8 +280,14 @@ export function contentType(path: string): string {
 }
 
 /** Authored crawl files are mutable public assets, with normal conditional/HEAD semantics. */
-export function crawlAssetResponse(obj: R2ObjectBody, pathname: string, method: string, ifNoneMatch: string | null): Response {
-  const headers = securityHeaders({ htmlCache: true });
+export function crawlAssetResponse(
+  obj: R2ObjectBody,
+  pathname: string,
+  method: string,
+  ifNoneMatch: string | null,
+  opts: { crossOriginIsolated?: boolean } = {},
+): Response {
+  const headers = securityHeaders({ htmlCache: true, crossOriginIsolated: opts.crossOriginIsolated });
   headers.set("content-type", contentType(pathname));
   headers.set("etag", obj.httpEtag);
   const unchanged = etagsMatch(ifNoneMatch, obj.httpEtag);

@@ -75,6 +75,18 @@ describe("insertHostRoute", () => {
     const routes = prepared.find((s) => /INSERT\s+INTO\s+routes/.test(s.sql))!;
     expect(routes.binds.slice(0, 4)).toEqual(["calendar", "freeappstore.online", "apps/calendar", "apps"]);
     expect(typeof routes.binds[4]).toBe("number");
+    // Isolation defaults off and is not overwritten on re-publish unless asked.
+    expect(routes.binds[5]).toBe(0);
+    expect(routes.binds[6]).toBe(0);
+    expect(routes.sql).toMatch(/cross_origin_isolated/);
+  });
+
+  it("writes cross_origin_isolated=1 and overwrites on conflict when the app opted in", async () => {
+    const { db, prepared } = mockDb();
+    await insertHostRoute(env(db), { ...req, crossOriginIsolated: true }, config);
+    const routes = prepared.find((s) => /INSERT\s+INTO\s+routes/.test(s.sql))!;
+    expect(routes.binds[5]).toBe(1);
+    expect(routes.binds[6]).toBe(1);
   });
 
   it("uses the store's registryKey as the r2 prefix root", async () => {

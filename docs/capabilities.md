@@ -77,9 +77,37 @@ donation or sponsor page isn't covered by the check. To charge for an app, publi
 
 ## Cross-origin isolation
 
-`SharedArrayBuffer` and threaded WebAssembly need `crossOriginIsolated`, which the host doesn't enable
-yet. It would break third-party images and embeds and popup `window.opener` links for every app.
-A per-app opt-in is [#286](https://github.com/freeappstore-online/platform/issues/286).
+`SharedArrayBuffer`, `Atomics.wait` on the main thread, high-resolution timers, and multi-threaded
+WebAssembly (emscripten pthreads, ffmpeg.wasm, ONNX/Transformers.js threaded backends) need
+`crossOriginIsolated === true`. That is **off by default**. Opt in per app:
+
+```json
+{
+  "crossOriginIsolated": true
+}
+```
+
+Put that in the app's `fas.json` (create the file at the repo root if you don't have one) and run
+`fas publish`. The host then sends, for that app only:
+
+- `Cross-Origin-Opener-Policy: same-origin`
+- `Cross-Origin-Embedder-Policy: credentialless`
+- `Permissions-Policy: cross-origin-isolated=(self)` (in addition to the grants above)
+
+**Cost of opting in:**
+
+- Third-party images, fonts, scripts, and embeds need CORS or CORP. `credentialless` lets no-cors
+  subresources load without cookies, which is gentler than `require-corp`, but they still cannot
+  use credentials.
+- `window.opener` is severed. Popup-based OAuth and any app that talks to a window it opened will
+  break. The SDK's sign-in is a redirect, so it is unaffected.
+- Cross-origin iframes inside the app (YouTube and similar) need to be COEP-compatible or they
+  won't load.
+- Safari does not support `credentialless`, so isolation (and `SharedArrayBuffer`) will not
+  activate there. Chrome, Firefox, and Edge will.
+
+Existing apps that do not set the flag are unchanged. Re-run `fas publish` after changing the flag;
+a git push alone does not update it.
 
 ## Platform services
 

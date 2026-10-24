@@ -58,6 +58,12 @@ interface PublishRequest {
   demo?: string | null;
   /** Pro-only: bullet list of features the pro subscription unlocks. */
   proFeatures?: string[];
+  /**
+   * Opt into cross-origin isolation (COOP/COEP) so SharedArrayBuffer and
+   * threaded wasm work (#286). Omitted = leave the existing route value
+   * unchanged on re-publish (new apps default off).
+   */
+  crossOriginIsolated?: boolean;
 }
 
 export interface Step {
@@ -203,6 +209,9 @@ function buildRegistryEntry(req: PublishRequest, config: StoreConfig, subdomain:
   if (req.creatorGithub) {
     entry.creatorGithub = req.creatorGithub;
   }
+  if (req.crossOriginIsolated === true) {
+    entry.crossOriginIsolated = true;
+  }
   return entry;
 }
 
@@ -341,15 +350,18 @@ export async function insertHostRoute(env: PublishEnv, req: PublishRequest, conf
   // until it's explicitly reassigned.
   const ownerLogin = req.creatorGithub || config.org;
   try {
+    const isolated = req.crossOriginIsolated === true ? 1 : 0;
+    const updateIsolated = typeof req.crossOriginIsolated === "boolean" ? 1 : 0;
     const routesStmt = env.DB.prepare(
-      `INSERT INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 'r2', ?5, ?5)
+      `INSERT INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at, cross_origin_isolated)
+         VALUES (?1, ?2, ?3, ?4, 'r2', ?5, ?5, ?6)
          ON CONFLICT (slug, zone) DO UPDATE SET
            r2_prefix = excluded.r2_prefix,
            store = excluded.store,
            hosted_on = excluded.hosted_on,
-           updated_at = excluded.updated_at`,
-    ).bind(slug, zone, r2Prefix, req.store, now);
+           updated_at = excluded.updated_at,
+           cross_origin_isolated = CASE WHEN ?7 = 1 THEN excluded.cross_origin_isolated ELSE routes.cross_origin_isolated END`,
+    ).bind(slug, zone, r2Prefix, req.store, now, isolated, updateIsolated);
     await env.DB.batch([routesStmt, claimAppStmt(env.DB, req, ownerLogin, now)]);
     return { name: "Hosting route", status: "ok", detail: `${slug}.${zone} → r2://fas-apps/${r2Prefix} (owner ${ownerLogin})` };
   } catch (e: any) {

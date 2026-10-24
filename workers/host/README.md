@@ -25,13 +25,20 @@ broken JS bundles or images don't silently serve HTML).
 - `src/index.ts` — Worker entry; request → response pipeline
 - `src/host.ts` — `resolveRoute()`, `r2KeyFor()`, `contentType()` (testable units)
 - `migrations/0001_create_routes.sql` — D1 schema for the routes table
+- `migrations/0002_cross_origin_isolated.sql` — per-app COOP/COEP opt-in flag (#286)
 - `wrangler.toml` — bindings + route pattern
 
 ## Headers
 
-CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, and HSTS are
+CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, and HSTS are
 emitted from this Worker. Apps no longer need their own `_headers` file —
 policy is centralized here. Cache: 60s for HTML, 1 year immutable for assets.
+
+Cross-origin isolation (COOP `same-origin` + COEP `credentialless`) is **off
+by default**. An app opts in with `"crossOriginIsolated": true` in `fas.json`;
+`fas publish` stores that on the D1 `routes` row (`cross_origin_isolated = 1`)
+and this Worker sends the headers only for that app. See
+[Browser Capabilities](../../docs/capabilities.md#cross-origin-isolation).
 
 ## Secrets needed
 

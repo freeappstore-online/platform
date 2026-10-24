@@ -215,7 +215,7 @@
         </div>
         <div class="api-card">
           <h3>Web Workers</h3>
-          <p>Background threads. CPU-intensive work without blocking the UI. Blob-URL workers are allowed on FreeAppStore hosting. SharedArrayBuffer needs cross-origin isolation, which isn't available yet (<a href="https://github.com/freeappstore-online/platform/issues/286">#286</a>).</p>
+          <p>Background threads. CPU-intensive work without blocking the UI. Blob-URL workers are allowed on FreeAppStore hosting. SharedArrayBuffer and threaded wasm need cross-origin isolation: set <code>"crossOriginIsolated": true</code> in <code>fas.json</code> and run <code>fas publish</code>. Off by default — COOP/COEP break third-party embeds and <code>window.opener</code>. Guide: <a href="https://docs.freeappstore.online/capabilities/">capabilities</a>.</p>
           <div class="compat"><span class="compat-yes">Chrome</span> <span class="compat-yes">Safari</span> <span class="compat-yes">Firefox</span> <span class="compat-yes">Mobile</span></div>
           <p class="idea">Image processing, data crunching, markdown rendering, syntax highlighting, spell checking.</p>
         </div>

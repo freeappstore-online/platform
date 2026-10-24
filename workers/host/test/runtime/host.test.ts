@@ -15,17 +15,23 @@ beforeAll(async () => {
   const route = env.DB.prepare(
     "INSERT OR REPLACE INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at) VALUES (?, ?, ?, 'apps', 'r2', ?, ?)",
   );
+  const isolated = env.DB.prepare(
+    "INSERT OR REPLACE INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at, cross_origin_isolated) VALUES (?, ?, ?, 'apps', 'r2', ?, ?, 1)",
+  );
   await env.DB.batch([
     route.bind("dict", "freeappstore.online", "apps/dict", now, now),
     route.bind("seo", "freeappstore.online", "apps/seo", now, now),
     route.bind("unbuilt", "freeappstore.online", "apps/unbuilt", now, now),
     route.bind("agentcoder", "space", "apps/agentcoder", now, now),
+    isolated.bind("wasm", "freeappstore.online", "apps/wasm", now, now),
   ]);
   await env.APPS.put("apps/dict/index.html", INDEX_HTML);
   await env.APPS.put("apps/seo/index.html", '<!doctype html><html><head><title>My custom title</title><meta name="robots" content="index,follow"><meta property="og:image" content="/my.png"></head><body><div id="root"></div><script>const x="<title>preserved</title>";</script></body></html>');
   await env.APPS.put("apps/dict/assets/app.js", APP_JS);
   await env.APPS.put("apps/dict/manifest.json", "{}");
   await env.APPS.put("apps/agentcoder/index.html", "<!doctype html><title>AgentCoder</title>");
+  await env.APPS.put("apps/wasm/index.html", "<!doctype html><title>Wasm</title>");
+  await env.APPS.put("apps/wasm/assets/app.js", "console.log('wasm')");
 });
 
 describe("serving an app: D1 routes row → R2 object", () => {
@@ -45,6 +51,30 @@ describe("serving an app: D1 routes row → R2 object", () => {
     }
     // FreeAppStore apps take no payments (#289).
     expect(pp).toContain("payment=()");
+    // Isolation is opt-in (#286). A default app must not send COOP/COEP.
+    expect(res.headers.get("cross-origin-opener-policy")).toBeNull();
+    expect(res.headers.get("cross-origin-embedder-policy")).toBeNull();
+    expect(pp).not.toContain("cross-origin-isolated");
+  });
+
+  it("sends COOP/COEP on every response for an opted-in app, and not for a neighbour", async () => {
+    const html = await get("https://wasm.freeappstore.online/");
+    expect(html.status).toBe(200);
+    expect(html.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+    expect(html.headers.get("cross-origin-embedder-policy")).toBe("credentialless");
+    expect(html.headers.get("permissions-policy")).toContain("cross-origin-isolated=(self)");
+    await html.body?.cancel();
+
+    const asset = await get("https://wasm.freeappstore.online/assets/app.js");
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get("cross-origin-opener-policy")).toBe("same-origin");
+    expect(asset.headers.get("cross-origin-embedder-policy")).toBe("credentialless");
+    await asset.body?.cancel();
+
+    const neighbour = await get("https://dict.freeappstore.online/assets/app.js");
+    expect(neighbour.headers.get("cross-origin-opener-policy")).toBeNull();
+    expect(neighbour.headers.get("cross-origin-embedder-policy")).toBeNull();
+    await neighbour.body?.cancel();
   });
 
   it("serves assets with their own type and a long immutable cache", async () => {

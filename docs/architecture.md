@@ -77,7 +77,8 @@ Apps deploy to R2 via GitHub Actions, not CF Pages:
 1. `git push` triggers `.github/workflows/deploy.yml`
 2. Builds with `pnpm build`
 3. Uploads `web/dist/` to `fas-apps` R2 bucket at `apps/<id>/`
-4. Host Worker reads D1 `routes` table, streams from R2
+4. Host Worker reads D1 `routes` table, streams from R2. `routes.cross_origin_isolated`
+   (default 0) opts an app into COOP/COEP; see [Capabilities](capabilities.md#cross-origin-isolation).
 
 ## Auth flow
 

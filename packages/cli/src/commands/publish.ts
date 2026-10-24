@@ -284,6 +284,25 @@ interface AutoProvisionFailure {
 }
 type AutoProvisionResult = AutoProvisionSuccess | AutoProvisionFailure;
 
+/**
+ * Read `crossOriginIsolated` from the app's fas.json. `true`/`false` are
+ * forwarded to provision so the host can send COOP/COEP (#286). Missing or
+ * malformed files leave the existing route value unchanged.
+ */
+export async function readCrossOriginIsolatedFlag(
+  root = process.cwd(),
+): Promise<boolean | undefined> {
+  try {
+    const raw = await readFile(join(root, 'fas.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { crossOriginIsolated?: unknown };
+    return typeof parsed?.crossOriginIsolated === 'boolean'
+      ? parsed.crossOriginIsolated
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function tryAutoProvision(
   input: SubmissionInput,
   store: Store,
@@ -293,6 +312,7 @@ async function tryAutoProvision(
   if (!sessionToken) return { kind: 'unauthorized', reason: 'no fas session' };
 
   const typeShort = input.type.startsWith('Standalone') ? 'standalone' : 'connected';
+  const crossOriginIsolated = await readCrossOriginIsolatedFlag();
   const res = await fetch(`${config.apiBase}/v1/publish`, {
     method: 'POST',
     headers: {
@@ -308,6 +328,7 @@ async function tryAutoProvision(
       description: input.description,
       repo: input.repo,
       demo: input.demo,
+      ...(crossOriginIsolated !== undefined ? { crossOriginIsolated } : {}),
     }),
   });
   if (res.status === 401) return { kind: 'unauthorized', reason: 'session expired' };

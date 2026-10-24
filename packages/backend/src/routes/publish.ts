@@ -25,6 +25,8 @@ interface PublishBody {
    * publisher's login.
    */
   creatorGithub?: string;
+  /** Opt into COOP/COEP on the hosted origin (#286). Default off. */
+  crossOriginIsolated?: boolean;
 }
 
 // GitHub username rules: 1–39 chars, alphanumeric or single hyphens (not
@@ -185,6 +187,9 @@ publishRoutes.post('/publish', async (c) => {
       creatorGithub,
       repo: body.repo,
       demo: body.demo,
+      ...(typeof body.crossOriginIsolated === 'boolean'
+        ? { crossOriginIsolated: body.crossOriginIsolated }
+        : {}),
     }),
   });
 
