@@ -2610,6 +2610,22 @@
           "reason": "Find the position of your associated recording so lyrics follow nearby music."
         }
       ]
+    },
+    {
+      "id": "song-to-midi",
+      "name": "song-to-midi",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Turn a recording into editable instrument parts and multitrack MIDI",
+      "appUrl": "https://song-to-midi.freeappstore.online",
+      "repo": "freeappstore-online/song-to-midi",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-10-24T05:47:34.074Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
