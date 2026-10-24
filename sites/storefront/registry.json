@@ -2626,6 +2626,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-10-24T05:47:34.074Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "music-share",
+      "name": "music-share",
+      "category": "Social",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Record tab audio, organize songs into playlists, and share listening links.",
+      "appUrl": "https://music-share.freeappstore.online",
+      "repo": "freeappstore-online/music-share",
+      "hostedOn": "r2",
+      "type": "connected",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-10-24T06:48:21.937Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
