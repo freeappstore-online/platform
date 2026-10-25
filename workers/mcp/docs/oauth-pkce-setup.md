@@ -76,7 +76,8 @@ const oauthProvider = new OAuthProvider({
   tokenEndpoint: "/token",
   clientRegistrationEndpoint: "/register",
   scopesSupported: [...MCP_SCOPES],
-  accessTokenTTL: 86_400,
+  // 30 days: keep this aligned with the platform MCP default.
+  accessTokenTTL: 30 * 86_400,
   allowPlainPKCE: false,
 });
 ```

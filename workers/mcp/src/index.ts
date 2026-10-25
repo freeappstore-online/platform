@@ -1,4 +1,5 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
+import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -546,7 +547,8 @@ const oauthProvider = new OAuthProvider({
   tokenEndpoint: "/token",
   clientRegistrationEndpoint: "/register",
   scopesSupported: [...MCP_SCOPES],
-  accessTokenTTL: 86_400,
+  // Keep MCP access grants aligned with the 30-day FAS session default.
+  accessTokenTTL: MCP_ACCESS_TOKEN_TTL_SECONDS,
   // S256 only. The library accepts `plain` by default, which makes the
   // challenge equal to the verifier and PKCE decorative (#44).
   allowPlainPKCE: false,
