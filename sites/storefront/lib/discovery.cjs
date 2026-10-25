@@ -1,7 +1,8 @@
 // Registry visibility is independent of resource provisioning and temporary uptime.
 const STATUSES = new Set(['live', 'published', 'approved']);
+const fixtures = new Set(require('../../../config/monitoring-fixtures.json').appIds);
 function permitsDiscovery(app) {
-  return (app.status === undefined || STATUSES.has(app.status)) && app.private !== true &&
+  return !fixtures.has(app.id) && (app.status === undefined || STATUSES.has(app.status)) && app.private !== true &&
     (app.visibility === undefined || ['public', 'published'].includes(app.visibility));
 }
 function isPublicListing(app) {

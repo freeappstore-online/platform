@@ -22,10 +22,13 @@ beforeAll(async () => {
     route.bind("dict", "freeappstore.online", "apps/dict", now, now),
     route.bind("seo", "freeappstore.online", "apps/seo", now, now),
     route.bind("unbuilt", "freeappstore.online", "apps/unbuilt", now, now),
+    route.bind("smoke-sandbox", "freeappstore.online", "apps/smoke-sandbox", now, now),
     route.bind("agentcoder", "space", "apps/agentcoder", now, now),
     isolated.bind("wasm", "freeappstore.online", "apps/wasm", now, now),
   ]);
   await env.APPS.put("apps/dict/index.html", INDEX_HTML);
+  await env.APPS.put("apps/smoke-sandbox/index.html", '<html><head><title>Monitoring sandbox</title></head><body>Canary ready</body></html>');
+  await env.APPS.put("apps/smoke-sandbox/sitemap.xml", '<urlset>Old fixture sitemap</urlset>');
   await env.APPS.put("apps/seo/index.html", '<!doctype html><html><head><title>My custom title</title><meta name="robots" content="index,follow"><meta property="og:image" content="/my.png"></head><body><div id="root"></div><script>const x="<title>preserved</title>";</script></body></html>');
   await env.APPS.put("apps/dict/assets/app.js", APP_JS);
   await env.APPS.put("apps/dict/manifest.json", "{}");
@@ -35,6 +38,26 @@ beforeAll(async () => {
 });
 
 describe("serving an app: D1 routes row → R2 object", () => {
+  it("keeps designated monitoring fixtures accessible but out of discovery, including cached responses", async () => {
+    for (const path of ["/", "/health", "/index.html"]) {
+      const first = await get(`https://smoke-sandbox.freeappstore.online${path}`);
+      expect(first.status).toBe(200);
+      expect(first.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      expect(first.headers.get("cache-control")).toBe("no-store");
+      expect(first.headers.get("content-security-policy")).toBeTruthy();
+      expect(await first.text()).toContain("Canary ready");
+      const etag = first.headers.get("etag")!;
+      const cached = await get(`https://smoke-sandbox.freeappstore.online${path}`, { headers: { "if-none-match": etag } });
+      expect(cached.status).toBe(304);
+      expect(cached.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      const head = await get(`https://smoke-sandbox.freeappstore.online${path}`, { method: "HEAD" });
+      expect(head.headers.get("x-robots-tag")).toBe("noindex, nofollow");
+      expect(await head.text()).toBe("");
+    }
+    const robots = await get("https://smoke-sandbox.freeappstore.online/robots.txt");
+    expect(await robots.text()).toBe("User-agent: *\nAllow: /\n");
+    expect((await get("https://smoke-sandbox.freeappstore.online/sitemap.xml")).status).toBe(404);
+  });
   it("serves / from the app's R2 prefix with the platform's security headers", async () => {
     const res = await get("https://dict.freeappstore.online/");
     expect(res.status).toBe(200);

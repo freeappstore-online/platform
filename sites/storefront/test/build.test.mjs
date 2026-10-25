@@ -32,6 +32,7 @@ const REAL_REGISTRY = join(REPO_ROOT, "registry.json");
 
 const XSS_PAYLOAD = "<script>alert(1)</script>";
 const FIXTURE_ID = "xss-fixture";
+const monitoringIds = new Set(JSON.parse(readFileSync(join(REPO_ROOT, '../../config/monitoring-fixtures.json'), 'utf8')).appIds);
 
 function runBuild({ withQualityScores = false, withStalePages = false, discoveryStatus } = {}) {
   // Use a unique temp dir per run so parallel test invocations don't
@@ -94,8 +95,26 @@ function runBuild({ withQualityScores = false, withStalePages = false, discovery
     timeout: 60_000,
   });
 
-  return { tmp, tmpDist, registry: { ...realRegistry, apps: realRegistry.apps.filter(app => app.status === undefined || ["live", "published", "approved"].includes(app.status)) } };
+  return { tmp, tmpDist, registry: { ...realRegistry, apps: realRegistry.apps.filter(app => !monitoringIds.has(app.id) && (app.status === undefined || ["live", "published", "approved"].includes(app.status))) } };
 }
+
+test('designated monitoring fixtures stay registered but produce no public listing or fixture-only creator page', () => {
+  const source = JSON.parse(readFileSync(REAL_REGISTRY, 'utf8'));
+  const fixture = source.apps.find(app => app.id === 'smoke-sandbox');
+  assert.ok(fixture, 'operational registry entry must remain');
+  assert.equal(fixture.creatorGithub, 'serge-the-dev');
+  const { tmp, tmpDist } = runBuild();
+  try {
+    for (const file of ['index.html', 'registry.json', 'sitemap.xml', 'creators.html']) {
+      const output = readFileSync(join(tmpDist, file), 'utf8');
+      assert.ok(!output.includes('smoke-sandbox'), file);
+      assert.ok(!output.includes('/u/serge-the-dev'), file);
+    }
+    assert.ok(!readdirSync(join(tmpDist, 'apps')).includes('smoke-sandbox.html'));
+    assert.ok(!readdirSync(join(tmpDist, 'u')).includes('serge-the-dev.html'));
+    assert.ok(readFileSync(join(tmpDist, 'index.html'), 'utf8').includes('data-about="/apps/music"'));
+  } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
 
 test("build.js writes index.html containing every app id", () => {
   const { tmp, tmpDist, registry } = runBuild();

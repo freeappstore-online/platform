@@ -9,6 +9,7 @@ on:
     branches: [main]
     paths:
       - 'workers/host/**'
+      - 'config/monitoring-fixtures.json'
       - '.github/workflows/deploy-host.yml'
   workflow_dispatch:
 

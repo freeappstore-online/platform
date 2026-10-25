@@ -1,4 +1,9 @@
+import fixtures from "../../../config/monitoring-fixtures.json";
 import type { Route } from "./host";
+
+export function isMonitoringFixture(route: Route): boolean {
+  return route.zone === "freeappstore.online" && fixtures.appIds.includes(route.slug);
+}
 
 export interface PublicApp {
   id: string;
@@ -13,6 +18,7 @@ let loading: Promise<PublicApp[]> | undefined;
 
 /** Only approved public storefront entries qualify, never a provisioning route alone. */
 export async function publicApp(route: Route): Promise<PublicApp | undefined> {
+  if (isMonitoringFixture(route)) return undefined;
   if (!cached || cached.expires <= Date.now()) {
     loading ??= (async () => {
       try {

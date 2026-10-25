@@ -22,7 +22,7 @@ import {
   wantsCrossOriginIsolation,
 } from "./host";
 
-import { injectMetadata, publicApp } from "./seo";
+import { injectMetadata, isMonitoringFixture, publicApp } from "./seo";
 
 /**
  * Platform-infra subdomains: NOT apps. The wildcard route catches them just
@@ -115,7 +115,15 @@ export default {
 
     // Serve from R2 if the slug is registered in D1.
     const route = await resolveRoute(env.DB, host);
-    if (route) return await serve(env.APPS, route, url, req.method, req.headers.get("if-none-match"), ctx);
+    if (route) {
+      const response = await serve(env.APPS, route, url, req.method, req.headers.get("if-none-match"), ctx);
+      if (!isMonitoringFixture(route)) return response;
+      // Keep canaries functional and crawlable so crawlers can observe noindex.
+      const headers = new Headers(response.headers);
+      headers.set("x-robots-tag", "noindex, nofollow");
+      headers.set("cache-control", "no-store");
+      return new Response(response.body, { status: response.status, headers });
+    }
 
     return notFound(host);
   },
@@ -175,6 +183,12 @@ async function serve(
 
   const isRoot = url.pathname === "/" || url.pathname === "/index.html";
   const isCrawl = url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml";
+  if (isCrawl && isMonitoringFixture(route)) {
+    if (url.pathname === "/sitemap.xml") return notFound(url.pathname, route.slug);
+    return new Response(method === "HEAD" ? null : "User-agent: *\nAllow: /\n", {
+      headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
+    });
+  }
   const isolated = wantsCrossOriginIsolation(route);
   const app = isRoot || isCrawl ? await publicApp(route) : undefined;
   if (isCrawl) return appCrawlResponse(bucket, route, url, method, app, ifNoneMatch, isolated);

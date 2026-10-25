@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - 'sites/storefront/**'
+      - 'config/monitoring-fixtures.json'
+      - '.github/workflows/deploy-storefront.yml'
   workflow_dispatch:
 
 permissions:

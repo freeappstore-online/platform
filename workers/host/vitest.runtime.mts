@@ -23,7 +23,7 @@ export default defineConfig(async () => {
           serviceBindings: { API: echo("API"), KB: echo("KB") },
           // Proxy targets (compliance.pages.dev, …) are the internet; answer locally.
           outboundService: async (req: Request) => req.url === "https://freeappstore.online/registry.json"
-            ? Response.json({ apps: [{ id: "seo", name: "SEO App", description: 'Useful <app> & "safe"', appUrl: "https://seo.freeappstore.online" }, { id: "unbuilt", name: "Unbuilt", description: "Not deployed", appUrl: "https://unbuilt.freeappstore.online" }] })
+            ? Response.json({ apps: [{ id: "seo", name: "SEO App", description: 'Useful <app> & "safe"', appUrl: "https://seo.freeappstore.online" }, { id: "smoke-sandbox", name: "Canary", description: "Old cached fixture listing", appUrl: "https://smoke-sandbox.freeappstore.online" }, { id: "unbuilt", name: "Unbuilt", description: "Not deployed", appUrl: "https://unbuilt.freeappstore.online" }] })
             : Response.json({ outbound: req.url, method: req.method }),
         },
       }),
