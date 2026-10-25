@@ -198,3 +198,96 @@ describe('checkNoBrandOverrides (integration)', () => {
     expect(r.status).toBe('pass');
   });
 });
+
+describe('font custom properties (#310)', () => {
+  it.each([
+    [
+      'Tailwind theme',
+      "@theme { --font-body: 'Manrope', sans-serif; } body { font-family: var(--font-body); }",
+    ],
+    [
+      'forward alias',
+      ':root { --body: var(--base); --base: Manrope; } body { font-family: var(--body), Arial; }',
+    ],
+    [
+      'nested fallback',
+      'body { font-family: var(--missing, var(--also-missing, Manrope)), sans-serif; }',
+    ],
+    [
+      'quoted fallback stack',
+      'body { font-family: var(--missing, "Manrope", Arial), sans-serif; }',
+    ],
+    [
+      'cycle with usage fallback',
+      ':root { --a: var(--b); --b: var(--a); } body { font-family: var(--a, Manrope); }',
+    ],
+    [
+      'all brand alternatives',
+      ':root { --body: Manrope; } .dark { --body: Fraunces; } body { font-family: var(--body); }',
+    ],
+    [
+      'multiline declaration',
+      ':root { --body:\n "Manrope",\n sans-serif; } body { font-family: var(--body); }',
+    ],
+    [
+      'case-sensitive missing variable fallback',
+      ':root { --Body: "Comic Sans"; } body { font-family: var(--body, Manrope); }',
+    ],
+  ])('accepts %s', (_name, css) => {
+    expect(scanContent('web/src/index.css', css)).toEqual([]);
+  });
+
+  it.each([
+    [
+      'non-brand variable',
+      ':root { --body: "Comic Sans", serif; } body { font-family: var(--body); }',
+    ],
+    [
+      'defined variable wins over fallback',
+      ':root { --body: Sora; } body { font-family: var(--body, Manrope); }',
+    ],
+    ['empty variable', ':root { --body: ; } body { font-family: var(--body); }'],
+    [
+      'connected cycles',
+      ':root { --a: var(--b); --b: var(--c); --c: var(--a); --d: var(--c, Manrope); --a: var(--d); } body { font-family: var(--d); }',
+    ],
+    ['missing variable', 'body { font-family: var(--unknown); }'],
+    [
+      'cycle without fallback',
+      ':root { --a: var(--b); --b: var(--a); } body { font-family: var(--a); }',
+    ],
+    [
+      'fallback inside cycle',
+      ':root { --a: var(--b, Manrope); --b: var(--a); } body { font-family: var(--a); }',
+    ],
+    [
+      'non-brand shadow',
+      ':root { --body: Manrope; } .dark { --body: Sora; } body { font-family: var(--body); }',
+    ],
+    ['mixed quoted stack', ':root { --body: Sora; } body { font-family: var(--body), "Manrope"; }'],
+    [
+      'literal function-shaped name',
+      ':root { --body: Manrope; } body { font-family: "var(--body)"; }',
+    ],
+    ['non-font variable', ':root { --body: #ffffff; } body { font-family: var(--body); }'],
+  ])('rejects %s', (_name, css) => {
+    expect(scanContent('web/src/index.css', css)).toHaveLength(1);
+  });
+
+  it('resolves theme declarations for JSX and per-component CSS regardless of file order', async () => {
+    const dir = await fixture({
+      'web/src/App.tsx': `const style = { fontFamily: "var(--body), sans-serif" };`,
+      'web/src/card.css': 'h1 { font-family: var(--heading); }',
+      'web/src/index.css':
+        '@theme { --body: Manrope; --heading: var(--display); --display: Fraunces; }',
+    });
+    expect((await checkNoBrandOverrides(fsFileSource(dir))).status).toBe('pass');
+    await writeFile(
+      join(dir, 'web/src/card.css'),
+      '.card { --body: Sora; font-family: var(--body); }',
+    );
+    const result = await checkNoBrandOverrides(fsFileSource(dir));
+    expect(result.status).toBe('fail');
+    expect(result.suggestions?.join(' ')).toContain('non-brand font "sora"');
+  });
+});

@@ -1,4 +1,10 @@
 import type { FileSource } from '../lib/file-source.js';
+import {
+  collectFontVariables,
+  type FontVariables,
+  resolveFontVariables,
+  splitFontStack,
+} from '../lib/font-variables.js';
 import { stripCommentsOnly, stripCssComments } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
 
@@ -22,6 +28,7 @@ import type { CheckResult } from '../types.js';
  */
 export async function checkNoBrandOverrides(source: FileSource): Promise<CheckResult> {
   const issues: string[] = [];
+  const files: { path: string; content: string }[] = [];
 
   for await (const path of source.list()) {
     const ext = extOf(path);
@@ -35,13 +42,17 @@ export async function checkNoBrandOverrides(source: FileSource): Promise<CheckRe
     // syntax at the language level).
     const content =
       ext === '.css' || ext === '.scss' ? stripCssComments(raw) : stripCommentsOnly(raw);
+    files.push({ path, content });
+  }
+  const fontVariables = collectFontVariables(files.map((file) => file.content));
+  for (const { path, content } of files) {
     // Canonical theme file: the platform's CSS variables ARE defined here.
     // Apps own this file post-scaffold (they can technically modify token
     // values, and we accept the imperfection — the loud places where a
     // brand override actually causes inconsistency are inline styles +
     // per-component CSS, which this check still covers).
     const isThemeFile = path === 'web/src/index.css' || path === 'web/src/main.css';
-    const fileIssues = scanContent(path, content, { skipVarRedefs: isThemeFile });
+    const fileIssues = scanContent(path, content, { skipVarRedefs: isThemeFile, fontVariables });
     issues.push(...fileIssues);
     // Cap at 10 — beyond that the user has bigger problems and we don't
     // want a 200-line failure report.
@@ -128,7 +139,7 @@ const ALLOWED_FONT_TOKENS = new Set([
 export function scanContent(
   filename: string,
   content: string,
-  opts: { skipVarRedefs?: boolean } = {},
+  opts: { skipVarRedefs?: boolean; fontVariables?: FontVariables } = {},
 ): string[] {
   const out: string[] = [];
 
@@ -164,6 +175,7 @@ export function scanContent(
   // and false-positives. Real SVG-in-JSX with kebab fontFamily is rare
   // enough to skip.
   const fontHeadRe = /(font-family\s*:|fontFamily\s*[:=])/g;
+  const variables = opts.fontVariables ?? collectFontVariables([content]);
   const quotedRe = /(['"`])([^'"`\n]+)\1/g;
   let m: RegExpExecArray | null;
   while ((m = fontHeadRe.exec(content)) !== null) {
@@ -171,11 +183,13 @@ export function scanContent(
     const start = m.index + m[0].length;
     const value = sliceFontValue(content, start, isJsx);
     const quotedStrings = [...value.matchAll(quotedRe)].map((x) => x[2]!);
-    const candidates = quotedStrings.length > 0 ? quotedStrings : [value];
+    const candidates = isJsx && quotedStrings.length > 0 ? quotedStrings : [value];
     let flagged = false;
     for (const cand of candidates) {
-      const tokens = cand
-        .split(',')
+      const fontValue = isJsx ? cand : cand.replace(/\s*!important\s*$/i, '');
+      const resolved = resolveFontVariables(fontValue, variables) ?? [fontValue];
+      const tokens = resolved
+        .flatMap(splitFontStack)
         .map((t) =>
           t
             .trim()
@@ -183,6 +197,10 @@ export function scanContent(
             .toLowerCase(),
         )
         .filter(Boolean);
+      if (tokens.length === 0 && /var\(/i.test(cand)) {
+        out.push(`${filename}:${lineNumberAt(content, m.index)} unresolved font "${cand.trim()}"`);
+        flagged = true;
+      }
       for (const t of tokens) {
         if (!ALLOWED_FONT_TOKENS.has(t)) {
           const line = lineNumberAt(content, m.index);
