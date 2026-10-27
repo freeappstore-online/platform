@@ -1,141 +1,109 @@
 {
-  "decision-wheel": {
+  "artout": {
     "score": 68,
     "grade": "C"
   },
-  "books": {
-    "score": 70,
+  "math": {
+    "score": 74,
     "grade": "C"
   },
-  "typeflow": {
-    "score": 67,
-    "grade": "C"
-  },
-  "faces": {
-    "score": 68,
-    "grade": "C"
-  },
-  "stopwatch": {
-    "score": 79,
-    "grade": "B"
-  },
-  "flight-search": {
-    "score": 68,
-    "grade": "C"
-  },
-  "pdfreader": {
+  "bandmates": {
     "score": 75,
     "grade": "B"
   },
-  "password": {
-    "score": 69,
-    "grade": "C"
-  },
-  "statistics": {
-    "score": 67,
-    "grade": "C"
-  },
-  "meditation": {
-    "score": 71,
-    "grade": "C"
-  },
-  "chemistry": {
+  "countdown": {
     "score": 70,
-    "grade": "C"
-  },
-  "spreadsheet": {
-    "score": 69,
-    "grade": "C"
-  },
-  "whenly": {
-    "score": 71,
     "grade": "C"
   },
   "flashcards": {
     "score": 67,
     "grade": "C"
   },
-  "colorpicker": {
+  "qrcode": {
     "score": 68,
     "grade": "C"
   },
-  "quiz": {
-    "score": 62,
+  "decision-wheel": {
+    "score": 68,
+    "grade": "C"
+  },
+  "faces": {
+    "score": 68,
+    "grade": "C"
+  },
+  "budget": {
+    "score": 64,
+    "grade": "C"
+  },
+  "periodic-table": {
+    "score": 74,
+    "grade": "C"
+  },
+  "solar-system": {
+    "score": 70,
+    "grade": "C"
+  },
+  "qrreader": {
+    "score": 73,
     "grade": "C"
   },
   "chessclock": {
     "score": 57,
     "grade": "D"
   },
-  "artout": {
-    "score": 68,
-    "grade": "C"
-  },
-  "timer": {
-    "score": 61,
-    "grade": "C"
-  },
-  "facer": {
-    "score": 71,
-    "grade": "C"
-  },
-  "pomodoro": {
-    "score": 70,
-    "grade": "C"
-  },
-  "snowman": {
-    "score": 65,
+  "calculator": {
+    "score": 69,
     "grade": "C"
   },
   "mood": {
     "score": 67,
     "grade": "C"
   },
-  "language": {
-    "score": 68,
+  "music": {
+    "score": 62,
     "grade": "C"
   },
-  "whiteboard": {
-    "score": 69,
-    "grade": "C"
-  },
-  "streak": {
-    "score": 72,
-    "grade": "C"
-  },
-  "notes": {
-    "score": 69,
-    "grade": "C"
-  },
-  "hiit": {
-    "score": 74,
-    "grade": "C"
-  },
-  "meetup": {
-    "score": 65,
-    "grade": "C"
-  },
-  "sleep": {
+  "converter": {
     "score": 67,
     "grade": "C"
   },
-  "star-map": {
-    "score": 71,
+  "password": {
+    "score": 69,
     "grade": "C"
   },
-  "quickslotwebfas": {
-    "score": 74,
+  "pomodoro": {
+    "score": 70,
+    "grade": "C"
+  },
+  "smart-planner": {
+    "score": 69,
+    "grade": "C"
+  },
+  "agentcoder": {
+    "score": 81,
+    "grade": "B"
+  },
+  "population-agent": {
+    "score": 61,
+    "grade": "C"
+  },
+  "weather": {
+    "score": 65,
+    "grade": "C"
+  },
+  "language": {
+    "score": 68,
     "grade": "C"
   },
   "habits": {
     "score": 69,
     "grade": "C"
   },
-  "math-reference": {
-    "score": 66,
+  "facer": {
+    "score": 71,
     "grade": "C"
   },
-  "decision-compass": {
+  "recipes": {
     "score": 70,
     "grade": "C"
   },
@@ -143,103 +111,147 @@
     "score": 67,
     "grade": "C"
   },
-  "countdown": {
-    "score": 70,
-    "grade": "C"
-  },
-  "pixel-art": {
+  "notes": {
     "score": 69,
     "grade": "C"
   },
-  "converter": {
-    "score": 67,
-    "grade": "C"
-  },
-  "loan": {
-    "score": 70,
-    "grade": "C"
-  },
-  "typing": {
-    "score": 70,
-    "grade": "C"
-  },
-  "convert-color": {
-    "score": 70,
-    "grade": "C"
-  },
-  "regex": {
-    "score": 67,
-    "grade": "C"
-  },
-  "palette": {
-    "score": 68,
-    "grade": "C"
-  },
-  "music": {
-    "score": 62,
-    "grade": "C"
-  },
-  "graphing": {
-    "score": 68,
-    "grade": "C"
-  },
-  "journal": {
-    "score": 70,
+  "kanban": {
+    "score": 63,
     "grade": "C"
   },
   "json": {
     "score": 66,
     "grade": "C"
   },
-  "dictionary": {
+  "snowman": {
+    "score": 65,
+    "grade": "C"
+  },
+  "streak": {
+    "score": 72,
+    "grade": "C"
+  },
+  "invoice": {
+    "score": 66,
+    "grade": "C"
+  },
+  "journal": {
+    "score": 70,
+    "grade": "C"
+  },
+  "message": {
     "score": 68,
     "grade": "C"
   },
-  "qrcode": {
-    "score": 68,
+  "typeflow": {
+    "score": 67,
     "grade": "C"
   },
-  "music-theory": {
-    "score": 70,
+  "sleep": {
+    "score": 67,
     "grade": "C"
   },
-  "solar-system": {
-    "score": 70,
-    "grade": "C"
-  },
-  "metronome": {
-    "score": 70,
+  "meditation": {
+    "score": 71,
     "grade": "C"
   },
   "circuits": {
     "score": 66,
     "grade": "C"
   },
-  "cell-biology": {
-    "score": 69,
+  "palette": {
+    "score": 68,
     "grade": "C"
   },
-  "physics": {
+  "pixel-art": {
     "score": 69,
-    "grade": "C"
-  },
-  "wordcount": {
-    "score": 78,
-    "grade": "B"
-  },
-  "qrreader": {
-    "score": 73,
     "grade": "C"
   },
   "docbot": {
     "score": 78,
     "grade": "B"
   },
-  "plants": {
+  "quiz": {
+    "score": 62,
+    "grade": "C"
+  },
+  "shelfmark": {
+    "score": 75,
+    "grade": "B"
+  },
+  "star-map": {
+    "score": 71,
+    "grade": "C"
+  },
+  "books": {
+    "score": 70,
+    "grade": "C"
+  },
+  "math-reference": {
+    "score": 66,
+    "grade": "C"
+  },
+  "split": {
     "score": 67,
     "grade": "C"
   },
-  "geography": {
+  "flight-search": {
+    "score": 68,
+    "grade": "C"
+  },
+  "focus": {
+    "score": 69,
+    "grade": "C"
+  },
+  "statistics": {
+    "score": 67,
+    "grade": "C"
+  },
+  "voicerecorder": {
+    "score": 78,
+    "grade": "B"
+  },
+  "meetup": {
+    "score": 65,
+    "grade": "C"
+  },
+  "graphing": {
+    "score": 68,
+    "grade": "C"
+  },
+  "pdfreader": {
+    "score": 75,
+    "grade": "B"
+  },
+  "quickslotwebfas": {
+    "score": 74,
+    "grade": "C"
+  },
+  "markdown": {
+    "score": 70,
+    "grade": "C"
+  },
+  "stopwatch": {
+    "score": 79,
+    "grade": "B"
+  },
+  "lens-journal": {
+    "score": 69,
+    "grade": "C"
+  },
+  "resume": {
+    "score": 66,
+    "grade": "C"
+  },
+  "metronome": {
+    "score": 70,
+    "grade": "C"
+  },
+  "webshare": {
+    "score": 66,
+    "grade": "C"
+  },
+  "physics": {
     "score": 69,
     "grade": "C"
   },
@@ -247,19 +259,7 @@
     "score": 63,
     "grade": "C"
   },
-  "smart-planner": {
-    "score": 69,
-    "grade": "C"
-  },
-  "shoplist": {
-    "score": 67,
-    "grade": "C"
-  },
-  "anatomy": {
-    "score": 73,
-    "grade": "C"
-  },
-  "calculator": {
+  "spreadsheet": {
     "score": 69,
     "grade": "C"
   },
@@ -267,44 +267,172 @@
     "score": 69,
     "grade": "C"
   },
-  "clearday": {
-    "score": 76,
-    "grade": "B"
-  },
-  "budget": {
-    "score": 64,
-    "grade": "C"
-  },
-  "workout": {
-    "score": 68,
-    "grade": "C"
-  },
-  "markdown": {
+  "chemistry": {
     "score": 70,
     "grade": "C"
   },
-  "split": {
-    "score": 67,
+  "music-theory": {
+    "score": 70,
     "grade": "C"
   },
-  "study-room": {
-    "score": 66,
-    "grade": "C"
-  },
-  "morse": {
-    "score": 63,
+  "convert-color": {
+    "score": 70,
     "grade": "C"
   },
   "sketch": {
     "score": 71,
     "grade": "C"
   },
+  "whenly": {
+    "score": 71,
+    "grade": "C"
+  },
+  "colorpicker": {
+    "score": 68,
+    "grade": "C"
+  },
+  "forktuner": {
+    "score": 76,
+    "grade": "B"
+  },
+  "wordcount": {
+    "score": 78,
+    "grade": "B"
+  },
+  "cell-biology": {
+    "score": 69,
+    "grade": "C"
+  },
+  "geography": {
+    "score": 69,
+    "grade": "C"
+  },
+  "datalens": {
+    "score": 76,
+    "grade": "B"
+  },
+  "extract-color": {
+    "score": 73,
+    "grade": "C"
+  },
+  "my-todo-app": {
+    "score": 75,
+    "grade": "B"
+  },
+  "a11y-fixlist": {
+    "score": 81,
+    "grade": "B"
+  },
+  "shoplist": {
+    "score": 67,
+    "grade": "C"
+  },
+  "quotes": {
+    "score": 66,
+    "grade": "C"
+  },
+  "workout": {
+    "score": 68,
+    "grade": "C"
+  },
+  "song-to-midi": {
+    "score": 67,
+    "grade": "C"
+  },
+  "plants": {
+    "score": 67,
+    "grade": "C"
+  },
+  "pillcount": {
+    "score": 76,
+    "grade": "B"
+  },
+  "planning-poker": {
+    "score": 70,
+    "grade": "C"
+  },
+  "timer": {
+    "score": 61,
+    "grade": "C"
+  },
+  "piano": {
+    "score": 74,
+    "grade": "C"
+  },
+  "cycle": {
+    "score": 76,
+    "grade": "B"
+  },
+  "carebook": {
+    "score": 75,
+    "grade": "B"
+  },
+  "anatomy": {
+    "score": 73,
+    "grade": "C"
+  },
+  "photo": {
+    "score": 67,
+    "grade": "C"
+  },
+  "sleepsounds": {
+    "score": 77,
+    "grade": "B"
+  },
+  "stock-tracker": {
+    "score": 71,
+    "grade": "C"
+  },
+  "hiit": {
+    "score": 74,
+    "grade": "C"
+  },
+  "study-room": {
+    "score": 66,
+    "grade": "C"
+  },
+  "prayercompass": {
+    "score": 75,
+    "grade": "B"
+  },
+  "dictionary": {
+    "score": 68,
+    "grade": "C"
+  },
+  "taskflow": {
+    "score": 76,
+    "grade": "B"
+  },
   "learner-coder": {
     "score": 70,
     "grade": "C"
   },
-  "focus": {
-    "score": 69,
+  "echoshift": {
+    "score": 67,
+    "grade": "C"
+  },
+  "devestimate": {
+    "score": 72,
+    "grade": "C"
+  },
+  "loan": {
+    "score": 70,
+    "grade": "C"
+  },
+  "tapbeat": {
+    "score": 81,
+    "grade": "B"
+  },
+  "formulapad": {
+    "score": 58,
+    "grade": "D"
+  },
+  "watertracker": {
+    "score": 76,
+    "grade": "B"
+  },
+  "crontab-explain": {
+    "score": 71,
     "grade": "C"
   },
   "smoke-sandbox": {
@@ -315,51 +443,15 @@
     "score": 71,
     "grade": "C"
   },
-  "message": {
-    "score": 68,
-    "grade": "C"
-  },
-  "invoice": {
-    "score": 66,
-    "grade": "C"
-  },
-  "periodic-table": {
-    "score": 74,
-    "grade": "C"
-  },
-  "recipes": {
+  "typing": {
     "score": 70,
     "grade": "C"
   },
-  "population-agent": {
-    "score": 61,
-    "grade": "C"
-  },
-  "bandmates": {
-    "score": 75,
-    "grade": "B"
-  },
-  "crontab-explain": {
-    "score": 71,
-    "grade": "C"
-  },
-  "agentcoder": {
-    "score": 81,
-    "grade": "B"
-  },
-  "photo": {
-    "score": 67,
-    "grade": "C"
-  },
-  "cycle": {
+  "calcwright": {
     "score": 76,
     "grade": "B"
   },
-  "echoshift": {
-    "score": 67,
-    "grade": "C"
-  },
-  "forktuner": {
+  "mcp-live-demo": {
     "score": 76,
     "grade": "B"
   },
@@ -367,107 +459,19 @@
     "score": 68,
     "grade": "C"
   },
-  "mandarin-english": {
-    "score": 67,
-    "grade": "C"
-  },
-  "webshare": {
-    "score": 66,
-    "grade": "C"
-  },
-  "calcwright": {
-    "score": 76,
-    "grade": "B"
-  },
-  "a11y-fixlist": {
-    "score": 81,
-    "grade": "B"
-  },
-  "extract-color": {
-    "score": 73,
-    "grade": "C"
-  },
-  "pillcount": {
-    "score": 76,
-    "grade": "B"
-  },
   "flatbed": {
     "score": 76,
     "grade": "B"
   },
-  "type-spec": {
-    "score": 69,
-    "grade": "C"
-  },
-  "sleepsounds": {
-    "score": 77,
-    "grade": "B"
-  },
-  "quantlab": {
-    "score": 76,
-    "grade": "B"
-  },
-  "planning-poker": {
-    "score": 70,
-    "grade": "C"
-  },
-  "datalens": {
-    "score": 76,
-    "grade": "B"
-  },
-  "formulapad": {
-    "score": 58,
-    "grade": "D"
-  },
-  "mcp-live-demo": {
-    "score": 76,
-    "grade": "B"
-  },
-  "quotes": {
-    "score": 66,
-    "grade": "C"
-  },
-  "resume": {
-    "score": 66,
-    "grade": "C"
-  },
-  "dual-timezone": {
-    "score": 72,
-    "grade": "C"
-  },
-  "stock-tracker": {
-    "score": 71,
-    "grade": "C"
-  },
-  "my-todo-app": {
-    "score": 75,
+  "fastclock": {
+    "score": 78,
     "grade": "B"
   },
   "reactionlab": {
     "score": 75,
     "grade": "B"
   },
-  "devestimate": {
-    "score": 72,
-    "grade": "C"
-  },
-  "taskflow": {
-    "score": 76,
-    "grade": "B"
-  },
-  "lens-journal": {
-    "score": 69,
-    "grade": "C"
-  },
-  "fastclock": {
-    "score": 78,
-    "grade": "B"
-  },
   "pulsestack": {
-    "score": 75,
-    "grade": "B"
-  },
-  "shelfmark": {
     "score": 75,
     "grade": "B"
   },
@@ -475,48 +479,44 @@
     "score": 72,
     "grade": "C"
   },
-  "prayercompass": {
-    "score": 75,
+  "decision-compass": {
+    "score": 70,
+    "grade": "C"
+  },
+  "morse": {
+    "score": 63,
+    "grade": "C"
+  },
+  "clearday": {
+    "score": 76,
     "grade": "B"
+  },
+  "type-spec": {
+    "score": 69,
+    "grade": "C"
+  },
+  "whiteboard": {
+    "score": 69,
+    "grade": "C"
+  },
+  "regex": {
+    "score": 67,
+    "grade": "C"
   },
   "quickcalc": {
     "score": 77,
     "grade": "B"
   },
-  "watertracker": {
+  "quantlab": {
     "score": 76,
     "grade": "B"
   },
-  "piano": {
-    "score": 74,
+  "dual-timezone": {
+    "score": 72,
     "grade": "C"
   },
-  "math": {
-    "score": 74,
-    "grade": "C"
-  },
-  "weather": {
-    "score": 65,
-    "grade": "C"
-  },
-  "song-to-midi": {
+  "mandarin-english": {
     "score": 67,
     "grade": "C"
-  },
-  "carebook": {
-    "score": 75,
-    "grade": "B"
-  },
-  "voicerecorder": {
-    "score": 78,
-    "grade": "B"
-  },
-  "kanban": {
-    "score": 63,
-    "grade": "C"
-  },
-  "tapbeat": {
-    "score": 81,
-    "grade": "B"
   }
 }
