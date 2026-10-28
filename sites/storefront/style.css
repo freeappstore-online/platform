@@ -2546,3 +2546,65 @@ pre[class*="language-"] {
 
 .preview-frame.preview-tablet { max-width: 768px; margin: 0 auto; }
 .preview-frame.preview-mobile { max-width: 375px; margin: 0 auto; }
+
+/* App ideas (/ideas) */
+.ideas-hero { padding-bottom: 2rem; }
+.ideas-stats { display: flex; justify-content: center; gap: 2.5rem; flex-wrap: wrap; margin-top: 2rem; }
+.ideas-stats div { display: flex; flex-direction: column; align-items: center; }
+.ideas-stats strong { font-family: var(--font-display); font-size: 2.2rem; font-weight: 800; color: var(--ink-strong); line-height: 1.1; }
+.ideas-stats span { font-size: 0.85rem; color: var(--muted); }
+.ideas-section { padding: 1rem 0 3rem; }
+.ideas-controls { margin-bottom: 1.5rem; }
+.ideas-controls .filter-bar { margin-bottom: 0.75rem; }
+.ideas-search input { width: 100%; max-width: 32rem; padding: 0.7rem 1rem; border: 1px solid var(--line); border-radius: 100px; background: var(--panel); color: var(--ink); font: inherit; font-size: 0.95rem; margin-bottom: 1rem; }
+.ideas-search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+.ideas-sort { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--muted); flex-wrap: wrap; }
+.ideas-sort select { padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel); color: var(--ink); font: inherit; font-size: 0.85rem; }
+.ideas-count { margin-left: auto; font-weight: 600; }
+.ideas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: 1rem; }
+.ideas-card { display: flex; flex-direction: column; gap: 0.6rem; padding: 1.15rem 1.2rem; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius-lg); box-shadow: var(--shadow); min-width: 0; }
+.ideas-card[hidden] { display: none; }
+.ideas-card:target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow); }
+.ideas-status-defer, .ideas-status-wont { opacity: 0.75; }
+.ideas-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+.ideas-card-head h3 { font-size: 1.1rem; font-weight: 750; line-height: 1.3; letter-spacing: -0.01em; }
+.ideas-card-head h3 a { color: var(--ink-strong); text-decoration: none; }
+.ideas-card-head h3 a:hover { color: var(--accent); }
+.ideas-cat { font-size: 0.75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+.ideas-demand { display: flex; gap: 3px; padding-top: 0.35rem; flex-shrink: 0; }
+.ideas-demand span { width: 7px; height: 14px; border-radius: 2px; background: var(--line); }
+.ideas-demand span.on { background: var(--accent); }
+.ideas-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.ideas-badge { font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.55rem; border-radius: 100px; background: var(--panel-alt); color: var(--muted); border: 1px solid var(--line); }
+.ideas-badge-open { background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d; border-color: color-mix(in srgb, #16a34a 35%, transparent); }
+.ideas-badge-upgrade { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.ideas-badge-defer { background: color-mix(in srgb, #d97706 14%, transparent); color: #b45309; border-color: color-mix(in srgb, #d97706 35%, transparent); }
+.ideas-badge-wont { background: var(--panel-alt); color: var(--muted-soft); }
+:root[data-theme='dark'] .ideas-badge-open { color: #4ade80; }
+:root[data-theme='dark'] .ideas-badge-defer { color: #fbbf24; }
+.ideas-pitch { font-size: 0.92rem; color: var(--ink); line-height: 1.5; }
+.ideas-edge { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+.ideas-edge strong { color: var(--ink); }
+.ideas-leaders { list-style: none; padding: 0.6rem 0 0; margin: 0; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.83rem; }
+.ideas-leaders li { line-height: 1.4; overflow-wrap: anywhere; }
+.ideas-store { display: inline-block; font-size: 0.66rem; font-weight: 800; padding: 0.1rem 0.4rem; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.03em; vertical-align: 1px; }
+.ideas-store-play { background: color-mix(in srgb, #16a34a 14%, transparent); color: #15803d; }
+.ideas-store-apple { background: var(--panel-alt); color: var(--ink); border: 1px solid var(--line); }
+:root[data-theme='dark'] .ideas-store-play { color: #4ade80; }
+.ideas-leader-name { font-weight: 650; color: var(--ink); }
+.ideas-leader-name a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 2px; }
+.ideas-leader-name a:hover { color: var(--accent); text-decoration-color: var(--accent); }
+.ideas-leader-stats { color: var(--muted); }
+.ideas-onfas { font-size: 0.83rem; color: var(--muted); }
+.ideas-onfas a { color: var(--accent); font-weight: 650; }
+.ideas-details { font-size: 0.83rem; color: var(--muted); line-height: 1.5; }
+.ideas-details summary { cursor: pointer; font-weight: 650; color: var(--ink); }
+.ideas-details p { margin-top: 0.4rem; }
+.ideas-actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-top: auto; padding-top: 0.4rem; }
+.ideas-copy { padding: 0.45rem 0.9rem; border-radius: 100px; border: 1px solid var(--accent); background: var(--accent); color: white; font: inherit; font-size: 0.82rem; font-weight: 700; cursor: pointer; }
+.ideas-copy:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.ideas-actions code { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); background: var(--panel-alt); padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+.ideas-empty { text-align: center; color: var(--muted); padding: 3rem 0; }
+.ideas-howto { padding: 1rem 0 4rem; max-width: 46rem; }
+.ideas-howto ol { margin: 1rem 0 1.5rem 1.25rem; display: flex; flex-direction: column; gap: 0.6rem; line-height: 1.55; }
+.ideas-howto code { font-family: var(--font-mono); font-size: 0.85em; background: var(--panel-alt); padding: 0.1rem 0.35rem; border-radius: 4px; }

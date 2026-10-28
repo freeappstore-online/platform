@@ -530,6 +530,7 @@ const sriHashes = {
   PRISM_AUTODETECT_JS: sriHash('prism-autodetect.js'),
   SETTINGS_JS: sriHash('settings.js'),
   AI_GUIDE_JS: sriHash('ai-guide.js'),
+  IDEAS_JS: sriHash('ideas.js'),
 };
 // Content-version tokens for the same set of assets (same read, different encoding).
 const contentVersions = {
@@ -544,6 +545,7 @@ const contentVersions = {
   PRISM_AUTODETECT_JS: contentVersion('prism-autodetect.js'),
   SETTINGS_JS: contentVersion('settings.js'),
   AI_GUIDE_JS: contentVersion('ai-guide.js'),
+  IDEAS_JS: contentVersion('ideas.js'),
 };
 
 function replaceStylesheetUrls(html, stylesheetUrls) {
@@ -1091,6 +1093,32 @@ creatorsHtml = replaceStylesheetUrls(creatorsHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'creators.html'), creatorsHtml);
 console.log(`Generated /creators page (${uniqueAuthors.length} creators)`);
 
+// --- App ideas (/ideas) ---
+// Popular Play / App Store app types to rebuild on FAS. Data is validated the
+// same way as the registry: a bad entry breaks the build rather than shipping.
+const { validateIdeas, renderIdeasPage } = require('./lib/ideas.cjs');
+const IDEAS_PATH = process.env.FAS_IDEAS_PATH
+  ? path.resolve(process.env.FAS_IDEAS_PATH)
+  : path.join(ROOT, 'data', 'app-ideas.json');
+const ideasData = JSON.parse(fs.readFileSync(IDEAS_PATH, 'utf8'));
+const ideasErrors = validateIdeas(ideasData);
+if (ideasErrors.length) {
+  console.error('App ideas validation failed:\n  - ' + ideasErrors.join('\n  - '));
+  process.exit(1);
+}
+const ideasTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'ideas.html'), 'utf8'));
+let ideasHtml = renderIdeasPage(injectSettingsBootstrap(ideasTemplate, 'templates/ideas.html'), ideasData, apps, escapeHtml)
+  .replace('__CF_BEACON__', CF_BEACON_SNIPPET);
+for (const [k, v] of Object.entries(sriHashes)) {
+  ideasHtml = ideasHtml.replaceAll(`{{SRI_${k}}}`, v);
+}
+for (const [k, v] of Object.entries(contentVersions)) {
+  ideasHtml = ideasHtml.replaceAll(`{{VER_${k}}}`, v);
+}
+ideasHtml = replaceStylesheetUrls(ideasHtml, stylesheetUrls);
+fs.writeFileSync(path.join(DIST, 'ideas.html'), ideasHtml);
+console.log(`Generated /ideas page (${ideasData.ideas.length} ideas)`);
+
 // --- Generate sitemap.xml ---
 
 const sitemapEntries = [
@@ -1120,6 +1148,7 @@ const sitemapEntries = [
   `  <url><loc>https://freeappstore.online/llms.txt</loc><priority>0.7</priority></url>`,
   `  <url><loc>https://freeappstore.online/quality</loc><priority>0.7</priority></url>`,
   `  <url><loc>https://freeappstore.online/creators</loc><priority>0.7</priority></url>`,
+  `  <url><loc>https://freeappstore.online/ideas</loc><priority>0.8</priority></url>`,
   `  <url><loc>https://freeappstore.online/privacy</loc><priority>0.5</priority></url>`,
   `  <url><loc>https://freeappstore.online/terms</loc><priority>0.5</priority></url>`,
   ...apps.map(app =>
@@ -1173,6 +1202,7 @@ const filesToCopy = [
   'prism-autodetect.js',
   'settings.js',
   'ai-guide.js',
+  'ideas.js',
   '_redirects',
 ];
 

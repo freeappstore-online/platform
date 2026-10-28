@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>App Ideas — Rebuild the World's Most Popular Apps, Free — FreeAppStore</title>
+  <meta name="description" content="{{IDEAS_COUNT}} app ideas taken from the Google Play and Apple App Store charts, ranked by demand. Pick one, build a free, ad-free, no-tracking version, and publish it on FreeAppStore." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="App Ideas — Rebuild the World's Most Popular Apps, Free" />
+  <meta property="og:description" content="Popular Google Play and App Store apps, ranked by demand, that you can rebuild as free web apps on FreeAppStore." />
+  <meta property="og:url" content="https://freeappstore.online/ideas" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="https://freeappstore.online/ideas" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="stylesheet" href="{{STYLE_CSS_URL}}" />
+  <!-- CF Web Analytics — cookieless, no PII. Token injected at build time. -->
+  __CF_BEACON__
+</head>
+<body>
+
+  {{HEADER}}
+
+  <main class="container">
+    <section class="hero ideas-hero">
+      <h1>Rebuild the apps millions already use</h1>
+      <p>
+        The apps that top Google Play and the App Store are often full of ads,
+        paywalls and trackers. Pick one, build a free version that works in the
+        browser, and publish it here.
+      </p>
+      <div class="ideas-stats" aria-label="Summary">
+        <div><strong>{{IDEAS_COUNT}}</strong><span>app ideas</span></div>
+        <div><strong>{{IDEAS_OPEN_COUNT}}</strong><span>not on FreeAppStore yet</span></div>
+        <div><strong>{{IDEAS_READY_COUNT}}</strong><span>buildable today</span></div>
+      </div>
+    </section>
+
+    <section class="ideas-section" aria-labelledby="ideas-heading">
+      <h2 id="ideas-heading" class="sr-only">App ideas</h2>
+
+      <div class="ideas-controls">
+        <label class="ideas-search">
+          <span class="sr-only">Search ideas</span>
+          <input type="search" id="ideasSearch" placeholder="Search ideas, e.g. habit, scanner, budget" autocomplete="off" />
+        </label>
+
+        <div class="filter-bar" id="ideasStatus" role="toolbar" aria-label="Filter by status">
+          <button class="filter-btn active" type="button" data-status="buildable" aria-pressed="true">Buildable now</button>
+          <button class="filter-btn" type="button" data-status="open" aria-pressed="false">Not on FreeAppStore yet</button>
+          <button class="filter-btn" type="button" data-status="upgrade" aria-pressed="false">Improve an existing app</button>
+          <button class="filter-btn" type="button" data-status="defer" aria-pressed="false">Coming soon</button>
+          <button class="filter-btn" type="button" data-status="all" aria-pressed="false">All</button>
+        </div>
+
+        <div class="filter-bar" id="ideasCategory" role="toolbar" aria-label="Filter by category">
+          <button class="filter-btn active" type="button" data-category="all" aria-pressed="true">All categories</button>
+          {{IDEAS_CATEGORY_BUTTONS}}
+        </div>
+
+        <div class="ideas-sort">
+          <label for="ideasSort">Sort by</label>
+          <select id="ideasSort">
+            <option value="priority">Recommended</option>
+            <option value="demand">Most popular</option>
+            <option value="easy">Easiest first</option>
+            <option value="az">A → Z</option>
+          </select>
+          <span class="ideas-count" id="ideasCount" aria-live="polite"></span>
+        </div>
+      </div>
+
+      <div class="ideas-grid" id="ideasGrid">
+        {{IDEAS_CARDS}}
+      </div>
+      <p class="ideas-empty" id="ideasEmpty" hidden>No ideas match. Try another filter, or <a href="/get-started">start your own app</a>.</p>
+    </section>
+
+    <section class="ideas-howto" aria-labelledby="howto-heading">
+      <h2 id="howto-heading" class="section-h2">How to take an idea</h2>
+      <ol>
+        <li><strong>Pick an idea.</strong> Press <em>Copy build prompt</em> on a card. It copies a brief for your AI coding tool with the leaders to beat and the FreeAppStore features to use.</li>
+        <li><strong>Scaffold it.</strong> Run <code>fas init &lt;name&gt;</code>, or open <a href="https://freeappstore.online/app/build">VibeCode</a> and paste the prompt.</li>
+        <li><strong>Publish it.</strong> Run <code>fas check</code> and then <code>fas publish</code>. Your app is listed here and the idea card links to it. See <a href="/get-started">Get started</a>.</li>
+      </ol>
+      <p class="section-note">
+        Data comes from FreeAppStore's research of the Google Play and Apple App Store charts on {{IDEAS_RESEARCH_DATE}}.
+        Install counts, ratings and chart positions change daily, so check the store listing before you rely on a number.
+        Google Play is a trademark of Google LLC. App Store is a trademark of Apple Inc. FreeAppStore is not affiliated with either.
+      </p>
+    </section>
+  </main>
+
+  {{FOOTER}}
+
+  <script src="/ideas.js?v={{VER_IDEAS_JS}}" integrity="{{SRI_IDEAS_JS}}"></script>
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>

@@ -1,0 +1,5316 @@
+{
+  "researchDate": "2026-10-15",
+  "ideas": [
+    {
+      "id": "sleep-sounds",
+      "name": "Sleep sounds & white noise",
+      "category": "Health & Fitness",
+      "pitch": "Used every night for sleep, focus and babies. BetterSleep has 10M+ Play installs; White Noise is #5 on Apple's US Top Paid Health & Fitness chart.",
+      "fasEdge": "Rivals lock sounds and sleep timers behind paywalls and show ads. FAS generates white, pink and brown noise with Web Audio, so it is free and offline.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 5,
+      "features": [
+        "Web Audio",
+        "Offline",
+        "Wake Lock",
+        "KV sync"
+      ],
+      "caveats": "Background audio from a Home Screen PWA is unreliable when the screen locks; suggest Wake Lock. Guided Calm-style content is licensed and out of scope.",
+      "fasApps": [
+        "sleepsounds"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "BetterSleep",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.3,
+          "reviews": "397K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=ipnossoft.rma.free"
+        },
+        {
+          "name": "White Noise",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 5,
+          "chart": "US Top Paid Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/white-noise/id289894882"
+        },
+        {
+          "name": "White Noise Lite",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.82,
+          "reviews": "277k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/white-noise-lite/id292987597"
+        },
+        {
+          "name": "Insight Timer",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.spotlightsix.zentimerlite2"
+        },
+        {
+          "name": "Sleep Sounds",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.8,
+          "reviews": "214K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=relax.sleep.relaxation.sleepingsounds"
+        }
+      ]
+    },
+    {
+      "id": "voice-recorder",
+      "name": "Voice recorder",
+      "category": "Productivity",
+      "pitch": "Lectures, meetings and memos: two Play recorders have 50M+ installs each, and Just Press Record is #9 on Apple's US Top Paid Utilities chart.",
+      "fasEdge": "Recordings stay on the device. Transcription and summaries run on the user's own AI key instead of an Otter-style subscription.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 5,
+      "features": [
+        "Microphone",
+        "MediaRecorder",
+        "IndexedDB",
+        "BYO-key AI",
+        "Web Share"
+      ],
+      "caveats": "Recording stops when the screen locks or the tab is backgrounded, especially on iOS. Audio stays local. Recording phone calls is impossible.",
+      "fasApps": [
+        "voicerecorder"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Voice Recorder (bestrecorder)",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.9,
+          "reviews": "1.28M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.media.bestrecorder.audiorecorder"
+        },
+        {
+          "name": "Easy Voice Recorder",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.7,
+          "reviews": "624K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.coffeebeanventures.easyvoicerecorder"
+        },
+        {
+          "name": "Just Press Record",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 9,
+          "chart": "US Top Paid Utilities",
+          "price": "$6.99",
+          "url": "https://apps.apple.com/us/app/just-press-record/id1033342465"
+        },
+        {
+          "name": "Whisper Notes",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 9,
+          "chart": "US Top Paid Productivity",
+          "price": "$7.99",
+          "url": "https://apps.apple.com/us/app/whisper-notes-speech-to-text/id6447090616"
+        },
+        {
+          "name": "Otter",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 13,
+          "chart": "US Top Grossing Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/otter-transcribe-voice-notes/id1276437113"
+        }
+      ]
+    },
+    {
+      "id": "financial-trade-calculators",
+      "name": "Financial & trade calculators",
+      "category": "Finance",
+      "pitch": "Professionals, exam takers and trades pay for accurate calculators: they hold about 8 of Apple's US Top Paid Finance top 30, and QuickBend is Paid Productivity #1.",
+      "fasEdge": "TVM, NPV/IRR and conduit bending are pure maths that run offline. FAS removes the $6–15 price tag.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 5,
+      "features": [
+        "Offline",
+        "KV sync"
+      ],
+      "caveats": null,
+      "fasApps": [
+        "calcwright"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "10bii",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 1,
+          "chart": "US Top Paid Finance",
+          "price": "$5.99",
+          "url": "https://apps.apple.com/us/app/10bii-financial-calculator/id360256797"
+        },
+        {
+          "name": "QuickBend",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 1,
+          "chart": "US Top Paid Productivity",
+          "price": "$6.99",
+          "url": "https://apps.apple.com/us/app/quickbend-conduit-bending/id1010311475"
+        },
+        {
+          "name": "HP 12c",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 8,
+          "chart": "US Top Paid Finance",
+          "price": "$14.99",
+          "url": "https://apps.apple.com/us/app/hp-12c-financial-calculator/id503641946"
+        },
+        {
+          "name": "BA II Plus",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 17,
+          "chart": "US Top Paid Finance",
+          "price": "$14.99",
+          "url": "https://apps.apple.com/us/app/ba-ii-plus-financial-calc/id329739750"
+        },
+        {
+          "name": "Construction Master Pro",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.84,
+          "reviews": "40k",
+          "chartRank": 45,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/construction-master-pro-calc/id370406446"
+        }
+      ]
+    },
+    {
+      "id": "sound-meter",
+      "name": "Sound level meter (dB)",
+      "category": "Utilities",
+      "pitch": "Noise complaints, workplace checks and curiosity. Two sound meters have 10M+ Play installs each; Decibel X has 163k App Store ratings.",
+      "fasEdge": "Sensor tools are a classic adware category. FAS ships the same meter with no ads and no tracking.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 4,
+      "features": [
+        "Microphone",
+        "Web Audio",
+        "Charts",
+        "Offline"
+      ],
+      "caveats": "Readings are uncalibrated estimates, as with native apps: label them approximate and turn off auto gain and noise suppression.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Sound Meter (Smart Tools)",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.4,
+          "reviews": "205K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=kr.sira.sound"
+        },
+        {
+          "name": "Sound Meter (gamebasic)",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.5,
+          "reviews": "186K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.gamebasic.decibel"
+        },
+        {
+          "name": "Decibel X",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.65,
+          "reviews": "163k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/decibel-x-db-sound-level-meter/id448155923"
+        },
+        {
+          "name": "Audio Spectrum Analyzer",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 16,
+          "chart": "US Top Paid Utilities",
+          "price": null,
+          "url": null
+        },
+        {
+          "name": "AudioTools",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 26,
+          "chart": "US Top Paid Music",
+          "price": "$19.99",
+          "url": "https://apps.apple.com/us/app/audiotools-db-sound-audio/id325307477"
+        }
+      ]
+    },
+    {
+      "id": "voice-changer",
+      "name": "Voice changer",
+      "category": "Music & Audio",
+      "pitch": "Fun, shareable clips: \"Voice changer with effects\" has 100M+ Play installs and 1.48M reviews.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 4,
+      "features": [
+        "Microphone",
+        "MediaRecorder",
+        "Web Audio",
+        "Web Share"
+      ],
+      "caveats": "Pitch shifting without changing speed needs a small DSP library. iOS records AAC/MP4, so handle codecs.",
+      "fasApps": [
+        "voicerecorder",
+        "echoshift"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Voice changer with effects",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.6,
+          "reviews": "1.48M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.baviux.voicechanger"
+        }
+      ]
+    },
+    {
+      "id": "drum-pad",
+      "name": "Drum pad & beat maker",
+      "category": "Music & Audio",
+      "pitch": "Music making without gear: Drum Pad Machine has 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 4,
+      "features": [
+        "Web Audio",
+        "Multitouch",
+        "KV sync",
+        "Shared collections",
+        "Offline"
+      ],
+      "caveats": "Sample packs are the product: kits must be CC0 or self-made and cached for offline use. Licensed packs are not an option.",
+      "fasApps": [
+        "tapbeat"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Drum Pad Machine",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.3,
+          "reviews": "1.05M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.agminstruments.drumpadmachine"
+        },
+        {
+          "name": "Drum Pads 24",
+          "store": "play",
+          "installs": "10M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.paullipnyagov.drumpads24"
+        }
+      ]
+    },
+    {
+      "id": "compass-level-ruler",
+      "name": "Compass, bubble level & ruler",
+      "category": "Utilities",
+      "pitch": "DIY, hiking and hanging pictures: a compass, a bubble level and a ruler app each have 10M+ Play installs.",
+      "fasEdge": "Sensor tools are a classic adware category. FAS puts all three in one offline app with no ads.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 3,
+      "features": [
+        "DeviceOrientation",
+        "DeviceMotion",
+        "Geolocation",
+        "Offline"
+      ],
+      "caveats": "iOS needs an explicit motion permission and uses webkitCompassHeading. Compass accuracy varies; the ruler needs on-screen calibration. No camera AR measuring.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Digital Compass",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "626K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.vincentlee.compass"
+        },
+        {
+          "name": "Bubble Level (Gamma Play)",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "335K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.gamma.bubblelevel"
+        },
+        {
+          "name": "Ruler",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.3,
+          "reviews": "115K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=org.nixgame.ruler"
+        }
+      ]
+    },
+    {
+      "id": "everyday-calculators",
+      "name": "Everyday calculators: tip, %, discount, age, EMI",
+      "category": "Utilities",
+      "pitch": "Tip, EMI and age calculators each reach millions of Play installs; people want every everyday calculator in one place.",
+      "fasEdge": "Ad-funded calculator apps run full-screen interstitials and over-ask for permissions. FAS puts them all in one clean, offline app.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 2,
+      "features": [
+        "Offline",
+        "KV sync"
+      ],
+      "caveats": null,
+      "fasApps": [
+        "quickcalc",
+        "loan"
+      ],
+      "sources": [
+        "play",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Age Calculator",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.7,
+          "reviews": "177K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.happyverse.agecalculator"
+        },
+        {
+          "name": "EMI Calculator",
+          "store": "play",
+          "installs": "5M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.continuum.emi.calculator"
+        },
+        {
+          "name": "Tip Calculator",
+          "store": "play",
+          "installs": "500K+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.skollabs.tipcalc"
+        }
+      ]
+    },
+    {
+      "id": "baby-tracker",
+      "name": "Baby tracker (two parents, live)",
+      "category": "Lifestyle",
+      "pitch": "Parents log feeds, naps and diapers around the clock. Baby Tracker – Newborn Log has a 4.9 rating; Huckleberry peaked near $69K a week in US revenue (Sensor Tower).",
+      "fasEdge": "Sleep predictions and partner sync are often paid, and child health data sits with VC-backed firms. FAS syncs two parents live, free and private.",
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": "fas.push (feed reminders, nice to have)",
+      "wave": 1,
+      "demand": 2,
+      "features": [
+        "Shared collections",
+        "Realtime rooms",
+        "Friends",
+        "Offline"
+      ],
+      "caveats": null,
+      "fasApps": [],
+      "sources": [
+        "play",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Baby Tracker – Newborn Log",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.9,
+          "reviews": "72K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.nighp.babytracker_android"
+        }
+      ]
+    },
+    {
+      "id": "sobriety-counter",
+      "name": "Sobriety / quit counter",
+      "category": "Health & Fitness",
+      "pitch": "Recovery is counted in days: I Am Sober claims 18M+ users and charges $4.99/month or $49.99/year.",
+      "fasEdge": "Stats and motivation packs are locked, and the data is very sensitive. A private counter with nothing to unlock.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 1,
+      "features": [
+        "Counters",
+        "KV sync",
+        "Realtime rooms",
+        "Offline"
+      ],
+      "caveats": null,
+      "fasApps": [
+        "clearday"
+      ],
+      "sources": [
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "I Am Sober",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": "$4.99/mo or $49.99/yr",
+          "url": "https://apps.apple.com/us/app/i-am-sober/id672904239"
+        }
+      ]
+    },
+    {
+      "id": "reading-log",
+      "name": "Reading log & book tracker",
+      "category": "Lifestyle",
+      "pitch": "Readers track shelves, progress and yearly goals. Goodreads is the default tracker, and StoryGraph sells a Plus tier.",
+      "fasEdge": "Track reading without Amazon: Goodreads is Amazon-owned with ads, and StoryGraph paywalls stats. Open Library search, shelves and goals, free.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 1,
+      "features": [
+        "Open Library API",
+        "Shared collections",
+        "Friends",
+        "Counters"
+      ],
+      "caveats": null,
+      "fasApps": [
+        "shelfmark"
+      ],
+      "sources": [
+        "niche"
+      ],
+      "leaders": []
+    },
+    {
+      "id": "teleprompter",
+      "name": "Teleprompter",
+      "category": "Photo & Video",
+      "pitch": "Creators read scripts on camera: PromptSmart Pro is #5 on Apple's US Top Paid Photo & Video chart at $29.99.",
+      "fasEdge": "Scrolling text with mirror mode, free instead of $29.99.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 5,
+      "features": [
+        "Smooth scroll",
+        "Mirror mode",
+        "Speech follow (optional)",
+        "Offline"
+      ],
+      "caveats": null,
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "PromptSmart Pro",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.61,
+          "reviews": "11.9k",
+          "chartRank": 5,
+          "chart": "US Top Paid Photo & Video",
+          "price": "$29.99",
+          "url": "https://apps.apple.com/us/app/promptsmart-pro-teleprompter/id894811756"
+        }
+      ]
+    },
+    {
+      "id": "wishlist",
+      "name": "Wishlist & gift registry",
+      "category": "Lifestyle",
+      "pitch": "Holidays, birthdays and weddings: GoWish is #3 on Apple's US Top Free Lifestyle chart.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 5,
+      "features": [
+        "Shared collections",
+        "Friends",
+        "Proxy"
+      ],
+      "caveats": "Product previews are scraped through the proxy (CORS) and count toward its 10k requests a day.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "GoWish",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.78,
+          "reviews": "188k",
+          "chartRank": 3,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/gowish-your-digital-wishlist/id1605170923"
+        },
+        {
+          "name": "Giftful",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 30,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/giftful-wishlist-registry/id1450175505"
+        },
+        {
+          "name": "Listful",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 41,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/listful-wishlist-maker/id6505107527"
+        }
+      ]
+    },
+    {
+      "id": "event-rsvp",
+      "name": "Event invite & RSVP page",
+      "category": "Social",
+      "pitch": "Partiful replaced Evite for younger users: it is #4 on Apple's US Top Free Lifestyle chart with 269k ratings.",
+      "fasEdge": "Web-first suits it: guests open a link and never install anything.",
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 5,
+      "features": [
+        "Shared collections",
+        "Auth",
+        "Email",
+        "Realtime rooms"
+      ],
+      "caveats": "Overlaps the catalog's Meetup app; check before building.",
+      "fasApps": [
+        "meetup"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Partiful",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.95,
+          "reviews": "269k",
+          "chartRank": 4,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/partiful-party-invite-maker/id1662982304"
+        }
+      ]
+    },
+    {
+      "id": "test-prep-quiz",
+      "name": "Test-prep quiz banks (driving, ham radio)",
+      "category": "Education",
+      "pitch": "A high-intent, time-boxed need, so people pay: Stack the States and HamStudy are #5 and #6 on Apple's US Top Paid Education chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 5,
+      "features": [
+        "Static question JSON",
+        "SRS engine",
+        "REST Countries",
+        "Offline"
+      ],
+      "caveats": "The value is the question bank: use public-domain sources such as state driver manuals and the FCC question pools.",
+      "fasApps": [
+        "quiz"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "DMV Practice Test",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.62,
+          "reviews": "111k",
+          "chartRank": 17,
+          "chart": "US Top Grossing Education",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/dmv-practice-test-2026-mydmv/id1625234008"
+        },
+        {
+          "name": "Zutobi",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 16,
+          "chart": "US Top Grossing Education",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/zutobi-permit-driving-prep/id1394069110"
+        },
+        {
+          "name": "Stack the States",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 5,
+          "chart": "US Top Paid Education",
+          "price": "$2.99",
+          "url": "https://apps.apple.com/us/app/stack-the-states/id381342267"
+        },
+        {
+          "name": "HamStudy",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 6,
+          "chart": "US Top Paid Education",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/hamstudy-org/id1371288324"
+        }
+      ]
+    },
+    {
+      "id": "digital-business-card",
+      "name": "Digital business card (QR / vCard)",
+      "category": "Productivity",
+      "pitch": "Networking without paper cards: Blinq is #17 on Apple's US Top Grossing Business chart, with 132k ratings.",
+      "fasEdge": "Blinq and Popl are subscription-monetised. FAS makes the vCard, QR code and public profile page free.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 4,
+      "features": [
+        "QR generator",
+        "vCard",
+        "Shared collections",
+        "Web Share"
+      ],
+      "caveats": "No NFC writing on iOS Safari, so it is QR only.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Blinq",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.87,
+          "reviews": "132k",
+          "chartRank": 17,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/blinq-digital-business-card/id1324102258"
+        },
+        {
+          "name": "Popl",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 44,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/popl-ai-lead-capture/id1503939262"
+        }
+      ]
+    },
+    {
+      "id": "gps-timestamp-camera",
+      "name": "GPS timestamp camera",
+      "category": "Photo & Video",
+      "pitch": "Field workers, contractors and inspectors prove where and when a photo was taken: GPS Map Camera has 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 4,
+      "features": [
+        "Camera",
+        "Geolocation",
+        "Nominatim",
+        "Canvas overlay"
+      ],
+      "caveats": "Photos save by download or share, not straight to the gallery. Map thumbnails must respect the OSM tile policy; writing EXIF needs a small library.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "GPS Map Camera",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 3.6,
+          "reviews": "390K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.gpsmapcamera.geotagginglocationonphoto"
+        }
+      ]
+    },
+    {
+      "id": "flashlight",
+      "name": "Flashlight & screen light",
+      "category": "Utilities",
+      "pitch": "Huge historic demand: Tiny Flashlight and \"Flashlight\" have 100M+ Play installs each.",
+      "fasEdge": "Flashlights are the classic home of over-permissioned adware. A FAS version asks for nothing it doesn't need.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 4,
+      "features": [
+        "Camera torch",
+        "Screen light"
+      ],
+      "caveats": "LED control works on Android Chrome only; iOS gets a white screen light. Phones have a built-in toggle anyway. Low priority.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Tiny Flashlight",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.4,
+          "reviews": "4.05M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.devuni.flashlight"
+        },
+        {
+          "name": "Flashlight",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.77,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.splendapps.torch"
+        },
+        {
+          "name": "Brightest Flashlight",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.5,
+          "reviews": "1.27M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=goldenshorestechnologies.brightestflashlight.free"
+        }
+      ]
+    },
+    {
+      "id": "counters",
+      "name": "Tally, tasbeeh & score counters",
+      "category": "Utilities",
+      "pitch": "Prayer counting, board games, inventory and events: Digital Tasbeeh Counter and Chess Clock have 10M+ Play installs each.",
+      "fasEdge": "Rivals put ads in a tap counter. FAS adds what native apps lack: a shared live scoreboard.",
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 3,
+      "features": [
+        "KV sync",
+        "Counters",
+        "Realtime rooms",
+        "Vibration"
+      ],
+      "caveats": "The Vibration API is missing on iOS Safari. The catalog's Chess Clock covers one piece of the set.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Digital Tasbeeh Counter",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.9,
+          "reviews": "102K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.sevapp.smart_tasbeeh"
+        },
+        {
+          "name": "Chess Clock",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "25K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.chess.clock"
+        },
+        {
+          "name": "Tally Counter",
+          "store": "play",
+          "installs": "500K+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=de.cliff.strichliste"
+        },
+        {
+          "name": "Score Counter",
+          "store": "play",
+          "installs": "500K+",
+          "rating": 4.9,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=ua.napps.scorekeeper"
+        }
+      ]
+    },
+    {
+      "id": "gps-speedometer",
+      "name": "GPS speedometer & trip meter",
+      "category": "Travel & Maps",
+      "pitch": "Drivers, cyclists and runners: GPS Speedometer has 10M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 3,
+      "features": [
+        "Geolocation",
+        "Wake Lock",
+        "Leaflet"
+      ],
+      "caveats": "Foreground only, so the screen must stay on. No background trip logging.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Speedometer: GPS Speedometer",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.5,
+          "reviews": "175K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=gps.speedometer.gpsspeedometer.odometer"
+        }
+      ]
+    },
+    {
+      "id": "magnifier-mirror",
+      "name": "Magnifier & mirror",
+      "category": "Utilities",
+      "pitch": "Older users reading small print, and make-up: a magnifier and a mirror app have 10M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 3,
+      "features": [
+        "Camera",
+        "Canvas contrast filters"
+      ],
+      "caveats": "Optical zoom and torch control work on Android Chrome only; iOS gets digital zoom.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Mirror Plus",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "392K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=mmapps.mirror.free"
+        },
+        {
+          "name": "Magnifier & Microscope [Cozy]",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "126K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.hantor.CozyMag"
+        }
+      ]
+    },
+    {
+      "id": "fuel-log",
+      "name": "Car fuel & expense log",
+      "category": "Travel & Maps",
+      "pitch": "Drivers track fuel economy and running costs: Fuelio and Drivvo have 5M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 3,
+      "demand": 2,
+      "features": [
+        "KV sync",
+        "Charts",
+        "Offline"
+      ],
+      "caveats": null,
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Fuelio",
+          "store": "play",
+          "installs": "5M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.kajda.fuelio"
+        },
+        {
+          "name": "Drivvo",
+          "store": "play",
+          "installs": "5M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=br.com.ctncardoso.ctncar"
+        }
+      ]
+    },
+    {
+      "id": "ai-task-breakdown",
+      "name": "AI task breakdown / ADHD helper",
+      "category": "AI",
+      "pitch": "An ADHD-friendly \"break this into steps\" tool that is simple and beloved: Goblin Tools is #2 on Apple's US Top Paid Productivity chart.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 4,
+      "demand": 5,
+      "features": [
+        "BYO-key AI",
+        "KV sync"
+      ],
+      "caveats": "The user must bring a key, which is friction for non-technical users.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Goblin Tools",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.76,
+          "reviews": "3k",
+          "chartRank": 2,
+          "chart": "US Top Paid Productivity",
+          "price": "$1.99",
+          "url": "https://apps.apple.com/us/app/goblin-tools/id6449003064"
+        }
+      ]
+    },
+    {
+      "id": "translator",
+      "name": "Translator (text and voice)",
+      "category": "AI",
+      "pitch": "Travel and immigration: Google Translate has 1B+ Play installs, and iTranslate is a large subscription business with 531k App Store ratings.",
+      "fasEdge": "Translation through the user's own AI key instead of another subscription.",
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 4,
+      "demand": 5,
+      "features": [
+        "BYO-key AI",
+        "Proxy",
+        "Web Speech"
+      ],
+      "caveats": "There is no free no-key translation API, so it is BYO key only. Safari speech recognition is partial; camera and offline translation are out.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Google Translate",
+          "store": "play",
+          "installs": "1B+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.apps.translate"
+        },
+        {
+          "name": "Microsoft Translator",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.microsoft.translator"
+        },
+        {
+          "name": "iTranslate",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.73,
+          "reviews": "531k",
+          "chartRank": 34,
+          "chart": "US Top Grossing Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/itranslate-translator/id288113403"
+        },
+        {
+          "name": "Translator GO",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 36,
+          "chart": "US Top Grossing Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/translator-go-ai-translate/id1570134612"
+        }
+      ]
+    },
+    {
+      "id": "ai-photo-calorie",
+      "name": "AI photo calorie logger",
+      "category": "AI",
+      "pitch": "Snap a meal instead of logging it: Cal AI reportedly made about $35M in 2025 and is #12 on Apple's US Top Grossing Health & Fitness chart.",
+      "fasEdge": "$30–60/yr for what is one vision-model call. With the user's own key the photo goes straight to their model and is never stored.",
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 4,
+      "demand": 4,
+      "features": [
+        "Camera",
+        "BYO-key AI",
+        "KV sync"
+      ],
+      "caveats": "Needs the user's own AI key. Pairs with the calorie log upgrade.",
+      "fasApps": [],
+      "sources": [
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Cal AI",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 12,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/cal-ai-calorie-tracker/id6480417616"
+        }
+      ]
+    },
+    {
+      "id": "ai-journal-coach",
+      "name": "AI journaling & reflection coach",
+      "category": "AI",
+      "pitch": "Guided prompts and summaries for journaling: Rosebud raised a $6M seed in 2025, and Day One has 119k App Store ratings.",
+      "fasEdge": "$10–15/month subscriptions are mostly LLM markup, and intimate entries sit on a vendor server. FAS uses the user's own AI key and keeps entries local.",
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": 4,
+      "demand": 1,
+      "features": [
+        "BYO-key AI",
+        "Secret proxy",
+        "KV sync",
+        "Client-side encryption"
+      ],
+      "caveats": "The user must bring an OpenAI or Anthropic key, which is friction for non-technical users.",
+      "fasApps": [],
+      "sources": [
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Day One",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.83,
+          "reviews": "119k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/day-one-daily-journal-diary/id1044867788"
+        }
+      ]
+    },
+    {
+      "id": "tts-reader",
+      "name": "Text-to-speech reader",
+      "category": "Productivity",
+      "pitch": "Accessibility, dyslexia and \"listen instead of read\": Speechify is #15 on Apple's US Top Grossing Productivity chart.",
+      "fasEdge": "Free system voices through speechSynthesis; premium voices only with the user's own key.",
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Speech synthesis",
+        "pdf.js",
+        "Proxy",
+        "BYO-key AI"
+      ],
+      "caveats": "The pdf.js worker is large, so it must be a separate chunk. Fetching article URLs needs the proxy because of CORS.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Speechify",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.66,
+          "reviews": "526k",
+          "chartRank": 15,
+          "chart": "US Top Grossing Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/speechify-text-to-speech-pdf/id1209815023"
+        }
+      ]
+    },
+    {
+      "id": "fancy-text",
+      "name": "Stylish text / fancy fonts generator",
+      "category": "Social",
+      "pitch": "People decorate bios and posts with Unicode styles: Stylish Text has 10M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Offline",
+        "Clipboard"
+      ],
+      "caveats": "A copy-paste Unicode generator is feasible; the keyboard part is not.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Stylish Text",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.3,
+          "reviews": "236K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.theruralguys.stylishtext"
+        }
+      ]
+    },
+    {
+      "id": "christian-devotion",
+      "name": "Christian prayer & devotion",
+      "category": "Lifestyle",
+      "pitch": "Rosary, Liturgy of the Hours and daily readings: Hallow earned about $10M a month at its peak, with Lent spikes.",
+      "fasEdge": "Hallow charges $69.99/yr for devotional content, much of it public domain. FAS uses public-domain texts, free.",
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 1,
+      "features": [
+        "Counters",
+        "Realtime rooms",
+        "KV sync",
+        "Offline"
+      ],
+      "caveats": "Content licensing: use only public-domain texts.",
+      "fasApps": [],
+      "sources": [
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Hallow",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": "$69.99/yr",
+          "url": "https://apps.apple.com/us/app/hallow-prayer-meditation/id1405323394"
+        }
+      ]
+    },
+    {
+      "id": "period-tracker",
+      "name": "Period & cycle tracker",
+      "category": "Health & Fitness",
+      "pitch": "A daily need with very high engagement: Flo and Period Calendar each have 100M+ Play installs, and Flo is #2 on Apple's US Top Free Health & Fitness chart.",
+      "fasEdge": "Flo settled with the US FTC over sharing health data. Local-first storage, no analytics SDKs and free predictions make \"your data never leaves your phone\" the pitch.",
+      "difficulty": "easy",
+      "decision": "build-now-upgrade-later",
+      "waitsOn": "fas.push (period-due and pill reminders)",
+      "wave": 1,
+      "demand": 5,
+      "features": [
+        "Offline",
+        "Client-side encryption",
+        "KV sync",
+        "Charts",
+        "Web Push"
+      ],
+      "caveats": "Keep predictions simple and honest (average cycle length). Keep push text generic on the lock screen. Never claim contraceptive accuracy.",
+      "fasApps": [
+        "cycle"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Flo",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.7,
+          "reviews": "5.14M",
+          "chartRank": null,
+          "chart": null,
+          "price": "Subscription",
+          "url": "https://play.google.com/store/apps/details?id=org.iggymedia.periodtracker"
+        },
+        {
+          "name": "Flo",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.74,
+          "reviews": "2.0M",
+          "chartRank": 2,
+          "chart": "US Top Free Health & Fitness",
+          "price": "Subscription",
+          "url": "https://apps.apple.com/us/app/flo-cycle-period-tracker/id1038369065"
+        },
+        {
+          "name": "Period Calendar",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.9,
+          "reviews": "4.89M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.popularapp.periodcalendar"
+        },
+        {
+          "name": "Clue",
+          "store": "play",
+          "installs": "50M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.clue.android"
+        },
+        {
+          "name": "Stardust",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.76,
+          "reviews": "119k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/stardust-period-tracker/id1495829322"
+        }
+      ]
+    },
+    {
+      "id": "medication-bp-log",
+      "name": "Medication & blood-pressure log",
+      "category": "Health & Fitness",
+      "pitch": "Chronic conditions, carers and doctor visits: Medisafe and MyTherapy have 5M+ Play installs, and Pocket Blood Pressure is #4 on Apple's US Top Free Health & Fitness chart.",
+      "fasEdge": "A med schedule, vitals charts and a PDF report for the doctor, with health data encrypted on the device and no paid tier.",
+      "difficulty": "easy",
+      "decision": "build-now-upgrade-later",
+      "waitsOn": "fas.push (dose reminders)",
+      "wave": 1,
+      "demand": 5,
+      "features": [
+        "Client-side encryption",
+        "KV sync",
+        "Charts",
+        "jsPDF",
+        "Web Push",
+        "Badging"
+      ],
+      "caveats": "A missed push must never be the only safeguard: show doses due on open. Keep lock-screen text generic. Don't copy camera heart-rate apps; they are medically dubious.",
+      "fasApps": [
+        "carebook",
+        "pillcount"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Medisafe",
+          "store": "play",
+          "installs": "5M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.medisafe.android.client"
+        },
+        {
+          "name": "MyTherapy",
+          "store": "play",
+          "installs": "5M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=eu.smartpatient.mytherapy"
+        },
+        {
+          "name": "Blood Pressure Diary",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.8,
+          "reviews": "128K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.bluefish.bloodpressure"
+        },
+        {
+          "name": "Pocket Blood Pressure",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 4,
+          "chart": "US Top Free Health & Fitness",
+          "price": null,
+          "url": null
+        },
+        {
+          "name": "Blood Pressure Log, Heart Rate",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.32,
+          "reviews": "31.8k",
+          "chartRank": 18,
+          "chart": "US Top Grossing Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/blood-pressure-log-heart-rate/id1575719736"
+        }
+      ]
+    },
+    {
+      "id": "prayer-times-qibla",
+      "name": "Prayer times & Qibla compass",
+      "category": "Lifestyle",
+      "pitch": "Used daily by a very large audience: Muslim Pro has 100M+ Play installs (145M+ downloads, company-reported) and Athan 10M+.",
+      "fasEdge": "Muslim Pro and several Qibla apps shared location data that reached US military contractors. FAS calculates prayer times on the device and never sells location.",
+      "difficulty": "easy",
+      "decision": "build-now-upgrade-later",
+      "waitsOn": "fas.push (prayer-time alerts)",
+      "wave": 1,
+      "demand": 4,
+      "features": [
+        "Geolocation",
+        "DeviceOrientation",
+        "Offline",
+        "Web Push",
+        "Web Audio",
+        "Nominatim"
+      ],
+      "caveats": "Alerts are Web Push at the computed times; a full adhan playing through a locked phone is alarm behaviour and won't happen. Recitation audio is licensed content.",
+      "fasApps": [
+        "prayercompass"
+      ],
+      "sources": [
+        "play",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Muslim Pro",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.1,
+          "reviews": "1.92M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.bitsmedia.android.muslimpro"
+        },
+        {
+          "name": "Athan",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.9,
+          "reviews": "333K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.athan"
+        },
+        {
+          "name": "Qibla Compass",
+          "store": "play",
+          "installs": "5M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": null
+        }
+      ]
+    },
+    {
+      "id": "fasting-timer",
+      "name": "Intermittent fasting timer",
+      "category": "Health & Fitness",
+      "pitch": "A timer plus a log riding a strong diet trend. Google Play's top fasting app has 50M+ installs and Zero has 445k App Store ratings.",
+      "fasEdge": "Zero, Fastic and Simple charge $40–100/yr for a clock, and Fastic faced German consumer-centre action over unwanted renewals. A fasting timer should be free.",
+      "difficulty": "easy",
+      "decision": "build-now-upgrade-later",
+      "waitsOn": "fas.push (fasting-window alerts)",
+      "wave": 1,
+      "demand": 3,
+      "features": [
+        "KV sync",
+        "Charts",
+        "Streaks",
+        "Offline",
+        "Web Push"
+      ],
+      "caveats": "The timer is computed from a stored start time, so nothing runs in the background. \"Fast complete\" and eating-window alerts go out as Web Push at the end time.",
+      "fasApps": [
+        "fastclock"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Fasting – Intermittent Fasting",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.8,
+          "reviews": "979K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=bodyfast.zero.fastingtracker.weightloss"
+        },
+        {
+          "name": "Zero",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.82,
+          "reviews": "445k",
+          "chartRank": null,
+          "chart": null,
+          "price": "$69.99/yr (Plus)",
+          "url": "https://apps.apple.com/us/app/zero-fasting-food-tracker/id1168348542"
+        },
+        {
+          "name": "BodyFast",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "370K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.bodyfast"
+        }
+      ]
+    },
+    {
+      "id": "water-tracker",
+      "name": "Water intake tracker & reminders",
+      "category": "Health & Fitness",
+      "pitch": "Hydration goals, with an app literally named for its reminders: Water Reminder has 10M+ Play installs and a 4.8 rating.",
+      "fasEdge": "Incumbents paywall reminder customisation and show ads. FAS gives the reminder schedule, with quiet hours, away free.",
+      "difficulty": "easy",
+      "decision": "build-now-upgrade-later",
+      "waitsOn": "fas.push (scheduled reminders)",
+      "wave": 1,
+      "demand": 3,
+      "features": [
+        "KV sync",
+        "Charts",
+        "Web Push",
+        "Badging",
+        "Open-Meteo",
+        "Offline"
+      ],
+      "caveats": "The reminder is the product, so ship fas.push soon after launch. Respect quiet hours.",
+      "fasApps": [
+        "watertracker"
+      ],
+      "sources": [
+        "play",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Water Reminder",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "410K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.remind.drink.water.hourly"
+        }
+      ]
+    },
+    {
+      "id": "document-scanner",
+      "name": "Document scanner to PDF",
+      "category": "Productivity",
+      "pitch": "Receipts, forms and homework as PDFs. One of the most subscription-monetised utility types: six or more scanners sit in Apple's US Top Grossing Business top 50.",
+      "fasEdge": "Rivals use weekly-subscription traps, watermarks and forced cloud upload; CamScanner shipped a malicious ad SDK in 2019. FAS scans on the device: no upload, no watermark.",
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 1,
+      "demand": 5,
+      "features": [
+        "Camera",
+        "Canvas crop & filters",
+        "jsPDF",
+        "Web Share",
+        "Offline",
+        "BYO-key AI (OCR)"
+      ],
+      "caveats": "OCR is the hard part: tesseract.js data is many MB and must be a lazy-loaded asset, which the P2 compliance rule now allows. Scans stay on the device; there is no file storage.",
+      "fasApps": [
+        "flatbed"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "CamScanner",
+          "store": "play",
+          "installs": "500M+",
+          "rating": 4.6,
+          "reviews": "5.06M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.intsig.camscanner"
+        },
+        {
+          "name": "CamScanner",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.84,
+          "reviews": "1.94M",
+          "chartRank": 7,
+          "chart": "US Top Grossing Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/camscanner-pdf-scanner-app/id388627783"
+        },
+        {
+          "name": "Adobe Scan",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.6,
+          "reviews": "3.04M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.adobe.scan.android"
+        },
+        {
+          "name": "iScanner",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.76,
+          "reviews": "1.41M",
+          "chartRank": 5,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/iscanner-pdf-document-scanner/id1040093707"
+        },
+        {
+          "name": "Scanner App – Scan PDF & Docs",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 3,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/scanner-app-scan-pdf-docs/id1568660349"
+        }
+      ]
+    },
+    {
+      "id": "habit-tracker",
+      "name": "Habit tracker & streaks",
+      "category": "Health & Fitness",
+      "pitch": "Self-improvement streaks: Streaks is #1 on Apple's US Top Paid Health & Fitness chart, and open-source Loop reached 5M+ Play installs with no marketing.",
+      "fasEdge": "Rivals paywall after 3–5 habits and nag for upgrades. FAS offers unlimited habits, Loop-style scoring and accountability with friends, free.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": "fas.push (daily nudges)",
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "KV sync",
+        "Charts",
+        "Friends",
+        "Counters",
+        "Web Push",
+        "Badging"
+      ],
+      "caveats": "Loop is already free and open source, so the FAS edge is the web, multi-device sync and friends. No Home Screen widgets.",
+      "fasApps": [
+        "habits",
+        "streak"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Streaks",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.81,
+          "reviews": "27k",
+          "chartRank": 1,
+          "chart": "US Top Paid Health & Fitness",
+          "price": "$5.99",
+          "url": "https://apps.apple.com/us/app/streaks/id963034692"
+        },
+        {
+          "name": "HabitNow",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.7,
+          "reviews": "93K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.habitnow"
+        },
+        {
+          "name": "Loop Habit Tracker",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.7,
+          "reviews": "63.5K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=org.isoron.uhabits"
+        },
+        {
+          "name": "Steady Tally",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 25,
+          "chart": "US Top Paid Health & Fitness",
+          "price": "$5.99",
+          "url": null
+        },
+        {
+          "name": "Habitify",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.59,
+          "reviews": "7k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/habitify-habit-tracker/id1111447047"
+        }
+      ]
+    },
+    {
+      "id": "todo-list",
+      "name": "To-do list with due dates & shared lists",
+      "category": "Productivity",
+      "pitch": "Productivity basics: Google Tasks, Microsoft To Do and TickTick have 10M+ Play installs each, and Things 3 is #3 on Apple's US Top Paid Productivity chart.",
+      "fasEdge": "People pay once for a polished, private task app. FAS offers that free, with cross-device sync and shared lists.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": "fas.push (due-date reminders)",
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "KV sync",
+        "Shared collections",
+        "Realtime rooms",
+        "Web Push",
+        "Badging"
+      ],
+      "caveats": "The catalog already has several to-do apps; the plan is one flagship, not another duplicate.",
+      "fasApps": [
+        "my-todos",
+        "taskflow",
+        "kanban",
+        "my-todo-app",
+        "taskflow-manager"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Google Tasks",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "611K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.apps.tasks"
+        },
+        {
+          "name": "Microsoft To Do",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "483K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.microsoft.todos"
+        },
+        {
+          "name": "TickTick",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "166K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.ticktick.task"
+        },
+        {
+          "name": "Things 3",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.82,
+          "reviews": "28k",
+          "chartRank": 3,
+          "chart": "US Top Paid Productivity",
+          "price": "$9.99",
+          "url": "https://apps.apple.com/us/app/things-3/id904237743"
+        },
+        {
+          "name": "Due",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 8,
+          "chart": "US Top Paid Productivity",
+          "price": "$7.99",
+          "url": "https://apps.apple.com/us/app/due-reminders-timers/id390017969"
+        }
+      ]
+    },
+    {
+      "id": "unit-currency-converter",
+      "name": "Unit & currency converter",
+      "category": "Utilities",
+      "pitch": "Travel, shopping, cooking and DIY: several currency and unit converters have 10M+ Play installs each.",
+      "fasEdge": "Many converters are ad-funded, paywall currency rates or lack an offline mode. FAS: every unit, live currencies, offline.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "Exchange rates",
+        "REST Countries",
+        "Offline"
+      ],
+      "caveats": "Rates are daily, not real-time: label them clearly and keep last-known rates for offline use.",
+      "fasApps": [
+        "converter"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Currency Converter Plus",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "233K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.digitalchemy.currencyconverter"
+        },
+        {
+          "name": "XE",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.5,
+          "reviews": "401K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.xe.currency"
+        },
+        {
+          "name": "Unit Converter (Smart Tools)",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.4,
+          "reviews": "222K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=kr.sira.unit"
+        },
+        {
+          "name": "My Currency Converter Pro",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.87,
+          "reviews": "2.8k",
+          "chartRank": 6,
+          "chart": "US Top Paid Finance",
+          "price": "$3.99",
+          "url": "https://apps.apple.com/us/app/my-currency-converter-pro/id1035430719"
+        },
+        {
+          "name": "Unit Converter",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.8,
+          "reviews": "198k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/unit-converter-best-unit-app/id623691968"
+        }
+      ]
+    },
+    {
+      "id": "photo-collage",
+      "name": "Photo editor, collage & print layouts",
+      "category": "Photo & Video",
+      "pitch": "Social posting and prints: Picsart has 1B+ Play installs and Collage Maker 100M+; Print to Size is #6 on Apple's US Top Paid Photo & Video chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "File picker",
+        "Canvas/WebGL filters",
+        "jsPDF",
+        "Web Share"
+      ],
+      "caveats": "No server-side AI such as background removal; only via the user's key or a lazy on-device model. Export via download or the share sheet.",
+      "fasApps": [
+        "photo"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Picsart",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 3.9,
+          "reviews": "12.1M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.picsart.studio"
+        },
+        {
+          "name": "Collage Maker",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.9,
+          "reviews": "3.67M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=photoeditor.layout.collagemaker"
+        },
+        {
+          "name": "PicCollage",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.7,
+          "reviews": "1.81M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.cardinalblue.piccollage.google"
+        },
+        {
+          "name": "Print to Size",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.86,
+          "reviews": "20k",
+          "chartRank": 6,
+          "chart": "US Top Paid Photo & Video",
+          "price": "$2.99",
+          "url": "https://apps.apple.com/us/app/print-to-size/id949490225"
+        },
+        {
+          "name": "SCRL",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 16,
+          "chart": "US Top Grossing Photo & Video",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/scrl-photo-collage-maker/id1289057196"
+        }
+      ]
+    },
+    {
+      "id": "recipe-manager",
+      "name": "Recipe manager & meal planner",
+      "category": "Lifestyle",
+      "pitch": "Saved recipes plus weekly planning: Paprika is #1 on Apple's US Top Paid Food & Drink chart, and ReciMe #1 on Top Grossing Food & Drink.",
+      "fasEdge": "A crowded field of paid and subscription apps. FAS imports recipes by URL and shares a live grocery list, free.",
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "KV sync",
+        "Shared collections",
+        "Realtime rooms",
+        "Proxy"
+      ],
+      "caveats": "Recipe photos can't be uploaded (no file storage); link to the source image. URL import parses JSON-LD through the proxy.",
+      "fasApps": [
+        "recipes",
+        "chefai-recipes"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Paprika 3",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.9,
+          "reviews": "54k",
+          "chartRank": 1,
+          "chart": "US Top Paid Food & Drink",
+          "price": "$4.99",
+          "url": "https://apps.apple.com/us/app/paprika-recipe-manager-3/id1303222868"
+        },
+        {
+          "name": "ReciMe",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.79,
+          "reviews": "312k",
+          "chartRank": 1,
+          "chart": "US Top Grossing Food & Drink",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/recime-recipes-meal-planner/id1593779280"
+        },
+        {
+          "name": "Mealie",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 6,
+          "chart": "US Top Paid Food & Drink",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/mealie-recipe-meal-planner/id6762080217"
+        }
+      ]
+    },
+    {
+      "id": "calorie-log",
+      "name": "Calorie & macro food log",
+      "category": "Health & Fitness",
+      "pitch": "Weight loss is a perennial goal: MyFitnessPal has 100M+ Play installs and is #1 on Apple's US Top Grossing Health & Fitness chart.",
+      "fasEdge": "MyFitnessPal paywalls barcode scan and macros. FAS logs food free, with barcode lookup through Open Food Facts.",
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": "Open Food Facts on the API list (barcode lookup)",
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "KV sync",
+        "Charts",
+        "Camera",
+        "Open Food Facts",
+        "BYO-key AI"
+      ],
+      "caveats": "The food database is the moat, and Open Food Facts coverage varies by country. Safari has no BarcodeDetector, so use a JS decoder.",
+      "fasApps": [
+        "calories"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "MyFitnessPal",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.4,
+          "reviews": "2.92M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.myfitnesspal.android"
+        },
+        {
+          "name": "MyFitnessPal",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.71,
+          "reviews": "2.38M",
+          "chartRank": 1,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/myfitnesspal-calorie-counter/id341232718"
+        },
+        {
+          "name": "Cronometer",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.77,
+          "reviews": "99k",
+          "chartRank": 16,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/cronometer-calorie-counter/id1145935738"
+        },
+        {
+          "name": "Lose It!",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.77,
+          "reviews": "781k",
+          "chartRank": 21,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/lose-it-calorie-counter/id297368629"
+        },
+        {
+          "name": "Yazio",
+          "store": "play",
+          "installs": "50M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.yazio.android"
+        }
+      ]
+    },
+    {
+      "id": "interval-timer",
+      "name": "Interval / HIIT / Tabata timer",
+      "category": "Health & Fitness",
+      "pitch": "Every gym-goer and CrossFitter needs one: Seconds Pro is #8 on Apple's US Top Paid Health & Fitness chart at $7.99.",
+      "fasEdge": "Saved routines and voice cues are paywalled elsewhere. FAS builds any interval routine with voice cues, free.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "Web Audio",
+        "Speech synthesis",
+        "KV sync",
+        "Wake Lock"
+      ],
+      "caveats": "Cues stop when the screen locks, and iOS Safari has no haptics.",
+      "fasApps": [
+        "hiit"
+      ],
+      "sources": [
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Seconds Pro",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.76,
+          "reviews": "12k",
+          "chartRank": 8,
+          "chart": "US Top Paid Health & Fitness",
+          "price": "$7.99",
+          "url": "https://apps.apple.com/us/app/seconds-pro-interval-timer/id363978811"
+        },
+        {
+          "name": "Clock Yourself",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 13,
+          "chart": "US Top Paid Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/clock-yourself/id1142095221"
+        }
+      ]
+    },
+    {
+      "id": "flashcards",
+      "name": "Flashcards with spaced repetition",
+      "category": "Education",
+      "pitch": "Students, language learners and medical students: AnkiMobile is #1 on Apple's US Top Paid Education chart at $24.99, so people pay for SRS.",
+      "fasEdge": "Quizlet moved Learn mode behind its paywall in 2022 and shows ads. FAS: FSRS scheduling, Anki import and shared public decks, free.",
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "KV sync",
+        "Shared collections",
+        "IndexedDB",
+        "BYO-key AI",
+        "Offline"
+      ],
+      "caveats": "The 1 MB KV limit restricts very large personal decks, so keep the bulk in IndexedDB. Shared decks must be split into 64 KB docs.",
+      "fasApps": [
+        "flashcards"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "AnkiMobile",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 1,
+          "chart": "US Top Paid Education",
+          "price": "$24.99",
+          "url": "https://apps.apple.com/us/app/ankimobile-flashcards/id373493387"
+        },
+        {
+          "name": "Quizlet",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.78,
+          "reviews": "1.13M",
+          "chartRank": 4,
+          "chart": "US Top Grossing Education",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/quizlet-more-than-flashcards/id546473125"
+        },
+        {
+          "name": "AnkiDroid",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "166K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.ichi2.anki"
+        },
+        {
+          "name": "Quizlet",
+          "store": "play",
+          "installs": "50M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.quizlet.quizletandroid"
+        }
+      ]
+    },
+    {
+      "id": "weather",
+      "name": "Weather without location resale",
+      "category": "Utilities",
+      "pitch": "Checked daily: The Weather Channel and AccuWeather have 100M+ Play installs each.",
+      "fasEdge": "Big incumbents are ad-heavy and monetise location; The Weather Channel settled a suit over it. FAS: Open-Meteo forecasts, no account, no resale.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": "P4 scheduled server-side fetch (severe-weather alerts)",
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "Open-Meteo",
+        "Nominatim",
+        "Geolocation",
+        "Charts",
+        "Leaflet",
+        "Offline"
+      ],
+      "caveats": "No home-screen widget. Severe-weather alerts need a scheduled forecast check. A radar overlay needs a tile source outside the listed APIs.",
+      "fasApps": [
+        "weather"
+      ],
+      "sources": [
+        "play",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "The Weather Channel",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.6,
+          "reviews": "3.61M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.weather.Weather"
+        },
+        {
+          "name": "AccuWeather",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 3.6,
+          "reviews": "2.57M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.accuweather.android"
+        },
+        {
+          "name": "1Weather",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.3,
+          "reviews": "1.11M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.handmark.expressweather"
+        },
+        {
+          "name": "Weather by Xiaomi",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 4.1,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.miui.weather2"
+        }
+      ]
+    },
+    {
+      "id": "tuner-metronome",
+      "name": "Instrument tuner & metronome",
+      "category": "Music & Audio",
+      "pitch": "Every musician needs one: GuitarTuna has 100M+ Play installs, and TonalEnergy is #1 on Apple's US Top Paid Music chart.",
+      "fasEdge": "GuitarTuna went subscription and locks alternate tunings; metronome extras like tempo ramps are paywalled. FAS: every tuning and feature free.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 5,
+      "features": [
+        "Microphone",
+        "Web Audio",
+        "KV sync",
+        "Offline"
+      ],
+      "caveats": "Turn off echo cancellation, noise suppression and auto gain. Metronome timing must use the AudioContext clock; background playback is unreliable on iOS.",
+      "fasApps": [
+        "forktuner",
+        "metronome"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "GuitarTuna",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.5,
+          "reviews": "2.67M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.ovelin.guitartuna"
+        },
+        {
+          "name": "TonalEnergy",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.84,
+          "reviews": "59k",
+          "chartRank": 1,
+          "chart": "US Top Paid Music",
+          "price": "$6.99",
+          "url": "https://apps.apple.com/us/app/tonalenergy-tuner-metronome/id497716362"
+        },
+        {
+          "name": "GuitarTuna",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.78,
+          "reviews": "148k",
+          "chartRank": 12,
+          "chart": "US Top Grossing Music",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/guitartuna-tune-play-guitar/id527588389"
+        },
+        {
+          "name": "Metronome Beats",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "183K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.andymstone.metronome"
+        },
+        {
+          "name": "Smart Metronome",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.71,
+          "reviews": "61k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/smart-metronome-tuner/id889571826"
+        }
+      ]
+    },
+    {
+      "id": "pdf-tools",
+      "name": "PDF reader & tools (merge, split, sign)",
+      "category": "Productivity",
+      "pitch": "Everyone gets PDFs: Acrobat Reader has 500M+ Play installs, and five PDF readers sit in AppBrain's US Tools top 10.",
+      "fasEdge": "Most top-chart PDF apps are thin wrappers full of ads, and PDF readers feature in Avast's fleeceware list. FAS works on local files with no ads.",
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 4,
+      "features": [
+        "pdf.js",
+        "pdf-lib",
+        "File picker",
+        "Offline"
+      ],
+      "caveats": "The pdf.js worker is large, so it must load as a separate lazy chunk. Local files only.",
+      "fasApps": [
+        "pdfreader"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Adobe Acrobat Reader",
+          "store": "play",
+          "installs": "500M+",
+          "rating": 4.5,
+          "reviews": "8.03M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.adobe.reader"
+        },
+        {
+          "name": "MobiOffice",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.6,
+          "reviews": "1.5M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.mobisystems.office"
+        },
+        {
+          "name": "Xodo",
+          "store": "play",
+          "installs": "10M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.xodo.pdf.reader"
+        }
+      ]
+    },
+    {
+      "id": "home-workout",
+      "name": "Home bodyweight workouts",
+      "category": "Health & Fitness",
+      "pitch": "Free, guided, no gym: Leap Fitness has several 100M+ Play titles built from one template.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 4,
+      "features": [
+        "Offline",
+        "Web Speech cues",
+        "Wake Lock",
+        "KV sync"
+      ],
+      "caveats": "The value is partly content: exercise art must be original or openly licensed. Keep animations as SVG/CSS so the app stays small and offline.",
+      "fasApps": [
+        "workout"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Home Workout – No Equipment",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.9,
+          "reviews": "4.04M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=homeworkout.homeworkouts.noequipment"
+        },
+        {
+          "name": "Six Pack in 30 Days",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.93,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=sixpack.sixpackabs.absworkout"
+        },
+        {
+          "name": "Lose Weight App for Men",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.93,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=menloseweight.loseweightappformen.weightlossformen"
+        }
+      ]
+    },
+    {
+      "id": "couch-to-5k",
+      "name": "Couch-to-5K run coach",
+      "category": "Health & Fitness",
+      "pitch": "A structured beginner programme with high completion pride: Couch to 5K and Watch to 5K are #11 and #12 on Apple's US Top Paid Health & Fitness chart.",
+      "fasEdge": "The same run-walk plan with voice cues, free instead of $4.99.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 4,
+      "features": [
+        "Interval engine",
+        "Speech synthesis",
+        "Web Audio",
+        "Wake Lock"
+      ],
+      "caveats": "No background GPS and no cues once the screen locks: keep the screen on (Wake Lock) or use time-only intervals.",
+      "fasApps": [
+        "workout",
+        "hiit"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "C25K",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.77,
+          "reviews": "171k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/c25k-5k-running-coach-map/id485971733"
+        },
+        {
+          "name": "Couch to 5K",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 11,
+          "chart": "US Top Paid Health & Fitness",
+          "price": "$4.99",
+          "url": "https://apps.apple.com/us/app/couch-to-5k-run-training/id448474423"
+        },
+        {
+          "name": "Watch to 5K",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 12,
+          "chart": "US Top Paid Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/watch-to-5k-couch-to-5km-coach/id1517914828"
+        }
+      ]
+    },
+    {
+      "id": "qr-scanner",
+      "name": "QR & barcode scanner and generator",
+      "category": "Utilities",
+      "pitch": "Payments, menus, Wi-Fi and tickets: Gamma Play's scanner has 500M+ installs, and four QR readers are in Apple's US Top Grossing Utilities top 50.",
+      "fasEdge": "QR apps are classic fleeceware: weekly trials, surprise charges and fake ad buttons for a feature built into the iPhone camera. FAS: free forever, no trial.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 4,
+      "features": [
+        "Camera",
+        "QR generator",
+        "KV sync",
+        "Offline"
+      ],
+      "caveats": "BarcodeDetector exists only on Android Chrome; iOS needs a lazy-loaded JS/WASM decoder. The plan merges the two catalog apps into one.",
+      "fasApps": [
+        "qrcode",
+        "qrreader"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "QR & Barcode Scanner (Gamma Play)",
+          "store": "play",
+          "installs": "500M+",
+          "rating": 4.8,
+          "reviews": "4.75M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.gamma.scan"
+        },
+        {
+          "name": "QR code reader & QR code Scanner",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=tw.mobileapp.qrcode.banner"
+        },
+        {
+          "name": "Scan QR Code Now",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 23,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/scan-qr-code-now/id6503708537"
+        },
+        {
+          "name": "QR Code Reader＊Barcode Scanner",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.46,
+          "reviews": "23k",
+          "chartRank": 44,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/qr-code-reader-barcode-scanner/id1584764976"
+        }
+      ]
+    },
+    {
+      "id": "subscription-tracker",
+      "name": "Subscription tracker",
+      "category": "Finance",
+      "pitch": "\"Stop paying for things I forgot.\" Subpilot and SubSeek are #27 and #30 on Apple's US Top Grossing Finance chart.",
+      "fasEdge": "A paid app to track paid apps. FAS keeps the list, monthly total and renewal reminders free.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": "fas.push (renewal alerts)",
+      "wave": 2,
+      "demand": 3,
+      "features": [
+        "KV sync",
+        "Charts",
+        "Exchange rates",
+        "Web Push"
+      ],
+      "caveats": "Automatic detection would need bank data, so entry is manual.",
+      "fasApps": [
+        "bill-reminders"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Subpilot",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.55,
+          "reviews": "5k",
+          "chartRank": 27,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/subpilot-cancel-subscription/id6751181747"
+        },
+        {
+          "name": "SubSeek",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 30,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/subseek-subscription-manager/id6769329967"
+        }
+      ]
+    },
+    {
+      "id": "days-since-countdown",
+      "name": "Days-since & event countdown",
+      "category": "Lifestyle",
+      "pitch": "Emotional, shareable and simple: My Love has 1.04M App Store ratings, and Time Until has 5M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": "fas.push (milestone pushes)",
+      "wave": 2,
+      "demand": 3,
+      "features": [
+        "Date maths",
+        "Share card",
+        "Counters",
+        "Web Push"
+      ],
+      "caveats": "These apps live on Home Screen widgets, which a web app can't offer. Milestone days can be pushed instead.",
+      "fasApps": [
+        "countdown"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "My Love",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.83,
+          "reviews": "1.04M",
+          "chartRank": 33,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/my-love-relationship-counter/id409609608"
+        },
+        {
+          "name": "Countdown",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.81,
+          "reviews": "189k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/countdown/id1403367428"
+        },
+        {
+          "name": "Time Until",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.6,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.brunoschalch.timeuntil"
+        },
+        {
+          "name": "Halloween Countdown Pro",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 30,
+          "chart": "US Top Paid Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/halloween-countdown-pro-push/id358607767"
+        }
+      ]
+    },
+    {
+      "id": "grocery-list",
+      "name": "Shared grocery list",
+      "category": "Productivity",
+      "pitch": "Households shop together: Listonic has 10M+ Play installs, and AnyList a 4.9 rating.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 3,
+      "features": [
+        "Auth",
+        "Friends",
+        "Shared collections",
+        "Realtime rooms",
+        "Offline"
+      ],
+      "caveats": "Needs offline edit merging.",
+      "fasApps": [
+        "shoplist",
+        "shopping-list"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Listonic",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "318K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.l"
+        },
+        {
+          "name": "AnyList",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.9,
+          "reviews": "30.8K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.purplecover.anylist"
+        }
+      ]
+    },
+    {
+      "id": "gym-log",
+      "name": "Gym workout log",
+      "category": "Health & Fitness",
+      "pitch": "Lifters log sets every session: Hevy has 5M+ Play installs and 98k App Store ratings, showing that a social feed adds pull.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 3,
+      "features": [
+        "KV sync",
+        "Charts",
+        "Friends",
+        "Shared collections"
+      ],
+      "caveats": "A rest timer ending in the background arrives as a notification; iOS Safari has no Vibration API.",
+      "fasApps": [
+        "workout"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Hevy",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.9,
+          "reviews": "278K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.hevy"
+        },
+        {
+          "name": "Hevy",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.92,
+          "reviews": "98k",
+          "chartRank": 35,
+          "chart": "US Top Free Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/hevy-workout-tracker-gym-log/id1458862350"
+        },
+        {
+          "name": "Strong",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.86,
+          "reviews": "109k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/strong-workout-tracker-gym-log/id464254577"
+        },
+        {
+          "name": "FitNotes",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.8,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.github.jamesgay.fitnotes"
+        },
+        {
+          "name": "Gymverse",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 36,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/gymverse-gym-workout-planner/id1048454034"
+        }
+      ]
+    },
+    {
+      "id": "journal-mood",
+      "name": "Mood tracker & private journal",
+      "category": "Health & Fitness",
+      "pitch": "Mental-health self-tracking and private journaling: Daylio and Diary with Lock have 10M+ Play installs each.",
+      "fasEdge": "Stats and exports are paywalled, and this is sensitive mental-health data. FAS adds a passphrase lock with client-side encryption, free.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": 2,
+      "demand": 3,
+      "features": [
+        "Client-side encryption",
+        "KV sync",
+        "Charts",
+        "Tiptap",
+        "BYO-key AI"
+      ],
+      "caveats": "\"Lock\" means a passphrase plus client-side encryption, not OS biometrics. No photo attachments on the server.",
+      "fasApps": [
+        "journal",
+        "mood"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Daylio",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "463K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=net.daylio"
+        },
+        {
+          "name": "Diary with Lock",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "409K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=diary.journal.lock.mood.daily"
+        },
+        {
+          "name": "Day One",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.83,
+          "reviews": "119k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/day-one-daily-journal-diary/id1044867788"
+        },
+        {
+          "name": "Daylio",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.77,
+          "reviews": "62k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/daylio-journal-mood-tracker/id1194023242"
+        }
+      ]
+    },
+    {
+      "id": "calculator",
+      "name": "Calculator with history",
+      "category": "Utilities",
+      "pitch": "Used daily by everyone. OEM calculators are bare-bones, so third-party ones with history and percent tools reach 100M+ Play installs.",
+      "fasEdge": "A very crowded field: win on no ads, history and dark mode.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Offline",
+        "KV sync"
+      ],
+      "caveats": "Big install numbers are inflated by preinstalled OEM calculators.",
+      "fasApps": [
+        "calculator"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Google Calculator",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 4.3,
+          "reviews": "795K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.calculator"
+        },
+        {
+          "name": "Samsung Calculator",
+          "store": "play",
+          "installs": "1B+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.sec.android.app.popupcalculator"
+        },
+        {
+          "name": "ClevCalc",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.6,
+          "reviews": "1.23M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.dencreak.dlcalculator"
+        },
+        {
+          "name": "Calculator Plus",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.9,
+          "reviews": "920K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.digitalchemy.calculator.freedecimal"
+        }
+      ]
+    },
+    {
+      "id": "notes",
+      "name": "Notes & checklists",
+      "category": "Productivity",
+      "pitch": "A universal need: ColorNote shows a simple coloured-note app can reach 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Auth",
+        "KV sync",
+        "Tiptap",
+        "Offline"
+      ],
+      "caveats": "KV caps at 1 MB and 100 keys per user: shard notes or keep the full archive in IndexedDB. No image attachments.",
+      "fasApps": [
+        "notes"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Google Keep",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 4.7,
+          "reviews": "2.62M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.keep"
+        },
+        {
+          "name": "Samsung Notes",
+          "store": "play",
+          "installs": "1B+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.samsung.android.app.notes"
+        },
+        {
+          "name": "Notepad – Notes, Todo, Memo",
+          "store": "play",
+          "installs": "500M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": null
+        },
+        {
+          "name": "ColorNote",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.9,
+          "reviews": "3.97M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.socialnmobile.dictapps.notepad.color.note"
+        }
+      ]
+    },
+    {
+      "id": "clock-tools",
+      "name": "Stopwatch, timer & world clock",
+      "category": "Utilities",
+      "pitch": "Cooking, workouts, interval timing and time zones: two independent stopwatch apps have 10M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Offline",
+        "Wake Lock",
+        "Web Audio",
+        "Notifications",
+        "Web Push"
+      ],
+      "caveats": "A finished timer can notify, but alarm-clock behaviour (ringing through a locked phone or silent mode) is not feasible.",
+      "fasApps": [
+        "timer",
+        "stopwatch",
+        "colour-timer",
+        "dual-timezone"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Google Clock",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 3.9,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.deskclock"
+        },
+        {
+          "name": "Stopwatch Timer (Hybrid)",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.5,
+          "reviews": "249K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.hybrid.stopwatch"
+        },
+        {
+          "name": "Stopwatch & Timer (Zaba)",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.5,
+          "reviews": "84K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.zabamobile.sportstimerfree"
+        },
+        {
+          "name": "Multi Timer",
+          "store": "play",
+          "installs": "1M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.digitalchemy.timerplus"
+        }
+      ]
+    },
+    {
+      "id": "budget-tracker",
+      "name": "Budget & expense tracker (manual)",
+      "category": "Finance",
+      "pitch": "Personal finance without bank linking: Money Manager and Wallet have 10M+ Play installs, and YNAB is #4 on Apple's US Top Grossing Finance chart.",
+      "fasEdge": "Mint shut down in 2024, YNAB-style apps cost about $100/yr, and bank-sync apps harvest financial data. FAS: envelope budgeting, no bank access, no fee.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "KV sync",
+        "Shared collections",
+        "Charts",
+        "Exchange rates",
+        "CSV import/export"
+      ],
+      "caveats": "No bank sync. Long histories approach the 1 MB KV cap, so roll up by month.",
+      "fasApps": [
+        "budget",
+        "expense"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Money Manager",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "467K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.realbyteapps.moneymanagerfree"
+        },
+        {
+          "name": "Wallet",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "387K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.droid4you.application.wallet"
+        },
+        {
+          "name": "YNAB",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.79,
+          "reviews": "62k",
+          "chartRank": 4,
+          "chart": "US Top Grossing Finance",
+          "price": "$99–109/yr",
+          "url": "https://apps.apple.com/us/app/ynab/id1010865877"
+        },
+        {
+          "name": "EveryDollar",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.73,
+          "reviews": "84k",
+          "chartRank": 11,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/everydollar-budget-management/id942571931"
+        },
+        {
+          "name": "Money Manager",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.81,
+          "reviews": "19.5k",
+          "chartRank": 7,
+          "chart": "US Top Paid Finance (ad-free unlock)",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/money-manager-expense-budget/id560481810"
+        }
+      ]
+    },
+    {
+      "id": "invoice-maker",
+      "name": "Invoice & estimate maker",
+      "category": "Productivity",
+      "pitch": "Every tradesperson and freelancer needs one: seven or more invoice apps are in Apple's US Top Grossing Business or Finance top 50.",
+      "fasEdge": "Rivals charge $10–20/month for clients, line items and a PDF. Every primitive exists in FAS, so it can be free.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "KV sync",
+        "jsPDF",
+        "Email",
+        "Web Share"
+      ],
+      "caveats": "No online card payments; include a payment-link or bank-details field instead.",
+      "fasApps": [
+        "invoice"
+      ],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Invoice Simple",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.87,
+          "reviews": "123k",
+          "chartRank": 9,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/invoice-maker-invoice-simple/id694831622"
+        },
+        {
+          "name": "Invoice Simple",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.8,
+          "reviews": "172K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.aadhk.woinvoice"
+        },
+        {
+          "name": "Invoice Fly",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.75,
+          "reviews": "110k",
+          "chartRank": 8,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/invoice-maker-invoice-fly/id1606911248"
+        },
+        {
+          "name": "Easy Invoice Maker",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.87,
+          "reviews": "27.5k",
+          "chartRank": 34,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/easy-invoice-maker-app/id1568511681"
+        }
+      ]
+    },
+    {
+      "id": "astro-planner",
+      "name": "Sun, moon & night-sky planner",
+      "category": "Education",
+      "pitch": "Photographers plan golden hour and families point at stars: SkyView is #2 on Apple's US Top Paid Education chart, PhotoPills #3 in Paid Photo & Video.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Astronomy maths",
+        "Leaflet",
+        "Open-Meteo",
+        "Geolocation",
+        "DeviceOrientation"
+      ],
+      "caveats": "DeviceOrientation needs an explicit permission prompt on iOS, and AR overlay quality is lower than native.",
+      "fasApps": [
+        "star-map",
+        "tides"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "SkyView",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 2,
+          "chart": "US Top Paid Education",
+          "price": "$2.99",
+          "url": "https://apps.apple.com/us/app/skyview/id404990064"
+        },
+        {
+          "name": "PhotoPills",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 3,
+          "chart": "US Top Paid Photo & Video",
+          "price": "$10.99",
+          "url": "https://apps.apple.com/us/app/photopills/id596026805"
+        },
+        {
+          "name": "AstroShader",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 14,
+          "chart": "US Top Paid Photo & Video",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/astroshader/id6444631986"
+        },
+        {
+          "name": "Sun Surveyor",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 17,
+          "chart": "US Top Paid Photo & Video",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/sun-surveyor-sun-moon/id525176875"
+        }
+      ]
+    },
+    {
+      "id": "virtual-piano",
+      "name": "Virtual piano",
+      "category": "Music & Audio",
+      "pitch": "Kids, beginners and playing for fun: Perfect Piano has 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Web Audio",
+        "Multitouch",
+        "Offline"
+      ],
+      "caveats": "Audio latency on some Android devices. Samples must be CC0 or your own; ship a synth fallback to stay small.",
+      "fasApps": [
+        "piano"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Perfect Piano",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.2,
+          "reviews": "1.02M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.gamestar.perfectpiano"
+        },
+        {
+          "name": "Mini Piano Lite",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "57K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=umito.android.minipiano"
+        }
+      ]
+    },
+    {
+      "id": "drawing-pad",
+      "name": "Drawing & sketch pad",
+      "category": "Photo & Video",
+      "pitch": "Doodling, kids and digital art: ibis Paint X and Sketchbook have 100M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Canvas",
+        "Pointer Events",
+        "Offline"
+      ],
+      "caveats": "No cloud gallery (no file storage). Small drawings could be stored as vector strokes within the 64 KB doc limit. Layers and brushes are medium effort.",
+      "fasApps": [
+        "sketch",
+        "whiteboard"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "ibis Paint X",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.5,
+          "reviews": "3.01M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=jp.ne.ibis.ibispaintx.app"
+        },
+        {
+          "name": "Sketchbook",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.1,
+          "reviews": "707K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.adsk.sketchbook"
+        }
+      ]
+    },
+    {
+      "id": "scientific-calculator",
+      "name": "Scientific & graphing calculator",
+      "category": "Education",
+      "pitch": "Students and exam-style calculators: Scientific calculator plus 991 has 50M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Offline",
+        "Expression parser",
+        "Canvas plotting"
+      ],
+      "caveats": "Desmos is already free and ad-free, so the FAS edge is smaller. Import only the parts of math.js you need.",
+      "fasApps": [
+        "graphing"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Scientific calculator plus 991",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.8,
+          "reviews": "563K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=advanced.scientific.calculator.calc991.plus"
+        },
+        {
+          "name": "Desmos",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.desmos.calculator"
+        },
+        {
+          "name": "GeoGebra",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.3,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=org.geogebra.android"
+        }
+      ]
+    },
+    {
+      "id": "resume-maker",
+      "name": "Resume / CV maker",
+      "category": "Productivity",
+      "pitch": "Job seekers, especially in emerging markets: Resume – Intelligent CV maker has 50M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Templates",
+        "jsPDF",
+        "KV sync",
+        "BYO-key AI"
+      ],
+      "caveats": "Template quality decides success. Keep jsPDF fonts small, and store one or two resumes per user within KV limits.",
+      "fasApps": [
+        "resume"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Resume – Intelligent CV maker",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.5,
+          "reviews": "547K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=icv.resume.curriculumvitae"
+        }
+      ]
+    },
+    {
+      "id": "dictionary-vocab",
+      "name": "Dictionary & word of the day",
+      "category": "Education",
+      "pitch": "Students, ESL learners and word nerds: Merriam-Webster has 50M+ Play installs.",
+      "fasEdge": "Incumbents rate poorly because of ads and streak-shaming paywalls. FAS: free lookups, saved words and spaced review.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Dictionary API",
+        "Wikipedia",
+        "KV sync",
+        "Web Speech",
+        "BYO-key AI"
+      ],
+      "caveats": "Lookups need a connection; offline covers cached or saved words only. Word of the day needs a curated local list.",
+      "fasApps": [
+        "dictionary"
+      ],
+      "sources": [
+        "play",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Merriam-Webster",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 3.6,
+          "reviews": "519K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.merriamwebster"
+        },
+        {
+          "name": "Dictionary.com",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4,
+          "reviews": "968K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.dictionary"
+        },
+        {
+          "name": "Vocabulary – Learn words daily",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.5,
+          "reviews": "113K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.hrd.vocabulary"
+        }
+      ]
+    },
+    {
+      "id": "bill-splitting",
+      "name": "Group bill splitting",
+      "category": "Finance",
+      "pitch": "Trips and flatmates: Splitwise and tricount have 10M+ Play installs each.",
+      "fasEdge": "Splitwise caps free users at 3–4 expenses a day with video ads, and users pushed back. FAS: no daily limit, shared groups, multi-currency.",
+      "difficulty": "medium",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Auth",
+        "Friends",
+        "Shared collections",
+        "Realtime rooms",
+        "Exchange rates",
+        "Email"
+      ],
+      "caveats": "No payments: \"settle up\" is a record only. Needs conflict handling for concurrent edits.",
+      "fasApps": [
+        "split"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Splitwise",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4,
+          "reviews": "195K",
+          "chartRank": null,
+          "chart": null,
+          "price": "Pro $5/mo or $40/yr",
+          "url": "https://play.google.com/store/apps/details?id=com.Splitwise.SplitwiseMobile"
+        },
+        {
+          "name": "tricount",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "196K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.tribab.tricount.android"
+        },
+        {
+          "name": "Splitwise",
+          "store": "apple",
+          "installs": null,
+          "rating": 4,
+          "reviews": "28.8k",
+          "chartRank": 29,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/splitwise/id458023433"
+        },
+        {
+          "name": "Splid",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.9,
+          "reviews": "87K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=splid.teamturtle.com.splid"
+        }
+      ]
+    },
+    {
+      "id": "randomizer",
+      "name": "Spin the wheel & randomizers",
+      "category": "Utilities",
+      "pitch": "Classrooms, groups and streamers: Spin The Wheel – Random Picker has 10M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Offline",
+        "crypto.getRandomValues",
+        "Realtime rooms"
+      ],
+      "caveats": "A commodity: the social room where everyone sees the same spin is the hook.",
+      "fasApps": [
+        "decision-wheel"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Spin The Wheel – Random Picker",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "150K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.spinthewheeldecider"
+        }
+      ]
+    },
+    {
+      "id": "focus-pomodoro",
+      "name": "Focus / Pomodoro timer",
+      "category": "Productivity",
+      "pitch": "Studying and work: Focus To-Do has 10M+ Play installs, and Forest's grow-a-tree mechanic peaked near $400K a month on iOS.",
+      "fasEdge": "Forest is paid upfront on iOS and needs Pro for cross-device. FAS adds free group focus rooms.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Realtime rooms",
+        "Friends",
+        "Counters",
+        "KV sync",
+        "Web Audio"
+      ],
+      "caveats": "It cannot block other apps; that needs native Screen Time APIs.",
+      "fasApps": [
+        "pomodoro",
+        "focus",
+        "focus-timer",
+        "study-room"
+      ],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Focus To-Do",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "287K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.superelement.pomodoro"
+        },
+        {
+          "name": "Flora",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.76,
+          "reviews": "83k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/flora-green-focus/id1225155794"
+        },
+        {
+          "name": "Forest",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.8,
+          "reviews": "50k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/forest-focus-for-productivity/id866450515"
+        },
+        {
+          "name": "Focus Keeper",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.79,
+          "reviews": "32k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/focus-keeper-pomodoro-timer/id867374917"
+        }
+      ]
+    },
+    {
+      "id": "periodic-table",
+      "name": "Periodic table",
+      "category": "Education",
+      "pitch": "Students and chemistry fans: Periodic Table 2026 has 10M+ Play installs and a 4.8 rating.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Offline",
+        "Static data"
+      ],
+      "caveats": null,
+      "fasApps": [
+        "periodic-table"
+      ],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Periodic Table 2026",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "433K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=mendeleev.redlime"
+        }
+      ]
+    },
+    {
+      "id": "daily-quotes",
+      "name": "Daily quotes & affirmations",
+      "category": "Lifestyle",
+      "pitch": "A low-effort daily ritual: Motivation and I am have 1.07M and 735k App Store ratings and sit in Apple's US Top Grossing Health & Fitness top 30.",
+      "fasEdge": "Heavily subscription-monetised for a list of quotes. FAS uses public-domain quotes and a free daily Web Push.",
+      "difficulty": "easy",
+      "decision": "upgrade-existing",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "KV sync",
+        "Share card",
+        "Web Push"
+      ],
+      "caveats": "These apps live mostly on widgets, which FAS can't offer.",
+      "fasApps": [
+        "quotes"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Motivation",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.82,
+          "reviews": "1.07M",
+          "chartRank": 29,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/motivation-daily-quotes/id876080126"
+        },
+        {
+          "name": "I am",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.83,
+          "reviews": "735k",
+          "chartRank": 30,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/i-am-daily-affirmations/id874656917"
+        }
+      ]
+    },
+    {
+      "id": "authenticator-2fa",
+      "name": "2FA authenticator (TOTP)",
+      "category": "Utilities",
+      "pitch": "Mandatory for work and banking accounts: Google Authenticator is #3 on Apple's US Top Free Utilities chart with 1.2M ratings.",
+      "fasEdge": "Clones charge subscriptions for an RFC 6238 one-liner; two sit at #12 and #46 in Apple's US Top Grossing Utilities.",
+      "difficulty": "easy",
+      "decision": "defer",
+      "waitsOn": "a security review and forced encrypted backup",
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "WebCrypto",
+        "Camera QR import",
+        "Encrypted backup",
+        "KV sync"
+      ],
+      "caveats": "If iOS clears the web app's storage, the user loses their 2FA codes. Needs a mandatory encrypted backup and a review before shipping.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Google Authenticator",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.85,
+          "reviews": "1.20M",
+          "chartRank": 3,
+          "chart": "US Top Free Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/google-authenticator/id388497605"
+        },
+        {
+          "name": "Google Authenticator",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2"
+        },
+        {
+          "name": "Microsoft Authenticator",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 9,
+          "chart": "Apple 2025 top free iPhone apps",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/microsoft-authenticator/id983156458"
+        },
+        {
+          "name": "Authenticator℠ App",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 12,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/authenticator-app/id6754900760"
+        }
+      ]
+    },
+    {
+      "id": "package-tracking",
+      "name": "Package tracking",
+      "category": "Utilities",
+      "pitch": "Online shoppers follow several parcels at once: pkge is #10 on Apple's US Top Grossing Business chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "defer",
+      "waitsOn": "P4 scheduled server-side fetch and carrier API keys",
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Proxy",
+        "KV sync",
+        "Web Push",
+        "Badging"
+      ],
+      "caveats": "Status on open works today; a push when the status changes needs a scheduled check against the carrier.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "pkge",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 10,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/package-tracker-pkge-mobile/id1397865865"
+        }
+      ]
+    },
+    {
+      "id": "self-care-pet",
+      "name": "Self-care pet (Finch-style)",
+      "category": "Health & Fitness",
+      "pitch": "Gentle habit-building through a virtual pet, with very high retention: Finch has 764k ratings at 4.95 and is #13 on Apple's US Top Grossing Health & Fitness chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "defer",
+      "waitsOn": "character art and writing (not a platform update)",
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "KV sync",
+        "Friends",
+        "Streaks"
+      ],
+      "caveats": "The value is character art and writing quality, not code.",
+      "fasApps": [
+        "petdo"
+      ],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Finch",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.95,
+          "reviews": "764k",
+          "chartRank": 13,
+          "chart": "US Top Grossing Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/finch-self-care-pet/id1528595748"
+        }
+      ]
+    },
+    {
+      "id": "sleep-tracking",
+      "name": "Sleep tracking",
+      "category": "Health & Fitness",
+      "pitch": "Sleep insights every morning: Sleep Cycle has 10M+ Play installs, and AutoSleep and HeartWatch are #2 and #3 on Apple's US Top Paid Health & Fitness chart.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs all-night background sensing",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Needs all-night mic and motion sensing in the background, HealthKit or Apple Watch data.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Sleep Cycle",
+          "store": "play",
+          "installs": "10M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.northcube.sleepcycle"
+        },
+        {
+          "name": "AutoSleep",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 2,
+          "chart": "US Top Paid Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/autosleep-watch-sleep-tracker/id1164801111"
+        },
+        {
+          "name": "HeartWatch",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 3,
+          "chart": "US Top Paid Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/heartwatch-heart-rate-monitor/id1062745479"
+        }
+      ]
+    },
+    {
+      "id": "phone-cleaner",
+      "name": "Phone storage & photo cleaner",
+      "category": "Utilities",
+      "pitch": "Full phones and a satisfying swipe UX: Cleanup is #1 on Apple's US Top Grossing Utilities chart, and CCleaner has 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs device storage and Photos library access",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "A browser can't enumerate or delete from the Photos library or see device storage. On Android much of the \"boost\" value is illusory anyway.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Cleanup",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.65,
+          "reviews": "737k",
+          "chartRank": 1,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/cleanup-phone-storage-cleaner/id1510944943"
+        },
+        {
+          "name": "CCleaner",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.piriform.ccleaner"
+        },
+        {
+          "name": "Cleaner Guru",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 4,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/cleaner-guru-clean-up-storage/id1476380919"
+        },
+        {
+          "name": "Swipewipe",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.69,
+          "reviews": "97k",
+          "chartRank": 9,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/swipewipe-photo-cleaner/id1583884012"
+        }
+      ]
+    },
+    {
+      "id": "vpn",
+      "name": "VPN & proxy client",
+      "category": "Utilities",
+      "pitch": "Privacy and region access: Turbo VPN has 500M+ Play installs, and Shadowrocket is #1 on Apple's US Top Paid Utilities chart.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs the OS VPN service",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Needs the native VPN / NetworkExtension API and server infrastructure.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Turbo VPN",
+          "store": "play",
+          "installs": "500M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=free.vpn.unblock.proxy.turbovpn"
+        },
+        {
+          "name": "Shadowrocket",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 1,
+          "chart": "US Top Paid Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/shadowrocket/id932747118"
+        },
+        {
+          "name": "NordVPN",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 5,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/nordvpn-vpn-fast-secure/id905953485"
+        },
+        {
+          "name": "Proton VPN",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=ch.protonvpn.android"
+        },
+        {
+          "name": "1.1.1.1",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.cloudflare.onedotonedotonedotone"
+        }
+      ]
+    },
+    {
+      "id": "launcher-keyboard",
+      "name": "Launchers & keyboards",
+      "category": "Utilities",
+      "pitch": "Personalising the phone: Gboard has 10B+ Play installs and SwiftKey 1B+; Nova Launcher 100M+.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs a system launcher or input method",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Needs launcher replacement, widgets or wallpaper APIs, or a system input method.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Gboard",
+          "store": "play",
+          "installs": "10B+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.inputmethod.latin"
+        },
+        {
+          "name": "SwiftKey",
+          "store": "play",
+          "installs": "1B+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.touchtype.swiftkey"
+        },
+        {
+          "name": "Nova Launcher",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.teslacoilsw.launcher"
+        },
+        {
+          "name": "HiPhone Launcher",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.launcher.ios11.iphonex"
+        },
+        {
+          "name": "Emoji keyboard",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": null
+        }
+      ]
+    },
+    {
+      "id": "caller-id",
+      "name": "Caller ID, call blocking & recording",
+      "category": "Utilities",
+      "pitch": "Stopping spam calls: Truecaller has 1B+ Play installs, and call-blocking and second-number apps fill Apple's Top Grossing Utilities.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs telephony hooks",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Needs system telephony hooks, CallKit or call-directory extensions, paid number provisioning and a crowd-sourced number database.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Truecaller",
+          "store": "play",
+          "installs": "1B+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.truecaller"
+        }
+      ]
+    },
+    {
+      "id": "tv-remote",
+      "name": "Universal TV remote",
+      "category": "Utilities",
+      "pitch": "Lost remotes: TV Remote – Universal Control is #3 on Apple's US Top Grossing Utilities chart with 623k ratings.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs an IR blaster or local-network discovery",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Needs an IR blaster or local-network discovery (SSDP/mDNS), raw sockets and AirPlay/DIAL, which browsers lack.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "TV Remote – Universal Control",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.44,
+          "reviews": "623k",
+          "chartRank": 3,
+          "chart": "US Top Grossing Utilities",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/tv-remote-universal-control/id1539090879"
+        }
+      ]
+    },
+    {
+      "id": "plant-identifier",
+      "name": "Plant & rock identifier",
+      "category": "Education",
+      "pitch": "Point the camera and learn what it is: PictureThis has 1.12M ratings and is #3 on Apple's US Top Grossing Education chart.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs a proprietary model and database",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Identification is a proprietary model plus a curated database. Only feasible as BYO-key LLM vision, at lower accuracy.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "PictureThis",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.8,
+          "reviews": "1.12M",
+          "chartRank": 3,
+          "chart": "US Top Grossing Education",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/picturethis-plant-identifier/id1252497129"
+        }
+      ]
+    },
+    {
+      "id": "bank-linked-budgeting",
+      "name": "Bank-linked budgeting & credit",
+      "category": "Finance",
+      "pitch": "Automatic money tracking: Rocket Money is #3 on Apple's US Top Grossing Finance chart with 399k ratings.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs bank aggregators and server compute",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Needs Plaid-style aggregators, server compute and credit-bureau data. The manual budget tracker is buildable.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Rocket Money",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.47,
+          "reviews": "399k",
+          "chartRank": 3,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/rocket-money-bills-budgets/id1130616675"
+        }
+      ]
+    },
+    {
+      "id": "mileage-logging",
+      "name": "Automatic mileage logging",
+      "category": "Finance",
+      "pitch": "Tax-deductible driving: MileIQ is #1 on Apple's US Top Grossing Finance chart.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs background location",
+      "wave": null,
+      "demand": 5,
+      "features": [],
+      "caveats": "Automatic trip detection needs background location. A manual trip log with OSRM distance is buildable but misses the point.",
+      "fasApps": [],
+      "sources": [
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "MileIQ",
+          "store": "apple",
+          "installs": null,
+          "rating": null,
+          "reviews": null,
+          "chartRank": 1,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/mileiq-mileage-tracker-log/id578830929"
+        }
+      ]
+    },
+    {
+      "id": "step-counter",
+      "name": "Step counter & walking rewards",
+      "category": "Health & Fitness",
+      "pitch": "Daily step goals and walking rewards: Step Counter – Pedometer and Sweatcoin have 100M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs background motion sensing",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Motion events only arrive while the page is open, and HealthKit is off-limits. A foreground \"walk session\" tracker with friend challenges is the weak substitute.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "Step Counter – Pedometer",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=pedometer.steptracker.calorieburner.stepcounter"
+        },
+        {
+          "name": "Sweatcoin",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=in.sweatco.app"
+        }
+      ]
+    },
+    {
+      "id": "run-tracker",
+      "name": "Run & ride GPS tracking",
+      "category": "Health & Fitness",
+      "pitch": "Runners and cyclists log routes: Strava has 100M+ Play installs and adidas Running 50M+.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs background geolocation",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs location while the screen is off. A foreground-only tracker is possible but frustrating.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Strava",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.strava"
+        },
+        {
+          "name": "adidas Running",
+          "store": "play",
+          "installs": "50M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.runtastic.android"
+        }
+      ]
+    },
+    {
+      "id": "antivirus",
+      "name": "Antivirus & security suite",
+      "category": "Utilities",
+      "pitch": "Fear of malware and identity theft: AVG, Avast One and Norton each have 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs OS-level scanning",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs OS-level scanning, native device APIs and data-broker or credit-bureau feeds. Often mostly a VPN bundle.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "AVG",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.antivirus"
+        },
+        {
+          "name": "Avast One",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.avast.android.mobilesecurity"
+        },
+        {
+          "name": "Norton",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.symantec.mobilesecurity"
+        }
+      ]
+    },
+    {
+      "id": "app-locker-blocker",
+      "name": "App locker & screen-time blocker",
+      "category": "Productivity",
+      "pitch": "Hiding apps and curbing screen time: AppLock and HideU Calculator Lock have 100M+ Play installs; Opal has 90k App Store ratings.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs OS accessibility or Screen Time hooks",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs accessibility or usage-access hooks on Android and the Screen Time API on iOS. FAS can only offer a focus timer.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple",
+        "niche"
+      ],
+      "leaders": [
+        {
+          "name": "AppLock",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.domobile.applockwatcher"
+        },
+        {
+          "name": "HideU Calculator Lock",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.calculator.hideu"
+        },
+        {
+          "name": "Opal",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.72,
+          "reviews": "90k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/opal-screen-time-control/id1497465230"
+        }
+      ]
+    },
+    {
+      "id": "screen-recorder",
+      "name": "Screen recorder",
+      "category": "Photo & Video",
+      "pitch": "Tutorials and gameplay clips: Screen Recorder and Mobizen have 100M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs screen capture on mobile",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "getDisplayMedia is not available in mobile browsers.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Screen Recorder",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": null
+        },
+        {
+          "name": "Mobizen",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.rsupport.mvagent"
+        }
+      ]
+    },
+    {
+      "id": "wifi-device-tools",
+      "name": "Wi-Fi, file recovery & device info tools",
+      "category": "Utilities",
+      "pitch": "Network and phone diagnostics: WiFi Master and DiskDigger have 100M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs radio, raw storage or system APIs",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs radio, raw storage or system APIs that browsers don't expose.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "WiFi Master",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": null
+        },
+        {
+          "name": "DiskDigger",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.defianttech.diskdigger"
+        },
+        {
+          "name": "CPU X",
+          "store": "play",
+          "installs": "10M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.abs.cpu_z_advance"
+        }
+      ]
+    },
+    {
+      "id": "speed-test",
+      "name": "Internet speed test",
+      "category": "Utilities",
+      "pitch": "Checking the connection: Speedtest by Ookla has 100M+ Play installs and 1.49M reviews.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs dedicated measurement servers",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs dedicated measurement servers, which are not in FAS's free-API set, and FAS has no server compute.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Speedtest by Ookla",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.6,
+          "reviews": "1.49M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=org.zwanoo.android.speedtest"
+        }
+      ]
+    },
+    {
+      "id": "music-id",
+      "name": "Music recognition",
+      "category": "Music & Audio",
+      "pitch": "Naming the song that's playing: Shazam has 500M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs a fingerprint database and server matching",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs an audio fingerprint database and server-side matching.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Shazam",
+          "store": "play",
+          "installs": "500M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.shazam.android"
+        }
+      ]
+    },
+    {
+      "id": "content-library",
+      "name": "Content-library apps (courses, meditation, scripture)",
+      "category": "Education",
+      "pitch": "Huge audiences for curated content: Duolingo has 500M+ Play installs, YouVersion Bible 100M+ and Calm 50M+.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs a licensed content library",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "The value is licensed or curated content, a curriculum or a network effect, not code.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Duolingo",
+          "store": "play",
+          "installs": "500M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.duolingo"
+        },
+        {
+          "name": "YouVersion Bible",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.sirma.mobile.bible.android"
+        },
+        {
+          "name": "Calm",
+          "store": "play",
+          "installs": "50M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.calm.android"
+        }
+      ]
+    },
+    {
+      "id": "auto-clicker",
+      "name": "Auto clicker & assistive touch",
+      "category": "Utilities",
+      "pitch": "Automating taps and on-screen shortcuts: Auto Clicker and Assistive Touch have 100M+ Play installs each.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs Android accessibility services",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs accessibility services that a web app can't use.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Auto Clicker",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.truedevelopersstudio.automatictap.autoclicker"
+        },
+        {
+          "name": "Assistive Touch",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.easytouch.assistivetouch"
+        }
+      ]
+    },
+    {
+      "id": "sticker-status-saver",
+      "name": "Sticker maker, status saver & video downloader",
+      "category": "Social",
+      "pitch": "WhatsApp extras: a sticker maker, a status saver and a video downloader each have 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs native intents and other apps' storage",
+      "wave": null,
+      "demand": 4,
+      "features": [],
+      "caveats": "Needs native intents to WhatsApp or access to other apps' storage. Downloaders also raise ToS and copyright issues.",
+      "fasApps": [],
+      "sources": [
+        "play"
+      ],
+      "leaders": [
+        {
+          "name": "Sticker maker",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.marsvard.stickermakerforwhatsapp"
+        },
+        {
+          "name": "Status Saver",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": null
+        },
+        {
+          "name": "All Video Downloader",
+          "store": "play",
+          "installs": "100M+",
+          "rating": null,
+          "reviews": null,
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=all.video.downloader.allvideodownloader"
+        }
+      ]
+    },
+    {
+      "id": "alarm-clock",
+      "name": "Alarm clock",
+      "category": "Utilities",
+      "pitch": "Waking up reliably: Alarmy has 249k App Store ratings and is #26 on Apple's US Top Grossing Lifestyle chart.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "wont-build",
+      "waitsOn": "needs to ring through a locked phone",
+      "wave": null,
+      "demand": 3,
+      "features": [],
+      "caveats": "A Web Push notification can't ring loudly through a locked phone, override silent mode or guarantee an exact-second wake. Unreliable alarms are worse than none.",
+      "fasApps": [],
+      "sources": [
+        "play",
+        "apple"
+      ],
+      "leaders": [
+        {
+          "name": "Alarmy",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.76,
+          "reviews": "249k",
+          "chartRank": 26,
+          "chart": "US Top Grossing Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/alarmy-loud-alarm-clock/id1163786766"
+        }
+      ]
+    }
+  ]
+}
