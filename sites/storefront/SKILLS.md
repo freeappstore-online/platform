@@ -73,13 +73,11 @@ That's it. No `npm publish`. No `npm login`. No npm token request. No local buil
 
 ## Creator Program
 
-People join as creators to build apps/games. The flow:
+Anyone can publish. Provisioning is self-service; there is no application or approval queue:
 
-1. Apply at https://github.com/freeappstore-online/submissions/issues/new?template=creator-application.yml
-2. Admin reviews and approves within 48h
-3. Admin provisions the app via `POST /api/provision` (creates repo, hosting route, registry)
-4. Creator is added to the `creators` team in the GitHub org
-5. Creator clones the repo, writes code, pushes → live
+1. `fas login` (GitHub device flow), then `fas init <app-id>`, or start in VibeCode at https://freeappstore.online/app/build
+2. `fas check`, then `fas publish`: creates the `freeappstore-online/<app-id>` repo, hosting route and storefront entry
+3. Push to `main` using the remote commands `fas publish` prints → GitHub Actions builds → live at `<app-id>.freeappstore.online`
 
 **GitHub org teams:**
 - `maintainers` — admins + AI agents, push access to ALL repos
@@ -175,6 +173,7 @@ No further API calls or manual steps needed. Ever.
 - ONE environment: production only. Push to `main` = deploy. Fix forward.
 - Static hosting on Cloudflare R2 (served by the host Worker). No server-side code in apps.
 - Backend (if needed): `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice). `npm i @freeappstore/sdk`.
+- No ads. FreeAppStore apps never show ads or load ad networks (platform policy).
 - Free means free forever. No monetization in the free version: no payments of any kind. The host blocks the Payment Request API (`payment=()`) and `fas check` fails on Payment Request, Apple Pay, Stripe/PayPal/Paddle/Lemon Squeezy/Gumroad/Google Pay SDKs or checkout links, and payment manifest members. Paid apps go on ProAppStore.
 - Browser capabilities are open on your app's own origin: microphone, camera, location, motion sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock, Web Workers (including `blob:` workers) and WebAssembly all work. The browser asks the user, so handle `NotAllowedError` and missing hardware; the storefront preview delegates the same features to your app, so they work there too. Not available: payments (see the rule above) and the Topics API. `SharedArrayBuffer` and threaded wasm need cross-origin isolation: set `"crossOriginIsolated": true` in `fas.json` and run `fas publish`. That sends COOP/COEP for your app only; third-party embeds/images need CORS/CORP and popups lose `window.opener`. Full matrix: https://docs.freeappstore.online/capabilities/
 - Declare the browser permissions your app asks for (microphone, camera, location, motion, notifications, midi, clipboard, screen, bluetooth, usb, serial, hid) in `web/public/manifest.json` as `"permissions": [{ "name": "microphone", "reason": "one line shown on the listing" }]`. `fas check` warns about undeclared ones, and the storefront listing shows them. Guide: https://docs.freeappstore.online/permissions/

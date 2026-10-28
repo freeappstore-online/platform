@@ -2,14 +2,20 @@
 
 ## Mission
 
-FreeAppStore is an open platform for free, high-quality web applications — no ads, no paywalls, no subscriptions, no catch. Everything we build and host is 100% free, forever. Every app is private, offline-capable, and works on any device. One app per category — no duplicates, no fragmentation.
+**We're rebuilding everyday apps for the web.**
+
+Native apps are expensive to build and ship, so they make that money back from users: ads, paid downloads, 7-day trials, then a subscription. The web is far cheaper to build on and run, and AI makes it cheaper still. That saving goes to everyone: apps on FreeAppStore are free for users and free to publish for creators. The platform's running costs are covered by ProAppStore, which earns its revenue from Pro apps listed on a subscription basis.
+
+Short form (tagline, meta descriptions): *Everyday apps, rebuilt for the web. Nothing to download, no ads, no trials, no subscriptions.*
+
+The public statement lives on [freeappstore.online/about](https://freeappstore.online/about) (`sites/storefront/about.html`). Keep this section, that page, the README and `docs/index.md` in step.
 
 ## Platform Rules
 
-1. **One app per category.** There will never be two chess apps, two audiobook readers, or two calendars. One free, one pro — that's it.
-2. **Free means free.** No freemium, no ads, no plans, no paywalls. Ever.
-3. **Real apps, not websites.** PWA-capable, offline-first, installable to home screen.
-4. **Private by default.** No tracking, no analytics, no accounts required.
+1. **Free means free.** No payments, freemium, trials, plans or paywalls. Enforced: `fas check` rejects payment SDKs and checkout links, and the host blocks the Payment Request API.
+2. **No ads.** Apps never show ads or load ad networks. Platform policy (not yet an automated check).
+3. **Nothing to download.** Every app works from a link in the browser on any device, and is installable as a PWA where the browser supports it.
+4. **Private by default.** No tracking SDKs in app code (`fas check`); analytics, if any, go through the platform loader. Accounts are optional and only for apps that need sign-in or sync.
 5. **Open source.** Every free app is MIT-licensed and open on GitHub.
 
 ## Logo

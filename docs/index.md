@@ -4,7 +4,9 @@ Build and publish free web apps at [freeappstore.online](https://freeappstore.on
 
 ## What is FreeAppStore?
 
-A free, open-source PWA app store. Every app gets its own subdomain (`yourapp.freeappstore.online`), GitHub repo, and auto-deploy pipeline. Apps are free forever, no tracking, MIT licensed.
+We're rebuilding everyday apps for the web. The web is cheaper to build on and run than native, and AI makes it cheaper still, so FreeAppStore apps are free: nothing to download, no ads, no trials, no subscriptions. [Read the mission](https://freeappstore.online/about).
+
+For creators it is a free, open-source PWA platform. Every app gets its own subdomain (`yourapp.freeappstore.online`), GitHub repo, auto-deploy pipeline and storefront listing. Apps are MIT licensed and take no payments.
 
 ## For developers
 

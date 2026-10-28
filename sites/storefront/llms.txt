@@ -1,6 +1,15 @@
 # FreeAppStore
 
-> FreeAppStore is a free, open-source app platform where developers publish PWA apps at `<name>.freeappstore.online`. Apps are built with TypeScript, React, and Vite, deployed via GitHub Actions to Cloudflare R2. The platform provides an SDK with auth, per-user storage, real-time rooms, and UI components. Every app is free forever, MIT-licensed, and privacy-first (zero tracking). For the full AI agent guide, see [SKILLS.md](https://freeappstore.online/skills.md).
+> FreeAppStore is on a mission to rebuild everyday apps for the web. The web is cheaper to build on and run than native, especially with AI, so apps here are free: nothing to download, no ads, no trials, no subscriptions.
+>
+> It is a free, open-source app platform where developers publish PWA apps at `<name>.freeappstore.online`. Apps are built with TypeScript, React, and Vite, deployed via GitHub Actions to Cloudflare R2. The platform provides an SDK with auth, per-user storage, real-time rooms, and UI components. Every app is free forever and MIT-licensed. Apps take no payments, and tracking SDKs can't be bundled into app code; analytics, if an app uses any, go through the platform loader. For the full AI agent guide, see [SKILLS.md](https://freeappstore.online/skills.md).
+
+## About
+
+- [Our mission](https://freeappstore.online/about): Rebuilding everyday apps for the web, free for users and creators.
+- [How it's free](https://freeappstore.online/how-its-free): Web apps cost far less than native; platform costs are covered by ProAppStore, which earns from Pro apps listed on a subscription basis.
+- [Web apps vs native apps](https://freeappstore.online/web-apps-vs-native): No download, one codebase, no ads or subscriptions needed.
+- [FAQ](https://freeappstore.online/faq): Common questions from users and creators.
 
 ## AI Agent Integration
 

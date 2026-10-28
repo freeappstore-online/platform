@@ -3,15 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>About — FreeAppStore</title>
-  <meta name="description" content="Free, open-source browser apps with optional platform sign-in, cloud services, and clear permissions." />
+  <title>Our Mission: Rebuilding Everyday Apps for the Web — FreeAppStore</title>
+  <meta name="description" content="FreeAppStore is rebuilding everyday apps for the web. The web is cheaper to build on than native, so apps here are free: nothing to download, no ads, no trials, no subscriptions." />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="About — FreeAppStore" />
-  <meta property="og:description" content="Free, open-source browser apps with optional platform sign-in, cloud services, and clear permissions." />
+  <meta property="og:title" content="Our Mission: Rebuilding Everyday Apps for the Web — FreeAppStore" />
+  <meta property="og:description" content="FreeAppStore is rebuilding everyday apps for the web. The web is cheaper to build on than native, so apps here are free: nothing to download, no ads, no trials, no subscriptions." />
   <meta property="og:url" content="https://freeappstore.online/about" />
   <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
   <meta name="twitter:card" content="summary" />
   <link rel="canonical" href="https://freeappstore.online/about" />
+  <script type="application/ld+json">{
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    "@id": "https://freeappstore.online/about#page",
+    "url": "https://freeappstore.online/about",
+    "name": "Our Mission: Rebuilding Everyday Apps for the Web",
+    "description": "FreeAppStore is rebuilding everyday apps for the web, where they are cheaper to build and run, so they can be free: nothing to download, no ads, no trials, no subscriptions.",
+    "isPartOf": { "@id": "https://freeappstore.online/#website" },
+    "about": { "@id": "https://freeappstore.online/#org" }
+  }</script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   {{SETTINGS_BOOTSTRAP}}
@@ -21,32 +31,43 @@
   <link rel="stylesheet" href="{{STYLE_CSS_URL}}" />
 </head>
 <body>
-  
+
   {{HEADER}}
 
 
   <main class="container">
     <div class="page-header">
-      <h1>About FreeAppStore</h1>
-      <p>Free, open-source web apps for everyday tasks. No app subscriptions, ads, or paywalls.</p>
+      <h1>We're rebuilding everyday apps for the web</h1>
+      <p>Free apps with nothing to download, no ads, no trials, and no subscriptions.</p>
     </div>
     <div class="page-content">
-      <h2>Useful apps, free forever</h2>
-      <p>Browse the <a href="/">catalog</a> for timers, calculators, notes, learning tools, creative apps, and more. Each app runs on its own subdomain in your browser. Apps are published with public source code under the MIT license.</p>
+      <h2>Why the web</h2>
+      <p>Native apps are expensive to build, review, and ship to every app store, so they earn that money back from you. You download an app and it shows you ads. You pay $4.99 up front, or you get a 7-day trial and then a subscription.</p>
+      <p>The web is much cheaper to build on and run, and AI makes building cheaper still. One codebase works on phones, tablets, and computers, and a link is all it takes to share it. Because the apps cost so little to make, they can be free. That is cheaper for the people who use them and for the people who build them.</p>
+
+      <h2>Who pays for it</h2>
+      <p>The platform's running costs are covered by our sister store, <a href="https://proappstore.online">ProAppStore</a>, which earns its revenue from Pro apps listed on a subscription basis. Free apps and their users never pay. Read <a href="/how-its-free">how FreeAppStore is free</a> and how <a href="/web-apps-vs-native">web apps compare with native apps</a>.</p>
+
+      <h2>What that means for you</h2>
       <div class="principles">
-        <div class="principle"><h3>Free to use</h3><p>FreeAppStore apps take no payments. External APIs you choose to use with your own key can have provider charges; the app should explain those before you connect.</p></div>
+        <div class="principle"><h3>Nothing to download</h3><p>Open a link and the app works in your browser. You can add it to your home screen where your browser supports PWAs. Offline behavior depends on the app; sign-in, sync, and live data need a connection.</p></div>
+        <div class="principle"><h3>No ads, trials, or paywalls</h3><p>FreeAppStore apps take no payments and don't show ads. Checkout SDKs and payment APIs are blocked when an app is checked and hosted. External APIs you choose to use with your own key can have provider charges; the app should explain those before you connect.</p></div>
+        <div class="principle"><h3>Open source</h3><p>Every app's code is public on GitHub under the MIT license. Anyone can read it, report an issue, or improve it.</p></div>
         <div class="principle"><h3>On your device or connected</h3><p>Standalone apps can keep data on your device. Connected apps can use platform sign-in, cloud storage, public collections, and realtime rooms.</p></div>
-        <div class="principle"><h3>Built for the browser</h3><p>Apps support responsive layouts and can be installed where the browser supports PWAs. Offline behavior depends on the app; live data, sync, sign-in, and API calls need a connection.</p></div>
-        <div class="principle"><h3>Clear permissions</h3><p>App listings show requested browser permissions. Read our <a href="/privacy">privacy policy</a> for account data, storage, diagnostics, and integrations.</p></div>
+        <div class="principle"><h3>Clear permissions</h3><p>App listings show the browser permissions an app requests. Read our <a href="/privacy">privacy policy</a> for account data, storage, analytics, and integrations.</p></div>
       </div>
-      <h2>A shared platform for creators</h2>
-      <p>Creators get a public GitHub repository, HTTPS subdomain, automated deployment workflow, and storefront listing. Publish through the <code>fas</code> CLI or build in <a href="/app/build">VibeCode</a>. Provisioning is self-service; there is no standard 48-hour application queue.</p>
-      <p>The SDK includes sign-in, per-user key-value storage, public document collections, shared counters, realtime rooms, app roles, friendships, email, scheduled push reminders, API proxying, and an encrypted key vault. React apps use the SDK's <code>Shell</code>, hooks, and UI components. See <a href="/capabilities">capabilities</a> and <a href="https://docs.freeappstore.online/platform-limits/">service limits</a>.</p>
+
+      <p>Browse the <a href="/">catalog</a> for timers, calculators, notes, learning tools, creative apps, and more. Each app runs on its own subdomain.</p>
+
+      <h2>Cheaper for creators too</h2>
+      <p>Publishing on FreeAppStore costs nothing. Creators get a public GitHub repository, an HTTPS subdomain, an automated deployment workflow, and a storefront listing. Publish through the <code>fas</code> CLI, or describe your app to <a href="/app/build">VibeCode</a> and let AI build it with your own AI provider connection. Provisioning is self-service; there is no application queue.</p>
+      <p>The free SDK includes sign-in, per-user key-value storage, public document collections, shared counters, realtime rooms, app roles, friendships, email, scheduled push reminders, API proxying, and an encrypted key vault. React apps use the SDK's <code>Shell</code>, hooks, and UI components. See <a href="/capabilities">capabilities</a> and <a href="https://docs.freeappstore.online/platform-limits/">service limits</a>.</p>
+
       <h2>FreeAppStore and the sister stores</h2>
       <p><a href="https://freegamestore.online">FreeGameStore</a> hosts browser games, and <a href="https://freewebstore.online">FreeWebStore</a> hosts one-page sites. They have their own publishing tools and rules.</p>
       <p><a href="https://proappstore.online">ProAppStore</a> is a separate paid platform. Its plans and supported features are described on its own website. A FreeAppStore app does not automatically have a corresponding Pro version or a shared data migration.</p>
       <h2>Build or contribute</h2>
-      <p><a href="/get-started">Get started</a>, read the <a href="https://docs.freeappstore.online/">developer docs</a>, or explore the <a href="https://github.com/freeappstore-online/platform">platform source</a>. Report app bugs and feature requests on the individual app's repository; SDK, CLI, hosting, and storefront issues belong on the platform repository.</p>
+      <p>Have a question? See the <a href="/faq">FAQ</a>. <a href="/get-started">Get started</a>, read the <a href="https://docs.freeappstore.online/">developer docs</a>, or explore the <a href="https://github.com/freeappstore-online/platform">platform source</a>. Report app bugs and feature requests on the individual app's repository; SDK, CLI, hosting, and storefront issues belong on the platform repository.</p>
     </div>
   </main>
   {{FOOTER}}
