@@ -83,7 +83,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=relax.sleep.relaxation.sleepingsounds"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa",
+        "user-storage"
+      ],
+      "requiresWhy": "Noise is generated on the device with Web Audio; syncing favourite mixes is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "voice-recorder",
@@ -167,7 +176,20 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/otter-transcribe-voice-notes/id1276437113"
         }
-      ]
+      ],
+      "requires": [
+        "browser-microphone"
+      ],
+      "anyOf": null,
+      "optional": [
+        "ai-user-key",
+        "ai-platform",
+        "file-storage",
+        "browser-file-access"
+      ],
+      "requiresWhy": "Records from the microphone; AI transcription and cloud backup are extras.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "financial-trade-calculators",
@@ -247,7 +269,16 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/construction-master-pro-calc/id370406446"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa",
+        "user-storage"
+      ],
+      "requiresWhy": "Pure maths that runs in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "sound-meter",
@@ -328,7 +359,17 @@
           "price": "$19.99",
           "url": "https://apps.apple.com/us/app/audiotools-db-sound-audio/id325307477"
         }
-      ]
+      ],
+      "requires": [
+        "browser-microphone"
+      ],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa"
+      ],
+      "requiresWhy": "Measures loudness from the microphone.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "voice-changer",
@@ -367,7 +408,17 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.baviux.voicechanger"
         }
-      ]
+      ],
+      "requires": [
+        "browser-microphone"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-wasm"
+      ],
+      "requiresWhy": "Records your voice from the microphone and applies effects on the device.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "drum-pad",
@@ -417,7 +468,17 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.paullipnyagov.drumpads24"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa",
+        "user-storage",
+        "shared-data"
+      ],
+      "requiresWhy": "Plays samples with Web Audio; sharing beats with others is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "compass-level-ruler",
@@ -475,7 +536,18 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=org.nixgame.ruler"
         }
-      ]
+      ],
+      "requires": [
+        "browser-sensors"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-geolocation",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Compass and bubble level read the phone's motion and orientation sensors.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "everyday-calculators",
@@ -535,7 +607,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.skollabs.tipcalc"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa",
+        "user-storage"
+      ],
+      "requiresWhy": "Pure maths that runs in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "baby-tracker",
@@ -572,7 +653,20 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.nighp.babytracker_android"
         }
-      ]
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "realtime"
+      ],
+      "anyOf": null,
+      "optional": [
+        "push-triggered",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Two parents sign in to one shared log that updates live; feed reminders are optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "sobriety-counter",
@@ -610,7 +704,18 @@
           "price": "$4.99/mo or $49.99/yr",
           "url": "https://apps.apple.com/us/app/i-am-sober/id672904239"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "counters",
+        "realtime",
+        "push-reminders"
+      ],
+      "requiresWhy": "A day count works from a date stored on the device; sync and milestones are extras.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "reading-log",
@@ -636,7 +741,20 @@
       "sources": [
         "niche"
       ],
-      "leaders": []
+      "leaders": [],
+      "requires": [
+        "browser-any-https-api"
+      ],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "auth",
+        "shared-data",
+        "counters"
+      ],
+      "requiresWhy": "Searches a public book database such as Open Library; sharing shelves is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "teleprompter",
@@ -672,7 +790,16 @@
           "price": "$29.99",
           "url": "https://apps.apple.com/us/app/promptsmart-pro-teleprompter/id894811756"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "browser-microphone",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Scrolls text on screen; voice-following scroll would need the microphone.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "wishlist",
@@ -729,7 +856,19 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/listful-wishlist-maker/id6505107527"
         }
-      ]
+      ],
+      "requires": [
+        "shared-data"
+      ],
+      "anyOf": null,
+      "optional": [
+        "auth",
+        "server-compute",
+        "email"
+      ],
+      "requiresWhy": "Others must open your list and mark gifts as reserved; product link previews are extras.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "event-rsvp",
@@ -767,7 +906,20 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/partiful-party-invite-maker/id1662982304"
         }
-      ]
+      ],
+      "requires": [
+        "shared-data"
+      ],
+      "anyOf": null,
+      "optional": [
+        "auth",
+        "email",
+        "realtime",
+        "push-triggered"
+      ],
+      "requiresWhy": "Guests open one invite page and their RSVPs are saved where the host can see them.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "test-prep-quiz",
@@ -838,7 +990,16 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/hamstudy-org/id1371288324"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa",
+        "user-storage"
+      ],
+      "requiresWhy": "Question banks ship with the app and run offline.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "digital-business-card",
@@ -885,7 +1046,18 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/popl-ai-lead-capture/id1503939262"
         }
-      ]
+      ],
+      "requires": [
+        "shared-data"
+      ],
+      "anyOf": null,
+      "optional": [
+        "auth",
+        "counters"
+      ],
+      "requiresWhy": "Your card is a public profile page other people open from a link or QR code.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "gps-timestamp-camera",
@@ -921,7 +1093,18 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.gpsmapcamera.geotagginglocationonphoto"
         }
-      ]
+      ],
+      "requires": [
+        "browser-camera",
+        "browser-geolocation"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "Takes photos with the camera and stamps them with your GPS position.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "flashlight",
@@ -977,7 +1160,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=goldenshorestechnologies.brightestflashlight.free"
         }
-      ]
+      ],
+      "requires": [
+        "browser-camera"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Turning on the LED uses the camera's torch control (Android browsers only).",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "counters",
@@ -1047,7 +1238,17 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=ua.napps.scorekeeper"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "counters",
+        "realtime"
+      ],
+      "requiresWhy": "A tap counter works on the device; a live shared scoreboard is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "gps-speedometer",
@@ -1082,7 +1283,17 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=gps.speedometer.gpsspeedometer.odometer"
         }
-      ]
+      ],
+      "requires": [
+        "browser-geolocation"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "Speed and distance come from GPS while the app is open.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "magnifier-mirror",
@@ -1127,7 +1338,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.hantor.CozyMag"
         }
-      ]
+      ],
+      "requires": [
+        "browser-camera"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Shows the camera feed zoomed in or as a mirror.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "fuel-log",
@@ -1173,7 +1392,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=br.com.ctncardoso.ctncar"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "offline-pwa"
+      ],
+      "requiresWhy": "A log and charts that work with data kept on the device.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "ai-task-breakdown",
@@ -1207,7 +1435,22 @@
           "price": "$1.99",
           "url": "https://apps.apple.com/us/app/goblin-tools/id6449003064"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": [
+        [
+          "ai-user-key"
+        ],
+        [
+          "ai-platform"
+        ]
+      ],
+      "optional": [
+        "user-storage"
+      ],
+      "requiresWhy": "Breaking a task into steps needs an AI model.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "translator",
@@ -1276,7 +1519,26 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/translator-go-ai-translate/id1570134612"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": [
+        [
+          "ai-user-key"
+        ],
+        [
+          "ai-platform"
+        ],
+        [
+          "third-party-api-secret"
+        ]
+      ],
+      "optional": [
+        "browser-microphone",
+        "user-storage"
+      ],
+      "requiresWhy": "Translation needs an AI model or a translation API with the owner's key.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "ai-photo-calorie",
@@ -1312,7 +1574,25 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/cal-ai-calorie-tracker/id6480417616"
         }
-      ]
+      ],
+      "requires": [
+        "browser-camera"
+      ],
+      "anyOf": [
+        [
+          "ai-user-key"
+        ],
+        [
+          "ai-platform"
+        ]
+      ],
+      "optional": [
+        "user-storage",
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "Photographs a meal and asks a vision AI model to estimate calories.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "ai-journal-coach",
@@ -1348,7 +1628,22 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/day-one-daily-journal-diary/id1044867788"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": [
+        [
+          "ai-user-key"
+        ],
+        [
+          "ai-platform"
+        ]
+      ],
+      "optional": [
+        "user-storage"
+      ],
+      "requiresWhy": "Reflection prompts and summaries need an AI model.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "tts-reader",
@@ -1384,7 +1679,18 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/speechify-text-to-speech-pdf/id1209815023"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "ai-user-key",
+        "ai-platform",
+        "browser-file-access",
+        "server-compute"
+      ],
+      "requiresWhy": "Reads text aloud with the browser's built-in voices; premium voices and URL import are extras.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "fancy-text",
@@ -1418,7 +1724,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.theruralguys.stylishtext"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa"
+      ],
+      "requiresWhy": "Converts text to Unicode styles in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "christian-devotion",
@@ -1454,7 +1768,18 @@
           "price": "$69.99/yr",
           "url": "https://apps.apple.com/us/app/hallow-prayer-meditation/id1405323394"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "counters",
+        "realtime",
+        "push-reminders"
+      ],
+      "requiresWhy": "Prayers and readings are public-domain texts shipped with the app.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "period-tracker",
@@ -1539,7 +1864,16 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/stardust-period-tracker/id1495829322"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "push-reminders"
+      ],
+      "requiresWhy": "Cycle log and predictions work on the device; period-due reminders are optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "medication-bp-log",
@@ -1625,7 +1959,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/blood-pressure-log-heart-rate/id1575719736"
         }
-      ]
+      ],
+      "requires": [
+        "push-reminders"
+      ],
+      "anyOf": null,
+      "optional": [
+        "user-storage"
+      ],
+      "requiresWhy": "Dose reminders are the core of a medication app, so it needs push notifications.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "prayer-times-qibla",
@@ -1688,7 +2032,19 @@
           "price": null,
           "url": null
         }
-      ]
+      ],
+      "requires": [
+        "browser-sensors"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-geolocation",
+        "push-reminders",
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "Times are computed on the device; the Qibla compass needs the orientation sensor.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "fasting-timer",
@@ -1751,7 +2107,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.bodyfast"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "push-reminders"
+      ],
+      "requiresWhy": "The timer runs from a saved start time; end-of-fast alerts are optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "water-tracker",
@@ -1792,7 +2157,18 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.remind.drink.water.hourly"
         }
-      ]
+      ],
+      "requires": [
+        "push-reminders"
+      ],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "The reminder is the product: it needs scheduled push notifications.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "document-scanner",
@@ -1878,7 +2254,20 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/scanner-app-scan-pdf-docs/id1568660349"
         }
-      ]
+      ],
+      "requires": [
+        "browser-camera"
+      ],
+      "anyOf": null,
+      "optional": [
+        "ai-user-key",
+        "ai-platform",
+        "browser-wasm",
+        "file-storage"
+      ],
+      "requiresWhy": "Captures pages with the camera and builds the PDF on the device; OCR is an extra.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "habit-tracker",
@@ -1965,7 +2354,18 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/habitify-habit-tracker/id1111447047"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "push-reminders",
+        "shared-data",
+        "counters"
+      ],
+      "requiresWhy": "Habits and streaks work with data on the device; reminders and friends are extras.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "todo-list",
@@ -2053,7 +2453,20 @@
           "price": "$7.99",
           "url": "https://apps.apple.com/us/app/due-reminders-timers/id390017969"
         }
-      ]
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "realtime",
+        "push-triggered"
+      ],
+      "requiresWhy": "Shared lists need sign-in and data other people can read and edit.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "unit-currency-converter",
@@ -2136,7 +2549,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/unit-converter-best-unit-app/id623691968"
         }
-      ]
+      ],
+      "requires": [
+        "browser-any-https-api"
+      ],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa"
+      ],
+      "requiresWhy": "Currency rates come from a public exchange-rate API.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "photo-collage",
@@ -2219,7 +2642,19 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/scrl-photo-collage-maker/id1289057196"
         }
-      ]
+      ],
+      "requires": [
+        "browser-file-access"
+      ],
+      "anyOf": null,
+      "optional": [
+        "ai-user-key",
+        "ai-platform",
+        "browser-wasm"
+      ],
+      "requiresWhy": "Opens photos from your device and edits them in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "recipe-manager",
@@ -2280,7 +2715,19 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/mealie-recipe-meal-planner/id6762080217"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "shared-data",
+        "realtime",
+        "server-compute",
+        "file-storage"
+      ],
+      "requiresWhy": "Recipes and plans can live on the device; URL import, sync and shared lists are extras.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "calorie-log",
@@ -2364,7 +2811,20 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.yazio.android"
         }
-      ]
+      ],
+      "requires": [
+        "browser-any-https-api"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-camera",
+        "user-storage",
+        "ai-user-key",
+        "ai-platform"
+      ],
+      "requiresWhy": "Food lookup needs a public food database such as Open Food Facts.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "interval-timer",
@@ -2414,7 +2874,16 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/clock-yourself/id1142095221"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Timer and voice cues run in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "flashcards",
@@ -2488,7 +2957,18 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.quizlet.quizletandroid"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "shared-data",
+        "ai-user-key",
+        "ai-platform"
+      ],
+      "requiresWhy": "Spaced repetition runs on the device; shared public decks are optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "weather",
@@ -2562,7 +3042,19 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.miui.weather2"
         }
-      ]
+      ],
+      "requires": [
+        "browser-any-https-api"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-geolocation",
+        "scheduled-jobs",
+        "push-triggered"
+      ],
+      "requiresWhy": "Forecasts come from a public weather API; severe-weather alerts need a scheduled check.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "tuner-metronome",
@@ -2647,7 +3139,18 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/smart-metronome-tuner/id889571826"
         }
-      ]
+      ],
+      "requires": [
+        "browser-microphone"
+      ],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa",
+        "user-storage"
+      ],
+      "requiresWhy": "The tuner listens to your instrument through the microphone.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "pdf-tools",
@@ -2707,7 +3210,18 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.xodo.pdf.reader"
         }
-      ]
+      ],
+      "requires": [
+        "browser-file-access"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-wasm",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Opens and edits PDF files from your device in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "home-workout",
@@ -2767,7 +3281,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=menloseweight.loseweightappformen.weightlossformen"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Workout plans and cues ship with the app.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "couch-to-5k",
@@ -2828,7 +3351,16 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/watch-to-5k-couch-to-5km-coach/id1517914828"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "browser-geolocation",
+        "user-storage"
+      ],
+      "requiresWhy": "A timed run-walk plan with voice cues; GPS distance is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "qr-scanner",
@@ -2902,7 +3434,18 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/qr-code-reader-barcode-scanner/id1584764976"
         }
-      ]
+      ],
+      "requires": [
+        "browser-camera"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-wasm",
+        "user-storage"
+      ],
+      "requiresWhy": "Scans codes with the camera.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "subscription-tracker",
@@ -2951,7 +3494,24 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/subseek-subscription-manager/id6769329967"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": [
+        [
+          "push-reminders"
+        ],
+        [
+          "email",
+          "scheduled-jobs"
+        ]
+      ],
+      "optional": [
+        "user-storage",
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "Renewal alerts are the point: scheduled push, or email sent on a schedule.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "days-since-countdown",
@@ -3023,7 +3583,16 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/halloween-countdown-pro-push/id358607767"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "push-reminders",
+        "user-storage"
+      ],
+      "requiresWhy": "Date maths on the device; milestone pushes are optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "grocery-list",
@@ -3074,7 +3643,19 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.purplecover.anylist"
         }
-      ]
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "anyOf": null,
+      "optional": [
+        "realtime",
+        "offline-pwa"
+      ],
+      "requiresWhy": "A household shares one list, so it needs sign-in and shared data.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "gym-log",
@@ -3157,7 +3738,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/gymverse-gym-workout-planner/id1048454034"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "shared-data",
+        "push-reminders"
+      ],
+      "requiresWhy": "Sets and progress charts work with data on the device; a social feed is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "journal-mood",
@@ -3232,7 +3823,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/daylio-journal-mood-tracker/id1194023242"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "ai-user-key",
+        "ai-platform"
+      ],
+      "requiresWhy": "Entries and mood charts can stay encrypted on the device.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "calculator",
@@ -3301,7 +3902,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.digitalchemy.calculator.freedecimal"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Pure maths that runs in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "notes",
@@ -3372,7 +3982,17 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.socialnmobile.dictapps.notepad.color.note"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "auth",
+        "user-storage",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Notes work on the device; sync across devices is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "clock-tools",
@@ -3447,7 +4067,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.digitalchemy.timerplus"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "push-reminders",
+        "offline-pwa"
+      ],
+      "requiresWhy": "Stopwatch, timer and world clock run in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "budget-tracker",
@@ -3533,7 +4162,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/money-manager-expense-budget/id560481810"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "shared-data",
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "Manual budgeting works with data on the device.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "invoice-maker",
@@ -3605,7 +4244,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/easy-invoice-maker-app/id1568511681"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "email",
+        "payments"
+      ],
+      "requiresWhy": "Builds the PDF in the browser; emailing and online payment are extras.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "astro-planner",
@@ -3678,7 +4327,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/sun-surveyor-sun-moon/id525176875"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "browser-geolocation",
+        "browser-sensors",
+        "browser-any-https-api"
+      ],
+      "requiresWhy": "Sun and moon positions are computed on the device for a chosen place.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "virtual-piano",
@@ -3726,7 +4385,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=umito.android.minipiano"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa"
+      ],
+      "requiresWhy": "Plays notes with Web Audio.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "drawing-pad",
@@ -3775,7 +4442,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.adsk.sketchbook"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "file-storage"
+      ],
+      "requiresWhy": "Draws on a canvas in the browser; a cloud gallery is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "scientific-calculator",
@@ -3834,7 +4510,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=org.geogebra.android"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa"
+      ],
+      "requiresWhy": "Pure maths that runs in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "resume-maker",
@@ -3872,7 +4556,17 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=icv.resume.curriculumvitae"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "ai-user-key",
+        "ai-platform"
+      ],
+      "requiresWhy": "Builds the CV PDF in the browser.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "dictionary-vocab",
@@ -3934,7 +4628,20 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.hrd.vocabulary"
         }
-      ]
+      ],
+      "requires": [
+        "browser-any-https-api"
+      ],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "push-reminders",
+        "ai-user-key",
+        "ai-platform"
+      ],
+      "requiresWhy": "Definitions come from a public dictionary API.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "bill-splitting",
@@ -4009,7 +4716,20 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=splid.teamturtle.com.splid"
         }
-      ]
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "anyOf": null,
+      "optional": [
+        "realtime",
+        "browser-any-https-api",
+        "email"
+      ],
+      "requiresWhy": "Group members sign in and share one ledger of expenses.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "randomizer",
@@ -4046,7 +4766,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.spinthewheeldecider"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "realtime"
+      ],
+      "requiresWhy": "Spins run on the device; a shared room where everyone sees the spin is optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "focus-pomodoro",
@@ -4123,7 +4851,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/focus-keeper-pomodoro-timer/id867374917"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "realtime",
+        "counters",
+        "user-storage"
+      ],
+      "requiresWhy": "The timer runs in the browser; group focus rooms are optional.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "periodic-table",
@@ -4159,7 +4897,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=mendeleev.redlime"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "offline-pwa"
+      ],
+      "requiresWhy": "Static element data shipped with the app.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "daily-quotes",
@@ -4207,7 +4953,16 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/i-am-daily-affirmations/id874656917"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "push-reminders",
+        "user-storage"
+      ],
+      "requiresWhy": "Quotes ship with the app; a daily push is optional (widgets are not possible).",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "authenticator-2fa",
@@ -4277,7 +5032,18 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/authenticator-app/id6754900760"
         }
-      ]
+      ],
+      "requires": [
+        "user-storage"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-camera",
+        "auth"
+      ],
+      "requiresWhy": "Codes are computed on the device, but losing them is unacceptable, so an off-device encrypted backup is needed.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "package-tracking",
@@ -4313,7 +5079,19 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/package-tracker-pkge-mobile/id1397865865"
         }
-      ]
+      ],
+      "requires": [
+        "third-party-api-secret",
+        "scheduled-jobs",
+        "push-triggered"
+      ],
+      "anyOf": null,
+      "optional": [
+        "user-storage"
+      ],
+      "requiresWhy": "Carrier APIs need keys kept server-side, and status-change alerts need a scheduled check.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "self-care-pet",
@@ -4350,7 +5128,17 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/finch-self-care-pet/id1528595748"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "shared-data",
+        "push-reminders"
+      ],
+      "requiresWhy": "Runs on the device; what holds it back is character art and writing, not the platform.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "sleep-tracking",
@@ -4404,7 +5192,15 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/heartwatch-heart-rate-monitor/id1062745479"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs all-night background microphone and motion sensing, or health-data access.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "phone-cleaner",
@@ -4469,7 +5265,15 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/swipewipe-photo-cleaner/id1583884012"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs access to the phone's storage and photo library.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "vpn",
@@ -4545,7 +5349,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.cloudflare.onedotonedotonedotone"
         }
-      ]
+      ],
+      "requires": [
+        "native-os",
+        "server-compute"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs the phone's VPN service plus VPN servers.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "launcher-keyboard",
@@ -4620,7 +5433,15 @@
           "price": null,
           "url": null
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs to replace the phone's launcher or system keyboard.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "caller-id",
@@ -4652,7 +5473,16 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.truecaller"
         }
-      ]
+      ],
+      "requires": [
+        "native-os",
+        "shared-data"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs phone-call hooks plus a shared spam-number database.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "tv-remote",
@@ -4684,7 +5514,15 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/tv-remote-universal-control/id1539090879"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs an IR blaster or local-network discovery that browsers don't allow.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "plant-identifier",
@@ -4715,7 +5553,22 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/picturethis-plant-identifier/id1252497129"
         }
-      ]
+      ],
+      "requires": [
+        "browser-camera"
+      ],
+      "anyOf": [
+        [
+          "ai-user-key"
+        ],
+        [
+          "ai-platform"
+        ]
+      ],
+      "optional": [],
+      "requiresWhy": "Identifying a plant from a photo needs a vision AI model.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "bank-linked-budgeting",
@@ -4746,7 +5599,22 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/rocket-money-bills-budgets/id1130616675"
         }
-      ]
+      ],
+      "requires": [
+        "auth",
+        "user-storage",
+        "third-party-api-secret",
+        "server-compute",
+        "scheduled-jobs"
+      ],
+      "anyOf": null,
+      "optional": [
+        "webhooks-in",
+        "push-triggered"
+      ],
+      "requiresWhy": "Bank links need a secret aggregator key, server-held tokens and scheduled syncs.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "mileage-logging",
@@ -4777,7 +5645,15 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/mileiq-mileage-tracker-log/id578830929"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Automatic trip detection needs location in the background.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "step-counter",
@@ -4821,7 +5697,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=in.sweatco.app"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Counting steps all day needs background motion sensing or health data.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "run-tracker",
@@ -4863,7 +5747,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.runtastic.android"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Recording a route needs location while the screen is off.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "antivirus",
@@ -4917,7 +5809,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.symantec.mobilesecurity"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs OS-level scanning of apps and files.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "app-locker-blocker",
@@ -4972,7 +5872,15 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/opal-screen-time-control/id1497465230"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Locking or blocking other apps needs OS accessibility or Screen Time hooks.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "screen-recorder",
@@ -5014,7 +5922,17 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.rsupport.mvagent"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [
+        "browser-screen-capture"
+      ],
+      "requiresWhy": "Recording the phone screen needs the OS; browsers only capture on desktop.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "wifi-device-tools",
@@ -5067,7 +5985,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.abs.cpu_z_advance"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs radio, raw storage or system APIs that browsers don't expose.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "speed-test",
@@ -5098,7 +6024,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=org.zwanoo.android.speedtest"
         }
-      ]
+      ],
+      "requires": [
+        "server-compute"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs measurement servers to download from and upload to.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "music-id",
@@ -5129,7 +6063,22 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.shazam.android"
         }
-      ]
+      ],
+      "requires": [
+        "browser-microphone"
+      ],
+      "anyOf": [
+        [
+          "server-compute"
+        ],
+        [
+          "third-party-api-secret"
+        ]
+      ],
+      "optional": [],
+      "requiresWhy": "Listens through the microphone and matches against a fingerprint database server-side.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "content-library",
@@ -5183,7 +6132,18 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.calm.android"
         }
-      ]
+      ],
+      "requires": [],
+      "anyOf": null,
+      "optional": [
+        "user-storage",
+        "auth",
+        "payments",
+        "file-storage"
+      ],
+      "requiresWhy": "Runs on any platform; what holds it back is a licensed content library, not the platform.",
+      "pasApps": [],
+      "heldBy": "needs a licensed content library"
     },
     {
       "id": "auto-clicker",
@@ -5225,7 +6185,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=com.easytouch.assistivetouch"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Automated taps need Android accessibility services.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "sticker-status-saver",
@@ -5278,7 +6246,15 @@
           "price": null,
           "url": "https://play.google.com/store/apps/details?id=all.video.downloader.allvideodownloader"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "Needs to hand files to WhatsApp and read other apps' storage.",
+      "pasApps": [],
+      "heldBy": null
     },
     {
       "id": "alarm-clock",
@@ -5310,7 +6286,2372 @@
           "price": null,
           "url": "https://apps.apple.com/us/app/alarmy-loud-alarm-clock/id1163786766"
         }
-      ]
+      ],
+      "requires": [
+        "native-os"
+      ],
+      "anyOf": null,
+      "optional": [],
+      "requiresWhy": "An alarm must ring through a locked phone and silent mode.",
+      "pasApps": [],
+      "heldBy": null
+    },
+    {
+      "id": "secondhand-marketplace",
+      "name": "Buy & sell secondhand marketplace",
+      "category": "Lifestyle",
+      "pitch": "Selling clothes and household items second-hand: Vinted is #2 on Apple's US Top Free chart and has 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Public storage",
+        "Push",
+        "Maps"
+      ],
+      "caveats": "Needs moderation and buyer/seller trust. Local pickup works without payments; shipped orders need checkout and payouts to sellers, which PAS does not offer.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "file-storage"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Vinted",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.89,
+          "reviews": "612k",
+          "chartRank": 1,
+          "chart": "US Top Free Shopping",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/vinted-pre-loved-marketplace/id632064380"
+        },
+        {
+          "name": "Vinted",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.5,
+          "reviews": "2.43M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=fr.vinted"
+        },
+        {
+          "name": "Depop",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.82,
+          "reviews": "1.1M",
+          "chartRank": 5,
+          "chart": "US Top Free Shopping",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/depop-buy-sell-clothes/id518684914"
+        },
+        {
+          "name": "OfferUp",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.4,
+          "reviews": "1.26M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.offerup"
+        },
+        {
+          "name": "OfferUp",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.75,
+          "reviews": "4.4M",
+          "chartRank": 1,
+          "chart": "US Top Grossing Shopping",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/offerup-buy-sell-marketplace/id468996152"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "surplus-food-sharing",
+      "name": "Surplus food & neighbour sharing",
+      "category": "Lifestyle",
+      "pitch": "Rescuing unsold food and sharing leftovers locally: Too Good To Go has 50M+ Play installs and is #10 on Apple's US Top Free Food & Drink chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Public storage",
+        "Maps",
+        "Push"
+      ],
+      "caveats": "Too Good To Go sells paid bags from shops; a paid version needs app billing. Free giveaway (Olio-style) works today.",
+      "fasApps": [],
+      "pasApps": [
+        "stash"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Too Good To Go",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.9,
+          "reviews": "2.02M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.app.tgtg"
+        },
+        {
+          "name": "Too Good To Go",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.93,
+          "reviews": "600k",
+          "chartRank": 10,
+          "chart": "US Top Free Food & Drink",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/too-good-to-go-end-food-waste/id1060683933"
+        },
+        {
+          "name": "Olio",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 3.3,
+          "reviews": "50.4K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.olioex.android"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "stock-price-alerts",
+      "name": "Stock watchlist & price alerts",
+      "category": "Finance",
+      "pitch": "Investors follow a watchlist and want a ping at a price level: TradingView is #2 on Apple's US Top Grossing Finance chart with 50M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Proxy secret",
+        "Worker schedule",
+        "Push"
+      ],
+      "caveats": "Quotes need a market-data API key held server-side; real-time data is licensed. A 5-minute check suits end-of-day or swing alerts, not trading.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "third-party-api-secret",
+        "scheduled-jobs",
+        "push-triggered"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "TradingView",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.84,
+          "reviews": "422k",
+          "chartRank": 2,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/tradingview-track-all-markets/id1205990992"
+        },
+        {
+          "name": "TradingView",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.6,
+          "reviews": "959K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.tradingview.tradingviewapp"
+        },
+        {
+          "name": "Investing.com",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.7,
+          "reviews": "1.13M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.fusionmedia.investing"
+        },
+        {
+          "name": "Investing.com",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.74,
+          "reviews": "38k",
+          "chartRank": 21,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/investing-com-stock-market/id909998122"
+        },
+        {
+          "name": "Yahoo Finance",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.75,
+          "reviews": "628k",
+          "chartRank": 31,
+          "chart": "US Top Grossing Finance",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/yahoo-finance-stocks-markets/id328412701"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "ai-chat-assistant",
+      "name": "AI chat assistant (no API key)",
+      "category": "AI",
+      "pitch": "General AI chat is the biggest new app category: ChatGPT is #4 on Apple's US Top Free chart and has 1B+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "app.ai chat",
+        "KV history"
+      ],
+      "caveats": "Platform AI is text only, 1,024 output tokens, 16,000-char prompt and 200 units per user per day; no image input or generation.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "ai-platform"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "ChatGPT",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.82,
+          "reviews": "11.7M",
+          "chartRank": 1,
+          "chart": "US Top Grossing",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/chatgpt/id6448311069"
+        },
+        {
+          "name": "ChatGPT",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 4.8,
+          "reviews": "66.3M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.openai.chatgpt"
+        },
+        {
+          "name": "Claude",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.72,
+          "reviews": "289k",
+          "chartRank": 2,
+          "chart": "US Top Grossing Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/claude-by-anthropic/id6473753684"
+        },
+        {
+          "name": "Google Gemini",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.73,
+          "reviews": "2.4M",
+          "chartRank": 4,
+          "chart": "US Top Free Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/google-gemini/id6477489729"
+        },
+        {
+          "name": "Google Gemini",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 4.5,
+          "reviews": "50.2M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.apps.bard"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": "Runs on the platform's AI with no key for the user and no separate AI subscription."
+    },
+    {
+      "id": "file-transfer",
+      "name": "Send large files by link",
+      "category": "Productivity",
+      "pitch": "Sending files too big for email: WeTransfer is #7 on Apple's US Top Grossing Productivity chart; Send Anywhere has 10M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Public storage",
+        "Email"
+      ],
+      "caveats": "50 MB per file on PAS storage, far below WeTransfer's limits. Expiring links need a scheduled clean-up (app workers).",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "file-storage"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "WeTransfer",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.83,
+          "reviews": "80k",
+          "chartRank": 7,
+          "chart": "US Top Grossing Productivity",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/wetransfer-transfer-files/id1569379048"
+        },
+        {
+          "name": "Send Anywhere",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.5,
+          "reviews": "347K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.estmob.android.sendanywhere"
+        },
+        {
+          "name": "Send Anywhere",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.73,
+          "reviews": "55k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/send-anywhere-file-transfer/id596642855"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "rentals-marketplace",
+      "name": "Room & holiday rental listings",
+      "category": "Travel & Maps",
+      "pitch": "Finding a room or a stay: Airbnb is #2 on Apple's US Top Free Travel chart and has 100M+ Play installs; Zillow is #9 in Lifestyle.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Public storage",
+        "Maps",
+        "Push"
+      ],
+      "caveats": "Listings and enquiries work today; taking booking payments needs app billing, and paying hosts out is not offered.",
+      "fasApps": [],
+      "pasApps": [
+        "room-rent"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "file-storage"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Airbnb",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.75,
+          "reviews": "703k",
+          "chartRank": 2,
+          "chart": "US Top Free Travel",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/airbnb/id401626263"
+        },
+        {
+          "name": "Airbnb",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.5,
+          "reviews": "1.98M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.airbnb.android"
+        },
+        {
+          "name": "Zillow",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.8,
+          "reviews": "7.2M",
+          "chartRank": 9,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/zillow-real-estate-rentals/id310738695"
+        },
+        {
+          "name": "Zillow",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.8,
+          "reviews": "1.67M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.zillow.android.zillowmap"
+        },
+        {
+          "name": "SpareRoom",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.69,
+          "reviews": "4k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/spareroom/id400181250"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "job-board",
+      "name": "Job board",
+      "category": "Productivity",
+      "pitch": "Job seekers browse and apply on mobile: Indeed is #2 on Apple's US Top Free Business chart and has 100M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Roles",
+        "Storage",
+        "Email"
+      ],
+      "caveats": "A board needs listings first: a niche or local board is realistic, Indeed-scale is not.",
+      "fasApps": [],
+      "pasApps": [
+        "jobs",
+        "interns"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Indeed",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.79,
+          "reviews": "4.1M",
+          "chartRank": 2,
+          "chart": "US Top Free Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/indeed-job-search/id309735670"
+        },
+        {
+          "name": "Indeed",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.7,
+          "reviews": "14.2M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.indeed.android.jobsearch"
+        },
+        {
+          "name": "LinkedIn",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 3.9,
+          "reviews": "3.52M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.linkedin.android"
+        },
+        {
+          "name": "LinkedIn",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.77,
+          "reviews": "645k",
+          "chartRank": 1,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/linkedin-community-network/id288429040"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "dating",
+      "name": "Dating app",
+      "category": "Social",
+      "pitch": "Dating is one of the top-grossing categories: Tinder is #1 on Apple's US Top Grossing Lifestyle chart and has 500M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Storage",
+        "Rooms",
+        "Push"
+      ],
+      "caveats": "Needs photo moderation, blocking and reporting, and a critical mass of local users.",
+      "fasApps": [],
+      "pasApps": [
+        "dating"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "file-storage"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Tinder",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.2,
+          "reviews": "1.8M",
+          "chartRank": 1,
+          "chart": "US Top Grossing Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/tinder-dating-app-date-chat/id547702041"
+        },
+        {
+          "name": "Tinder",
+          "store": "play",
+          "installs": "500M+",
+          "rating": 3.9,
+          "reviews": "9.27M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.tinder"
+        },
+        {
+          "name": "Hinge",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.41,
+          "reviews": "1.1M",
+          "chartRank": 2,
+          "chart": "US Top Grossing Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/hinge-dating-app-match-date/id595287172"
+        },
+        {
+          "name": "Bumble",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.32,
+          "reviews": "1.8M",
+          "chartRank": 4,
+          "chart": "US Top Grossing Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/bumble-dating-app-meet-date/id930441707"
+        },
+        {
+          "name": "Bumble",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 3.8,
+          "reviews": "1.63M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.bumble.app"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": "No paid boosts or swipe limits: everything is in the one PAS subscription."
+    },
+    {
+      "id": "video-meetings",
+      "name": "Video meetings",
+      "category": "Productivity",
+      "pitch": "Video calls for work and family: Google Meet has 10B+ Play installs and Zoom is #3 on Apple's US Top Free Business chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Rooms (signalling)",
+        "WebRTC",
+        "Push"
+      ],
+      "caveats": "Rooms carry signalling only (32 peers, 4 KB messages). Group calls need a media server, which the PAS docs do not list; 1-on-1 calls fit.",
+      "fasApps": [],
+      "pasApps": [
+        "meet"
+      ],
+      "requires": [
+        "auth",
+        "realtime",
+        "browser-camera",
+        "browser-microphone"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Google Meet",
+          "store": "play",
+          "installs": "10B+",
+          "rating": 4.4,
+          "reviews": "12M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.google.android.apps.tachyon"
+        },
+        {
+          "name": "Zoom",
+          "store": "play",
+          "installs": "1B+",
+          "rating": 4.1,
+          "reviews": "4.6M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=us.zoom.videomeetings"
+        },
+        {
+          "name": "Zoom",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.66,
+          "reviews": "3.3M",
+          "chartRank": 3,
+          "chart": "US Top Free Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/zoom-workplace/id546505307"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "sports-team-manager",
+      "name": "Sports team & club manager",
+      "category": "Health & Fitness",
+      "pitch": "Coaches and parents run fixtures, availability and scores: GameChanger is #2 on Apple's US Top Grossing Sports chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Tenants",
+        "Roles",
+        "Push"
+      ],
+      "caveats": "Live game streaming (GameChanger's paid feature) is out of scope.",
+      "fasApps": [],
+      "pasApps": [
+        "tennis-clubs",
+        "chess-academy"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "GameChanger",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.88,
+          "reviews": "916k",
+          "chartRank": 2,
+          "chart": "US Top Grossing Sports",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/gamechanger/id1308415878"
+        },
+        {
+          "name": "GameChanger",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.4,
+          "reviews": "30.1K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.gc.teammanager"
+        },
+        {
+          "name": "TeamSnap",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.76,
+          "reviews": "60k",
+          "chartRank": 23,
+          "chart": "US Top Grossing Sports",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/teamsnap/id393048976"
+        },
+        {
+          "name": "TeamSnap",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 2.9,
+          "reviews": "30.1K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.teamsnap.teamsnap"
+        },
+        {
+          "name": "Spond",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.7,
+          "reviews": "14.4K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.spond.spond"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": "TeamSnap's Android app is rated 2.9 on Play; a PAS version has no in-app upsell."
+    },
+    {
+      "id": "school-parent-messaging",
+      "name": "School-to-parent messaging",
+      "category": "Education",
+      "pitch": "Teachers post updates and message parents: ClassDojo is #5 on Apple's US Top Grossing Education chart with 50M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Roles",
+        "Child accounts",
+        "Push",
+        "Storage"
+      ],
+      "caveats": "Children's data needs care; PAS child accounts exist, but school procurement and privacy review are the real barrier.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "push-triggered"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "ClassDojo",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.85,
+          "reviews": "4.1M",
+          "chartRank": 5,
+          "chart": "US Top Grossing Education",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/classdojo/id552602056"
+        },
+        {
+          "name": "ClassDojo",
+          "store": "play",
+          "installs": "50M+",
+          "rating": 4.8,
+          "reviews": "1.35M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.classdojo.android"
+        },
+        {
+          "name": "Remind",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.8,
+          "reviews": "1.8M",
+          "chartRank": 17,
+          "chart": "US Top Free Education",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/remind-school-communication/id522826277"
+        },
+        {
+          "name": "Remind",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.3,
+          "reviews": "227K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.remind101"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "business-bookkeeping",
+      "name": "Small-business bookkeeping & receipts",
+      "category": "Finance",
+      "pitch": "Owners categorise transactions and keep receipts for tax: QuickBooks is #4 on Apple's US Top Grossing Business chart.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 5,
+      "features": [
+        "Actions (D1)",
+        "Storage",
+        "Roles"
+      ],
+      "caveats": "Bank feeds need an aggregator (see bank-linked-budgeting); import of bank exports works today.",
+      "fasApps": [],
+      "pasApps": [
+        "bookkeeper"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "file-storage"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "QuickBooks",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.74,
+          "reviews": "274k",
+          "chartRank": 4,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/intuit-quickbooks-for-business/id584606479"
+        },
+        {
+          "name": "QuickBooks",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.7,
+          "reviews": "89.9K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.intuit.quickbooks"
+        },
+        {
+          "name": "Expensify",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.4,
+          "reviews": "32.5K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=org.me.mobiexpensifyg"
+        },
+        {
+          "name": "Expensify",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.63,
+          "reviews": "158k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/expensify-travel-expense/id471713959"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "services-marketplace",
+      "name": "Local services marketplace (hire a pro)",
+      "category": "Lifestyle",
+      "pitch": "People hire cleaners, handymen and pet sitters from their phone: Thumbtack is #23 on Apple's US Top Free Lifestyle chart with 478k ratings.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Actions (D1)",
+        "Roles",
+        "Storage",
+        "Push",
+        "Maps"
+      ],
+      "caveats": "Two-sided: needs providers before customers. Payment between customer and pro stays off-platform unless app billing is enabled.",
+      "fasApps": [],
+      "pasApps": [
+        "tradies",
+        "clean-up"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Thumbtack",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.89,
+          "reviews": "478k",
+          "chartRank": 23,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/thumbtack-home-service-pros/id852703300"
+        },
+        {
+          "name": "Thumbtack",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.9,
+          "reviews": "66.5K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.thumbtack.consumer"
+        },
+        {
+          "name": "Taskrabbit",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.72,
+          "reviews": "46k",
+          "chartRank": 43,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/taskrabbit-handyman-more/id374165361"
+        },
+        {
+          "name": "Rover",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.89,
+          "reviews": "516k",
+          "chartRank": 41,
+          "chart": "US Top Free Travel",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/rover-pet-sitters/id547320928"
+        },
+        {
+          "name": "Rover",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.6,
+          "reviews": "48.7K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.rover.android"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": "One PAS subscription, no lead fees inside the app; Taskrabbit's Android app is rated 2.0 on Play."
+    },
+    {
+      "id": "appointment-booking",
+      "name": "Appointment booking for salons & studios",
+      "category": "Lifestyle",
+      "pitch": "Clients book haircuts, classes and treatments online: Booksy has 10M+ Play installs and is #11 on Apple's US Top Free Lifestyle chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Actions (D1)",
+        "Roles",
+        "Email",
+        "Push"
+      ],
+      "caveats": "Deposits or no-show fees need app billing. Email is capped at 100 a day per app, so reminders at volume should use push.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Booksy",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.9,
+          "reviews": "1.06M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=net.booksy.customer"
+        },
+        {
+          "name": "Booksy",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.92,
+          "reviews": "862k",
+          "chartRank": 11,
+          "chart": "US Top Free Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/booksy-for-customers/id723961236"
+        },
+        {
+          "name": "Mindbody",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.9,
+          "reviews": "274k",
+          "chartRank": 35,
+          "chart": "US Top Free Health & Fitness",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/mindbody-fitness-wellness/id689501356"
+        },
+        {
+          "name": "Calendly",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.85,
+          "reviews": "56k",
+          "chartRank": 54,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/calendly-meeting-scheduling/id1451094657"
+        },
+        {
+          "name": "Fresha",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.91,
+          "reviews": "63k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/fresha-for-customers/id1297230801"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "flight-fare-alerts",
+      "name": "Flight search & fare alerts",
+      "category": "Travel & Maps",
+      "pitch": "Travellers watch routes for a cheaper fare: Skyscanner has 100M+ Play installs; Hopper and KAYAK 10M+ each.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Proxy secret",
+        "Worker schedule",
+        "Push"
+      ],
+      "caveats": "Fares come from a paid flight-data API whose key the app owner holds. Booking is handed off to the airline or agent.",
+      "fasApps": [],
+      "pasApps": [
+        "flights"
+      ],
+      "requires": [
+        "third-party-api-secret",
+        "scheduled-jobs",
+        "push-triggered"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Skyscanner",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.8,
+          "reviews": "1.53M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=net.skyscanner.android.main"
+        },
+        {
+          "name": "Hopper",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.82,
+          "reviews": "1.2M",
+          "chartRank": 61,
+          "chart": "US Top Free Travel",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/hopper-flights-hotels-cars/id904052407"
+        },
+        {
+          "name": "Hopper",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.5,
+          "reviews": "151K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.hopper.mountainview.play"
+        },
+        {
+          "name": "KAYAK",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "434K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.kayak.android"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "paid-membership-community",
+      "name": "Paid membership community",
+      "category": "Social",
+      "pitch": "Creators run members-only posts and groups: Patreon has 10M+ Play installs; Skool is #23 on Apple's US Top Free Social Networking chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Actions (D1)",
+        "Roles",
+        "Storage",
+        "App billing",
+        "Push"
+      ],
+      "caveats": "Recurring membership needs app billing (admin-gated). STRATEGY.md says apps must not gate features behind payments; confirm before building the paid tier.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "payments"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Patreon",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "309K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.patreon.android"
+        },
+        {
+          "name": "Patreon",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.87,
+          "reviews": "581k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/patreon/id1044456188"
+        },
+        {
+          "name": "Skool",
+          "store": "apple",
+          "installs": null,
+          "rating": 3.85,
+          "reviews": "792",
+          "chartRank": 23,
+          "chart": "US Top Free Social Networking",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/skool-communities/id6447270545"
+        },
+        {
+          "name": "Circle",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.87,
+          "reviews": "87k",
+          "chartRank": 70,
+          "chart": "US Top Free Social Networking",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/circle-communities/id1509651625"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "online-store",
+      "name": "Online shop for a small business",
+      "category": "Productivity",
+      "pitch": "Small sellers take orders online: Shopify is #24 on Apple's US Top Free Business chart; Square Point of Sale has 10M+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Actions (D1)",
+        "Public storage",
+        "App billing",
+        "Email",
+        "Custom domain"
+      ],
+      "caveats": "Payments go through the platform's Stripe account, not the seller's; up to 20 products per app. In-person card readers are out of scope.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "payments"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Shopify",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.7,
+          "reviews": "43k",
+          "chartRank": 24,
+          "chart": "US Top Free Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/shopify-sell-run-a-business/id371294472"
+        },
+        {
+          "name": "Shopify",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.2,
+          "reviews": "74.3K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.shopify.mobile"
+        },
+        {
+          "name": "Square Point of Sale",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "261K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.squareup"
+        },
+        {
+          "name": "Square Point of Sale",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.81,
+          "reviews": "607k",
+          "chartRank": 34,
+          "chart": "US Top Free Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/square-point-of-sale-pos/id335393788"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "carpool",
+      "name": "Carpooling & shared rides",
+      "category": "Travel & Maps",
+      "pitch": "Sharing a car for a regular or long trip: BlaBlaCar has 100M+ Play installs and 2.63M reviews.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Actions (D1)",
+        "Maps routing",
+        "Push"
+      ],
+      "caveats": "Cost sharing between riders needs payouts to drivers, which PAS does not offer.",
+      "fasApps": [],
+      "pasApps": [
+        "loopride"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "BlaBlaCar",
+          "store": "play",
+          "installs": "100M+",
+          "rating": 4.4,
+          "reviews": "2.63M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.comuto"
+        },
+        {
+          "name": "BlaBlaCar",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.69,
+          "reviews": "16k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/blablacar-carpooling-and-bus/id341329033"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "field-service-jobs",
+      "name": "Field service jobs for trades",
+      "category": "Productivity",
+      "pitch": "Trades businesses schedule crews, send quotes and track jobs: Jobber is #19 on Apple's US Top Grossing Business chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 4,
+      "features": [
+        "Actions (D1)",
+        "Tenants",
+        "Roles",
+        "Storage",
+        "Email"
+      ],
+      "caveats": "Team dispatch and client records, unlike the single-user invoice-maker idea. Card payment on an invoice needs app billing.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Jobber",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.81,
+          "reviews": "21k",
+          "chartRank": 19,
+          "chart": "US Top Grossing Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/jobber-field-service-software/id1014146758"
+        },
+        {
+          "name": "Jobber",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.4,
+          "reviews": "6.92K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.getjobber.jobber"
+        },
+        {
+          "name": "Housecall Pro",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.65,
+          "reviews": "31k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/housecall-pro-field-service/id692833651"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": "A Tailored PAS template the business forks and reshapes, instead of a per-user monthly fee."
+    },
+    {
+      "id": "price-drop-alerts",
+      "name": "Price-drop & back-in-stock alerts",
+      "category": "Utilities",
+      "pitch": "Shoppers watch a product and wait for a lower price: ShopSavvy has 10M+ Play installs and Keepa 1M+.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Worker schedule",
+        "Actions (D1)",
+        "Push"
+      ],
+      "caveats": "Checks run at most every 5 minutes, 3 schedules per app and 5,000 invocations a day. Many retailers block scraping; an official price API is safer.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "scheduled-jobs",
+        "push-triggered"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "ShopSavvy",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4,
+          "reviews": "112K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.biggu.shopsavvy"
+        },
+        {
+          "name": "Keepa",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.2,
+          "reviews": "5.79K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.keepa.mobile"
+        },
+        {
+          "name": "Keepa",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.8,
+          "reviews": "2k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/keepa-price-tracker/id1518541385"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "team-project-boards",
+      "name": "Team project boards",
+      "category": "Productivity",
+      "pitch": "Teams track who does what on shared boards: Trello has 10M+ Play installs; monday.com and Asana 5M+ each.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Actions (D1)",
+        "Tenants",
+        "Roles",
+        "Rooms"
+      ],
+      "caveats": null,
+      "fasApps": [],
+      "pasApps": [
+        "kanban"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Trello",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 3.8,
+          "reviews": "123K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.trello"
+        },
+        {
+          "name": "monday.com",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 4.6,
+          "reviews": "45.4K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.monday.monday"
+        },
+        {
+          "name": "Asana",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 3.8,
+          "reviews": "45.5K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.asana.app"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "course-creator",
+      "name": "Sell your own online course",
+      "category": "Education",
+      "pitch": "Experts sell video courses to their audience: Udemy has 10M+ Play installs; Teachable and Kajabi run creator-owned course apps.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Storage",
+        "Actions (D1)",
+        "App billing"
+      ],
+      "caveats": "Different from content-library: the creator brings the content. 50 MB per file limits long videos. STRATEGY.md says apps must not charge separately; confirm before selling.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "file-storage",
+        "payments"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Udemy",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.4,
+          "reviews": "514K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.udemy.android"
+        },
+        {
+          "name": "Teachable",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.62,
+          "reviews": "9k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/teachable-online-courses/id1177062376"
+        },
+        {
+          "name": "Kajabi",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.33,
+          "reviews": "7k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/kajabi/id1485646310"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "shared-family-album",
+      "name": "Private shared family photo album",
+      "category": "Photo & Video",
+      "pitch": "Parents share baby photos with grandparents privately: FamilyAlbum has 10M+ Play installs and 366K reviews.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Storage",
+        "Actions (D1)",
+        "Push"
+      ],
+      "caveats": "50 MB per file and 1,000 files per user per app; video-heavy families will hit the file cap.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "file-storage",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "FamilyAlbum",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.8,
+          "reviews": "366K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=us.mitene"
+        },
+        {
+          "name": "FamilyAlbum",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.87,
+          "reviews": "379k",
+          "chartRank": 59,
+          "chart": "US Top Grossing Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/familyalbum-share-baby-photos/id935672069"
+        },
+        {
+          "name": "Tinybeans",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.86,
+          "reviews": "104k",
+          "chartRank": 44,
+          "chart": "US Top Grossing Lifestyle",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/tinybeans-private-family-album/id521633042"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "courier-delivery",
+      "name": "Local courier & delivery",
+      "category": "Travel & Maps",
+      "pitch": "Sending a parcel across town the same day: Lalamove has 10M+ Play installs and 809K reviews.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Actions (D1)",
+        "Maps routing",
+        "Rooms",
+        "Push"
+      ],
+      "caveats": "Drivers share location only while the app is open; background tracking needs a native app.",
+      "fasApps": [],
+      "pasApps": [
+        "doordrop"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "browser-geolocation"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Lalamove",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.6,
+          "reviews": "809K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=hk.easyvan.app.client"
+        },
+        {
+          "name": "Lalamove",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.81,
+          "reviews": "3k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/lalamove-fast-affordable/id735701965"
+        },
+        {
+          "name": "Roadie Driver",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.64,
+          "reviews": "132k",
+          "chartRank": 38,
+          "chart": "US Top Free Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/roadie-driver/id1436325695"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "restaurant-reservations",
+      "name": "Restaurant reservations & waitlist",
+      "category": "Lifestyle",
+      "pitch": "Diners book tables and join waitlists from their phone: OpenTable has 10M+ Play installs and is #32 on Apple's US Top Free Food & Drink chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Actions (D1)",
+        "Rooms",
+        "Push",
+        "SMS"
+      ],
+      "caveats": "A \"table ready\" push needs the guest to allow notifications; SMS is creator-only.",
+      "fasApps": [],
+      "pasApps": [
+        "queueflow"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "push-triggered"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "OpenTable",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.7,
+          "reviews": "195K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.opentable"
+        },
+        {
+          "name": "OpenTable",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.92,
+          "reviews": "5.7M",
+          "chartRank": 32,
+          "chart": "US Top Free Food & Drink",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/opentable/id296581815"
+        },
+        {
+          "name": "Resy",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.9,
+          "reviews": "804k",
+          "chartRank": 45,
+          "chart": "US Top Free Food & Drink",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/resy/id866163372"
+        },
+        {
+          "name": "Yelp Guest Manager",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.56,
+          "reviews": "2k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/yelp-guest-manager/id404226510"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "shift-scheduling",
+      "name": "Staff shift scheduling & time clock",
+      "category": "Productivity",
+      "pitch": "Shops and cafes publish rosters and staff swap shifts: Connecteam is #45 and Homebase #48 on Apple's US Top Free Business chart.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Actions (D1)",
+        "Tenants",
+        "Roles",
+        "Push"
+      ],
+      "caveats": "Payroll is out of scope; a clock-in location check works only while the app is open.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Connecteam",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.86,
+          "reviews": "61k",
+          "chartRank": 45,
+          "chart": "US Top Free Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/connecteam-team-management-app/id1121613912"
+        },
+        {
+          "name": "Connecteam",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.8,
+          "reviews": "30.4K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.connecteamco.Connecteam.app"
+        },
+        {
+          "name": "Homebase",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.78,
+          "reviews": "96k",
+          "chartRank": 48,
+          "chart": "US Top Free Business",
+          "price": null,
+          "url": "https://apps.apple.com/us/app/homebase-employee-scheduling/id871544379"
+        },
+        {
+          "name": "Deputy",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.7,
+          "reviews": "19.7K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.deputy.android"
+        },
+        {
+          "name": "When I Work",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.79,
+          "reviews": "58k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/when-i-work-staff-scheduling/id383126470"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "event-ticketing",
+      "name": "Event ticketing & check-in",
+      "category": "Social",
+      "pitch": "Organisers sell tickets and scan them at the door: Eventbrite has 10M+ Play installs and 1.8M ratings on Apple.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 3,
+      "features": [
+        "Actions (D1)",
+        "App billing",
+        "Email",
+        "Camera (QR)"
+      ],
+      "caveats": "Free RSVPs overlap the event-rsvp idea; this is the paid, scanned-ticket version. Ticket revenue goes through the platform's Stripe account.",
+      "fasApps": [],
+      "pasApps": [
+        "meetup"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data",
+        "payments"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Eventbrite",
+          "store": "play",
+          "installs": "10M+",
+          "rating": 4.9,
+          "reviews": "299K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.eventbrite.attendee"
+        },
+        {
+          "name": "Eventbrite",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.9,
+          "reviews": "1.8M",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/eventbrite/id487922291"
+        },
+        {
+          "name": "Eventbrite Organizer",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 3.6,
+          "reviews": "5.35K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.eventbrite.organizer"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "small-business-crm",
+      "name": "Small-business CRM",
+      "category": "Productivity",
+      "pitch": "Small teams keep contacts, deals and follow-ups in one place: Salesforce has 5M+ Play installs; HubSpot and Zoho CRM 1M+ each.",
+      "fasEdge": null,
+      "difficulty": "medium",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 2,
+      "features": [
+        "Actions (D1)",
+        "Tenants",
+        "Roles",
+        "Email"
+      ],
+      "caveats": null,
+      "fasApps": [],
+      "pasApps": [
+        "crm",
+        "leads"
+      ],
+      "requires": [
+        "auth",
+        "private-shared-data"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Salesforce",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 3.5,
+          "reviews": "60.3K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.salesforce.chatter"
+        },
+        {
+          "name": "HubSpot",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.5,
+          "reviews": "13.6K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.hubspot.android"
+        },
+        {
+          "name": "HubSpot",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.74,
+          "reviews": "16k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/hubspot/id1107711722"
+        },
+        {
+          "name": "Zoho CRM",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 3.7,
+          "reviews": "6.28K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.zoho.crm"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": "A Tailored PAS template the business forks and reshapes with AI, instead of per-seat CRM pricing."
+    },
+    {
+      "id": "social-media-scheduler",
+      "name": "Social media post scheduler",
+      "category": "Productivity",
+      "pitch": "Small businesses queue posts across networks: Hootsuite has 5M+ Play installs and Buffer 1M+.",
+      "fasEdge": null,
+      "difficulty": "hard",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 2,
+      "features": [
+        "Worker schedule",
+        "Proxy secret",
+        "Actions (D1)"
+      ],
+      "caveats": "Each network needs an approved developer app and OAuth; posting at a set time needs the scheduled worker (5-minute granularity).",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "auth",
+        "scheduled-jobs",
+        "third-party-api-secret"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "Hootsuite",
+          "store": "play",
+          "installs": "5M+",
+          "rating": 3.7,
+          "reviews": "103K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.hootsuite.droid.full"
+        },
+        {
+          "name": "Buffer",
+          "store": "play",
+          "installs": "1M+",
+          "rating": 4.5,
+          "reviews": "57.9K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=org.buffer.android"
+        },
+        {
+          "name": "Buffer",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.73,
+          "reviews": "35k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/buffer-plan-schedule-posts/id490474324"
+        },
+        {
+          "name": "Later",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.55,
+          "reviews": "3k",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/later-social-media-scheduler/id784907999"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
+    },
+    {
+      "id": "uptime-monitor",
+      "name": "Website uptime monitor",
+      "category": "Developer Tools",
+      "pitch": "Site owners want a ping when their site goes down: UptimeRobot has 100K+ Play installs.",
+      "fasEdge": null,
+      "difficulty": "easy",
+      "decision": "build-now",
+      "waitsOn": null,
+      "wave": null,
+      "demand": 1,
+      "features": [
+        "Worker schedule",
+        "Push",
+        "Email"
+      ],
+      "caveats": "Checks every 5 minutes at best (the platform tick), 3 schedules and 5,000 invocations a day per app.",
+      "fasApps": [],
+      "pasApps": [],
+      "requires": [
+        "scheduled-jobs",
+        "push-triggered"
+      ],
+      "sources": [
+        "pas-research"
+      ],
+      "leaders": [
+        {
+          "name": "UptimeRobot",
+          "store": "play",
+          "installs": "100K+",
+          "rating": 3.3,
+          "reviews": "3.73K",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://play.google.com/store/apps/details?id=com.uptimerobot"
+        },
+        {
+          "name": "UptimeRobot",
+          "store": "apple",
+          "installs": null,
+          "rating": 4.02,
+          "reviews": "458",
+          "chartRank": null,
+          "chart": null,
+          "price": null,
+          "url": "https://apps.apple.com/us/app/uptimerobot-monitor-anything/id1104878581"
+        }
+      ],
+      "heldBy": null,
+      "optional": [],
+      "anyOf": null,
+      "requiresWhy": null,
+      "pasEdge": null
     }
   ]
 }

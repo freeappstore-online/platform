@@ -1,18 +1,64 @@
-// App ideas page (/ideas): popular Google Play / App Store app types that
-// creators can rebuild as free FAS apps. Source of truth is
-// data/app-ideas.json, extracted from docs/app-research/*.md. The cards are
-// rendered at build time (crawlable, works without JS); /ideas.js only
-// filters and sorts them.
+// App ideas pages (freeappstore.online/ideas and proappstore.online/ideas):
+// popular Google Play / App Store app types to rebuild as web apps. One
+// dataset (data/app-ideas.json, from docs/app-research/*.md) is rendered by
+// both storefronts. Whether an idea can be built here is not hand-labelled:
+// it is computed from what the idea requires and what each platform's
+// capabilities.json says it supports, so a card names its blocker and links
+// to the other store when only that one can build it.
+//
+// This file is shared verbatim with the ProAppStore storefront
+// (proappstore-online/proappstore scripts/ideas.cjs). Change it here and copy
+// it there; a test in each repo checks the copies match.
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const CATEGORIES = [
   'Productivity', 'Utilities', 'Health & Fitness', 'Finance', 'Education', 'Lifestyle',
-  'Photo & Video', 'Music & Audio', 'Developer Tools', 'Travel & Maps', 'Social', 'AI',
+  'Photo & Video', 'Music & Audio', 'Developer Tools', 'Travel & Maps', 'Social', 'AI', 'Business',
 ];
 const DECISIONS = ['build-now', 'build-now-upgrade-later', 'upgrade-existing', 'defer', 'wont-build'];
 const DIFFICULTIES = ['easy', 'medium', 'hard'];
 const STORES = ['play', 'apple'];
-const SOURCES = ['play', 'apple', 'niche'];
+const SOURCES = ['play', 'apple', 'niche', 'pas-research'];
+// The capability vocabulary both platforms publish. Labels are what a card
+// says when a capability is missing ("Needs scheduled jobs").
+const CAPABILITY_LABELS = {
+  'static-hosting': 'web hosting',
+  'offline-pwa': 'offline install',
+  auth: 'sign-in',
+  'user-storage': 'synced user data',
+  'shared-data': 'shared data between users',
+  'private-shared-data': 'private data shared within a group',
+  counters: 'shared counters',
+  realtime: 'realtime rooms',
+  'file-storage': 'file storage',
+  email: 'email',
+  'push-reminders': 'scheduled reminders',
+  'push-triggered': 'push notifications on events',
+  'third-party-api-secret': 'secret API keys',
+  'ai-user-key': 'AI with your own key',
+  'ai-platform': 'built-in AI',
+  'server-compute': 'server code',
+  'scheduled-jobs': 'scheduled jobs',
+  payments: 'payments',
+  'webhooks-out': 'outgoing webhooks',
+  'webhooks-in': 'incoming webhooks',
+  'custom-domain': 'a custom domain',
+  'ads-free-tracking-free': 'no ads or tracking',
+  'browser-camera': 'the camera',
+  'browser-microphone': 'the microphone',
+  'browser-geolocation': 'location',
+  'browser-sensors': 'motion sensors',
+  'browser-bluetooth-usb-serial': 'Bluetooth / USB',
+  'browser-screen-capture': 'screen capture',
+  'browser-file-access': 'local files',
+  'browser-wasm': 'WebAssembly',
+  'browser-any-https-api': 'third-party APIs',
+};
+const CAPABILITY_IDS = Object.keys(CAPABILITY_LABELS);
+// Needs the phone's own OS (widgets, launchers, call recording…): no web
+// platform can offer it, so it is never in a capabilities.json.
+const NATIVE = 'native-os';
+const CAP_STATUSES = ['yes', 'limited', 'no'];
 // Store links are the only outbound URLs on the page; pin them to the two
 // stores so a bad data edit can't turn the page into a link farm.
 const STORE_URL_RE = {
@@ -27,6 +73,25 @@ function text(s, max) {
 }
 function optText(s, max) {
   return s == null || text(s, max);
+}
+function capList(list, allowNative) {
+  return Array.isArray(list) && list.every(c => CAPABILITY_IDS.includes(c) || (allowNative && c === NATIVE));
+}
+
+function validateCapabilities(caps) {
+  const errors = [];
+  if (!caps || typeof caps.capabilities !== 'object') return ['capabilities must be an object'];
+  if (!text(caps.platform, 10) || !text(caps.name, 40)) errors.push('platform and name are required');
+  for (const id of CAPABILITY_IDS) {
+    const c = caps.capabilities[id];
+    if (!c) { errors.push(`${caps.platform}: missing capability ${id}`); continue; }
+    if (!CAP_STATUSES.includes(c.status)) errors.push(`${caps.platform}: ${id}: bad status ${JSON.stringify(c.status)}`);
+    if (!optText(c.limits, 300) || !optText(c.note, 300)) errors.push(`${caps.platform}: ${id}: limits/note too long`);
+  }
+  for (const id of Object.keys(caps.capabilities)) {
+    if (!CAPABILITY_IDS.includes(id)) errors.push(`${caps.platform}: unknown capability ${id}`);
+  }
+  return errors;
 }
 
 function validateIdeas(data) {
@@ -46,12 +111,20 @@ function validateIdeas(data) {
     if (!DIFFICULTIES.includes(idea.difficulty)) errors.push(`${at}: unknown difficulty ${JSON.stringify(idea.difficulty)}`);
     if (!Number.isInteger(idea.demand) || idea.demand < 1 || idea.demand > 5) errors.push(`${at}: demand must be 1-5`);
     if (idea.wave != null && !(Number.isInteger(idea.wave) && idea.wave >= 1 && idea.wave <= 9)) errors.push(`${at}: bad wave`);
-    if (!optText(idea.pitch, 300)) errors.push(`${at}: pitch too long`);
-    if (!optText(idea.fasEdge, 300)) errors.push(`${at}: fasEdge too long`);
+    for (const k of ['pitch', 'fasEdge', 'pasEdge', 'requiresWhy']) {
+      if (!optText(idea[k], 300)) errors.push(`${at}: ${k} too long`);
+    }
     if (!optText(idea.caveats, 400)) errors.push(`${at}: caveats too long`);
     if (!optText(idea.waitsOn, 120)) errors.push(`${at}: waitsOn too long`);
-    if (!Array.isArray(idea.features) || !idea.features.every(f => text(f, 40))) errors.push(`${at}: features must be short strings`);
-    if (!Array.isArray(idea.fasApps) || !idea.fasApps.every(a => typeof a === 'string' && ID_RE.test(a))) errors.push(`${at}: fasApps must be app ids`);
+    if (!optText(idea.heldBy, 120)) errors.push(`${at}: heldBy too long`);
+    if (!capList(idea.requires, true)) errors.push(`${at}: requires must be capability ids`);
+    if (idea.optional != null && !capList(idea.optional, false)) errors.push(`${at}: optional must be capability ids`);
+    if (idea.anyOf != null && !(Array.isArray(idea.anyOf) && idea.anyOf.length > 1 && idea.anyOf.every(set => set.length && capList(set, false)))) {
+      errors.push(`${at}: anyOf must be ≥ 2 non-empty sets of capability ids`);
+    }
+    for (const k of ['fasApps', 'pasApps']) {
+      if (idea[k] != null && !(Array.isArray(idea[k]) && idea[k].every(a => typeof a === 'string' && ID_RE.test(a)))) errors.push(`${at}: ${k} must be app ids`);
+    }
     if (!Array.isArray(idea.sources) || !idea.sources.every(s => SOURCES.includes(s))) errors.push(`${at}: bad sources`);
     if (!Array.isArray(idea.leaders) || idea.leaders.length > 8) { errors.push(`${at}: leaders must be an array of ≤ 8`); continue; }
     for (const l of idea.leaders) {
@@ -68,13 +141,45 @@ function validateIdeas(data) {
   return errors;
 }
 
-// Status buckets the page filters on. "open" = buildable and nothing on FAS
-// covers it yet — the ideas we most want creators to pick up.
-function statusOf(idea, liveApps) {
-  if (idea.decision === 'wont-build') return 'wont';
-  if (idea.decision === 'defer') return 'defer';
-  if (idea.decision === 'upgrade-existing') return 'upgrade';
-  return liveApps.length ? 'covered' : 'open';
+// Can `caps` build `idea`? → { kind: 'native' | 'blocked' | 'limited' | 'ok',
+// missing: [cap ids], limited: [cap ids] }. An anyOf group is satisfied by the
+// first set whose capabilities all exist; with none, the set missing the
+// fewest is reported.
+function verdictFor(idea, caps) {
+  if (idea.requires.includes(NATIVE)) return { kind: 'native', missing: [], limited: [] };
+  const has = id => caps.capabilities[id] && caps.capabilities[id].status !== 'no';
+  let needed = idea.requires.slice();
+  if (idea.anyOf) {
+    const ranked = idea.anyOf
+      .map(set => ({ set, missing: set.filter(c => !has(c)).length }))
+      .sort((a, b) => a.missing - b.missing);
+    needed = needed.concat(ranked[0].set);
+  }
+  const missing = needed.filter(c => !has(c));
+  if (missing.length) return { kind: 'blocked', missing, limited: [] };
+  const limited = needed.filter(c => caps.capabilities[c].status === 'limited');
+  return { kind: limited.length ? 'limited' : 'ok', missing: [], limited };
+}
+function buildable(v) {
+  return v.kind === 'ok' || v.kind === 'limited';
+}
+
+// The status a card filters on. "open" = buildable here and nothing in this
+// store covers it yet — the ideas we most want creators to pick up.
+function statusOf(idea, here, other, liveApps) {
+  const v = verdictFor(idea, here.caps);
+  if (v.kind === 'native') return 'native';
+  // Held back by something no platform capability covers (licensed content).
+  if (idea.heldBy) return 'held';
+  if (!buildable(v)) return other && buildable(verdictFor(idea, other.caps)) ? 'other' : 'blocked';
+  if (liveApps.length) return 'covered';
+  if (here.key === 'fas' && idea.decision === 'upgrade-existing') return 'upgrade';
+  return 'open';
+}
+
+function capPhrase(ids) {
+  const labels = [...new Set(ids)].map(c => CAPABILITY_LABELS[c] || c);
+  return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}` : labels[0];
 }
 
 function leaderLine(l, escapeHtml) {
@@ -90,43 +195,84 @@ function leaderLine(l, escapeHtml) {
   return `<li><span class="ideas-store ideas-store-${l.store}">${STORE_LABEL[l.store]}</span> <span class="ideas-leader-name">${name}</span>${stats.length ? ` <span class="ideas-leader-stats">${stats.join(' · ')}</span>` : ''}</li>`;
 }
 
-function buildPrompt(idea, liveApps) {
+// What a builder should use on this platform, with its limits.
+function capabilityNotes(idea, here, v, escapeHtml) {
+  const wanted = [...new Set([...idea.requires, ...(idea.anyOf ? idea.anyOf.flat() : []), ...(idea.optional || [])])]
+    .filter(c => c !== NATIVE && here.caps.capabilities[c] && here.caps.capabilities[c].status !== 'no');
+  return wanted.map(c => {
+    const cap = here.caps.capabilities[c];
+    const extra = [cap.limits, cap.note].filter(Boolean).map(escapeHtml).join('. ');
+    const flag = v.limited.includes(c) ? ' ideas-cap-limited' : '';
+    return `<li class="ideas-cap${flag}"><strong>${escapeHtml(CAPABILITY_LABELS[c])}</strong>${extra ? `: ${extra}` : ''}</li>`;
+  }).join('');
+}
+
+function buildPrompt(idea, here, liveApps) {
   const leaders = idea.leaders.map(l => `${l.name} (${STORE_LABEL[l.store]})`).join(', ');
+  const usable = [...new Set([...idea.requires, ...(idea.anyOf ? idea.anyOf.flat() : []), ...(idea.optional || [])])]
+    .filter(c => here.caps.capabilities[c] && here.caps.capabilities[c].status !== 'no')
+    .map(c => {
+      const cap = here.caps.capabilities[c];
+      return `${CAPABILITY_LABELS[c]}${cap.limits ? ` (${cap.limits})` : ''}`;
+    });
+  const edge = here.key === 'pas' ? idea.pasEdge : idea.fasEdge;
   return [
-    `Build a free FreeAppStore web app: ${idea.name}.`,
+    `Build a ${here.name} web app: ${idea.name}.`,
     idea.pitch ? `Why people want it: ${idea.pitch}` : '',
     leaders ? `Market leaders to match or beat: ${leaders}.` : '',
-    idea.fasEdge ? `Our edge: ${idea.fasEdge}` : 'Our edge: free forever, no ads, no tracking, works offline in the browser.',
-    idea.features.length ? `FreeAppStore features to use: ${idea.features.join(', ')}.` : '',
+    edge ? `Our edge: ${edge}` : '',
+    usable.length ? `${here.name} capabilities to use: ${usable.join('; ')}.` : '',
     idea.caveats ? `Watch out for: ${idea.caveats}` : '',
-    liveApps.length ? `Existing FreeAppStore apps in this space (go beyond them): ${liveApps.map(a => a.name).join(', ')}.` : '',
-    'Scaffold with `fas init`, run `fas check` before `fas publish`. Guide: https://freeappstore.online/skills.md',
+    liveApps.length ? `Existing ${here.name} apps in this space (go beyond them): ${liveApps.map(a => a.name).join(', ')}.` : '',
+    here.buildHint,
   ].filter(Boolean).join('\n');
 }
 
-function renderCard(idea, appsById, escapeHtml) {
-  const liveApps = idea.fasApps.map(id => appsById.get(id)).filter(Boolean);
-  const status = statusOf(idea, liveApps);
+function renderCard(idea, here, other, escapeHtml) {
+  const liveApps = (idea[here.appsField] || []).map(id => here.appsById.get(id)).filter(Boolean);
+  const status = statusOf(idea, here, other, liveApps);
+  const v = verdictFor(idea, here.caps);
+  const ov = other ? verdictFor(idea, other.caps) : null;
+  const otherLink = other ? `<a href="${other.ideasUrl}#idea-${idea.id}">${escapeHtml(other.name)} →</a>` : '';
   const dots = Array.from({ length: 5 }, (_, i) => `<span class="${i < idea.demand ? 'on' : ''}"></span>`).join('');
+
   const badges = [];
-  if (status === 'open') badges.push('<span class="ideas-badge ideas-badge-open">Not on FreeAppStore yet</span>');
+  if (status === 'open') badges.push(`<span class="ideas-badge ideas-badge-open">Not on ${escapeHtml(here.name)} yet</span>`);
   if (status === 'upgrade') badges.push('<span class="ideas-badge ideas-badge-upgrade">Improve an existing app</span>');
-  if (status === 'defer') badges.push(`<span class="ideas-badge ideas-badge-defer">Coming soon${idea.waitsOn ? `: needs ${escapeHtml(idea.waitsOn)}` : ''}</span>`);
-  if (status === 'wont') badges.push(`<span class="ideas-badge ideas-badge-wont">Not possible as a web app${idea.waitsOn ? `: ${escapeHtml(idea.waitsOn)}` : ''}</span>`);
-  if (idea.decision === 'build-now-upgrade-later' && idea.waitsOn) badges.push(`<span class="ideas-badge">Later: ${escapeHtml(idea.waitsOn)}</span>`);
+  if (status === 'native') badges.push('<span class="ideas-badge ideas-badge-wont">Not possible as a web app</span>');
+  if (status === 'held') badges.push(`<span class="ideas-badge ideas-badge-defer">On hold: ${escapeHtml(idea.heldBy)}</span>`);
+  if (status === 'blocked') badges.push(`<span class="ideas-badge ideas-badge-defer">Blocked: needs ${escapeHtml(capPhrase(v.missing))}</span>`);
+  if (status === 'other') badges.push(`<span class="ideas-badge ideas-badge-other">Needs ${escapeHtml(capPhrase(v.missing))}</span>`);
+  if (v.kind === 'limited') badges.push(`<span class="ideas-badge ideas-badge-limited">Within limits: ${escapeHtml(capPhrase(v.limited))}</span>`);
+  // The other store can build it too: on PAS that means "you could ship it
+  // free on FAS"; on FAS it is not worth a badge.
+  const canBuild = buildable(v) && status !== 'held';
+  const exclusive = canBuild && ov && !buildable(ov);
+  if (here.key === 'pas' && exclusive) badges.push('<span class="ideas-badge ideas-badge-exclusive">Pro only</span>');
   badges.push(`<span class="ideas-badge ideas-diff-${idea.difficulty}">${DIFFICULTY_LABEL[idea.difficulty]}</span>`);
 
-  const onFas = liveApps.length
-    ? `<p class="ideas-onfas">On FreeAppStore: ${liveApps.map(a => `<a href="/apps/${encodeURIComponent(a.id)}">${escapeHtml(a.name)}</a>`).join(', ')}</p>`
+  let crossLine = '';
+  if (status === 'other') {
+    crossLine = `<p class="ideas-cross ideas-cross-go">${escapeHtml(here.name)} can't build this yet: it needs ${escapeHtml(capPhrase(v.missing))}. <strong>Build it on ${otherLink}</strong></p>`;
+  } else if (here.key === 'pas' && canBuild && ov && buildable(ov)) {
+    crossLine = `<p class="ideas-cross">Needs nothing paid: you could also publish it free on ${otherLink}</p>`;
+  } else if (status === 'blocked') {
+    crossLine = `<p class="ideas-cross">Neither store can build this yet: it needs ${escapeHtml(capPhrase(v.missing))}.</p>`;
+  }
+
+  const onHere = liveApps.length
+    ? `<p class="ideas-onfas">On ${escapeHtml(here.name)}: ${liveApps.map(a => `<a href="${here.appHref(a.id)}">${escapeHtml(a.name)}</a>`).join(', ')}</p>`
     : '';
+  const notes = canBuild ? capabilityNotes(idea, here, v, escapeHtml) : '';
   const details = [];
-  if (idea.features.length) details.push(`<p><strong>FreeAppStore features:</strong> ${idea.features.map(escapeHtml).join(', ')}</p>`);
+  if (idea.requiresWhy) details.push(`<p>${escapeHtml(idea.requiresWhy)}</p>`);
+  if (notes) details.push(`<p><strong>Use on ${escapeHtml(here.name)}:</strong></p><ul class="ideas-caps">${notes}</ul>`);
   if (idea.caveats) details.push(`<p><strong>Watch out for:</strong> ${escapeHtml(idea.caveats)}</p>`);
-  const buildable = status !== 'defer' && status !== 'wont';
+  const edge = here.key === 'pas' ? idea.pasEdge : idea.fasEdge;
   const searchText = [idea.name, idea.category, idea.pitch, ...idea.leaders.map(l => l.name), ...liveApps.map(a => a.name)]
     .filter(Boolean).join(' ').toLowerCase();
 
-  return `<article class="ideas-card ideas-status-${status}" id="idea-${idea.id}" data-id="${idea.id}" data-status="${status}" data-category="${escapeHtml(idea.category)}" data-demand="${idea.demand}" data-difficulty="${DIFFICULTIES.indexOf(idea.difficulty)}" data-wave="${idea.wave || 9}" data-decision="${DECISIONS.indexOf(idea.decision)}" data-search="${escapeHtml(searchText)}">
+  return `<article class="ideas-card ideas-status-${status}" id="idea-${idea.id}" data-id="${idea.id}" data-status="${status}" data-exclusive="${exclusive ? 1 : 0}" data-category="${escapeHtml(idea.category)}" data-demand="${idea.demand}" data-difficulty="${DIFFICULTIES.indexOf(idea.difficulty)}" data-wave="${idea.wave || 9}" data-decision="${DECISIONS.indexOf(idea.decision)}" data-search="${escapeHtml(searchText)}">
   <div class="ideas-card-head">
     <div>
       <h3><a href="#idea-${idea.id}">${escapeHtml(idea.name)}</a></h3>
@@ -136,29 +282,56 @@ function renderCard(idea, appsById, escapeHtml) {
   </div>
   <div class="ideas-badges">${badges.join('')}</div>
   ${idea.pitch ? `<p class="ideas-pitch">${escapeHtml(idea.pitch)}</p>` : ''}
-  ${idea.fasEdge ? `<p class="ideas-edge"><strong>Why a free version wins:</strong> ${escapeHtml(idea.fasEdge)}</p>` : ''}
+  ${edge ? `<p class="ideas-edge"><strong>${escapeHtml(here.edgeLabel)}</strong> ${escapeHtml(edge)}</p>` : ''}
+  ${crossLine}
   ${idea.leaders.length ? `<ul class="ideas-leaders" aria-label="Market leaders">${idea.leaders.map(l => leaderLine(l, escapeHtml)).join('')}</ul>` : ''}
-  ${onFas}
+  ${onHere}
   ${details.length ? `<details class="ideas-details"><summary>Build notes</summary>${details.join('')}</details>` : ''}
-  ${buildable ? `<div class="ideas-actions"><button type="button" class="ideas-copy" data-prompt="${escapeHtml(buildPrompt(idea, liveApps))}">Copy build prompt</button><code>fas init ${idea.id}</code></div>` : ''}
+  ${canBuild ? `<div class="ideas-actions"><button type="button" class="ideas-copy" data-prompt="${escapeHtml(buildPrompt(idea, here, liveApps))}">Copy build prompt</button><code>${escapeHtml(here.initCommand(idea.id))}</code></div>` : ''}
 </article>`;
 }
 
-function renderIdeasPage(template, data, apps, escapeHtml) {
-  const appsById = new Map(apps.map(a => [a.id, a]));
+// here / other: { key, name, caps (capabilities.json), ideasUrl } plus, for
+// here: apps [{id,name}], appsField ('fasApps'|'pasApps'), appHref(id),
+// initCommand(id), buildHint, edgeLabel. other may be null (no cross-links).
+function renderIdeasPage(template, data, here, other, escapeHtml) {
+  here = { ...here, appsById: new Map(here.apps.map(a => [a.id, a])) };
   const ideas = data.ideas;
-  const statuses = ideas.map(i => statusOf(i, i.fasApps.filter(id => appsById.has(id))));
+  const statuses = ideas.map(i => statusOf(i, here, other, (i[here.appsField] || []).filter(id => here.appsById.has(id))));
+  const count = (...s) => statuses.filter(x => s.includes(x)).length;
+  // Buildable here but not on the other store ("Pro only" on PAS).
+  const exclusiveCount = other
+    ? ideas.filter((i, n) => ['open', 'covered', 'upgrade'].includes(statuses[n]) && !buildable(verdictFor(i, other.caps))).length
+    : 0;
+  const groups = [
+    ['buildable', `Buildable on ${here.name}`, ['open', 'covered', 'upgrade']],
+    ['open', `Not on ${here.name} yet`, ['open']],
+    ['upgrade', 'Improve an existing app', ['upgrade']],
+    ['other', other ? `Build on ${other.name}` : '', ['other']],
+    ['blocked', 'Not possible yet', ['blocked', 'native', 'held']],
+    ['all', 'All', null],
+  ].filter(([key, , s]) => key === 'all' || count(...s) > 0);
+  const statusButtons = groups.map(([key, label, s], i) =>
+    `<button class="filter-btn${i === 0 ? ' active' : ''}" type="button" data-status="${key}" data-statuses="${s ? s.join(' ') : ''}" aria-pressed="${i === 0}">${escapeHtml(label)} <span class="ideas-btn-count">${s ? count(...s) : ideas.length}</span></button>`
+  ).join('\n          ');
   const usedCategories = CATEGORIES.filter(c => ideas.some(i => i.category === c));
   const categoryButtons = usedCategories
     .map(c => `<button class="filter-btn" type="button" data-category="${escapeHtml(c)}" aria-pressed="false">${escapeHtml(c)}</button>`)
     .join('\n          ');
   return template
-    .replace('{{IDEAS_CARDS}}', ideas.map(i => renderCard(i, appsById, escapeHtml)).join('\n'))
+    .replace('{{IDEAS_CARDS}}', ideas.map(i => renderCard(i, here, other, escapeHtml)).join('\n'))
+    .replace('{{IDEAS_STATUS_BUTTONS}}', statusButtons)
     .replace('{{IDEAS_CATEGORY_BUTTONS}}', categoryButtons)
     .replaceAll('{{IDEAS_COUNT}}', String(ideas.length))
-    .replace('{{IDEAS_OPEN_COUNT}}', String(statuses.filter(s => s === 'open').length))
-    .replace('{{IDEAS_READY_COUNT}}', String(statuses.filter(s => s === 'open' || s === 'covered' || s === 'upgrade').length))
-    .replace('{{IDEAS_RESEARCH_DATE}}', escapeHtml(data.researchDate || 'the research date'));
+    .replace('{{IDEAS_OPEN_COUNT}}', String(count('open')))
+    .replace('{{IDEAS_READY_COUNT}}', String(count('open', 'covered', 'upgrade')))
+    .replace('{{IDEAS_OTHER_COUNT}}', String(count('other')))
+    .replace('{{IDEAS_EXCLUSIVE_COUNT}}', String(exclusiveCount))
+    .replace('{{IDEAS_RESEARCH_DATE}}', escapeHtml(data.researchDate || 'the research date'))
+    .replace('{{IDEAS_CAPS_VERIFIED}}', escapeHtml(here.caps.verifiedAt || 'recently'));
 }
 
-module.exports = { validateIdeas, renderIdeasPage, statusOf, CATEGORIES, DECISIONS };
+module.exports = {
+  validateIdeas, validateCapabilities, renderIdeasPage, verdictFor, statusOf,
+  CAPABILITY_IDS, CAPABILITY_LABELS, CATEGORIES, DECISIONS, NATIVE,
+};

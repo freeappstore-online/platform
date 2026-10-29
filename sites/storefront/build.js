@@ -760,6 +760,32 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+// ProAppStore's capabilities, straight from its storefront repo's main so
+// /ideas cross-links follow what PAS can do today. null → use the snapshot.
+async function fetchPasCapabilities() {
+  if (OFFLINE_BUILD) return null;
+  return new Promise((resolve) => {
+    const req = https.request(
+      { hostname: 'raw.githubusercontent.com', path: '/proappstore-online/proappstore/main/data/capabilities.json', method: 'GET', timeout: 10000 },
+      (r) => {
+        let data = '';
+        r.on('data', (c) => (data += c));
+        r.on('end', () => {
+          try {
+            const parsed = JSON.parse(data);
+            resolve(r.statusCode === 200 && parsed.platform === 'pas' ? parsed : null);
+          } catch {
+            resolve(null);
+          }
+        });
+      },
+    );
+    req.on('timeout', () => req.destroy());
+    req.on('error', () => resolve(null));
+    req.end();
+  });
+}
+
 async function fetchCrossStoreRegistry() {
   // Pull the OTHER store's registry so the homepage search can
   // federate. Failure → empty registry, search still works locally.
@@ -794,12 +820,13 @@ async function fetchCrossStoreRegistry() {
 
 (async () => {
 console.log(`Fetching commit history for ${apps.length} apps (with disk cache fallback)...`);
-const [histories, auditMap, crossRegistry, manifests, buildInfos] = await Promise.all([
+const [histories, auditMap, crossRegistry, manifests, buildInfos, pasCapabilitiesLive] = await Promise.all([
   fetchAllHistories(apps),
   fetchAuditSummary(),
   fetchCrossStoreRegistry(),
   Promise.all(apps.map((a) => fetchManifest(a.appUrl))),
   Promise.all(apps.map((a) => fetchBuildInfo(a.appUrl))),
+  fetchPasCapabilities(),
 ]);
 
 // Cross-store search cards are created at runtime, but their colors must be
@@ -1094,20 +1121,40 @@ fs.writeFileSync(path.join(DIST, 'creators.html'), creatorsHtml);
 console.log(`Generated /creators page (${uniqueAuthors.length} creators)`);
 
 // --- App ideas (/ideas) ---
-// Popular Play / App Store app types to rebuild on FAS. Data is validated the
+// Popular Play / App Store app types to rebuild. Whether FAS can build each
+// one is computed from data/capabilities.json; ideas only ProAppStore can
+// build link there, using PAS's capabilities.json from its repo's main (the
+// committed snapshot when offline or unreachable). Data is validated the
 // same way as the registry: a bad entry breaks the build rather than shipping.
-const { validateIdeas, renderIdeasPage } = require('./lib/ideas.cjs');
+const { validateIdeas, validateCapabilities, renderIdeasPage } = require('./lib/ideas.cjs');
 const IDEAS_PATH = process.env.FAS_IDEAS_PATH
   ? path.resolve(process.env.FAS_IDEAS_PATH)
   : path.join(ROOT, 'data', 'app-ideas.json');
 const ideasData = JSON.parse(fs.readFileSync(IDEAS_PATH, 'utf8'));
-const ideasErrors = validateIdeas(ideasData);
+const fasCapabilities = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'capabilities.json'), 'utf8'));
+const pasCapabilities = pasCapabilitiesLive || JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'pas-capabilities.json'), 'utf8'));
+const ideasErrors = [...validateIdeas(ideasData), ...validateCapabilities(fasCapabilities), ...validateCapabilities(pasCapabilities)];
 if (ideasErrors.length) {
   console.error('App ideas validation failed:\n  - ' + ideasErrors.join('\n  - '));
   process.exit(1);
 }
 const ideasTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'ideas.html'), 'utf8'));
-let ideasHtml = renderIdeasPage(injectSettingsBootstrap(ideasTemplate, 'templates/ideas.html'), ideasData, apps, escapeHtml)
+let ideasHtml = renderIdeasPage(injectSettingsBootstrap(ideasTemplate, 'templates/ideas.html'), ideasData, {
+  key: 'fas',
+  name: 'FreeAppStore',
+  caps: fasCapabilities,
+  apps,
+  appsField: 'fasApps',
+  appHref: (id) => `/apps/${encodeURIComponent(id)}`,
+  initCommand: (id) => `fas init ${id}`,
+  buildHint: 'Scaffold with `fas init`, run `fas check` before `fas publish`. Guide: https://freeappstore.online/skills.md',
+  edgeLabel: 'Why a free version wins:',
+}, {
+  key: 'pas',
+  name: 'ProAppStore',
+  caps: pasCapabilities,
+  ideasUrl: 'https://proappstore.online/ideas',
+}, escapeHtml)
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET);
 for (const [k, v] of Object.entries(sriHashes)) {
   ideasHtml = ideasHtml.replaceAll(`{{SRI_${k}}}`, v);
@@ -1117,7 +1164,10 @@ for (const [k, v] of Object.entries(contentVersions)) {
 }
 ideasHtml = replaceStylesheetUrls(ideasHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'ideas.html'), ideasHtml);
-console.log(`Generated /ideas page (${ideasData.ideas.length} ideas)`);
+// Published for the ProAppStore storefront, which renders the same ideas.
+fs.writeFileSync(path.join(DIST, 'ideas.json'), JSON.stringify(ideasData, null, 2) + '\n');
+fs.writeFileSync(path.join(DIST, 'capabilities.json'), JSON.stringify(fasCapabilities, null, 2) + '\n');
+console.log(`Generated /ideas page (${ideasData.ideas.length} ideas; PAS capabilities ${pasCapabilitiesLive ? 'live from main' : 'from snapshot'})`);
 
 // --- Generate sitemap.xml ---
 

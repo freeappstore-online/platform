@@ -1,0 +1,352 @@
+{
+  "platform": "fas",
+  "name": "FreeAppStore",
+  "verifiedAt": "2026-10-29",
+  "commit": "8ffe0b2",
+  "capabilities": {
+    "static-hosting": {
+      "status": "yes",
+      "limits": "Initial-load JS 300 KB gzipped per file; lazy assets (workers, wasm, models) up to 25 MB each",
+      "note": "Served at <app>.freeappstore.online over HTTPS from a public app repo; publishing runs fas check first.",
+      "evidence": [
+        "workers/host/wrangler.toml:10",
+        "workers/host/src/index.ts:117",
+        "packages/backend/src/routes/publish.ts:67",
+        "packages/compliance/src/lib/bundle-limits.ts:11",
+        "docs/platform-limits.md:104"
+      ]
+    },
+    "offline-pwa": {
+      "status": "yes",
+      "limits": null,
+      "note": "Required: every FAS app must be an installable PWA with a service worker that works offline.",
+      "evidence": [
+        "packages/compliance/src/checks/pwa-offline.ts:91",
+        "workers/host/src/host.ts:76",
+        "sites/storefront/browser-apis.html:205"
+      ]
+    },
+    "auth": {
+      "status": "yes",
+      "limits": "GitHub, Google and email magic link; 30-day sessions",
+      "note": "Apple sign-in exists in the code but is not configured on the live platform (returns 503).",
+      "evidence": [
+        "packages/sdk/src/auth.ts:3",
+        "packages/backend/src/routes/auth.ts:75",
+        "packages/backend/src/routes/auth.ts:160",
+        "packages/backend/src/routes/auth.ts:283",
+        "packages/backend/src/routes/auth.ts:402",
+        "packages/backend/src/lib/session.ts:3",
+        "docs/platform-limits.md:9"
+      ]
+    },
+    "user-storage": {
+      "status": "yes",
+      "limits": "1 MiB per user per app, 100 keys, 64 KiB per value",
+      "note": "Requires sign-in; private to the signed-in user within the app.",
+      "evidence": [
+        "packages/sdk/src/kv.ts:26",
+        "packages/backend/src/lib/quota.ts:46",
+        "packages/backend/src/routes/kv.ts:71",
+        "docs/platform-limits.md:12"
+      ]
+    },
+    "shared-data": {
+      "status": "limited",
+      "limits": "10,000 documents per collection, 64 KiB each, 100 per query page",
+      "note": "Every document is publicly readable and only its creator can edit or delete it; queries filter only by owner or geo box and sort by created/updated time.",
+      "evidence": [
+        "packages/sdk/src/db.ts:42",
+        "packages/backend/src/routes/db.ts:19",
+        "packages/backend/src/routes/db.ts:149",
+        "packages/backend/src/routes/db.ts:151",
+        "packages/backend/src/routes/db.ts:236",
+        "docs/platform-limits.md:27"
+      ]
+    },
+    "counters": {
+      "status": "yes",
+      "limits": "1,000 counters per app; each increment -1,000 to +1,000",
+      "note": "Anyone can read; any signed-in user can increment, with no built-in one-vote-per-user check.",
+      "evidence": [
+        "packages/sdk/src/counters.ts:8",
+        "packages/backend/src/routes/counters.ts:19",
+        "packages/backend/src/routes/counters.ts:59",
+        "docs/platform-limits.md:20"
+      ]
+    },
+    "realtime": {
+      "status": "yes",
+      "limits": "32 peers per room, 64 active rooms per app, 4 KiB messages, 100 msgs/sec per peer",
+      "note": "Requires sign-in; messages are not stored.",
+      "evidence": [
+        "packages/sdk/src/rooms.ts:30",
+        "packages/backend/src/do/room.ts:4",
+        "packages/backend/src/routes/rooms.ts:23",
+        "packages/backend/src/routes/rooms.ts:57",
+        "docs/platform-limits.md:34"
+      ]
+    },
+    "file-storage": {
+      "status": "no",
+      "limits": null,
+      "note": "No upload API. Files can be kept in the browser (IndexedDB, file pickers); small data could go in KV or public collections (64 KiB cap).",
+      "evidence": [
+        "packages/backend/src/index.ts:85",
+        "packages/backend/wrangler.toml:65",
+        "sites/storefront/capabilities.html:52",
+        "docs/platform-limits.md:120"
+      ]
+    },
+    "email": {
+      "status": "limited",
+      "limits": "100 emails/day per app, 50/day per sending user, 200-char subject, 50,000-char body",
+      "note": "Sent from the browser by a signed-in user; comes from noreply@freeappstore.online with the subject prefixed [app-id]. No scheduled or server-triggered sends.",
+      "evidence": [
+        "packages/sdk/src/email.ts:11",
+        "packages/backend/src/routes/email.ts:21",
+        "packages/backend/src/routes/email.ts:26",
+        "packages/backend/src/routes/email.ts:118",
+        "docs/platform-limits.md:72"
+      ]
+    },
+    "third-party-api-secret": {
+      "status": "limited",
+      "limits": "5 secrets and 5 allowlist rules per app, 10,000 requests/day per app, 100 KB request and response",
+      "note": "Callers must be signed in. AI provider hosts (OpenAI, Anthropic, OpenRouter, Gemini) are refused. Responses are buffered, not streamed.",
+      "evidence": [
+        "packages/sdk/src/proxy.ts:19",
+        "packages/backend/src/routes/secrets.ts:22",
+        "packages/backend/src/routes/secrets.ts:385",
+        "packages/backend/src/routes/secrets.ts:574",
+        "packages/backend/src/lib/proxy-allowlist.ts:28",
+        "docs/platform-limits.md:47"
+      ]
+    },
+    "ai-user-key": {
+      "status": "yes",
+      "limits": "Key-vault proxy: 1,000 calls/day per user across apps, 100 KB request and response, no streaming",
+      "note": "User stores a key once (OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability, ElevenLabs). The key is sent as a Bearer token. Apps can also call providers straight from the browser.",
+      "evidence": [
+        "packages/sdk/src/keys.ts:11",
+        "packages/backend/src/routes/secrets.ts:368",
+        "packages/backend/src/routes/secrets.ts:430",
+        "packages/backend/src/routes/secrets.ts:471",
+        "workers/host/src/host.ts:206",
+        "docs/platform-limits.md:59"
+      ]
+    },
+    "ai-platform": {
+      "status": "no",
+      "limits": null,
+      "note": "The platform provides no AI to apps, and the app-secret proxy refuses OpenAI, Anthropic, OpenRouter and Gemini. Use the user key vault, a non-LLM AI API through the proxy, or an in-browser model.",
+      "evidence": [
+        "packages/backend/src/lib/proxy-allowlist.ts:28",
+        "packages/backend/src/lib/proxy-allowlist.ts:66",
+        "packages/backend/src/routes/keys.ts:671",
+        "packages/backend/src/routes/secrets.ts:24",
+        "docs/platform-limits.md:121"
+      ]
+    },
+    "server-compute": {
+      "status": "no",
+      "limits": null,
+      "note": "Apps are static; the platform API offers only its fixed services.",
+      "evidence": [
+        "packages/backend/src/index.ts:85",
+        "workers/host/src/index.ts:117",
+        "sites/storefront/capabilities.html:52",
+        "docs/platform-limits.md:125"
+      ]
+    },
+    "scheduled-jobs": {
+      "status": "no",
+      "limits": null,
+      "note": "Platform cron runs only platform tasks (uptime, backups, push reminders); app code never runs on a schedule.",
+      "evidence": [
+        "packages/backend/src/index.ts:114",
+        "packages/backend/wrangler.toml:54",
+        "docs/platform-limits.md:122"
+      ]
+    },
+    "payments": {
+      "status": "no",
+      "limits": null,
+      "note": "FAS apps take no payments: the host blocks the Payment Request API and fas check rejects checkout SDKs.",
+      "evidence": [
+        "workers/host/src/host.ts:172",
+        "packages/compliance/src/checks/no-payments.ts:14",
+        "docs/capabilities.md:63"
+      ]
+    },
+    "webhooks-out": {
+      "status": "limited",
+      "limits": "5 webhooks per app, HMAC-SHA256 signed",
+      "note": "Only friend events (requested, accepted, removed, blocked) and manual tests are actually sent. The other 8 listed events (kv, collection, counter, role, user) never fire.",
+      "evidence": [
+        "packages/sdk/src/webhooks.ts:25",
+        "packages/backend/src/routes/webhooks.ts:16",
+        "packages/backend/src/routes/webhooks.ts:156",
+        "packages/backend/src/routes/webhooks.ts:196",
+        "packages/backend/src/routes/friends.ts:127",
+        "docs/platform-limits.md:81"
+      ]
+    },
+    "webhooks-in": {
+      "status": "no",
+      "limits": null,
+      "note": null,
+      "evidence": [
+        "packages/backend/src/index.ts:85"
+      ]
+    },
+    "custom-domain": {
+      "status": "limited",
+      "limits": null,
+      "note": "Not self-serve: a platform admin wires each domain into the host and API config by hand (one exists today).",
+      "evidence": [
+        "workers/host/wrangler.toml:13",
+        "workers/host/src/index.ts:111",
+        "packages/backend/src/lib/origins.ts:31",
+        "sites/storefront/capabilities.html:52",
+        "docs/platform-limits.md:123"
+      ]
+    },
+    "ads-free-tracking-free": {
+      "status": "yes",
+      "limits": null,
+      "note": "fas check rejects analytics trackers (GA, Mixpanel, Segment, Amplitude, Hotjar, Plausible, PostHog) and payments; the host blocks the Topics API. No-ads is stated policy without an automated ad-SDK check.",
+      "evidence": [
+        "packages/compliance/src/checks/no-tracking.ts:22",
+        "packages/compliance/src/index.ts:104",
+        "workers/host/src/host.ts:172",
+        "sites/storefront/about.html:54"
+      ]
+    },
+    "browser-camera": {
+      "status": "yes",
+      "limits": null,
+      "note": "Browser asks the user for permission.",
+      "evidence": [
+        "workers/host/src/host.ts:145",
+        "docs/capabilities.md:21"
+      ]
+    },
+    "browser-microphone": {
+      "status": "yes",
+      "limits": null,
+      "note": "Browser asks the user for permission.",
+      "evidence": [
+        "workers/host/src/host.ts:158",
+        "docs/capabilities.md:20"
+      ]
+    },
+    "browser-geolocation": {
+      "status": "yes",
+      "limits": null,
+      "note": "Only while the app is open; no background location.",
+      "evidence": [
+        "workers/host/src/host.ts:152",
+        "docs/capabilities.md:22"
+      ]
+    },
+    "browser-sensors": {
+      "status": "yes",
+      "limits": null,
+      "note": "Motion and orientation work in all major mobile browsers; iPhone asks permission. Ambient light is Chromium-only.",
+      "evidence": [
+        "workers/host/src/host.ts:141",
+        "workers/host/src/host.ts:153",
+        "workers/host/src/host.ts:157",
+        "docs/capabilities.md:23"
+      ]
+    },
+    "browser-bluetooth-usb-serial": {
+      "status": "limited",
+      "limits": null,
+      "note": "Allowed by the platform, but Web Bluetooth, USB and Serial work only in Chromium browsers (not Safari, Firefox or iPhone).",
+      "evidence": [
+        "workers/host/src/host.ts:144",
+        "workers/host/src/host.ts:164",
+        "workers/host/src/host.ts:166",
+        "docs/capabilities.md:25",
+        "sites/storefront/browser-apis.html:183"
+      ]
+    },
+    "browser-screen-capture": {
+      "status": "limited",
+      "limits": null,
+      "note": "Allowed by the platform; desktop browsers only (mobile browsers don't support screen capture).",
+      "evidence": [
+        "workers/host/src/host.ts:148",
+        "docs/capabilities.md:27"
+      ]
+    },
+    "browser-file-access": {
+      "status": "yes",
+      "limits": null,
+      "note": "File pickers and downloads work everywhere; read/write File System Access (folders, save in place) is Chromium-only.",
+      "evidence": [
+        "workers/host/src/host.ts:201",
+        "sites/storefront/browser-apis.html:115"
+      ]
+    },
+    "browser-wasm": {
+      "status": "yes",
+      "limits": "Lazy wasm/model files up to 25 MB each",
+      "note": "Threaded wasm/SharedArrayBuffer needs the per-app crossOriginIsolated opt-in (not on Safari).",
+      "evidence": [
+        "workers/host/src/host.ts:202",
+        "workers/host/src/host.ts:210",
+        "workers/host/src/host.ts:228",
+        "packages/compliance/src/lib/bundle-limits.ts:12",
+        "docs/capabilities.md:78"
+      ]
+    },
+    "browser-any-https-api": {
+      "status": "yes",
+      "limits": null,
+      "note": "connect-src allows any https: and wss: origin; the API itself must allow cross-origin (CORS) requests.",
+      "evidence": [
+        "workers/host/src/host.ts:206",
+        "docs/capabilities.md:56"
+      ]
+    },
+    "push-reminders": {
+      "status": "limited",
+      "limits": "10 devices and 20 reminders per user per app; sent on a 15-minute cycle",
+      "note": "Only reminders the user schedules (once, daily, every N days) with fixed per-app text. No pushes triggered by events, other users or server checks. iPhone needs the app added to the Home Screen.",
+      "evidence": [
+        "packages/sdk/src/push.ts:14",
+        "packages/sdk/src/push-sw.ts:10",
+        "packages/backend/src/routes/push.ts:292",
+        "packages/backend/src/lib/quota.ts:63",
+        "packages/backend/src/index.ts:115",
+        "docs/platform-limits.md:89"
+      ]
+    },
+    "push-triggered": {
+      "status": "no",
+      "limits": null,
+      "note": "Nothing can send a push in response to an event, another user or a server check: only reminders the user schedules.",
+      "evidence": [
+        "packages/sdk/src/push.ts:14",
+        "packages/sdk/src/push-sw.ts:10",
+        "packages/backend/src/routes/push.ts:292",
+        "packages/backend/src/lib/quota.ts:63",
+        "packages/backend/src/index.ts:115",
+        "docs/platform-limits.md:89"
+      ]
+    },
+    "private-shared-data": {
+      "status": "no",
+      "limits": null,
+      "note": "Shared collections are publicly readable and only a document's creator can edit it, so data a family, team or business keeps private cannot be shared between its members.",
+      "evidence": [
+        "packages/backend/src/routes/db.ts:149",
+        "packages/backend/src/routes/db.ts:236",
+        "packages/sdk/src/db.ts:42"
+      ]
+    }
+  }
+}

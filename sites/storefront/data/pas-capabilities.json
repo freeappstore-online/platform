@@ -1,0 +1,348 @@
+{
+  "platform": "pas",
+  "name": "ProAppStore",
+  "verifiedAt": "2026-10-29",
+  "commit": "8bcf2df",
+  "capabilities": {
+    "static-hosting": {
+      "status": "yes",
+      "limits": null,
+      "note": "Served at <app>.proappstore.online over HTTPS from the platform host.",
+      "evidence": [
+        "platform/packages/host/src/host.ts:66",
+        "platform/packages/host/src/index.ts:128",
+        "platform/packages/host/src/host.ts:471"
+      ]
+    },
+    "offline-pwa": {
+      "status": "yes",
+      "limits": null,
+      "note": "A service worker is required of every app by the compliance check; the app template ships vite-plugin-pwa.",
+      "evidence": [
+        "platform/packages/compliance/src/checks/pwa-offline.ts:20",
+        "platform/packages/host/src/host.ts:425",
+        "platform/packages/agent-teams/src/template-seed.ts:125",
+        "platform/docs/app-capabilities.md:104"
+      ]
+    },
+    "auth": {
+      "status": "yes",
+      "limits": "GitHub, Google, email + password; adult-provisioned login/password accounts for kids. Email magic-link is not enabled.",
+      "note": null,
+      "evidence": [
+        "platform/packages/backend/src/routes/auth.ts:134",
+        "platform/packages/backend/src/routes/auth.ts:774",
+        "platform/packages/backend/src/routes/auth.ts:620",
+        "platform/packages/backend/src/routes/auth.ts:611",
+        "platform/packages/sdk/src/auth.ts:5"
+      ]
+    },
+    "user-storage": {
+      "status": "yes",
+      "limits": "64 KB per value, 1,000 keys and 10 MB per user per app",
+      "note": null,
+      "evidence": [
+        "platform/packages/sdk/src/kv.ts:26",
+        "platform/packages/backend/src/routes/kv.ts:43",
+        "platform/packages/backend/src/lib/quota.ts:31",
+        "platform/docs/app-capabilities.md:97"
+      ]
+    },
+    "shared-data": {
+      "status": "yes",
+      "limits": "One SQL database (Cloudflare D1) per app, reached through up to 500 registered actions",
+      "note": "Reads and writes go through SQL actions declared in mcp.json, with per-action role gates.",
+      "evidence": [
+        "platform/packages/sdk/src/actions.ts:103",
+        "platform/packages/sdk/src/db.ts:32",
+        "platform/packages/data-worker/src/index.ts:7",
+        "platform/packages/backend/src/lib/manifest/tool.ts:17",
+        "platform/docs/sdk-overview.md:195"
+      ]
+    },
+    "counters": {
+      "status": "yes",
+      "limits": "1,000 counters per app, key up to 128 chars, ±1,000 per increment",
+      "note": null,
+      "evidence": [
+        "platform/packages/sdk/src/counters.ts:11",
+        "platform/packages/backend/src/routes/counters.ts:5",
+        "platform/packages/backend/src/routes/counters.ts:39",
+        "platform/docs/app-capabilities.md:98"
+      ]
+    },
+    "realtime": {
+      "status": "yes",
+      "limits": "32 people per room, 4 KB per message, 100 messages/s; signed-in users only",
+      "note": null,
+      "evidence": [
+        "platform/packages/sdk/src/rooms.ts:90",
+        "platform/packages/backend/src/routes/rooms.ts:12",
+        "platform/packages/backend/src/do/room.ts:6",
+        "platform/docs/app-capabilities.md:99"
+      ]
+    },
+    "file-storage": {
+      "status": "yes",
+      "limits": "50 MB per file, 1,000 files per user per app in each area (private, public, review)",
+      "note": null,
+      "evidence": [
+        "platform/packages/sdk/src/storage.ts:26",
+        "platform/packages/backend/src/routes/storage.ts:24",
+        "platform/packages/backend/src/routes/storage.ts:81",
+        "platform/docs/app-capabilities.md:96"
+      ]
+    },
+    "email": {
+      "status": "limited",
+      "limits": "100 emails per app per day; 10 per recipient per day for user-to-user email",
+      "note": "Only the app's owner or editors can send free-form email. Users can email other app members only through a fixed platform template. Nothing can send email on a schedule or from server code.",
+      "evidence": [
+        "platform/packages/sdk/src/email.ts:13",
+        "platform/packages/backend/src/routes/email.ts:12",
+        "platform/packages/backend/src/routes/email.ts:65",
+        "platform/packages/backend/src/routes/notifications.ts:169",
+        "platform/packages/backend/src/rpc/app-worker-api.ts:52"
+      ]
+    },
+    "third-party-api-secret": {
+      "status": "limited",
+      "limits": "5 secrets and 5 allowlisted hosts per app; 10,000 calls/day per app (1,000 per user); 100 KB request and response bodies; 30 s timeout",
+      "note": "Only signed-in users can call it, and only from the app's own origin in platform-cookie auth mode.",
+      "evidence": [
+        "platform/packages/sdk/src/proxy.ts:36",
+        "platform/packages/backend/src/routes/secrets-proxy.ts:71",
+        "platform/packages/backend/src/routes/secrets-proxy.ts:98",
+        "platform/packages/backend/src/routes/secrets-shared.ts:14"
+      ]
+    },
+    "ai-user-key": {
+      "status": "yes",
+      "limits": null,
+      "note": "There is no SDK helper. The app calls the provider directly from the browser, which the CSP allows (connect-src https:).",
+      "evidence": [
+        "platform/packages/host/src/host.ts:493",
+        "platform/docs/app-capabilities.md:64"
+      ]
+    },
+    "ai-platform": {
+      "status": "limited",
+      "limits": "Workers AI only (Llama 3.1 8B, Llama 3.3 70B, BGE embeddings); 200 units per user per day (70B costs 5); 20 calls/min; 1,024 max output tokens; 16,000-char prompt",
+      "note": "The platform pays. Signed-in users only. No frontier models.",
+      "evidence": [
+        "platform/packages/sdk/src/ai.ts:64",
+        "platform/packages/backend/src/routes/ai.ts:16",
+        "platform/packages/backend/src/routes/ai.ts:32",
+        "platform/packages/backend/src/lib/ai-budget.ts:12",
+        "platform/docs/sdk-overview.md:348"
+      ]
+    },
+    "server-compute": {
+      "status": "no",
+      "limits": null,
+      "note": "App workers exist only as a prototype: at most 5 first-party apps (owned by a platform admin), enabled by an admin, and off in production. Every other app's deploy gets a 403.",
+      "evidence": [
+        "platform/packages/backend/src/routes/app-workers.ts:3",
+        "platform/packages/backend/src/routes/app-workers.ts:68",
+        "platform/packages/backend/src/routes/app-workers.ts:135",
+        "platform/packages/backend/src/routes/app-workers.ts:42",
+        "platform/docs/app-workers.md:14"
+      ]
+    },
+    "scheduled-jobs": {
+      "status": "no",
+      "limits": null,
+      "note": "Schedules run only the app's own SQL actions (up to 5, every 5 minutes): they cannot fetch a URL or send push or email. Scheduled code needs an app worker, which only first-party apps can get.",
+      "evidence": [
+        "platform/packages/backend/src/lib/manifest/tool.ts:27",
+        "platform/packages/backend/src/lib/manifest/tool.ts:181",
+        "platform/packages/backend/src/lib/scheduled-actions.ts:221",
+        "platform/packages/backend/src/lib/scheduler-tick.ts:10",
+        "platform/packages/backend/src/routes/app-workers.ts:68"
+      ]
+    },
+    "payments": {
+      "status": "limited",
+      "limits": "Up to 20 products per app; one-off and subscription",
+      "note": "Checkout is refused for each app until a platform admin enables billing for it. Sales go through the platform's Stripe account; the revenue ledger records revenue but pays nothing out.",
+      "evidence": [
+        "platform/packages/sdk/src/billing.ts:72",
+        "platform/packages/backend/src/routes/app-billing.ts:88",
+        "platform/packages/backend/src/routes/app-billing-account.ts:160",
+        "platform/packages/backend/src/lib/manifest/billing.ts:27",
+        "platform/docs/app-billing.md:12",
+        "platform/docs/app-billing.md:234"
+      ]
+    },
+    "webhooks-out": {
+      "status": "limited",
+      "limits": "10 webhooks per app; HMAC-SHA256 signed; HTTPS only",
+      "note": "Only three platform events: storage.uploaded, notification.sent and app.alert. An app cannot send webhooks for its own events.",
+      "evidence": [
+        "platform/packages/backend/src/routes/webhooks-config.ts:9",
+        "platform/packages/backend/src/lib/webhook-dispatch.ts:38",
+        "platform/packages/backend/src/lib/webhook-dispatch.ts:60",
+        "platform/packages/sdk/src/webhooks.ts:27"
+      ]
+    },
+    "webhooks-in": {
+      "status": "limited",
+      "limits": "10 hooks per app, 5 MB body, 2,000 deliveries/day",
+      "note": "A verified hook (GitHub, Stripe, HMAC or token) can write its payload into the app's database through one SQL action. Sending a hook to custom code needs an app worker, which only first-party apps can get.",
+      "evidence": [
+        "platform/packages/backend/src/routes/hooks.ts:175",
+        "platform/packages/backend/src/routes/hooks.ts:38",
+        "platform/packages/backend/src/routes/hooks.ts:244",
+        "platform/packages/backend/src/lib/manifest/hooks.ts:6",
+        "platform/docs/app-workers.md:127"
+      ]
+    },
+    "custom-domain": {
+      "status": "limited",
+      "limits": null,
+      "note": "The owner can attach a domain, but it connects only if its DNS zone is in the platform's Cloudflare account. Domains with DNS elsewhere need Cloudflare for SaaS, which the platform owner has not enabled.",
+      "evidence": [
+        "platform/packages/backend/src/routes/domains.ts:436",
+        "platform/packages/backend/src/routes/domains.ts:99",
+        "platform/packages/backend/src/routes/domains.ts:470",
+        "platform/packages/host/src/host.ts:114"
+      ]
+    },
+    "ads-free-tracking-free": {
+      "status": "yes",
+      "limits": null,
+      "note": "PAS policy bans ads and trackers. Tracking SDKs fail a compliance check, which matches a fixed list of known trackers. Ads are banned by the guidelines only and nothing in code checks for them. Platform analytics are first-party and cookieless.",
+      "evidence": [
+        "platform/packages/compliance/src/checks/no-tracking.ts:24",
+        "platform/packages/compliance/src/clause-map.ts:58",
+        "proappstore/guidelines.html:185",
+        "proappstore/guidelines.html:189",
+        "platform/docs/standard/stack.md:831"
+      ]
+    },
+    "browser-camera": {
+      "status": "yes",
+      "limits": null,
+      "note": "The browser asks the user.",
+      "evidence": [
+        "platform/packages/host/src/capabilities.ts:23",
+        "platform/packages/host/src/host.ts:478",
+        "platform/docs/app-capabilities.md:24"
+      ]
+    },
+    "browser-microphone": {
+      "status": "yes",
+      "limits": null,
+      "note": "The browser asks the user.",
+      "evidence": [
+        "platform/packages/host/src/capabilities.ts:38",
+        "platform/packages/host/src/host.ts:478",
+        "platform/docs/app-capabilities.md:24"
+      ]
+    },
+    "browser-geolocation": {
+      "status": "yes",
+      "limits": null,
+      "note": "Foreground only; the browser asks the user.",
+      "evidence": [
+        "platform/packages/host/src/capabilities.ts:31",
+        "platform/packages/host/src/host.ts:478",
+        "platform/docs/app-capabilities.md:26"
+      ]
+    },
+    "browser-sensors": {
+      "status": "yes",
+      "limits": null,
+      "note": "Accelerometer, gyroscope, magnetometer and ambient light. On iOS, DeviceMotionEvent.requestPermission() is needed.",
+      "evidence": [
+        "platform/packages/host/src/capabilities.ts:18",
+        "platform/packages/host/src/capabilities.ts:32",
+        "platform/packages/host/src/capabilities.ts:37",
+        "platform/docs/app-capabilities.md:27"
+      ]
+    },
+    "browser-bluetooth-usb-serial": {
+      "status": "yes",
+      "limits": null,
+      "note": "Allowed by the headers (bluetooth, usb, serial, hid), but Chromium browsers only.",
+      "evidence": [
+        "platform/packages/host/src/capabilities.ts:22",
+        "platform/packages/host/src/capabilities.ts:48",
+        "platform/packages/host/src/capabilities.ts:46",
+        "platform/packages/host/src/capabilities.ts:33",
+        "platform/docs/app-capabilities.md:29"
+      ]
+    },
+    "browser-screen-capture": {
+      "status": "yes",
+      "limits": null,
+      "note": "getDisplayMedia; desktop browsers only.",
+      "evidence": [
+        "platform/packages/host/src/capabilities.ts:27",
+        "platform/docs/app-capabilities.md:25"
+      ]
+    },
+    "browser-file-access": {
+      "status": "yes",
+      "limits": null,
+      "note": "File pickers work everywhere. The File System Access API works in Chromium only.",
+      "evidence": [
+        "platform/packages/host/src/host.ts:478",
+        "platform/packages/host/src/host.ts:491"
+      ]
+    },
+    "browser-wasm": {
+      "status": "yes",
+      "limits": null,
+      "note": "SharedArrayBuffer (threaded WASM) is opt-in per app with mcp.json \"isolation\", which turns on COOP/COEP.",
+      "evidence": [
+        "platform/packages/host/src/host.ts:486",
+        "platform/packages/host/src/isolation.ts:47",
+        "platform/packages/backend/src/lib/manifest/isolation.ts:23",
+        "platform/docs/app-capabilities.md:81"
+      ]
+    },
+    "browser-any-https-api": {
+      "status": "yes",
+      "limits": null,
+      "note": "Any HTTPS or WSS endpoint and any HTTPS CDN script; plain http: is blocked. The target API must still allow CORS.",
+      "evidence": [
+        "platform/packages/host/src/host.ts:493",
+        "platform/packages/host/src/host.ts:486",
+        "platform/docs/app-capabilities.md:64"
+      ]
+    },
+    "push-reminders": {
+      "status": "no",
+      "limits": null,
+      "note": "Nothing can send a push on a schedule: scheduled actions only run SQL and app workers have no push binding.",
+      "evidence": [
+        "platform/packages/sdk/src/notifications.ts:33",
+        "platform/packages/backend/src/routes/notifications.ts:354",
+        "platform/packages/backend/src/routes/notifications.ts:139",
+        "platform/packages/backend/src/rpc/app-worker-api.ts:52"
+      ]
+    },
+    "push-triggered": {
+      "status": "limited",
+      "limits": "User-to-user: 30/min per sender, 10/min per recipient",
+      "note": "Web push works: users subscribe, the owner can broadcast from their own session, and users can notify each other. There are no scheduled or server-triggered pushes: scheduled actions only run SQL, and app workers have no push binding.",
+      "evidence": [
+        "platform/packages/sdk/src/notifications.ts:33",
+        "platform/packages/backend/src/routes/notifications.ts:354",
+        "platform/packages/backend/src/routes/notifications.ts:139",
+        "platform/packages/backend/src/rpc/app-worker-api.ts:52"
+      ]
+    },
+    "private-shared-data": {
+      "status": "yes",
+      "limits": "One SQL database per app, up to 500 declared actions",
+      "note": "Each read and write is a declared SQL action with its own role gate, so data can be private to a group (household, team, business and its customers).",
+      "evidence": [
+        "platform/packages/backend/src/lib/manifest/tool.ts:165",
+        "platform/packages/backend/src/lib/manifest/tool.ts:17",
+        "platform/packages/sdk/src/actions.ts:103"
+      ]
+    }
+  }
+}

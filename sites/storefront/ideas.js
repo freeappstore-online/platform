@@ -15,16 +15,17 @@
   var countEl = document.getElementById('ideasCount');
   var emptyEl = document.getElementById('ideasEmpty');
 
-  var STATUS_GROUPS = {
-    buildable: ['open', 'covered', 'upgrade'],
-    open: ['open'],
-    upgrade: ['upgrade'],
-    defer: ['defer', 'wont'],
-    all: null,
-  };
+  // Status filters differ per store, so the groups come from the buttons:
+  // data-statuses lists the card statuses a button shows (empty = all).
+  var STATUS_GROUPS = {};
+  Array.prototype.forEach.call(statusBar.querySelectorAll('.filter-btn'), function (btn) {
+    var s = btn.getAttribute('data-statuses');
+    STATUS_GROUPS[btn.getAttribute('data-status')] = s ? s.split(' ') : null;
+  });
+  var defaultStatus = statusBar.querySelector('.filter-btn').getAttribute('data-status');
   var params = new URLSearchParams(location.search);
   var state = {
-    status: STATUS_GROUPS.hasOwnProperty(params.get('status')) ? params.get('status') : 'buildable',
+    status: STATUS_GROUPS.hasOwnProperty(params.get('status')) ? params.get('status') : defaultStatus,
     category: params.get('category') || 'all',
     sort: params.get('sort') || 'priority',
     q: params.get('q') || '',
@@ -34,9 +35,11 @@
   function name(card) { return card.querySelector('h3').textContent; }
 
   var SORTS = {
-    // Open ideas first, then the research priority (decision, wave), then demand.
+    // Ideas only this store can build first, then open ones, then the research
+    // priority (decision, wave), then demand.
     priority: function (a, b) {
-      return (a.dataset.status === 'open' ? 0 : 1) - (b.dataset.status === 'open' ? 0 : 1)
+      return num(b, 'exclusive') - num(a, 'exclusive')
+        || (a.dataset.status === 'open' ? 0 : 1) - (b.dataset.status === 'open' ? 0 : 1)
         || num(a, 'decision') - num(b, 'decision')
         || num(a, 'wave') - num(b, 'wave')
         || num(b, 'demand') - num(a, 'demand');
@@ -57,7 +60,7 @@
 
   function syncUrl() {
     var p = new URLSearchParams();
-    if (state.status !== 'buildable') p.set('status', state.status);
+    if (state.status !== defaultStatus) p.set('status', state.status);
     if (state.category !== 'all') p.set('category', state.category);
     if (state.sort !== 'priority') p.set('sort', state.sort);
     if (state.q) p.set('q', state.q);
@@ -132,7 +135,7 @@
     var group = Object.keys(STATUS_GROUPS).filter(function (k) {
       return STATUS_GROUPS[k] && STATUS_GROUPS[k].indexOf(target.dataset.status) !== -1;
     })[0];
-    if (group) state.status = group;
+    state.status = group || 'all';
   }
 
   render();
