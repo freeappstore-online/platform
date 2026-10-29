@@ -18,6 +18,7 @@ import { dbRoutes } from './routes/db.js';
 import { emailRoutes } from './routes/email.js';
 import { exchangeRoutes } from './routes/exchange.js';
 import { friendsRoutes } from './routes/friends.js';
+import { ideaBuildersRoutes } from './routes/idea-builders.js';
 import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
 import { logsRoutes } from './routes/logs.js';
@@ -104,6 +105,7 @@ v1.route('/', contentAdminRoutes);
 v1.route('/', agentSessionRoutes);
 v1.route('/', qualityRoutes);
 v1.route('/', votesRoutes);
+v1.route('/', ideaBuildersRoutes);
 v1.route('/', pushRoutes);
 app.route('/v1', v1);
 
