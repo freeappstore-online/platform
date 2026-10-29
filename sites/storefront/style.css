@@ -2607,8 +2607,24 @@ pre[class*="language-"] {
 .ideas-howto { padding: 1rem 0 4rem; max-width: 46rem; }
 .ideas-howto ol { margin: 1rem 0 1.5rem 1.25rem; display: flex; flex-direction: column; gap: 0.6rem; line-height: 1.55; }
 .ideas-howto code { font-family: var(--font-mono); font-size: 0.85em; background: var(--panel-alt); padding: 0.1rem 0.35rem; border-radius: 4px; }
-.ideas-caps-note { font-size: 0.88rem; color: var(--muted); max-width: 40rem; margin: 1.5rem auto 0; line-height: 1.5; }
-.ideas-caps-note a { color: var(--accent); }
+.ideas-hero .ideas-caps-note { font-size: 0.88rem; color: var(--muted); max-width: 40rem; margin: 1.5rem auto 0; line-height: 1.5; }
+.ideas-hero .ideas-caps-note a { color: var(--accent); }
+.ideas-steps { list-style: none; counter-reset: step; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; max-width: 60rem; margin: 2rem auto 0; padding: 0; text-align: left; }
+.ideas-steps li { counter-increment: step; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.9rem; line-height: 1.5; color: var(--muted); }
+.ideas-steps strong { color: var(--ink-strong); font-size: 0.98rem; }
+.ideas-steps strong::before { content: counter(step) ". "; color: var(--accent); }
+.ideas-steps a { color: var(--accent); }
+.ideas-steps code { font-family: var(--font-mono); font-size: 0.85em; background: var(--panel-alt); padding: 0.1rem 0.35rem; border-radius: 4px; }
+@media (max-width: 760px) { .ideas-steps { grid-template-columns: 1fr; } }
+.ideas-limits { font-size: 0.85rem; color: var(--muted); margin: 0; line-height: 1.5; }
+.ideas-limits strong { color: var(--ink); }
+.ideas-claim { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; flex-basis: 100%; }
+.ideas-claim[hidden] { display: none; }
+.ideas-claim-count { font-size: 0.85rem; color: var(--muted); }
+.ideas-claim-btn { font: inherit; font-size: 0.85rem; padding: 0.35rem 0.8rem; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+.ideas-claim-btn:hover { border-color: var(--accent); }
+.ideas-claim-btn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ideas-claim-btn:disabled { opacity: 0.6; cursor: wait; }
 .ideas-btn-count { font-weight: 500; opacity: 0.7; margin-left: 0.15rem; }
 .ideas-badge-other { background: var(--pro-soft); color: var(--pro); border-color: color-mix(in srgb, var(--pro) 35%, transparent); }
 .ideas-badge-exclusive { background: var(--pro); color: white; border-color: var(--pro); }

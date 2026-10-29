@@ -36,10 +36,15 @@
         <div><strong>{{IDEAS_READY_COUNT}}</strong><span>buildable on FreeAppStore</span></div>
         <div><strong>{{IDEAS_OTHER_COUNT}}</strong><span>need ProAppStore</span></div>
       </div>
+      <ol class="ideas-steps" aria-label="How to take an idea">
+        <li><strong>Pick an idea</strong><span>Start with one that isn't on FreeAppStore yet, and press <em>I'm building this</em> so others know.</span></li>
+        <li><strong>Copy the build prompt</strong><span>Paste it into your AI coding tool, or into <a href="https://freeappstore.online/app/build">VibeCode</a> in the browser. It names the apps to beat and the limits to design for.</span></li>
+        <li><strong>Publish it free</strong><span>Run <code>fas check</code>, then <code>fas publish</code>. <a href="/get-started">Get started</a> covers the setup.</span></li>
+      </ol>
       <p class="ideas-caps-note">
         Each card is checked against what FreeAppStore can do today
         (<a href="/capabilities">capabilities</a>, verified {{IDEAS_CAPS_VERIFIED}}).
-        If an idea needs something only ProAppStore has, such as private data shared within a team, file storage or payments, the card says so and links there. If neither store can build it yet, the card names what is missing.
+        Ideas that need a private backend, file storage or payments link to ProAppStore.
       </p>
     </section>
 
@@ -79,13 +84,7 @@
       <p class="ideas-empty" id="ideasEmpty" hidden>No ideas match. Try another filter, or <a href="/get-started">start your own app</a>.</p>
     </section>
 
-    <section class="ideas-howto" aria-labelledby="howto-heading">
-      <h2 id="howto-heading" class="section-h2">How to take an idea</h2>
-      <ol>
-        <li><strong>Pick an idea.</strong> Press <em>Copy build prompt</em> on a card. It copies a brief for your AI coding tool with the leaders to beat and the FreeAppStore capabilities to use, with their limits.</li>
-        <li><strong>Scaffold it.</strong> Run <code>fas init &lt;name&gt;</code>, or open <a href="https://freeappstore.online/app/build">VibeCode</a> and paste the prompt.</li>
-        <li><strong>Publish it.</strong> Run <code>fas check</code> and then <code>fas publish</code>. Your app is listed here and the idea card links to it. See <a href="/get-started">Get started</a>.</li>
-      </ol>
+    <section class="ideas-howto" aria-label="About this data">
       <p class="section-note">
         Data comes from FreeAppStore's research of the Google Play and Apple App Store charts on {{IDEAS_RESEARCH_DATE}}.
         Install counts, ratings and chart positions change daily, so check the store listing before you rely on a number.
@@ -97,6 +96,7 @@
   {{FOOTER}}
 
   <script src="/ideas.js?v={{VER_IDEAS_JS}}" integrity="{{SRI_IDEAS_JS}}"></script>
+  <script src="/ideas-claims.js?v={{VER_IDEAS_CLAIMS_JS}}" integrity="{{SRI_IDEAS_CLAIMS_JS}}"></script>
   <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
 </body>
 </html>

@@ -534,6 +534,7 @@ const sriHashes = {
   SETTINGS_JS: sriHash('settings.js'),
   AI_GUIDE_JS: sriHash('ai-guide.js'),
   IDEAS_JS: sriHash('ideas.js'),
+  IDEAS_CLAIMS_JS: sriHash('ideas-claims.js'),
 };
 // Content-version tokens for the same set of assets (same read, different encoding).
 const contentVersions = {
@@ -549,6 +550,7 @@ const contentVersions = {
   SETTINGS_JS: contentVersion('settings.js'),
   AI_GUIDE_JS: contentVersion('ai-guide.js'),
   IDEAS_JS: contentVersion('ideas.js'),
+  IDEAS_CLAIMS_JS: contentVersion('ideas-claims.js'),
 };
 
 function replaceStylesheetUrls(html, stylesheetUrls) {
@@ -1302,6 +1304,7 @@ const filesToCopy = [
   'settings.js',
   'ai-guide.js',
   'ideas.js',
+  'ideas-claims.js',
   '_redirects',
 ];
 

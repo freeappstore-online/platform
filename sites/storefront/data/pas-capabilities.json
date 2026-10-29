@@ -83,7 +83,7 @@
       ]
     },
     "file-storage": {
-      "status": "yes",
+      "status": "limited",
       "limits": "50 MB per file, 1,000 files per user per app in each area (private, public, review)",
       "note": null,
       "evidence": [

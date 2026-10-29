@@ -242,7 +242,7 @@ function renderCard(idea, here, other, escapeHtml) {
 
   const badges = [];
   if (status === 'open') badges.push(`<span class="ideas-badge ideas-badge-open">Not on ${escapeHtml(here.name)} yet</span>`);
-  if (status === 'upgrade') badges.push('<span class="ideas-badge ideas-badge-upgrade">Improve an existing app</span>');
+  if (status === 'upgrade') badges.push('<span class="ideas-badge ideas-badge-upgrade">Build a better one</span>');
   if (status === 'native') badges.push('<span class="ideas-badge ideas-badge-wont">Not possible as a web app</span>');
   if (status === 'held') badges.push(`<span class="ideas-badge ideas-badge-defer">On hold: ${escapeHtml(idea.heldBy)}</span>`);
   if (status === 'blocked') badges.push(`<span class="ideas-badge ideas-badge-defer">Blocked: needs ${escapeHtml(capPhrase(v.missing))}</span>`);
@@ -251,9 +251,18 @@ function renderCard(idea, here, other, escapeHtml) {
   // The other store can build it too: on PAS that means "you could ship it
   // free on FAS"; on FAS it is not worth a badge.
   const canBuild = buildable(v) && status !== 'held';
-  const exclusive = canBuild && ov && !buildable(ov);
-  if (here.key === 'pas' && exclusive) badges.push('<span class="ideas-badge ideas-badge-exclusive">Pro only</span>');
+  const exclusive = here.key === 'pas' && canBuild && ov && !buildable(ov);
+  if (exclusive) badges.push(`<span class="ideas-badge ideas-badge-exclusive">Only on ${escapeHtml(here.name)}</span>`);
   badges.push(`<span class="ideas-badge ideas-diff-${idea.difficulty}">${DIFFICULTY_LABEL[idea.difficulty]}</span>`);
+
+  // Say what the limit is right on the card, not only in Build notes.
+  const limitsLine = v.kind === 'limited'
+    ? `<p class="ideas-limits"><strong>Limits on ${escapeHtml(here.name)}:</strong> ${v.limited.map(c => {
+      const cap = here.caps.capabilities[c];
+      const extra = [cap.limits, cap.note].filter(Boolean).map(escapeHtml).join('. ');
+      return `${escapeHtml(CAPABILITY_LABELS[c])}${extra ? ` (${extra})` : ''}`;
+    }).join('; ')}</p>`
+    : '';
 
   let crossLine = '';
   if (status === 'other') {
@@ -287,11 +296,12 @@ function renderCard(idea, here, other, escapeHtml) {
   <div class="ideas-badges">${badges.join('')}</div>
   ${idea.pitch ? `<p class="ideas-pitch">${escapeHtml(idea.pitch)}</p>` : ''}
   ${edge ? `<p class="ideas-edge"><strong>${escapeHtml(here.edgeLabel)}</strong> ${escapeHtml(edge)}</p>` : ''}
+  ${limitsLine}
   ${crossLine}
   ${idea.leaders.length ? `<ul class="ideas-leaders" aria-label="Market leaders">${idea.leaders.map(l => leaderLine(l, escapeHtml)).join('')}</ul>` : ''}
   ${onHere}
   ${details.length ? `<details class="ideas-details"><summary>Build notes</summary>${details.join('')}</details>` : ''}
-  ${canBuild ? `<div class="ideas-actions"><button type="button" class="ideas-copy" data-prompt="${escapeHtml(buildPrompt(idea, here, liveApps))}">Copy build prompt</button><code>${escapeHtml(here.initCommand(idea.id))}</code></div>` : ''}
+  ${canBuild ? `<div class="ideas-actions"><button type="button" class="ideas-copy" data-prompt="${escapeHtml(buildPrompt(idea, here, liveApps))}">Copy build prompt</button><code>${escapeHtml(here.initCommand(idea.id))}</code><div class="ideas-claim" data-idea="${idea.id}" hidden></div></div>` : ''}
 </article>`;
 }
 
@@ -308,11 +318,12 @@ function renderIdeasPage(template, data, here, other, escapeHtml) {
     ? ideas.filter((i, n) => ['open', 'covered', 'upgrade'].includes(statuses[n]) && !buildable(verdictFor(i, other.caps))).length
     : 0;
   const groups = [
-    ['buildable', `Buildable on ${here.name}`, ['open', 'covered', 'upgrade']],
     ['open', `Not on ${here.name} yet`, ['open']],
-    ['upgrade', 'Improve an existing app', ['upgrade']],
+    ['upgrade', 'Build a better one', ['upgrade']],
+    ['buildable', 'All buildable here', ['open', 'covered', 'upgrade']],
     ['other', other ? `Build on ${other.name}` : '', ['other']],
-    ['blocked', 'Not possible yet', ['blocked', 'native', 'held']],
+    ['blocked', 'Not possible yet', ['blocked', 'held']],
+    ['native', 'Needs a native app', ['native']],
     ['all', 'All', null],
   ].filter(([key, , s]) => key === 'all' || count(...s) > 0);
   const statusButtons = groups.map(([key, label, s], i) =>

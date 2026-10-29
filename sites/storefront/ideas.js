@@ -35,11 +35,11 @@
   function name(card) { return card.querySelector('h3').textContent; }
 
   var SORTS = {
-    // Ideas only this store can build first, then open ones, then the research
-    // priority (decision, wave), then demand.
+    // Ideas nobody has built here yet first, then ones only this store can
+    // build, then the research priority (decision, wave), then demand.
     priority: function (a, b) {
-      return num(b, 'exclusive') - num(a, 'exclusive')
-        || (a.dataset.status === 'open' ? 0 : 1) - (b.dataset.status === 'open' ? 0 : 1)
+      return (a.dataset.status === 'open' ? 0 : 1) - (b.dataset.status === 'open' ? 0 : 1)
+        || num(b, 'exclusive') - num(a, 'exclusive')
         || num(a, 'decision') - num(b, 'decision')
         || num(a, 'wave') - num(b, 'wave')
         || num(b, 'demand') - num(a, 'demand');

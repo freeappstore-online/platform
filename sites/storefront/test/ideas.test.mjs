@@ -108,6 +108,7 @@ test("a FAS card blocked by a PAS-only capability names it and links to PAS", ()
   assert.ok(html.includes("Needs scheduled jobs and payments"));
   assert.ok(html.includes('href="https://pas.example/ideas#idea-fixture-idea"'));
   assert.ok(!html.includes("Copy build prompt"), "no build prompt for an idea this store cannot build");
+  assert.ok(!html.includes("ideas-claim"), "no claim button for an idea this store cannot build");
   assert.ok(html.includes('data-status="other"'));
 });
 
@@ -116,7 +117,7 @@ test("a PAS card marks Pro-only ideas and points free-buildable ones to FAS", ()
   const html = renderIdeasPage("{{IDEAS_CARDS}}", data, here("pas", PAS), other(FAS), escapeHtml);
   const paid = html.slice(html.indexOf('id="idea-paid"'), html.indexOf('id="idea-free"'));
   const free = html.slice(html.indexOf('id="idea-free"'));
-  assert.ok(paid.includes("Pro only") && paid.includes('data-exclusive="1"'));
+  assert.ok(paid.includes("Only on ProAppStore") && paid.includes('data-exclusive="1"'));
   assert.ok(free.includes("publish it free on") && free.includes('href="https://fas.example/ideas#idea-free"'));
 });
 
@@ -129,6 +130,7 @@ test("rendering escapes text, lists limits and links only live catalog apps", ()
   assert.ok(!html.includes("/apps/gone"));
   assert.ok(html.includes("#3 US Top Free"));
   assert.ok(html.includes("Within limits: synced user data") && html.includes("user-storage quota"));
+  assert.ok(html.includes("Limits on FreeAppStore:</strong> synced user data (user-storage quota)"), "the limit is on the card, not only in Build notes");
   assert.ok(html.startsWith("1|0|1|0|"), "covered idea counts as buildable, not open");
   assert.ok(!html.includes("{{"));
 });
@@ -160,7 +162,9 @@ test("build writes /ideas, the shared data files, the script and a sitemap entry
     assert.ok(!html.includes(XSS));
     assert.ok(!/{{[A-Z_]+}}/.test(html), "no unsubstituted placeholders");
     assert.match(html, /<script src="\/ideas\.js\?v=[^"]+" integrity="sha256-/);
+    assert.match(html, /<script src="\/ideas-claims\.js\?v=[^"]+" integrity="sha256-/);
     readFileSync(join(dist, "ideas.js"));
+    readFileSync(join(dist, "ideas-claims.js"));
     assert.equal(JSON.parse(readFileSync(join(dist, "ideas.json"), "utf8")).ideas.length, 2);
     assert.equal(JSON.parse(readFileSync(join(dist, "capabilities.json"), "utf8")).platform, "fas");
     assert.ok(readFileSync(join(dist, "sitemap.xml"), "utf8").includes("https://freeappstore.online/ideas</loc>"));
@@ -170,4 +174,21 @@ test("build writes /ideas, the shared data files, the script and a sitemap entry
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test("new users land on ideas nobody has built yet; never-possible is its own group", () => {
+  const data = { ideas: [idea({ id: "a" }), idea({ id: "b", requires: ["native-os"] }), idea({ id: "c", heldBy: "licence" })] };
+  const html = renderIdeasPage("{{IDEAS_STATUS_BUTTONS}}", data, here("fas", FAS), other(PAS), escapeHtml);
+  const keys = [...html.matchAll(/data-status="([a-z]+)"/g)].map((m) => m[1]);
+  assert.equal(keys[0], "open", "the first button is the default view");
+  assert.ok(keys.includes("native") && keys.includes("blocked"));
+  assert.match(html, /data-status="blocked" data-statuses="blocked held"/);
+});
+
+test("buildable cards get a hidden claim slot; FAS-only ideas are not sorted as exclusive on FAS", () => {
+  const data = { ideas: [idea({ requires: ["push-reminders"] })] };
+  const fasOnly = caps("pas", { "push-reminders": "no" });
+  const html = renderIdeasPage("{{IDEAS_CARDS}}", data, here("fas", FAS), other(fasOnly), escapeHtml);
+  assert.ok(html.includes('<div class="ideas-claim" data-idea="fixture-idea" hidden></div>'));
+  assert.ok(html.includes('data-exclusive="0"'));
 });

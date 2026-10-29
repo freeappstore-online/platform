@@ -666,7 +666,8 @@
       ],
       "requiresWhy": "Two parents sign in to one shared log that updates live; feed reminders are optional.",
       "pasApps": [],
-      "heldBy": null
+      "heldBy": null,
+      "pasEdge": "Both parents see every feed and nap live in one private log, with no premium tier for the second caregiver."
     },
     {
       "id": "sobriety-counter",
@@ -2466,7 +2467,8 @@
       ],
       "requiresWhy": "Shared lists need sign-in and data other people can read and edit.",
       "pasApps": [],
-      "heldBy": null
+      "heldBy": null,
+      "pasEdge": "Shared lists stay private to the people invited, with roles, instead of a free tier capped at a few collaborators."
     },
     {
       "id": "unit-currency-converter",
@@ -3655,7 +3657,8 @@
       ],
       "requiresWhy": "A household shares one list, so it needs sign-in and shared data.",
       "pasApps": [],
-      "heldBy": null
+      "heldBy": null,
+      "pasEdge": "One private household list that syncs between everyone in it, without the ads and upsells of the leaders."
     },
     {
       "id": "gym-log",
@@ -4729,7 +4732,8 @@
       ],
       "requiresWhy": "Group members sign in and share one ledger of expenses.",
       "pasApps": [],
-      "heldBy": null
+      "heldBy": null,
+      "pasEdge": "Group balances stay private to the group, and nothing like Splitwise’s daily expense cap on the free tier."
     },
     {
       "id": "randomizer",
@@ -6385,7 +6389,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Listings with photos and private buyer–seller messages, without platform fees on local pickups."
     },
     {
       "id": "surplus-food-sharing",
@@ -6455,7 +6459,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Neighbours post and claim giveaways in a private community, run locally rather than by a commission-taking marketplace."
     },
     {
       "id": "stock-price-alerts",
@@ -6698,7 +6702,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Send documents and photos by link with sign-in and expiry you control, without ads on the download page."
     },
     {
       "id": "rentals-marketplace",
@@ -6791,7 +6795,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "A niche or local rentals board with photos and private enquiries, without the big platforms’ service fees."
     },
     {
       "id": "job-board",
@@ -6873,7 +6877,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "A focused local or niche board with private applications, so employers don’t pay per listing."
     },
     {
       "id": "dating",
@@ -7211,7 +7215,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Class groups with roles for teachers and parents and push on new messages, without selling data."
     },
     {
       "id": "business-bookkeeping",
@@ -7292,7 +7296,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Books, receipts and roles for an accountant in one private workspace, without a monthly fee that grows with your business."
     },
     {
       "id": "services-marketplace",
@@ -7476,7 +7480,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "A booking page and private calendar for a small business, without per-booking commission."
     },
     {
       "id": "flight-fare-alerts",
@@ -7638,7 +7642,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Members-only posts and roles in one app, with the membership billed through the platform."
     },
     {
       "id": "online-store",
@@ -7719,7 +7723,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "A small catalogue with checkout through the platform, without a monthly store subscription."
     },
     {
       "id": "carpool",
@@ -7777,7 +7781,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Riders and drivers coordinate in a private group, without a booking fee on every seat."
     },
     {
       "id": "field-service-jobs",
@@ -7984,7 +7988,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Boards private to the team, with roles and no per-seat price to add a teammate."
     },
     {
       "id": "course-creator",
@@ -8052,7 +8056,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Lessons, files and enrolments in one app, without the marketplace taking a cut of every sale."
     },
     {
       "id": "shared-family-album",
@@ -8120,7 +8124,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "One private album the whole family adds to, without ads or an upload paywall."
     },
     {
       "id": "courier-delivery",
@@ -8191,7 +8195,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Jobs, drivers and live position while the app is open, in a private dispatch board for a small fleet."
     },
     {
       "id": "restaurant-reservations",
@@ -8273,7 +8277,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "A restaurant’s own booking book with a push when the table is ready, and no per-cover fee."
     },
     {
       "id": "shift-scheduling",
@@ -8363,7 +8367,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Rosters and shift swaps private to the team, with roles for managers and no per-employee price."
     },
     {
       "id": "event-ticketing",
@@ -8434,7 +8438,7 @@
       "optional": [],
       "anyOf": null,
       "requiresWhy": null,
-      "pasEdge": null
+      "pasEdge": "Tickets, check-in and attendee lists in one app, without per-ticket booking fees on top."
     },
     {
       "id": "small-business-crm",
