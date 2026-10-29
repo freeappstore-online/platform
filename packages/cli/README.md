@@ -96,7 +96,7 @@ fas init asteroids --template game-canvas  # HTML5 canvas game template
 
 ### `fas check`
 
-Run compliance checks against the app in the current directory (or `--dir`). Checks include: no tracking SDKs, brand fonts present, no brand token overrides, PWA manifest valid, bundle size under limit, and no leftover `APPNAME` placeholders. Exits non-zero on hard failures.
+Run compliance checks against the app in the current directory (or `--dir`). Checks include: no tracking SDKs, no payments, no ads, brand fonts present, no brand token overrides, PWA manifest valid, bundle size under limit, and no leftover `APPNAME` placeholders. Exits non-zero on hard failures.
 
 ```bash
 fas check              # check cwd
@@ -277,6 +277,8 @@ Every app and game on the platform shares the same visual language — colors, f
 |---|---|
 | `No template placeholders` | Every `APPNAME` placeholder substituted before publish. |
 | `No tracking SDKs` | None of 8 known trackers (Google Analytics, Plausible, Mixpanel, …). |
+| `No payments (free tier)` | No Payment Request API, checkout SDKs or payment links. Paid apps go on ProAppStore. |
+| `No ads` | No ad network scripts, SDKs or packages (AdSense, Ad Manager, IMA, Carbon Ads, EthicalAds, Taboola, …). |
 | `Brand fonts present` | Manrope (body) + Fraunces (display) both referenced in CSS / HTML. |
 | `No brand overrides` | No app redefines a platform CSS token (`--paper`, `--ink`, `--accent`, `--line`, `--line-strong`, `--panel`, `--muted`) outside the canonical theme file; no non-brand `font-family` declarations. |
 | `PWA manifest` | `web/public/manifest.json` with `name`, `display`, `start_url`. |

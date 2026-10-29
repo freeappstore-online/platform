@@ -121,7 +121,7 @@ These features are not exposed by the FreeAppStore SDK. For a separate paid plat
 - Server-side AI (Workers AI)
 - Arbitrary server-side cron / scheduled tasks (scheduled user push reminders are supported above)
 - Custom domains
-- Monetization (Stripe + creator payouts). FAS apps take no payments: the host blocks the Payment Request API and `fas check` rejects payment code. See [Browser Capabilities](capabilities.md#no-payments).
+- Monetization (Stripe + creator payouts). FAS apps take no payments: the host blocks the Payment Request API and `fas check` rejects payment code. Apps show no ads either: `fas check` rejects ad network SDKs. See [Browser Capabilities](capabilities.md#no-payments).
 - Server-side compute (per-app Worker + D1)
 
 ## Source of truth

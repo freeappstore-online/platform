@@ -58,6 +58,8 @@ Runs compliance checks against the app in the current directory.
 |-------|------|
 | No template placeholders | Every `APPNAME` substituted |
 | No tracking SDKs | Known tracking SDKs blocked |
+| No payments (free tier) | No Payment Request API, checkout SDKs or payment links |
+| No ads | No ad network scripts, SDKs or packages |
 | Brand fonts present | Manrope + Fraunces referenced |
 | No brand overrides | No redefined platform CSS tokens |
 | PWA manifest | Valid `manifest.json` with name, display, start_url |

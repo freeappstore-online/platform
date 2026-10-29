@@ -71,6 +71,7 @@ describe('failing-app fixture', () => {
       'HTML meta tags',
       'MIT License',
       'No .env.production',
+      'No ads',
       'No brand overrides',
       'No payments (free tier)',
       'No template placeholders',

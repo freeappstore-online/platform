@@ -5,6 +5,7 @@ import {
   checkBrandFontsLive,
   checkBundleSizeLive,
   checkManifestLive,
+  checkNoAdsLive,
   checkNoTrackingLive,
   checkUnsafeVhLive,
 } from './index.js';
@@ -14,6 +15,41 @@ import {
 function randomBytes(n: number): Uint8Array {
   return new Uint8Array(nodeRandomBytes(n));
 }
+
+describe('checkNoAdsLive', () => {
+  it('passes clean HTML, including ad-like words and Google Tag Manager', () => {
+    const r = checkNoAdsLive(
+      '<html><head><script async src="https://www.googletagmanager.com/gtag/js?id=G-X"></script></head><body><h1>Classified ads</h1><span ondblclick="x()">adBreak</span></body></html>',
+    );
+    expect(r.status).toBe('pass');
+  });
+
+  it('flags a pasted AdSense tag', () => {
+    const r = checkNoAdsLive(
+      '<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1234567890123456"></script>',
+    );
+    expect(r.status).toBe('fail');
+    expect(r.detail).toContain('Google AdSense');
+    expect(r.suggestions?.[0]).toMatch(/no ads/);
+  });
+
+  it('flags Carbon Ads and Google Ad Manager', () => {
+    expect(
+      checkNoAdsLive('<script src="//cdn.carbonads.com/carbon.js?serve=X"></script>').status,
+    ).toBe('fail');
+    expect(
+      checkNoAdsLive('<script src="https://securepubads.g.doubleclick.net/tag/js/gpt.js"></script>')
+        .status,
+    ).toBe('fail');
+  });
+
+  it('ignores ad tags inside HTML comments', () => {
+    expect(
+      checkNoAdsLive('<!-- <script src="https://pagead2.googlesyndication.com/x.js"></script> -->')
+        .status,
+    ).toBe('pass');
+  });
+});
 
 describe('checkNoTrackingLive', () => {
   it('passes when HTML is clean of tracker patterns', () => {
@@ -269,14 +305,14 @@ describe('auditLive (integration)', () => {
     });
     const r = await auditLive({ appId: 'tip', liveUrl: 'https://tip.example' });
     expect(r.reachable).toBe(true);
-    // 6 results: Reachable + tracking + fonts + manifest + bundle + vh.
+    // 7 results: Reachable + tracking + ads + fonts + manifest + bundle + vh.
     // Reachable is recorded on success too so stale fail rows from
     // earlier runs get overwritten on the next clean pass.
-    expect(r.results).toHaveLength(6);
+    expect(r.results).toHaveLength(7);
     const reachable = r.results.find((c) => c.name === 'Reachable');
     expect(reachable?.status).toBe('pass');
     const otherStatuses = r.results.filter((c) => c.name !== 'Reachable').map((c) => c.status);
-    expect(otherStatuses).toEqual(['pass', 'pass', 'pass', 'pass', 'pass']);
+    expect(otherStatuses).toEqual(['pass', 'pass', 'pass', 'pass', 'pass', 'pass']);
   });
 
   it("downgrades subrequest-cap errors from fail → warn (not the app's fault)", async () => {

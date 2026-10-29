@@ -13,7 +13,7 @@ The public statement lives on [freeappstore.online/about](https://freeappstore.o
 ## Platform Rules
 
 1. **Free means free.** No payments, freemium, trials, plans or paywalls. Enforced: `fas check` rejects payment SDKs and checkout links, and the host blocks the Payment Request API.
-2. **No ads.** Apps never show ads or load ad networks. Platform policy (not yet an automated check).
+2. **No ads.** Apps never show ads or load ad networks. Enforced: `fas check` fails on ad network scripts and SDKs (AdSense, Google Ad Manager, IMA, Carbon Ads, EthicalAds, Amazon, Taboola, Outbrain and others), and the weekly live audit flags ad tags in published HTML.
 3. **Nothing to download.** Every app works from a link in the browser on any device, and is installable as a PWA where the browser supports it.
 4. **Private by default.** No tracking SDKs in app code (`fas check`); analytics, if any, go through the platform loader. Accounts are optional and only for apps that need sign-in or sync.
 5. **Open source.** Every free app is MIT-licensed and open on GitHub.

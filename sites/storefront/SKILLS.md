@@ -173,7 +173,7 @@ No further API calls or manual steps needed. Ever.
 - ONE environment: production only. Push to `main` = deploy. Fix forward.
 - Static hosting on Cloudflare R2 (served by the host Worker). No server-side code in apps.
 - Backend (if needed): `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice). `npm i @freeappstore/sdk`.
-- No ads. FreeAppStore apps never show ads or load ad networks (platform policy).
+- No ads. FreeAppStore apps never show ads or load ad networks. `fas check` fails on ad network scripts, SDKs and packages: Google AdSense, Ad Manager (GPT), IMA and H5 Games Ads/AdMob, Amazon Publisher Services, Prebid, Media.net, Carbon Ads, BuySellAds, EthicalAds, Ezoic, PropellerAds, Adsterra, Taboola, Outbrain and web-game portal ad SDKs (Poki, CrazyGames, GameDistribution, GameMonetize).
 - Free means free forever. No monetization in the free version: no payments of any kind. The host blocks the Payment Request API (`payment=()`) and `fas check` fails on Payment Request, Apple Pay, Stripe/PayPal/Paddle/Lemon Squeezy/Gumroad/Google Pay SDKs or checkout links, and payment manifest members. Paid apps go on ProAppStore.
 - Browser capabilities are open on your app's own origin: microphone, camera, location, motion sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock, Web Workers (including `blob:` workers) and WebAssembly all work. The browser asks the user, so handle `NotAllowedError` and missing hardware; the storefront preview delegates the same features to your app, so they work there too. Not available: payments (see the rule above) and the Topics API. `SharedArrayBuffer` and threaded wasm need cross-origin isolation: set `"crossOriginIsolated": true` in `fas.json` and run `fas publish`. That sends COOP/COEP for your app only; third-party embeds/images need CORS/CORP and popups lose `window.opener`. Full matrix: https://docs.freeappstore.online/capabilities/
 - Declare the browser permissions your app asks for (microphone, camera, location, motion, notifications, midi, clipboard, screen, bluetooth, usb, serial, hid) in `web/public/manifest.json` as `"permissions": [{ "name": "microphone", "reason": "one line shown on the listing" }]`. `fas check` warns about undeclared ones, and the storefront listing shows them. Guide: https://docs.freeappstore.online/permissions/
@@ -899,6 +899,8 @@ The canonical list lives in [`workflows/compliance.yml`](./workflows/compliance.
 - MIT `LICENSE` file exists
 - No `.env.production` committed (use GitHub repo variables for `VITE_*` public config instead; see "App Config & Secrets" section)
 - No tracking SDKs (google-analytics, gtag, amplitude, mixpanel, segment, hotjar, plausible, posthog)
+- No payments (Payment Request API, Apple Pay, checkout SDKs and links, payment manifest members)
+- No ads (ad network scripts, SDKs and packages: AdSense, Ad Manager, IMA, Carbon Ads, EthicalAds, Amazon, Taboola, Outbrain, game-portal ad SDKs, and others)
 - Brand fonts (Manrope + Fraunces) referenced in `web/src/index.css`
 - Brand CSS variables (`--paper`, `--ink`, `--accent`) present
 - HTML `lang`, `viewport`, and `<title>` in `web/index.html`

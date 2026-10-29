@@ -75,6 +75,17 @@ Words like "payment" in your own code are fine (a loan calculator passes). A lin
 donation or sponsor page isn't covered by the check. To charge for an app, publish it on
 [ProAppStore](https://proappstore.online), which handles subscriptions and creator payouts.
 
+## No ads
+
+FreeAppStore apps show **no ads**. `fas check` fails the **No ads** check on ad network scripts, SDKs
+and packages: Google AdSense, Google Ad Manager (GPT), the Google IMA SDK, H5 Games Ads / AdMob,
+Amazon Publisher Services, Prebid.js, Media.net, Carbon Ads, BuySellAds, EthicalAds, Ezoic,
+PropellerAds, Adsterra, Taboola, Outbrain, and web-game portal ad SDKs (Poki, CrazyGames,
+GameDistribution, GameMonetize). The weekly live audit also flags ad tags in your published HTML.
+
+The check matches ad-serving hostnames, SDK calls and package names, so words like "ads" or a function
+of your own called `adBreak` are fine. Linking to your own other apps isn't covered by the check.
+
 ## Cross-origin isolation
 
 `SharedArrayBuffer`, `Atomics.wait` on the main thread, high-resolution timers, and multi-threaded

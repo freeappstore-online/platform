@@ -82,6 +82,15 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     ],
   },
   {
+    "detail": "1 file(s) load ad networks: web/src/ads.ts (Google AdSense)",
+    "name": "No ads",
+    "status": "fail",
+    "suggestions": [
+      "FreeAppStore apps show no ads: remove the ad network script, SDK or package.",
+      "To earn from an app, publish it on ProAppStore (https://proappstore.online), which handles subscriptions and creator payouts.",
+    ],
+  },
+  {
     "detail": "2 apparent overrides",
     "name": "No brand overrides",
     "status": "fail",

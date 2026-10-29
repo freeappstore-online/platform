@@ -6,6 +6,7 @@ import { checkDarkMode } from './checks/dark-mode.js';
 import { checkHtmlMeta } from './checks/html-meta.js';
 import { checkLicenseMit } from './checks/license-mit.js';
 import { checkManifest } from './checks/manifest.js';
+import { checkNoAds } from './checks/no-ads.js';
 import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
 import { checkNoCommittedArtifacts } from './checks/no-committed-artifacts.js';
 import { checkNoEnvProduction } from './checks/no-env-production.js';
@@ -44,6 +45,7 @@ export {
   checkBrandFontsLive,
   checkBundleSizeLive,
   checkManifestLive,
+  checkNoAdsLive,
   checkNoTrackingLive,
   checkUnsafeVhLive,
 } from './live/index.js';
@@ -58,6 +60,7 @@ export {
   checkLicenseMit,
   checkManifest,
   checkMaskableIcon,
+  checkNoAds,
   checkNoBrandOverrides,
   checkNoCommittedArtifacts,
   checkNoEnvProduction,
@@ -103,6 +106,7 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkNoPlaceholders(source),
     checkNoTracking(source),
     checkNoPayments(source),
+    checkNoAds(source),
     checkPermissions(source),
     checkBrandFonts(source),
     checkBrandTokens(source),

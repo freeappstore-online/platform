@@ -125,7 +125,7 @@ Game templates are available for scaffolding, but publish games with the separat
 fas check
 ```
 
-Checks: no tracking SDKs, brand fonts present, PWA manifest valid, initial-load JS under 300KB gzipped, no leftover `APPNAME` placeholders.
+Checks: no tracking SDKs, no payments, no ads, brand fonts present, PWA manifest valid, initial-load JS under 300KB gzipped, no leftover `APPNAME` placeholders.
 
 ## Publish
 

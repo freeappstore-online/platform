@@ -5,6 +5,7 @@
  *
  * What we can check from a live URL:
  *   - Tracking SDK injection (script src, inline scripts, fetched JS)
+ *   - Ad network tags (script src, inline scripts) — FreeAppStore apps show no ads
  *   - Brand fonts presence (link href to fonts.googleapis.com)
  *   - PWA manifest reachable + valid
  *   - Initial-load JS size (entry script + modulepreload chunks)
@@ -18,9 +19,11 @@
  * time without leaving the storefront.
  */
 
+import { matchAdNetworks, NO_ADS_SUGGESTIONS } from '../checks/no-ads.js';
 import { INITIAL_LOAD_MAX_GZIP_BYTES } from '../lib/bundle-limits.js';
 import { gzipByteLength } from '../lib/gzip.js';
 import { collectInitialJsRefs, jsAssetFileName } from '../lib/html-initial-js.js';
+import { stripHtmlComments } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
 
 /** Cap live fetches of the initial graph so a page with many modulepreloads
@@ -128,14 +131,15 @@ export async function auditLive(input: LiveAuditInput): Promise<LiveAuditReport>
   }
 
   // Run all checks in parallel — each is independent.
-  const [tracking, fonts, manifest, bundle, vh] = await Promise.all([
+  const [tracking, ads, fonts, manifest, bundle, vh] = await Promise.all([
     checkNoTrackingLive(html),
+    checkNoAdsLive(html),
     checkBrandFontsLive(html),
     checkManifestLive(html, input.liveUrl),
     checkBundleSizeLive(html, input.liveUrl),
     checkUnsafeVhLive(html, input.liveUrl),
   ]);
-  report.results.push(tracking, fonts, manifest, bundle, vh);
+  report.results.push(tracking, ads, fonts, manifest, bundle, vh);
   return report;
 }
 
@@ -156,6 +160,25 @@ export function checkNoTrackingLive(html: string): CheckResult {
       'Replace the direct SDK with the platform loader: <script src="https://api.freeappstore.online/v1/analytics.js?app=<id>" defer></script>.',
       'Configure providers via PUT /v1/apps/<id>/analytics so policy can evolve without a redeploy.',
     ],
+  };
+}
+
+/**
+ * Live counterpart to checkNoAds: the same ad-network patterns, run over the
+ * served HTML with HTML comments stripped. Catches the classic pasted ad tag
+ * (`<script async src="https://pagead2.googlesyndication.com/…">`, an inline
+ * `adsbygoogle.push`); an ad SDK bundled into the JS is the source check's job.
+ */
+export function checkNoAdsLive(html: string): CheckResult {
+  const found = matchAdNetworks(stripHtmlComments(html));
+  if (found.length === 0) {
+    return { name: 'No ads (live)', status: 'pass', detail: 'no ad network tags in live HTML' };
+  }
+  return {
+    name: 'No ads (live)',
+    status: 'fail',
+    detail: `ad network tags in live HTML: ${found.join(', ')}`,
+    suggestions: NO_ADS_SUGGESTIONS,
   };
 }
 
