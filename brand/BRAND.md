@@ -4,7 +4,7 @@
 
 **We're rebuilding everyday apps for the web.**
 
-Native apps are expensive to build and ship, so they make that money back from users: ads, paid downloads, 7-day trials, then a subscription. The web is far cheaper to build on and run, and AI makes it cheaper still. That saving goes to everyone: apps on FreeAppStore are free for users and free to publish for creators. The platform's running costs are covered by ProAppStore, which earns its revenue from Pro apps listed on a subscription basis.
+Native apps are expensive to build and ship, so they make that money back from users: ads, paid downloads, 7-day trials, then a subscription. The web is far cheaper to build on and run, and AI makes it cheaper still. That saving goes to everyone: apps on FreeAppStore are free for users and free to publish for creators. The platform's running costs are covered by ProAppStore, which earns its revenue from Pro app subscriptions.
 
 Short form (tagline, meta descriptions): *Everyday apps, rebuilt for the web. Nothing to download, no ads, no trials, no subscriptions.*
 

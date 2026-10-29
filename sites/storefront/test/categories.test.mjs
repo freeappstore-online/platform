@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const ROOT = resolve(dirname(__filename), "..");
 const require = createRequire(import.meta.url);
-const { categorySlug, groupCategories, categoryTitle, categoryDescription, renderCategoryPage, TITLE_MAX, DESCRIPTION_MAX } = require("../lib/categories.cjs");
+const { categorySlug, groupCategories, categoryTitle, categoryDescription, renderCategoryPage, TITLE_MAX, DESCRIPTION_MAX, INDEX_MIN_APPS } = require("../lib/categories.cjs");
 
 const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 const categoryLabel = (cat) => (cat.toLowerCase() === "other (specify in description)" ? "Other" : cat.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "));
@@ -86,7 +86,7 @@ test("app names and categories are escaped in HTML and JSON-LD", () => {
   assert.equal(ldOf(html).mainEntity.itemListElement[0].name, evil);
 });
 
-test("build writes a page per category with public apps and lists each in the sitemap", () => {
+test("build writes a page per category with public apps; sitemap lists all but thin ones", () => {
   const tmp = mkdtempSync(join(tmpdir(), "fas-category-test-"));
   try {
     const registry = JSON.parse(readFileSync(join(ROOT, "registry.json"), "utf8"));
@@ -108,8 +108,9 @@ test("build writes a page per category with public apps and lists each in the si
     const sitemap = readFileSync(join(dist, "sitemap.xml"), "utf8");
     for (const f of files) {
       const slug = f.replace(/\.html$/, "");
-      assert.ok(sitemap.includes(`<loc>https://freeappstore.online/category/${slug}</loc><priority>0.8</priority>`), slug);
       const html = readFileSync(join(dist, "category", f), "utf8");
+      const thin = /name="robots" content="noindex, follow"/.test(html);
+      assert.equal(sitemap.includes(`<loc>https://freeappstore.online/category/${slug}</loc><priority>0.8</priority>`), !thin, slug);
       assert.doesNotMatch(html, /\{\{|__CF_BEACON__/, f);
       assert.match(html, /integrity="sha256-/);
       assert.match(html, /href="\/style\.[0-9a-f]{10}\.css"/);
@@ -119,4 +120,14 @@ test("build writes a page per category with public apps and lists each in the si
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test("categories under INDEX_MIN_APPS apps are noindex and the rest are indexable", () => {
+  const apps = [app("solo", "Strategy"), ...Array.from({ length: INDEX_MIN_APPS }, (_, i) => app(`p${i}`, "Productivity"))];
+  const groups = groupCategories(apps, categoryLabel);
+  const bySlug = Object.fromEntries(groups.map((g) => [g.slug, g]));
+  assert.equal(bySlug.strategy.indexable, false);
+  assert.equal(bySlug.productivity.indexable, true);
+  assert.match(renderCategoryPage(TEMPLATE, bySlug.strategy, groups, { escapeHtml, categoryLabel }), /<meta name="robots" content="noindex, follow" \/>/);
+  assert.doesNotMatch(renderCategoryPage(TEMPLATE, bySlug.productivity, groups, { escapeHtml, categoryLabel }), /noindex/);
 });

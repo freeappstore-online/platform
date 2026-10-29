@@ -7,7 +7,7 @@
 ## About
 
 - [Our mission](https://freeappstore.online/about): Rebuilding everyday apps for the web, free for users and creators.
-- [How it's free](https://freeappstore.online/how-its-free): Web apps cost far less than native; platform costs are covered by ProAppStore, which earns from Pro apps listed on a subscription basis.
+- [How it's free](https://freeappstore.online/how-its-free): Web apps cost far less than native; platform costs are covered by ProAppStore, which earns from Pro app subscriptions.
 - [Web apps vs native apps](https://freeappstore.online/web-apps-vs-native): No download, one codebase, no ads or subscriptions needed.
 - [FAQ](https://freeappstore.online/faq): Common questions from users and creators.
 

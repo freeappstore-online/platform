@@ -1252,7 +1252,7 @@ const sitemapEntries = [
   ...uniqueAuthors.map(username =>
     `  <url><loc>https://freeappstore.online/u/${username}</loc><priority>0.6</priority></url>`
   ),
-  ...categoryGroups.map(group =>
+  ...categoryGroups.filter(group => group.indexable).map(group =>
     `  <url><loc>${group.url}</loc><priority>0.8</priority></url>`
   )
 ];
@@ -1285,6 +1285,7 @@ const filesToCopy = [
   'how-its-free.html',
   'web-apps-vs-native.html',
   'faq.html',
+  'og-image.png',
   'capabilities.html',
   'browser-apis.html',
   'contribute.html',

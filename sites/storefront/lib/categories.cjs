@@ -23,6 +23,8 @@ function categorySlug(label) {
  * "Lifestyle" and "lifestyle"). Label comes from the first app seen, as on
  * the homepage filter. Sorted by label; empty and excluded categories dropped.
  */
+const INDEX_MIN_APPS = 3;
+
 function groupCategories(apps, categoryLabel) {
   const byKey = new Map();
   for (const app of apps) {
@@ -35,6 +37,9 @@ function groupCategories(apps, categoryLabel) {
   const groups = [...byKey.values()].filter((g) => g.apps.length > 0);
   for (const g of groups) {
     g.slug = categorySlug(g.label);
+    // A one- or two-app page is thin content: keep it browsable but out of
+    // search indexes and the sitemap until the category fills up.
+    g.indexable = g.apps.length >= INDEX_MIN_APPS;
     g.url = `${ORIGIN}/category/${g.slug}`;
   }
   const slugs = new Set();
@@ -147,6 +152,7 @@ function renderCategoryPage(template, group, groups, { escapeHtml, categoryLabel
     CATEGORY_TITLE: escapeHtml(categoryTitle(group.label)),
     CATEGORY_DESCRIPTION: escapeHtml(description),
     CATEGORY_URL: escapeHtml(group.url),
+    CATEGORY_ROBOTS: group.indexable === false ? '<meta name="robots" content="noindex, follow" />' : '',
     CATEGORY_HEADING: escapeHtml(`Free ${group.label.toLowerCase()} apps`),
     CATEGORY_INTRO: categoryIntro(group, escapeHtml),
     CATEGORY_LABEL: escapeHtml(group.label),
@@ -166,5 +172,6 @@ module.exports = {
   categoryDescription,
   renderCategoryPage,
   TITLE_MAX,
+  INDEX_MIN_APPS,
   DESCRIPTION_MAX,
 };

@@ -4,7 +4,7 @@ Free SDK + CLI + backend for apps published on **[freeappstore.online](https://f
 
 ## Mission
 
-We're rebuilding everyday apps for the web. Native apps are expensive to build and ship, so they make that money back from users with ads, paid downloads, short trials and subscriptions. The web is far cheaper to build on and run, and AI makes it cheaper still, so apps on FreeAppStore are simply free: nothing to download, no ads, no trials, no paywalls, no subscriptions. Every app is open source under MIT. Platform running costs are covered by [ProAppStore](https://proappstore.online), which earns its revenue from Pro apps listed on a subscription basis.
+We're rebuilding everyday apps for the web. Native apps are expensive to build and ship, so they make that money back from users with ads, paid downloads, short trials and subscriptions. The web is far cheaper to build on and run, and AI makes it cheaper still, so apps on FreeAppStore are simply free: nothing to download, no ads, no trials, no paywalls, no subscriptions. Every app is open source under MIT. Platform running costs are covered by [ProAppStore](https://proappstore.online), which earns its revenue from Pro app subscriptions.
 
 Publishing is free and self-serve too: any developer can scaffold, build, and publish an app under their own subdomain (`yourapp.freeappstore.online`), with hosting, a GitHub repo, CI deploys and the SDK backend provided by the platform.
 
