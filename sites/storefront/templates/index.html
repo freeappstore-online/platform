@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FreeAppStore: Free Web Apps, No Ads, No Subscriptions</title>
-  <meta name="description" content="Everyday apps, rebuilt for the web and free forever. Nothing to download, no ads, no trials, no subscriptions. Works on phone, tablet, and desktop. Open source." />
+  <meta name="description" content="Everyday apps, rebuilt for the web and free forever. Nothing to download, no ads, no trials, no subscriptions. Open source, on any device." />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="FreeAppStore: Free Web Apps, No Ads, No Subscriptions" />
-  <meta property="og:description" content="Everyday apps, rebuilt for the web and free forever. Nothing to download, no ads, no trials, no subscriptions. Works on phone, tablet, and desktop. Open source." />
+  <meta property="og:description" content="Everyday apps, rebuilt for the web and free forever. Nothing to download, no ads, no trials, no subscriptions. Open source, on any device." />
   <meta property="og:url" content="https://freeappstore.online/" />
   <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
   <meta name="twitter:card" content="summary" />
@@ -150,6 +150,13 @@
         </aside>
       </div>
     </section>
+
+    <nav class="catalog-categories" aria-labelledby="browseCategoriesHeading">
+      <h2 id="browseCategoriesHeading">Browse free apps by category</h2>
+      <div class="filter-bar category-links">
+          {{CATEGORY_LINKS_HOME}}
+      </div>
+    </nav>
 
     <script type="application/json" id="cross-store-registry">{{CROSS_STORE_REGISTRY}}</script>
     <script src="/search.js?v={{VER_SEARCH_JS}}" integrity="{{SRI_SEARCH_JS}}" defer></script>

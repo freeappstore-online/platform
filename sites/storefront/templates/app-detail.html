@@ -3,30 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{{NAME}} — FreeAppStore</title>
-  <meta name="description" content="Free {{NAME_LOWER}} app. {{DESCRIPTION}} Works offline, no account needed." />
+  <title>{{SEO_TITLE}}</title>
+  <meta name="description" content="{{SEO_DESCRIPTION}}" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="{{NAME}} — FreeAppStore" />
-  <meta property="og:description" content="Free {{NAME_LOWER}} app. {{DESCRIPTION}}" />
+  <meta property="og:title" content="{{SEO_TITLE}}" />
+  <meta property="og:description" content="{{SEO_DESCRIPTION}}" />
   <meta property="og:url" content="https://freeappstore.online/apps/{{ID}}" />
   <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
   <meta name="twitter:card" content="summary" />
   <link rel="canonical" href="https://freeappstore.online/apps/{{ID}}" />
-  <!-- Per-app SoftwareApplication JSON-LD — helps Google show rich-card
-       hits for app searches (name, screenshot, free price). -->
-  <script type="application/ld+json">{
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "{{NAME}}",
-    "description": "{{DESCRIPTION}}",
-    "applicationCategory": "{{CATEGORY_LABEL}}",
-    "operatingSystem": "Web",
-    "url": "{{APP_URL}}",
-    "image": "https://freeappstore.online/icon-512.png",
-    "fileSize": "{{SIZE}}",
-    "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
-    "isPartOf": {"@id": "https://freeappstore.online/#website"}
-  }</script>
+  <!-- Per-app WebApplication JSON-LD (lib/app-seo.cjs) — helps Google show
+       rich-card hits for app searches (name, category, free price). -->
+  <script type="application/ld+json">{{JSON_LD}}</script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="{{STYLE_CSS_URL}}" />
@@ -48,7 +36,7 @@
           <div class="app-hero-icon app-icon" data-letter="{{LETTER}}" data-id="{{ID}}"><span class="app-emoji app-hero-emoji" aria-hidden="true">{{ICON}}</span></div>
           <div>
             <h1>{{NAME}}</h1>
-            <div class="tag">{{CATEGORY_LABEL}}</div>
+            {{CATEGORY_TAG}}
             <div class="app-hero-author">{{AUTHOR_CHIP}}</div>
           </div>
         </div>

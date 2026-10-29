@@ -24,6 +24,9 @@ const STYLE_CSS_PATH = process.env.FAS_STYLE_CSS_PATH
 const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
 // Provisioned/retired entries remain in source, but are not public listings.
 const { isPublicListing } = require('./lib/discovery.cjs');
+const { appSeo } = require('./lib/app-seo.cjs');
+const appKinds = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'app-kinds.json'), 'utf8'));
+const { groupCategories, renderCategoryPage } = require('./lib/categories.cjs');
 const apps = registry.apps.filter(isPublicListing);
 
 // --- Registry shape validator (security: stop malformed/malicious entries at
@@ -566,12 +569,21 @@ const categoryFilters = categories
 
 // {{APPS_GRID}} is replaced inside the async IIFE after histories are fetched
 // so each card can carry data-published from histories[i].meta.created_at.
+// Category landing pages (/category/<slug>) are linked from the homepage and
+// every app page so crawlers can reach them; groups come from lib/categories.cjs.
+const categoryGroups = groupCategories(apps, categoryLabel);
+const categorySlugByKey = new Map(categoryGroups.map(g => [g.key, g.slug]));
+const categoryLinksHome = categoryGroups
+  .map(g => `<a class="filter-btn" href="/category/${escapeHtml(g.slug)}">${escapeHtml(g.label)}</a>`)
+  .join('\n          ');
+
 let indexHtml = injectSettingsBootstrap(indexTemplate, 'templates/index.html')
   .replace('{{PREVIEW_ALLOW}}', PREVIEW_ALLOW)
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
   .replace('{{INLINE_SCRIPT_HASH}}', inlineScriptHash)
   .replace('{{APPS_COUNT}}', String(apps.length))
-  .replace('{{CATEGORY_FILTERS}}', categoryFilters);
+  .replace('{{CATEGORY_FILTERS}}', categoryFilters)
+  .replace('{{CATEGORY_LINKS_HOME}}', () => categoryLinksHome);
 
 // Apply SRI hashes and content-version tokens.
 // SRI placeholders: {{SRI_AUTH_JS}} → integrity value
@@ -965,6 +977,11 @@ apps.forEach((app, i) => {
     .replace(/\{\{LETTER\}\}/g, escapeHtml((app.name || '?').trim().charAt(0).toUpperCase()))
     .replace(/\{\{ICON_BG\}\}/g, escapeHtml(app.iconBg))
     .replace(/\{\{CATEGORY_LABEL\}\}/g, escapeHtml(categoryLabel(app.category)))
+    .replace('{{CATEGORY_TAG}}', () => {
+      const slug = typeof app.category === 'string' && categorySlugByKey.get(app.category.toLowerCase());
+      const label = escapeHtml(categoryLabel(app.category));
+      return slug ? `<a class="tag" href="/category/${escapeHtml(slug)}" title="More free ${label} apps">${label}</a>` : `<div class="tag">${label}</div>`;
+    })
     .replace(/\{\{DESCRIPTION\}\}/g, escapeHtml(app.description))
     .replace(/\{\{APP_URL\}\}/g, escapeHtml(app.appUrl))
     .replace(/\{\{REPO\}\}/g, escapeHtml(app.repo))
@@ -979,6 +996,13 @@ apps.forEach((app, i) => {
     .replace(/\{\{CODE_QUALITY_BADGE\}\}/g, renderCodeQualityBadge(app.id))
     .replace(/\{\{VIEWPORT_BADGE\}\}/g, renderViewportBadge(manifests[i]))
     .replace(/\{\{SIZE\}\}/g, formatSize(buildInfos[i]?.size) || 'Unknown');
+  // Title / meta description / JSON-LD (lib/app-seo.cjs). Function replacers so
+  // `$&`-style sequences in registry text are not treated as patterns.
+  const seo = appSeo(app, appKinds, { size: formatSize(buildInfos[i]?.size) || null });
+  html = html
+    .replace(/\{\{SEO_TITLE\}\}/g, () => escapeHtml(seo.title))
+    .replace(/\{\{SEO_DESCRIPTION\}\}/g, () => escapeHtml(seo.description))
+    .replace(/\{\{JSON_LD\}\}/g, () => seo.jsonLd);
 
   // SRI hashes and content-version tokens (detail pages use auth.js + detail-page.js).
   for (const [k, v] of Object.entries(sriHashes)) {
@@ -1169,6 +1193,21 @@ fs.writeFileSync(path.join(DIST, 'ideas.json'), JSON.stringify(ideasData, null, 
 fs.writeFileSync(path.join(DIST, 'capabilities.json'), JSON.stringify(fasCapabilities, null, 2) + '\n');
 console.log(`Generated /ideas page (${ideasData.ideas.length} ideas; PAS capabilities ${pasCapabilitiesLive ? 'live from main' : 'from snapshot'})`);
 
+// --- Category landing pages (/category/<slug>) ---
+// Public listings only (same `apps` as the homepage and sitemap); see lib/categories.cjs.
+const categoryTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'category.html'), 'utf8'));
+fs.rmSync(path.join(DIST, 'category'), { recursive: true, force: true });
+fs.mkdirSync(path.join(DIST, 'category'), { recursive: true });
+for (const group of categoryGroups) {
+  let html = renderCategoryPage(injectSettingsBootstrap(categoryTemplate, 'templates/category.html'), group, categoryGroups, { escapeHtml, categoryLabel })
+    .replace('__CF_BEACON__', CF_BEACON_SNIPPET);
+  for (const [k, v] of Object.entries(sriHashes)) html = html.replaceAll(`{{SRI_${k}}}`, v);
+  for (const [k, v] of Object.entries(contentVersions)) html = html.replaceAll(`{{VER_${k}}}`, v);
+  html = replaceStylesheetUrls(html, stylesheetUrls);
+  fs.writeFileSync(path.join(DIST, 'category', `${group.slug}.html`), html);
+}
+console.log(`Generated ${categoryGroups.length} category page(s) at /category/`);
+
 // --- Generate sitemap.xml ---
 
 const sitemapEntries = [
@@ -1206,6 +1245,9 @@ const sitemapEntries = [
   ),
   ...uniqueAuthors.map(username =>
     `  <url><loc>https://freeappstore.online/u/${username}</loc><priority>0.6</priority></url>`
+  ),
+  ...categoryGroups.map(group =>
+    `  <url><loc>${group.url}</loc><priority>0.8</priority></url>`
   )
 ];
 

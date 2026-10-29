@@ -2619,3 +2619,10 @@ pre[class*="language-"] {
 .ideas-cross-go { background: var(--pro-soft); color: var(--ink); }
 .ideas-caps { margin: 0.3rem 0 0 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; }
 .ideas-cap-limited strong { color: var(--ink); text-decoration: underline dotted; }
+
+/* ---- Category landing pages (/category/<slug>, templates/category.html) ---- */
+.category-links .filter-btn:hover { text-decoration: none; }
+.category-link-count { font-weight: 500; opacity: 0.7; margin-left: 0.15rem; }
+.catalog-categories { margin: 2.5rem 0 1rem; }
+.catalog-categories h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+a.tag { text-decoration: none; }

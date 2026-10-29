@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{CATEGORY_TITLE}}</title>
+  <meta name="description" content="{{CATEGORY_DESCRIPTION}}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="{{CATEGORY_TITLE}}" />
+  <meta property="og:description" content="{{CATEGORY_DESCRIPTION}}" />
+  <meta property="og:url" content="{{CATEGORY_URL}}" />
+  <meta property="og:image" content="https://freeappstore.online/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <link rel="canonical" href="{{CATEGORY_URL}}" />
+  <!-- CollectionPage + ItemList of the category's apps (built from the registry). -->
+  <script type="application/ld+json">{{CATEGORY_JSON_LD}}</script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  {{SETTINGS_BOOTSTRAP}}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{STYLE_CSS_URL}}" />
+  <link rel="stylesheet" href="{{CARD_STYLES_CSS_URL}}" />
+  __CF_BEACON__
+</head>
+<body>
+
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="page-header">
+      <h1>{{CATEGORY_HEADING}}</h1>
+      <p>{{CATEGORY_INTRO}}</p>
+    </div>
+
+    <section class="app-section" aria-label="{{CATEGORY_LABEL}} apps">
+      <div class="apps-grid compact">
+{{CATEGORY_CARDS}}
+      </div>
+    </section>
+
+    <div class="page-content">
+      <h2>More free app categories</h2>
+      <nav class="filter-bar category-links" aria-label="App categories">
+        <a class="filter-btn" href="/">All apps</a>
+        {{CATEGORY_LINKS}}
+      </nav>
+      <p><a href="/about">Our mission</a> · <a href="/how-its-free">How FreeAppStore is free</a> · <a href="/ideas">App ideas</a></p>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>
