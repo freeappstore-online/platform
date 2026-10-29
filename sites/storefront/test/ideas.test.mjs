@@ -83,6 +83,9 @@ test("verdicts come from requirements and capabilities", () => {
   const ai = idea({ anyOf: [["ai-user-key"], ["ai-platform"]] });
   assert.equal(verdictFor(ai, caps("fas", { "ai-platform": "no" })).kind, "ok");
   assert.deepEqual(verdictFor(ai, caps("fas", { "ai-platform": "no", "ai-user-key": "no" })).missing, ["ai-user-key"]);
+  // an unrestricted set beats a quota-bound one listed first
+  const quota = idea({ anyOf: [["ai-platform"], ["ai-user-key"]] });
+  assert.equal(verdictFor(quota, caps("pas", { "ai-platform": "limited" })).kind, "ok");
 });
 
 test("statuses: open, covered, upgrade, other, blocked, native, held", () => {
@@ -90,7 +93,9 @@ test("statuses: open, covered, upgrade, other, blocked, native, held", () => {
   const o = other(PAS);
   assert.equal(statusOf(idea(), h, o, []), "open");
   assert.equal(statusOf(idea(), h, o, [{ id: "calc" }]), "covered");
-  assert.equal(statusOf(idea({ decision: "upgrade-existing" }), h, o, []), "upgrade");
+  assert.equal(statusOf(idea({ decision: "upgrade-existing" }), h, o, [{ id: "calc" }]), "upgrade");
+  assert.equal(statusOf(idea({ decision: "upgrade-existing" }), h, o, []), "open", "nothing live to improve");
+  assert.equal(statusOf(idea({ decision: "upgrade-existing" }), withApps(here("pas", PAS)), other(FAS), [{ id: "calc" }]), "covered");
   assert.equal(statusOf(idea({ requires: ["payments"] }), h, o, []), "other");
   assert.equal(statusOf(idea({ requires: ["payments"] }), h, other(caps("pas", { payments: "no" })), []), "blocked");
   assert.equal(statusOf(idea({ requires: ["native-os"] }), h, o, []), "native");
@@ -126,6 +131,13 @@ test("rendering escapes text, lists limits and links only live catalog apps", ()
   assert.ok(html.includes("Within limits: synced user data") && html.includes("user-storage quota"));
   assert.ok(html.startsWith("1|0|1|0|"), "covered idea counts as buildable, not open");
   assert.ok(!html.includes("{{"));
+});
+
+test("text with $ replacement patterns or placeholders renders literally", () => {
+  const pitch = "Costs $& or $' or $` and {{IDEAS_COUNT}}";
+  const html = renderIdeasPage("{{IDEAS_CARDS}}|{{IDEAS_COUNT}}|{{IDEAS_COUNT}}", { ideas: [idea({ pitch })] }, here("fas", FAS), other(PAS), escapeHtml);
+  assert.ok(html.includes(escapeHtml(pitch)));
+  assert.ok(html.endsWith("|1|1"));
 });
 
 test("the ProAppStore storefront's copy of lib/ideas.cjs is identical", (t) => {

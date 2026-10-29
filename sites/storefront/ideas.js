@@ -113,10 +113,13 @@
   grid.addEventListener('click', function (e) {
     var btn = e.target.closest('.ideas-copy');
     if (!btn) return;
-    var label = btn.textContent;
+    // Keep the original label on the button: a second click while it reads
+    // "Copied" must not make "Copied" the label it restores.
+    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
     function done(msg) {
       btn.textContent = msg;
-      setTimeout(function () { btn.textContent = label; }, 1800);
+      clearTimeout(btn._resetTimer);
+      btn._resetTimer = setTimeout(function () { btn.textContent = btn.dataset.label; }, 1800);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(btn.getAttribute('data-prompt')).then(

@@ -1156,7 +1156,13 @@ const IDEAS_PATH = process.env.FAS_IDEAS_PATH
   : path.join(ROOT, 'data', 'app-ideas.json');
 const ideasData = JSON.parse(fs.readFileSync(IDEAS_PATH, 'utf8'));
 const fasCapabilities = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'capabilities.json'), 'utf8'));
-const pasCapabilities = pasCapabilitiesLive || JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'pas-capabilities.json'), 'utf8'));
+// A PAS commit must not be able to break this build: live capabilities that
+// fail validation (e.g. a capability id this lib doesn't know yet) fall back
+// to the committed snapshot.
+const pasLiveErrors = pasCapabilitiesLive ? validateCapabilities(pasCapabilitiesLive) : [];
+if (pasLiveErrors.length) console.warn(`PAS capabilities from main are invalid, using the snapshot: ${pasLiveErrors.join('; ')}`);
+const pasCapabilitiesUsed = pasCapabilitiesLive && !pasLiveErrors.length ? pasCapabilitiesLive : null;
+const pasCapabilities = pasCapabilitiesUsed || JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'pas-capabilities.json'), 'utf8'));
 const ideasErrors = [...validateIdeas(ideasData), ...validateCapabilities(fasCapabilities), ...validateCapabilities(pasCapabilities)];
 if (ideasErrors.length) {
   console.error('App ideas validation failed:\n  - ' + ideasErrors.join('\n  - '));
@@ -1191,7 +1197,7 @@ fs.writeFileSync(path.join(DIST, 'ideas.html'), ideasHtml);
 // Published for the ProAppStore storefront, which renders the same ideas.
 fs.writeFileSync(path.join(DIST, 'ideas.json'), JSON.stringify(ideasData, null, 2) + '\n');
 fs.writeFileSync(path.join(DIST, 'capabilities.json'), JSON.stringify(fasCapabilities, null, 2) + '\n');
-console.log(`Generated /ideas page (${ideasData.ideas.length} ideas; PAS capabilities ${pasCapabilitiesLive ? 'live from main' : 'from snapshot'})`);
+console.log(`Generated /ideas page (${ideasData.ideas.length} ideas; PAS capabilities ${pasCapabilitiesUsed ? 'live from main' : 'from snapshot'})`);
 
 // --- Category landing pages (/category/<slug>) ---
 // Public listings only (same `apps` as the homepage and sitemap); see lib/categories.cjs.

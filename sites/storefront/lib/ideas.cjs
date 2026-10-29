@@ -142,17 +142,21 @@ function validateIdeas(data) {
 }
 
 // Can `caps` build `idea`? → { kind: 'native' | 'blocked' | 'limited' | 'ok',
-// missing: [cap ids], limited: [cap ids] }. An anyOf group is satisfied by the
-// first set whose capabilities all exist; with none, the set missing the
-// fewest is reported.
+// missing: [cap ids], limited: [cap ids] }. An anyOf group uses the set
+// missing the fewest capabilities, then the one with the fewest limited ones,
+// so an unrestricted option wins over a quota-bound one.
 function verdictFor(idea, caps) {
   if (idea.requires.includes(NATIVE)) return { kind: 'native', missing: [], limited: [] };
   const has = id => caps.capabilities[id] && caps.capabilities[id].status !== 'no';
   let needed = idea.requires.slice();
   if (idea.anyOf) {
     const ranked = idea.anyOf
-      .map(set => ({ set, missing: set.filter(c => !has(c)).length }))
-      .sort((a, b) => a.missing - b.missing);
+      .map(set => ({
+        set,
+        missing: set.filter(c => !has(c)).length,
+        limited: set.filter(c => has(c) && caps.capabilities[c].status === 'limited').length,
+      }))
+      .sort((a, b) => a.missing - b.missing || a.limited - b.limited);
     needed = needed.concat(ranked[0].set);
   }
   const missing = needed.filter(c => !has(c));
@@ -172,8 +176,8 @@ function statusOf(idea, here, other, liveApps) {
   // Held back by something no platform capability covers (licensed content).
   if (idea.heldBy) return 'held';
   if (!buildable(v)) return other && buildable(verdictFor(idea, other.caps)) ? 'other' : 'blocked';
-  if (liveApps.length) return 'covered';
-  if (here.key === 'fas' && idea.decision === 'upgrade-existing') return 'upgrade';
+  // The research picked an existing FAS app to improve rather than a new one.
+  if (liveApps.length) return here.key === 'fas' && idea.decision === 'upgrade-existing' ? 'upgrade' : 'covered';
   return 'open';
 }
 
@@ -318,17 +322,21 @@ function renderIdeasPage(template, data, here, other, escapeHtml) {
   const categoryButtons = usedCategories
     .map(c => `<button class="filter-btn" type="button" data-category="${escapeHtml(c)}" aria-pressed="false">${escapeHtml(c)}</button>`)
     .join('\n          ');
-  return template
-    .replace('{{IDEAS_CARDS}}', ideas.map(i => renderCard(i, here, other, escapeHtml)).join('\n'))
-    .replace('{{IDEAS_STATUS_BUTTONS}}', statusButtons)
-    .replace('{{IDEAS_CATEGORY_BUTTONS}}', categoryButtons)
-    .replaceAll('{{IDEAS_COUNT}}', String(ideas.length))
-    .replace('{{IDEAS_OPEN_COUNT}}', String(count('open')))
-    .replace('{{IDEAS_READY_COUNT}}', String(count('open', 'covered', 'upgrade')))
-    .replace('{{IDEAS_OTHER_COUNT}}', String(count('other')))
-    .replace('{{IDEAS_EXCLUSIVE_COUNT}}', String(exclusiveCount))
-    .replace('{{IDEAS_RESEARCH_DATE}}', escapeHtml(data.researchDate || 'the research date'))
-    .replace('{{IDEAS_CAPS_VERIFIED}}', escapeHtml(here.caps.verifiedAt || 'recently'));
+  const values = {
+    IDEAS_CARDS: ideas.map(i => renderCard(i, here, other, escapeHtml)).join('\n'),
+    IDEAS_STATUS_BUTTONS: statusButtons,
+    IDEAS_CATEGORY_BUTTONS: categoryButtons,
+    IDEAS_COUNT: String(ideas.length),
+    IDEAS_OPEN_COUNT: String(count('open')),
+    IDEAS_READY_COUNT: String(count('open', 'covered', 'upgrade')),
+    IDEAS_OTHER_COUNT: String(count('other')),
+    IDEAS_EXCLUSIVE_COUNT: String(exclusiveCount),
+    IDEAS_RESEARCH_DATE: escapeHtml(data.researchDate || 'the research date'),
+    IDEAS_CAPS_VERIFIED: escapeHtml(here.caps.verifiedAt || 'recently'),
+  };
+  // One pass with a function replacer: rendered text is never re-scanned for
+  // placeholders, and `$&` / `$'` in it are not replacement patterns.
+  return template.replace(/{{(IDEAS_[A-Z_]+)}}/g, (m, k) => (k in values ? values[k] : m));
 }
 
 module.exports = {
