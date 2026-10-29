@@ -244,7 +244,7 @@ export async function runAgentStep(
   // Execute file tools
   const results: ToolResult[] = [];
   for (const tc of fileToolCalls) {
-    const toolOutput = executeTool(tc, files, storeConfig);
+    const toolOutput = await executeTool(tc, files, storeConfig);
     // Truncate large results in conversation history (e.g. read_file returning full file)
     const truncated = { ...toolOutput, content: toolOutput.content.slice(0, 1500) };
     results.push(truncated);

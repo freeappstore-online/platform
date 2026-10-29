@@ -92,50 +92,50 @@ describe("INFRA_TOOLS", () => {
 });
 
 describe("executeTool — file tools", () => {
-  it("write_file and read_file round-trip", () => {
+  it("write_file and read_file round-trip", async () => {
     const files = new Map<string, string>();
-    const write = executeTool({ id: "1", name: "write_file", input: { path: "test.txt", content: "hello" } }, files, appsConfig);
+    const write = await executeTool({ id: "1", name: "write_file", input: { path: "test.txt", content: "hello" } }, files, appsConfig);
     expect(write.content).toContain("Wrote test.txt");
-    const read = executeTool({ id: "2", name: "read_file", input: { path: "test.txt" } }, files, appsConfig);
+    const read = await executeTool({ id: "2", name: "read_file", input: { path: "test.txt" } }, files, appsConfig);
     expect(read.content).toBe("hello");
   });
 
-  it("read_file errors on missing file", () => {
+  it("read_file errors on missing file", async () => {
     const files = new Map<string, string>();
-    const result = executeTool({ id: "1", name: "read_file", input: { path: "nope.txt" } }, files, appsConfig);
+    const result = await executeTool({ id: "1", name: "read_file", input: { path: "nope.txt" } }, files, appsConfig);
     expect(result.isError).toBe(true);
   });
 
-  it("delete_file removes file", () => {
+  it("delete_file removes file", async () => {
     const files = new Map([["a.txt", "content"]]);
-    executeTool({ id: "1", name: "delete_file", input: { path: "a.txt" } }, files, appsConfig);
+    await executeTool({ id: "1", name: "delete_file", input: { path: "a.txt" } }, files, appsConfig);
     expect(files.has("a.txt")).toBe(false);
   });
 
-  it("list_files returns sorted paths", () => {
+  it("list_files returns sorted paths", async () => {
     const files = new Map([
       ["b.txt", ""],
       ["a.txt", ""],
     ]);
-    const result = executeTool({ id: "1", name: "list_files", input: {} }, files, appsConfig);
+    const result = await executeTool({ id: "1", name: "list_files", input: {} }, files, appsConfig);
     expect(result.content).toBe("a.txt\nb.txt");
   });
 
-  it("search_files finds matches", () => {
+  it("search_files finds matches", async () => {
     const files = new Map([["a.txt", "hello world\nfoo bar"]]);
-    const result = executeTool({ id: "1", name: "search_files", input: { pattern: "foo" } }, files, appsConfig);
+    const result = await executeTool({ id: "1", name: "search_files", input: { pattern: "foo" } }, files, appsConfig);
     expect(result.content).toContain("a.txt:2:");
   });
 });
 
 describe("executeTool — register_api", () => {
-  const reg = (input: Record<string, unknown>, files = new Map<string, string>()) => ({
+  const reg = async (input: Record<string, unknown>, files = new Map<string, string>()) => ({
     files,
-    result: executeTool({ id: "1", name: "register_api", input }, files, appsConfig),
+    result: await executeTool({ id: "1", name: "register_api", input }, files, appsConfig),
   });
 
-  it("writes fas.json with a https:// URL-prefix pattern (not a glob)", () => {
-    const { files, result } = reg({
+  it("writes fas.json with a https:// URL-prefix pattern (not a glob)", async () => {
+    const { files, result } = await reg({
       host: "api.openweathermap.org",
       secretName: "OPENWEATHER_KEY",
       injectKind: "query",
@@ -150,35 +150,43 @@ describe("executeTool — register_api", () => {
     expect(api).toMatchObject({ host: "api.openweathermap.org", secretName: "OPENWEATHER_KEY", injectKind: "query", injectName: "appid" });
   });
 
-  it("strips scheme/path from host", () => {
-    const { files } = reg({ host: "https://api.x.com/v1/foo", secretName: "X_KEY", injectKind: "bearer" });
+  it("strips scheme/path from host", async () => {
+    const { files } = await reg({ host: "https://api.x.com/v1/foo", secretName: "X_KEY", injectKind: "bearer" });
     expect(JSON.parse(files.get("fas.json")!).apis[0].host).toBe("api.x.com");
   });
 
-  it("rejects a non-UPPER_SNAKE_CASE secretName", () => {
-    const { result } = reg({ host: "api.x.com", secretName: "weatherKey", injectKind: "query", injectName: "appid" });
+  it("rejects a non-UPPER_SNAKE_CASE secretName", async () => {
+    const { result } = await reg({ host: "api.x.com", secretName: "weatherKey", injectKind: "query", injectName: "appid" });
     expect(result.isError).toBe(true);
     expect(result.content).toContain("UPPER_SNAKE_CASE");
   });
 
-  it("requires injectName for query/header but not bearer", () => {
-    expect(reg({ host: "a.com", secretName: "A_KEY", injectKind: "query" }).result.isError).toBe(true);
-    expect(reg({ host: "a.com", secretName: "A_KEY", injectKind: "bearer" }).result.isError).toBeFalsy();
+  it("requires injectName for query/header but not bearer", async () => {
+    expect((await reg({ host: "a.com", secretName: "A_KEY", injectKind: "query" })).result.isError).toBe(true);
+    expect((await reg({ host: "a.com", secretName: "A_KEY", injectKind: "bearer" })).result.isError).toBeFalsy();
   });
 
-  it("rejects an unknown injectKind", () => {
-    expect(reg({ host: "a.com", secretName: "A_KEY", injectKind: "cookie" }).result.isError).toBe(true);
+  it("rejects an unknown injectKind", async () => {
+    expect((await reg({ host: "a.com", secretName: "A_KEY", injectKind: "cookie" })).result.isError).toBe(true);
   });
 
-  it("merges + dedupes by host across calls", () => {
+  it("merges + dedupes by host across calls", async () => {
     const files = new Map<string, string>();
-    executeTool({ id: "1", name: "register_api", input: { host: "a.com", secretName: "A_KEY", injectKind: "bearer" } }, files, appsConfig);
-    executeTool(
+    await executeTool(
+      { id: "1", name: "register_api", input: { host: "a.com", secretName: "A_KEY", injectKind: "bearer" } },
+      files,
+      appsConfig,
+    );
+    await executeTool(
       { id: "2", name: "register_api", input: { host: "b.com", secretName: "B_KEY", injectKind: "query", injectName: "k" } },
       files,
       appsConfig,
     );
-    executeTool({ id: "3", name: "register_api", input: { host: "a.com", secretName: "A_KEY2", injectKind: "bearer" } }, files, appsConfig);
+    await executeTool(
+      { id: "3", name: "register_api", input: { host: "a.com", secretName: "A_KEY2", injectKind: "bearer" } },
+      files,
+      appsConfig,
+    );
     const apis = JSON.parse(files.get("fas.json")!).apis;
     expect(apis).toHaveLength(2); // a.com replaced, b.com kept
     expect(apis.find((a: { host: string }) => a.host === "a.com").secretName).toBe("A_KEY2");
@@ -205,34 +213,34 @@ describe("locked infrastructure files", () => {
   ];
 
   for (const path of lockedPaths) {
-    it(`write_file rejects ${path}`, () => {
+    it(`write_file rejects ${path}`, async () => {
       const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
-      const result = executeTool({ id: "1", name: "write_file", input: { path, content: "hacked" } }, files, appsConfig);
+      const result = await executeTool({ id: "1", name: "write_file", input: { path, content: "hacked" } }, files, appsConfig);
       expect(result.isError).toBe(true);
       expect(result.content).toContain("locked infrastructure file");
       // Original content must be unchanged
       expect(files.get(path)).not.toBe("hacked");
     });
 
-    it(`delete_file rejects ${path}`, () => {
+    it(`delete_file rejects ${path}`, async () => {
       const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
-      const result = executeTool({ id: "1", name: "delete_file", input: { path } }, files, appsConfig);
+      const result = await executeTool({ id: "1", name: "delete_file", input: { path } }, files, appsConfig);
       expect(result.isError).toBe(true);
       expect(result.content).toContain("locked infrastructure file");
       expect(files.has(path)).toBe(true);
     });
   }
 
-  it("read_file still works on locked files", () => {
+  it("read_file still works on locked files", async () => {
     const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
-    const result = executeTool({ id: "1", name: "read_file", input: { path: "package.json" } }, files, appsConfig);
+    const result = await executeTool({ id: "1", name: "read_file", input: { path: "package.json" } }, files, appsConfig);
     expect(result.isError).toBeUndefined();
     expect(result.content).toContain("packageManager");
   });
 
-  it("write_file allows non-locked paths", () => {
+  it("write_file allows non-locked paths", async () => {
     const files = new Map<string, string>();
-    const result = executeTool(
+    const result = await executeTool(
       { id: "1", name: "write_file", input: { path: "web/src/App.tsx", content: "export default () => <div/>" } },
       files,
       appsConfig,
@@ -241,9 +249,9 @@ describe("locked infrastructure files", () => {
     expect(files.get("web/src/App.tsx")).toBe("export default () => <div/>");
   });
 
-  it("write_file allows new component files", () => {
+  it("write_file allows new component files", async () => {
     const files = new Map<string, string>();
-    const result = executeTool(
+    const result = await executeTool(
       { id: "1", name: "write_file", input: { path: "web/src/components/Sidebar.tsx", content: "export const Sidebar = () => null" } },
       files,
       appsConfig,
@@ -253,9 +261,9 @@ describe("locked infrastructure files", () => {
 });
 
 describe("run_compliance_check", () => {
-  it("apps template passes apps compliance (except APPNAME, replaced at deploy)", () => {
+  it("apps template passes apps compliance (except APPNAME, replaced at deploy)", async () => {
     const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
-    const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
+    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
     expect(result.content).toContain("PASS: MIT License");
     expect(result.content).toContain("PASS: CSS variables (--paper, --ink, --accent)");
     expect(result.content).toContain("PASS: Dark mode support");
@@ -265,13 +273,15 @@ describe("run_compliance_check", () => {
     // index.css applies Fraunces to headings (#90)
     expect(result.content).toContain("PASS: Brand fonts");
     // APPNAME placeholders remain until deploy time
+    expect(result.content).toContain("PASS: No payments (free tier)");
+    expect(result.content).toContain("PASS: No ads");
     expect(result.content).toContain("FAIL: APPNAME placeholders");
-    expect(result.content).toContain("11 pass, 1 fail");
+    expect(result.content).toContain("13 pass, 1 fail");
   });
 
-  it("games template passes games compliance (except APPNAME + Fraunces)", () => {
+  it("games template passes games compliance (except APPNAME + Fraunces)", async () => {
     const files = new Map(Object.entries(getTemplateFiles(gamesConfig)));
-    const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
+    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
     expect(result.content).toContain("PASS: MIT License");
     expect(result.content).toContain("PASS: CSS variables (--paper, --ink, --accent)");
     expect(result.content).toContain("PASS: Overflow hidden");
@@ -280,27 +290,29 @@ describe("run_compliance_check", () => {
     expect(result.content).toContain("PASS: PWA manifest");
     expect(result.content).toContain("FAIL: Brand fonts");
     expect(result.content).toContain("FAIL: APPNAME placeholders");
-    expect(result.content).toContain("10 pass, 2 fail");
+    expect(result.content).toContain("PASS: No payments (free tier)");
+    expect(result.content).toContain("PASS: No ads");
+    expect(result.content).toContain("12 pass, 2 fail");
   });
 
-  it("apps template would fail games compliance (overflow)", () => {
+  it("apps template would fail games compliance (overflow)", async () => {
     const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
-    const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
+    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
     // Token names are shared since #64, so only the game-specific rules differ.
     expect(result.content).toContain("PASS: CSS variables (--paper, --ink, --accent)");
     expect(result.content).toContain("FAIL: Overflow hidden");
   });
 
-  it("games template would fail apps compliance (store link)", () => {
+  it("games template would fail apps compliance (store link)", async () => {
     const files = new Map(Object.entries(getTemplateFiles(gamesConfig)));
-    const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
+    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
     expect(result.content).toContain("FAIL: FreeAppStore link");
   });
 
-  it("detects APPNAME placeholders", () => {
+  it("detects APPNAME placeholders", async () => {
     const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
     // Template files still have APPNAME (they're replaced at deploy time)
-    const result = executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
+    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
     expect(result.content).toContain("FAIL: APPNAME placeholders");
   });
 });

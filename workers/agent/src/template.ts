@@ -823,6 +823,11 @@ subscription or upgrade screen. Only pass \`requireAuth\` to Shell if the whole 
 
 ## Privacy Rules (mandatory)
 - ZERO analytics, tracking, cookies, or third-party scripts (except Google Fonts which is in the template)
+- NO payments and NO ads. FreeAppStore apps are free forever: no checkout or payment SDKs (Stripe, PayPal,
+  Paddle, Lemon Squeezy, Gumroad), Payment Request API, Apple Pay, Google Pay or payment links, and no ad
+  networks or ad SDKs (AdSense, Ad Manager, AdMob / H5 Games Ads, Carbon, Poki or CrazyGames ads). No tip
+  jars, upgrade screens or paywalls either. run_compliance_check fails payment and ad code, and deploy and
+  push_update refuse to ship it.
 - Default to localStorage (no sign-in). Use cloud sync (fas.kv, below) only when the user wants their
   data to persist / follow them across devices — that path requires sign-in.
 - NEVER add an API-key input or ask the user to paste/enter an API key. End users never supply keys on this platform — developer API keys are configured once in the platform itself, not in the app. If a feature needs a third-party API key and cannot work without one, build the rest of the app and tell the user that API access is configured at the platform level (server-side key injection is coming via the SDK proxy), not inside the app.
@@ -915,7 +920,7 @@ Do NOT attempt to edit these. Build your app entirely in web/src/ (App.tsx + com
 ## Important
 - Do not add npm dependencies. The template already has React, Tailwind and "@freeappstore/sdk"
   (the Shell, UI components, sign-in, cloud storage and the API proxy).
-- Do NOT add analytics, tracking, or any third-party scripts.
+- Do NOT add analytics, tracking, payments, ads, or any third-party scripts.
 - Do NOT build your own backend/server. For external data, use the platform proxy (above), not a
   custom backend.
 - Always use the write_file tool to create/edit files. Show the user what you're building.
@@ -961,6 +966,11 @@ When building games, follow these patterns based on game type:
 
 ## Privacy Rules (mandatory)
 - ZERO analytics, tracking, cookies, or third-party scripts (except Google Fonts which is in the template)
+- NO payments and NO ads. FreeGameStore games are free forever: no checkout or payment SDKs (Stripe, PayPal,
+  Paddle, Lemon Squeezy, Gumroad), Payment Request API, Apple Pay, Google Pay or payment links, and no ad
+  networks or ad SDKs (AdSense, Ad Manager, AdMob / H5 Games Ads, Carbon, Poki or CrazyGames ads). No tip
+  jars, upgrade screens or paywalls either. run_compliance_check fails payment and ad code, and deploy and
+  push_update refuse to ship it.
 - High scores in localStorage only
 - No accounts, no sign-in required
 - NEVER add an API-key input or ask the user to paste/enter an API key. End users never supply keys on this platform — developer API keys are configured once in the platform itself, not in the app. If a feature needs a third-party API key and cannot work without one, build the rest of the app and tell the user that API access is configured at the platform level (server-side key injection is coming via the SDK proxy), not inside the app.
@@ -1015,7 +1025,7 @@ Do NOT attempt to edit these. Build your game entirely in web/src/ (App.tsx + co
 
 ## Important
 - Do NOT add any npm dependencies beyond what's in the template unless absolutely necessary (e.g. Three.js for 3D games). Build everything with React + Tailwind + Canvas API.
-- Do NOT add analytics, tracking, or any third-party scripts.
+- Do NOT add analytics, tracking, payments, ads, or any third-party scripts.
 - Do NOT create a backend or API — this is a static game.
 - Always use the write_file tool to create/edit files. Show the user what you're building.
 - When you deploy, all APPNAME placeholders in template files must be replaced with the actual game name.

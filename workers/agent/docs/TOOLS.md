@@ -39,20 +39,42 @@ The `deploy` tool creates a **preview** — not a published store listing:
 
 ## Compliance checks (run_compliance_check)
 
-Validates 12 rules matching the CI compliance workflow:
+Validates 14 rules matching the CI compliance workflow:
 
 1. MIT License file exists
 2. No .env.production committed
 3. No tracking SDKs (google-analytics, gtag, amplitude, etc.)
-4. Brand fonts referenced (Manrope + Fraunces)
-5. CSS variables present (--paper, --ink, --accent)
-6. HTML meta tags (lang, viewport, title)
-7. PWA manifest (name, display, start_url)
-8. PWA meta tags (apple-mobile-web-app-capable)
-9. FreeAppStore link in source
-10. Dark mode support (prefers-color-scheme)
-11. pnpm workspace configured
-12. No APPNAME placeholders remaining
+4. No payments (free tier): Payment Request API, Apple Pay, Google Pay, Stripe, PayPal, Paddle, Lemon Squeezy, Gumroad, payment manifest members
+5. No ads: AdSense, Ad Manager, IMA, H5 Games Ads / AdMob, Amazon, Prebid, Carbon, Taboola, Outbrain, game-portal ad SDKs and others
+6. Brand fonts referenced (Manrope + Fraunces)
+7. CSS variables present (--paper, --ink, --accent)
+8. HTML meta tags (lang, viewport, title)
+9. PWA manifest (name, display, start_url)
+10. PWA meta tags (apple-mobile-web-app-capable)
+11. FreeAppStore link in source
+12. Dark mode support (prefers-color-scheme)
+13. pnpm workspace configured
+14. No APPNAME placeholders remaining
+
+Rules 4 and 5 aren't reimplemented here. `src/compliance.ts` imports
+`checkNoPayments` and `checkNoAds` from `packages/compliance/src/checks/`, the
+same code `fas check` and app CI run, so the patterns stay in one place. It
+imports the check modules by relative path, as `src/push.ts` does with the
+backend's web-push, because this Worker is its own pnpm workspace (it can't use
+`workspace:*`) and the package entry pulls in `node:fs`, which a Worker without
+`nodejs_compat` can't load. `src/shared-compliance.d.ts` declares the Node
+modules the CLI-only `fsFileSource` imports, so `tsc` can check the shared
+files. They are never bundled. A change under `packages/compliance/` redeploys
+the agent (`deploy-agent.yml` paths).
+
+The other rules are advisory: the model is told to fix failures before
+deploying, and app CI gates them after the push. Payments and ads are a hard
+gate. `deploy` and `push_update` run the two shared checks first, next to the
+build sanity preflight. On a failure they push nothing, set the deploy status
+to `error` ("Compliance check failed: No payments (free tier)"), and return a
+`Deploy BLOCKED` result that names the files and the fix, so the model removes
+the code and deploys again. Both stores forbid both, so the gate applies to
+apps and games.
 
 ## Tool execution flow
 

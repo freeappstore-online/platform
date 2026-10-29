@@ -24,20 +24,20 @@ function makeCtx(overrides: Partial<{ appId: string | null }> = {}) {
 describe("Security: write_file path validation", () => {
   const files = new Map<string, string>();
 
-  it("blocks path traversal with ..", () => {
-    const r = executeTool({ id: "1", name: "write_file", input: { path: "../etc/passwd", content: "x" } }, files, appsConfig);
+  it("blocks path traversal with ..", async () => {
+    const r = await executeTool({ id: "1", name: "write_file", input: { path: "../etc/passwd", content: "x" } }, files, appsConfig);
     expect(r.isError).toBe(true);
     expect(r.content).toContain("not allowed");
   });
 
-  it("blocks nested path traversal", () => {
-    const r = executeTool({ id: "1", name: "write_file", input: { path: "web/../../.env", content: "x" } }, files, appsConfig);
+  it("blocks nested path traversal", async () => {
+    const r = await executeTool({ id: "1", name: "write_file", input: { path: "web/../../.env", content: "x" } }, files, appsConfig);
     expect(r.isError).toBe(true);
     expect(r.content).toContain("not allowed");
   });
 
-  it("blocks .github/workflows injection", () => {
-    const r = executeTool(
+  it("blocks .github/workflows injection", async () => {
+    const r = await executeTool(
       { id: "1", name: "write_file", input: { path: ".github/workflows/evil.yml", content: "on: push" } },
       files,
       appsConfig,
@@ -46,8 +46,8 @@ describe("Security: write_file path validation", () => {
     expect(r.content).toContain("not allowed");
   });
 
-  it("blocks .github/ directory entirely", () => {
-    const r = executeTool(
+  it("blocks .github/ directory entirely", async () => {
+    const r = await executeTool(
       { id: "1", name: "write_file", input: { path: ".github/CODEOWNERS", content: "* @attacker" } },
       files,
       appsConfig,
@@ -55,14 +55,14 @@ describe("Security: write_file path validation", () => {
     expect(r.isError).toBe(true);
   });
 
-  it("blocks absolute paths", () => {
-    const r = executeTool({ id: "1", name: "write_file", input: { path: "/etc/passwd", content: "x" } }, files, appsConfig);
+  it("blocks absolute paths", async () => {
+    const r = await executeTool({ id: "1", name: "write_file", input: { path: "/etc/passwd", content: "x" } }, files, appsConfig);
     expect(r.isError).toBe(true);
     expect(r.content).toContain("not allowed");
   });
 
-  it("allows normal web/ paths", () => {
-    const r = executeTool(
+  it("allows normal web/ paths", async () => {
+    const r = await executeTool(
       { id: "1", name: "write_file", input: { path: "web/src/App.tsx", content: "export default () => <div/>" } },
       files,
       appsConfig,
@@ -71,8 +71,8 @@ describe("Security: write_file path validation", () => {
     expect(r.content).toContain("Wrote");
   });
 
-  it("blocks package.json (locked infrastructure file)", () => {
-    const r = executeTool({ id: "1", name: "write_file", input: { path: "package.json", content: "{}" } }, files, appsConfig);
+  it("blocks package.json (locked infrastructure file)", async () => {
+    const r = await executeTool({ id: "1", name: "write_file", input: { path: "package.json", content: "{}" } }, files, appsConfig);
     expect(r.isError).toBe(true);
     expect(r.content).toContain("locked infrastructure file");
   });

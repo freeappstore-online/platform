@@ -432,3 +432,48 @@ describe("executeInfraTool — build sanity preflight", () => {
     }
   });
 });
+
+describe("executeInfraTool — no payments / no ads preflight", () => {
+  const deployCall = {
+    id: "1",
+    name: "deploy",
+    input: { id: "safe-app", name: "Safe App", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "test" },
+  };
+
+  it("blocks deploy before any GitHub call when the code uses Stripe", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
+    try {
+      const ctx = makeCtx();
+      ctx.files.set("web/src/Checkout.tsx", 'import { loadStripe } from "@stripe/stripe-js";\nexport const s = loadStripe("pk_test_1");');
+      const result = await executeInfraTool(deployCall, ctx);
+
+      expect(result).toContain("Deploy BLOCKED");
+      expect(result).toContain("take no payments");
+      expect(result).toContain("web/src/Checkout.tsx (Stripe)");
+      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "error", error: "Compliance check failed: No payments (free tier)" });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("blocks push_update before pushing when the code loads AdSense", async () => {
+    const originalFetch = globalThis.fetch;
+    const fetchSpy = vi.fn() as unknown as typeof fetch;
+    globalThis.fetch = fetchSpy;
+    try {
+      const ctx = makeCtx({ appId: "my-app", ownerLogin: "alice", apps: new Map([["my-app", "alice"]]) });
+      ctx.files.set("web/index.html", '<script src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>');
+      const result = await executeInfraTool({ id: "1", name: "push_update", input: { id: "my-app", message: "update" } }, ctx);
+
+      expect(result).toContain("Deploy BLOCKED");
+      expect(result).toContain("web/index.html (Google AdSense)");
+      expect(ctx.onDeployStatus).toHaveBeenCalledWith({ phase: "error", error: "Compliance check failed: No ads" });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

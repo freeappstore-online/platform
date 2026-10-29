@@ -148,7 +148,7 @@ export function getToolDefinitions(config: StoreConfig): ToolDef[] {
     },
     {
       name: "run_compliance_check",
-      description: `Run ${storeName} compliance checks against the current project files. Validates: MIT license, no tracking SDKs, brand fonts, CSS variables, HTML meta tags, PWA manifest, ${config.domain} link, pnpm workspace. Returns pass/fail for each check with details. Run this BEFORE deploying to catch issues early.`,
+      description: `Run ${storeName} compliance checks against the current project files. Validates: MIT license, no tracking SDKs, no payments (checkout SDKs, payment APIs or links), no ads (ad network scripts, SDKs or packages), brand fonts, CSS variables, HTML meta tags, PWA manifest, ${config.domain} link, pnpm workspace. Returns pass/fail for each check with details. Run this BEFORE deploying to catch issues early.`,
       parameters: { type: "object", properties: {} },
     },
     {
@@ -216,7 +216,8 @@ const LOCKED_FILES = new Set([
   "LICENSE",
 ]);
 
-export function executeTool(toolCall: ToolCall, files: Map<string, string>, config: StoreConfig): ToolResult {
+/** Async because run_compliance_check runs the shared checks, which read through an async FileSource. */
+export async function executeTool(toolCall: ToolCall, files: Map<string, string>, config: StoreConfig): Promise<ToolResult> {
   const { name, input, id } = toolCall;
 
   switch (name) {
@@ -282,7 +283,7 @@ export function executeTool(toolCall: ToolCall, files: Map<string, string>, conf
     }
 
     case "run_compliance_check": {
-      return { id, content: runComplianceCheck(files, config) };
+      return { id, content: await runComplianceCheck(files, config) };
     }
 
     case "register_api": {

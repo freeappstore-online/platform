@@ -165,6 +165,15 @@ describe("getSystemPrompt", () => {
     expect(prompt).not.toMatch(/sidebar \(17rem\)|Shell sidebar|prefers-color-scheme/);
   });
 
+  it("both prompts forbid payments and ads, like fas check", () => {
+    for (const config of [appsConfig, gamesConfig]) {
+      const prompt = getSystemPrompt(config);
+      expect(prompt).toContain("NO payments and NO ads");
+      expect(prompt).toMatch(/Stripe[\s\S]*AdSense/);
+      expect(prompt).toContain("Do NOT add analytics, tracking, payments, ads, or any third-party scripts.");
+    }
+  });
+
   it("games prompt references GameShell component", () => {
     expect(getSystemPrompt(gamesConfig)).toContain("GameShell");
   });
@@ -229,10 +238,10 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
     expect(files["web/src/index.css"]).toMatch(/h1,\s*h2,\s*h3\s*\{\s*font-family: var\(--font-display\)/);
   });
 
-  it("a freshly scaffolded app passes the agent's compliance check, for every archetype", () => {
+  it("a freshly scaffolded app passes the agent's compliance check, for every archetype", async () => {
     for (const archetype of APP_ARCHETYPES) {
       const scaffold = substituteAppName(getTemplateFiles(appsConfig, archetype), "my-app", "My App");
-      const output = runComplianceCheck(new Map(Object.entries(scaffold)), appsConfig);
+      const output = await runComplianceCheck(new Map(Object.entries(scaffold)), appsConfig);
       expect(output, archetype).not.toContain("FAIL");
     }
   });

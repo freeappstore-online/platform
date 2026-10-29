@@ -12,6 +12,10 @@ on:
       - 'workers/agent/**'
       # The agent imports the shared Web Push sender from the backend (#146).
       - 'packages/backend/src/lib/web-push.ts'
+      # The agent imports the no-payments and no-ads checks from compliance
+      # source, so compliance changes alter the deployed Worker even when
+      # workers/agent itself doesn't change.
+      - 'packages/compliance/**'
       - '.github/workflows/deploy-agent.yml'
   workflow_dispatch:
 

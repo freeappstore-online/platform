@@ -1,7 +1,46 @@
+// The no-payments and no-ads rules are the shared @freeappstore/compliance
+// checks, imported from source (as push.ts does with the backend's web-push)
+// so the agent can't drift from `fas check` and app CI. This Worker is its own
+// pnpm workspace, outside the root one, so `workspace:*` doesn't resolve here.
+// Only the check modules are imported: the package entry and lib/file-source
+// pull in node:fs / node:child_process, which a Worker can't load, so the Map
+// adapter below stands in for the package's mapFileSource.
+import { checkNoAds } from "../../../packages/compliance/src/checks/no-ads";
+import { checkNoPayments } from "../../../packages/compliance/src/checks/no-payments";
+import type { FileSource } from "../../../packages/compliance/src/lib/file-source";
+import type { CheckResult } from "../../../packages/compliance/src/types";
 import type { StoreConfig } from "./config";
 
+/** The session's virtual filesystem as the shared checks' FileSource. */
+function mapSource(files: Map<string, string>): FileSource {
+  return {
+    async *list() {
+      yield* files.keys();
+    },
+    async read(path) {
+      return files.get(path) ?? null;
+    },
+  };
+}
+
+/**
+ * The shared platform rules both stores forbid outright: payments and ads.
+ * These are hard rules, so deploy and push_update refuse to ship a failure
+ * (infra-exec.ts) rather than leave it to app CI after the push.
+ */
+export function runSharedChecks(files: Map<string, string>): Promise<CheckResult[]> {
+  const source = mapSource(files);
+  return Promise.all([checkNoPayments(source), checkNoAds(source)]);
+}
+
+/** One FAIL line per failing shared check, with its fix. */
+export function formatSharedFailure(result: CheckResult): string {
+  const fix = result.suggestions?.length ? ` Fix: ${result.suggestions.join(" ")}` : "";
+  return `${result.name} — ${result.detail}.${fix}`;
+}
+
 /** Run offline compliance checks against the session's virtual filesystem. */
-export function runComplianceCheck(files: Map<string, string>, config: StoreConfig): string {
+export async function runComplianceCheck(files: Map<string, string>, config: StoreConfig): Promise<string> {
   const results: string[] = [];
   const pass = (name: string) => results.push(`PASS: ${name}`);
   const fail = (name: string, detail: string) => results.push(`FAIL: ${name} — ${detail}`);
@@ -9,6 +48,10 @@ export function runComplianceCheck(files: Map<string, string>, config: StoreConf
   checkLicense(files, pass, fail);
   checkEnvProduction(files, pass, fail);
   checkTracking(files, pass, fail);
+  for (const result of await runSharedChecks(files)) {
+    if (result.status === "fail") results.push(`FAIL: ${formatSharedFailure(result)}`);
+    else pass(result.name);
+  }
   checkBrandFonts(files, pass, fail);
   checkCssVars(files, pass, fail);
   checkHtmlMeta(files, pass, fail);

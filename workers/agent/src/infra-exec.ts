@@ -1,6 +1,8 @@
 /** Execute infra tools server-side. Extracted from session.ts to keep it manageable. */
 
+import type { CheckResult } from "../../../packages/compliance/src/types";
 import { checkBuildSanity, formatSanityBlock } from "./build-sanity";
+import { formatSharedFailure, runSharedChecks } from "./compliance";
 import type { StoreConfig } from "./config";
 import type { DeployEnv, DeployStatus } from "./deploy";
 import { deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./deploy";
@@ -50,6 +52,15 @@ const FIX_HINT = "Use get_build_logs to see the full log, fix the code, then pus
  *  which would make the follow-up prompt treat an unfinished build as broken. */
 const STILL_BUILDING =
   "CI is still building, so it is not live yet. Call check_deploy_status shortly to confirm it went live; if the build did not succeed, it will say why.";
+
+/** The model-facing refusal when the code breaks the no-payments or no-ads rule. */
+function formatRuleBlock(fails: CheckResult[], config: StoreConfig): string {
+  const lines = fails.map((result) => `  - ${formatSharedFailure(result)}`);
+  return (
+    `Deploy BLOCKED: ${config.storeName} ${config.noun}s are free: they take no payments and show no ads. ` +
+    `Remove these, then deploy again:\n\n${lines.join("\n")}`
+  );
+}
 
 /** Execute a single infra tool. Returns the result string. */
 export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<string> {
@@ -102,6 +113,17 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
         error: `Build check failed: ${findings.map((finding) => finding.file).join(", ")}`,
       });
       return formatSanityBlock(findings, config.noun);
+    }
+    // Payments and ads are hard platform rules (fas check fails them, app CI
+    // and the Terms forbid them), so they block here like a broken build
+    // instead of shipping and failing CI with the old version left live.
+    const ruleFails = (await runSharedChecks(ctx.files)).filter((result) => result.status === "fail");
+    if (ruleFails.length) {
+      await ctx.onDeployStatus({
+        phase: "error",
+        error: `Compliance check failed: ${ruleFails.map((result) => result.name).join(", ")}`,
+      });
+      return formatRuleBlock(ruleFails, config);
     }
   }
 
