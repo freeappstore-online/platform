@@ -325,6 +325,15 @@ Menus, drawers, popovers, modals and toasts use an opaque surface in both themes
 to the container. Reserve `--panel-glass` for explicit glass effects and
 `--scrim` for translucent backdrops.
 
+Both [template-standalone](https://github.com/freeappstore-online/template-standalone)
+and [template-connected](https://github.com/freeappstore-online/template-connected)
+ship this configuration with SDK 0.16.0 or later. From either template root,
+run `pnpm install --frozen-lockfile` and `pnpm test`. The tests build the app
+and check emitted app/SDK utilities, drawer animation CSS, and opaque light/dark
+surface tokens. CI runs these checks on pushes to `main` and pull requests.
+The SDK source path is relative to `web/src/index.css`: `../node_modules`
+resolves to `web/node_modules`; `../../node_modules` also covers root installs.
+
 | Token | Utilities via `@theme inline` |
 |-------|--------------------------------|
 | `--paper`, `--paper-deep` | `bg-paper`, `bg-paper-deep` |
