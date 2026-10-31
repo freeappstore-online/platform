@@ -1,5 +1,8 @@
 # UI Components
 
+See [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md) for the storefront styling and surface
+contract, including opaque floating UI and opt-in glass.
+
 Drop-in React components from `@freeappstore/sdk/ui`. Components use CSS custom properties (`--ink`, `--accent`, etc.) to blend into your app's theme.
 
 ```tsx
