@@ -296,7 +296,7 @@ sets it from the system preference or the `Shell`'s theme toggle.
 
 React + Tailwind 4 on FAS tokens is **required for every React surface**:
 apps, templates, `packages/sdk/src/ui`, `sites/console`, and `workers/admin`.
-[ADR-001](adr/001-tailwind-on-fas-tokens.md) defines three layers:
+[ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md) defines three layers:
 
 1. Reuse `@freeappstore/sdk/ui` or app-local React components for repeated UI
    such as buttons, cards, inputs, dialogs and empty states.
