@@ -18,6 +18,7 @@ import { screencheckCommand } from './commands/screencheck.js';
 import { secretCommand } from './commands/secret.js';
 import { whoamiCommand } from './commands/whoami.js';
 import { backgroundVersionCheck } from './lib/version-check.js';
+import { migrateCommand } from './migrate-tailwind-tokens.js';
 
 // Read version from the package's own package.json so `fas --version` always
 // matches the installed package. dist/index.js sits one level under the
@@ -51,6 +52,7 @@ program.addCommand(secretCommand);
 program.addCommand(proxyCommand);
 program.addCommand(qualityCommand);
 program.addCommand(adminCommand);
+program.addCommand(migrateCommand);
 
 // `fas` with no subcommand → launch the TUI when stdout is a TTY.
 // Subcommands keep their normal one-shot behavior, scriptable for CI / agents.
