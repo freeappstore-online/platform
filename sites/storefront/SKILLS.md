@@ -185,6 +185,49 @@ No further API calls or manual steps needed. Ever.
 - 3D games: Three.js + React Three Fiber + Drei
 - Games SDK: `@freegamestore/games` (GameShell, GameTopbar, GameButton)
 
+## Styling (required)
+
+React + Tailwind 4 on FAS tokens is **required for every React surface**:
+apps, templates, `packages/sdk/src/ui`, `sites/console`, and `workers/admin`.
+[ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md) defines three layers:
+
+1. Reuse `@freeappstore/sdk/ui` or app-local React components for repeated UI
+   such as buttons, cards, inputs, dialogs and empty states.
+2. Write Tailwind utilities on token colours in `className`, such as
+   `text-ink bg-panel border-line`, for layout and one-offs. Map the tokens
+   with `@theme inline`; prefer named utilities to `text-[var(--muted)]`.
+3. Keep `web/src/index.css` (or the surface's entry stylesheet) limited to
+   `@import "tailwindcss"`, `@source`, token blocks (`:root` and
+   `:root[data-theme='dark']`), `@theme`, and `@layer base` /
+   `@layer components`. Print styles may use `@media print`.
+   No unlayered rules or hex colours outside token blocks.
+
+Never add feature classes to index.css; extract a React component instead.
+Never inline `style` except for truly dynamic values such as computed positions,
+transforms and progress widths; comment the reason. Static appearance uses
+utilities or component variants. Runtime-injected CSS strings are prohibited,
+including in the SDK.
+
+Branding stays in token values in the light and dark token blocks. Migration
+changes how tokens are used, not an app's palette. The [UI styling guide](https://docs.freeappstore.online/ui/#styling) contains the mapping and explicit SDK distribution `@source` entries needed
+because Tailwind skips dependencies under `node_modules`.
+
+Menus, drawers, popovers, modals and toasts use an opaque surface in both themes:
+`bg-popover` with `--popover: var(--paper)`, or `bg-paper`. Do not apply opacity
+to the container. Reserve `--panel-glass` for explicit glass effects and
+`--scrim` for translucent backdrops.
+
+| Token | Utilities via `@theme inline` |
+|-------|--------------------------------|
+| `--paper`, `--paper-deep` | `bg-paper`, `bg-paper-deep` |
+| `--ink`, `--ink-strong`, `--muted` | `text-ink`, `text-ink-strong`, `text-muted` |
+| `--line`, `--line-strong` | `border-line`, `border-line-strong` |
+| `--panel`, `--popover` | `bg-panel`, `bg-popover` |
+| `--accent`, `--accent-soft`, `--accent-deep`, `--accent-hover` | `text-accent`, `bg-accent-soft`, `text-accent-deep`, `hover:bg-accent-hover` |
+| `--sky`, `--mint` (and soft/deep variants) | `text-sky`, `bg-sky-soft`, `text-mint-deep` |
+| `--success`, `--warning`, `--danger` (and soft variants) | `text-success`, `text-warning`, `text-danger`, `bg-danger-soft` |
+| `--panel-glass`, `--scrim` | `bg-panel-glass`, `bg-scrim` |
+
 ## Project Structure
 
 ```

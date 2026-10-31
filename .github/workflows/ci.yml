@@ -41,6 +41,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+      - name: Styling standard documentation tests
+        run: node --test scripts/styling-standard.test.mjs
       - name: Discovery lifecycle tests
         run: node --test scripts/reconcile-app-discovery.test.mjs
 

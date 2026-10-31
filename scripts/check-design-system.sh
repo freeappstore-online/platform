@@ -1,6 +1,6 @@
 #!/bin/bash
 # Design system lint — run in CI to catch violations.
-# See DESIGN-SYSTEM.md for the full spec.
+# See docs/ui.md#styling and docs/adr/001-tailwind-on-fas-tokens.md for the styling standard.
 set -euo pipefail
 
 FAIL=0
@@ -12,7 +12,7 @@ BANNED_VARS='var\(--bg\)|--bg\s*:|var\(--surface\b|--surface\s*:|var\(--border\b
 # these tokens are actually applied. Generated theme strings in *.ts scaffolds
 # are intentionally self-contained and excluded.
 if grep -rn --include="*.css" --include="*.tsx" --include="*.jsx" -E "$BANNED_VARS" "${1:-.}" 2>/dev/null | grep -v node_modules | grep -v '.min.css' | grep -v 'prism' | grep -v 'test/fixtures' | grep -v '/dist/'; then
-  echo "FAIL: Found banned CSS variable names. Use standard tokens from DESIGN-SYSTEM.md"
+  echo "FAIL: Found banned CSS variable names. Use standard tokens from docs/ui.md#styling"
   echo "  --bg → --paper, --surface → --panel, --border → --line, --glass → --panel, --error → --danger"
   FAIL=1
 fi
