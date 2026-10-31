@@ -1,13 +1,4 @@
-import {
-  type CSSProperties,
-  type ReactNode,
-  Suspense,
-  useEffect,
-  useInsertionEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
 import { Footer, Modal, Spinner } from './components.js';
@@ -16,7 +7,6 @@ import { FriendRequestBadge, FriendsList } from './friends.js';
 import { activeHref, NavBar, type NavItem, useCurrentPath } from './navbar.js';
 import {
   OfflineBanner,
-  SHELL_CSS,
   ShellErrorBoundary,
   type ShellErrorContext,
   SkipLink,
@@ -69,60 +59,24 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
   };
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} className="relative">
       <button
+        type="button"
+        aria-label="Profile menu"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
-        style={{
-          background: 'none',
-          border: '2px solid var(--line)',
-          borderRadius: '50%',
-          padding: 0,
-          cursor: 'pointer',
-          width: 32,
-          height: 32,
-          overflow: 'hidden',
-          display: 'block',
-        }}
+        className="bg-transparent border-2 border-line rounded-full p-0 cursor-pointer w-8 h-8 overflow-hidden block"
       >
         <Avatar user={user} size={28} />
       </button>
       {open && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 40,
-            right: 0,
-            background: 'var(--panel)',
-            border: '1px solid var(--line)',
-            borderRadius: 'var(--radius, 0.75rem)',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-            minWidth: 200,
-            padding: '0.5rem 0',
-            zIndex: 100,
-          }}
-        >
-          <div
-            style={{
-              padding: '0.5rem 1rem',
-              borderBottom: '1px solid var(--line)',
-              fontSize: '0.85rem',
-              fontWeight: 700,
-              color: 'var(--ink)',
-            }}
-          >
+        <div className="absolute top-10 right-0 bg-popover border border-line rounded shadow-sm min-w-50 p-[0.5rem_0] z-[100]">
+          <div className="p-[0.5rem_1rem] border-b border-line text-[0.85rem] font-bold text-ink">
             {user.login}
           </div>
           {showThemeToggle && (
-            <div
-              style={{
-                padding: '0.5rem 1rem',
-                borderBottom: '1px solid var(--line)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <span style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>Theme</span>
+            <div className="p-[0.5rem_1rem] border-b border-line flex items-center justify-between">
+              <span className="text-[0.85rem] text-muted">Theme</span>
               <ThemeToggle />
             </div>
           )}
@@ -131,7 +85,7 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
               app.keys.manage();
               setOpen(false);
             }}
-            style={menuItemStyle}
+            className="block w-full p-[0.5rem_1rem] bg-transparent border-0 text-left text-[0.85rem] cursor-pointer text-ink font-[inherit]"
           >
             API Keys
           </button>
@@ -140,22 +94,20 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
               setFriendsOpen(true);
               setOpen(false);
             }}
-            style={{
-              ...menuItemStyle,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}
+            className="flex w-full p-[0.5rem_1rem] bg-transparent border-0 text-left text-[0.85rem] cursor-pointer text-ink font-[inherit] items-center justify-between"
           >
             Friends <FriendRequestBadge app={app} />
           </button>
           {children}
-          <button onClick={handleSignOut} style={menuItemStyle}>
+          <button
+            onClick={handleSignOut}
+            className="block w-full p-[0.5rem_1rem] bg-transparent border-0 text-left text-[0.85rem] cursor-pointer text-ink font-[inherit]"
+          >
             Sign out
           </button>
           <button
             onClick={handleDelete}
-            style={{ ...menuItemStyle, color: 'var(--danger, #dc2626)' }}
+            className="block w-full p-[0.5rem_1rem] bg-transparent border-0 text-left text-[0.85rem] cursor-pointer text-danger font-[inherit]"
           >
             Delete account
           </button>
@@ -172,19 +124,6 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
     </div>
   );
 }
-
-const menuItemStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '0.5rem 1rem',
-  background: 'none',
-  border: 'none',
-  textAlign: 'left',
-  fontSize: '0.85rem',
-  cursor: 'pointer',
-  color: 'var(--ink)',
-  fontFamily: 'inherit',
-};
 
 // ---------------------------------------------------------------------------
 // ProfilePage
@@ -203,15 +142,13 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   const [friendsOpen, setFriendsOpen] = useState(false);
 
   if (loading) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>Loading...</div>
-    );
+    return <div className="p-8 text-center text-muted">Loading...</div>;
   }
 
   if (!user) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <p style={{ color: 'var(--muted)', marginBottom: '1rem' }}>Sign in to view your profile.</p>
+      <div className="p-8 text-center">
+        <p className="text-muted mb-4">Sign in to view your profile.</p>
         <SignInButton app={app} />
       </div>
     );
@@ -241,21 +178,13 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   ];
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '2rem 1rem' }}>
+    <div className="max-w-120 m-[0_auto] p-[2rem_1rem]">
       {/* Identity */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
+      <div className="flex items-center gap-4 mb-8">
         <Avatar user={user} size={64} />
         <div>
-          <div
-            style={{
-              fontSize: '1.25rem',
-              fontWeight: 700,
-              color: 'var(--ink-strong)',
-            }}
-          >
-            {user.login}
-          </div>
-          <div style={{ fontSize: '0.85rem', color: 'var(--muted)' }}>FreeAppStore account</div>
+          <div className="text-[1.25rem] font-bold text-ink-strong">{user.login}</div>
+          <div className="text-[0.85rem] text-muted">FreeAppStore account</div>
         </div>
       </div>
 
@@ -264,7 +193,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
         {showThemeToggle && (
           <>
             <ProfileLabel>Theme</ProfileLabel>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+            <div className="flex gap-2 mb-4">
               {themeOptions.map((opt) => (
                 <ToggleButton
                   key={opt.value}
@@ -278,7 +207,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
           </>
         )}
         <ProfileLabel>Text Size</ProfileLabel>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div className="flex gap-2">
           {textSizeOptions.map((opt) => (
             <ToggleButton
               key={opt.value}
@@ -295,12 +224,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
       <ProfileSection title="Friends">
         <button
           onClick={() => setFriendsOpen(true)}
-          style={{
-            ...profileBtnStyle,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
+          className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit] flex items-center justify-between"
         >
           Manage Friends <FriendRequestBadge app={app} />
         </button>
@@ -308,7 +232,10 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
 
       {/* API Keys */}
       <ProfileSection title="API Keys">
-        <button onClick={() => app.keys.manage()} style={profileBtnStyle}>
+        <button
+          onClick={() => app.keys.manage()}
+          className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit]"
+        >
           Manage API Keys
         </button>
       </ProfileSection>
@@ -316,47 +243,19 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
       {/* Account */}
       <button
         onClick={signOut}
-        style={{
-          ...profileBtnStyle,
-          marginBottom: '1.5rem',
-        }}
+        className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit] mb-6"
       >
         Sign out
       </button>
 
-      <div
-        style={{
-          border: '1px solid #fecaca',
-          borderRadius: 'var(--radius, 0.75rem)',
-          padding: '1.25rem',
-        }}
-      >
-        <div
-          style={{
-            fontSize: '0.9rem',
-            fontWeight: 700,
-            color: 'var(--danger, #dc2626)',
-            marginBottom: '0.5rem',
-          }}
-        >
-          Danger zone
-        </div>
-        <p style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.75rem' }}>
+      <div className="border border-danger rounded p-5">
+        <div className="text-[0.9rem] font-bold text-danger mb-2">Danger zone</div>
+        <p className="text-[0.85rem] text-muted mb-3">
           Permanently delete your account and all data across all apps.
         </p>
         <button
           onClick={handleDelete}
-          style={{
-            padding: '0.5rem 1rem',
-            borderRadius: 'var(--radius-sm, 0.5rem)',
-            border: '1px solid var(--danger, #dc2626)',
-            background: 'transparent',
-            color: 'var(--danger, #dc2626)',
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
+          className="p-[0.5rem_1rem] rounded-sm border border-danger bg-transparent text-danger text-[0.85rem] font-semibold cursor-pointer font-[inherit]"
         >
           Delete account
         </button>
@@ -376,43 +275,15 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
 
 function ProfileSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div
-      style={{
-        background: 'var(--panel)',
-        border: '1px solid var(--line)',
-        borderRadius: 'var(--radius, 0.75rem)',
-        padding: '1.25rem',
-        marginBottom: '1rem',
-      }}
-    >
-      <div
-        style={{
-          fontSize: '0.9rem',
-          fontWeight: 700,
-          marginBottom: '0.75rem',
-          color: 'var(--ink)',
-        }}
-      >
-        {title}
-      </div>
+    <div className="bg-panel border border-line rounded p-5 mb-4">
+      <div className="text-[0.9rem] font-bold mb-3 text-ink">{title}</div>
       {children}
     </div>
   );
 }
 
 function ProfileLabel({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        fontSize: '0.75rem',
-        fontWeight: 600,
-        color: 'var(--muted)',
-        marginBottom: '0.35rem',
-      }}
-    >
-      {children}
-    </div>
-  );
+  return <div className="text-[0.75rem] font-semibold text-muted mb-[0.35rem]">{children}</div>;
 }
 
 function ToggleButton({
@@ -427,36 +298,25 @@ function ToggleButton({
   return (
     <button
       onClick={onClick}
-      style={{
-        flex: 1,
-        padding: '0.5rem',
-        borderRadius: 'var(--radius-sm, 0.5rem)',
-        border: active ? '2px solid var(--accent)' : '1px solid var(--line)',
-        background: active ? 'var(--accent-soft)' : 'transparent',
-        color: active ? 'var(--accent)' : 'var(--muted)',
-        fontWeight: active ? 700 : 500,
-        fontSize: '0.85rem',
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-      }}
+      className={[
+        'flex-1',
+        'p-2',
+        'rounded-sm',
+        active ? 'border-2 border-accent' : 'border border-line',
+        active ? 'bg-accent-soft' : 'bg-transparent',
+        active ? 'text-accent' : 'text-muted',
+        active ? 'font-bold' : 'font-medium',
+        'text-[0.85rem]',
+        'cursor-pointer',
+        'font-[inherit]',
+      ]
+        .filter(Boolean)
+        .join(' ')}
     >
       {children}
     </button>
   );
 }
-
-const profileBtnStyle: CSSProperties = {
-  width: '100%',
-  padding: '0.75rem',
-  borderRadius: 'var(--radius, 0.75rem)',
-  border: '1px solid var(--line)',
-  background: 'var(--panel)',
-  color: 'var(--ink)',
-  fontSize: '0.9rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
 
 // ---------------------------------------------------------------------------
 // Shell (also exported as FasShell for backwards compatibility)
@@ -530,14 +390,6 @@ export function Shell({
   const beforeNavigate = useRouteChangeEffects(currentPath, mainRef, onNavigate !== undefined);
   const displayAppName = normalizeShellAppName(appName);
 
-  useInsertionEffect(() => {
-    if (document.getElementById('fas-shell-css')) return;
-    const style = document.createElement('style');
-    style.id = 'fas-shell-css';
-    style.textContent = SHELL_CSS;
-    document.head.appendChild(style);
-  }, []);
-
   // A nav item's `title` becomes the tab title on its route. A layout effect
   // runs before every passive effect, so a screen's own useDocumentTitle wins.
   const navItems = nav ?? [];
@@ -549,48 +401,22 @@ export function Shell({
 
   if (loading) {
     return (
-      <div
-        style={{
-          minHeight: '100dvh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <p style={{ color: 'var(--muted)' }}>Loading...</p>
+      <div className="min-h-[100dvh] flex items-center justify-center">
+        <p className="text-muted">Loading...</p>
       </div>
     );
   }
 
   if (requireAuth && !user) {
     return (
-      <div
-        style={{
-          minHeight: '100dvh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '2rem',
-        }}
-      >
-        <div style={{ maxWidth: 400, textAlign: 'center' }}>
-          <h1
-            style={{
-              fontSize: '1.5rem',
-              fontWeight: 800,
-              marginBottom: '0.5rem',
-              color: 'var(--ink)',
-            }}
-          >
+      <div className="min-h-[100dvh] flex items-center justify-center p-8">
+        <div className="max-w-100 text-center">
+          <h1 className="text-[1.5rem] font-extrabold mb-2 text-ink">
             {displayAppName || 'FreeAppStore'}
           </h1>
-          <p style={{ color: 'var(--muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>
-            Sign in to continue.
-          </p>
+          <p className="text-muted text-[0.9rem] mb-4">Sign in to continue.</p>
           <SignInButton app={app} />
-          <p style={{ color: 'var(--muted)', fontSize: '0.75rem', marginTop: '0.75rem' }}>
-            One account for all Free apps.
-          </p>
+          <p className="text-muted text-[0.75rem] mt-3">One account for all Free apps.</p>
         </div>
       </div>
     );
@@ -621,48 +447,29 @@ export function Shell({
   const loadingNode = renderLoading ? (
     renderLoading()
   ) : (
-    <div className="fas-shell-loading">
+    <div className="fas-shell-loading flex flex-1 items-center justify-center px-4 py-12">
       <Spinner size={28} />
     </div>
   );
 
   return (
     <ToastProvider>
-      <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+      <div className="min-h-[100dvh] flex flex-col">
         <SkipLink mainRef={mainRef} />
-        <header
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '0.5rem 1rem',
-            borderBottom: '1px solid var(--line)',
-            background: 'var(--panel)',
-            position: 'sticky',
-            top: 0,
-            zIndex: 50,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <header className="flex items-center justify-between p-[0.5rem_1rem] border-b border-line bg-panel sticky top-0 z-[50]">
+          <div className="flex items-center gap-3">
             <a
               href="https://freeappstore.online"
-              style={{
-                fontWeight: 800,
-                fontSize: '1rem',
-                color: 'var(--accent)',
-                textDecoration: 'none',
-              }}
+              className="font-extrabold text-[1rem] text-accent no-underline"
             >
               Free
             </a>
             {displayAppName && displayAppName !== 'FreeAppStore' && (
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--muted)' }}>
-                {displayAppName}
-              </span>
+              <span className="text-[0.85rem] font-semibold text-muted">{displayAppName}</span>
             )}
           </div>
           {navNode}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div className="flex items-center gap-2">
             <TextSizeToggle />
             {showThemeToggle && !user && <ThemeToggle />}
             {user ? (
@@ -673,13 +480,7 @@ export function Shell({
           </div>
         </header>
         <OfflineBanner />
-        <main
-          id="main"
-          ref={mainRef}
-          tabIndex={-1}
-          className="fas-main"
-          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-        >
+        <main id="main" ref={mainRef} tabIndex={-1} className="fas-main flex-1 flex flex-col">
           <ShellErrorBoundary app={app} renderError={renderError} resetKey={currentPath}>
             <Suspense fallback={loadingNode}>{children}</Suspense>
           </ShellErrorBoundary>

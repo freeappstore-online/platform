@@ -29,6 +29,81 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const theme of ['light', 'dark'] as const) {
+  test(`compiled SDK floating surfaces and keyboard focus in ${theme} (#317)`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+    await page.addInitScript(() =>
+      localStorage.setItem(
+        'fas:session',
+        JSON.stringify({
+          token: 'browser-test-only',
+          user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+        }),
+      ),
+    );
+    await page.goto('/');
+    await landmarks(page);
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme,
+    );
+    const skip = page.getByRole('link', { name: 'Skip to content' });
+    expect((await skip.boundingBox())!.y).toBeLessThan(0);
+    await page.keyboard.press('Tab');
+    await expect(skip).toBeFocused();
+    expect((await skip.boundingBox())!.y).toBeGreaterThanOrEqual(0);
+    const menu = page.getByRole('button', { name: 'Menu', exact: true });
+    if (testInfo.project.name === 'mobile') {
+      await expect(menu).toBeVisible();
+      await expect(page.locator('.fas-nav__list')).toBeHidden();
+      await menu.click();
+      const drawer = page.locator('.fas-nav__list');
+      const bounds = (await drawer.boundingBox())!;
+      expect(Math.round(bounds.x + bounds.width)).toBe(page.viewportSize()!.width);
+      expect(bounds.height).toBeGreaterThan(page.viewportSize()!.height / 2);
+      expect(
+        await drawer.evaluate((el) => {
+          const probe = document.createElement('div');
+          probe.style.backgroundColor = 'var(--popover)';
+          document.body.append(probe);
+          const expected = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          return getComputedStyle(el).backgroundColor === expected;
+        }),
+      ).toBe(true);
+      await expect(page.getByRole('button', { name: 'Profile menu' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(menu).toBeFocused();
+      await expect(drawer).toBeHidden();
+    } else {
+      await expect(menu).toBeHidden();
+      await expect(page.locator('.fas-nav__list')).toHaveCSS('display', 'flex');
+    }
+    await page.getByRole('button', { name: 'Profile menu' }).click();
+    const profile = page.getByRole('button', { name: 'API Keys', exact: true }).locator('..');
+    const opaque = async (locator: typeof profile) =>
+      locator.evaluate((el) => {
+        const context = document.createElement('canvas').getContext('2d')!;
+        context.fillStyle = getComputedStyle(el).backgroundColor;
+        context.fillRect(0, 0, 1, 1);
+        return context.getImageData(0, 0, 1, 1).data[3];
+      });
+    expect(await opaque(profile)).toBe(255);
+    await page.getByRole('button', { name: 'Friends', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Friends' });
+    await expect(dialog).toBeVisible();
+    expect(await opaque(dialog)).toBe(255);
+    await expect(dialog).toHaveCSS('border-style', 'solid');
+    expect(await dialog.evaluate((el) => el.contains(document.activeElement))).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`sdk-${theme}.png`), fullPage: true });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    expect(
+      await page.locator('style#fas-nav-css, style#fas-shell-css, style#fas-ui-keyframes').count(),
+    ).toBe(0);
+  });
+
   test(`mobile menu is opaque over page text in ${theme} (#319)`, async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.emulateMedia({ colorScheme: theme });

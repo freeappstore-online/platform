@@ -16,34 +16,6 @@ import type { FreeAppStore } from '../index.js';
 // Shell's resilience and feedback layer (#89): error boundary, toasts, offline
 // banner, skip link, and scroll/focus on client-side route changes.
 
-// Skip link, offline banner, toasts, error/loading fallbacks and PageHeader.
-// Tokens only, injected once by Shell like the navbar's stylesheet.
-//
-// The skip link hides by sitting just above the viewport (fixed, so it never
-// adds document scroll) and slides in on focus. Not the 1px overflow:hidden
-// "sr-only" box: `fas screencheck` reports that as content clipping (#149).
-export const SHELL_CSS = `.fas-skip-link{position:fixed;top:.5rem;left:.5rem;z-index:1200;padding:.7rem 1rem;border:2px solid var(--accent);border-radius:var(--radius-sm,10px);background:var(--panel);color:var(--ink);font-weight:600;white-space:nowrap;text-decoration:none;transform:translateY(calc(-100% - 1rem))}
-.fas-skip-link:focus{transform:none;outline:2px solid var(--accent);outline-offset:2px}
-.fas-main:focus{outline:none}
-.fas-offline{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.25rem .5rem .25rem 1rem;background:var(--panel);color:var(--ink);border-bottom:1px solid var(--line);border-left:3px solid var(--warning);font-size:.875rem}
-.fas-toast-region{position:fixed;bottom:1.25rem;left:50%;z-index:1100;display:flex;flex-direction:column;align-items:center;gap:.5rem;max-width:calc(100vw - 2rem);transform:translateX(-50%);pointer-events:none}
-.fas-toast{display:flex;align-items:center;gap:.75rem;padding:.25rem .25rem .25rem 1rem;background:var(--ink);color:var(--panel);border-left:3px solid var(--accent);border-radius:var(--radius,.75rem);box-shadow:0 8px 24px rgba(0,0,0,.3);font-size:.875rem;pointer-events:auto}
-.fas-toast[data-variant="success"]{border-left-color:var(--success)}
-.fas-toast[data-variant="error"]{border-left-color:var(--danger)}
-.fas-dismiss{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;border:0;border-radius:var(--radius-sm,10px);background:transparent;color:inherit;font:inherit;font-size:1.1rem;line-height:1;cursor:pointer;opacity:.75}
-.fas-dismiss:hover{opacity:1}
-.fas-shell-loading{display:flex;flex:1;align-items:center;justify-content:center;padding:3rem 1rem}
-.fas-shell-error{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:.75rem;padding:3rem 1rem;text-align:center;color:var(--ink)}
-.fas-shell-error h1{margin:0;font-size:1.25rem}
-.fas-shell-error p{margin:0;max-width:32rem;color:var(--muted);font-size:.9rem}
-.fas-shell-error__retry{min-height:44px;padding:0 1.25rem;border:0;border-radius:var(--radius-sm,10px);background:var(--accent);color:#fff;font:inherit;font-weight:600;cursor:pointer}
-.fas-page-header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:.75rem;margin:0 0 1.25rem}
-.fas-page-header__title{margin:0;color:var(--ink);font-size:1.5rem;font-weight:700;line-height:1.2}
-.fas-page-header__title:focus{outline:none}
-.fas-page-header__description{margin:.25rem 0 0;color:var(--muted);font-size:.9rem}
-.fas-dismiss:focus-visible,.fas-shell-error__retry:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-`;
-
 // ── Error boundary ──────────────────────────────────────────────
 
 export interface ShellErrorContext {
@@ -101,13 +73,20 @@ export class ShellErrorBoundary extends Component<BoundaryProps, BoundaryState> 
     if (!error) return this.props.children;
     if (this.props.renderError) return this.props.renderError({ error, reset: this.reset });
     return (
-      <div role="alert" className="fas-shell-error">
+      <div
+        role="alert"
+        className="fas-shell-error flex flex-1 flex-col items-center justify-center gap-3 px-4 py-12 text-center text-ink [&_h1]:m-0 [&_h1]:text-xl [&_p]:m-0 [&_p]:max-w-lg [&_p]:text-[0.9rem] [&_p]:text-muted"
+      >
         <h1>Something went wrong</h1>
         <p>
           This screen hit an error and could not be shown. It has been reported. Try again, or use
           the navigation to go elsewhere.
         </p>
-        <button type="button" className="fas-shell-error__retry" onClick={this.reset}>
+        <button
+          type="button"
+          className="fas-shell-error__retry min-h-11 cursor-pointer rounded-sm border-0 bg-accent px-5 font-semibold text-white focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
+          onClick={this.reset}
+        >
           Try again
         </button>
       </div>
@@ -165,11 +144,14 @@ function ToastItem({ toast, onDismiss }: { toast: QueuedToast; onDismiss: (id: n
     return () => clearTimeout(timer);
   }, [toast.id, toast.duration, onDismiss]);
   return (
-    <div className="fas-toast" data-variant={toast.variant}>
+    <div
+      className="fas-toast pointer-events-auto flex items-center gap-3 rounded border-l-[3px] border-accent bg-popover py-1 pl-4 pr-1 text-sm text-ink shadow-lg data-[variant=success]:border-success data-[variant=error]:border-danger"
+      data-variant={toast.variant}
+    >
       <span>{toast.message}</span>
       <button
         type="button"
-        className="fas-dismiss"
+        className="fas-dismiss inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-[1.1rem] leading-none text-inherit opacity-75 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         aria-label="Dismiss"
         onClick={() => onDismiss(toast.id)}
       >
@@ -208,7 +190,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
-      <div role="status" aria-live="polite" className="fas-toast-region">
+      <div
+        role="status"
+        aria-live="polite"
+        className="fas-toast-region pointer-events-none fixed bottom-5 left-1/2 z-[1100] flex max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col items-center gap-2"
+      >
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
         ))}
@@ -265,11 +251,11 @@ export function OfflineBanner() {
   return (
     <div role="status" aria-live="polite">
       {!online && !dismissed && (
-        <div className="fas-offline">
+        <div className="fas-offline flex items-center justify-between gap-3 border-b border-l-[3px] border-line border-l-warning bg-panel py-1 pl-4 pr-2 text-sm text-ink">
           <span>You're offline. Changes can't be saved until the connection is back.</span>
           <button
             type="button"
-            className="fas-dismiss"
+            className="fas-dismiss inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-[1.1rem] leading-none text-inherit opacity-75 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
             aria-label="Dismiss offline notice"
             onClick={() => setState((state) => ({ ...state, dismissed: true }))}
           >
@@ -289,7 +275,7 @@ export function SkipLink({ mainRef }: { mainRef: RefObject<HTMLElement | null> }
     // biome-ignore lint/a11y/useValidAnchor: a real link to #main (works without JS); the click handler only avoids a hash change.
     <a
       href="#main"
-      className="fas-skip-link"
+      className="fas-skip-link fixed left-2 top-2 z-[1200] -translate-y-[calc(100%+1rem)] whitespace-nowrap rounded-sm border-2 border-accent bg-popover px-4 py-[0.7rem] font-semibold text-ink no-underline focus:translate-y-0 focus:outline-2 focus:outline-accent focus:outline-offset-2"
       onClick={(e) => {
         // Focus directly rather than following the fragment: a hash change is a
         // history navigation, which a router would see as a route change.

@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FreeAppStore } from '../index.js';
 import { Shell } from './layout.js';
-import { activeHref, NAVBAR_CSS, NavBar, type NavItem } from './navbar.js';
+import { activeHref, NavBar, type NavItem } from './navbar.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -53,10 +53,13 @@ describe('NavBar markup', () => {
   });
 
   it('ships 44px targets, visible focus and the small-screen collapse, on tokens only', () => {
-    expect(NAVBAR_CSS).toContain('min-height:44px');
-    expect(NAVBAR_CSS).toContain(':focus-visible');
-    expect(NAVBAR_CSS).toContain('@media (max-width:639px)');
-    expect(NAVBAR_CSS).not.toMatch(/#[0-9a-f]{3,6}\b/i);
+    const html = renderToStaticMarkup(<NavBar items={ITEMS} />);
+    expect(html).toContain('min-h-11');
+    expect(html).toContain('focus-visible:outline-accent');
+    expect(html).toContain('sm:hidden');
+    expect(html).toContain('hidden translate-x-full sm:flex');
+    expect(html).toContain('bg-popover');
+    expect(html).not.toMatch(/#[0-9a-f]{3,6}\b/i);
   });
 
   it('activeHref prefers the longest matching prefix and never matches "/" by prefix', () => {
@@ -246,13 +249,13 @@ describe('NavBar behaviour', () => {
     expect(link('Home').getAttribute('aria-current')).toBeNull();
   });
 
-  it('injects its stylesheet once', async () => {
+  it('does not inject stylesheets when mounted more than once', async () => {
     await mount(
       <>
         <NavBar items={ITEMS} currentPath="/" />
         <NavBar items={ITEMS} currentPath="/" />
       </>,
     );
-    expect(document.querySelectorAll('#fas-nav-css')).toHaveLength(1);
+    expect(document.querySelectorAll('#fas-nav-css')).toHaveLength(0);
   });
 });

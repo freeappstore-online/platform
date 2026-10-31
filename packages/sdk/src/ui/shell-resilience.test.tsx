@@ -396,35 +396,11 @@ describe('skip link', () => {
     expect(link).not.toBeNull();
     if (!link) return;
 
-    // screencheck flags overflow:hidden|clip elements whose content overflows them.
-    const noClipping = (style: CSSStyleDeclaration) => {
-      expect(['hidden', 'clip']).not.toContain(style.overflowX);
-      expect(['hidden', 'clip']).not.toContain(style.overflowY);
-      expect(['hidden', 'clip']).not.toContain(style.overflow);
-      expect(style.width).not.toBe('1px');
-      expect(style.height).not.toBe('1px');
-    };
-
-    // Unfocused: fixed (adds no document scroll) and moved up out of view.
-    const hidden = getComputedStyle(link);
-    noClipping(hidden);
-    expect(hidden.position).toBe('fixed');
-    expect(hidden.transform).toMatch(/translateY\(calc\(-100%/);
-
-    // Focused: slides into view, still unclipped. happy-dom doesn't match :focus
-    // in getComputedStyle, so read the rule from the stylesheet Shell injected.
-    const focusRules = [...document.styleSheets]
-      .flatMap((sheet) => [...sheet.cssRules])
-      .filter(
-        (rule): rule is CSSStyleRule =>
-          'selectorText' in rule &&
-          (rule as CSSStyleRule).selectorText.includes('.fas-skip-link:focus'),
-      );
-    expect(focusRules).toHaveLength(1);
-    const shown = focusRules[0]!.style;
-    expect(shown.transform).toBe('none');
-    expect(shown.position).toBe(''); // inherits position:fixed from the base rule
-    noClipping(shown);
+    // Utilities are compiled by the app; computed layout is covered in Chromium.
+    expect(link.classList.contains('fixed')).toBe(true);
+    expect(link.classList.contains('-translate-y-[calc(100%+1rem)]')).toBe(true);
+    expect(link.classList.contains('focus:translate-y-0')).toBe(true);
+    expect(link.className).not.toMatch(/overflow-(hidden|clip)|(?:^| )sr-only(?: |$)/);
   });
 });
 

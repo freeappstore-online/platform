@@ -1,5 +1,12 @@
 # @freeappstore/sdk
 
+## 0.16.0
+
+- Migrate all React UI to compiled Tailwind 4 utilities on design tokens. Apps upgrading must add the SDK `@source`, token mapping and animation setup documented in `docs/ui.md#styling`; runtime stylesheets are no longer injected.
+- Use opaque `--popover` for navigation, profile menus, dialogs and toasts. Mobile navigation opens a right-slide panel while header controls stay visible.
+- Add `className` to Badge, Card, Tabs and SearchInput. Preserve caller-supplied dynamic styles and dimensions.
+- Add styling policy and light/dark browser regression coverage for both templates.
+
 ## 0.1.2
 
 - **Fix:** `auth.init()` no longer leaves the `#fas_session=…` hash on the URL when the auth fetch fails. Previously a bad/expired token meant every reload retried it and the user was stuck.

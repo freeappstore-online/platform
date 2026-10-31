@@ -19,21 +19,23 @@ export function VoiceButton({ voice, disabled = false, size = 32 }: VoiceButtonP
       onClick={voice.toggle}
       disabled={disabled}
       title={voice.isListening ? 'Stop listening' : 'Voice input'}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        border: 'none',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-        background: voice.isListening ? '#fecaca' : 'var(--panel)',
-        color: voice.isListening ? 'var(--danger, #dc2626)' : 'var(--muted)',
-        fontFamily: 'inherit',
-        flexShrink: 0,
-      }}
+      className={[
+        'rounded-full',
+        'border-0',
+        'flex',
+        'items-center',
+        'justify-center',
+        disabled ? 'cursor-default' : 'cursor-pointer',
+        disabled ? 'opacity-[0.4]' : 'opacity-[1]',
+        voice.isListening ? 'bg-danger-soft' : 'bg-panel',
+        voice.isListening ? 'text-danger' : 'text-muted',
+        'font-[inherit]',
+        'shrink-0',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      // Dynamic: Voice button dimensions follow the caller size prop.
+      style={{ width: size, height: size }}
     >
       {voice.isListening ? <StopIcon size={iconSize} /> : <MicIcon size={iconSize} />}
     </button>
@@ -98,7 +100,11 @@ export function VoiceTextArea({
   const displayPlaceholder = voice.isListening ? 'Listening...' : placeholder;
 
   return (
-    <div style={{ position: 'relative', ...extraStyle }}>
+    <div
+      className="relative"
+      // Dynamic: Caller-supplied appearance remains supported for compatibility; prefer className.
+      style={{ ...extraStyle }}
+    >
       <textarea
         value={displayValue}
         onChange={(e) => {
@@ -116,22 +122,24 @@ export function VoiceTextArea({
             onSubmit();
           }
         }}
-        style={{
-          width: '100%',
-          padding: voice.isSupported ? '0.75rem 3rem 0.75rem 0.75rem' : '0.75rem',
-          borderRadius: 'var(--radius, 0.75rem)',
-          border: voice.isListening ? '2px solid var(--danger, #dc2626)' : '1px solid var(--line)',
-          background: 'var(--panel)',
-          color: 'var(--ink)',
-          fontSize: '0.9rem',
-          fontFamily: 'inherit',
-          resize: 'vertical',
-          outline: 'none',
-          boxSizing: 'border-box',
-        }}
+        className={[
+          'w-full',
+          voice.isSupported ? 'p-[0.75rem_3rem_0.75rem_0.75rem]' : 'p-3',
+          'rounded',
+          voice.isListening ? 'border-2 border-danger' : 'border border-line',
+          'bg-panel',
+          'text-ink',
+          'text-[0.9rem]',
+          'font-[inherit]',
+          'resize-y',
+          'outline-none',
+          'box-border',
+        ]
+          .filter(Boolean)
+          .join(' ')}
       />
       {voice.isSupported && (
-        <div style={{ position: 'absolute', right: 8, bottom: 8 }}>
+        <div className="absolute right-2 bottom-2">
           <VoiceButton voice={voice} disabled={disabled} />
         </div>
       )}

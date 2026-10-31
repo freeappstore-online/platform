@@ -1,12 +1,4 @@
-import {
-  type MouseEvent,
-  type ReactNode,
-  useEffect,
-  useId,
-  useInsertionEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type MouseEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 
 /** One screen in the app's main navigation. */
 export interface NavItem {
@@ -64,28 +56,6 @@ export function activeHref(items: NavItem[], path: string): string | null {
   return best;
 }
 
-// Hover, focus and the small-screen collapse need real CSS, so it's injected
-// once like the SDK's keyframes. Tokens only, so it follows light/dark theme.
-export const NAVBAR_CSS = `.fas-nav{position:relative;display:flex;align-items:center;flex:1 1 auto;min-width:0;margin:0 .5rem}
-.fas-nav__toggle{display:none;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;border:1px solid var(--line);border-radius:var(--radius-sm,10px);background:transparent;color:var(--ink);font:inherit;cursor:pointer}
-.fas-nav__list{display:flex;align-items:center;gap:.25rem;margin:0;padding:0;list-style:none;overflow-x:auto}
-.fas-nav__link{display:inline-flex;align-items:center;gap:.4rem;min-height:44px;padding:0 .75rem;border-radius:var(--radius-sm,10px);color:var(--muted);font-size:.9rem;font-weight:600;text-decoration:none;white-space:nowrap}
-.fas-nav__link:hover{color:var(--ink);background:var(--line)}
-.fas-nav__link[aria-current="page"]{color:var(--accent);background:var(--accent-soft,var(--line))}
-.fas-nav__toggle:focus-visible,.fas-nav__link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media (max-width:639px){.fas-nav{flex:0 0 auto;margin:0}.fas-nav__toggle{display:inline-flex}.fas-nav__list{display:none;position:absolute;top:calc(100% + .5rem);left:0;z-index:60;flex-direction:column;align-items:stretch;min-width:12rem;padding:.5rem;overflow:visible;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius,12px);box-shadow:0 8px 24px rgba(0,0,0,.12)}.fas-nav[data-open="true"] .fas-nav__list{display:flex}}
-`;
-
-function useNavbarStyles(): void {
-  useInsertionEffect(() => {
-    if (document.getElementById('fas-nav-css')) return;
-    const style = document.createElement('style');
-    style.id = 'fas-nav-css';
-    style.textContent = NAVBAR_CSS;
-    document.head.appendChild(style);
-  }, []);
-}
-
 /**
  * NavBar — the app's main navigation. Shell renders it in its topbar from the
  * `nav` prop; it also works on its own in a custom layout.
@@ -96,7 +66,6 @@ function useNavbarStyles(): void {
  * Renders nothing when there are no items.
  */
 export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
-  useNavbarStyles();
   const [path, setPath] = useCurrentPath(currentPath);
   const [open, setOpen] = useState(false);
   const listId = useId();
@@ -144,11 +113,16 @@ export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
   };
 
   return (
-    <nav ref={navRef} aria-label="Main" className="fas-nav" data-open={open ? 'true' : 'false'}>
+    <nav
+      ref={navRef}
+      aria-label="Main"
+      className="fas-nav relative mx-0 flex min-w-0 flex-none items-center sm:mx-2 sm:flex-auto"
+      data-open={open ? 'true' : 'false'}
+    >
       <button
         ref={toggleRef}
         type="button"
-        className="fas-nav__toggle"
+        className="fas-nav__toggle inline-flex min-h-11 min-w-11 items-center justify-center rounded-sm border border-line bg-transparent p-0 text-ink cursor-pointer sm:hidden focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
         aria-expanded={open}
         aria-controls={listId}
         aria-label="Menu"
@@ -167,13 +141,16 @@ export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
           <path d={open ? 'M6 6l12 12M18 6L6 18' : 'M4 7h16M4 12h16M4 17h16'} />
         </svg>
       </button>
-      <ul id={listId} className="fas-nav__list">
+      <ul
+        id={listId}
+        className={`fas-nav__list fixed right-0 top-14 z-60 m-0 h-[calc(100dvh-3.5rem)] w-72 max-w-[calc(100vw-1rem)] flex-col items-stretch gap-1 overflow-y-auto border-l border-line bg-popover p-3 text-ink shadow-lg motion-safe:transition-transform motion-safe:duration-200 sm:static sm:h-auto sm:w-auto sm:max-w-none sm:translate-x-0 sm:flex-row sm:items-center sm:overflow-x-auto sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none ${open ? 'flex translate-x-0 motion-safe:animate-sdk-drawer sm:animate-none' : 'hidden translate-x-full sm:flex'}`}
+      >
         {items.map((item) => (
           <li key={item.href}>
             <a
               href={item.href}
               aria-current={item.href === current ? 'page' : undefined}
-              className="fas-nav__link"
+              className="fas-nav__link inline-flex min-h-11 items-center gap-[0.4rem] whitespace-nowrap rounded-sm px-3 text-[0.9rem] font-semibold text-muted no-underline hover:bg-line hover:text-ink aria-[current=page]:bg-accent-soft aria-[current=page]:text-accent focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"
               onClick={(e) => follow(e, item.href)}
             >
               {item.icon}

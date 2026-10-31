@@ -31,16 +31,22 @@ export interface PageHeaderProps {
  */
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <div className="fas-page-header">
+    <div className="fas-page-header mb-5 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 className="fas-page-header__title" tabIndex={-1} data-fas-page-heading="">
+        <h1
+          className="fas-page-header__title m-0 text-2xl font-bold leading-[1.2] text-ink focus:outline-none"
+          tabIndex={-1}
+          data-fas-page-heading=""
+        >
           {title}
         </h1>
-        {description && <p className="fas-page-header__description">{description}</p>}
+        {description && (
+          <p className="fas-page-header__description mb-0 mt-1 text-[0.9rem] text-muted">
+            {description}
+          </p>
+        )}
       </div>
-      {actions && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>{actions}</div>
-      )}
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
     </div>
   );
 }

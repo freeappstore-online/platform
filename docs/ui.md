@@ -291,3 +291,86 @@ sets it from the system preference or the `Shell`'s theme toggle.
   /* …the rest of your dark tokens */
 }
 ```
+
+## Styling
+
+SDK UI uses React and Tailwind 4 utilities on design tokens, following
+[PAS ADR-011](https://github.com/proappstore-online/platform/blob/main/docs/adr/011-tailwind-on-pas-tokens.md).
+Reuse SDK or local React components for repeated patterns; use utilities such as
+`bg-paper text-ink border-line` for layout and one-offs. Keep token definitions,
+`@theme`, `@source` and base rules in the app stylesheet. Do not add feature CSS
+classes or runtime stylesheets. Inline styles are reserved for commented dynamic
+dimensions, progress and caller-supplied appearance.
+
+SDK 0.16.0 no longer injects styles. Existing apps must add the following to
+`web/src/index.css` after the Tailwind import before upgrading. Tailwind skips
+`node_modules` by default. The first source is relative to `web/src` when the
+dependency is installed under `web/node_modules`; the second supports a hoisted
+root install. These are the same explicit SDK-distribution sources used by PAS.
+
+```css
+@import "tailwindcss";
+@source "../node_modules/@freeappstore/sdk/dist";
+@source "../../node_modules/@freeappstore/sdk/dist";
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-ink-strong: var(--ink-strong);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-panel: var(--panel);
+  --color-panel-glass: var(--panel-glass);
+  --color-popover: var(--popover);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-hover: var(--accent-hover);
+  --color-sky: var(--sky);
+  --color-sky-soft: var(--sky-soft);
+  --color-sky-deep: var(--sky-deep);
+  --color-mint: var(--mint);
+  --color-mint-soft: var(--mint-soft);
+  --color-mint-deep: var(--mint-deep);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-scrim: var(--scrim);
+  --radius: var(--radius);
+  --radius-sm: var(--radius-sm);
+  --radius-lg: var(--radius-lg, var(--radius));
+  --shadow-sm: var(--shadow);
+  --shadow-lg: var(--shadow-lg, var(--shadow));
+}
+
+@theme {
+  --animate-sdk-fade-in: sdk-fade-in 150ms ease-out;
+  --animate-sdk-slide-up: sdk-slide-up 200ms ease-out;
+  --animate-sdk-drawer: sdk-drawer 200ms ease-out;
+  @keyframes sdk-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sdk-slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sdk-drawer {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+}
+```
+
+Define the underlying tokens in `:root` and override their values in
+`:root[data-theme='dark']`. The `inline` mapping keeps theme switching live.
+`--paper`, `--panel` and `--popover` must be opaque in both themes.
+Set `--popover: var(--paper)` for menus, mobile drawers, dialogs and toasts.
+Glass is opt-in: use `--panel-glass` with backdrop blur. Set `--scrim` for the
+translucent modal backdrop and define `--success-soft`, `--warning-soft` and
+`--danger-soft` (for example with `color-mix(in srgb, var(--danger) 15%, var(--paper))`).
+The templates include these mappings and animation keyframes. Animations respect
+reduced motion. Mobile navigation uses a right-slide panel below the header,
+with Escape, outside-click dismissal and focus return to the menu button.

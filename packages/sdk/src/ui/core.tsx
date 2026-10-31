@@ -21,10 +21,7 @@ export function Avatar({ user, size = 32 }: AvatarProps) {
         alt={user.login}
         width={size}
         height={size}
-        style={{
-          borderRadius: '50%',
-          display: 'block',
-        }}
+        className="rounded-full block"
       />
     );
   }
@@ -32,18 +29,9 @@ export function Avatar({ user, size = 32 }: AvatarProps) {
   const initial = user?.login?.charAt(0).toUpperCase() ?? '?';
   return (
     <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: 'var(--accent)',
-        color: '#fff',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontSize: size * 0.45,
-        fontWeight: 700,
-      }}
+      className="rounded-full bg-accent text-white flex items-center justify-center font-bold"
+      // Dynamic: Avatar dimensions and initial font size follow the caller size prop.
+      style={{ width: size, height: size, fontSize: size * 0.45 }}
     >
       {initial}
     </div>
@@ -64,17 +52,7 @@ export function SignInButton({ app, label = 'Sign in with GitHub' }: SignInButto
   return (
     <button
       onClick={() => app.auth.signIn()}
-      style={{
-        background: 'var(--accent)',
-        color: '#fff',
-        border: 'none',
-        padding: '0.6rem 1.5rem',
-        borderRadius: 'var(--radius, 0.75rem)',
-        fontSize: '0.9rem',
-        fontWeight: 700,
-        cursor: 'pointer',
-        fontFamily: 'inherit',
-      }}
+      className="bg-accent text-white border-0 p-[0.6rem_1.5rem] rounded text-[0.9rem] font-bold cursor-pointer font-[inherit]"
     >
       {label}
     </button>
@@ -137,20 +115,7 @@ export function ThemeToggle() {
       onClick={cycle}
       aria-label={`Theme: ${preference}`}
       title={`Theme: ${preference}`}
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 'var(--radius, 0.75rem)',
-        border: '1px solid var(--line)',
-        background: 'var(--panel)',
-        color: 'var(--ink)',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        padding: 0,
-        fontFamily: 'inherit',
-      }}
+      className="w-9 h-9 rounded border border-line bg-panel text-ink inline-flex items-center justify-center cursor-pointer p-0 font-[inherit]"
     >
       {icon}
     </button>
@@ -221,22 +186,7 @@ export function TextSizeToggle() {
       onClick={cycle}
       aria-label={title}
       title={title}
-      style={{
-        width: 36,
-        height: 36,
-        borderRadius: 'var(--radius, 0.75rem)',
-        border: '1px solid var(--line)',
-        background: 'var(--panel)',
-        color: 'var(--ink)',
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        padding: 0,
-        fontFamily: 'inherit',
-        fontSize: '0.85rem',
-        fontWeight: 700,
-      }}
+      className="w-9 h-9 rounded border border-line bg-panel text-ink inline-flex items-center justify-center cursor-pointer p-0 font-[inherit] text-[0.85rem] font-bold"
     >
       {label}
     </button>

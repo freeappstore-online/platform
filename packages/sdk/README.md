@@ -282,3 +282,19 @@ https://freeappstore.online/skills.md
 ## License
 
 MIT.
+
+## Tailwind styling (SDK 0.16+)
+
+React UI requires Tailwind 4. SDK styles are compiled by your app; they are no
+longer injected at runtime. In `web/src/index.css`, after the Tailwind import, add:
+
+```css
+@source "../node_modules/@freeappstore/sdk/dist";
+@source "../../node_modules/@freeappstore/sdk/dist";
+```
+
+Paths are relative to the stylesheet and cover web-local and root-hoisted installs.
+Also add the token `@theme inline` mapping and animation keyframes from
+[the styling guide](https://github.com/freeappstore-online/platform/blob/main/docs/ui.md#styling).
+Both official templates include the complete setup. Floating UI uses opaque
+`--popover` (default `var(--paper)`); `--panel` is opaque and glass is opt-in.
