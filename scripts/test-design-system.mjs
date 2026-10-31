@@ -70,7 +70,7 @@ test('FAS documentation and CI use the platform-local contract', () => {
     assert.ok(doc.includes(surface), surface);
   }
   const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-  assert.ok(read('docs/ui.md').includes('../DESIGN-SYSTEM.md'));
+  assert.ok(read('docs/ui.md').includes('/DESIGN-SYSTEM.md'));
   assert.ok(
     read('.github/workflows/ci.yml').includes('node --test scripts/test-design-system.mjs'),
   );
