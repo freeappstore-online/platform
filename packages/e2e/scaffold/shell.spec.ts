@@ -28,6 +28,42 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
+for (const theme of ['light', 'dark'] as const) {
+  test(`mobile menu is opaque over page text in ${theme} (#319)`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: theme });
+    await page.addInitScript(() =>
+      localStorage.setItem(
+        'fas:session',
+        JSON.stringify({
+          token: 'browser-test-only',
+          user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+        }),
+      ),
+    );
+    await page.goto('/');
+    await expect(page.getByRole('main')).toBeVisible();
+    await expect(page.getByRole('main')).not.toBeEmpty();
+    await page.evaluate(
+      (value) => document.documentElement.setAttribute('data-theme', value),
+      theme,
+    );
+    await page.getByRole('button', { name: 'Menu', exact: true }).click();
+    const list = page.locator('.fas-nav__list');
+    await expect(list).toBeVisible();
+    // Canvas resolves the browser's computed CSS color, including its alpha.
+    const alpha = await list.evaluate((element) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 1;
+      const context = canvas.getContext('2d')!;
+      context.fillStyle = getComputedStyle(element).backgroundColor;
+      context.fillRect(0, 0, 1, 1);
+      return context.getImageData(0, 0, 1, 1).data[3] / 255;
+    });
+    expect(alpha).toBe(1);
+  });
+}
+
 test('fresh scaffold: auth gate, landmarks, navigation and preferences', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

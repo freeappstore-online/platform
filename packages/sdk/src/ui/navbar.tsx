@@ -73,7 +73,7 @@ export const NAVBAR_CSS = `.fas-nav{position:relative;display:flex;align-items:c
 .fas-nav__link:hover{color:var(--ink);background:var(--line)}
 .fas-nav__link[aria-current="page"]{color:var(--accent);background:var(--accent-soft,var(--line))}
 .fas-nav__toggle:focus-visible,.fas-nav__link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-@media (max-width:639px){.fas-nav{flex:0 0 auto;margin:0}.fas-nav__toggle{display:inline-flex}.fas-nav__list{display:none;position:absolute;top:calc(100% + .5rem);left:0;z-index:60;flex-direction:column;align-items:stretch;min-width:12rem;padding:.5rem;overflow:visible;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius,12px);box-shadow:0 8px 24px rgba(0,0,0,.12)}.fas-nav[data-open="true"] .fas-nav__list{display:flex}}
+@media (max-width:639px){.fas-nav{flex:0 0 auto;margin:0}.fas-nav__toggle{display:inline-flex}.fas-nav__list{display:none;position:absolute;top:calc(100% + .5rem);left:0;z-index:60;flex-direction:column;align-items:stretch;min-width:12rem;padding:.5rem;overflow:visible;background:var(--paper);border:1px solid var(--line);border-radius:var(--radius,12px);box-shadow:0 8px 24px rgba(0,0,0,.12)}.fas-nav[data-open="true"] .fas-nav__list{display:flex}}
 `;
 
 function useNavbarStyles(): void {
