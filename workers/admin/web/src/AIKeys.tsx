@@ -1,3 +1,4 @@
+import { Button, Input, Select } from './ui.tsx'
 import { useEffect, useMemo, useState } from 'react'
 import type { AdminUser, GrantsResponse, KeyUsersResponse } from './api.ts'
 import { api } from './api.ts'
@@ -74,12 +75,13 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return users
-    return users.filter((user) =>
-      user.id.toLowerCase().includes(q) ||
-      user.githubLogin.toLowerCase().includes(q) ||
-      (user.displayName ?? '').toLowerCase().includes(q) ||
-      (user.grant?.provider ?? '').toLowerCase().includes(q) ||
-      user.keys.some((key) => key.provider.toLowerCase().includes(q)),
+    return users.filter(
+      (user) =>
+        user.id.toLowerCase().includes(q) ||
+        user.githubLogin.toLowerCase().includes(q) ||
+        (user.displayName ?? '').toLowerCase().includes(q) ||
+        (user.grant?.provider ?? '').toLowerCase().includes(q) ||
+        user.keys.some((key) => key.provider.toLowerCase().includes(q)),
     )
   }, [search, users])
 
@@ -104,10 +106,14 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
           provider,
           model,
           note: note.trim() || null,
-          expiresAt: expiresAt ? new Date(`${expiresAt}T23:59:59Z`).toISOString() : null,
+          expiresAt: expiresAt
+            ? new Date(`${expiresAt}T23:59:59Z`).toISOString()
+            : null,
         }),
       })
-      setNotice(`Granted ${provider} to ${activeUser?.githubLogin || selectedUser}.`)
+      setNotice(
+        `Granted ${provider} to ${activeUser?.githubLogin || selectedUser}.`,
+      )
       await load()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -143,9 +149,15 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
     try {
       await api('/api/ai-keys/userkey', {
         method: 'POST',
-        body: JSON.stringify({ userId: selectedUser, provider: keyProvider, key: keyValue.trim() }),
+        body: JSON.stringify({
+          userId: selectedUser,
+          provider: keyProvider,
+          key: keyValue.trim(),
+        }),
       })
-      setNotice(`Saved ${keyProvider} key for ${activeUser?.githubLogin || selectedUser}.`)
+      setNotice(
+        `Saved ${keyProvider} key for ${activeUser?.githubLogin || selectedUser}.`,
+      )
       setKeyValue('')
       await load()
     } catch (e) {
@@ -162,55 +174,78 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
       <div className="flex items-start justify-between mb-5 gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">AI Grants</h1>
-          <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>
-            Grant selected users complimentary VibeCode builds on platform-funded provider keys.
+          <p className="text-sm mt-1 text-muted">
+            Grant selected users complimentary VibeCode builds on
+            platform-funded provider keys.
           </p>
         </div>
-        <input
+        <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search users..."
           aria-label="Search users"
-          className="px-3 py-2 rounded-lg text-sm"
-          style={{ border: '1px solid var(--line)', background: 'var(--panel)', color: 'var(--ink)', width: 240 }}
+          className="w-[240px]"
         />
       </div>
 
       {error && <ErrorBox message={error} />}
       {notice && (
-        <div className="rounded-lg px-4 py-3 mb-4 text-sm" style={{ border: '1px solid rgba(47, 143, 87, 0.22)', background: 'rgba(47, 143, 87, 0.08)', color: 'var(--success)' }}>
+        <div className="rounded-lg px-4 py-3 mb-4 text-sm border border-success/22 bg-success/8 text-success">
           {notice}
         </div>
       )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--line)' }}>
+        <div className="rounded-xl overflow-hidden border border-line">
           <table className="w-full text-sm">
             <thead>
-              <tr style={{ background: 'var(--panel)', borderBottom: '1px solid var(--line)' }}>
-                <th className="text-left px-4 py-3 font-semibold" style={{ color: 'var(--muted)' }}>User</th>
-                <th className="text-left px-4 py-3 font-semibold hidden md:table-cell" style={{ color: 'var(--muted)' }}>Grant</th>
-                <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell" style={{ color: 'var(--muted)' }}>Vault Keys</th>
-                <th className="text-right px-4 py-3 font-semibold" style={{ color: 'var(--muted)' }}>Actions</th>
+              <tr className="bg-panel border-b border-line">
+                <th className="text-left px-4 py-3 font-semibold text-muted">
+                  User
+                </th>
+                <th className="text-left px-4 py-3 font-semibold hidden md:table-cell text-muted">
+                  Grant
+                </th>
+                <th className="text-left px-4 py-3 font-semibold hidden sm:table-cell text-muted">
+                  Vault Keys
+                </th>
+                <th className="text-right px-4 py-3 font-semibold text-muted">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((user) => (
-                <tr key={user.id} style={{ borderBottom: '1px solid var(--line)' }}>
+                <tr key={user.id} className="border-b border-line">
                   <td className="px-4 py-3">
-                    <button onClick={() => setSelectedUser(user.id)} className="text-left">
-                      <p className="font-medium" style={{ color: 'var(--ink)' }}>{user.displayName || user.githubLogin || user.id}</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{user.githubLogin ? `@${user.githubLogin} - ${user.id}` : user.id}</p>
-                    </button>
+                    <Button
+                      onClick={() => setSelectedUser(user.id)}
+                      className="text-left"
+                    >
+                      <p className="font-medium text-ink">
+                        {user.displayName || user.githubLogin || user.id}
+                      </p>
+                      <p className="text-xs mt-0.5 text-muted">
+                        {user.githubLogin
+                          ? `@${user.githubLogin} - ${user.id}`
+                          : user.id}
+                      </p>
+                    </Button>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
                     {user.grant ? (
                       <div>
-                        <p className="text-xs font-semibold" style={{ color: 'var(--accent)' }}>{user.grant.provider} / {user.grant.model}</p>
-                        <p className="text-xs" style={{ color: 'var(--muted)' }}>{user.grant.expiresAt ? `expires ${new Date(user.grant.expiresAt).toLocaleDateString()}` : 'no expiry'}</p>
+                        <p className="text-xs font-semibold text-accent">
+                          {user.grant.provider} / {user.grant.model}
+                        </p>
+                        <p className="text-xs text-muted">
+                          {user.grant.expiresAt
+                            ? `expires ${new Date(user.grant.expiresAt).toLocaleDateString()}`
+                            : 'no expiry'}
+                        </p>
                       </div>
                     ) : (
-                      <span className="text-xs" style={{ color: 'var(--muted)' }}>none</span>
+                      <span className="text-xs text-muted">none</span>
                     )}
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
@@ -219,31 +254,34 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
                       {user.githubLogin && (
-                        <button
-                          onClick={() => navigate('/apps/owner/' + encodeURIComponent(user.githubLogin))}
+                        <Button
+                          onClick={() =>
+                            navigate(
+                              '/apps/owner/' +
+                                encodeURIComponent(user.githubLogin),
+                            )
+                          }
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                          style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+                          variant="outline"
                           title={`View all apps by @${user.githubLogin}`}
                         >
                           Apps
-                        </button>
+                        </Button>
                       )}
-                      <button
+                      <Button
                         onClick={() => setSelectedUser(user.id)}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                        style={{ background: selectedUser === user.id ? 'var(--accent)' : 'var(--accent-soft)', color: selectedUser === user.id ? '#fff' : 'var(--accent)' }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${selectedUser === user.id ? 'bg-accent' : 'bg-accent-soft'} ${selectedUser === user.id ? 'text-white' : 'text-accent'}`}
                       >
                         Select
-                      </button>
+                      </Button>
                       {user.grant && (
-                        <button
+                        <Button
                           onClick={() => revokeGrant(user.id)}
                           disabled={saving}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                          style={{ border: '1px solid var(--line)', color: 'var(--danger)', opacity: saving ? 0.5 : 1 }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border border-line text-danger ${saving ? 'opacity-50' : 'opacity-100'}`}
                         >
                           Revoke
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </td>
@@ -252,121 +290,141 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <div className="py-12 text-center" style={{ color: 'var(--muted)' }}>
-              No users found.
-            </div>
+            <div className="py-12 text-center text-muted">No users found.</div>
           )}
         </div>
 
-        <aside className="rounded-xl p-4 h-fit" style={{ border: '1px solid var(--line)', background: 'var(--panel)' }}>
+        <aside className="rounded-xl p-4 h-fit border border-line bg-panel">
           <h2 className="text-base font-bold mb-3">Grant Access</h2>
-          <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
-            Funded providers: {funded.length ? funded.join(', ') : 'none configured'}
+          <p className="text-xs mb-3 text-muted">
+            Funded providers:{' '}
+            {funded.length ? funded.join(', ') : 'none configured'}
           </p>
 
-          <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>User</label>
-          <select
+          <label className="block text-xs font-semibold mb-1 text-muted">
+            User
+          </label>
+          <Select
             value={selectedUser}
             onChange={(event) => setSelectedUser(event.target.value)}
-            className="w-full px-3 py-2 rounded-lg text-sm mb-3"
-            style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+            className="w-full mb-3"
           >
             {users.map((user) => (
               <option key={user.id} value={user.id}>
                 {user.githubLogin || user.id}
               </option>
             ))}
-          </select>
+          </Select>
 
-          <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Provider</label>
-          <select
+          <label className="block text-xs font-semibold mb-1 text-muted">
+            Provider
+          </label>
+          <Select
             value={provider}
             onChange={(event) => setGrantProvider(event.target.value)}
-            className="w-full px-3 py-2 rounded-lg text-sm mb-3"
-            style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+            className="w-full mb-3"
           >
             {Object.keys(GRANT_MODELS).map((item) => (
               <option key={item} value={item}>
-                {item}{funded.includes(item) ? '' : ' (unfunded)'}
+                {item}
+                {funded.includes(item) ? '' : ' (unfunded)'}
               </option>
             ))}
-          </select>
+          </Select>
 
-          <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Model</label>
-          <select
+          <label className="block text-xs font-semibold mb-1 text-muted">
+            Model
+          </label>
+          <Select
             value={model}
             onChange={(event) => setModel(event.target.value)}
-            className="w-full px-3 py-2 rounded-lg text-sm mb-3"
-            style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+            className="w-full mb-3"
           >
             {models.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
             ))}
-          </select>
+          </Select>
 
-          <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Expires</label>
+          <label className="block text-xs font-semibold mb-1 text-muted">
+            Expires
+          </label>
           <input
             value={expiresAt}
             onChange={(event) => setExpiresAt(event.target.value)}
             type="date"
-            className="w-full px-3 py-2 rounded-lg text-sm mb-3"
-            style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+            className="w-full px-3 py-2 rounded-lg text-sm mb-3 border border-line bg-paper text-ink"
           />
 
-          <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Note</label>
+          <label className="block text-xs font-semibold mb-1 text-muted">
+            Note
+          </label>
           <input
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            className="w-full px-3 py-2 rounded-lg text-sm mb-4"
-            style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+            className="w-full px-3 py-2 rounded-lg text-sm mb-4 border border-line bg-paper text-ink"
           />
 
-          <button
+          <Button
             onClick={grantUser}
             disabled={saving || !selectedUser || !provider || !model}
-            className="w-full px-4 py-2 rounded-lg text-sm font-semibold"
-            style={{ background: 'var(--accent)', color: '#fff', opacity: saving || !selectedUser || !model ? 0.55 : 1 }}
+            className="w-full px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-55"
+            variant="primary"
           >
-            {saving ? 'Saving...' : funded.includes(provider) ? 'Save Grant' : 'Save Grant (unfunded)'}
-          </button>
+            {saving
+              ? 'Saving...'
+              : funded.includes(provider)
+                ? 'Save Grant'
+                : 'Save Grant (unfunded)'}
+          </Button>
 
-          <div className="mt-5 pt-4" style={{ borderTop: '1px solid var(--line)' }}>
+          <div className="mt-5 pt-4 border-t border-line">
             <h2 className="text-base font-bold mb-1">Paste API Key</h2>
-            <p className="text-xs mb-3" style={{ color: 'var(--muted)' }}>
-              Store a provider key in <strong>{activeUser?.githubLogin || selectedUser || 'the selected user'}</strong>'s encrypted vault — their VibeCode builds pick it up automatically. This works without funding a grant.
+            <p className="text-xs mb-3 text-muted">
+              Store a provider key in{' '}
+              <strong>
+                {activeUser?.githubLogin || selectedUser || 'the selected user'}
+              </strong>
+              's encrypted vault — their VibeCode builds pick it up
+              automatically. This works without funding a grant.
             </p>
 
-            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>Provider</label>
-            <select
+            <label className="block text-xs font-semibold mb-1 text-muted">
+              Provider
+            </label>
+            <Select
               value={keyProvider}
               onChange={(event) => setKeyProvider(event.target.value)}
-              className="w-full px-3 py-2 rounded-lg text-sm mb-3"
-              style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+              className="w-full mb-3"
             >
               {KEY_PROVIDERS.map((item) => (
-                <option key={item.id} value={item.id}>{item.label}</option>
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
               ))}
-            </select>
+            </Select>
 
-            <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--muted)' }}>API key</label>
+            <label className="block text-xs font-semibold mb-1 text-muted">
+              API key
+            </label>
             <input
               type="password"
               value={keyValue}
               onChange={(event) => setKeyValue(event.target.value)}
               placeholder="sk-…  (stored encrypted, never shown again)"
               autoComplete="off"
-              className="w-full px-3 py-2 rounded-lg text-sm mb-3"
-              style={{ border: '1px solid var(--line)', background: 'var(--paper)', color: 'var(--ink)' }}
+              className="w-full px-3 py-2 rounded-lg text-sm mb-3 border border-line bg-paper text-ink"
             />
 
-            <button
+            <Button
               onClick={saveUserKey}
               disabled={keySaving || !selectedUser || !keyValue.trim()}
-              className="w-full px-4 py-2 rounded-lg text-sm font-semibold"
-              style={{ background: 'var(--accent)', color: '#fff', opacity: keySaving || !keyValue.trim() ? 0.55 : 1 }}
+              className="w-full px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-55"
+              variant="primary"
             >
               {keySaving ? 'Saving...' : 'Save Key'}
-            </button>
+            </Button>
           </div>
         </aside>
       </div>
@@ -375,32 +433,40 @@ export function AIKeys({ navigate }: { navigate: (h: string) => void }) {
 }
 
 function VaultChips({ user }: { user: AdminUser }) {
-  if (user.keys.length === 0) return <span className="text-xs" style={{ color: 'var(--muted)' }}>none</span>
+  if (user.keys.length === 0)
+    return <span className="text-xs text-muted">none</span>
   // "Active" provider = the vault key most recently used in a build. This is the
   // provider the user is actually building on — paste keys for THIS one.
   const used = user.keys.filter((k) => k.lastUsedAt)
   const activeProvider = used.length
-    ? used.reduce((a, b) => ((b.lastUsedAt ?? 0) > (a.lastUsedAt ?? 0) ? b : a)).provider
+    ? used.reduce((a, b) => ((b.lastUsedAt ?? 0) > (a.lastUsedAt ?? 0) ? b : a))
+        .provider
     : null
   return (
     <div className="flex flex-wrap gap-1.5">
       {user.keys.map((key) => {
         const isActive = key.provider === activeProvider
-        const when = key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleDateString() : null
+        const when = key.lastUsedAt
+          ? new Date(key.lastUsedAt).toLocaleDateString()
+          : null
         return (
           <span
             key={key.provider}
-            title={key.lastUsedAt ? `${key.provider} — last built ${when}` : `${key.provider} — in vault, never used in a build`}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium"
-            style={
-              isActive
-                ? { background: 'var(--accent)', color: '#fff' }
-                : { background: 'var(--accent-soft)', color: 'var(--accent)', opacity: key.lastUsedAt ? 1 : 0.55 }
+            title={
+              key.lastUsedAt
+                ? `${key.provider} — last built ${when}`
+                : `${key.provider} — in vault, never used in a build`
             }
+            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${isActive ? 'bg-accent text-white' : 'bg-accent-soft text-accent'} ${!isActive && !key.lastUsedAt ? 'opacity-55' : ''}`}
           >
-            {isActive && <span aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: '#fff' }} />}
+            {isActive && (
+              <span
+                aria-hidden
+                className="w-[6px] h-[6px] rounded-full bg-white"
+              />
+            )}
             {key.provider}
-            {!key.lastUsedAt && <span style={{ opacity: 0.8 }}>·unused</span>}
+            {!key.lastUsedAt && <span className="opacity-80">·unused</span>}
           </span>
         )
       })}

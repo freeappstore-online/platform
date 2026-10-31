@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-panel: var(--panel);
+  --color-panel-strong: var(--panel-strong);
+  --color-panel-glass: var(--panel-glass);
+  --color-popover: var(--popover);
+  --color-scrim: var(--scrim);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-deep: var(--accent-deep);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+}
+
 @layer base {
 
 :root {
@@ -10,8 +30,11 @@
   --muted: #666666;
   --line: rgba(0, 0, 0, 0.08);
   --line-strong: rgba(0, 0, 0, 0.14);
-  --panel: rgba(255, 255, 255, 0.72);
-  --panel-strong: rgba(255, 255, 255, 0.88);
+  --panel: #ffffff;
+  --panel-strong: #ffffff;
+  --panel-glass: rgba(255, 255, 255, 0.72);
+  --popover: var(--paper);
+  --scrim: rgba(0, 0, 0, 0.45);
   --accent: #2563eb;
   --accent-soft: #eff6ff;
   --accent-deep: #1d4ed8;
@@ -33,8 +56,11 @@
   --muted: #888888;
   --line: rgba(255, 255, 255, 0.08);
   --line-strong: rgba(255, 255, 255, 0.14);
-  --panel: rgba(18, 18, 18, 0.8);
-  --panel-strong: rgba(18, 18, 18, 0.92);
+  --panel: #121212;
+  --panel-strong: #121212;
+  --panel-glass: rgba(18, 18, 18, 0.8);
+  --popover: var(--paper);
+  --scrim: rgba(0, 0, 0, 0.65);
   --accent: #3b82f6;
   --accent-soft: #1e3a8a;
   --accent-deep: #93c5fd;

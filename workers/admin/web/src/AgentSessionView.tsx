@@ -1,10 +1,16 @@
+import { Button, Panel, StatusBadge } from './ui.tsx'
 import { useState, useEffect } from 'react'
 import type { AgentSessionDetail, AgentMessage } from './api.ts'
 import { api } from './api.ts'
 import { Loading, ErrorBox } from './Overview.tsx'
-import { StatusBadge } from './AppList.tsx'
 
-export function AgentSessionView({ id, navigate }: { id: string; navigate: (h: string) => void }) {
+export function AgentSessionView({
+  id,
+  navigate,
+}: {
+  id: string
+  navigate: (h: string) => void
+}) {
   const [session, setSession] = useState<AgentSessionDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -23,18 +29,18 @@ export function AgentSessionView({ id, navigate }: { id: string; navigate: (h: s
 
   return (
     <div>
-      <button
+      <Button
         onClick={() => navigate('/agent')}
-        className="text-sm font-medium mb-4 inline-flex items-center gap-1"
-        style={{ color: 'var(--muted)' }}
+        className="text-sm font-medium mb-4 inline-flex items-center gap-1 text-muted"
       >
         &larr; Back to sessions
-      </button>
+      </Button>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold" style={{ color: 'var(--ink)' }}>{session.name}</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>
-          Session {session.sessionId.slice(0, 16)}... &middot; User: {session.userId.slice(0, 12)}...
+        <h1 className="text-2xl font-bold text-ink">{session.name}</h1>
+        <p className="text-sm mt-1 text-muted">
+          Session {session.sessionId.slice(0, 16)}... &middot; User:{' '}
+          {session.userId.slice(0, 12)}...
         </p>
       </div>
 
@@ -42,36 +48,52 @@ export function AgentSessionView({ id, navigate }: { id: string; navigate: (h: s
         <InfoCard label="Status">
           <StatusBadge
             status={session.deployed ? 'success' : 'idle'}
-            label={session.deployed ? 'deployed' : session.deployState?.phase ?? 'building'}
+            label={
+              session.deployed
+                ? 'deployed'
+                : (session.deployState?.phase ?? 'building')
+            }
           />
         </InfoCard>
         <InfoCard label="App ID">
           {session.appId ? (
-            <a onClick={() => navigate(`/apps/${session.appId}`)} className="text-sm font-mono cursor-pointer" style={{ color: 'var(--accent)' }}>
+            <a
+              onClick={() => navigate(`/apps/${session.appId}`)}
+              className="text-sm font-mono cursor-pointer text-accent"
+            >
               {session.appId}
             </a>
           ) : (
-            <span className="text-sm" style={{ color: 'var(--muted)' }}>none</span>
+            <span className="text-sm text-muted">none</span>
           )}
         </InfoCard>
         <InfoCard label="Messages">
-          <span className="text-lg font-bold" style={{ color: 'var(--ink)' }}>{session.messages.length}</span>
+          <span className="text-lg font-bold text-ink">
+            {session.messages.length}
+          </span>
         </InfoCard>
         <InfoCard label="Created">
-          <span className="text-sm" style={{ color: 'var(--ink)' }}>{formatDate(session.createdAt)}</span>
+          <span className="text-sm text-ink">
+            {formatDate(session.createdAt)}
+          </span>
         </InfoCard>
       </div>
 
       {session.appUrl && (
-        <div className="mb-6 rounded-xl p-4" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
-          <span className="text-sm font-medium" style={{ color: 'var(--muted)' }}>App URL: </span>
-          <a href={session.appUrl} target="_blank" rel="noopener" className="text-sm underline" style={{ color: 'var(--accent)' }}>
+        <Panel className="mb-6 p-4">
+          <span className="text-sm font-medium text-muted">App URL: </span>
+          <a
+            href={session.appUrl}
+            target="_blank"
+            rel="noopener"
+            className="text-sm underline text-accent"
+          >
             {session.appUrl}
           </a>
-        </div>
+        </Panel>
       )}
 
-      <h2 className="text-lg font-bold mb-4" style={{ color: 'var(--ink)' }}>
+      <h2 className="text-lg font-bold mb-4 text-ink">
         Conversation ({session.messages.length} messages)
       </h2>
 
@@ -80,7 +102,7 @@ export function AgentSessionView({ id, navigate }: { id: string; navigate: (h: s
           <MessageBubble key={i} msg={msg} index={i} />
         ))}
         {session.messages.length === 0 && (
-          <div className="py-8 text-center" style={{ color: 'var(--muted)' }}>
+          <div className="py-8 text-center text-muted">
             No messages in this session.
           </div>
         )}
@@ -89,58 +111,61 @@ export function AgentSessionView({ id, navigate }: { id: string; navigate: (h: s
   )
 }
 
-function InfoCard({ label, children }: { label: string; children: React.ReactNode }) {
+function InfoCard({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
   return (
-    <div className="rounded-xl p-3" style={{ background: 'var(--panel)', border: '1px solid var(--line)' }}>
-      <p className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>{label}</p>
+    <Panel className="p-3">
+      <p className="text-xs font-medium mb-1 text-muted">{label}</p>
       {children}
-    </div>
+    </Panel>
   )
 }
 
 function MessageBubble({ msg, index }: { msg: AgentMessage; index: number }) {
   const [expanded, setExpanded] = useState(false)
   const isUser = msg.role === 'user'
-  const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+  const content =
+    typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
   const truncated = content.length > 500 && !expanded
 
   return (
     <div
-      className="rounded-xl p-4"
-      style={{
-        background: isUser ? 'var(--accent-soft, rgba(37, 99, 235, 0.08))' : 'var(--panel)',
-        border: `1px solid ${isUser ? 'var(--accent, #2563eb)' : 'var(--line)'}`,
-        borderLeftWidth: '3px',
-      }}
+      className={`rounded-xl p-4 border border-l-[3px] ${isUser ? 'bg-accent-soft' : 'bg-panel'} ${isUser ? 'border-accent' : 'border-line'}`}
     >
       <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-bold uppercase" style={{ color: isUser ? 'var(--accent)' : 'var(--muted)' }}>
+        <span
+          className={`text-xs font-bold uppercase ${isUser ? 'text-accent' : 'text-muted'}`}
+        >
           {isUser ? 'User' : 'Agent'}
         </span>
-        <span className="text-xs" style={{ color: 'var(--muted)' }}>#{index + 1}</span>
+        <span className="text-xs text-muted">#{index + 1}</span>
       </div>
 
-      <pre
-        className="text-sm whitespace-pre-wrap break-words"
-        style={{ color: 'var(--ink)', fontFamily: 'inherit' }}
-      >
+      <pre className="text-sm whitespace-pre-wrap break-words text-ink [font-family:inherit]">
         {truncated ? content.slice(0, 500) + '...' : content}
       </pre>
 
       {content.length > 500 && (
-        <button
+        <Button
           onClick={() => setExpanded(!expanded)}
-          className="text-xs mt-2 underline"
-          style={{ color: 'var(--accent)' }}
+          className="text-xs mt-2 underline text-accent"
         >
           {expanded ? 'Show less' : `Show all (${content.length} chars)`}
-        </button>
+        </Button>
       )}
 
       {msg.toolCalls && msg.toolCalls.length > 0 && (
         <div className="mt-3 space-y-1">
           {msg.toolCalls.map((tc, j) => (
-            <div key={j} className="text-xs font-mono rounded px-2 py-1" style={{ background: 'var(--line)', color: 'var(--ink)' }}>
+            <div
+              key={j}
+              className="text-xs font-mono rounded px-2 py-1 bg-line text-ink"
+            >
               {tc.name}({tc.input.path ? String(tc.input.path) : '...'})
             </div>
           ))}
@@ -151,10 +176,10 @@ function MessageBubble({ msg, index }: { msg: AgentMessage; index: number }) {
         <div className="mt-2 space-y-1">
           {msg.toolResults.map((tr, j) => (
             <details key={j} className="text-xs">
-              <summary className="cursor-pointer font-mono" style={{ color: 'var(--muted)' }}>
+              <summary className="cursor-pointer font-mono text-muted">
                 Tool result ({tr.content.length} chars)
               </summary>
-              <pre className="mt-1 p-2 rounded text-xs overflow-x-auto" style={{ background: 'var(--line)', color: 'var(--ink)' }}>
+              <pre className="mt-1 p-2 rounded text-xs overflow-x-auto bg-line text-ink">
                 {tr.content.slice(0, 1000)}
                 {tr.content.length > 1000 ? '...' : ''}
               </pre>
@@ -167,5 +192,10 @@ function MessageBubble({ msg, index }: { msg: AgentMessage; index: number }) {
 }
 
 function formatDate(ts: number): string {
-  return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return new Date(ts).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }

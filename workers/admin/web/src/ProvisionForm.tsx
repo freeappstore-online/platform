@@ -1,7 +1,7 @@
+import { Button, Input, StatusBadge } from './ui.tsx'
 import { useState } from 'react'
 import type { ProvisionResult, ProvisionStep } from './api.ts'
 import { api } from './api.ts'
-import { StatusBadge } from './AppList.tsx'
 
 export function ProvisionForm({ navigate }: { navigate: (h: string) => void }) {
   const [form, setForm] = useState({
@@ -17,8 +17,10 @@ export function ProvisionForm({ navigate }: { navigate: (h: string) => void }) {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<ProvisionResult | null>(null)
 
-  const set = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [field]: e.target.value }))
+  const set =
+    (field: string) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setForm((f) => ({ ...f, [field]: e.target.value }))
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +36,13 @@ export function ProvisionForm({ navigate }: { navigate: (h: string) => void }) {
     } catch (err: unknown) {
       setResult({
         success: false,
-        steps: [{ name: 'Error', status: 'fail', detail: err instanceof Error ? err.message : String(err) }],
+        steps: [
+          {
+            name: 'Error',
+            status: 'fail',
+            detail: err instanceof Error ? err.message : String(err),
+          },
+        ],
       })
     } finally {
       setSubmitting(false)
@@ -43,128 +51,120 @@ export function ProvisionForm({ navigate }: { navigate: (h: string) => void }) {
 
   return (
     <div>
-      <button
+      <Button
         onClick={() => navigate('/')}
-        className="text-sm font-medium mb-4 inline-flex items-center gap-1"
-        style={{ color: 'var(--muted)' }}
+        className="text-sm font-medium mb-4 inline-flex items-center gap-1 text-muted"
       >
         &larr; Back
-      </button>
+      </Button>
 
       <h1 className="text-2xl font-bold mb-6">Provision New App</h1>
 
       <form onSubmit={handleSubmit} className="max-w-lg space-y-4">
         <Field label="ID" hint="Lowercase, letters/numbers/dashes only">
-          <input
+          <Input
             value={form.id}
             aria-label="App ID"
             onChange={set('id')}
             required
             pattern="^[a-z][a-z0-9-]*[a-z0-9]$"
             placeholder="e.g. calendar"
-            className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+            className="w-full"
           />
         </Field>
 
         <Field label="Display Name">
-          <input
+          <Input
             value={form.name}
             aria-label="Display name"
             onChange={set('name')}
             required
             placeholder="e.g. Calendar"
-            className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+            className="w-full"
           />
         </Field>
 
         <Field label="Category">
-          <input
+          <Input
             value={form.category}
             aria-label="Category"
             onChange={set('category')}
             required
             placeholder="e.g. utilities"
-            className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+            className="w-full"
           />
         </Field>
 
         <div className="grid grid-cols-2 gap-4">
           <Field label="Icon (HTML entity)">
-            <input
+            <Input
               value={form.icon}
               aria-label="Icon"
               onChange={set('icon')}
               required
               placeholder="&#128197;"
-              className="w-full rounded-lg px-3 py-2 text-sm"
-              style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+              className="w-full"
             />
           </Field>
           <Field label="Icon Background">
-            <input
+            <Input
               value={form.iconBg}
               aria-label="Icon background"
               onChange={set('iconBg')}
               placeholder="#f0f9ff"
-              className="w-full rounded-lg px-3 py-2 text-sm"
-              style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+              className="w-full"
             />
           </Field>
         </div>
 
         <Field label="Description">
-          <input
+          <Input
             value={form.description}
             aria-label="Description"
             onChange={set('description')}
             required
             placeholder="Short description"
-            className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+            className="w-full"
           />
         </Field>
 
         <Field label="Creator GitHub" hint="Gets push access to the repo">
-          <input
+          <Input
             value={form.creatorGithub}
             aria-label="Creator GitHub username"
             onChange={set('creatorGithub')}
             placeholder="github-username"
-            className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ background: 'var(--panel)', border: '1px solid var(--line)', color: 'var(--ink)' }}
+            className="w-full"
           />
         </Field>
 
-        <button
+        <Button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-lg px-4 py-2.5 text-sm font-semibold"
-          style={{ background: 'var(--accent)', color: '#fff', opacity: submitting ? 0.6 : 1 }}
+          className={`w-full rounded-lg px-4 py-2.5 text-sm font-semibold ${submitting ? 'opacity-60' : 'opacity-100'}`}
+          variant="primary"
         >
           {submitting ? 'Provisioning...' : 'Provision'}
-        </button>
+        </Button>
       </form>
 
       {result && (
         <div className="mt-6 max-w-lg">
           <StepList steps={result.steps} />
           <p
-            className="mt-4 text-sm font-semibold"
-            style={{ color: result.success ? 'var(--success)' : 'var(--danger)' }}
+            className={`mt-4 text-sm font-semibold ${result.success ? 'text-success' : 'text-danger'}`}
           >
-            {result.success ? 'Provisioned successfully!' : 'Some steps failed.'}
+            {result.success
+              ? 'Provisioned successfully!'
+              : 'Some steps failed.'}
           </p>
           {result.success && (
-            <button
+            <Button
               onClick={() => navigate(`/apps/${form.id}`)}
-              className="mt-3 text-sm font-medium underline"
-              style={{ color: 'var(--accent)' }}
+              className="mt-3 text-sm font-medium underline text-accent"
             >
               View app details
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -178,20 +178,28 @@ function StepList({ steps }: { steps: ProvisionStep[] }) {
       {steps.map((s, i) => (
         <div key={i} className="flex items-start gap-2 text-sm">
           <StatusBadge status={s.status} />
-          <span className="font-medium" style={{ color: 'var(--ink)' }}>{s.name}</span>
-          <span style={{ color: 'var(--muted)' }}>{s.detail}</span>
+          <span className="font-medium text-ink">{s.name}</span>
+          <span className="text-muted">{s.detail}</span>
         </div>
       ))}
     </div>
   )
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: React.ReactNode
+}) {
   return (
     <div>
-      <label className="block text-sm font-medium mb-1" style={{ color: 'var(--ink)' }}>
+      <label className="block text-sm font-medium mb-1 text-ink">
         {label}
-        {hint && <span className="font-normal ml-1" style={{ color: 'var(--muted)' }}>({hint})</span>}
+        {hint && <span className="font-normal ml-1 text-muted">({hint})</span>}
       </label>
       {children}
     </div>

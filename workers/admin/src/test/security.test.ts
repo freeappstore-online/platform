@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 describe("Security: no secrets in source", () => {
   const srcDir = join(__dirname, "..");
   const files = readdirSync(srcDir, { recursive: true }) as string[];
-  const tsFiles = files.filter((f) => f.endsWith(".ts") && !f.includes("test/") && !f.includes("node_modules"));
+  const tsFiles = files.filter((f) => f.endsWith(".ts") && !f.replaceAll("\\", "/").includes("test/") && !f.includes("node_modules"));
 
   // Known patterns that should NEVER appear in source
   const forbidden = [
