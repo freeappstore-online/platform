@@ -58,8 +58,14 @@ export function renderCheckResults(results: CheckResult[]): CheckSummary {
 export const checkCommand = new Command('check')
   .description('Run FreeAppStore compliance checks against the current directory.')
   .option('--dir <path>', 'Directory to check', process.cwd())
-  .action(async (opts: { dir: string }) => {
+  .option('--json', 'Print machine-readable compliance results')
+  .action(async (opts: { dir: string; json?: boolean }) => {
     const results = await runChecks(opts.dir);
+    if (opts.json) {
+      process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
+      if (results.some((result) => result.status === 'fail')) process.exitCode = 1;
+      return;
+    }
     const { failed } = renderCheckResults(results);
     if (failed > 0) process.exit(1);
   });

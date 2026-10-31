@@ -24,6 +24,29 @@ for (const r of results) {
 | `PWA manifest` | `web/public/manifest.json` exists and has name / short_name / start_url / display | warn |
 | `Bundle size` | Initial-load JS (entry + static imports) ≤ 300 KB gzipped; lazy wasm/workers/dynamic chunks ≤ 25 MB each | **fail** if either cap is exceeded; warn if not built yet |
 
+## Styling checks (warn-only rollout, #324)
+
+- `CSS discipline`: PostCSS parses `web/src/**/*.css` and reports banned token
+  aliases, unlayered rules, hex colours outside token blocks, per-screen dark
+  overrides, and more than 15 feature classes per stylesheet.
+- `No excessive inline styles`: vendored from FreeGameStore's platform check;
+  warns above 15 `style={{...}}` objects per TSX file or 30 total. Tests and
+  comments are excluded. FAS permits genuinely dynamic values with a reason
+  commented beside them; static appearance belongs in Tailwind on FAS tokens.
+- `Opaque surfaces`: warns for alpha colours in `--paper`, `--panel`, or
+  `--popover`, in either theme. `--panel-glass` and `--scrim` are exempt.
+
+`fas check --json` includes these warnings without failing the app build.
+`pnpm lint:platform-ui` reuses all three checks for SDK UI, Console, and Admin,
+and reports parsed TSX inline-style and runtime CSS injection counts. CI stays
+in warn-only migration mode while #322 is pending. After migration, run
+`pnpm lint:platform-ui --strict` to fail on runtime CSS injection or inline
+styles without a nearby comment explaining the dynamic value.
+
+The PAS CSS source referenced by #324 was unavailable (404); its five specified
+rules are implemented here with PostCSS. The FGS inline scanner is adapted from
+`freegamestore-online/platform/packages/compliance/src/checks/no-excessive-inline-styles.ts`.
+
 ## License
 
 MIT.

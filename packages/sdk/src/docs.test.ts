@@ -6,6 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -87,7 +88,7 @@ describe('Shell is the documented standard path', () => {
 
 // ── Documentation sweep (#92) ───────────────────────────────────
 
-const root = new URL('../../../', import.meta.url).pathname;
+const root = fileURLToPath(new URL('../../../', import.meta.url));
 const readRoot = (path: string) => readFileSync(join(root, path), 'utf8');
 
 /** Every tracked markdown doc, minus changelogs and test fixtures. */

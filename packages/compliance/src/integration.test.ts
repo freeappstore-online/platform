@@ -51,9 +51,9 @@ describe('passing-app fixture', () => {
     expect(fails, JSON.stringify(fails, null, 2)).toEqual([]);
   });
 
-  it('warns only on bundle-size (no dist built)', async () => {
+  it('warns on legacy unlayered CSS and bundle-size (no dist built)', async () => {
     const results = await runChecks(PASSING_APP);
-    expect(summarise(results).warn).toEqual(['Bundle size']);
+    expect(summarise(results).warn).toEqual(['CSS discipline', 'Bundle size']);
   });
 });
 
@@ -82,6 +82,7 @@ describe('failing-app fixture', () => {
     expect(summary.warn.sort()).toEqual([
       'Bundle size',
       'CLAUDE.md is slim (no platform boilerplate)',
+      'CSS discipline',
       'Dark mode support',
       'No unsafe 100vh',
       'PWA meta tags',
@@ -97,7 +98,9 @@ describe('failing-app fixture', () => {
       // The fixture lives inside this git repo and tracks no artifacts,
       // so the VCS-aware check legitimately passes even on the "broken" app.
       'No committed build artifacts',
+      'No excessive inline styles',
       'No scroll (games only)',
+      'Opaque surfaces',
       'PWA maskable icon',
       'Text selectable',
     ]);

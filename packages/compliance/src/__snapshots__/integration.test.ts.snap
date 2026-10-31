@@ -45,6 +45,14 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     ],
   },
   {
+    "detail": "web/src/extra.css:3: unlayered-rule: .button; web/src/index.css:3: unlayered-rule: body; web/src/index.css:8: unlayered-rule: .hero",
+    "name": "CSS discipline",
+    "status": "warn",
+    "suggestions": [
+      "Use Tailwind on FAS tokens; keep custom rules in @layer base/components and colours in :root token blocks.",
+    ],
+  },
+  {
     "detail": "no prefers-color-scheme / data-theme / color-scheme signal in web/src/",
     "name": "Dark mode support",
     "status": "warn",
@@ -107,6 +115,11 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     "status": "pass",
   },
   {
+    "detail": "0 inline style(s) across 0 TSX file(s) (thresholds: 15/file, 30 total)",
+    "name": "No excessive inline styles",
+    "status": "pass",
+  },
+  {
     "detail": "1 file(s) take or register payments: web/src/checkout.ts (Payment Request API)",
     "name": "No payments (free tier)",
     "status": "fail",
@@ -138,6 +151,11 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
       "web/src/index.css:9 100vh — use 100svh or 100dvh",
       "Replace with 100svh (preferred) or 100dvh. Add \`// allow-100vh\` on the line if intentional.",
     ],
+  },
+  {
+    "detail": "--paper, --panel and --popover have no translucent colours",
+    "name": "Opaque surfaces",
+    "status": "pass",
   },
   {
     "detail": "no manifest source found (looked for web/public/manifest.json and a VitePWA(...) block in web/vite.config.ts)",

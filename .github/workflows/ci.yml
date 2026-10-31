@@ -33,6 +33,12 @@ jobs:
       - name: Design system lint
         run: bash scripts/check-design-system.sh .
 
+      - name: Platform UI styling lint (warn first)
+        run: pnpm lint:platform-ui
+
+      - name: Platform UI scanner tests
+        run: node --test scripts/check-platform-ui.test.mjs
+
       - name: Lint
         run: pnpm lint
 

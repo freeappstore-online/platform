@@ -130,7 +130,7 @@ describe('public platform documentation matches the implementation', () => {
     const host = ts.createCompilerHost(options);
     const original = host.getSourceFile.bind(host);
     host.getSourceFile = (path, languageVersion, onError, shouldCreateNewSourceFile) =>
-      path === file
+      path.replaceAll('\\', '/') === file.replaceAll('\\', '/')
         ? ts.createSourceFile(file, contents, languageVersion, true)
         : original(path, languageVersion, onError, shouldCreateNewSourceFile);
     const program = ts.createProgram([file], options, host);

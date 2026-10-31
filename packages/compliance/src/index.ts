@@ -2,6 +2,7 @@ import { checkBrandFonts } from './checks/brand-fonts.js';
 import { checkBrandTokens } from './checks/brand-tokens.js';
 import { checkBundleSize } from './checks/bundle-size.js';
 import { checkClaudeMdSlim } from './checks/claude-md-slim.js';
+import { checkCssDiscipline } from './checks/css-discipline.js';
 import { checkDarkMode } from './checks/dark-mode.js';
 import { checkHtmlMeta } from './checks/html-meta.js';
 import { checkLicenseMit } from './checks/license-mit.js';
@@ -10,10 +11,12 @@ import { checkNoAds } from './checks/no-ads.js';
 import { checkNoBrandOverrides } from './checks/no-brand-overrides.js';
 import { checkNoCommittedArtifacts } from './checks/no-committed-artifacts.js';
 import { checkNoEnvProduction } from './checks/no-env-production.js';
+import { checkNoExcessiveInlineStyles } from './checks/no-excessive-inline-styles.js';
 import { checkNoPayments } from './checks/no-payments.js';
 import { checkNoPlaceholders } from './checks/no-placeholders.js';
 import { checkNoScroll } from './checks/no-scroll.js';
 import { checkNoTracking } from './checks/no-tracking.js';
+import { checkOpaqueSurface } from './checks/opaque-surface.js';
 import { checkPermissions } from './checks/permissions.js';
 import { checkMaskableIcon } from './checks/pwa-maskable-icon.js';
 import { checkPwaMeta } from './checks/pwa-meta.js';
@@ -55,6 +58,7 @@ export {
   checkBrandTokens,
   checkBundleSize,
   checkClaudeMdSlim,
+  checkCssDiscipline,
   checkDarkMode,
   checkHtmlMeta,
   checkLicenseMit,
@@ -64,10 +68,12 @@ export {
   checkNoBrandOverrides,
   checkNoCommittedArtifacts,
   checkNoEnvProduction,
+  checkNoExcessiveInlineStyles,
   checkNoPayments,
   checkNoPlaceholders,
   checkNoScroll,
   checkNoTracking,
+  checkOpaqueSurface,
   checkPermissions,
   checkPwaMeta,
   checkPwaOffline,
@@ -122,6 +128,9 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkStoreLink(source),
     checkTextSelectable(source),
     checkDarkMode(source),
+    checkCssDiscipline(source),
+    checkNoExcessiveInlineStyles(source),
+    checkOpaqueSurface(source),
     checkBundleSize(source),
     checkClaudeMdSlim(source),
   ]);
