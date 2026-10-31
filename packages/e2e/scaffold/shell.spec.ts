@@ -52,7 +52,7 @@ for (const theme of ['light', 'dark'] as const) {
     expect((await skip.boundingBox())!.y).toBeLessThan(0);
     await page.keyboard.press('Tab');
     await expect(skip).toBeFocused();
-    expect((await skip.boundingBox())!.y).toBeGreaterThanOrEqual(0);
+    await expect.poll(async () => (await skip.boundingBox())!.y).toBeGreaterThanOrEqual(0);
     const menu = page.getByRole('button', { name: 'Menu', exact: true });
     if (testInfo.project.name === 'mobile') {
       await expect(menu).toBeVisible();
