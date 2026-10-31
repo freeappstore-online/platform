@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
 const expect = (actual) => ({
   toContain: (value) => assert.ok(actual.includes(value), `Missing: ${value}`),
   toMatch: (pattern) => assert.match(actual, pattern),
@@ -25,7 +26,9 @@ describe('FAS styling standard (#320)', () => {
       expect(text).toContain('@theme inline');
       expect(text).toContain('--popover: var(--paper)');
       expect(text).toMatch(/Branding stays in token values/);
-      expect(text).not.toMatch(/Tailwind[^.\n]*(?:optional|not required)|caller-supplied appearance/i);
+      expect(text).not.toMatch(
+        /Tailwind[^.\n]*(?:optional|not required)|caller-supplied appearance/i,
+      );
     });
   }
 
@@ -44,7 +47,9 @@ describe('FAS styling standard (#320)', () => {
     for (const path of ['CLAUDE.md', 'docs/ui.md', 'sites/storefront/SKILLS.md']) {
       expect(read(path)).toContain('adr/001-tailwind-on-fas-tokens.md');
     }
-    expect(read('CLAUDE.md')).toContain('All UI, including the SDK, is React + Tailwind 4 on tokens');
+    expect(read('CLAUDE.md')).toContain(
+      'All UI, including the SDK, is React + Tailwind 4 on tokens',
+    );
     expect(read('scripts/check-design-system.sh')).toContain('docs/ui.md#styling');
   });
 });
