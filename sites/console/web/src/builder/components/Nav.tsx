@@ -12,11 +12,7 @@ function ThemeToggle() {
       onClick={cycle}
       title={label}
       aria-label={label}
-      style={{
-        width: 36, height: 36, borderRadius: "999px", border: "1px solid var(--line)",
-        background: "var(--panel)", color: "var(--ink)", cursor: "pointer", fontSize: "0.95rem",
-        display: "inline-flex", alignItems: "center", justifyContent: "center",
-      }}
+      className="w-9 h-9 rounded-full border border-line bg-panel text-ink cursor-pointer text-[0.95rem] inline-flex items-center justify-center"
     >
       <span aria-hidden>{icon}</span>
     </button>
@@ -54,23 +50,22 @@ export function Nav() {
   }, [avatarMenuOpen]);
 
   return (
-    <header className="sticky top-0 z-30 border-b backdrop-blur-xl" style={{ borderColor: "var(--line)", background: "var(--panel)", padding: "0.5rem 0" }}>
+    <header className="sticky top-0 z-30 border-b backdrop-blur-xl border-line bg-panel p-[0.5rem_0]">
       <div className="container flex items-center justify-between">
-        <Link to="/" className="font-display text-lg font-bold tracking-tight no-underline" style={{ color: "var(--ink)" }}>
-          Free<span style={{ color: "var(--accent)" }}>Apps</span> <span className="font-sans text-sm font-medium" style={{ color: "var(--muted)" }}>Studio</span>
+        <Link to="/" className="font-display text-lg font-bold tracking-tight no-underline text-ink">
+          Free<span className="text-accent">Apps</span> <span className="font-sans text-sm font-medium text-muted">Studio</span>
         </Link>
 
         {/* Desktop nav */}
         <nav className="hidden sm:flex items-center gap-5">
           <ThemeToggle />
-          <a href={consoleHome} className="text-sm font-semibold no-underline" style={{ color: "var(--accent)" }}>&#8592; Console</a>
+          <a href={consoleHome} className="text-sm font-semibold no-underline text-accent">&#8592; Console</a>
           {NAV_LINKS.map((link) =>
             link.external ? (
               <a
                 key={link.to}
                 href={link.to}
-                className="text-sm font-semibold no-underline"
-                style={{ color: "var(--muted)" }}
+                className="text-sm font-semibold no-underline text-muted"
               >
                 {link.label}
               </a>
@@ -78,54 +73,48 @@ export function Nav() {
               <Link
                 key={link.to}
                 to={link.to}
-                className="text-sm font-semibold no-underline"
-                style={{ color: location.pathname === link.to ? "var(--ink)" : "var(--muted)" }}
+                className={`text-sm font-semibold no-underline ${location.pathname === link.to ? "text-ink" : "text-muted"}`}
               >
                 {link.label}
               </Link>
             ),
           )}
           {user ? (
-            <div ref={avatarRef} style={{ position: "relative" }}>
+            <div ref={avatarRef} className="relative">
               <button
                 onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                className="bg-transparent border-0 cursor-pointer p-0"
               >
                 <img
                   src={user.avatarUrl || ""}
                   alt={user.login}
-                  className="rounded-full border-2"
-                  style={{ width: 28, height: 28, borderColor: avatarMenuOpen ? "var(--accent)" : "var(--line)" }}
+                  className={`rounded-full border-2 w-7 h-7 ${avatarMenuOpen ? "border-accent" : "border-line"}`}
                 />
               </button>
               {avatarMenuOpen && (
                 <div
-                  className="absolute right-0 mt-2 rounded-xl border shadow-lg"
-                  style={{ background: "var(--panel)", borderColor: "var(--line)", width: 200, zIndex: 100, padding: "0.5rem 0" }}
+                  className="absolute right-0 mt-2 rounded-xl border shadow-lg bg-paper border-line w-[200px] z-[100] p-[0.5rem_0]"
                 >
-                  <div className="px-3 py-2" style={{ borderBottom: "1px solid var(--line)" }}>
+                  <div className="px-3 py-2 border-b border-line">
                     <div className="text-sm font-semibold truncate">{user.login}</div>
-                    <div className="text-xs" style={{ color: "var(--muted)" }}>GitHub</div>
+                    <div className="text-xs text-muted">GitHub</div>
                   </div>
                   <button
                     onClick={() => { setAvatarMenuOpen(false); navigate("/profile"); }}
-                    className="w-full text-left px-3 py-2 text-sm"
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink)" }}
+                    className="w-full text-left px-3 py-2 text-sm bg-transparent border-0 cursor-pointer text-ink"
                   >
                     Profile & Settings
                   </button>
                   <button
                     onClick={() => { setAvatarMenuOpen(false); navigate("/admin"); }}
-                    className="w-full text-left px-3 py-2 text-sm"
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink)" }}
+                    className="w-full text-left px-3 py-2 text-sm bg-transparent border-0 cursor-pointer text-ink"
                   >
                     Admin
                   </button>
-                  <div style={{ borderTop: "1px solid var(--line)", margin: "0.25rem 0" }} />
+                  <div className="border-t border-line m-[0.25rem_0]" />
                   <button
                     onClick={() => { setAvatarMenuOpen(false); signOut(); navigate("/"); }}
-                    className="w-full text-left px-3 py-2 text-sm"
-                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--danger)" }}
+                    className="w-full text-left px-3 py-2 text-sm bg-transparent border-0 cursor-pointer text-danger"
                   >
                     Sign out
                   </button>
@@ -135,8 +124,7 @@ export function Nav() {
           ) : (
             <button
               onClick={signIn}
-              className="text-sm font-semibold"
-              style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}
+              className="text-sm font-semibold text-accent bg-transparent border-0 cursor-pointer"
             >
               Sign in
             </button>
@@ -148,7 +136,7 @@ export function Nav() {
           <ThemeToggle />
           <button
             onClick={() => setMenuOpen(true)}
-            style={{ width: 36, height: 36, background: "none", border: "1px solid var(--line)", borderRadius: "999px", fontSize: "1.1rem", color: "var(--ink)", cursor: "pointer" }}
+            className="w-9 h-9 bg-transparent border border-line rounded-full text-[1.1rem] text-ink cursor-pointer"
             aria-label="Menu"
           >
             &#9776;
@@ -160,35 +148,25 @@ export function Nav() {
       {menuOpen && (
         <>
           <div
-            className="fixed inset-0 z-40"
-            style={{ background: "rgba(0,0,0,0.3)" }}
+            className="fixed inset-0 z-40 bg-black/30"
             onClick={() => setMenuOpen(false)}
           />
           <nav
-            className="fixed top-0 right-0 z-50 flex flex-col gap-1 p-4"
-            style={{
-              width: 220,
-              height: "100dvh",
-              background: "var(--panel)",
-              borderLeft: "1px solid var(--line)",
-              boxShadow: "-4px 0 20px rgba(0,0,0,0.1)",
-            }}
+            className="fixed top-0 right-0 z-50 flex flex-col gap-1 p-4 w-[220px] h-[100dvh] bg-paper border-l border-line shadow-[-4px_0_20px_rgba(0,0,0,0.1)]"
           >
             <button
               onClick={() => setMenuOpen(false)}
-              className="self-end mb-2"
-              style={{ background: "none", border: "none", color: "var(--muted)", fontSize: "1rem", cursor: "pointer" }}
+              className="self-end mb-2 bg-transparent border-0 text-muted text-base cursor-pointer"
             >
               &#10005;
             </button>
-            <a href={consoleHome} className="block py-2 text-base font-semibold no-underline" style={{ color: "var(--accent)" }} onClick={() => setMenuOpen(false)}>&#8592; Console</a>
+            <a href={consoleHome} className="block py-2 text-base font-semibold no-underline text-accent" onClick={() => setMenuOpen(false)}>&#8592; Console</a>
             {NAV_LINKS.map((link) =>
               link.external ? (
                 <a
                   key={link.to}
                   href={link.to}
-                  className="block py-2 text-base font-semibold no-underline"
-                  style={{ color: "var(--muted)" }}
+                  className="block py-2 text-base font-semibold no-underline text-muted"
                   onClick={() => setMenuOpen(false)}
                 >
                   {link.label}
@@ -197,8 +175,7 @@ export function Nav() {
                 <Link
                   key={link.to}
                   to={link.to}
-                  className="block py-2 text-base font-semibold no-underline"
-                  style={{ color: location.pathname === link.to ? "var(--ink)" : "var(--muted)" }}
+                  className={`block py-2 text-base font-semibold no-underline ${location.pathname === link.to ? "text-ink" : "text-muted"}`}
                   onClick={() => setMenuOpen(false)}
                 >
                   {link.label}
@@ -211,15 +188,13 @@ export function Nav() {
                   <img
                     src={user.avatarUrl || ""}
                     alt={user.login}
-                    className="rounded-full"
-                    style={{ width: 24, height: 24 }}
+                    className="rounded-full w-6 h-6"
                   />
-                  <span className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{user.login}</span>
+                  <span className="text-sm font-semibold text-ink">{user.login}</span>
                 </Link>
                 <button
                   onClick={() => { setMenuOpen(false); signOut(); navigate("/"); }}
-                  className="mt-2 text-sm"
-                  style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+                  className="mt-2 text-sm text-danger bg-transparent border-0 cursor-pointer text-left"
                 >
                   Sign out
                 </button>
@@ -227,8 +202,7 @@ export function Nav() {
             ) : (
               <button
                 onClick={() => { setMenuOpen(false); signIn(); }}
-                className="mt-4 text-sm font-semibold"
-                style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+                className="mt-4 text-sm font-semibold text-accent bg-transparent border-0 cursor-pointer text-left"
               >
                 Sign in
               </button>

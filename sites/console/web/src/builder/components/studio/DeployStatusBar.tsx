@@ -82,22 +82,22 @@ export function DeployStatusBar({
   > = {
     working: {
       label: "Building",
-      dot: "#f59e0b", // amber
+      dot: "bg-warning",
       detail: "Generating app code…",
     },
     deploying: {
       label: "Deploying",
-      dot: "#3b82f6", // blue
+      dot: "bg-accent",
       detail: phaseLabel(deployState),
     },
     live: {
       label: "Live",
-      dot: "#16a34a", // green
+      dot: "bg-success",
       detail: "Preview ready",
     },
     error: {
       label: "Deploy failed",
-      dot: "#dc2626", // red
+      dot: "bg-danger",
       detail: deployState?.error?.slice(0, 80) ?? "Check the error panel for details.",
     },
   };
@@ -117,47 +117,21 @@ export function DeployStatusBar({
     <>
       {/* Status strip */}
       <div
-        className="flex items-center gap-2 shrink-0 text-xs"
-        style={{
-          padding: "0.3rem 0.75rem",
-          borderBottom: "1px solid var(--line)",
-          background:
-            barState === "error"
-              ? "color-mix(in srgb, #dc2626 8%, var(--panel))"
-              : barState === "live"
-              ? "color-mix(in srgb, #16a34a 8%, var(--panel))"
-              : "var(--panel)",
-          minHeight: 28,
-        }}
+        className={`flex items-center gap-2 shrink-0 text-xs py-[0.3rem] px-3 border-b border-line min-h-7 ${barState === "error" ? "bg-[color-mix(in_srgb,var(--danger)_8%,var(--panel))]" : barState === "live" ? "bg-[color-mix(in_srgb,var(--success)_8%,var(--panel))]" : "bg-panel"}`}
       >
         {/* Dot indicator */}
         <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: cfg.dot,
-            flexShrink: 0,
-            animation: isPulsing ? "fas-pulse 1.4s ease-in-out infinite" : "none",
-          }}
+          className={`w-2 h-2 rounded-full shrink-0 ${cfg.dot} ${isPulsing ? "animate-pulse [animation-duration:1.4s]" : ""}`}
         />
         {/* Label */}
         <span
-          className="font-semibold"
-          style={{
-            color:
-              barState === "error"
-                ? "#dc2626"
-                : barState === "live"
-                ? "#16a34a"
-                : "var(--ink)",
-          }}
+          className={`font-semibold ${barState === "error" ? "text-danger" : barState === "live" ? "text-success" : "text-ink"}`}
         >
           {cfg.label}
         </span>
         {/* Detail */}
         {cfg.detail && (
-          <span className="truncate" style={{ color: "var(--muted)", minWidth: 0, flex: 1 }}>
+          <span className="truncate text-muted min-w-0 flex-1">
             {cfg.detail}
           </span>
         )}
@@ -166,58 +140,26 @@ export function DeployStatusBar({
           <button
             onClick={() => setExpanded((e) => !e)}
             aria-label={expanded ? "Collapse error details" : "Expand error details"}
-            style={{
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-              color: "var(--muted)",
-              fontSize: "1rem",
-              display: "flex",
-              alignItems: "center",
-              padding: "0 0.25rem",
-              flexShrink: 0,
-            }}
+            className="bg-transparent border-0 cursor-pointer text-muted text-base flex items-center p-[0_0.25rem] shrink-0"
           >
             {expanded ? "∧" : "∨"}
           </button>
         )}
       </div>
 
-      {/* Pulse keyframes — injected once via a <style> tag */}
-      <style>{`
-        @keyframes fas-pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.35; }
-        }
-      `}</style>
 
       {/* Expanded error panel */}
       {barState === "error" && expanded && (
         <div
-          className="shrink-0 flex flex-col gap-2"
-          style={{
-            padding: "0.75rem",
-            borderBottom: "1px solid var(--line)",
-            background: "color-mix(in srgb, #dc2626 5%, var(--panel))",
-            fontSize: "0.8rem",
-          }}
+          className="shrink-0 flex flex-col gap-2 p-[0.75rem] border-b border-line bg-[color-mix(in_srgb,_var(--danger)_5%,_var(--panel))] text-[0.8rem]"
         >
           {/* Error label */}
-          <div className="font-semibold text-xs" style={{ color: "#dc2626" }}>
+          <div className="font-semibold text-xs text-danger">
             What happened
           </div>
           {/* Error text */}
           <pre
-            className="rounded-lg overflow-auto text-xs whitespace-pre-wrap"
-            style={{
-              maxHeight: 200,
-              padding: "0.6rem 0.75rem",
-              background: "var(--paper)",
-              border: "1px solid var(--line)",
-              color: "var(--ink)",
-              fontFamily: "monospace",
-              lineHeight: 1.5,
-            }}
+            className="rounded-lg overflow-auto text-xs whitespace-pre-wrap max-h-[200px] p-[0.6rem_0.75rem] bg-paper border border-line text-ink font-[monospace] leading-[1.5]"
           >
             {(deployState?.error ?? "No error details available.").slice(0, 2000)}
           </pre>
@@ -225,16 +167,7 @@ export function DeployStatusBar({
           <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={handleRetry}
-              className="inline-flex items-center gap-1 font-semibold"
-              style={{
-                padding: "0.35rem 0.75rem",
-                background: "var(--accent)",
-                color: "white",
-                border: "none",
-                borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
-                fontSize: "0.8rem",
-              }}
+              className="inline-flex items-center gap-1 font-semibold p-[0.35rem_0.75rem] bg-accent text-white border-0 rounded-control-sm cursor-pointer text-[0.8rem]"
             >
               {"↺"} Ask agent to fix this
             </button>
@@ -243,16 +176,7 @@ export function DeployStatusBar({
                 href={`https://github.com/freeappstore-online/${appId}/actions`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 font-semibold"
-                style={{
-                  padding: "0.35rem 0.75rem",
-                  background: "none",
-                  color: "var(--muted)",
-                  border: "1px solid var(--line)",
-                  borderRadius: "var(--radius-sm)",
-                  textDecoration: "none",
-                  fontSize: "0.8rem",
-                }}
+                className="inline-flex items-center gap-1 font-semibold p-[0.35rem_0.75rem] bg-transparent text-muted border border-line rounded-control-sm no-underline text-[0.8rem]"
               >
                 Open build logs {"↗"}
               </a>

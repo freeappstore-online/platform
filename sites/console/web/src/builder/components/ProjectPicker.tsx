@@ -92,12 +92,12 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
-      <div className="rounded-2xl shadow-xl w-full max-w-md mx-4" style={{ background: "var(--panel)", border: "1px solid var(--line)", maxHeight: "80vh", display: "flex", flexDirection: "column" }} onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="rounded-2xl shadow-xl w-full max-w-md mx-4 bg-paper border border-line max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 p-4 shrink-0" style={{ borderBottom: "1px solid var(--line)" }}>
-          <h2 className="font-display text-lg font-extrabold" style={{ color: "var(--ink-strong)" }}>Projects</h2>
+        <div className="flex items-center justify-between gap-2 p-4 shrink-0 border-b border-line">
+          <h2 className="font-display text-lg font-extrabold text-ink-strong">Projects</h2>
           <div className="flex items-center gap-1">
             {tab === "all" && (
               <button
@@ -105,21 +105,21 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
                 title="Search apps"
                 aria-label="Search apps"
                 aria-pressed={searchOpen}
-                style={{ width: 36, height: 36, display: "inline-flex", alignItems: "center", justifyContent: "center", background: searchOpen ? "var(--accent-soft)" : "none", border: `1px solid ${searchOpen ? "var(--accent)" : "var(--line)"}`, borderRadius: "var(--radius-sm)", color: searchOpen ? "var(--accent)" : "var(--ink)", cursor: "pointer", fontSize: "0.95rem" }}
+                className={`w-9 h-9 inline-flex items-center justify-center border rounded-control-sm cursor-pointer text-[0.95rem] ${searchOpen ? "bg-(--accent-soft) border-accent text-accent" : "bg-transparent border-line text-ink"}`}
               >
                 <span aria-hidden>🔍</span>
               </button>
             )}
-            <button onClick={onClose} aria-label="Close" style={{ width: 36, height: 36, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "none", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", color: "var(--muted)", fontSize: "1.1rem", cursor: "pointer" }}>✕</button>
+            <button onClick={onClose} aria-label="Close" className="w-9 h-9 inline-flex items-center justify-center bg-transparent border border-line rounded-control-sm text-muted text-[1.1rem] cursor-pointer">✕</button>
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex shrink-0" style={{ borderBottom: "1px solid var(--line)" }}>
-          <button onClick={() => setTab("all")} className="flex-1 py-2 text-sm font-semibold" style={{ background: "none", border: "none", cursor: "pointer", color: tab === "all" ? "var(--ink)" : "var(--muted)", borderBottom: tab === "all" ? "2px solid var(--accent)" : "2px solid transparent" }}>
+        <div className="flex shrink-0 border-b border-line">
+          <button onClick={() => setTab("all")} className={`flex-1 py-2 text-sm font-semibold bg-transparent border-0 border-b-2 cursor-pointer ${tab === "all" ? "text-ink border-b-accent" : "text-muted border-b-transparent"}`}>
             All Apps
           </button>
-          <button onClick={() => setTab("new")} className="flex-1 py-2 text-sm font-semibold" style={{ background: "none", border: "none", cursor: "pointer", color: tab === "new" ? "var(--ink)" : "var(--muted)", borderBottom: tab === "new" ? "2px solid var(--accent)" : "2px solid transparent" }}>
+          <button onClick={() => setTab("new")} className={`flex-1 py-2 text-sm font-semibold bg-transparent border-0 border-b-2 cursor-pointer ${tab === "new" ? "text-ink border-b-accent" : "text-muted border-b-transparent"}`}>
             New
           </button>
         </div>
@@ -132,29 +132,28 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search apps..."
-              className="w-full p-2 rounded-lg border text-sm"
-              style={{ background: "var(--paper)", borderColor: "var(--line)", color: "var(--ink)" }}
+              className="w-full p-2 rounded-lg border text-sm bg-paper border-line text-ink"
               onKeyDown={(e) => { if (e.key === "Escape") { setSearch(""); setSearchOpen(false); } }}
             />
           </div>
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-3" style={{ minHeight: 0 }}>
+        <div className="flex-1 overflow-y-auto p-3 min-h-0">
           {tab === "all" ? (
             <>
               {/* Local projects (have VibeCode sessions) */}
               {filteredLocal.length > 0 && (
                 <div className="mb-3">
-                  <div className="text-xs font-semibold uppercase mb-1 px-1" style={{ color: "var(--muted)", letterSpacing: "0.05em" }}>VibeCode projects</div>
+                  <div className="text-xs font-semibold uppercase mb-1 px-1 text-muted tracking-[0.05em]">VibeCode projects</div>
                   {filteredLocal.map((p) => (
-                    <button key={p.id} onClick={() => handleSelectLocal(p)} className="w-full flex items-center gap-3 p-2.5 rounded-lg text-left mb-1" style={{ background: p.id === currentId ? "color-mix(in srgb, var(--accent) 10%, var(--panel))" : "transparent", border: "none", cursor: "pointer", color: "var(--ink)" }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: p.deployed ? "#16a34a" : "var(--line-strong)", flexShrink: 0 }} />
+                    <button key={p.id} onClick={() => handleSelectLocal(p)} className={`w-full flex items-center gap-3 p-2.5 rounded-lg text-left mb-1 border-0 cursor-pointer text-ink ${p.id === currentId ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--paper))]" : "bg-transparent"}`}>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${p.deployed ? "bg-success" : "bg-(--line-strong)"}`} />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold truncate">{p.name}</div>
-                        {p.appId && <div className="text-xs truncate" style={{ color: "var(--muted)" }}>{p.appId}</div>}
+                        {p.appId && <div className="text-xs truncate text-muted">{p.appId}</div>}
                       </div>
-                      {p.id === currentId && <span className="text-xs" style={{ color: "var(--accent)" }}>current</span>}
+                      {p.id === currentId && <span className="text-xs text-accent">current</span>}
                     </button>
                   ))}
                 </div>
@@ -162,18 +161,18 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
 
               {/* Org repos (not in local) */}
               {loading ? (
-                <div className="text-center py-4 text-sm" style={{ color: "var(--muted)" }}>Loading apps from store...</div>
+                <div className="text-center py-4 text-sm text-muted">Loading apps from store...</div>
               ) : orgOnly.length > 0 ? (
                 <div>
-                  <div className="text-xs font-semibold uppercase mb-1 px-1" style={{ color: "var(--muted)", letterSpacing: "0.05em" }}>GitHub repos</div>
+                  <div className="text-xs font-semibold uppercase mb-1 px-1 text-muted tracking-[0.05em]">GitHub repos</div>
                   {orgOnly.map((r) => (
-                    <button key={r.id} onClick={() => handleSelectOrg(r)} className="w-full flex items-center gap-3 p-2.5 rounded-lg text-left mb-1" style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--ink)" }}>
-                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", flexShrink: 0 }} />
+                    <button key={r.id} onClick={() => handleSelectOrg(r)} className="w-full flex items-center gap-3 p-2.5 rounded-lg text-left mb-1 bg-transparent border-0 cursor-pointer text-ink">
+                      <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold truncate">{r.name}</div>
-                        <div className="text-xs truncate" style={{ color: "var(--muted)" }}>{r.description || r.id}</div>
+                        <div className="text-xs truncate text-muted">{r.description || r.id}</div>
                       </div>
-                      <span className="text-xs" style={{ color: "var(--muted)" }}>open</span>
+                      <span className="text-xs text-muted">open</span>
                     </button>
                   ))}
                 </div>
@@ -182,17 +181,16 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
           ) : (
             /* New project */
             <div className="py-4">
-              <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>Start a new app from scratch.</p>
+              <p className="text-sm mb-3 text-muted">Start a new app from scratch.</p>
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="App name..."
                 autoFocus
-                className="w-full p-2.5 rounded-lg border mb-3 text-sm"
-                style={{ background: "var(--paper)", borderColor: "var(--line)", color: "var(--ink)" }}
+                className="w-full p-2.5 rounded-lg border mb-3 text-sm bg-paper border-line text-ink"
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreateNew(); }}
               />
-              <button onClick={handleCreateNew} disabled={!newName.trim()} className="w-full p-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer", opacity: newName.trim() ? 1 : 0.5 }}>
+              <button onClick={handleCreateNew} disabled={!newName.trim()} className="w-full p-2.5 rounded-lg font-semibold text-sm text-white bg-accent border-0 cursor-pointer disabled:opacity-50">
                 Create Project
               </button>
             </div>
