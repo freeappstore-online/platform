@@ -837,11 +837,17 @@ footer .container {
 /* === App detail: live preview in phone frame === */
 .app-split-phone {
   text-align: center;
+  /* The phone's 360px width must not force the stacked column wider than the viewport. */
+  min-width: 0;
 }
 .phone-frame {
   --phone-bezel: #111;
+  --phone-island: 22px;
+  display: grid;
+  grid-template-rows: var(--phone-island) minmax(0, 1fr);
   width: 360px;
   max-width: 100%;
+  min-width: 0;
   margin: 0 auto;
   border: 12px solid var(--phone-bezel);
   border-radius: 38px;
@@ -852,21 +858,28 @@ footer .container {
   box-shadow: 0 18px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.08);
 }
 .phone-frame::before {
-  /* iPhone-style notch */
+  /* Camera island, drawn inside the bezel band above the iframe.
+     An embedded app has no env(safe-area-inset-top), so the frame itself
+     has to keep the viewport below the island. */
   content: '';
   position: absolute;
   top: 0; left: 50%;
   transform: translateX(-50%);
-  width: 110px; height: 22px;
+  width: 110px;
+  height: var(--phone-island);
   background: var(--phone-bezel);
   border-radius: 0 0 18px 18px;
   z-index: 2;
+  pointer-events: none;
 }
 .phone-frame iframe {
+  grid-row: 2;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   border: 0;
-  border-radius: 26px;
+  border-radius: 0 0 26px 26px;
   background: white;
   display: block;
 }
@@ -949,7 +962,9 @@ footer .container {
   display: grid;
   gap: 2.5rem;
   margin: 2rem 0 2.5rem;
-  /* Mobile: info first (so users read what the app does before previewing). */
+  /* Mobile: info first (so users read what the app does before previewing).
+     minmax(0, 1fr) lets the phone shrink inside a padded 360–400px viewport. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-areas: "info" "phone";
 }
 .app-split-info  { grid-area: info; }
