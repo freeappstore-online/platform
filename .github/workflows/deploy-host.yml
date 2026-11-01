@@ -47,8 +47,42 @@ jobs:
       - name: Runtime integration tests
         run: pnpm test:runtime
 
+      # Migrations first. wrangler deploy does not apply D1 migrations, and
+      # this Worker selects routes.cross_origin_isolated on every app request.
+      # Shipping the Worker before 0002 made every hosted app throw (#308).
+      - name: Apply D1 migrations
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if pnpm exec wrangler d1 migrations apply fas --remote; then
+              exit 0
+            fi
+            echo "migration attempt ${attempt} failed; retrying"
+            sleep 5
+          done
+          exit 1
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy
         run: pnpm exec wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # A successful upload is not recovery. This hits the live host: every
+      # public app root, representative JS assets, the console, an unknown
+      # host's 404, API health, and default-off COOP/COEP.
+      - name: Verify live app host
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if node scripts/verify-app-host.mjs; then
+              exit 0
+            fi
+            echo "live app-host check attempt ${attempt} failed; retrying"
+            sleep 10
+          done
+          exit 1

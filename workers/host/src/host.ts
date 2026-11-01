@@ -30,6 +30,9 @@ export interface Route {
  * — no privilege is attached to the resolved slug, so spoofing it just
  * picks which 404 you see.
  */
+/** Lookup used on every app request. Deploy must apply migration 0002 first (#308). */
+export const ROUTE_LOOKUP_SQL = "SELECT slug, zone, r2_prefix, store, cross_origin_isolated FROM routes WHERE slug = ?1 AND zone = ?2";
+
 export async function resolveRoute(db: D1Database, host: string): Promise<Route | null> {
   const cleaned = host.toLowerCase().split(":")[0];
   const dot = cleaned.indexOf(".");
@@ -38,10 +41,7 @@ export async function resolveRoute(db: D1Database, host: string): Promise<Route 
   const zone = cleaned.slice(dot + 1);
   if (!slug || !zone) return null;
 
-  const row = await db
-    .prepare("SELECT slug, zone, r2_prefix, store, cross_origin_isolated FROM routes WHERE slug = ?1 AND zone = ?2")
-    .bind(slug, zone)
-    .first<Route>();
+  const row = await db.prepare(ROUTE_LOOKUP_SQL).bind(slug, zone).first<Route>();
   return row ?? null;
 }
 

@@ -72,12 +72,13 @@ wrangler dev       # local with miniflare's R2 + D1 stubs
 
 ## Deploy
 
-```bash
-wrangler deploy
-```
-
-Migrations are applied automatically by wrangler against the bound D1
-database the first time they're seen.
+Pushes to `main` that touch this Worker run `.github/workflows/deploy-host.yml`.
+The workflow applies `migrations/` to the remote `fas` D1 database and only
+then runs `wrangler deploy`. `wrangler deploy` does not apply D1 migrations.
+Admin deploys apply the same host migrations first, because publish writes
+`routes.cross_origin_isolated`. The host workflow then checks the live fleet:
+app roots, representative JS assets, the console, an unknown-host 404, API
+health, and that default apps did not gain COOP/COEP.
 
 ## Public app SEO
 
