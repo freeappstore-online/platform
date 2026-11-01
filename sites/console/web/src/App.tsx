@@ -138,7 +138,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center">
-        <p className="text-[var(--muted)]">Loading...</p>
+        <p className="text-muted">Loading...</p>
       </div>
     )
   }
@@ -151,7 +151,7 @@ export default function App() {
   if (view === 'builder') {
     return (
       <div className="builder-root">
-        <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center"><p className="text-[var(--muted)]">Loading builder…</p></div>}>
+        <Suspense fallback={<div className="flex min-h-[100dvh] items-center justify-center"><p className="text-muted">Loading builder…</p></div>}>
           <BuilderApp basename={`${BASE}/build`} />
         </Suspense>
       </div>
@@ -186,20 +186,20 @@ function Landing() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center px-4">
       <div className="text-center max-w-md">
-        <h1 className="display-font text-4xl font-bold text-[var(--ink)]">Creator Console</h1>
-        <p className="mt-4 text-[var(--muted)] text-lg">
+        <h1 className="display-font text-4xl font-bold text-ink">Creator Console</h1>
+        <p className="mt-4 text-muted text-lg">
           Sign in with GitHub to manage your apps on FreeAppStore.
         </p>
         <button
           onClick={() => fas.auth.signIn()}
-          className="mt-8 inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-white shadow-lg hover:opacity-90"
+          className="mt-8 inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-white shadow-lg hover:opacity-90"
         >
           <GitHubIcon />
           Sign in with GitHub
         </button>
-        <p className="mt-6 text-xs text-[var(--muted)]">
+        <p className="mt-6 text-xs text-muted">
           Part of{' '}
-          <a href="https://freeappstore.online" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--ink)]">
+          <a href="https://freeappstore.online" target="_blank" rel="noopener noreferrer" className="underline hover:text-ink">
             FreeAppStore
           </a>
         </p>
@@ -219,19 +219,19 @@ const TABS: { key: View; label: string }[] = [
 function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate: (v: View) => void }) {
   return (
     <header className="sticky top-0 z-30">
-      <div className="border-b border-[var(--line)] bg-[var(--panel)] backdrop-blur-xl">
+      <div className="border-b border-line bg-panel backdrop-blur-xl">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 flex h-11 items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => onNavigate('dashboard')}
-              className="display-font text-sm font-bold text-[var(--ink)] tracking-tight no-underline"
+              className="display-font text-sm font-bold text-ink tracking-tight no-underline"
             >
               Console
             </button>
-            <nav className="hidden sm:flex items-center gap-2.5 text-xs font-medium text-[var(--muted)]">
-              <a href="https://freeappstore.online" className="hover:text-[var(--ink)] no-underline">Store</a>
-              <a href="https://freeappstore.online/docs" className="hover:text-[var(--ink)] no-underline">Docs</a>
-              <button type="button" onClick={() => onNavigate('builder')} className="hover:text-[var(--ink)] bg-transparent border-0 p-0 cursor-pointer text-xs font-medium text-[var(--muted)]">VibeCode</button>
+            <nav className="hidden sm:flex items-center gap-2.5 text-xs font-medium text-muted">
+              <a href="https://freeappstore.online" className="hover:text-ink no-underline">Store</a>
+              <a href="https://freeappstore.online/docs" className="hover:text-ink no-underline">Docs</a>
+              <button type="button" onClick={() => onNavigate('builder')} className="hover:text-ink bg-transparent border-0 p-0 cursor-pointer text-xs font-medium text-muted">VibeCode</button>
             </nav>
           </div>
           <div className="flex items-center gap-2.5">
@@ -241,14 +241,14 @@ function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate
             )}
             <button
               onClick={() => fas.auth.signOut()}
-              className="text-xs font-medium text-[var(--muted)] hover:text-[var(--ink)]"
+              className="text-xs font-medium text-muted hover:text-ink"
             >
               Sign out
             </button>
           </div>
         </div>
       </div>
-      <div className="border-b border-[var(--line)] bg-[var(--panel)]">
+      <div className="border-b border-line bg-panel">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
           <nav className="flex gap-0 -mb-px overflow-x-auto scrollbar-none">
             {TABS.map((tab) => (
@@ -257,8 +257,8 @@ function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate
                 onClick={() => onNavigate(tab.key)}
                 className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap min-h-[44px] ${
                   (view === tab.key || (view === 'app-detail' && tab.key === 'dashboard'))
-                    ? 'border-[var(--accent)] text-[var(--ink)]'
-                    : 'border-transparent text-[var(--muted)] hover:text-[var(--ink)]'
+                    ? 'border-accent text-ink'
+                    : 'border-transparent text-muted hover:text-ink'
                 }`}
               >
                 {tab.label}
@@ -274,12 +274,12 @@ function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate
 function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user: User; apps: AppEntry[]; deployStatuses: Record<string, DeployStatus> | undefined; onOpenApp: (id: string) => void; onPublish: () => void }) {
   return (
     <div className="space-y-8">
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 shadow-[var(--shadow-card)]">
+      <div className="rounded-2xl border border-line bg-panel p-6 shadow-[var(--shadow-card)]">
         <div className="flex items-center gap-4">
           <Avatar user={user} size={56} />
           <div>
-            <h2 className="display-font text-2xl font-bold text-[var(--ink)]">Welcome, {user.login}</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">Manage your apps on FreeAppStore</p>
+            <h2 className="display-font text-2xl font-bold text-ink">Welcome, {user.login}</h2>
+            <p className="mt-1 text-sm text-muted">Manage your apps on FreeAppStore</p>
           </div>
         </div>
       </div>
@@ -292,10 +292,10 @@ function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user:
 
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="display-font text-xl font-bold text-[var(--ink)]">Your Apps</h3>
+          <h3 className="display-font text-xl font-bold text-ink">Your Apps</h3>
           <button
             onClick={onPublish}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             + Publish New App
           </button>
@@ -303,9 +303,9 @@ function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user:
 
         {apps.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--line-strong)] p-12 text-center">
-            <p className="text-[var(--muted)]">
+            <p className="text-muted">
               No apps yet. Create your first app with{' '}
-              <button type="button" onClick={() => navigate('builder')} className="text-[var(--accent)] font-semibold underline bg-transparent border-0 p-0 cursor-pointer">
+              <button type="button" onClick={() => navigate('builder')} className="text-accent font-semibold underline bg-transparent border-0 p-0 cursor-pointer">
                 VibeCode
               </button>{' '}
               or the CLI.
@@ -317,13 +317,13 @@ function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user:
               <button
                 key={a.id}
                 onClick={() => onOpenApp(a.id)}
-                className="text-left rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4 hover:bg-[var(--panel-hover)] shadow-sm min-h-[5rem]"
+                className="text-left rounded-xl border border-line bg-panel p-4 hover:bg-panel-hover shadow-sm min-h-[5rem]"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <span className="font-semibold text-[var(--ink)] block truncate">{a.name}</span>
-                    <p className="mt-0.5 text-xs text-[var(--muted)] font-mono truncate">{a.id}.freeappstore.online</p>
-                    {a.category && <p className="mt-0.5 text-xs text-[var(--muted)]">{a.category}</p>}
+                    <span className="font-semibold text-ink block truncate">{a.name}</span>
+                    <p className="mt-0.5 text-xs text-muted font-mono truncate">{a.id}.freeappstore.online</p>
+                    {a.category && <p className="mt-0.5 text-xs text-muted">{a.category}</p>}
                   </div>
                 </div>
                 <DeployBadge status={deployStatuses === undefined ? undefined : (deployStatuses[a.id] ?? null)} />
@@ -333,8 +333,8 @@ function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user:
         )}
       </div>
 
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6">
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-4">Quick Links</h3>
+      <div className="rounded-2xl border border-line bg-panel p-6">
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Quick Links</h3>
         <div className="grid gap-2 sm:grid-cols-3">
           <QuickLink href="https://freeappstore.online/docs" label="SDK Docs" desc="Auth, KV, rooms, proxy" />
           <QuickLink href="https://freeappstore.online/docs/ui" label="UI Library" desc="Components & design tokens" />
@@ -348,29 +348,29 @@ function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user:
 function PublishView({ getToken }: { getToken: () => string | null }) {
   return (
     <div className="space-y-8">
-      <h2 className="display-font text-2xl font-bold text-[var(--ink)]">Publish an App</h2>
+      <h2 className="display-font text-2xl font-bold text-ink">Publish an App</h2>
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6">
-          <h3 className="display-font text-lg font-bold text-[var(--ink)] mb-2">VibeCode (AI Builder)</h3>
-          <p className="text-sm text-[var(--muted)] mb-4">
+        <div className="rounded-2xl border border-line bg-panel p-6">
+          <h3 className="display-font text-lg font-bold text-ink mb-2">VibeCode (AI Builder)</h3>
+          <p className="text-sm text-muted mb-4">
             Describe your app in plain English and AI builds it for you. No coding required.
           </p>
           <button
             type="button"
             onClick={() => navigate('builder')}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 border-0 cursor-pointer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 border-0 cursor-pointer"
           >
             Open VibeCode
           </button>
         </div>
 
-        <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6">
-          <h3 className="display-font text-lg font-bold text-[var(--ink)] mb-2">CLI (Local Dev)</h3>
-          <p className="text-sm text-[var(--muted)] mb-4">
+        <div className="rounded-2xl border border-line bg-panel p-6">
+          <h3 className="display-font text-lg font-bold text-ink mb-2">CLI (Local Dev)</h3>
+          <p className="text-sm text-muted mb-4">
             Build locally with React + Vite, then publish via the CLI.
           </p>
-          <pre className="rounded-lg bg-[var(--panel)] border border-[var(--line)] p-3 text-xs font-mono text-[var(--ink)] overflow-x-auto mb-3">
+          <pre className="rounded-lg bg-panel border border-line p-3 text-xs font-mono text-ink overflow-x-auto mb-3">
 {`npm i -g @freeappstore/cli
 fas init my-app
 cd my-app && pnpm install && pnpm dev`}
@@ -379,7 +379,7 @@ cd my-app && pnpm install && pnpm dev`}
             href="https://freeappstore.online/get-started"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-[var(--accent)] font-medium hover:underline no-underline"
+            className="text-sm text-accent font-medium hover:underline no-underline"
           >
             Full guide &rarr;
           </a>
@@ -396,11 +396,11 @@ function Settings() {
   const { size, setSize } = useTextSize()
   return (
     <div className="space-y-8">
-      <h2 className="display-font text-2xl font-bold text-[var(--ink)]">Settings</h2>
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 space-y-6">
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide">Appearance</h3>
+      <h2 className="display-font text-2xl font-bold text-ink">Settings</h2>
+      <div className="rounded-2xl border border-line bg-panel p-6 space-y-6">
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Appearance</h3>
         <div>
-          <p className="text-xs font-medium text-[var(--muted)] mb-2">Theme</p>
+          <p className="text-xs font-medium text-muted mb-2">Theme</p>
           <div className="flex gap-2">
             {(['system', 'light', 'dark'] as const).map((t) => (
               <button
@@ -408,8 +408,8 @@ function Settings() {
                 onClick={() => setPreference(t)}
                 className={`rounded-lg px-4 py-2 text-sm font-medium capitalize ${
                   preference === t
-                    ? 'bg-[var(--accent)] text-white'
-                    : 'border border-[var(--line-strong)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    ? 'bg-accent text-white'
+                    : 'border border-[var(--line-strong)] text-muted hover:text-ink'
                 }`}
               >
                 {t}
@@ -418,7 +418,7 @@ function Settings() {
           </div>
         </div>
         <div>
-          <p className="text-xs font-medium text-[var(--muted)] mb-2">Text Size</p>
+          <p className="text-xs font-medium text-muted mb-2">Text Size</p>
           <div className="flex gap-2">
             {([['sm', 'Small'], ['default', 'Default'], ['lg', 'Large']] as const).map(([val, label]) => (
               <button
@@ -426,8 +426,8 @@ function Settings() {
                 onClick={() => setSize(val)}
                 className={`rounded-lg px-4 py-2 text-sm font-medium ${
                   size === val
-                    ? 'bg-[var(--accent)] text-white'
-                    : 'border border-[var(--line-strong)] text-[var(--muted)] hover:text-[var(--ink)]'
+                    ? 'bg-accent text-white'
+                    : 'border border-[var(--line-strong)] text-muted hover:text-ink'
                 }`}
               >
                 {label}
@@ -446,9 +446,9 @@ function UILibraryView() {
   return (
     <div className="space-y-10">
       <div>
-        <h2 className="display-font text-2xl font-bold text-[var(--ink)]">UI Component Library</h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
-          Live preview of all <code className="text-xs bg-[var(--panel)] px-1.5 py-0.5 rounded">@freeappstore/sdk/ui</code> components.
+        <h2 className="display-font text-2xl font-bold text-ink">UI Component Library</h2>
+        <p className="mt-1 text-sm text-muted">
+          Live preview of all <code className="text-xs bg-panel px-1.5 py-0.5 rounded">@freeappstore/sdk/ui</code> components.
         </p>
       </div>
 
@@ -458,11 +458,11 @@ function UILibraryView() {
       </Section>
 
       <Section title="ThemeToggle" code="import { ThemeToggle } from '@freeappstore/sdk/ui'">
-        <Row label="Interactive"><ThemeToggle /><span className="text-xs text-[var(--muted)]">Cycles: system, light, dark</span></Row>
+        <Row label="Interactive"><ThemeToggle /><span className="text-xs text-muted">Cycles: system, light, dark</span></Row>
       </Section>
 
       <Section title="TextSizeToggle" code="import { TextSizeToggle } from '@freeappstore/sdk/ui'">
-        <Row label="Interactive"><TextSizeToggle /><span className="text-xs text-[var(--muted)]">Cycles: default, large, small</span></Row>
+        <Row label="Interactive"><TextSizeToggle /><span className="text-xs text-muted">Cycles: default, large, small</span></Row>
       </Section>
 
       <Section title="SignInButton" code="import { SignInButton } from '@freeappstore/sdk/ui'">
@@ -473,21 +473,21 @@ function UILibraryView() {
       <Section title="ProfileMenu" code="import { ProfileMenu } from '@freeappstore/sdk/ui'">
         <Row label="Live (requires sign-in)">
           <ProfileMenu app={fas} />
-          <span className="text-xs text-[var(--muted)]">Sign in to see the avatar dropdown</span>
+          <span className="text-xs text-muted">Sign in to see the avatar dropdown</span>
         </Row>
       </Section>
 
       <Section title="ProfilePage" code="import { ProfilePage } from '@freeappstore/sdk/ui'">
-        <div className="border border-[var(--line)] rounded-xl overflow-hidden max-h-[500px] overflow-y-auto">
+        <div className="border border-line rounded-xl overflow-hidden max-h-[500px] overflow-y-auto">
           <ProfilePage app={fas} />
         </div>
       </Section>
 
       <Section title="FasShell" code="import { FasShell } from '@freeappstore/sdk/ui'">
-        <div className="border border-[var(--line)] rounded-xl overflow-hidden" style={{ height: 300 }}>
-          <div style={{ transform: 'scale(0.6)', transformOrigin: 'top left', width: '166.67%', height: '166.67%' }}>
+        <div className="h-[300px] border border-line rounded-xl overflow-hidden">
+          <div className="h-[166.67%] w-[166.67%] origin-top-left scale-[0.6]">
             <FasShell app={fas} appName="Demo App">
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)' }}>
+              <div className="p-8 text-center text-muted">
                 Your app content goes here
               </div>
             </FasShell>
@@ -500,28 +500,28 @@ function UILibraryView() {
 
 function StatCard({ label, value }: { label: string; value: number | string }) {
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
-      <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">{label}</p>
-      <p className="mt-1 display-font text-2xl font-bold text-[var(--ink)]">{value}</p>
+    <div className="rounded-xl border border-line bg-panel p-4">
+      <p className="text-xs font-semibold text-muted uppercase tracking-wide">{label}</p>
+      <p className="mt-1 display-font text-2xl font-bold text-ink">{value}</p>
     </div>
   )
 }
 
 function QuickLink({ href, label, desc }: { href: string; label: string; desc: string }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-[var(--line)] p-3 hover:bg-[var(--panel-hover)] no-underline block">
-      <p className="font-semibold text-sm text-[var(--ink)]">{label}</p>
-      <p className="text-xs text-[var(--muted)] mt-0.5">{desc}</p>
+    <a href={href} target="_blank" rel="noopener noreferrer" className="rounded-xl border border-line p-3 hover:bg-panel-hover no-underline block">
+      <p className="font-semibold text-sm text-ink">{label}</p>
+      <p className="text-xs text-muted mt-0.5">{desc}</p>
     </a>
   )
 }
 
 function Section({ title, code, children }: { title: string; code: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] overflow-hidden">
-      <div className="px-5 py-4 border-b border-[var(--line)]">
-        <h3 className="text-lg font-bold text-[var(--ink)]">{title}</h3>
-        <code className="text-xs text-[var(--muted)] font-mono">{code}</code>
+    <div className="rounded-2xl border border-line bg-panel overflow-hidden">
+      <div className="px-5 py-4 border-b border-line">
+        <h3 className="text-lg font-bold text-ink">{title}</h3>
+        <code className="text-xs text-muted font-mono">{code}</code>
       </div>
       <div className="px-5 py-4 space-y-4">{children}</div>
     </div>
@@ -531,7 +531,7 @@ function Section({ title, code, children }: { title: string; code: string; child
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide mb-2">{label}</p>
+      <p className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">{label}</p>
       <div className="flex items-center gap-3 flex-wrap">{children}</div>
     </div>
   )
@@ -576,7 +576,7 @@ function DeployBadge({ status }: { status: DeployStatus | null | undefined }) {
       ) : (
         pill
       )}
-      {timeAgo && <span className="text-[10px] text-[var(--muted)]">{timeAgo}</span>}
+      {timeAgo && <span className="text-[10px] text-muted">{timeAgo}</span>}
     </div>
   )
 }

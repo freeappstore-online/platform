@@ -4,11 +4,11 @@
 import { useState } from "react";
 import { Markdown } from "./Markdown";
 
-const STYLES: Record<string, React.CSSProperties> = {
-  user: { alignSelf: "flex-end", background: "var(--accent)", color: "white", borderBottomRightRadius: "0.15rem" },
-  assistant: { alignSelf: "flex-start", background: "var(--panel)", border: "1px solid var(--line)", borderBottomLeftRadius: "0.15rem" },
-  tool: { alignSelf: "flex-start", fontSize: "0.72rem", fontFamily: "monospace", background: "var(--panel)", border: "1px solid var(--line)", color: "var(--muted)", padding: "0.25rem 0.5rem", borderRadius: "0.35rem" },
-  system: { alignSelf: "center", fontSize: "0.78rem", color: "var(--muted)", background: "none" },
+const ROLE_CLASSES: Record<string, string> = {
+  user: "self-end bg-accent text-white rounded-xl rounded-br-[0.15rem] px-3 py-[0.55rem] text-[0.86rem]",
+  assistant: "self-start bg-panel border border-line rounded-xl rounded-bl-[0.15rem] px-3 py-[0.55rem] text-[0.86rem]",
+  tool: "self-start bg-panel border border-line text-muted rounded-[0.35rem] px-2 py-1 text-[0.72rem] font-[monospace]",
+  system: "self-center text-muted bg-transparent rounded-xl px-3 py-[0.55rem] text-[0.78rem]",
 };
 
 interface Props {
@@ -33,36 +33,22 @@ export function ChatMessage({ role, content, canSpeak, speaking, onSpeak }: Prop
     } catch { /* clipboard blocked — ignore */ }
   };
 
-  const actionColor = onAccent ? "rgba(255,255,255,0.75)" : "var(--muted)";
-  const actionBtn: React.CSSProperties = {
-    background: "none", border: "none", cursor: "pointer", color: actionColor,
-    fontSize: "0.8rem", lineHeight: 1, padding: "0.25rem", minWidth: 28, minHeight: 28,
-    display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "var(--radius-sm)",
-  };
-
-  const bubble: React.CSSProperties = {
-    maxWidth: "88%",
-    padding: "0.55rem 0.75rem",
-    borderRadius: "0.75rem",
-    fontSize: "0.86rem",
-    lineHeight: 1.5,
-    wordBreak: "break-word",
-    ...(!useMarkdown ? { whiteSpace: "pre-wrap" } : {}),
-    ...STYLES[role],
-  };
+  const actionColor = onAccent ? "text-white/75" : "text-muted";
+  const actionBtn = "inline-flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-control-sm border-none bg-transparent p-1 text-[0.8rem] leading-none";
+  const bubble = ROLE_CLASSES[role] ?? "rounded-xl px-3 py-[0.55rem] text-[0.86rem]";
 
   return (
-    <div style={bubble}>
+    <div className={`max-w-[88%] leading-normal [word-break:break-word] ${useMarkdown ? "" : "whitespace-pre-wrap"} ${bubble}`}>
       {useMarkdown ? <Markdown text={content} /> : content}
       {showActions && (
-        <div className="flex gap-0.5 mt-1" style={{ marginLeft: -4, opacity: 0.85 }}>
+        <div className="flex gap-0.5 mt-1 -ml-1 opacity-85">
           {canSpeak && (
             <button
               type="button"
               onClick={onSpeak}
               title={speaking ? "Stop" : "Speak this message"}
               aria-label={speaking ? "Stop speaking" : "Speak this message"}
-              style={{ ...actionBtn, color: speaking ? (onAccent ? "white" : "var(--accent)") : actionColor }}
+              className={`${actionBtn} ${speaking ? (onAccent ? "text-white" : "text-accent") : actionColor}`}
             >
               <span aria-hidden>{speaking ? "■" : "🔊"}</span>
             </button>
@@ -72,7 +58,7 @@ export function ChatMessage({ role, content, canSpeak, speaking, onSpeak }: Prop
             onClick={copy}
             title="Copy this message"
             aria-label="Copy this message"
-            style={{ ...actionBtn, color: copied ? (onAccent ? "white" : "var(--success)") : actionColor }}
+            className={`${actionBtn} ${copied ? (onAccent ? "text-white" : "text-success") : actionColor}`}
           >
             <span aria-hidden>{copied ? "✓" : "⧉"}</span>
           </button>

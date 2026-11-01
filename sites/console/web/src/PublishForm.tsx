@@ -113,57 +113,57 @@ export function PublishForm({ getToken }: Props) {
     }
   }
 
-  const fieldCls = 'p-2 rounded-lg border bg-[var(--panel)] border-[var(--line)] text-[var(--ink)] w-full'
+  const fieldCls = 'p-2 rounded-lg border bg-panel border-line text-ink w-full'
 
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6 space-y-6">
+    <div className="rounded-2xl border border-line bg-panel p-6 space-y-6">
       <div>
-        <h3 className="display-font text-lg font-bold text-[var(--ink)] mb-2">Publisher Portal</h3>
-        <p className="text-sm text-[var(--muted)]">
+        <h3 className="display-font text-lg font-bold text-ink mb-2">Publisher Portal</h3>
+        <p className="text-sm text-muted">
           Already built an app? Publish it to the store — provisions the repo, subdomain, and store listing.
         </p>
       </div>
 
       {/* Your Apps */}
       <div>
-        <h4 className="text-sm font-bold text-[var(--accent)] mb-2">Your Apps</h4>
+        <h4 className="text-sm font-bold text-accent mb-2">Your Apps</h4>
         {loadingApps ? (
-          <p className="text-sm text-[var(--muted)]">Loading…</p>
+          <p className="text-sm text-muted">Loading…</p>
         ) : apps.length ? (
           <div className="flex flex-col gap-2">
             {apps.map((app) => (
-              <div key={app.id} className="rounded-xl border border-[var(--line)] p-3">
-                <strong className="text-[var(--ink)]">{app.id}</strong>
-                {app.oneliner && <span className="text-sm text-[var(--muted)]"> — {app.oneliner}</span>}
-                <div className="text-xs text-[var(--muted)] mt-1">{app.category} · {app.type}</div>
+              <div key={app.id} className="rounded-xl border border-line p-3">
+                <strong className="text-ink">{app.id}</strong>
+                {app.oneliner && <span className="text-sm text-muted"> — {app.oneliner}</span>}
+                <div className="text-xs text-muted mt-1">{app.category} · {app.type}</div>
                 <div className="flex gap-3 mt-2">
-                  <a href={app.appUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--accent)] no-underline">Visit</a>
-                  <a href={app.repoUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--accent)] no-underline">Code</a>
+                  <a href={app.appUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-accent no-underline">Visit</a>
+                  <a href={app.repoUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-accent no-underline">Code</a>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-sm text-[var(--muted)]">No apps yet. Publish your first one below.</p>
+          <p className="text-sm text-muted">No apps yet. Publish your first one below.</p>
         )}
       </div>
 
       {/* Create & Publish */}
       <form onSubmit={handlePublish} className="flex flex-col gap-3">
-        <h4 className="text-sm font-bold text-[var(--accent)]">Create &amp; Publish</h4>
+        <h4 className="text-sm font-bold text-accent">Create &amp; Publish</h4>
         <div>
-          <label className="text-xs font-semibold mb-1 block text-[var(--muted)]">Unique ID — becomes your URL</label>
+          <label className="text-xs font-semibold mb-1 block text-muted">Unique ID — becomes your URL</label>
           <input
             name="id"
             placeholder="e.g. meditation-timer"
             required
-            className={`p-2 rounded-lg border w-full font-mono bg-[var(--panel)] text-[var(--ink)] ${idError ? 'border-[var(--danger)]' : 'border-[var(--line)]'}`}
+            className={`p-2 rounded-lg border w-full font-mono bg-panel text-ink ${idError ? 'border-danger' : 'border-line'}`}
             onChange={(e) => { setIdValue(e.target.value); setIdError(validateId(e.target.value)) }}
           />
           {idError ? (
-            <p className="text-xs mt-1 text-[var(--danger)]">{idError}</p>
+            <p className="text-xs mt-1 text-danger">{idError}</p>
           ) : idValue && (
-            <p className="text-xs mt-1 font-mono text-[var(--success)]">{idValue}.freeappstore.online</p>
+            <p className="text-xs mt-1 font-mono text-success">{idValue}.freeappstore.online</p>
           )}
         </div>
         <select name="type" defaultValue="standalone" className={fieldCls}>
@@ -179,15 +179,14 @@ export function PublishForm({ getToken }: Props) {
         <button
           type="submit"
           disabled={publishing || !!idError}
-          className="p-3 rounded-lg font-semibold text-white bg-[var(--accent)]"
-          style={{ opacity: publishing || idError ? 0.6 : 1 }}
+          className="p-3 rounded-lg font-semibold text-white bg-accent disabled:opacity-60"
         >
           {publishing ? 'Provisioning…' : 'Create & Publish'}
         </button>
       </form>
 
       {/* Result */}
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
       {result && (() => {
         // The provision POST answers 200 with a per-step report, so a run where
         // (say) DNS succeeded and the registry write failed used to render a
@@ -198,30 +197,30 @@ export function PublishForm({ getToken }: Props) {
           <div className="flex flex-col gap-1 text-sm font-mono">
             {result.admin?.steps?.map((s, i) => (
               <div key={i} className="flex items-center gap-2">
-                <span className={s.status === 'ok' ? 'text-[var(--success)]' : s.status === 'skip' ? 'text-[var(--warning)]' : 'text-[var(--danger)]'}>●</span>
-                <span className="text-[var(--ink)]"><strong>{s.name}</strong>{s.detail ? `: ${s.detail}` : ''}</span>
+                <span className={s.status === 'ok' ? 'text-success' : s.status === 'skip' ? 'text-warning' : 'text-danger'}>●</span>
+                <span className="text-ink"><strong>{s.name}</strong>{s.detail ? `: ${s.detail}` : ''}</span>
               </div>
             ))}
             {steps.allOk ? (
-              <p className="mt-3 font-semibold text-[var(--success)]">
-                Published! <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)]">{result.appUrl}</a>
+              <p className="mt-3 font-semibold text-success">
+                Published! <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-accent">{result.appUrl}</a>
               </p>
             ) : (
-              <div className="mt-3 rounded-lg border border-[var(--danger)] bg-[var(--danger)]/10 p-3 font-sans">
-                <p className="font-semibold text-[var(--danger)]">{steps.summary}</p>
+              <div className="mt-3 rounded-lg border border-danger bg-danger/10 p-3 font-sans">
+                <p className="font-semibold text-danger">{steps.summary}</p>
                 <ul className="mt-1.5 space-y-1">
                   {steps.failed.map((s, i) => (
-                    <li key={i} className="text-sm text-[var(--ink)]">
+                    <li key={i} className="text-sm text-ink">
                       <strong>{s.name}</strong>{s.detail ? ` — ${s.detail}` : ' — no detail reported'}
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-xs text-[var(--muted)]">
+                <p className="mt-2 text-xs text-muted">
                   The app exists but is not fully set up. Re-run publish, or open the app to see what is missing.
                 </p>
                 <div className="mt-2 flex gap-3">
-                  <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--accent)] no-underline">Open app &rarr;</a>
-                  <a href={`${result.repoUrl}/actions`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[var(--accent)] no-underline">View Actions &rarr;</a>
+                  <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-accent no-underline">Open app &rarr;</a>
+                  <a href={`${result.repoUrl}/actions`} target="_blank" rel="noreferrer" className="text-xs font-semibold text-accent no-underline">View Actions &rarr;</a>
                 </div>
               </div>
             )}

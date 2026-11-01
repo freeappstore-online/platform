@@ -4,6 +4,12 @@
 @source "../../node_modules/@freeappstore/sdk/dist";
 
 @theme inline {
+  --color-ink: var(--ink);
+  --color-accent: var(--accent);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-paper: var(--paper);
+  --color-panel-hover: var(--panel-hover);
   --color-line: var(--line);
   --color-muted: var(--muted);
   --color-success: var(--success);
