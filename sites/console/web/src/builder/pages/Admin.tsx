@@ -150,14 +150,14 @@ function formatTokens(n: number | undefined): string {
 
 /** Provider/model, funding source and token totals for one session (#16). */
 function AiUsageCell({ session }: { session: Pick<AgentSession, "aiProvider" | "aiModel" | "aiSource" | "inputTokens" | "outputTokens"> }) {
-  if (!session.aiSource && !session.aiProvider) return <span style={{ color: "var(--muted)" }}>—</span>;
+  if (!session.aiSource && !session.aiProvider) return <span className="text-muted">—</span>;
   return (
     <>
       <strong className="text-xs">{session.aiSource ? AI_SOURCE_LABELS[session.aiSource] || session.aiSource : "—"}</strong>
-      <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+      <div className="text-xs font-mono text-muted">
         {[session.aiProvider, session.aiModel].filter(Boolean).join(" · ") || "—"}
       </div>
-      <div className="text-xs" style={{ color: "var(--muted)" }}>
+      <div className="text-xs text-muted">
         {formatTokens(session.inputTokens)} in · {formatTokens(session.outputTokens)} out
       </div>
     </>
@@ -242,7 +242,7 @@ export function Admin() {
     return (
       <>
         <Nav />
-        <div className="container py-16 text-center" style={{ color: "var(--muted)" }}>
+        <div className="container py-16 text-center text-muted">
           Loading...
         </div>
       </>
@@ -253,7 +253,7 @@ export function Admin() {
         <Nav />
         <main className="container py-16 text-center">
           <h1 className="text-3xl font-extrabold mb-3">Admin</h1>
-          <p style={{ color: "var(--muted)" }}>Admin access required.</p>
+          <p className="text-muted">Admin access required.</p>
         </main>
       </>
     );
@@ -261,21 +261,16 @@ export function Admin() {
   return (
     <>
       <Nav />
-      <main className="container py-6" style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <main className="container py-6 max-w-[1200px] m-[0_auto]">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-extrabold">Admin Dashboard</h1>
-          <div className="flex gap-1 p-1 rounded-xl" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+          <div className="flex gap-1 p-1 rounded-xl bg-panel border border-line">
             {(["overview", "usage", "apps", "users", "sessions", "grants", "creators"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
-                className="px-3 py-1.5 rounded-lg text-sm font-semibold capitalize"
-                style={{
-                  background: tab === t ? "var(--accent)" : "transparent",
-                  color: tab === t ? "white" : "var(--muted)",
-                  border: "none",
-                  cursor: "pointer",
-                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold capitalize ${(tab === t ? "bg-accent" : "bg-transparent")} ${(tab === t ? "text-white" : "text-muted")} border-0 cursor-pointer`}
+
               >
                 {t}
               </button>
@@ -329,25 +324,18 @@ function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string)
   return (
     <>
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
+        <p className="text-sm text-muted">
           {filtered ? `${total} matching VibeCode sessions` : `${total} total VibeCode sessions`}
         </p>
         <div className="flex gap-2 flex-wrap">
           {SESSION_FILTERS.map((f) => {
             const on = filters.includes(f.key);
-            const tone = f.danger ? "var(--danger)" : "var(--accent)";
             return (
               <button
                 key={f.key}
                 onClick={() => toggleFilter(f.key)}
                 aria-pressed={on}
-                className="px-3 py-2 rounded-lg text-sm font-semibold border"
-                style={{
-                  background: on ? `color-mix(in srgb, ${tone} 15%, var(--panel))` : "var(--panel)",
-                  borderColor: on ? tone : "var(--line)",
-                  color: on ? tone : "var(--muted)",
-                  cursor: "pointer",
-                }}
+                className={`px-3 py-2 rounded-lg text-sm font-semibold border cursor-pointer ${on ? f.danger ? "bg-[color-mix(in_srgb,var(--danger)_15%,var(--panel))] border-danger text-danger" : "bg-[color-mix(in_srgb,var(--accent)_15%,var(--panel))] border-accent text-accent" : "bg-panel border-line text-muted"}`}
               >
                 {f.label}
               </button>
@@ -357,8 +345,7 @@ function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string)
             value={fundedBy}
             onChange={(e) => setFundedBy(e.target.value)}
             aria-label="Funded by"
-            className="p-2 rounded-lg border text-sm"
-            style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}
+            className="p-2 rounded-lg border text-sm bg-panel border-line text-ink"
           >
             {FUNDED_BY_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -370,63 +357,62 @@ function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string)
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search sessions..."
-            className="p-2 rounded-lg border text-sm"
-            style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)", width: 260 }}
+            className="p-2 rounded-lg border text-sm bg-panel border-line text-ink w-[260px]"
           />
         </div>
       </div>
       {error && <AdminAccessError message={error} />}
       {loading ? (
-        <p style={{ color: "var(--muted)" }}>Loading sessions...</p>
+        <p className="text-muted">Loading sessions...</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+          <table className="w-full text-sm [border-collapse:collapse]">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <tr className="border-b border-line">
+                <th className="text-left p-2 font-semibold text-muted">
                   Session
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   User
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   App
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Status
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Last error
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   AI
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Updated
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Action
                 </th>
               </tr>
             </thead>
             <tbody>
               {sessions.map((s) => (
-                <tr key={s.sessionId} style={{ borderBottom: "1px solid var(--line)" }}>
+                <tr key={s.sessionId} className="border-b border-line">
                   <td className="p-2">
                     <strong>{s.name}</strong>
-                    <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                    <div className="text-xs font-mono text-muted">
                       {s.sessionId}
                     </div>
                   </td>
                   <td className="p-2">
                     <strong className="text-sm">{s.userDisplayName || s.userLogin || s.userId}</strong>
-                    <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                    <div className="text-xs font-mono text-muted">
                       {s.userId}
                     </div>
                   </td>
                   <td className="p-2 text-xs">
                     {s.appUrl ? (
-                      <a href={s.appUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+                      <a href={s.appUrl} target="_blank" rel="noopener noreferrer" className="text-accent">
                         {s.appId || s.appUrl}
                       </a>
                     ) : (
@@ -436,32 +422,26 @@ function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string)
                   <td className="p-2">
                     <StatusDot status={s.deployed ? "deployed" : s.deployState?.phase || "draft"} />
                   </td>
-                  <td className="p-2 text-xs" style={{ maxWidth: 280 }}>
+                  <td className="p-2 text-xs max-w-[280px]">
                     {s.lastErrorSummary ? (
-                      <span title={s.lastErrorSummary} style={{ color: "var(--danger)" }}>
+                      <span title={s.lastErrorSummary} className="text-danger">
                         {s.lastErrorSummary}
-                        {(s.errorCount || 0) > 1 && <span style={{ color: "var(--muted)" }}> · {s.errorCount} errors</span>}
+                        {(s.errorCount || 0) > 1 && <span className="text-muted"> · {s.errorCount} errors</span>}
                       </span>
                     ) : (
-                      <span style={{ color: "var(--muted)" }}>—</span>
+                      <span className="text-muted">—</span>
                     )}
                   </td>
                   <td className="p-2">
                     <AiUsageCell session={s} />
                   </td>
-                  <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
+                  <td className="p-2 text-xs text-muted">
                     {timeAgo(s.updatedAt)}
                   </td>
                   <td className="p-2">
                     <button
                       onClick={() => setSelected(s)}
-                      className="text-xs font-semibold px-2 py-1 rounded-md border"
-                      style={{
-                        color: "var(--accent)",
-                        borderColor: "color-mix(in srgb, var(--accent) 35%, var(--line))",
-                        background: "color-mix(in srgb, var(--accent) 8%, var(--panel))",
-                        cursor: "pointer",
-                      }}
+                      className="text-xs font-semibold px-2 py-1 rounded-md border text-accent border-[color-mix(in_srgb,_var(--accent)_35%,_var(--line))] bg-[color-mix(in_srgb,_var(--accent)_8%,_var(--panel))] cursor-pointer"
                     >
                       Inspect
                     </button>
@@ -471,7 +451,7 @@ function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string)
             </tbody>
           </table>
           {sessions.length === 0 && (
-            <p className="py-8 text-center" style={{ color: "var(--muted)" }}>
+            <p className="py-8 text-center text-muted">
               {filtered ? "No sessions match these filters." : "No sessions found."}
             </p>
           )}
@@ -550,45 +530,27 @@ function SessionInspectModal({
   const appActionsUrl = githubActionsUrl(appId);
   const repoUrl = detail?.repoUrl || summary.repoUrl;
   const aiSource = detail?.aiSource ?? summary.aiSource;
-  const linkButton = { color: "var(--accent)", background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit" } as const;
+  const linkButton = "text-accent bg-transparent border-0 p-0 cursor-pointer [font:inherit]";
 
   return (
     <div
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        zIndex: 60,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 16,
-      }}
+      className="fixed inset-[0px] bg-[rgba(0,0,0,0.5)] z-[60] flex items-center justify-center p-[16px]"
     >
       <div
-        className="rounded-xl border"
-        style={{
-          width: "min(1100px, 100%)",
-          maxHeight: "88vh",
-          overflow: "hidden",
-          background: "var(--paper)",
-          borderColor: "var(--line)",
-          boxShadow: "0 24px 80px rgba(0,0,0,0.3)",
-        }}
+        className="rounded-xl border w-[min(1100px,_100%)] max-h-[88vh] overflow-hidden bg-paper border-line shadow-[0_24px_80px_rgba(0,0,0,0.3)]"
       >
         <div
-          className="p-4 border-b flex items-start justify-between gap-3"
-          style={{ borderColor: "var(--line)", background: "var(--panel)" }}
+          className="p-4 border-b flex items-start justify-between gap-3 border-line bg-panel"
         >
           <div>
             <h3 className="font-bold text-lg">{detail?.name || summary.name}</h3>
-            <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+            <div className="text-xs font-mono text-muted">
               {sessionId}
             </div>
-            <div className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+            <div className="text-sm mt-1 text-muted">
               {userName} <span className="font-mono">{userId}</span>
               {detail?.appUrl || summary.appUrl ? (
                 <>
@@ -598,7 +560,7 @@ function SessionInspectModal({
                     href={detail?.appUrl || summary.appUrl || "#"}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: "var(--accent)" }}
+                    className="text-accent"
                   >
                     {appId || "live app"}
                   </a>
@@ -608,7 +570,7 @@ function SessionInspectModal({
                 <>
                   {" "}
                   ·{" "}
-                  <Link to={`/?app=${encodeURIComponent(appId)}`} style={{ color: "var(--accent)" }}>
+                  <Link to={`/?app=${encodeURIComponent(appId)}`} className="text-accent">
                     Open in VibeCode
                   </Link>
                 </>
@@ -617,7 +579,7 @@ function SessionInspectModal({
                 <>
                   {" "}
                   ·{" "}
-                  <a href={appActionsUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+                  <a href={appActionsUrl} target="_blank" rel="noopener noreferrer" className="text-accent">
                     GitHub Actions
                   </a>
                 </>
@@ -626,7 +588,7 @@ function SessionInspectModal({
                 <>
                   {" "}
                   ·{" "}
-                  <a href={repoUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--accent)" }}>
+                  <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="text-accent">
                     Repo
                   </a>
                 </>
@@ -635,7 +597,7 @@ function SessionInspectModal({
                 <>
                   {" "}
                   ·{" "}
-                  <button type="button" onClick={() => onOpenUser(userId)} style={linkButton}>
+                  <button type="button" onClick={() => onOpenUser(userId)} className={linkButton}>
                     View user
                   </button>
                 </>
@@ -644,7 +606,7 @@ function SessionInspectModal({
                 <>
                   {" "}
                   ·{" "}
-                  <button type="button" onClick={() => onOpenGrant(userId)} style={linkButton}>
+                  <button type="button" onClick={() => onOpenGrant(userId)} className={linkButton}>
                     View grant
                   </button>
                 </>
@@ -656,38 +618,32 @@ function SessionInspectModal({
           </div>
           <button
             onClick={onClose}
-            className="text-xl leading-none"
-            style={{ color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}
+            className="text-xl leading-none text-muted bg-transparent border-0 cursor-pointer"
           >
             x
           </button>
         </div>
 
-        <div className="px-4 pt-3 flex gap-2 flex-wrap" style={{ background: "var(--paper)" }}>
+        <div className="px-4 pt-3 flex gap-2 flex-wrap bg-paper">
           {(["transcript", "tools", "errors", "deploy"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setView(t)}
-              className="px-3 py-1.5 rounded-lg text-sm font-semibold capitalize"
-              style={{
-                background: view === t ? "var(--accent)" : "var(--panel)",
-                color: view === t ? "white" : "var(--muted)",
-                border: "1px solid var(--line)",
-                cursor: "pointer",
-              }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold capitalize ${(view === t ? "bg-accent" : "bg-panel")} ${(view === t ? "text-white" : "text-muted")} border border-line cursor-pointer`}
+
             >
               {t}
               {t === "errors" && errors.length ? ` (${errors.length})` : ""}
               {t === "tools" && toolMessages.length ? ` (${toolMessages.length})` : ""}
             </button>
           ))}
-          <span className="text-xs self-center" style={{ color: "var(--success)" }}>
+          <span className="text-xs self-center text-success">
             ● live poll
           </span>
         </div>
 
-        <div className="p-4" style={{ maxHeight: "64vh", overflow: "auto" }}>
-          {loading && <p style={{ color: "var(--muted)" }}>Loading session...</p>}
+        <div className="p-4 max-h-[64vh] overflow-auto">
+          {loading && <p className="text-muted">Loading session...</p>}
           {error && <AdminAccessError message={error} />}
           {!loading &&
             !error &&
@@ -699,7 +655,7 @@ function SessionInspectModal({
                 ))}
               </div>
             ) : (
-              <p style={{ color: "var(--muted)" }}>No messages saved for this session yet.</p>
+              <p className="text-muted">No messages saved for this session yet.</p>
             ))}
           {!loading &&
             !error &&
@@ -711,7 +667,7 @@ function SessionInspectModal({
                 ))}
               </div>
             ) : (
-              <p style={{ color: "var(--muted)" }}>No tool calls/results saved yet.</p>
+              <p className="text-muted">No tool calls/results saved yet.</p>
             ))}
           {!loading &&
             !error &&
@@ -729,7 +685,7 @@ function SessionInspectModal({
                 ))}
               </div>
             ) : (
-              <p style={{ color: "var(--success)" }}>No server-side errors for this session.</p>
+              <p className="text-success">No server-side errors for this session.</p>
             ))}
           {!loading &&
             !error &&
@@ -737,8 +693,8 @@ function SessionInspectModal({
             (deployLog.length || deployState ? (
               <div className="grid gap-3">
                 {deployState && (
-                  <div className="rounded-lg border p-3" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
-                    <div className="text-xs font-bold uppercase mb-1" style={{ color: "var(--muted)" }}>
+                  <div className="rounded-lg border p-3 bg-panel border-line">
+                    <div className="text-xs font-bold uppercase mb-1 text-muted">
                       Final deploy phase
                     </div>
                     <StatusDot status={deployState.phase || "unknown"} />
@@ -758,7 +714,7 @@ function SessionInspectModal({
                 )}
               </div>
             ) : (
-              <p style={{ color: "var(--muted)" }}>No deploy log entries saved yet.</p>
+              <p className="text-muted">No deploy log entries saved yet.</p>
             ))}
         </div>
       </div>
@@ -780,31 +736,30 @@ function AgentMessageBlock({
   const isTool = role === "tool" || role === "tool_result";
   const useMarkdown = role === "assistant";
   const title = isUser ? userName : isTool ? "Tool" : role === "assistant" ? "AI" : role;
-  const bg = isUser ? "color-mix(in srgb, var(--accent) 10%, var(--panel))" : isTool ? "var(--panel)" : "var(--paper)";
-  const border = isUser ? "color-mix(in srgb, var(--accent) 30%, var(--line))" : "var(--line)";
+
   const toolCalls = message.toolCalls || [];
   const toolResults = message.toolResults || [];
   return (
-    <div className="rounded-lg border p-3" style={{ background: bg, borderColor: border }}>
+    <div className={`rounded-lg border p-3 ${isUser ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--panel))] border-[color-mix(in_srgb,var(--accent)_30%,var(--line))]" : isTool ? "bg-panel border-line" : "bg-paper border-line"}`}>
       <div
-        className="text-xs font-bold uppercase mb-2"
-        style={{ color: isTool ? "var(--warning)" : isUser ? "var(--accent)" : "var(--success)" }}
+        className={`text-xs font-bold uppercase mb-2 ${(isTool ? "text-warning" : (isUser ? "text-accent" : "text-success"))}`}
+
       >
         {title}
       </div>
       {message.content && (
-        <div className="text-sm" style={{ color: "var(--ink)", lineHeight: 1.55 }}>
+        <div className="text-sm text-ink leading-[1.55]">
           {useMarkdown ? (
             <Markdown text={message.content} />
           ) : (
-            <pre style={{ whiteSpace: "pre-wrap", margin: 0, fontFamily: "inherit" }}>{message.content}</pre>
+            <pre className="[white-space:pre-wrap] m-[0px] font-[inherit]">{message.content}</pre>
           )}
         </div>
       )}
       {toolCalls.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
           {toolCalls.map((tc, i) => (
-            <code key={i} className="text-xs px-2 py-1 rounded-md" style={{ background: "var(--line)", color: "var(--ink)" }}>
+            <code key={i} className="text-xs px-2 py-1 rounded-md bg-line text-ink">
               {tc.name || "tool"} {toolArg(tc.input)}
             </code>
           ))}
@@ -812,22 +767,14 @@ function AgentMessageBlock({
       )}
       {toolResults.length > 0 && (
         <details open={forceExpanded} className="mt-3">
-          <summary className="text-xs font-semibold" style={{ color: "var(--muted)", cursor: "pointer" }}>
+          <summary className="text-xs font-semibold text-muted cursor-pointer">
             tool result{toolResults.length > 1 ? `s (${toolResults.length})` : ""}
           </summary>
           <div className="grid gap-2 mt-2">
             {toolResults.map((tr, i) => (
               <pre
                 key={i}
-                className="text-xs rounded-md p-2"
-                style={{
-                  whiteSpace: "pre-wrap",
-                  maxHeight: 260,
-                  overflow: "auto",
-                  background: "var(--panel)",
-                  color: "var(--muted)",
-                  margin: 0,
-                }}
+                className="text-xs rounded-md p-2 [white-space:pre-wrap] max-h-[260px] overflow-auto bg-panel text-muted m-[0px]"
               >
                 {tr.content || ""}
               </pre>
@@ -842,21 +789,18 @@ function AgentMessageBlock({
 function LogBlock({ title, time, body, tone }: { title: string; time?: string | number; body: string; tone: "error" | "info" }) {
   return (
     <div
-      className="rounded-lg border p-3"
-      style={{
-        background: tone === "error" ? "color-mix(in srgb, var(--danger) 8%, var(--panel))" : "var(--panel)",
-        borderColor: tone === "error" ? "color-mix(in srgb, var(--danger) 35%, var(--line))" : "var(--line)",
-      }}
+      className={`rounded-lg border p-3 ${(tone === "error" ? "bg-[color-mix(in_srgb,_var(--danger)_8%,_var(--panel))]" : "bg-panel")} ${(tone === "error" ? "border-[color-mix(in_srgb,_var(--danger)_35%,_var(--line))]" : "border-line")}`}
+
     >
       <div className="flex items-center justify-between gap-3 mb-2">
-        <strong className="text-sm" style={{ color: tone === "error" ? "var(--danger)" : "var(--accent)" }}>
+        <strong className={`text-sm ${(tone === "error" ? "text-danger" : "text-accent")}`} >
           {title}
         </strong>
-        <span className="text-xs" style={{ color: "var(--muted)" }}>
+        <span className="text-xs text-muted">
           {formatDateTime(time)}
         </span>
       </div>
-      <pre className="text-xs" style={{ whiteSpace: "pre-wrap", margin: 0, color: "var(--ink)" }}>
+      <pre className="text-xs [white-space:pre-wrap] m-[0px] text-ink">
         {body}
       </pre>
     </div>
@@ -975,13 +919,13 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
     load();
   }
 
-  if (loading) return <p style={{ color: "var(--muted)" }}>Loading grants...</p>;
+  if (loading) return <p className="text-muted">Loading grants...</p>;
   if (error) return <AdminAccessError message={error} />;
 
   return (
     <>
-      <div className="p-4 rounded-xl border mb-5" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
-        <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+      <div className="p-4 rounded-xl border mb-5 bg-panel border-line">
+        <p className="text-sm mb-3 text-muted">
           Funded providers: {funded.length ? funded.join(", ") : "none configured"}.
           {!funded.length && " Grants can be saved now, but they only run after the matching COMP_KEY secret is set."}
         </p>
@@ -989,8 +933,7 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
           <select
             value={selectedUser}
             onChange={(e) => setSelectedUser(e.target.value)}
-            className="p-2 rounded-lg border text-sm"
-            style={{ background: "var(--paper)", borderColor: "var(--line)" }}
+            className="p-2 rounded-lg border text-sm bg-paper border-line"
           >
             {users.map((u) => (
               <option key={u.id} value={u.id}>
@@ -1004,8 +947,7 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
               setProvider(e.target.value);
               setModel(defaultGrantModel(e.target.value));
             }}
-            className="p-2 rounded-lg border text-sm"
-            style={{ background: "var(--paper)", borderColor: "var(--line)" }}
+            className="p-2 rounded-lg border text-sm bg-paper border-line"
           >
             {["anthropic", "openai", "google"].map((p) => (
               <option key={p} value={p}>
@@ -1017,8 +959,7 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}
-            className="p-2 rounded-lg border text-sm"
-            style={{ background: "var(--paper)", borderColor: "var(--line)" }}
+            className="p-2 rounded-lg border text-sm bg-paper border-line"
           >
             {grantModelOptions(provider).map((option) => (
               <option key={option.value} value={option.value}>
@@ -1029,27 +970,27 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
           <button
             onClick={saveGrant}
             disabled={!selectedUser || !provider || !model}
-            className="px-3 py-2 rounded-lg text-sm font-semibold"
-            style={{ background: "var(--accent)", color: "white", opacity: selectedUser && provider && model ? 1 : 0.5 }}
+            className={`px-3 py-2 rounded-lg text-sm font-semibold bg-accent text-white ${(selectedUser && provider && model ? "opacity-[1]" : "opacity-[0.5]")}`}
+
           >
             Save Grant
           </button>
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+        <table className="w-full text-sm [border-collapse:collapse]">
           <thead>
-            <tr style={{ borderBottom: "1px solid var(--line)" }}>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+            <tr className="border-b border-line">
+              <th className="text-left p-2 font-semibold text-muted">
                 User
               </th>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <th className="text-left p-2 font-semibold text-muted">
                 Grant
               </th>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <th className="text-left p-2 font-semibold text-muted">
                 Vault Keys
               </th>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <th className="text-left p-2 font-semibold text-muted">
                 Action
               </th>
             </tr>
@@ -1059,14 +1000,11 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
               <tr
                 key={u.id}
                 id={`grant-row-${u.id}`}
-                style={{
-                  borderBottom: "1px solid var(--line)",
-                  background: u.id === focusUserId ? "color-mix(in srgb, var(--accent) 12%, var(--panel))" : undefined,
-                }}
+                className={`[border-bottom:1px_solid_var(--line)] ${(u.id === focusUserId ? "bg-[color-mix(in_srgb,_var(--accent)_12%,_var(--panel))]" : "")}`}
               >
                 <td className="p-2">
                   <strong>{u.displayName || u.githubLogin || u.id}</strong>
-                  <div className="text-xs" style={{ color: "var(--muted)" }}>
+                  <div className="text-xs text-muted">
                     {u.id}
                   </div>
                 </td>
@@ -1074,7 +1012,7 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
                   {u.grant ? (
                     <>
                       {u.grant.provider} / {u.grant.model}
-                      <div style={{ color: "var(--muted)" }}>
+                      <div className="text-muted">
                         {u.grant.lastUsedAt ? `last used ${timeAgo(u.grant.lastUsedAt)}` : "never used"}
                         {u.grant.usage?.sessions
                           ? ` · ~${formatTokens(u.grant.usage.inputTokens)} in / ${formatTokens(u.grant.usage.outputTokens)} out over ${u.grant.usage.sessions} session${u.grant.usage.sessions === 1 ? "" : "s"}`
@@ -1091,12 +1029,7 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
                       {u.keys.map((k) => (
                         <span
                           key={k.provider}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md border"
-                          style={{
-                            color: "var(--success)",
-                            borderColor: "color-mix(in srgb, var(--success) 35%, var(--line))",
-                            background: "color-mix(in srgb, var(--success) 10%, var(--panel))",
-                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md border text-success border-[color-mix(in_srgb,_var(--success)_35%,_var(--line))] bg-[color-mix(in_srgb,_var(--success)_10%,_var(--panel))]"
                         >
                           <span title={k.lastUsedAt ? `last used ${timeAgo(k.lastUsedAt)}` : "never used"}>
                             {k.provider}
@@ -1105,14 +1038,7 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
                           <button
                             onClick={() => removeUserKey(u.id, k.provider)}
                             title={`Remove ${k.provider} key`}
-                            style={{
-                              color: "var(--success)",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: 0,
-                              lineHeight: 1,
-                            }}
+                            className="text-success bg-transparent border-0 cursor-pointer p-[0px] leading-[1]"
                           >
                             x
                           </button>
@@ -1120,28 +1046,21 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
                       ))}
                     </div>
                   ) : (
-                    <span style={{ color: "var(--muted)" }}>none</span>
+                    <span className="text-muted">none</span>
                   )}
                 </td>
                 <td className="p-2">
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => openKeyModal(u)}
-                      className="text-xs font-semibold px-2 py-1 rounded-md border"
-                      style={{
-                        color: "var(--success)",
-                        borderColor: "color-mix(in srgb, var(--success) 35%, var(--line))",
-                        background: "color-mix(in srgb, var(--success) 10%, var(--panel))",
-                        cursor: "pointer",
-                      }}
+                      className="text-xs font-semibold px-2 py-1 rounded-md border text-success border-[color-mix(in_srgb,_var(--success)_35%,_var(--line))] bg-[color-mix(in_srgb,_var(--success)_10%,_var(--panel))] cursor-pointer"
                     >
                       Add Key
                     </button>
                     {u.grant && (
                       <button
                         onClick={() => revoke(u.id)}
-                        className="text-xs font-semibold"
-                        style={{ color: "var(--danger)", background: "none", border: "none", cursor: "pointer" }}
+                        className="text-xs font-semibold text-danger bg-transparent border-0 cursor-pointer"
                       >
                         Revoke Grant
                       </button>
@@ -1158,37 +1077,21 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
           onClick={(e) => {
             if (e.target === e.currentTarget) closeKeyModal();
           }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            zIndex: 50,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: 16,
-          }}
+          className="fixed inset-[0px] bg-[rgba(0,0,0,0.45)] z-[50] flex items-center justify-center p-[16px]"
         >
           <div
-            className="rounded-xl border p-5"
-            style={{
-              width: "min(520px, 100%)",
-              background: "var(--panel)",
-              borderColor: "var(--line)",
-              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
-            }}
+            className="rounded-xl border p-5 w-[min(520px,_100%)] bg-panel border-line shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
           >
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
                 <h3 className="font-bold text-lg">Add AI Key</h3>
-                <p className="text-xs" style={{ color: "var(--muted)" }}>
+                <p className="text-xs text-muted">
                   {keyUser.displayName || keyUser.githubLogin || keyUser.id} - {keyUser.id}
                 </p>
               </div>
               <button
                 onClick={closeKeyModal}
-                className="text-xl leading-none"
-                style={{ color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}
+                className="text-xl leading-none text-muted bg-transparent border-0 cursor-pointer"
               >
                 x
               </button>
@@ -1197,8 +1100,7 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
               <select
                 value={keyProvider}
                 onChange={(e) => setKeyProvider(e.target.value)}
-                className="p-2 rounded-lg border text-sm"
-                style={{ background: "var(--paper)", borderColor: "var(--line)" }}
+                className="p-2 rounded-lg border text-sm bg-paper border-line"
               >
                 {keyProviderOptions().map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1212,27 +1114,25 @@ function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
                 type="password"
                 autoComplete="off"
                 placeholder="Paste API key"
-                className="p-2 rounded-lg border text-sm"
-                style={{ background: "var(--paper)", borderColor: "var(--line)" }}
+                className="p-2 rounded-lg border text-sm bg-paper border-line"
               />
               {keyMessage && (
-                <p className="text-sm" style={{ color: keyMessage.includes("Saved") ? "var(--success)" : "var(--muted)" }}>
+                <p className={`text-sm ${(keyMessage.includes("Saved") ? "text-success" : "text-muted")}`} >
                   {keyMessage}
                 </p>
               )}
               <div className="flex justify-end gap-2">
                 <button
                   onClick={closeKeyModal}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold border"
-                  style={{ borderColor: "var(--line)", color: "var(--ink)", background: "var(--paper)" }}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold border border-line text-ink bg-paper"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={saveUserKey}
                   disabled={keySaving || !keyValue.trim()}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold"
-                  style={{ background: "var(--accent)", color: "white", opacity: keySaving || !keyValue.trim() ? 0.5 : 1 }}
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold bg-accent text-white ${(keySaving || !keyValue.trim() ? "opacity-[0.5]" : "opacity-[1]")}`}
+
                 >
                   Save Key
                 </button>
@@ -1267,7 +1167,7 @@ function OverviewTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p style={{ color: "var(--muted)" }}>Loading stats...</p>;
+  if (loading) return <p className="text-muted">Loading stats...</p>;
   if (error || !stats) return <AdminAccessError message={error || "No stats returned"} />;
 
   const fasT = stats.traffic?.fas?.totals;
@@ -1278,9 +1178,9 @@ function OverviewTab() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-        <StatCard label="Apps" value={stats.apps} color="var(--accent)" />
-        <StatCard label="Users" value={stats.users} color="#8b5cf6" />
-        <StatCard label="Creators" value={stats.creators} color="#f59e0b" />
+        <StatCard label="Apps" value={stats.apps} color="text-accent" />
+        <StatCard label="Users" value={stats.users} color="text-(--pro)" />
+        <StatCard label="Creators" value={stats.creators} color="text-warning" />
       </div>
 
       {/* Traffic */}
@@ -1332,95 +1232,89 @@ function FailingDeploysPanel() {
       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
         <div>
           <h2 className="text-lg font-bold">Failing Deploys</h2>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>
+          <p className="text-sm text-muted">
             Apps and sessions whose latest deploy signal needs admin triage.
           </p>
         </div>
         <button
           onClick={() => void load()}
           disabled={loading}
-          className="px-3 py-2 rounded-lg text-sm font-semibold border"
-          style={{
-            background: "var(--panel)",
-            borderColor: "var(--line)",
-            color: "var(--ink)",
-            cursor: loading ? "wait" : "pointer",
-            opacity: loading ? 0.65 : 1,
-          }}
+          className={`px-3 py-2 rounded-lg text-sm font-semibold border bg-panel border-line text-ink ${(loading ? "[cursor:wait]" : "cursor-pointer")} ${(loading ? "opacity-[0.65]" : "opacity-[1]")}`}
+
         >
           Reload
         </button>
       </div>
 
-      <div className="rounded-xl border overflow-hidden" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+      <div className="rounded-xl border overflow-hidden bg-panel border-line">
         {error ? (
           <div className="p-4">
-            <p className="text-sm" style={{ color: "var(--danger)" }}>
+            <p className="text-sm text-danger">
               Failed to load deploy failures: {error}
             </p>
           </div>
         ) : loading ? (
-          <p className="p-4 text-sm" style={{ color: "var(--muted)" }}>
+          <p className="p-4 text-sm text-muted">
             Loading deploy failures...
           </p>
         ) : rows.length ? (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+            <table className="w-full text-sm [border-collapse:collapse]">
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <tr className="border-b border-line">
+                  <th className="text-left p-2 font-semibold text-muted">
                     App
                   </th>
-                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  <th className="text-left p-2 font-semibold text-muted">
                     Owner
                   </th>
-                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  <th className="text-left p-2 font-semibold text-muted">
                     Error
                   </th>
-                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  <th className="text-left p-2 font-semibold text-muted">
                     Last failure
                   </th>
-                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  <th className="text-left p-2 font-semibold text-muted">
                     Run
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.key} style={{ borderBottom: "1px solid var(--line)" }}>
+                  <tr key={row.key} className="border-b border-line">
                     <td className="p-2">
                       {row.appUrl ? (
-                        <a href={row.appUrl} target="_blank" rel="noopener noreferrer" className="font-semibold" style={{ color: "var(--accent)" }}>
+                        <a href={row.appUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent">
                           {row.appId}
                         </a>
                       ) : (
                         <strong>{row.appId}</strong>
                       )}
-                      <div className="text-xs" style={{ color: "var(--muted)" }}>
+                      <div className="text-xs text-muted">
                         {row.appLabel}
                       </div>
                     </td>
-                    <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>
+                    <td className="p-2 text-xs font-mono text-muted">
                       {row.ownerLogin}
                     </td>
                     <td className="p-2">
-                      <div style={{ color: "var(--danger)" }}>{row.errorSummary}</div>
+                      <div className="text-danger">{row.errorSummary}</div>
                       {row.sessionId && (
-                        <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                        <div className="text-xs font-mono text-muted">
                           {row.source === "github" ? "Session detail available" : row.sessionId}
                         </div>
                       )}
                     </td>
-                    <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
+                    <td className="p-2 text-xs text-muted">
                       {row.failedAt ? timeAgo(row.failedAt) : "unknown"}
                     </td>
                     <td className="p-2">
                       {row.actionsUrl ? (
-                        <a href={row.actionsUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+                        <a href={row.actionsUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-accent">
                           Open Actions
                         </a>
                       ) : (
-                        <span className="text-xs" style={{ color: "var(--muted)" }}>
+                        <span className="text-xs text-muted">
                           No app repo
                         </span>
                       )}
@@ -1431,7 +1325,7 @@ function FailingDeploysPanel() {
             </table>
           </div>
         ) : (
-          <p className="p-4 text-sm" style={{ color: "var(--success)" }}>
+          <p className="p-4 text-sm text-success">
             No failing deploys found.
           </p>
         )}
@@ -1442,14 +1336,13 @@ function FailingDeploysPanel() {
 
 function AdminAccessError({ message }: { message?: string }) {
   return (
-    <div className="p-4 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
-      <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+    <div className="p-4 rounded-xl border bg-panel border-line">
+      <p className="text-sm mb-3 text-muted">
         {message || ADMIN_ACCESS_MESSAGE}
       </p>
       <Link
         to="/profile"
-        className="inline-flex px-3 py-2 rounded-lg text-sm font-semibold"
-        style={{ background: "var(--accent)", color: "white" }}
+        className="inline-flex px-3 py-2 rounded-lg text-sm font-semibold bg-accent text-white"
       >
         Open Profile
       </Link>
@@ -1459,11 +1352,11 @@ function AdminAccessError({ message }: { message?: string }) {
 
 function StatCard({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="p-5 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
-      <div className="text-3xl font-extrabold mb-1" style={{ color }}>
+    <div className="p-5 rounded-xl border bg-panel border-line">
+      <div className={`text-3xl font-extrabold mb-1 ${color}`}>
         {value.toLocaleString()}
       </div>
-      <div className="text-sm font-medium" style={{ color: "var(--muted)" }}>
+      <div className="text-sm font-medium text-muted">
         {label}
       </div>
     </div>
@@ -1481,9 +1374,9 @@ function TrafficCard({
 }) {
   if (!totals)
     return (
-      <div className="p-5 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+      <div className="p-5 rounded-xl border bg-panel border-line">
         <h3 className="font-bold mb-2">{title}</h3>
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
+        <p className="text-sm text-muted">
           No traffic data
         </p>
       </div>
@@ -1492,40 +1385,37 @@ function TrafficCard({
   // Simple sparkline from daily data
   const dailyRequests = (days || []).map((d) => d.sum?.requests || 0);
   const max = Math.max(...dailyRequests, 1);
-  const barWidth = 100 / Math.max(dailyRequests.length, 1);
 
   return (
-    <div className="p-5 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+    <div className="p-5 rounded-xl border bg-panel border-line">
       <h3 className="font-bold mb-3">{title}</h3>
       <div className="grid grid-cols-3 gap-3 mb-4">
         <div>
           <div className="text-xl font-bold">{totals.visitors.toLocaleString()}</div>
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
+          <div className="text-xs text-muted">
             Visitors
           </div>
         </div>
         <div>
           <div className="text-xl font-bold">{totals.pageViews.toLocaleString()}</div>
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
+          <div className="text-xs text-muted">
             Page Views
           </div>
         </div>
         <div>
           <div className="text-xl font-bold">{formatNum(totals.requests)}</div>
-          <div className="text-xs" style={{ color: "var(--muted)" }}>
+          <div className="text-xs text-muted">
             Requests
           </div>
         </div>
       </div>
       {dailyRequests.length > 0 && (
-        <div className="flex items-end gap-px" style={{ height: 48 }}>
-          {dailyRequests.map((v: number, i: number) => (
-            <div
-              key={i}
-              style={{ width: `${barWidth}%`, height: `${(v / max) * 100}%`, background: "var(--accent)", borderRadius: 2, minHeight: 2 }}
-            />
-          ))}
-        </div>
+        <svg className="w-full h-12" viewBox={` 0 0 ${dailyRequests.length * 10} 48`} preserveAspectRatio="none" role="img" aria-label="Daily requests">
+          {dailyRequests.map((v, i) => {
+            const barHeight = Math.max((v / max) * 48, 2);
+            return <rect key={i} x={i * 10} y={48 - barHeight} width={9} height={barHeight} rx={2} className="fill-accent" />;
+          })}
+        </svg>
       )}
     </div>
   );
@@ -1579,13 +1469,8 @@ function UsageTab() {
             <button
               key={d}
               onClick={() => setDays(d)}
-              className="px-3 py-1.5 rounded-lg text-sm font-semibold"
-              style={{
-                background: days === d ? "var(--accent)" : "var(--panel)",
-                color: days === d ? "white" : "var(--muted)",
-                border: "1px solid var(--line)",
-                cursor: "pointer",
-              }}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold ${(days === d ? "bg-accent" : "bg-panel")} ${(days === d ? "text-white" : "text-muted")} border border-line cursor-pointer`}
+
             >
               {d} days
             </button>
@@ -1593,25 +1478,25 @@ function UsageTab() {
         </div>
       </div>
 
-      {loading && <p style={{ color: "var(--muted)" }}>Loading usage...</p>}
+      {loading && <p className="text-muted">Loading usage...</p>}
       {!loading && (error || !report) && <AdminAccessError message={error || "No usage returned"} />}
 
       {!loading && report && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard label={`Page views (${report.days}d)`} value={report.totals.views} color="var(--accent)" />
-            <StatCard label="Published apps" value={report.totals.apps} color="#8b5cf6" />
-            <StatCard label="Apps with views" value={report.totals.apps_with_views} color="#10b981" />
-            <StatCard label="Apps with no views" value={report.totals.apps_without_views} color="#f59e0b" />
+            <StatCard label={`Page views (${report.days}d)`} value={report.totals.views} color="text-accent" />
+            <StatCard label="Published apps" value={report.totals.apps} color="text-(--pro)" />
+            <StatCard label="Apps with views" value={report.totals.apps_with_views} color="text-success" />
+            <StatCard label="Apps with no views" value={report.totals.apps_without_views} color="text-warning" />
           </div>
 
-          <div className="p-4 rounded-xl border mb-6" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+          <div className="p-4 rounded-xl border mb-6 bg-panel border-line">
             <div className="text-sm font-semibold mb-2">Daily page views, all apps</div>
             <Sparkline series={report.totals.series} height={56} />
           </div>
 
           {report.totals.apps_without_views > 0 && (
-            <p className="text-sm mb-3" style={{ color: "var(--muted)" }}>
+            <p className="text-sm mb-3 text-muted">
               {report.totals.apps_without_views} app{report.totals.apps_without_views === 1 ? "" : "s"} recorded no page views in this window. That
               usually means the analytics loader (<code>/v1/analytics.js</code>) is missing from the app, or it isn't deployed.{" "}
               <label className="inline-flex items-center gap-1 cursor-pointer">
@@ -1623,37 +1508,37 @@ function UsageTab() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ borderBottom: "1px solid var(--line)" }}>
+                <tr className="border-b border-line">
                   {USAGE_COLUMNS.map((col) => (
                     <th
                       key={col.key}
-                      className={`p-2 font-semibold ${col.numeric ? "text-right" : "text-left"}`}
-                      style={{ color: "var(--muted)" }}
+                      className={`${`p-2 font-semibold ${col.numeric ? "text-right" : "text-left"}`} text-muted`}
+
                       aria-sort={sortKey === col.key ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                     >
                       <button
                         type="button"
                         onClick={() => sortBy(col.key, col.numeric)}
-                        style={{ background: "none", border: "none", color: "inherit", font: "inherit", cursor: "pointer", padding: 0 }}
+                        className="bg-transparent border-0 text-[inherit] [font:inherit] cursor-pointer p-[0px]"
                       >
                         {col.label}
                         {sortKey === col.key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                       </button>
                     </th>
                   ))}
-                  <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                  <th className="text-left p-2 font-semibold text-muted">
                     Daily
                   </th>
                 </tr>
               </thead>
               <tbody>
-                <tr style={{ borderBottom: "2px solid var(--line)", background: "var(--panel)" }}>
+                <tr className="border-b-2 border-line bg-panel">
                   <td className="p-2 font-bold">All apps</td>
-                  <td className="p-2" style={{ color: "var(--muted)" }}>
+                  <td className="p-2 text-muted">
                     {report.totals.apps} apps
                   </td>
                   <td className="p-2 text-right font-bold">{report.totals.views.toLocaleString()}</td>
-                  <td className="p-2 text-right" style={{ color: "var(--muted)" }}>
+                  <td className="p-2 text-right text-muted">
                     —
                   </td>
                   <td className="p-2 text-right">
@@ -1664,20 +1549,20 @@ function UsageTab() {
                   </td>
                 </tr>
                 {rows.map((app) => (
-                  <tr key={app.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                  <tr key={app.id} className="border-b border-line">
                     <td className="p-2">
                       <strong>{app.id}</strong>
                       {app.no_views && (
-                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded" style={{ background: "#f59e0b22", color: "#b45309" }}>
+                        <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-warning/15 text-warning">
                           no views
                         </span>
                       )}
                     </td>
-                    <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>
+                    <td className="p-2 text-xs font-mono text-muted">
                       {app.owner}
                     </td>
                     <td className="p-2 text-right">{app.views.toLocaleString()}</td>
-                    <td className="p-2 text-right" style={{ color: "var(--muted)" }}>
+                    <td className="p-2 text-right text-muted">
                       {app.unique_paths.toLocaleString()}
                     </td>
                     <td className="p-2 text-right">
@@ -1692,12 +1577,12 @@ function UsageTab() {
             </table>
           </div>
 
-          <p className="mt-3 text-xs" style={{ color: "var(--muted)" }}>
+          <p className="mt-3 text-xs text-muted">
             Page views come from the cookieless platform loader. It stores no visitor identifier, so there is no unique-visitor
             count; unique paths is the closest measure. Trend compares the second half of the window with the first.
           </p>
           {report.unregistered.length > 0 && (
-            <p className="mt-2 text-xs" style={{ color: "var(--muted)" }}>
+            <p className="mt-2 text-xs text-muted">
               Views under app ids that aren't registered:{" "}
               {report.unregistered.map((u) => `${u.id} (${u.views.toLocaleString()})`).join(", ")}
             </p>
@@ -1708,24 +1593,19 @@ function UsageTab() {
   );
 }
 
-function Sparkline({ series, height }: { series: UsagePoint[]; height: number }) {
+export function Sparkline({ series, height }: { series: UsagePoint[]; height: number }) {
   const max = Math.max(...series.map((p) => p.views), 1);
   const total = series.reduce((sum, p) => sum + p.views, 0);
   return (
-    <div
-      className="flex items-end gap-px"
-      style={{ height, minWidth: 80 }}
-      role="img"
-      aria-label={`${total.toLocaleString()} page views over ${series.length} days`}
-    >
-      {series.map((p) => (
-        <div
-          key={p.t}
-          title={`${p.t}: ${p.views.toLocaleString()}`}
-          style={{ flex: 1, height: `${(p.views / max) * 100}%`, background: "var(--accent)", borderRadius: 1, minHeight: 1 }}
-        />
-      ))}
-    </div>
+    <svg className="w-full min-w-20" height={height} viewBox={`0 0 ${Math.max(series.length, 1) * 10} ${height}`} preserveAspectRatio="none"
+      role="img" aria-label={`${total.toLocaleString()} page views over ${series.length} days`}>
+      {series.map((p, i) => {
+        const barHeight = Math.max((p.views / max) * height, 1);
+        return <rect key={p.t} x={i * 10} y={height - barHeight} width={9} height={barHeight} rx={1} className="fill-accent">
+          <title>{p.t}: {p.views.toLocaleString()}</title>
+        </rect>;
+      })}
+    </svg>
   );
 }
 
@@ -1733,13 +1613,13 @@ function TrendBadge({ series }: { series: UsagePoint[] }) {
   const pct = trendPercent(series);
   if (pct === null)
     return (
-      <span className="text-xs" style={{ color: "var(--muted)" }}>
+      <span className="text-xs text-muted">
         —
       </span>
     );
-  const color = pct > 0 ? "#10b981" : pct < 0 ? "#ef4444" : "var(--muted)";
+  const color = pct > 0 ? "text-success" : pct < 0 ? "text-danger" : "text-muted";
   return (
-    <span className="text-xs font-semibold" style={{ color }}>
+    <span className={`text-xs font-semibold ${color}`}>
       {pct > 0 ? "▲" : pct < 0 ? "▼" : ""} {Math.abs(pct)}%
     </span>
   );
@@ -1791,40 +1671,39 @@ function AppsTab() {
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search apps..."
         aria-label="Search apps"
-        className="w-full p-2 rounded-lg border mb-4"
-        style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}
+        className="w-full p-2 rounded-lg border mb-4 bg-panel border-line text-ink"
       />
       {loadingApps ? (
-        <p style={{ color: "var(--muted)" }}>Loading...</p>
+        <p className="text-muted">Loading...</p>
       ) : (
         <div className="overflow-x-auto">
           {error && (
-            <p className="mb-3 text-sm" style={{ color: "var(--danger)" }}>
+            <p className="mb-3 text-sm text-danger">
               Failed to load apps: {error}
             </p>
           )}
-          <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+          <table className="w-full text-sm [border-collapse:collapse]">
             <thead>
-              <tr style={{ borderBottom: "1px solid var(--line)" }}>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <tr className="border-b border-line">
+                <th className="text-left p-2 font-semibold text-muted">
                   Name
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Owner
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Hosting
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Sessions
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Domain
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Updated
                 </th>
-                <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+                <th className="text-left p-2 font-semibold text-muted">
                   Links
                 </th>
               </tr>
@@ -1835,17 +1714,17 @@ function AppsTab() {
                 const repoUrl = githubRepoUrl(app.repo, app.id);
                 const latestPhase = deployStatusForApp(app, deployStatuses);
                 return (
-                  <tr key={app.id} style={{ borderBottom: "1px solid var(--line)" }}>
+                  <tr key={app.id} className="border-b border-line">
                     <td className="p-2">
                       <strong>{app.name}</strong>
-                      <div className="text-xs" style={{ color: "var(--muted)" }}>
+                      <div className="text-xs text-muted">
                         {app.id}
                       </div>
                     </td>
                     <td className="p-2">
                       <strong className="text-sm">{app.ownerDisplayName || app.owner || "—"}</strong>
                       {app.ownerDisplayName && app.owner && (
-                        <div className="text-xs font-mono" style={{ color: "var(--muted)" }}>
+                        <div className="text-xs font-mono text-muted">
                           {app.owner}
                         </div>
                       )}
@@ -1855,30 +1734,29 @@ function AppsTab() {
                     </td>
                     <td className="p-2">
                       <StatusDot status={latestPhase} />
-                      <div className="text-xs" style={{ color: "var(--muted)" }}>
+                      <div className="text-xs text-muted">
                         {app.sessionCount || 0} total
                       </div>
                     </td>
-                    <td className="p-2 text-xs font-mono" style={{ color: "var(--muted)" }}>
+                    <td className="p-2 text-xs font-mono text-muted">
                       {app.domain || "—"}
                     </td>
-                    <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
+                    <td className="p-2 text-xs text-muted">
                       {app.updatedAt ? timeAgo(app.updatedAt) : "—"}
                     </td>
                     <td className="p-2 flex gap-2 flex-wrap">
-                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+                      <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-accent">
                         Visit
                       </a>
                       <a
                         href={repoUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs font-semibold"
-                        style={{ color: "var(--accent)" }}
+                        className="text-xs font-semibold text-accent"
                       >
                         Code
                       </a>
-                      <Link to={`/?app=${encodeURIComponent(app.id)}`} className="text-xs font-semibold" style={{ color: "var(--accent)" }}>
+                      <Link to={`/?app=${encodeURIComponent(app.id)}`} className="text-xs font-semibold text-accent">
                         Open in VibeCode
                       </Link>
                     </td>
@@ -1887,7 +1765,7 @@ function AppsTab() {
               })}
             </tbody>
           </table>
-          <p className="mt-3 text-sm" style={{ color: "var(--muted)" }}>
+          <p className="mt-3 text-sm text-muted">
             {filtered.length} of {apps.length} apps
           </p>
         </div>
@@ -1933,17 +1811,17 @@ function UsersTab({ focusUserId, onClearFocus }: { focusUserId: string | null; o
       .finally(() => setLoading(false));
   }, [page, fundedBy, focusUserId]);
 
-  if (loading) return <p style={{ color: "var(--muted)" }}>Loading users...</p>;
+  if (loading) return <p className="text-muted">Loading users...</p>;
   if (error) return <AdminAccessError message={error} />;
 
   return (
     <>
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-        <p className="text-sm" style={{ color: "var(--muted)" }}>
+        <p className="text-sm text-muted">
           {focusUserId ? (
             <>
               Showing <span className="font-mono">{focusUserId}</span> ·{" "}
-              <button type="button" onClick={onClearFocus} style={{ color: "var(--accent)", background: "none", border: "none", padding: 0, cursor: "pointer", font: "inherit" }}>
+              <button type="button" onClick={onClearFocus} className="text-accent bg-transparent border-0 p-[0px] cursor-pointer [font:inherit]">
                 Show all users
               </button>
             </>
@@ -1958,8 +1836,7 @@ function UsersTab({ focusUserId, onClearFocus }: { focusUserId: string | null; o
             setFundedBy(e.target.value);
           }}
           aria-label="Funded by"
-          className="p-2 rounded-lg border text-sm"
-          style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}
+          className="p-2 rounded-lg border text-sm bg-panel border-line text-ink"
         >
           {FUNDED_BY_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -1969,34 +1846,34 @@ function UsersTab({ focusUserId, onClearFocus }: { focusUserId: string | null; o
         </select>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
+        <table className="w-full text-sm [border-collapse:collapse]">
           <thead>
-            <tr style={{ borderBottom: "1px solid var(--line)" }}>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+            <tr className="border-b border-line">
+              <th className="text-left p-2 font-semibold text-muted">
                 User
               </th>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <th className="text-left p-2 font-semibold text-muted">
                 Email
               </th>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <th className="text-left p-2 font-semibold text-muted">
                 Provider
               </th>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <th className="text-left p-2 font-semibold text-muted">
                 AI usage
               </th>
-              <th className="text-left p-2 font-semibold" style={{ color: "var(--muted)" }}>
+              <th className="text-left p-2 font-semibold text-muted">
                 Joined
               </th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} style={{ borderBottom: "1px solid var(--line)" }}>
+              <tr key={u.id} className="border-b border-line">
                 <td className="p-2 flex items-center gap-2">
-                  {u.photo_url && <img src={u.photo_url} alt="" className="rounded-full" style={{ width: 28, height: 28 }} />}
+                  {u.photo_url && <img src={u.photo_url} alt="" className="rounded-full w-[28px] h-[28px]"  />}
                   <span className="font-medium">{u.name}</span>
                 </td>
-                <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
+                <td className="p-2 text-xs text-muted">
                   {u.email}
                 </td>
                 <td className="p-2 text-xs">{u.provider}</td>
@@ -2005,14 +1882,14 @@ function UsersTab({ focusUserId, onClearFocus }: { focusUserId: string | null; o
                     ? u.aiUsage.map((a) => (
                         <div key={a.source}>
                           <strong>{AI_SOURCE_LABELS[a.source] || a.source}</strong>{" "}
-                          <span style={{ color: "var(--muted)" }}>
+                          <span className="text-muted">
                             {a.sessions} session{a.sessions === 1 ? "" : "s"} · {formatTokens(a.inputTokens)} in / {formatTokens(a.outputTokens)} out
                           </span>
                         </div>
                       ))
-                    : <span style={{ color: "var(--muted)" }}>—</span>}
+                    : <span className="text-muted">—</span>}
                 </td>
-                <td className="p-2 text-xs" style={{ color: "var(--muted)" }}>
+                <td className="p-2 text-xs text-muted">
                   {formatDate(u.created_at)}
                 </td>
               </tr>
@@ -2025,31 +1902,19 @@ function UsersTab({ focusUserId, onClearFocus }: { focusUserId: string | null; o
           <button
             disabled={page <= 1}
             onClick={() => setPage(page - 1)}
-            className="px-3 py-1 rounded-lg text-sm border"
-            style={{
-              borderColor: "var(--line)",
-              background: "var(--panel)",
-              color: "var(--ink)",
-              cursor: page <= 1 ? "not-allowed" : "pointer",
-              opacity: page <= 1 ? 0.5 : 1,
-            }}
+            className={`px-3 py-1 rounded-lg text-sm border border-line bg-panel text-ink ${(page <= 1 ? "[cursor:not-allowed]" : "cursor-pointer")} ${(page <= 1 ? "opacity-[0.5]" : "opacity-[1]")}`}
+
           >
             Prev
           </button>
-          <span className="text-sm py-1" style={{ color: "var(--muted)" }}>
+          <span className="text-sm py-1 text-muted">
             {page} / {pages}
           </span>
           <button
             disabled={page >= pages}
             onClick={() => setPage(page + 1)}
-            className="px-3 py-1 rounded-lg text-sm border"
-            style={{
-              borderColor: "var(--line)",
-              background: "var(--panel)",
-              color: "var(--ink)",
-              cursor: page >= pages ? "not-allowed" : "pointer",
-              opacity: page >= pages ? 0.5 : 1,
-            }}
+            className={`px-3 py-1 rounded-lg text-sm border border-line bg-panel text-ink ${(page >= pages ? "[cursor:not-allowed]" : "cursor-pointer")} ${(page >= pages ? "opacity-[0.5]" : "opacity-[1]")}`}
+
           >
             Next
           </button>
@@ -2074,39 +1939,38 @@ function CreatorsTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <p style={{ color: "var(--muted)" }}>Loading creators...</p>;
+  if (loading) return <p className="text-muted">Loading creators...</p>;
 
   return (
     <>
-      <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+      <p className="text-sm mb-4 text-muted">
         {creators.length} creators
       </p>
       <div className="flex flex-col gap-3">
         {creators.map((c) => (
-          <div key={c.github} className="p-4 rounded-xl border" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+          <div key={c.github} className="p-4 rounded-xl border bg-panel border-line">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <a href={`https://github.com/${c.github}`} target="_blank" rel="noopener noreferrer" className="font-semibold" style={{ color: "var(--accent)" }}>
+                <a href={`https://github.com/${c.github}`} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent">
                   @{c.github}
                 </a>
                 {c.banned && (
                   <span
-                    className="text-xs px-2 py-0.5 rounded-full font-semibold"
-                    style={{ background: "color-mix(in srgb, var(--danger) 15%, var(--panel))", color: "var(--danger)" }}
+                    className="text-xs px-2 py-0.5 rounded-full font-semibold bg-[color-mix(in_srgb,_var(--danger)_15%,_var(--panel))] text-danger"
                   >
                     Banned
                   </span>
                 )}
               </div>
-              <span className="text-xs" style={{ color: "var(--muted)" }}>
+              <span className="text-xs text-muted">
                 {c.apps.length} / {c.maxApps} slots
               </span>
             </div>
             {c.apps.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {c.apps.map((a) => (
-                  <span key={a.id} className="text-xs px-2 py-1 rounded-lg" style={{ background: "var(--line)", color: "var(--ink)" }}>
-                    {a.name} <span style={{ color: "var(--muted)" }}>({a.store})</span>
+                  <span key={a.id} className="text-xs px-2 py-1 rounded-lg bg-line text-ink">
+                    {a.name} <span className="text-muted">({a.store})</span>
                   </span>
                 ))}
               </div>
@@ -2123,18 +1987,18 @@ function CreatorsTab() {
 function StatusDot({ status }: { status: string | undefined }) {
   const normalized = status?.toLowerCase();
   const color = !normalized
-    ? "var(--muted)"
+    ? "text-muted"
     : ["active", "success", "completed", "deployed", "live", "ok"].includes(normalized)
-      ? "var(--success)"
+      ? "text-success"
       : ["pending", "in_progress", "queued", "waiting", "draft", "building", "pushing", "provisioning", "unknown", "none", "not deployed", "cancelled"].includes(
             normalized,
           )
-        ? "var(--warning)"
-        : "var(--danger)";
+        ? "text-warning"
+        : "text-danger";
   return (
-    <span style={{ color, fontSize: "0.9rem" }}>
+    <span className={`text-[0.9rem] ${color}`}>
       ●{" "}
-      <span className="text-xs" style={{ color: "var(--muted)" }}>
+      <span className="text-xs text-muted">
         {status || "?"}
       </span>
     </span>

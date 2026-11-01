@@ -51,13 +51,13 @@ export function AppKeys() {
   useEffect(() => { load(); }, [load]);
 
   if (authLoading) {
-    return (<><Nav /><div className="container py-16 text-center" style={{ color: "var(--muted)" }}>Loading…</div></>);
+    return (<><Nav /><div className="container py-16 text-center text-muted">Loading…</div></>);
   }
   if (!user) {
     return (
       <><Nav /><div className="container py-16 text-center">
-        <p className="mb-4" style={{ color: "var(--muted)" }}>Sign in to manage this app's API keys.</p>
-        <button onClick={signIn} className="px-5 py-2 rounded-xl text-sm font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer" }}>Sign in with GitHub</button>
+        <p className="mb-4 text-muted">Sign in to manage this app's API keys.</p>
+        <button onClick={signIn} className="px-5 py-2 rounded-xl text-sm font-semibold text-white bg-accent border-0 cursor-pointer">Sign in with GitHub</button>
       </div></>
     );
   }
@@ -65,39 +65,39 @@ export function AppKeys() {
   return (
     <>
       <Nav />
-      <div className="container py-8" style={{ maxWidth: 640 }}>
+      <div className="container py-8 max-w-[640px]">
         <div className="flex items-center gap-2 mb-1">
-          <button onClick={() => navigate(`/app/${appId}`)} aria-label="Back to app" style={{ width: 36, height: 36, display: "inline-flex", alignItems: "center", justifyContent: "center", background: "none", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", color: "var(--ink)", cursor: "pointer" }}>&#8592;</button>
-          <h1 className="font-display text-xl font-extrabold" style={{ color: "var(--ink-strong)" }}>API Keys</h1>
+          <button onClick={() => navigate(`/app/${appId}`)} aria-label="Back to app" className="w-[36px] h-[36px] inline-flex items-center justify-center bg-transparent border border-line rounded-control-sm text-ink cursor-pointer">&#8592;</button>
+          <h1 className="font-display text-xl font-extrabold text-ink-strong">API Keys</h1>
         </div>
-        <p className="text-sm mb-6" style={{ color: "var(--muted)" }}>
+        <p className="text-sm mb-6 text-muted">
           Keys for <strong>{appId}</strong>. Added once here, encrypted, and injected server-side — your app's
           users never enter them. (They sign in with GitHub to use the API.)
         </p>
 
-        {loading && <p className="text-sm py-8 text-center" style={{ color: "var(--muted)" }}>Loading…</p>}
+        {loading && <p className="text-sm py-8 text-center text-muted">Loading…</p>}
 
         {!loading && error && (
-          <div className="p-4 rounded-xl border mb-4" style={{ borderColor: "var(--danger)", background: "color-mix(in srgb, var(--danger) 8%, var(--panel))" }}>
-            <p className="text-sm" style={{ color: "var(--danger)" }}>{error}</p>
-            <button onClick={load} className="mt-2 text-xs font-semibold" style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}>Retry</button>
+          <div className="p-4 rounded-xl border mb-4 border-danger bg-[color-mix(in_srgb,_var(--danger)_8%,_var(--panel))]">
+            <p className="text-sm text-danger">{error}</p>
+            <button onClick={load} className="mt-2 text-xs font-semibold text-accent bg-transparent border-0 cursor-pointer">Retry</button>
           </div>
         )}
 
         {!loading && !error && !published && (
-          <div className="p-4 rounded-xl border" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <div className="p-4 rounded-xl border border-line bg-panel">
             <p className="text-sm font-semibold mb-1">Publish this app first</p>
-            <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+            <p className="text-xs mb-3 text-muted">
               API keys can be added once the app is published to the store. Open the app and hit Publish.
             </p>
-            <Link to={`/app/${appId}`} className="text-xs font-semibold" style={{ color: "var(--accent)" }}>Back to the app →</Link>
+            <Link to={`/app/${appId}`} className="text-xs font-semibold text-accent">Back to the app →</Link>
           </div>
         )}
 
         {!loading && !error && published && (
           <>
             {apis.length === 0 && (
-              <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>
+              <p className="text-sm mb-4 text-muted">
                 No APIs configured yet. Apps the agent builds declare these automatically; otherwise add one below.
               </p>
             )}
@@ -129,7 +129,6 @@ function ManualAddForm({ appId, existing, onAdded }: { appId: string; existing: 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const inp: React.CSSProperties = { background: "var(--paper)", borderColor: "var(--line)", color: "var(--ink)" };
 
   async function add() {
     setErr(null);
@@ -163,34 +162,34 @@ function ManualAddForm({ appId, existing, onAdded }: { appId: string; existing: 
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="text-sm font-semibold mt-2" style={{ color: "var(--accent)", background: "none", border: "none", cursor: "pointer" }}>
+      <button onClick={() => setOpen(true)} className="text-sm font-semibold mt-2 text-accent bg-transparent border-0 cursor-pointer">
         + Add an API manually
       </button>
     );
   }
 
   return (
-    <div className="p-4 rounded-xl border mt-2" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+    <div className="p-4 rounded-xl border mt-2 bg-panel border-line">
       <div className="flex items-center justify-between mb-2">
         <strong className="text-sm">Add an API</strong>
-        <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer" }}>✕</button>
+        <button onClick={() => setOpen(false)} className="bg-transparent border-0 text-muted cursor-pointer">✕</button>
       </div>
       <div className="flex flex-col gap-2">
-        <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="Host — api.openweathermap.org" className="p-2 rounded-lg border text-sm" style={inp} />
-        <input value={secretName} onChange={(e) => setSecretName(e.target.value.toUpperCase())} placeholder="Secret name — OPENWEATHER_KEY" className="p-2 rounded-lg border text-sm" style={{ ...inp, fontFamily: "monospace" }} />
+        <input value={host} onChange={(e) => setHost(e.target.value)} placeholder="Host — api.openweathermap.org" className="p-2 rounded-lg border text-sm bg-paper border-line text-ink" />
+        <input value={secretName} onChange={(e) => setSecretName(e.target.value.toUpperCase())} placeholder="Secret name — OPENWEATHER_KEY" className="p-2 rounded-lg border text-sm bg-paper border-line text-ink font-[monospace]" />
         <div className="flex gap-2">
-          <select value={injectKind} onChange={(e) => setInjectKind(e.target.value as typeof injectKind)} className="p-2 rounded-lg border text-sm" style={inp}>
+          <select value={injectKind} onChange={(e) => setInjectKind(e.target.value as typeof injectKind)} className="p-2 rounded-lg border text-sm bg-paper border-line text-ink">
             <option value="query">Query param</option>
             <option value="header">Header</option>
             <option value="bearer">Bearer token</option>
           </select>
           {injectKind !== "bearer" && (
-            <input value={injectName} onChange={(e) => setInjectName(e.target.value)} placeholder={injectKind === "query" ? "param name — appid" : "header name — X-API-Key"} className="flex-1 p-2 rounded-lg border text-sm" style={inp} />
+            <input value={injectName} onChange={(e) => setInjectName(e.target.value)} placeholder={injectKind === "query" ? "param name — appid" : "header name — X-API-Key"} className="flex-1 p-2 rounded-lg border text-sm bg-paper border-line text-ink" />
           )}
         </div>
-        <input type="password" value={value} onChange={(e) => setValue(e.target.value)} placeholder="API key value" className="p-2 rounded-lg border text-sm" style={{ ...inp, fontFamily: "monospace" }} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
-        {err && <p className="text-xs" style={{ color: "var(--danger)" }}>{err}</p>}
-        <button onClick={add} disabled={saving} className="p-2 rounded-lg text-sm font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+        <input type="password" value={value} onChange={(e) => setValue(e.target.value)} placeholder="API key value" className="p-2 rounded-lg border text-sm bg-paper border-line text-ink font-[monospace]" onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+        {err && <p className="text-xs text-danger">{err}</p>}
+        <button onClick={add} disabled={saving} className={`p-2 rounded-lg text-sm font-semibold text-white bg-accent border-0 cursor-pointer ${(saving ? "opacity-[0.6]" : "opacity-[1]")}`} >
           {saving ? "Saving…" : "Add API + key"}
         </button>
       </div>
@@ -224,13 +223,13 @@ function ApiKeyRow({ appId, api, isSet, onSaved }: { appId: string; api: Manifes
   }
 
   return (
-    <div className="p-4 rounded-xl border mb-3" style={{ background: "var(--panel)", borderColor: "var(--line)" }}>
+    <div className="p-4 rounded-xl border mb-3 bg-panel border-line">
       <div className="flex items-center gap-2 mb-1">
         <strong className="text-sm">{api.host}</strong>
-        {done && <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold" style={{ background: "color-mix(in srgb, var(--success) 15%, var(--panel))", color: "var(--success)" }}>Key set</span>}
+        {done && <span className="text-xs px-1.5 py-0.5 rounded-full font-semibold bg-[color-mix(in_srgb,_var(--success)_15%,_var(--panel))] text-success">Key set</span>}
       </div>
-      {api.description && <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>{api.description}</p>}
-      <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
+      {api.description && <p className="text-xs mb-2 text-muted">{api.description}</p>}
+      <p className="text-xs mb-2 text-muted">
         Secret <code>{api.secretName}</code> · sent as {api.injectKind}{api.injectName ? ` "${api.injectName}"` : ""}
       </p>
       <div className="flex gap-2">
@@ -239,15 +238,14 @@ function ApiKeyRow({ appId, api, isSet, onSaved }: { appId: string; api: Manifes
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={done ? "Replace key…" : "Paste API key…"}
-          className="flex-1 p-2 rounded-lg border text-sm"
-          style={{ background: "var(--paper)", borderColor: "var(--line)", color: "var(--ink)", fontFamily: "monospace" }}
+          className="flex-1 p-2 rounded-lg border text-sm bg-paper border-line text-ink font-[monospace]"
           onKeyDown={(e) => { if (e.key === "Enter") save(); }}
         />
-        <button onClick={save} disabled={saving || !value.trim()} className="px-3 rounded-lg text-sm font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer", opacity: saving || !value.trim() ? 0.5 : 1 }}>
+        <button onClick={save} disabled={saving || !value.trim()} className={`px-3 rounded-lg text-sm font-semibold text-white bg-accent border-0 cursor-pointer ${(saving || !value.trim() ? "opacity-[0.5]" : "opacity-[1]")}`} >
           {saving ? "Saving…" : "Save"}
         </button>
       </div>
-      {err && <p className="text-xs mt-1" style={{ color: "var(--danger)" }}>{err}</p>}
+      {err && <p className="text-xs mt-1 text-danger">{err}</p>}
     </div>
   );
 }

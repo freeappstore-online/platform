@@ -99,7 +99,7 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <button onClick={onBack} className="text-sm text-[var(--accent)] font-medium hover:underline min-h-[44px] flex items-center">&larr; Back</button>
+        <button onClick={onBack} className="text-sm text-accent font-medium hover:underline min-h-[44px] flex items-center">&larr; Back</button>
         <div className="flex gap-1 ml-auto">
           {(['overview', 'data'] as AppTab[]).map(t => (
             <button
@@ -107,8 +107,8 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
               onClick={() => setAppTab(t)}
               className={`px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${
                 appTab === t
-                  ? 'bg-[var(--ink)] text-[var(--paper)]'
-                  : 'text-[var(--muted)] border border-[var(--line)]'
+                  ? 'bg-ink text-paper'
+                  : 'text-muted border border-line'
               }`}
             >
               {t === 'data' ? 'Admin' : 'Overview'}
@@ -123,17 +123,17 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       <>
 
       {/* Hero */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6">
-        <h2 className="display-font text-xl sm:text-2xl font-bold text-[var(--ink)]">{appName}</h2>
-        <p className="mt-1 text-sm text-[var(--muted)] font-mono truncate">{appId}.freeappstore.online</p>
+      <div className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+        <h2 className="display-font text-xl sm:text-2xl font-bold text-ink">{appName}</h2>
+        <p className="mt-1 text-sm text-muted font-mono truncate">{appId}.freeappstore.online</p>
         <div className="mt-4 flex gap-2.5 flex-wrap">
-          <a href={appUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 no-underline min-h-[44px]">
+          <a href={appUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 no-underline min-h-[44px]">
             Open App
           </a>
-          <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--panel-hover)] no-underline min-h-[44px]">
+          <a href={repoUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2.5 text-sm font-medium text-ink hover:bg-[var(--panel-hover)] no-underline min-h-[44px]">
             Source
           </a>
-          <button type="button" onClick={onOpenInVibeCode} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2.5 text-sm font-medium text-[var(--ink)] hover:bg-[var(--panel-hover)] min-h-[44px] bg-transparent cursor-pointer">
+          <button type="button" onClick={onOpenInVibeCode} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line-strong)] px-4 py-2.5 text-sm font-medium text-ink hover:bg-[var(--panel-hover)] min-h-[44px] bg-transparent cursor-pointer">
             Open in VibeCode
           </button>
         </div>
@@ -142,32 +142,32 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       {/* Deploy History */}
       {/* Deploy history — explicit about loading, failure, and "never ran",
           which previously all rendered as an absent section. */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6">
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-3">Recent Deploys</h3>
+      <div className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">Recent Deploys</h3>
 
         {sessionDeploy && sessionDeploy.phase === 'error' && (
-          <div className="mb-3 rounded-lg border border-[var(--danger)] bg-[var(--danger)]/10 p-3">
-            <p className="text-xs font-semibold text-[var(--danger)] uppercase tracking-wide">Last VibeCode deploy failed</p>
-            <p className="mt-1 text-sm text-[var(--ink)] break-words">{sessionDeploy.error || 'No error detail was recorded.'}</p>
+          <div className="mb-3 rounded-lg border border-danger bg-danger/10 p-3">
+            <p className="text-xs font-semibold text-danger uppercase tracking-wide">Last VibeCode deploy failed</p>
+            <p className="mt-1 text-sm text-ink break-words">{sessionDeploy.error || 'No error detail was recorded.'}</p>
             {sessionDeploy.at && (
-              <p className="mt-1 text-xs text-[var(--muted)]">{formatTimestamp(sessionDeploy.at)}</p>
+              <p className="mt-1 text-xs text-muted">{formatTimestamp(sessionDeploy.at)}</p>
             )}
           </div>
         )}
 
         {deployLoading ? (
-          <p className="text-sm text-[var(--muted)]">Loading deploy history…</p>
+          <p className="text-sm text-muted">Loading deploy history…</p>
         ) : deployError ? (
-          <div className="rounded-lg border border-[var(--line)] p-3">
-            <p className="text-sm text-[var(--ink)]">{deployError}</p>
-            <a href={`${repoUrl}/actions`} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-[var(--accent)] font-medium hover:underline no-underline">
+          <div className="rounded-lg border border-line p-3">
+            <p className="text-sm text-ink">{deployError}</p>
+            <a href={`${repoUrl}/actions`} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-accent font-medium hover:underline no-underline">
               Check GitHub Actions directly &rarr;
             </a>
           </div>
         ) : !deploy || deploy.runs.length === 0 ? (
           <div>
-            <p className="text-sm text-[var(--muted)]">This app has not been deployed yet.</p>
-            <p className="mt-1 text-xs text-[var(--muted)]">A deploy runs automatically when you push to the app's repository.</p>
+            <p className="text-sm text-muted">This app has not been deployed yet.</p>
+            <p className="mt-1 text-xs text-muted">A deploy runs automatically when you push to the app's repository.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -186,22 +186,22 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
                     <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${TONE_DOT[view.tone]}`} />
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-sm font-medium ${view.tone === 'failure' ? 'text-[var(--danger)]' : 'text-[var(--ink)]'}`}>
+                        <span className={`text-sm font-medium ${view.tone === 'failure' ? 'text-danger' : 'text-ink'}`}>
                           {view.label}
                         </span>
-                        {d.name && <span className="text-xs text-[var(--muted)] truncate">{d.name}</span>}
+                        {d.name && <span className="text-xs text-muted truncate">{d.name}</span>}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-2 flex-wrap text-xs text-[var(--muted)]">
+                      <div className="mt-0.5 flex items-center gap-2 flex-wrap text-xs text-muted">
                         {d.branch && <span className="font-mono">{d.branch}</span>}
                         {d.headSha && <span className="font-mono">{d.headSha}</span>}
                         {d.commitMsg && <span className="truncate">{d.commitMsg}</span>}
                       </div>
                       {view.tone === 'failure' && (
-                        <span className="mt-0.5 inline-block text-xs text-[var(--accent)] font-medium">View logs &rarr;</span>
+                        <span className="mt-0.5 inline-block text-xs text-accent font-medium">View logs &rarr;</span>
                       )}
                     </div>
                   </div>
-                  <span className="text-xs text-[var(--muted)] whitespace-nowrap flex-shrink-0" title={formatTimestamp(d.createdAt)}>
+                  <span className="text-xs text-muted whitespace-nowrap flex-shrink-0" title={formatTimestamp(d.createdAt)}>
                     {d.createdAt ? formatTimeAgo(new Date(d.createdAt)) : ''}
                   </span>
                 </a>
@@ -214,13 +214,13 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       {/* Stats */}
       {!loading && analytics && (
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
-            <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">Active Users (30d)</p>
-            <p className="mt-1 display-font text-2xl font-bold text-[var(--ink)]">{analytics.activeUsers30d}</p>
+          <div className="rounded-xl border border-line bg-panel p-4">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Active Users (30d)</p>
+            <p className="mt-1 display-font text-2xl font-bold text-ink">{analytics.activeUsers30d}</p>
           </div>
-          <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
-            <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">Total Events</p>
-            <p className="mt-1 display-font text-2xl font-bold text-[var(--ink)]">{analytics.totalEvents}</p>
+          <div className="rounded-xl border border-line bg-panel p-4">
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Total Events</p>
+            <p className="mt-1 display-font text-2xl font-bold text-ink">{analytics.totalEvents}</p>
           </div>
         </div>
       )}
@@ -242,7 +242,7 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
 
       {/* Info grid */}
       <div>
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-3">App Info</h3>
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">App Info</h3>
         <div className="grid gap-3 grid-cols-2">
           <InfoCard label="Subdomain" value={`${appId}.freeappstore.online`} mono />
           <InfoCard label="Source" value={`freeappstore-online/${appId}`} href={repoUrl} />
@@ -255,7 +255,7 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
 
       {/* SDK features */}
       <div>
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-3">Platform Features</h3>
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">Platform Features</h3>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <FeatureCard title="Auth" desc="Platform sign-in (GitHub, Google, Apple, email)" />
           <FeatureCard title="Per-user KV" desc="1MB/user, 100 keys, scoped storage" />
@@ -267,8 +267,8 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       </div>
 
       {/* Useful links */}
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-6">
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-3">Links</h3>
+      <div className="rounded-2xl border border-line bg-panel p-6">
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">Links</h3>
         <div className="space-y-2">
           <LinkRow href={appUrl} label="Live app" />
           <LinkRow href={repoUrl} label="GitHub repository" />
@@ -315,11 +315,11 @@ function JsonView({ data, onPreview }: { data: unknown; onPreview: (url: string)
   if (last < json.length) parts.push({ type: 'text', value: json.slice(last) })
 
   return (
-    <div className="relative border-t border-[var(--line)]">
+    <div className="relative border-t border-line">
       <button
         onClick={copy}
         title={copied ? 'Copied!' : 'Copy JSON'}
-        className="absolute top-1.5 right-1.5 p-1 rounded bg-[var(--line)] text-[var(--muted)] hover:text-[var(--ink)] z-10"
+        className="absolute top-1.5 right-1.5 p-1 rounded bg-line text-muted hover:text-ink z-10"
       >
         {copied ? (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -327,7 +327,7 @@ function JsonView({ data, onPreview }: { data: unknown; onPreview: (url: string)
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         )}
       </button>
-      <pre className="px-3 py-2 pr-16 text-xs font-mono bg-[var(--paper)] text-[var(--ink)] whitespace-pre-wrap break-all max-h-[300px] overflow-auto select-text" style={{ userSelect: 'text', WebkitUserSelect: 'text' }}>
+      <pre className="px-3 py-2 pr-16 text-xs font-mono bg-paper text-ink whitespace-pre-wrap break-all max-h-[300px] overflow-auto select-text [user-select:text] [-webkit-user-select:text]">
         {parts.map((p, i) =>
           p.type === 'url' ? (
             <a
@@ -336,7 +336,7 @@ function JsonView({ data, onPreview }: { data: unknown; onPreview: (url: string)
               target="_blank"
               rel="noopener noreferrer"
               onClick={isImageUrl(p.value) ? (e) => { e.preventDefault(); onPreview(p.value) } : undefined}
-              className="text-[var(--accent)] hover:underline cursor-pointer"
+              className="text-accent hover:underline cursor-pointer"
             >{p.value}</a>
           ) : (
             <span key={i}>{p.value}</span>
@@ -353,12 +353,12 @@ function PreviewDialog({ url, onClose }: { url: string; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
       <div className="relative max-w-[90vw] max-h-[90vh] bg-[var(--panel-strong)] rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-[var(--line)]">
-          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-[var(--accent)] truncate hover:underline">{url}</a>
-          <button onClick={onClose} title="Close" className="text-[var(--muted)] hover:text-[var(--ink)] p-1 min-h-[32px] flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-line">
+          <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-accent truncate hover:underline">{url}</a>
+          <button onClick={onClose} title="Close" className="text-muted hover:text-ink p-1 min-h-[32px] flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         {isImage ? (
-          <div className="p-4 flex items-center justify-center" style={{ minWidth: 200, minHeight: 200 }}>
+          <div className="p-4 flex items-center justify-center min-w-[200px] min-h-[200px]">
             <img src={url} alt="preview" className="max-w-[80vw] max-h-[75vh] object-contain rounded" />
           </div>
         ) : (
@@ -430,27 +430,27 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
     <div>
       <div className="flex gap-1 mb-4">
         {(['kv', 'collections', 'counters'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${tab === t ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] border border-[var(--line)]'}`}>
+          <button key={t} onClick={() => setTab(t)} className={`px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${tab === t ? 'bg-accent text-white' : 'text-muted border border-line'}`}>
             {t === 'kv' ? 'KV' : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
-        <span className="text-xs text-[var(--muted)] ml-auto self-center">{entries.length} entries</span>
+        <span className="text-xs text-muted ml-auto self-center">{entries.length} entries</span>
       </div>
 
-      {loading ? <p className="text-sm text-[var(--muted)]">Loading...</p> : entries.length === 0 ? (
-        <p className="text-sm text-[var(--muted)]">No {tab} data for this app.</p>
+      {loading ? <p className="text-sm text-muted">Loading...</p> : entries.length === 0 ? (
+        <p className="text-sm text-muted">No {tab} data for this app.</p>
       ) : (
-        <div className="rounded-xl border border-[var(--line)] overflow-hidden">
+        <div className="rounded-xl border border-line overflow-hidden">
           {entries.map((e, i) => {
             if (tab === 'kv') {
               const cacheKey = `${e.user_id}:${e.key}`
               return (
-                <div key={i} className="border-b border-[var(--line)] last:border-0">
+                <div key={i} className="border-b border-line last:border-0">
                   <div className="flex items-center gap-2 px-3 py-2 text-xs">
-                    <span className="font-mono text-[var(--muted)] w-16 truncate flex-shrink-0">{String(e.user_id).slice(0, 8)}</span>
-                    <button onClick={() => { loadKvValue(String(e.user_id), String(e.key)); setExpanded(expanded === i ? null : i) }} className="font-mono text-[var(--ink)] truncate flex-1 text-left hover:underline">{String(e.key)}</button>
-                    <span className="text-[var(--muted)] flex-shrink-0">{String(e.size)}B</span>
-                    <button onClick={() => deleteItem(`app=${appId}&user=${e.user_id}&key=${encodeURIComponent(String(e.key))}`)} className="text-[var(--danger)] hover:text-[var(--danger)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                    <span className="font-mono text-muted w-16 truncate flex-shrink-0">{String(e.user_id).slice(0, 8)}</span>
+                    <button onClick={() => { loadKvValue(String(e.user_id), String(e.key)); setExpanded(expanded === i ? null : i) }} className="font-mono text-ink truncate flex-1 text-left hover:underline">{String(e.key)}</button>
+                    <span className="text-muted flex-shrink-0">{String(e.size)}B</span>
+                    <button onClick={() => deleteItem(`app=${appId}&user=${e.user_id}&key=${encodeURIComponent(String(e.key))}`)} className="text-danger hover:text-danger opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                   </div>
                   {expanded === i && valueCache[cacheKey] !== undefined && (
                     <JsonView data={valueCache[cacheKey]} onPreview={setPreviewUrl} />
@@ -460,12 +460,12 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
             }
             if (tab === 'collections') {
               return (
-                <div key={i} className="border-b border-[var(--line)] last:border-0">
+                <div key={i} className="border-b border-line last:border-0">
                   <div className="flex items-center gap-2 px-3 py-2 text-xs">
-                    <span className="font-mono text-[var(--muted)] w-16 truncate flex-shrink-0">{String(e.collection)}</span>
-                    <button onClick={() => setExpanded(expanded === i ? null : i)} className="font-mono text-[var(--ink)] truncate flex-1 text-left hover:underline">{String(e.id).slice(0, 12)}</button>
-                    <span className="text-[var(--muted)] flex-shrink-0">{String(e.owner_id).slice(0, 8)}</span>
-                    <button onClick={() => deleteItem(`app=${appId}&collection=${e.collection}&id=${e.id}`)} className="text-[var(--danger)] hover:text-[var(--danger)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+                    <span className="font-mono text-muted w-16 truncate flex-shrink-0">{String(e.collection)}</span>
+                    <button onClick={() => setExpanded(expanded === i ? null : i)} className="font-mono text-ink truncate flex-1 text-left hover:underline">{String(e.id).slice(0, 12)}</button>
+                    <span className="text-muted flex-shrink-0">{String(e.owner_id).slice(0, 8)}</span>
+                    <button onClick={() => deleteItem(`app=${appId}&collection=${e.collection}&id=${e.id}`)} className="text-danger hover:text-danger opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
                   </div>
                   {expanded === i && (
                     <JsonView data={e.data} onPreview={setPreviewUrl} />
@@ -475,10 +475,10 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
             }
             // counters
             return (
-              <div key={i} className="flex items-center gap-2 px-3 py-2 text-xs border-b border-[var(--line)] last:border-0">
-                <span className="font-mono text-[var(--ink)] flex-1 truncate">{String(e.name)}</span>
-                <span className="font-bold text-[var(--ink)] w-16 text-right flex-shrink-0">{String(e.value)}</span>
-                <button onClick={() => deleteItem(`app=${appId}&name=${encodeURIComponent(String(e.name))}`)} className="text-[var(--danger)] hover:text-[var(--danger)] opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+              <div key={i} className="flex items-center gap-2 px-3 py-2 text-xs border-b border-line last:border-0">
+                <span className="font-mono text-ink flex-1 truncate">{String(e.name)}</span>
+                <span className="font-bold text-ink w-16 text-right flex-shrink-0">{String(e.value)}</span>
+                <button onClick={() => deleteItem(`app=${appId}&name=${encodeURIComponent(String(e.name))}`)} className="text-danger hover:text-danger opacity-40 hover:opacity-100 min-h-[32px] px-1" title="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               </div>
             )
           })}
@@ -491,12 +491,12 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
 
 function InfoCard({ label, value, href, mono }: { label: string; value: string; href?: string; mono?: boolean }) {
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-4">
-      <p className="text-xs font-semibold text-[var(--muted)] uppercase tracking-wide">{label}</p>
+    <div className="rounded-xl border border-line bg-panel p-4">
+      <p className="text-xs font-semibold text-muted uppercase tracking-wide">{label}</p>
       {href ? (
-        <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1 text-sm text-[var(--accent)] font-medium block">{value}</a>
+        <a href={href} target="_blank" rel="noopener noreferrer" className="mt-1 text-sm text-accent font-medium block">{value}</a>
       ) : (
-        <p className={`mt-1 text-sm text-[var(--ink)] ${mono ? 'font-mono' : ''}`}>{value}</p>
+        <p className={`mt-1 text-sm text-ink ${mono ? 'font-mono' : ''}`}>{value}</p>
       )}
     </div>
   )
@@ -504,9 +504,9 @@ function InfoCard({ label, value, href, mono }: { label: string; value: string; 
 
 function FeatureCard({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3">
-      <p className="font-semibold text-sm text-[var(--ink)]">{title}</p>
-      <p className="text-xs text-[var(--muted)] mt-0.5">{desc}</p>
+    <div className="rounded-xl border border-line bg-panel p-3">
+      <p className="font-semibold text-sm text-ink">{title}</p>
+      <p className="text-xs text-muted mt-0.5">{desc}</p>
     </div>
   )
 }
@@ -551,40 +551,36 @@ function CodeHealth({ appId }: { appId: string }) {
   if (loading) return null
   if (!report) {
     return (
-      <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide mb-2">Code Health</h3>
-        <p className="text-sm text-[var(--muted)]">No scan data yet. Code health runs automatically on each deploy.</p>
+      <div className="rounded-2xl border border-line bg-panel p-5">
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-2">Code Health</h3>
+        <p className="text-sm text-muted">No scan data yet. Code health runs automatically on each deploy.</p>
       </div>
     )
   }
 
-  const gradeColor = (g: string) => {
-    if (g === 'A') return 'var(--success, #16a34a)'
-    if (g === 'B') return 'var(--success, #16a34a)'
-    if (g === 'C') return 'var(--warning, #ca8a04)'
-    return 'var(--danger, #dc2626)'
-  }
+  const gradeClass = (g: string) => g === "A" || g === "B" ? "text-success" : g === "C" ? "text-warning" : "text-danger"
+  const gradeFill = (g: string) => g === "A" || g === "B" ? "fill-success" : g === "C" ? "fill-warning" : "fill-danger"
 
   const activeChecks = report.checks?.filter(c => c.score !== undefined && c.grade !== 'skip') ?? []
   const totalIssues = activeChecks.reduce((n, c) => n + (c.issues?.length ?? 0), 0)
 
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] p-5">
+    <div className="rounded-2xl border border-line bg-panel p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-[var(--muted)] uppercase tracking-wide">Code Health</h3>
-        <span className="text-xs text-[var(--muted)]">
-          via <a href="https://vibecodeqa.online" target="_blank" rel="noopener noreferrer" className="text-[var(--accent)]">vcqa</a>
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Code Health</h3>
+        <span className="text-xs text-muted">
+          via <a href="https://vibecodeqa.online" target="_blank" rel="noopener noreferrer" className="text-accent">vcqa</a>
           {report.timestamp && ` · ${new Date(report.timestamp).toLocaleDateString()}`}
         </span>
       </div>
 
       <div className="flex items-center gap-4 mb-4">
-        <div className="display-font text-4xl font-bold" style={{ color: gradeColor(report.grade) }}>
+        <div className={`display-font text-4xl font-bold ${gradeClass(report.grade)}`}>
           {report.grade}
         </div>
         <div>
-          <div className="text-2xl font-bold text-[var(--ink)]">{report.score}/100</div>
-          <div className="text-xs text-[var(--muted)]">{activeChecks.length} checks · {totalIssues} issues</div>
+          <div className="text-2xl font-bold text-ink">{report.score}/100</div>
+          <div className="text-xs text-muted">{activeChecks.length} checks · {totalIssues} issues</div>
         </div>
         {!badgeError && (
           <div className="ml-auto">
@@ -608,47 +604,45 @@ function CodeHealth({ appId }: { appId: string }) {
               <div key={check.name}>
                 <button
                   onClick={() => hasIssues && setExpanded(isOpen ? null : check.name)}
-                  className="flex items-center gap-2 py-1.5 w-full text-left min-h-[36px]"
-                  style={{ cursor: hasIssues ? 'pointer' : 'default', background: 'none', border: 'none', fontFamily: 'inherit', color: 'inherit' }}
+                  className={`flex items-center gap-2 py-1.5 w-full text-left min-h-[36px] bg-transparent border-0 font-[inherit] text-inherit ${hasIssues ? "cursor-pointer" : "cursor-default"}`}
                 >
                   <span
-                    className="inline-block w-6 text-center text-xs font-bold rounded flex-shrink-0"
-                    style={{ color: gradeColor(check.grade), background: `color-mix(in srgb, ${gradeColor(check.grade)} 15%, transparent)` }}
+                    className={`inline-block w-6 text-center text-xs font-bold rounded flex-shrink-0 ${gradeClass(check.grade)} ${check.grade === "A" || check.grade === "B" ? "bg-success/15" : check.grade === "C" ? "bg-warning/15" : "bg-danger/15"}`}
                   >
                     {check.grade}
                   </span>
-                  <span className="text-sm text-[var(--ink)] flex-1">{check.name}</span>
+                  <span className="text-sm text-ink flex-1">{check.name}</span>
                   {hasIssues && (
-                    <span className="text-xs text-[var(--muted)]">{issues.length} issue{issues.length > 1 ? 's' : ''}</span>
+                    <span className="text-xs text-muted">{issues.length} issue{issues.length > 1 ? 's' : ''}</span>
                   )}
-                  <span className="text-xs text-[var(--muted)] font-mono w-6 text-right flex-shrink-0">{check.score}</span>
-                  <div className="w-16 h-1.5 rounded bg-[var(--line)] overflow-hidden flex-shrink-0">
-                    <div className="h-full rounded" style={{ width: `${check.score}%`, background: gradeColor(check.grade) }} />
+                  <span className="text-xs text-muted font-mono w-6 text-right flex-shrink-0">{check.score}</span>
+                  <div className="w-16 h-1.5 rounded bg-line overflow-hidden flex-shrink-0">
+                    <svg className="w-full h-full" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect width={check.score} height="6" rx="3" className={gradeFill(check.grade)} /></svg>
                   </div>
                   {hasIssues && (
-                    <span className="text-xs text-[var(--muted)] flex-shrink-0">{isOpen ? '▾' : '▸'}</span>
+                    <span className="text-xs text-muted flex-shrink-0">{isOpen ? '▾' : '▸'}</span>
                   )}
                 </button>
                 {isOpen && issues.length > 0 && (
-                  <div className="ml-8 mb-2 rounded-lg border border-[var(--line)] bg-[var(--paper)] overflow-hidden">
+                  <div className="ml-8 mb-2 rounded-lg border border-line bg-paper overflow-hidden">
                     {issues.slice(0, 20).map((issue, i) => (
-                      <div key={i} className="flex items-start gap-2 px-3 py-1.5 border-b border-[var(--line)] last:border-0 text-xs">
-                        <span className={`flex-shrink-0 font-semibold ${issue.severity === 'error' ? 'text-[var(--danger,#dc2626)]' : 'text-[var(--warning,#ca8a04)]'}`}>
+                      <div key={i} className="flex items-start gap-2 px-3 py-1.5 border-b border-line last:border-0 text-xs">
+                        <span className={`flex-shrink-0 font-semibold ${issue.severity === 'error' ? 'text-danger' : 'text-warning'}`}>
                           {issue.severity === 'error' ? '!' : '~'}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <span className="text-[var(--ink)]">{issue.message}</span>
+                          <span className="text-ink">{issue.message}</span>
                           {issue.file && (
-                            <span className="text-[var(--muted)] font-mono ml-1.5">
+                            <span className="text-muted font-mono ml-1.5">
                               {issue.file.split('/').slice(-2).join('/')}{issue.line ? `:${issue.line}` : ''}
                             </span>
                           )}
                         </div>
-                        {issue.rule && <span className="text-[var(--muted)] font-mono flex-shrink-0">{issue.rule}</span>}
+                        {issue.rule && <span className="text-muted font-mono flex-shrink-0">{issue.rule}</span>}
                       </div>
                     ))}
                     {issues.length > 20 && (
-                      <div className="px-3 py-1.5 text-xs text-[var(--muted)]">+{issues.length - 20} more issues</div>
+                      <div className="px-3 py-1.5 text-xs text-muted">+{issues.length - 20} more issues</div>
                     )}
                   </div>
                 )}
@@ -663,9 +657,9 @@ function CodeHealth({ appId }: { appId: string }) {
 
 function LinkRow({ href, label }: { href: string; label: string }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between py-1.5 text-sm text-[var(--accent)] font-medium hover:underline no-underline">
+    <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between py-1.5 text-sm text-accent font-medium hover:underline no-underline">
       {label}
-      <span className="text-[var(--muted)]">&rarr;</span>
+      <span className="text-muted">&rarr;</span>
     </a>
   )
 }

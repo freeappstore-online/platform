@@ -72,8 +72,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
   }, [appId, onPublished]);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.5)" }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background: "var(--panel)", borderRadius: "var(--radius-lg)", padding: "1.5rem", width: "100%", maxWidth: 420, maxHeight: "90vh", overflow: "auto", boxShadow: "var(--shadow-lg)", border: "1px solid var(--line)" }}>
+    <div className="fixed inset-[0px] z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.5)]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-paper rounded-[var(--radius-lg)] p-[1.5rem] w-[100%] max-w-[420px] max-h-[90vh] overflow-auto shadow-[var(--shadow-lg)] border border-line">
         {result?.appId ? (() => {
           // A 200 from /publish does not mean every provisioning step worked.
           // Show a partial failure as a failure, naming the step (#32).
@@ -82,20 +82,20 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
           <>
             {steps.allOk ? (
               <>
-                <h2 className="text-lg font-bold mb-2" style={{ color: "var(--success)" }}>Published!</h2>
-                <p className="text-sm mb-2">Your app is live at <a href={result.appUrl || `https://${appId}.freeappstore.online`} target="_blank" rel="noopener" className="font-semibold" style={{ color: "var(--accent)" }}>{appId}.freeappstore.online</a></p>
+                <h2 className="text-lg font-bold mb-2 text-success">Published!</h2>
+                <p className="text-sm mb-2">Your app is live at <a href={result.appUrl || `https://${appId}.freeappstore.online`} target="_blank" rel="noopener" className="font-semibold text-accent">{appId}.freeappstore.online</a></p>
               </>
             ) : (
               <>
-                <h2 className="text-lg font-bold mb-2" style={{ color: "var(--danger)" }}>{steps.summary}</h2>
+                <h2 className="text-lg font-bold mb-2 text-danger">{steps.summary}</h2>
                 <p className="text-sm mb-2">The app was created but is not fully set up. These steps failed:</p>
-                <ul className="text-sm mb-2" style={{ paddingLeft: "1.1rem" }}>
+                <ul className="text-sm mb-2 pl-[1.1rem]">
                   {steps.failed.map((s, i) => (
                     <li key={i}><strong>{s.name}</strong>{s.detail ? ` — ${s.detail}` : " — no detail reported"}</li>
                   ))}
                 </ul>
-                <p className="text-xs mb-2" style={{ color: "var(--muted)" }}>
-                  Re-run publish to retry. <a href={`https://github.com/freeappstore-online/${appId}/actions`} target="_blank" rel="noopener" style={{ color: "var(--accent)" }}>View Actions</a>
+                <p className="text-xs mb-2 text-muted">
+                  Re-run publish to retry. <a href={`https://github.com/freeappstore-online/${appId}/actions`} target="_blank" rel="noopener" className="text-accent">View Actions</a>
                 </p>
               </>
             )}
@@ -103,37 +103,37 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
               <div className="text-xs mb-3">
                 {result.admin.steps.map((s: any, i: number) => (
                   <div key={i} className="flex items-center gap-1">
-                    <span style={{ color: s.status === "ok" ? "var(--success)" : s.status === "skip" ? "var(--muted)" : "var(--danger)" }}>●</span>
+                    <span className={`${(s.status === "ok" ? "text-success" : (s.status === "skip" ? "text-muted" : "text-danger"))}`}>●</span>
                     <span>{s.name}{s.detail ? ` — ${s.detail}` : ""}</span>
                   </div>
                 ))}
               </div>
             )}
-            <button onClick={onClose} className="w-full p-2 rounded-lg font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer" }}>Done</button>
+            <button onClick={onClose} className="w-full p-2 rounded-lg font-semibold text-white bg-accent border-0 cursor-pointer">Done</button>
           </>
           );
         })() : (
           <>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-bold">Publish to Store</h2>
-              <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)", fontSize: "1.2rem" }}>✕</button>
+              <button onClick={onClose} className="bg-transparent border-0 cursor-pointer text-muted text-[1.2rem]">✕</button>
             </div>
-            <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>
+            <p className="text-xs mb-3 text-muted">
               This will add <strong>{appName}</strong> to freeappstore.online with a custom subdomain.
             </p>
             <form onSubmit={handlePublish} className="flex flex-col gap-2">
               <div>
-                <label className="text-xs font-semibold" style={{ color: "var(--muted)" }}>URL</label>
-                <p className="text-sm font-mono" style={{ color: "var(--accent)" }}>{appId}.freeappstore.online</p>
+                <label className="text-xs font-semibold text-muted">URL</label>
+                <p className="text-sm font-mono text-accent">{appId}.freeappstore.online</p>
               </div>
               {!idValid && (
-                <p className="text-xs" style={{ color: "var(--danger)" }}>
+                <p className="text-xs text-danger">
                   This app's id "{appId}" isn't a valid store id (needs lowercase letters/digits/hyphens, 2–31 chars). Re-deploy with a simpler name first.
                 </p>
               )}
               <div>
-                <label className="text-xs font-semibold" style={{ color: "var(--muted)" }}>Category</label>
-                <select name="category" className="w-full p-2 rounded-lg border text-sm" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }}>
+                <label className="text-xs font-semibold text-muted">Category</label>
+                <select name="category" className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink">
                   <option value="utilities">Utilities</option>
                   <option value="productivity">Productivity</option>
                   <option value="learning">Learning</option>
@@ -145,11 +145,11 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold" style={{ color: "var(--muted)" }}>One-line description</label>
-                <input name="oneliner" placeholder="What does it do, in one line?" required className="w-full p-2 rounded-lg border text-sm" style={{ background: "var(--panel)", borderColor: "var(--line)", color: "var(--ink)" }} />
+                <label className="text-xs font-semibold text-muted">One-line description</label>
+                <input name="oneliner" placeholder="What does it do, in one line?" required className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink"  />
               </div>
-              {error && <p className="text-xs" style={{ color: "var(--danger)" }}>{error}</p>}
-              <button type="submit" disabled={publishing || !idValid} className="p-2 rounded-lg font-semibold text-white text-sm" style={{ background: "var(--accent)", border: "none", cursor: "pointer", opacity: publishing || !idValid ? 0.6 : 1 }}>
+              {error && <p className="text-xs text-danger">{error}</p>}
+              <button type="submit" disabled={publishing || !idValid} className={`p-2 rounded-lg font-semibold text-white text-sm bg-accent border-0 cursor-pointer ${(publishing || !idValid ? "opacity-[0.6]" : "opacity-[1]")}`} >
                 {publishing ? "Publishing..." : "Publish"}
               </button>
             </form>

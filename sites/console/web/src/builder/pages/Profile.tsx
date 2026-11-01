@@ -93,25 +93,18 @@ export function Profile() {
   useEffect(() => { fetchVaultUsage().then(setUsage); }, []);
 
   if (loading) {
-    return (<><Nav /><div className="container py-16 text-center" style={{ color: "var(--muted)" }}>Loading...</div></>);
+    return (<><Nav /><div className="container py-16 text-center text-muted">Loading...</div></>);
   }
 
   if (!user) {
     return (
       <><Nav /><div className="container py-16 text-center">
-        <p className="mb-4" style={{ color: "var(--muted)" }}>
+        <p className="mb-4 text-muted">
           Sign in to manage your settings.
         </p>
         <button
           onClick={signIn}
-          className="px-5 py-2 rounded-xl text-sm font-semibold border"
-          style={{
-            background: "transparent",
-            color: "var(--ink)",
-            borderColor: "var(--line)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
+          className="px-5 py-2 rounded-xl text-sm font-semibold border bg-transparent text-ink border-line cursor-pointer font-[inherit]"
         >
           Sign in with GitHub
         </button>
@@ -122,26 +115,24 @@ export function Profile() {
   return (
     <>
     <Nav />
-    <div className="container py-8" style={{ maxWidth: 640 }}>
+    <div className="container py-8 max-w-[640px]">
       {/* Avatar + name card */}
       <div
-        className="flex items-center gap-5 p-5 rounded-2xl border mb-6"
-        style={{ background: "var(--panel)", borderColor: "var(--line)", boxShadow: "var(--shadow)" }}
+        className="flex items-center gap-5 p-5 rounded-2xl border mb-6 bg-panel border-line shadow-[var(--shadow)]"
       >
         {user.avatarUrl && (
           <img
             src={user.avatarUrl}
             alt={user.login}
-            className="rounded-full border-2 shrink-0"
-            style={{ width: 56, height: 56, borderColor: "var(--line)" }}
+            className="rounded-full border-2 shrink-0 w-[56px] h-[56px] border-line"
           />
         )}
         <div className="flex-1 min-w-0">
-          <h2 className="font-display text-xl font-extrabold truncate" style={{ color: "var(--ink-strong)" }}>{user.login}</h2>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
+          <h2 className="font-display text-xl font-extrabold truncate text-ink-strong">{user.login}</h2>
+          <p className="text-xs text-muted">
             Signed in via GitHub
           </p>
-          <p className="text-xs font-mono mt-1 select-all" style={{ color: "var(--muted)" }}>
+          <p className="text-xs font-mono mt-1 select-all text-muted">
             {user.id}
           </p>
         </div>
@@ -151,20 +142,14 @@ export function Profile() {
       <Section title="Appearance">
         <div className="flex flex-col gap-4">
           <div>
-            <label className="text-xs font-semibold block mb-2" style={{ color: "var(--muted)" }}>Theme</label>
+            <label className="text-xs font-semibold block mb-2 text-muted">Theme</label>
             <div className="flex gap-2 flex-wrap">
               {(["system", "light", "dark"] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setThemePref(t)}
-                  className="px-4 py-1.5 rounded-lg text-sm font-semibold border capitalize"
-                  style={{
-                    background: themePref === t ? "var(--accent)" : "transparent",
-                    color: themePref === t ? "#fff" : "var(--muted)",
-                    borderColor: themePref === t ? "var(--accent)" : "var(--line)",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold border capitalize ${(themePref === t ? "bg-accent" : "bg-transparent")} ${(themePref === t ? "text-white" : "text-muted")} ${(themePref === t ? "border-accent" : "border-line")} cursor-pointer font-[inherit]`}
+
                 >
                   {t}
                 </button>
@@ -172,20 +157,14 @@ export function Profile() {
             </div>
           </div>
           <div>
-            <label className="text-xs font-semibold block mb-2" style={{ color: "var(--muted)" }}>Text Size</label>
+            <label className="text-xs font-semibold block mb-2 text-muted">Text Size</label>
             <div className="flex gap-2 flex-wrap">
               {([["sm", "Small"], ["default", "Default"], ["lg", "Large"]] as const).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setTextSize(val)}
-                  className="px-4 py-1.5 rounded-lg text-sm font-semibold border"
-                  style={{
-                    background: textSize === val ? "var(--accent)" : "transparent",
-                    color: textSize === val ? "#fff" : "var(--muted)",
-                    borderColor: textSize === val ? "var(--accent)" : "var(--line)",
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold border ${(textSize === val ? "bg-accent" : "bg-transparent")} ${(textSize === val ? "text-white" : "text-muted")} ${(textSize === val ? "border-accent" : "border-line")} cursor-pointer font-[inherit]`}
+
                 >
                   {label}
                 </button>
@@ -199,7 +178,7 @@ export function Profile() {
       <Section title="Default AI Settings">
         <div className="flex flex-col gap-3">
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{ color: "var(--muted)" }}>Provider</label>
+            <label className="text-xs font-semibold block mb-1 text-muted">Provider</label>
             <select
               value={provider}
               onChange={(e) => {
@@ -207,8 +186,7 @@ export function Profile() {
                 const models = MODEL_OPTIONS[e.target.value];
                 if (models?.length) setModel(models[0].value);
               }}
-              className="w-full p-2.5 rounded-lg border text-sm"
-              style={{ background: "var(--paper)", borderColor: "var(--line)", color: "var(--ink)" }}
+              className="w-full p-2.5 rounded-lg border text-sm bg-paper border-line text-ink"
             >
               {PROVIDERS.map((p) => (
                 <option key={p.type} value={p.type}>{p.name}{p.free ? " (free)" : ""}</option>
@@ -216,12 +194,11 @@ export function Profile() {
             </select>
           </div>
           <div>
-            <label className="text-xs font-semibold block mb-1" style={{ color: "var(--muted)" }}>Model</label>
+            <label className="text-xs font-semibold block mb-1 text-muted">Model</label>
             <select
               value={model}
               onChange={(e) => setModel(e.target.value)}
-              className="w-full p-2.5 rounded-lg border text-sm"
-              style={{ background: "var(--paper)", borderColor: "var(--line)", color: "var(--ink)" }}
+              className="w-full p-2.5 rounded-lg border text-sm bg-paper border-line text-ink"
             >
               {(MODEL_OPTIONS[provider] || []).map((m) => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -241,20 +218,14 @@ export function Profile() {
         <Section title="Daily Usage">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm">API proxy calls today</span>
-            <span className="text-sm font-semibold" style={{ color: usage.used >= usage.limit ? "var(--danger)" : "var(--ink)" }}>
+            <span className={`text-sm font-semibold ${(usage.used >= usage.limit ? "text-danger" : "text-ink")}`} >
               {usage.used.toLocaleString()} / {usage.limit.toLocaleString()}
             </span>
           </div>
-          <div className="w-full rounded-full overflow-hidden" style={{ height: 6, background: "var(--line)" }}>
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${Math.min((usage.used / usage.limit) * 100, 100)}%`,
-                background: usage.used >= usage.limit * 0.9 ? "var(--danger)" : "var(--accent)",
-              }}
-            />
+          <div className="w-full rounded-full overflow-hidden h-[6px] bg-line">
+            <svg className="w-full h-full" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true"><rect width={Math.min((usage.used / usage.limit) * 100, 100)} height="6" rx="3" className={usage.used >= usage.limit * 0.9 ? "fill-danger" : "fill-accent"} /></svg>
           </div>
-          <p className="text-xs mt-2" style={{ color: "var(--muted)" }}>
+          <p className="text-xs mt-2 text-muted">
             Resets daily at midnight UTC. This caps how many API calls apps can make using your keys through the platform proxy.
           </p>
         </Section>
@@ -266,7 +237,7 @@ export function Profile() {
           <div className="flex justify-between items-center mb-3">
             <div>
               <span className="text-sm font-medium">Tap-to-speak</span>
-              <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              <p className="text-xs mt-0.5 text-muted">
                 Tap any chat message to hear it read aloud
               </p>
             </div>
@@ -275,7 +246,7 @@ export function Profile() {
           <div className="flex justify-between items-center mb-3">
             <div>
               <span className="text-sm font-medium">Auto-speak replies</span>
-              <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              <p className="text-xs mt-0.5 text-muted">
                 Read each assistant reply automatically when it finishes
               </p>
             </div>
@@ -283,12 +254,11 @@ export function Profile() {
           </div>
           {speech.voices.length > 0 && (
             <div>
-              <label className="text-xs font-semibold block mb-1" style={{ color: "var(--muted)" }}>Voice</label>
+              <label className="text-xs font-semibold block mb-1 text-muted">Voice</label>
               <select
                 value={speech.voiceURI ?? ""}
                 onChange={(e) => speech.setVoiceURI(e.target.value || null)}
-                className="w-full p-2.5 rounded-lg border text-sm"
-                style={{ background: "var(--paper)", borderColor: "var(--line)", color: "var(--ink)" }}
+                className="w-full p-2.5 rounded-lg border text-sm bg-paper border-line text-ink"
               >
                 <option value="">System default</option>
                 {speech.voices
@@ -300,8 +270,8 @@ export function Profile() {
               <button
                 onClick={() => speech.speak("preview", "Hi! This is how I'll read your messages.")}
                 disabled={!speech.enabled}
-                className="mt-2 text-xs font-semibold"
-                style={{ color: speech.enabled ? "var(--accent)" : "var(--muted)", background: "none", border: "none", cursor: speech.enabled ? "pointer" : "default" }}
+                className={`mt-2 text-xs font-semibold ${(speech.enabled ? "text-accent" : "text-muted")} bg-transparent border-0 ${(speech.enabled ? "cursor-pointer" : "[cursor:default]")}`}
+
               >
                 ▶ Preview voice
               </button>
@@ -316,33 +286,25 @@ export function Profile() {
           <div className="flex justify-between items-center">
             <div>
               <span className="text-sm font-medium">Push notifications</span>
-              <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              <p className="text-xs mt-0.5 text-muted">
                 Get notified when your build finishes
               </p>
             </div>
             <button
               onClick={notif.toggle}
-              className="relative w-11 h-6 rounded-full transition-colors shrink-0"
-              style={{
-                background: notif.enabled ? "var(--accent)" : "var(--line-strong)",
-                border: "none",
-                cursor: notif.permission === "denied" ? "not-allowed" : "pointer",
-                opacity: notif.permission === "denied" ? 0.5 : 1,
-              }}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${(notif.enabled ? "bg-accent" : "bg-(--line-strong)")} border-0 ${(notif.permission === "denied" ? "[cursor:not-allowed]" : "cursor-pointer")} ${(notif.permission === "denied" ? "opacity-[0.5]" : "opacity-[1]")}`}
+
               disabled={notif.permission === "denied"}
               title={notif.permission === "denied" ? "Notifications blocked in browser settings" : undefined}
             >
               <span
-                className="absolute top-0.5 w-5 h-5 rounded-full transition-transform"
-                style={{
-                  background: "white",
-                  left: notif.enabled ? 22 : 2,
-                }}
+                className={`absolute top-0.5 w-5 h-5 rounded-full transition-transform bg-white ${(notif.enabled ? "left-[22px]" : "left-0.5")}`}
+
               />
             </button>
           </div>
           {notif.permission === "denied" && (
-            <p className="text-xs mt-2" style={{ color: "var(--warning)" }}>
+            <p className="text-xs mt-2 text-warning">
               Notifications are blocked. Enable them in your browser settings for this site.
             </p>
           )}
@@ -350,17 +312,10 @@ export function Profile() {
       )}
 
       {/* Sign out — small, at bottom */}
-      <div className="mt-6 pt-4 text-center" style={{ borderTop: "1px solid var(--line)" }}>
+      <div className="mt-6 pt-4 text-center border-t border-line">
         <button
           onClick={signOut}
-          className="text-sm"
-          style={{
-            background: "none",
-            border: "none",
-            color: "var(--muted)",
-            cursor: "pointer",
-            fontFamily: "inherit",
-          }}
+          className="text-sm bg-transparent border-0 text-muted cursor-pointer font-[inherit]"
         >
           Sign out
         </button>
@@ -374,8 +329,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <div className="mb-6">
       <h3
-        className="text-sm font-bold uppercase mb-3 pb-2 border-b tracking-wide"
-        style={{ borderColor: "var(--line)", color: "var(--muted)" }}
+        className="text-sm font-bold uppercase mb-3 pb-2 border-b tracking-wide border-line text-muted"
       >
         {title}
       </h3>
@@ -389,18 +343,13 @@ function Toggle({ on, onToggle, disabled }: { on: boolean; onToggle: () => void;
     <button
       onClick={onToggle}
       disabled={disabled}
-      className="relative w-11 h-6 rounded-full transition-colors shrink-0"
-      style={{
-        background: on ? "var(--accent)" : "var(--line-strong)",
-        border: "none",
-        cursor: disabled ? "not-allowed" : "pointer",
-        opacity: disabled ? 0.5 : 1,
-      }}
+      className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${(on ? "bg-accent" : "bg-(--line-strong)")} border-0 ${(disabled ? "[cursor:not-allowed]" : "cursor-pointer")} ${(disabled ? "opacity-[0.5]" : "opacity-[1]")}`}
+
       aria-pressed={on}
     >
       <span
-        className="absolute top-0.5 w-5 h-5 rounded-full transition-transform"
-        style={{ background: "white", left: on ? 22 : 2 }}
+        className={`absolute top-0.5 w-5 h-5 rounded-full transition-transform bg-white ${(on ? "left-[22px]" : "left-0.5")}`}
+
       />
     </button>
   );

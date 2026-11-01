@@ -138,10 +138,10 @@ export function Create() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center" style={{ height: "100dvh" }}>
+      <div className="flex items-center justify-center h-[100dvh]">
         <div className="text-center">
-          <div className="inline-block w-6 h-6 border-2 rounded-full animate-spin mb-3" style={{ borderColor: "var(--line)", borderTopColor: "var(--accent)" }} />
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Loading...</p>
+          <div className="inline-block w-6 h-6 border-2 rounded-full animate-spin mb-3 border-line border-t-accent"  />
+          <p className="text-sm text-muted">Loading...</p>
         </div>
       </div>
     );
@@ -169,15 +169,15 @@ export function Create() {
     return (
       <>
         <Nav />
-        <main className="flex flex-col items-center justify-center text-center" style={{ minHeight: "60vh", padding: "4rem 1.5rem", maxWidth: 640, margin: "0 auto" }}>
-          <h1 className="font-display text-5xl font-extrabold tracking-tight mb-3" style={{ color: "var(--ink-strong)" }}>VibeCode</h1>
-          <p className="text-lg mb-8" style={{ color: "var(--muted)", maxWidth: 480 }}>
+        <main className="flex flex-col items-center justify-center text-center min-h-[60vh] p-[4rem_1.5rem] max-w-[640px] m-[0_auto]">
+          <h1 className="font-display text-5xl font-extrabold tracking-tight mb-3 text-ink-strong">VibeCode</h1>
+          <p className="text-lg mb-8 text-muted max-w-[480px]">
             Describe the app you want. An AI agent builds it, deploys it, and you get a live app on FreeAppStore — in minutes.
           </p>
-          <button onClick={signIn} className="inline-flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-white" style={{ background: "var(--accent)" }}>
+          <button onClick={signIn} className="inline-flex items-center gap-2 px-6 py-3 rounded-full font-semibold text-white bg-accent">
             Sign in with GitHub to start
           </button>
-          <p className="text-sm mt-3" style={{ color: "var(--muted)" }}>Sign in, add your AI provider key, and start building.</p>
+          <p className="text-sm mt-3 text-muted">Sign in, add your AI provider key, and start building.</p>
         </main>
       </>
     );
@@ -186,10 +186,10 @@ export function Create() {
   // Console view — My Apps with search
   if (view === "console") {
     return (
-      <div className="flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
+      <div className="flex flex-col h-[100dvh] overflow-hidden">
         <div className="shrink-0"><Nav /></div>
         {(openAppId || openError) && (
-          <p role="status" className="shrink-0 text-sm px-4 py-2" style={{ color: openError ? "var(--danger)" : "var(--muted)", borderBottom: "1px solid var(--line)" }}>
+          <p role="status" className={`shrink-0 text-sm px-4 py-2 ${(openError ? "text-danger" : "text-muted")} [border-bottom:1px_solid_var(--line)]`} >
             {openError ?? `Opening ${openAppId}…`}
           </p>
         )}
@@ -207,13 +207,13 @@ export function Create() {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "100dvh", overflow: "hidden" }}>
+    <div className="flex flex-col h-[100dvh] overflow-hidden">
       {/* Desktop nav */}
       <div className="hidden md:block shrink-0"><Nav /></div>
 
       {/* Mobile studio bar — single bar: back to apps · Code/Preview switch · settings */}
-      <div className="flex md:hidden shrink-0 items-center gap-2" style={{ padding: "0.4rem 0.5rem", borderBottom: "1px solid var(--line)", background: "var(--panel)" }}>
-        <button onClick={() => navigate("/")} title="Back to My Apps" aria-label="Back to My Apps" style={{ width: 40, height: 40, flexShrink: 0, background: "none", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", cursor: "pointer", color: "var(--ink)", fontSize: "1.1rem", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="flex md:hidden shrink-0 items-center gap-2 p-[0.4rem_0.5rem] border-b border-line bg-panel">
+        <button onClick={() => navigate("/")} title="Back to My Apps" aria-label="Back to My Apps" className="w-[40px] h-[40px] shrink-0 bg-transparent border border-line rounded-control-sm cursor-pointer text-ink text-[1.1rem] inline-flex items-center justify-center">
           &#8592;
         </button>
         <Segmented
@@ -222,7 +222,7 @@ export function Create() {
           options={[{ value: "chat", label: "Code" }, { value: "preview", label: previewUrl ? "Preview ●" : "Preview" }]}
         />
         <div className="shrink-0"><CopyLogButton agent={agent} provider={provider} model={model} /></div>
-        <button onClick={() => setSettingsOpen(!settingsOpen)} title="Settings" aria-label="Settings" aria-expanded={settingsOpen} style={{ width: 40, height: 40, flexShrink: 0, background: settingsOpen ? "var(--accent-soft)" : "none", border: `1px solid ${settingsOpen ? "var(--accent)" : "var(--line)"}`, borderRadius: "var(--radius-sm)", cursor: "pointer", color: settingsOpen ? "var(--accent)" : "var(--ink)", fontSize: "1.05rem", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+        <button onClick={() => setSettingsOpen(!settingsOpen)} title="Settings" aria-label="Settings" aria-expanded={settingsOpen} className={`w-10 h-10 shrink-0 border rounded-control-sm cursor-pointer text-[1.05rem] inline-flex items-center justify-center ${settingsOpen ? "bg-(--accent-soft) border-accent text-accent" : "bg-transparent border-line text-ink"}`}>
           &#9881;
         </button>
       </div>
@@ -231,7 +231,7 @@ export function Create() {
 
       <div className="grid flex-1 min-h-0 grid-cols-1 md:grid-cols-2">
         {/* Chat */}
-        <div className={`flex flex-col overflow-hidden border-r ${mobileTab !== "chat" ? "hidden md:flex" : ""}`} style={{ borderColor: "var(--line)" }}>
+        <div className={`${`flex flex-col overflow-hidden border-r ${mobileTab !== "chat" ? "hidden md:flex" : ""}`} border-line`} >
           {/* Desktop toolbar (mobile uses the studio bar above) */}
           <div className="hidden md:block">
             <Toolbar
@@ -243,20 +243,20 @@ export function Create() {
               onCreateProject={(name: string, appId?: string) => { const id = agent.createProject(name, appId); navigate(`/app/${id}`); }}
             />
           </div>
-          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2" style={{ minHeight: 0 }}>
+          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 min-h-0">
             <div className="flex-1" />
             {agent.historyError && agent.messages.length <= 1 ? (
               <div className="self-center text-center py-8">
                 <p className="text-sm font-semibold mb-1">Couldn't load this conversation</p>
-                <p className="text-xs mb-3" style={{ color: "var(--muted)" }}>Connection issue — your history is safe on the server.</p>
-                <button onClick={() => agent.retryHistory()} className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ background: "var(--accent)", border: "none", cursor: "pointer" }}>
+                <p className="text-xs mb-3 text-muted">Connection issue — your history is safe on the server.</p>
+                <button onClick={() => agent.retryHistory()} className="px-4 py-1.5 rounded-lg text-xs font-semibold text-white bg-accent border-0 cursor-pointer">
                   Retry
                 </button>
               </div>
             ) : agent.isLoadingHistory && agent.messages.length <= 1 ? (
               <div className="self-center text-center py-8">
-                <div className="inline-block w-5 h-5 border-2 rounded-full animate-spin mb-2" style={{ borderColor: "var(--line)", borderTopColor: "var(--accent)" }} />
-                <p className="text-xs" style={{ color: "var(--muted)" }}>Loading conversation…</p>
+                <div className="inline-block w-5 h-5 border-2 rounded-full animate-spin mb-2 border-line border-t-accent"  />
+                <p className="text-xs text-muted">Loading conversation…</p>
               </div>
             ) : (
               (() => {
@@ -267,8 +267,7 @@ export function Create() {
                     {start > 0 && (
                       <button
                         onClick={() => setVisibleCount((c) => c + 10)}
-                        className="self-center text-xs font-semibold mb-1 px-3 py-1.5 rounded-full"
-                        style={{ background: "var(--panel)", border: "1px solid var(--line)", color: "var(--muted)", cursor: "pointer" }}
+                        className="self-center text-xs font-semibold mb-1 px-3 py-1.5 rounded-full bg-panel border border-line text-muted cursor-pointer"
                       >
                         Load {Math.min(10, start)} older {start === 1 ? "message" : "messages"}
                       </button>
@@ -293,29 +292,27 @@ export function Create() {
             <div ref={messagesEndRef} />
           </div>
           {agent.queuedMessages.length > 0 && (
-            <section className="shrink-0" aria-label="Queued messages" style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--line)", background: "var(--panel)" }}>
-              <p className="text-xs font-semibold mb-2" style={{ color: "var(--muted)" }}>
+            <section className="shrink-0 p-[0.5rem_0.75rem] border-t border-line bg-panel" aria-label="Queued messages" >
+              <p className="text-xs font-semibold mb-2 text-muted">
                 {agent.queuedMessages.length} queued {agent.queuedMessages.length === 1 ? "message" : "messages"} · sends when the current response finishes
               </p>
-              <div className="flex flex-col gap-2" style={{ maxHeight: 180, overflowY: "auto" }}>
+              <div className="flex flex-col gap-2 max-h-[180px] [overflow-y:auto]">
                 {agent.queuedMessages.map((message, index) => (
-                  <div key={message.id} className="flex gap-2 items-start" style={{ padding: "0.45rem", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", background: "var(--paper)" }}>
-                    <span className="text-xs font-semibold shrink-0" aria-hidden style={{ color: "var(--muted)", paddingTop: "0.45rem" }}>{index + 1}</span>
+                  <div key={message.id} className="flex gap-2 items-start p-[0.45rem] border border-line rounded-control-sm bg-paper">
+                    <span className="text-xs font-semibold shrink-0 text-muted pt-[0.45rem]" aria-hidden >{index + 1}</span>
                     <textarea
                       value={message.content}
                       onChange={(e) => agent.editQueuedMessage(message.id, e.target.value)}
                       aria-label={`Queued message ${index + 1}`}
                       rows={2}
-                      className="flex-1 resize-y"
-                      style={{ minWidth: 0, border: "1px solid var(--line)", borderRadius: "0.35rem", padding: "0.35rem 0.45rem", background: "var(--panel)", color: "var(--ink)", fontFamily: "inherit", fontSize: "0.875rem" }}
+                      className="flex-1 resize-y min-w-0 border border-line rounded-[0.35rem] p-[0.35rem_0.45rem] bg-panel text-ink font-[inherit] text-[0.875rem]"
                     />
                     <button
                       type="button"
                       onClick={() => agent.deleteQueuedMessage(message.id)}
                       aria-label={`Remove queued message ${index + 1}`}
                       title="Remove from queue"
-                      className="text-xs font-semibold shrink-0"
-                      style={{ padding: "0.45rem", background: "none", border: "none", color: "var(--danger)", cursor: "pointer" }}
+                      className="text-xs font-semibold shrink-0 p-[0.45rem] bg-transparent border-0 text-danger cursor-pointer"
                     >
                       Remove
                     </button>
@@ -324,41 +321,40 @@ export function Create() {
               </div>
             </section>
           )}
-          <div className="flex gap-2 shrink-0" style={{ padding: "0.5rem 0.75rem", borderTop: "1px solid var(--line)", background: "var(--panel)" }}>
+          <div className="flex gap-2 shrink-0 p-[0.5rem_0.75rem] border-t border-line bg-panel">
             <textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
               placeholder="Build me a meditation timer..."
               rows={1}
-              className="flex-1 resize-none"
-              style={{ border: "1px solid var(--line)", borderRadius: "0.5rem", padding: "0.55rem 0.7rem", background: "var(--paper)", color: "var(--ink)", fontSize: "1rem", minHeight: 44, maxHeight: 120, fontFamily: "inherit" }}
+              className="flex-1 resize-none border border-line rounded-[0.5rem] p-[0.55rem_0.7rem] bg-paper text-ink text-[1rem] min-h-[44px] max-h-[120px] font-[inherit]"
             />
-            <button onClick={handleSend} className="self-end inline-flex items-center justify-center" title={agent.isStreaming ? "Add to queue" : "Send"} aria-label={agent.isStreaming ? "Add to queue" : "Send"} style={{ minHeight: 44, minWidth: 44, padding: "0.55rem 0.9rem", background: "var(--accent)", color: "white", border: "none", borderRadius: "var(--radius-sm)", fontWeight: 600, fontSize: "1.1rem", cursor: "pointer" }}>
+            <button onClick={handleSend} className="self-end inline-flex items-center justify-center min-h-[44px] min-w-[44px] p-[0.55rem_0.9rem] bg-accent text-white border-0 rounded-control-sm font-[600] text-[1.1rem] cursor-pointer" title={agent.isStreaming ? "Add to queue" : "Send"} aria-label={agent.isStreaming ? "Add to queue" : "Send"} >
               <span aria-hidden>↑</span>
             </button>
           </div>
         </div>
         {/* Preview */}
         <div className={`flex flex-col overflow-hidden ${mobileTab !== "preview" ? "hidden md:flex" : ""}`}>
-          <div className="flex items-center gap-2 shrink-0" style={{ padding: "0.35rem 0.75rem", borderBottom: "1px solid var(--line)", background: "var(--panel)", fontSize: "0.78rem" }}>
+          <div className="flex items-center gap-2 shrink-0 p-[0.35rem_0.75rem] border-b border-line bg-panel text-[0.78rem]">
             {previewUrl ? (
               <>
                 {/* The URL is the open affordance — opens in a new tab. No separate "Open" button. */}
-                <a href={previewUrl} target="_blank" rel="noopener" className="text-xs truncate" style={{ color: "var(--accent)", fontFamily: "monospace", minWidth: 0, flex: 1 }}>
+                <a href={previewUrl} target="_blank" rel="noopener" className="text-xs truncate text-accent font-[monospace] min-w-0 flex-1">
                   {previewUrl.replace("https://", "")} ↗
                 </a>
                 {appId && (
-                  <button onClick={() => navigate(`/app/${appId}/keys`)} title="Manage this app's API keys" className="text-xs font-semibold shrink-0" style={{ color: "var(--muted)", background: "none", border: "none", cursor: "pointer" }}>APIs</button>
+                  <button onClick={() => navigate(`/app/${appId}/keys`)} title="Manage this app's API keys" className="text-xs font-semibold shrink-0 text-muted bg-transparent border-0 cursor-pointer">APIs</button>
                 )}
                 {publishResult ? (
-                  <a href={publishResult.url} target="_blank" rel="noopener" className="text-xs px-2 py-0.5 rounded-full font-semibold shrink-0" style={{ background: "var(--success)", color: "white", textDecoration: "none" }}>Live</a>
+                  <a href={publishResult.url} target="_blank" rel="noopener" className="text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 bg-success text-white no-underline">Live</a>
                 ) : (
-                  <button onClick={() => setPublishOpen(true)} className="text-xs px-2 py-0.5 rounded-full font-semibold shrink-0" style={{ background: "var(--accent)", color: "white", border: "none", cursor: "pointer" }}>Publish</button>
+                  <button onClick={() => setPublishOpen(true)} className="text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 bg-accent text-white border-0 cursor-pointer">Publish</button>
                 )}
               </>
             ) : (
-              <span className="text-xs" style={{ color: "var(--muted)" }}>No preview yet</span>
+              <span className="text-xs text-muted">No preview yet</span>
             )}
           </div>
           <DeployStatusBar
@@ -370,16 +366,16 @@ export function Create() {
             onSwitchToChat={() => setMobileTab("chat")}
           />
           {publishResult && (
-            <div className="flex items-center gap-2 shrink-0 text-xs" style={{ padding: "0.35rem 0.75rem", background: "color-mix(in srgb, var(--success) 10%, var(--panel))", borderBottom: "1px solid var(--line)" }}>
-              <span style={{ color: "var(--success)" }}>●</span>
-              <span>Published at <a href={publishResult.url} target="_blank" rel="noopener" className="font-semibold" style={{ color: "var(--accent)" }}>{publishResult.url.replace("https://", "")}</a></span>
-              {publishResult.audit && <span style={{ color: "var(--muted)" }}>· Audit: {publishResult.audit.pass} pass{publishResult.audit.fail > 0 ? `, ${publishResult.audit.fail} fail` : ""}</span>}
+            <div className="flex items-center gap-2 shrink-0 text-xs p-[0.35rem_0.75rem] bg-[color-mix(in_srgb,_var(--success)_10%,_var(--panel))] border-b border-line">
+              <span className="text-success">●</span>
+              <span>Published at <a href={publishResult.url} target="_blank" rel="noopener" className="font-semibold text-accent">{publishResult.url.replace("https://", "")}</a></span>
+              {publishResult.audit && <span className="text-muted">· Audit: {publishResult.audit.pass} pass{publishResult.audit.fail > 0 ? `, ${publishResult.audit.fail} fail` : ""}</span>}
             </div>
           )}
-          <div className="flex-1 flex items-center justify-center" style={{ background: "#0f0f0f", minHeight: 0, overflow: "hidden" }}>
-            {showPreview ? <iframe src={previewUrl} title="Preview" sandbox="allow-scripts allow-same-origin" className="w-full h-full border-0" style={{ background: "#0f0f0f" }} /> :
+          <div className="flex-1 flex items-center justify-center bg-(--paper-deep) min-h-0 overflow-hidden">
+            {showPreview ? <iframe src={previewUrl} title="Preview" sandbox="allow-scripts allow-same-origin" className="w-full h-full border-0 bg-(--paper-deep)"  /> :
              agent.deployState ? <DeployLog state={agent.deployState} /> :
-             <div className="text-center p-8" style={{ color: "var(--muted)" }}><p>Your app will appear here once deployed.</p></div>}
+             <div className="text-center p-8 text-muted"><p>Your app will appear here once deployed.</p></div>}
           </div>
         </div>
       </div>
