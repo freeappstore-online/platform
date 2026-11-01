@@ -86,6 +86,16 @@ describe('app-host release check (#308)', () => {
     expect(localScriptSrc(html('<script type="module" src="/assets/index-abc.js"></script>'))).toBe(
       '/assets/index-abc.js',
     );
+    expect(
+      localScriptSrc(
+        html('<script type="module" crossorigin src="./assets/index-Clnup1Bp.js"></script>'),
+      ),
+    ).toBe('./assets/index-Clnup1Bp.js');
+    expect(localScriptSrc(html('<script src="beacon.min.js"></script>'))).toBeNull();
+    expect(localScriptSrc(html('<script src="./registerSW.js"></script>'))).toBeNull();
+    expect(
+      localScriptSrc(html('<script src="https://cdn.example/assets/index.js"></script>')),
+    ).toBeNull();
   });
 
   it('passes a fleet whose roots, assets, console, and unknown host answer', async () => {
@@ -100,6 +110,26 @@ describe('app-host release check (#308)', () => {
     expect(result.ok).toBe(true);
     expect(result.checkedRoots).toBe(3);
     expect(result.checkedAssets).toBe(2);
+  });
+
+  it('follows the console relative ./assets bundle to the console origin', async () => {
+    const seen: string[] = [];
+    const result = await verifyAppHost({
+      fetch: async (url: string) => {
+        const target = String(url);
+        seen.push(target);
+        if (target === 'https://console.freeappstore.online/') {
+          return page(
+            html('<script type="module" crossorigin src="./assets/index-Clnup1Bp.js"></script>'),
+          );
+        }
+        return routed(target);
+      },
+      log: () => {},
+    });
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+    expect(seen).toContain('https://console.freeappstore.online/assets/index-Clnup1Bp.js');
   });
 
   it('fails when every hosted app is the unmigrated worker exception', async () => {

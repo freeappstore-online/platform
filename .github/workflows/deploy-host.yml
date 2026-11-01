@@ -11,6 +11,7 @@ on:
       - 'workers/host/**'
       - 'config/monitoring-fixtures.json'
       - '.github/workflows/deploy-host.yml'
+      - 'scripts/verify-app-host.mjs'
   workflow_dispatch:
 
 permissions:

@@ -35,7 +35,10 @@ export function localScriptSrc(html) {
   const pattern = /<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi;
   for (const match of String(html).matchAll(pattern)) {
     const src = match[1];
-    if (src.startsWith('/assets/') && src.endsWith('.js')) return src;
+    // App hosts emit `/assets/….js`. The console emits `./assets/….js`: Vite's
+    // relative base, so the same HTML works at console.freeappstore.online/
+    // and at freeappstore.online/app/.
+    if (/^(?:\.\/|\/)assets\/[^/?#]+\.js(?:[?#].*)?$/.test(src)) return src;
   }
   return null;
 }
