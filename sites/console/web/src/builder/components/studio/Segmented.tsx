@@ -5,7 +5,7 @@ export function Segmented<T extends string>({ value, onChange, options }: {
   options: { value: T; label: string }[];
 }) {
   return (
-    <div className="flex flex-1" style={{ background: "var(--panel-alt)", border: "1px solid var(--line)", borderRadius: "var(--radius)", padding: 3, gap: 3, minWidth: 0 }}>
+    <div className="flex min-w-0 flex-1 gap-[3px] rounded-control border border-line bg-panel-alt p-[3px]">
       {options.map((o) => {
         const active = value === o.value;
         return (
@@ -13,15 +13,7 @@ export function Segmented<T extends string>({ value, onChange, options }: {
             key={o.value}
             onClick={() => onChange(o.value)}
             aria-pressed={active}
-            className="flex-1 font-semibold"
-            style={{
-              minHeight: 36, fontSize: "0.85rem", border: "none", cursor: "pointer",
-              borderRadius: "calc(var(--radius) - 3px)",
-              background: active ? "var(--panel)" : "transparent",
-              color: active ? "var(--ink-strong)" : "var(--muted)",
-              boxShadow: active ? "var(--shadow)" : "none",
-              transition: "background 0.15s ease, color 0.15s ease",
-            }}
+            className={`min-h-9 flex-1 cursor-pointer rounded-[calc(var(--radius)-3px)] border-none text-[0.85rem] font-semibold transition-[background,color] duration-150 ease-[ease] ${active ? "bg-panel text-ink-strong shadow-control" : "bg-transparent text-muted shadow-none"}`}
           >
             {o.label}
           </button>

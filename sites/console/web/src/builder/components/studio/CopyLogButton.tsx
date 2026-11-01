@@ -4,7 +4,6 @@ import type { Agent } from "../../hooks/useAgent";
 /** Copies the current conversation as JSON — handy for bug reports. */
 export function CopyLogButton({ agent, provider, model }: { agent: Agent; provider: string; model: string }) {
   const [copied, setCopied] = useState(false);
-  const btn: React.CSSProperties = { background: "none", border: "1px solid var(--line)", borderRadius: "var(--radius-sm)", minWidth: 40, minHeight: 40, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: copied ? "var(--success)" : "var(--muted)", fontSize: "0.9rem" };
 
   async function copy() {
     const json = JSON.stringify({
@@ -20,5 +19,5 @@ export function CopyLogButton({ agent, provider, model }: { agent: Agent; provid
     setTimeout(() => setCopied(false), 1500);
   }
 
-  return <button onClick={copy} title="Copy conversation as JSON" style={btn}>{copied ? "✓" : "📋"}</button>;
+  return <button onClick={copy} title="Copy conversation as JSON" className={`inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center rounded-control-sm border border-line bg-transparent text-[0.9rem] ${copied ? "text-success" : "text-muted"}`}>{copied ? "✓" : "📋"}</button>;
 }

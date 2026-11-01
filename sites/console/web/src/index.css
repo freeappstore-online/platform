@@ -1,5 +1,20 @@
 @import "tailwindcss";
 
+@source "../node_modules/@freeappstore/sdk/dist";
+@source "../../node_modules/@freeappstore/sdk/dist";
+
+@theme inline {
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-success: var(--success);
+  --color-panel: var(--panel);
+  --color-panel-alt: var(--panel-alt);
+  --color-ink-strong: var(--ink-strong);
+  --radius-control-sm: var(--radius-sm);
+  --radius-control: var(--radius);
+  --shadow-control: var(--shadow);
+}
+
 @layer base {
 
 :root {
