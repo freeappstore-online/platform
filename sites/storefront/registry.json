@@ -2676,6 +2676,22 @@
           "reason": "Record audio from a tab you choose in the browser picker."
         }
       ]
+    },
+    {
+      "id": "e2e-canary-mvy4wh1epilr",
+      "name": "e2e-canary-mvy4wh1epilr",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Automated production platform e2e canary — auto-removed at end of run.",
+      "appUrl": "https://e2e-canary-mvy4wh1epilr.freeappstore.online",
+      "repo": "freeappstore-online/e2e-canary-mvy4wh1epilr",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-01T17:59:13.178Z",
+      "creatorGithub": "serge-the-dev"
     }
   ]
 }
