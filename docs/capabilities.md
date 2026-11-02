@@ -13,7 +13,12 @@ live app every 30 minutes by the prod smoke workflow.
 ## Permissions-Policy
 
 Every feature below is granted to **your app's own origin** (`=(self)`). Cross-origin iframes your app
-embeds don't receive them, even with an `allow` attribute.
+embeds don't receive them, even with an `allow` attribute, except the low-risk media features
+(`fullscreen`, `autoplay`, `picture-in-picture`, `encrypted-media`, `gamepad`, `clipboard-write`).
+Those are `=*`: any origin the app embeds can use them once the iframe has the matching `allow`
+attribute. That is how YouTube, Vimeo, Spotify, SoundCloud, CodePen and similar players get
+fullscreen, autoplay and DRM ([#288](https://github.com/freeappstore-online/platform/issues/288)).
+Camera, microphone, location, sensors and device APIs stay `(self)`.
 
 | Capability | API | Used by | State |
 |---|---|---|---|
@@ -23,13 +28,13 @@ embeds don't receive them, even with an `allow` attribute.
 | Motion & orientation sensors | `DeviceOrientationEvent`, `DeviceMotionEvent`, Generic Sensor API (accelerometer, gyroscope, magnetometer, ambient light) | compasses, spirit levels, tilt games, step counters | allowed |
 | MIDI | `navigator.requestMIDIAccess()` | synths, drum pads, music learning | allowed |
 | USB, serial, HID, Bluetooth | `navigator.usb` / `.serial` / `.hid` / `.bluetooth` | firmware flashers, Arduino tools, controllers, BLE heart-rate | allowed |
-| Gamepad | `navigator.getGamepads()` | games, controller testers | allowed |
+| Gamepad | `navigator.getGamepads()` | games, controller testers | allowed (also in cross-origin embeds) |
 | Screen capture | `getDisplayMedia()` | screen recorders, sharing | allowed |
-| Clipboard read & write | `navigator.clipboard` | editors, paste-in tools | allowed |
+| Clipboard read & write | `navigator.clipboard` | editors, paste-in tools | allowed (write also in cross-origin embeds) |
 | Passkeys | WebAuthn `navigator.credentials` | app-level sign-in | allowed |
 | Screen wake lock | `navigator.wakeLock` | timers, recipes, workouts | allowed |
-| Fullscreen, picture-in-picture | `requestFullscreen()`, `requestPictureInPicture()` | games, video | allowed |
-| Autoplay, encrypted media | `<audio>`/`<video>` autoplay, EME | sound apps, media players | allowed |
+| Fullscreen, picture-in-picture | `requestFullscreen()`, `requestPictureInPicture()` | games, video | allowed (also in cross-origin embeds) |
+| Autoplay, encrypted media | `<audio>`/`<video>` autoplay, EME | sound apps, media players | allowed (also in cross-origin embeds) |
 | Web Share | `navigator.share()` | sharing results | allowed |
 | Idle detection, local fonts, storage access, window management, WebXR | respective APIs | design tools, multi-screen, AR/VR | allowed |
 | Payments | Payment Request API, Apple Pay | checkout, tips | **blocked**: FreeAppStore apps take no payments ([#289](https://github.com/freeappstore-online/platform/issues/289)) |
@@ -42,7 +47,8 @@ ones that prompt in your manifest so your listing explains them: see [Permission
 **Inside the storefront preview** (the phone frame on an app's listing, the homepage preview and
 the quality dashboard), the same features work. The storefront delegates every feature above to
 `*.freeappstore.online` app origins through its Permissions-Policy and the preview iframe's `allow`
-attribute. Users still get an **Open in new tab** link. One difference: the browser's permission
+attribute, and wildcards the same media features as the host so a nested player can fullscreen
+in the preview too. Users still get an **Open in new tab** link. One difference: the browser's permission
 prompt in the preview names freeappstore.online, the page the user is on, and a grant there is
 separate from a grant in the app's own tab.
 
@@ -55,7 +61,7 @@ separate from a grant in the app's own tab.
 | Web Workers and Service Workers from your origin, `blob:` workers (pdf.js, ffmpeg.wasm, Monaco, emscripten) | allowed |
 | `fetch`/XHR to your origin, any `https:` API, `wss:` websockets, `data:` and `blob:` URLs | allowed |
 | Images, media, fonts from your origin, `https:`, `data:`, `blob:` | allowed |
-| Embedding `https:` iframes in your app | allowed (they don't get the features above; see [#288](https://github.com/freeappstore-online/platform/issues/288) for media players) |
+| Embedding `https:` iframes in your app | allowed. Put `allow="fullscreen; autoplay; encrypted-media; picture-in-picture; clipboard-write"` on media-player iframes so they can fullscreen, autoplay and play DRM ([#288](https://github.com/freeappstore-online/platform/issues/288)). Camera, mic, location and device APIs stay on your origin. |
 | Plain `http:` requests | upgraded to `https:` |
 | `<object>`/`<embed>` plugins | blocked: obsolete plugin content, a common script-injection vector |
 | Your app framed by other sites | blocked: only `freeappstore.online` and its subdomains may frame your app, which prevents clickjacking |

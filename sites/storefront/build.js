@@ -102,16 +102,26 @@ const PREVIEW_FEATURES = [
   'screen-wake-lock', 'serial', 'storage-access', 'usb', 'web-share',
   'window-management', 'xr-spatial-tracking',
 ];
+// Low-risk media features a nested YouTube/Vimeo/Spotify/CodePen iframe may
+// use (#288). Same set as workers/host PERMISSIONS_POLICY_EMBED. `=*` on the
+// storefront header plus `feature *` on the preview iframe so the nested
+// player can fullscreen/autoplay/DRM the same way it does in the app's tab.
+const EMBED_FEATURES = new Set([
+  'autoplay', 'clipboard-write', 'encrypted-media', 'fullscreen', 'gamepad',
+  'picture-in-picture',
+]);
 const APP_ORIGINS = '"https://*.freeappstore.online"';
 // Blocked, as on the app host: the Topics API (shares ad interests with third
 // parties) and payments (FreeAppStore apps take no payments, #289).
 const STOREFRONT_PERMISSIONS_POLICY = [
-  ...PREVIEW_FEATURES.map((f) => `${f}=(self ${APP_ORIGINS})`),
+  ...PREVIEW_FEATURES.map((f) => (EMBED_FEATURES.has(f) ? `${f}=*` : `${f}=(self ${APP_ORIGINS})`)),
   'browsing-topics=()',
   'payment=()',
 ].join(', ');
-// `allow` value for preview iframes: each feature defaults to the iframe's src origin.
-const PREVIEW_ALLOW = PREVIEW_FEATURES.join('; ');
+// `allow` value for preview iframes. Embed features use `*` so a YouTube
+// player nested inside the framed app inherits them; everything else stays
+// the iframe's src origin.
+const PREVIEW_ALLOW = PREVIEW_FEATURES.map((f) => (EMBED_FEATURES.has(f) ? `${f} *` : f)).join('; ');
 
 const indexTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'index.html'), 'utf8'));
 const detailTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'app-detail.html'), 'utf8'));

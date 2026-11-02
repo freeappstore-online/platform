@@ -128,6 +128,11 @@ function xmlEscape(value: string): string {
  * delete a working feature) and protects nobody. `(self)` grants the app's own
  * origin but not cross-origin iframes it embeds.
  *
+ * Low-risk media features in PERMISSIONS_POLICY_EMBED are `=*` instead (#288),
+ * so a YouTube / Vimeo / Spotify / CodePen iframe the app embeds can
+ * fullscreen, autoplay, and play DRM once the iframe has `allow`. Camera,
+ * microphone, location, sensors and device APIs stay `(self)`.
+ *
  * Only names Chromium recognises are listed: an unknown name logs a console
  * error on every page load of every app.
  *
@@ -169,11 +174,34 @@ export const PERMISSIONS_POLICY_SELF = [
   "xr-spatial-tracking",
 ] as const;
 
+/**
+ * Features a hosted app may delegate to cross-origin embeds (#288).
+ *
+ * `=*` rather than an origin allowlist: the app still opts in per iframe via
+ * `allow`, none of these reach camera / mic / location / user identity, and
+ * an origin list would miss CodePen, itch.io, Twitch, and YouTube's
+ * nocookie / music hosts. Sensor, capture and device features stay `(self)`.
+ */
+export const PERMISSIONS_POLICY_EMBED = [
+  "autoplay",
+  "clipboard-write",
+  "encrypted-media",
+  "fullscreen",
+  "gamepad",
+  "picture-in-picture",
+] as const;
+
 export const PERMISSIONS_POLICY_BLOCKED = ["browsing-topics", "payment"] as const;
+
+const EMBED_FEATURES = new Set<string>(PERMISSIONS_POLICY_EMBED);
+
+function allowlistFor(feature: string): string {
+  return EMBED_FEATURES.has(feature) ? "*" : "(self)";
+}
 
 function permissionsPolicy(crossOriginIsolated: boolean): string {
   const self = crossOriginIsolated ? [...PERMISSIONS_POLICY_SELF, "cross-origin-isolated"] : PERMISSIONS_POLICY_SELF;
-  return [...self.map((f) => `${f}=(self)`), ...PERMISSIONS_POLICY_BLOCKED.map((f) => `${f}=()`)].join(", ");
+  return [...self.map((f) => `${f}=${allowlistFor(f)}`), ...PERMISSIONS_POLICY_BLOCKED.map((f) => `${f}=()`)].join(", ");
 }
 
 const PERMISSIONS_POLICY = permissionsPolicy(false);

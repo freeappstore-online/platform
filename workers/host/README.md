@@ -33,6 +33,12 @@ broken JS bundles or images don't silently serve HTML).
 CSP, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, and HSTS are
 emitted from this Worker. Apps no longer need their own `_headers` file —
 policy is centralized here. Cache: 60s for HTML, 1 year immutable for assets.
+Permissions-Policy grants most features to the app origin (`=(self)`). Low-risk
+media features (`fullscreen`, `autoplay`, `picture-in-picture`,
+`encrypted-media`, `gamepad`, `clipboard-write`) are `=*` so an embedded
+YouTube / Vimeo / Spotify / CodePen player can fullscreen, autoplay and play
+DRM when the iframe has `allow` (#288). Camera, mic, location and devices stay
+`(self)`.
 
 Cross-origin isolation (COOP `same-origin` + COEP `credentialless`) is **off
 by default**. An app opts in with `"crossOriginIsolated": true` in `fas.json`;

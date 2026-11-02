@@ -72,6 +72,10 @@ describe("serving an app: D1 routes row → R2 object", () => {
     for (const f of ["microphone", "camera", "geolocation", "midi", "gyroscope", "accelerometer", "usb"]) {
       expect(pp).toContain(`${f}=(self)`);
     }
+    // Media embeds (YouTube/Vimeo/Spotify) get fullscreen/autoplay/DRM (#288).
+    for (const f of ["fullscreen", "autoplay", "encrypted-media", "picture-in-picture", "gamepad", "clipboard-write"]) {
+      expect(pp).toContain(`${f}=*`);
+    }
     // FreeAppStore apps take no payments (#289).
     expect(pp).toContain("payment=()");
     // Isolation is opt-in (#286). A default app must not send COOP/COEP.

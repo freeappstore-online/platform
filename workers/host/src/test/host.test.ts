@@ -4,6 +4,9 @@ import {
   crawlAssetResponse,
   etagsMatch,
   isImmutablePath,
+  PERMISSIONS_POLICY_BLOCKED,
+  PERMISSIONS_POLICY_EMBED,
+  PERMISSIONS_POLICY_SELF,
   type Route,
   r2KeyFor,
   resolveRoute,
@@ -221,45 +224,42 @@ describe("securityHeaders", () => {
   });
 
   // #284 default-open: every feature on the app's own origin, one written block.
-  it.each([
-    "accelerometer",
-    "ambient-light-sensor",
-    "autoplay",
-    "bluetooth",
-    "camera",
-    "clipboard-read",
-    "clipboard-write",
-    "display-capture",
-    "encrypted-media",
-    "fullscreen",
-    "gamepad",
-    "geolocation",
-    "gyroscope",
-    "hid",
-    "idle-detection",
-    "local-fonts",
-    "magnetometer",
-    "microphone",
-    "midi",
-    "picture-in-picture",
-    "publickey-credentials-create",
-    "publickey-credentials-get",
-    "screen-wake-lock",
-    "serial",
-    "storage-access",
-    "usb",
-    "web-share",
-    "window-management",
-    "xr-spatial-tracking",
-  ])("Permissions-Policy grants %s to the app's own origin", (feature) => {
+  // #288: low-risk media features are `=*` so YouTube/Vimeo/Spotify/CodePen
+  // iframes the app embeds can fullscreen, autoplay, and play DRM.
+  const embed = new Set<string>(PERMISSIONS_POLICY_EMBED);
+  it.each(PERMISSIONS_POLICY_SELF.filter((feature) => !embed.has(feature)))(
+    "Permissions-Policy grants %s to the app's own origin",
+    (feature) => {
+      const entries = (html.get("permissions-policy") ?? "").split(", ");
+      expect(entries).toContain(`${feature}=(self)`);
+    },
+  );
+
+  it.each([...PERMISSIONS_POLICY_EMBED])("Permissions-Policy grants %s to the app and to embedded media origins (#288)", (feature) => {
     const entries = (html.get("permissions-policy") ?? "").split(", ");
-    expect(entries).toContain(`${feature}=(self)`);
+    expect(entries).toContain(`${feature}=*`);
+    expect(entries).not.toContain(`${feature}=(self)`);
+  });
+
+  it("embed features are a subset of the default-open list (#288)", () => {
+    const self = new Set<string>(PERMISSIONS_POLICY_SELF);
+    for (const feature of PERMISSIONS_POLICY_EMBED) {
+      expect(self.has(feature)).toBe(true);
+    }
+  });
+
+  it("does not wildcard camera, microphone, location, or device features (#288)", () => {
+    const entries = (html.get("permissions-policy") ?? "").split(", ");
+    for (const feature of ["camera", "microphone", "geolocation", "usb", "serial", "hid", "bluetooth", "display-capture"]) {
+      expect(entries).toContain(`${feature}=(self)`);
+    }
   });
 
   it("Permissions-Policy blocks only the Topics API (no tracking) and payments (#289)", () => {
     const entries = (html.get("permissions-policy") ?? "").split(", ");
-    expect(entries.filter((e) => e.endsWith("=()"))).toEqual(["browsing-topics=()", "payment=()"]);
+    expect(entries.filter((e) => e.endsWith("=()"))).toEqual(PERMISSIONS_POLICY_BLOCKED.map((f) => `${f}=()`));
     expect(entries).not.toContain("payment=(self)");
+    expect(entries).not.toContain("payment=*");
     // interest-cohort (FLoC) is unrecognised by current Chrome and logged a
     // console error on every page load.
     expect(entries.some((e) => e.startsWith("interest-cohort"))).toBe(false);
@@ -302,6 +302,7 @@ describe("securityHeaders", () => {
     // Other default-open grants stay in place.
     expect(entries).toContain("microphone=(self)");
     expect(entries).toContain("camera=(self)");
+    expect(entries).toContain("fullscreen=*");
   });
 });
 

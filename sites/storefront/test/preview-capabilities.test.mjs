@@ -1,11 +1,12 @@
 /**
- * Storefront previews get every capability the app host grants (#284).
+ * Storefront previews get every capability the app host grants (#284, #288).
  *
  * Owner decision (2026-10-20): the storefront preview must work too. The
  * storefront's Permissions-Policy allows each feature for itself and the
  * *.freeappstore.online app origins, and every preview iframe delegates the
- * features with `allow`. That replaced the #272 "mic isn't available in the
- * preview" banner, which is retired.
+ * features with `allow`. Low-risk media features are `=*` so a nested
+ * YouTube/Vimeo/Spotify player can fullscreen and play DRM. That replaced
+ * the #272 "mic isn't available in the preview" banner, which is retired.
  */
 
 import { test } from "node:test";
@@ -22,12 +23,21 @@ const BUILD_JS = join(ROOT, "build.js");
 const HOST_TS = join(ROOT, "..", "..", "workers", "host", "src", "host.ts");
 
 
+function hostConstList(name) {
+  const src = readFileSync(HOST_TS, "utf8");
+  const list = src.match(new RegExp(`${name} = \\[([\\s\\S]*?)\\] as const`))?.[1];
+  assert.ok(list, `host.ts must export ${name}`);
+  return [...list.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+}
+
 /** The features the app host grants each app on its own origin. */
 function hostFeatures() {
-  const src = readFileSync(HOST_TS, "utf8");
-  const list = src.match(/PERMISSIONS_POLICY_SELF = \[([\s\S]*?)\] as const/)?.[1];
-  assert.ok(list, "host.ts must export PERMISSIONS_POLICY_SELF");
-  return [...list.matchAll(/"([a-z-]+)"/g)].map((m) => m[1]);
+  return hostConstList("PERMISSIONS_POLICY_SELF");
+}
+
+/** Low-risk media features the host delegates to cross-origin embeds (#288). */
+function hostEmbedFeatures() {
+  return hostConstList("PERMISSIONS_POLICY_EMBED");
 }
 
 function validApp(overrides) {
@@ -79,8 +89,16 @@ test("registry lists permissions instead of the old #272 microphone flag", () =>
 
 test("preview iframes delegate every host capability, and the storefront policy lets them through", () => {
   const features = hostFeatures();
+  const embed = hostEmbedFeatures();
+  const embedSet = new Set(embed);
+  const expectedAllow = features.map((f) => (embedSet.has(f) ? `${f} *` : f));
   assert.ok(features.includes("microphone") && features.length > 20, "host feature list parsed");
   assert.ok(!features.includes("payment"), "the host never grants payment (#289)");
+  assert.deepEqual(
+    embed,
+    ["autoplay", "clipboard-write", "encrypted-media", "fullscreen", "gamepad", "picture-in-picture"],
+    "host media-embed list (#288)",
+  );
   const { tmp, dist } = runBuild([
     validApp({ id: "echoshift", name: "echoshift", appUrl: "https://echoshift.freeappstore.online", microphone: true }),
     validApp({ id: "calculator", name: "Calculator", appUrl: "https://calculator.freeappstore.online" }),
@@ -96,7 +114,7 @@ test("preview iframes delegate every host capability, and the storefront policy 
       ["listing", allowOf(listing, 'src="https://echoshift')],
       ["homepage", allowOf(indexHtml, 'id="previewFrame"')],
     ]) {
-      assert.deepEqual(frame.allow, features, `${name} preview must delegate exactly the host features`);
+      assert.deepEqual(frame.allow, expectedAllow, `${name} preview must delegate exactly the host features`);
       // Without allow-same-origin the framed app gets an opaque origin, which
       // never matches the delegation allowlist (and loses its own storage).
       assert.match(frame.tag, /sandbox="[^"]*allow-same-origin/, `${name} preview keeps allow-same-origin`);
@@ -104,15 +122,22 @@ test("preview iframes delegate every host capability, and the storefront policy 
 
     // /quality frames are built client-side from the embedded registry.
     const qualityData = JSON.parse(quality.match(/id="q-registry">([^<]*)</)[1]);
-    assert.deepEqual(qualityData.previewAllow.split("; "), features, "quality frames delegate the host features");
+    assert.deepEqual(qualityData.previewAllow.split("; "), expectedAllow, "quality frames delegate the host features");
     assert.match(readFileSync(join(ROOT, "quality.js"), "utf8"), /allow="\$\{esc\(loadRegistry\(\)\.previewAllow/);
 
-    // Storefront policy: each feature for self + app origins; Topics API and payments blocked (#289).
+    // Storefront policy: each feature for self + app origins, except #288
+    // media features which are `=*` so a nested YouTube player can
+    // fullscreen. Topics API and payments blocked (#289).
     const pp = headers.match(/Permissions-Policy: ([^\n]*)/)?.[1] ?? "";
+    const ppEntries = pp.split(", ");
     for (const f of features) {
-      assert.ok(pp.split(", ").includes(`${f}=(self "https://*.freeappstore.online")`), `storefront policy must allow ${f}`);
+      if (embedSet.has(f)) {
+        assert.ok(ppEntries.includes(`${f}=*`), `storefront policy must wildcard ${f} for nested media (#288)`);
+      } else {
+        assert.ok(ppEntries.includes(`${f}=(self "https://*.freeappstore.online")`), `storefront policy must allow ${f}`);
+      }
     }
-    assert.deepEqual(pp.split(", ").filter((e) => e.endsWith("=()")), ["browsing-topics=()", "payment=()"]);
+    assert.deepEqual(ppEntries.filter((e) => e.endsWith("=()")), ["browsing-topics=()", "payment=()"]);
     for (const [name, frame] of [["listing", allowOf(listing, 'src="https://echoshift')], ["homepage", allowOf(indexHtml, 'id="previewFrame"')]]) {
       assert.ok(!frame.allow.includes("payment"), `${name} preview must not delegate payment`);
     }

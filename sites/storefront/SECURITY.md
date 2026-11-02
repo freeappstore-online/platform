@@ -33,21 +33,29 @@ Referrer-Policy: strict-origin-when-cross-origin
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 Cross-Origin-Opener-Policy: same-origin
 Permissions-Policy: <feature>=(self "https://*.freeappstore.online") for every
-                    feature in build.js PREVIEW_FEATURES; browsing-topics=(), payment=()
+                    feature in build.js PREVIEW_FEATURES except the #288 media
+                    features (fullscreen, autoplay, picture-in-picture,
+                    encrypted-media, gamepad, clipboard-write), which are =*;
+                    browsing-topics=(), payment=()
 Content-Security-Policy: <see build.js — locked-down, hash-based>
 Content-Security-Policy-Report-Only: <same, for telemetry>
 ```
 
-**Permissions-Policy (#284).** The storefront doesn't block browser features.
+**Permissions-Policy (#284, #288).** The storefront doesn't block browser features.
 It allows each feature the app host grants (camera, microphone, location,
 sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock,
-…) for itself and for `https://*.freeappstore.online` app origins only, and
-every preview iframe delegates them with `allow`, so previews behave like the
-app in its own tab. The browser still asks the user before granting anything
-sensitive. No other origin can receive a feature through the storefront. The
-blocks are `browsing-topics` (the Topics API shares ad interests with third
-parties) and `payment` (FreeAppStore apps take no payments, #289). `test/preview-capabilities.test.mjs` keeps the list in sync with
-`workers/host/src/host.ts`.
+…) for itself and for `https://*.freeappstore.online` app origins, and every
+preview iframe delegates them with `allow`, so previews behave like the app in
+its own tab. Low-risk media features (`fullscreen`, `autoplay`,
+`picture-in-picture`, `encrypted-media`, `gamepad`, `clipboard-write`) are `=*`
+and the preview iframe delegates them with `allow="… fullscreen * …"` so a
+YouTube (or similar) player nested inside the framed app can fullscreen and
+play DRM. The browser still asks the user before granting anything sensitive.
+Sensor, capture and device features cannot be received by any other origin
+through the storefront. The blocks are `browsing-topics` (the Topics API shares
+ad interests with third parties) and `payment` (FreeAppStore apps take no
+payments, #289). `test/preview-capabilities.test.mjs` keeps the list in sync
+with `workers/host/src/host.ts`.
 
 The CSP **does not** appear in `<meta http-equiv>`. Headers are the only
 source of truth. Test `no <meta http-equiv=Content-Security-Policy>...`
