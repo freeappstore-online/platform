@@ -2676,6 +2676,22 @@
           "reason": "Record audio from a tab you choose in the browser picker."
         }
       ]
+    },
+    {
+      "id": "hanzi-practice",
+      "name": "hanzi-practice",
+      "category": "Learning",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Practice Chinese characters with animated stroke order, guided tracing, and memory challenges.",
+      "appUrl": "https://hanzi-practice.freeappstore.online",
+      "repo": "freeappstore-online/hanzi-practice",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-03T03:59:58.448Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
