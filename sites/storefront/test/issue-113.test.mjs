@@ -108,7 +108,7 @@ test("settings controls wrap and stack before they can overflow a narrow viewpor
 
 test("generated AI guides contain no inline styles or event handlers", () => {
   for (const file of readdirSync(aiDir).filter((name) => name.endsWith(".html"))) {
-    const html = readFileSync(join(aiDir.pathname, file), "utf8");
+    const html = readFileSync(new URL(file, aiDir), "utf8");
     assert.doesNotMatch(html, /\sstyle\s*=/i, `${file} must not emit inline style attributes`);
     assert.doesNotMatch(html, /\sonclick\s*=/i, `${file} must not emit inline click handlers`);
     assert.doesNotMatch(html, /<style\b/i, `${file} must not emit inline style blocks`);
@@ -116,7 +116,7 @@ test("generated AI guides contain no inline styles or event handlers", () => {
 });
 
 test("AI guides expose shared-build placeholders for shell, beacon, SRI, and versioning", () => {
-  const html = readFileSync(join(aiDir.pathname, "codex.html"), "utf8");
+  const html = readFileSync(new URL("codex.html", aiDir), "utf8");
   assert.match(html, /\{\{HEADER\}\}/, "guide source should request the shared header");
   assert.match(html, /\{\{FOOTER\}\}/, "guide source should request the shared footer");
   assert.match(html, /__CF_BEACON__/, "guide source should request the analytics beacon");

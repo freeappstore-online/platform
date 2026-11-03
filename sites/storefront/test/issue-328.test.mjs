@@ -7,6 +7,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -67,8 +68,9 @@ function writeFixture(dir) {
 }
 
 function startChrome() {
+  const executable = findChrome();
   const userData = mkdtempSync(join(tmpdir(), "fas-chrome-328-"));
-  const chrome = spawn(findChrome(), [
+  const chrome = spawn(executable, [
     "--headless=new",
     "--disable-gpu",
     "--no-sandbox",
@@ -106,6 +108,54 @@ function startChrome() {
 
   return { chrome, userData, ready };
 }
+
+async function removeTempDirectory(path, remove = rmSync) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      remove(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!["ENOTEMPTY", "EBUSY"].includes(error.code) || attempt === 5) throw error;
+      // Yield so late Chrome writes can finish before trying the whole tree again.
+      await delay(100);
+    }
+  }
+}
+
+for (const code of ["ENOTEMPTY", "EBUSY"]) {
+  test(`issue #335: cleanup retries ${code} and removes late Chrome files`, async () => {
+    const profile = mkdtempSync(join(tmpdir(), "fas-chrome-335-"));
+    let attempts = 0;
+    let lateWrite;
+    try {
+      await removeTempDirectory(profile, (path, options) => {
+        if (attempts++ === 0) {
+          lateWrite = delay(20).then(() => writeFileSync(join(profile, "late-chrome-file"), "data"));
+          throw Object.assign(new Error("Chrome is still writing"), { code });
+        }
+        assert.ok(existsSync(join(profile, "late-chrome-file")));
+        rmSync(path, options);
+      });
+      assert.equal(attempts, 2);
+      assert.equal(existsSync(profile), false);
+    } finally {
+      await lateWrite;
+      rmSync(profile, { recursive: true, force: true });
+    }
+  });
+}
+
+test("issue #335: cleanup reports persistent and unrelated errors", async () => {
+  for (const [code, expectedAttempts] of [["ENOTEMPTY", 6], ["EBUSY", 6], ["EACCES", 1]]) {
+    let attempts = 0;
+    const error = Object.assign(new Error("cannot remove"), { code });
+    await assert.rejects(removeTempDirectory("unused", () => {
+      attempts++;
+      throw error;
+    }), (actual) => actual === error);
+    assert.equal(attempts, expectedAttempts);
+  }
+});
 
 class Cdp {
   constructor(ws) {
@@ -208,19 +258,19 @@ async function measureAt(cdp, width, height) {
 
 test("issue #328: iframe starts at or below the camera island and still fits a phone width", { timeout: 60_000 }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "fas-storefront-328-"));
-  const url = writeFixture(dir);
-  const launched = startChrome();
-  let chrome;
+  let launched;
+  let ws;
   try {
+    const url = writeFixture(dir);
+    launched = startChrome();
     const browserWs = await launched.ready;
-    chrome = launched.chrome;
     const base = browserWs.replace(/^ws:/, "http:").replace(/\/devtools\/browser\/.*$/, "");
     const targets = await fetch(`${base}/json/list`).then((response) => response.json());
     const page = targets.find((target) => target.type === "page");
     if (!page?.webSocketDebuggerUrl) {
       throw new Error(`Chrome opened no page target: ${JSON.stringify(targets)}`);
     }
-    const ws = new WebSocket(page.webSocketDebuggerUrl);
+    ws = new WebSocket(page.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       ws.addEventListener("open", resolve, { once: true });
       ws.addEventListener("error", reject, { once: true });
@@ -270,14 +320,19 @@ test("issue #328: iframe starts at or below the camera island and still fits a p
       assert.equal(narrow.cornerIsIframe, false, `bottom corner clip failed at ${width}px`);
     }
 
-    ws.close();
   } finally {
-    const proc = chrome ?? launched.chrome;
-    if (proc.exitCode === null && proc.signalCode === null) {
-      proc.kill("SIGKILL");
-      await new Promise((resolve) => proc.once("exit", resolve));
+    ws?.close();
+    const proc = launched?.chrome;
+    if (proc?.pid && proc.exitCode === null && proc.signalCode === null) {
+      await new Promise((resolve) => {
+        proc.once("exit", resolve);
+        proc.kill("SIGKILL");
+      });
     }
-    rmSync(dir, { recursive: true, force: true });
-    rmSync(launched.userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 40 });
+    try {
+      if (launched) await removeTempDirectory(launched.userData);
+    } finally {
+      await removeTempDirectory(dir);
+    }
   }
 });
