@@ -133,6 +133,10 @@ jobs:
           # actually runs. Keep each template lockfile current with the SDK:
           # this published-SDK leg intentionally verifies what new apps receive,
           # including Shell resilience fixes such as the offline-banner reset.
+          # #332: publishing a fixed SDK does not update a template's lockfile.
+          # shell.spec.ts checks the installed version as well as installed-app
+          # behavior. Update BOTH template repos' SDK locks when releasing fixes;
+          # do not upgrade dependencies here and hide what fas init delivers.
           pnpm install
 
       - name: Build scaffold

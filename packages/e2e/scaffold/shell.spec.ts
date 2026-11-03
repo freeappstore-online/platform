@@ -5,6 +5,22 @@ import { expect, type Page, test } from '@playwright/test';
 const connected = process.env.SCAFFOLD_TEMPLATE === 'connected';
 const appFile = resolve(process.env.SCAFFOLD_DIR!, 'web/src/App.tsx');
 
+test('fresh scaffold resolves a published SDK with footer removal (#332)', async () => {
+  // Read the installed package, not the declared range: pnpm can retain an
+  // older release in a template lockfile even when a fixed release is on npm.
+  const { version } = JSON.parse(
+    await readFile(
+      resolve(process.env.SCAFFOLD_DIR!, 'web/node_modules/@freeappstore/sdk/package.json'),
+      'utf8',
+    ),
+  );
+  const [major, minor, patch] = version.split('.').map(Number);
+  expect(
+    major > 0 || minor > 16 || (minor === 16 && patch >= 5),
+    `Installed SDK ${version} predates the verified footer-free scaffold release; update the template lockfile`,
+  ).toBe(true);
+});
+
 async function openMenu(page: Page) {
   const menu = page.getByRole('button', { name: 'Menu', exact: true });
   if (await menu.isVisible()) await menu.click();
@@ -287,12 +303,96 @@ function BrowserProbe() {
   }
 });
 
-test('installed app keeps the frame free of platform attribution bars', async ({ page }) => {
-  // Chromium cannot install a PWA in this context. Emulate the documented
-  // iOS installed-app flag, leaving the actual Shell and browser DOM intact.
-  await page.addInitScript((signedIn) => {
-    Object.defineProperty(navigator, 'standalone', { value: true });
-    if (signedIn)
+for (const mode of ['ios', 'display-mode'] as const) {
+  test(`installed app (${mode}) keeps the frame free of platform attribution bars`, async ({
+    page,
+  }) => {
+    // Chromium cannot install a PWA in this context. Emulate the documented
+    // installed-app signals, leaving the actual Shell and browser DOM intact.
+    await page.addInitScript(
+      ({ signedIn, mode }) => {
+        if (mode === 'ios') Object.defineProperty(navigator, 'standalone', { value: true });
+        else {
+          const original = window.matchMedia.bind(window);
+          window.matchMedia = (query) => {
+            const result = original(query);
+            if (query === '(display-mode: standalone)')
+              Object.defineProperty(result, 'matches', { value: true });
+            return result;
+          };
+        }
+        if (signedIn)
+          localStorage.setItem(
+            'fas:session',
+            JSON.stringify({
+              token: 'browser-test-only',
+              user: {
+                id: 'gh:1',
+                login: 'browser-test',
+                avatarUrl: null,
+                dateOfBirth: '2000-01-01',
+              },
+            }),
+          );
+      },
+      { signedIn: connected, mode },
+    );
+    await page.goto('/');
+    await landmarks(page);
+    await expect(page.getByRole('contentinfo')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Part of FreeAppStore' })).toHaveCount(0);
+    const frame = page.getByRole('main').locator('..');
+    await expect(frame).toHaveClass(/pb-\[env\(safe-area-inset-bottom,0px\)\]/);
+    // Check the compiled Tailwind rule so a missing utility cannot pass
+    // merely because desktop safe-area insets default to zero.
+    const padding = await frame.evaluate((element) => {
+      function findPadding(rules: CSSRuleList): string {
+        for (const rule of rules) {
+          if (
+            rule instanceof CSSStyleRule &&
+            element.matches(rule.selectorText) &&
+            rule.style.paddingBottom.includes('safe-area-inset-bottom')
+          )
+            return rule.style.paddingBottom;
+          if ('cssRules' in rule) {
+            const nested = findPadding((rule as CSSGroupingRule).cssRules);
+            if (nested) return nested;
+          }
+        }
+        return '';
+      }
+      for (const sheet of document.styleSheets) {
+        // External font stylesheets are not readable through CSSOM.
+        if (sheet.href && new URL(sheet.href).origin !== location.origin) continue;
+        const padding = findPadding(sheet.cssRules);
+        if (padding) return padding;
+      }
+      return '';
+    });
+    expect(padding).toContain('env(safe-area-inset-bottom');
+  });
+}
+
+test('published SDK still supports an explicitly chosen Footer (#332)', async ({
+  page,
+  request,
+}) => {
+  const original = await readFile(appFile, 'utf8');
+  try {
+    await writeFile(
+      appFile,
+      `import { Footer as OptInFooter } from '@freeappstore/sdk/ui'\n${original}`.replace(
+        /(<Shell\b[^>]*>)/,
+        '$1<OptInFooter text="App-chosen attribution" />',
+      ),
+    );
+    await expect
+      .poll(async () =>
+        (await (await request.get('/src/App.tsx')).text()).includes('App-chosen attribution'),
+      )
+      .toBe(true);
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'standalone', { value: true });
       localStorage.setItem(
         'fas:session',
         JSON.stringify({
@@ -300,9 +400,12 @@ test('installed app keeps the frame free of platform attribution bars', async ({
           user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
         }),
       );
-  }, connected);
-  await page.goto('/');
-  await landmarks(page);
-  await expect(page.getByRole('contentinfo')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Part of FreeAppStore' })).toHaveCount(0);
+    });
+    await page.goto('/');
+    await expect(page.locator('footer')).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'App-chosen attribution' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Part of FreeAppStore' })).toHaveCount(0);
+  } finally {
+    await writeFile(appFile, original);
+  }
 });
