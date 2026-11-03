@@ -229,6 +229,8 @@ const toast = useToast(); toast.show('Saved', { variant: 'success' });
 
 `onNavigate` makes nav clicks client-side (scroll and focus are handled on route changes); without it the items are ordinary links. `FasShell` is the same component under its older name. Full reference: [docs/ui.md](../../docs/ui.md#shell-the-standard-app-frame).
 
+Set `profileHref="/profile"` to make the signed-in avatar open your app's profile screen through the same navigation. Without it, the existing profile dropdown remains. Add Profile to `nav` for signed-out access, and render your account, preferences and connection controls on that screen.
+
 ### UI Components
 
 Drop-in React components. Import from `@freeappstore/sdk/ui`. Components use CSS custom properties (`--ink`, `--accent`, etc.) to blend into your app's theme.

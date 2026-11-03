@@ -91,6 +91,7 @@ gate is the optional sign-in gate.
 | `nav` | The app's screens: `{ label, href, icon?, title? }[]`. No `nav` (or an empty list): no navbar. |
 | `onNavigate(href)` | Client-side navigation for nav clicks, e.g. `history.pushState` + your route state, or a router's `navigate`. Without it, nav items are ordinary links (the host serves your app for any path). |
 | `renderNav({ items, currentPath, onNavigate })` | Replace the built-in navbar; the result still goes in the topbar. Render a `<nav aria-label="Main">`. |
+| `profileHref` | Optional app-owned profile route, e.g. `/profile`. The signed-in avatar becomes a Profile link using `onNavigate`; modified clicks retain native behavior. Omit to keep the existing dropdown. Render account/preferences actions on your profile screen, and include Profile in `nav` so signed-out users can reach app connection settings too. |
 | `requireAuth` | Show a sign-in screen instead of the app until the user signs in. Default `false`. |
 | `showThemeToggle` | Default `true`. |
 | `renderError({ error, reset })` | Replace the error fallback. |

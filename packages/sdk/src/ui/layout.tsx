@@ -351,6 +351,8 @@ export interface ShellProps {
    * Without it, nav items are ordinary links (full page load).
    */
   onNavigate?: (href: string) => void;
+  /** App-owned profile route. Replaces the signed-in avatar menu with a link. */
+  profileHref?: string;
   /**
    * Replace the fallback shown when a screen throws while rendering. The error
    * is already recorded via `app.log`; call `reset` to retry.
@@ -379,6 +381,7 @@ export function Shell({
   nav,
   renderNav,
   onNavigate,
+  profileHref,
   renderError,
   renderLoading,
   requireAuth = false,
@@ -466,7 +469,30 @@ export function Shell({
           <div className="flex shrink-0 items-center gap-2">
             <TextSizeToggle />
             {showThemeToggle && !user && <ThemeToggle />}
-            {user ? (
+            {user && profileHref ? (
+              <a
+                href={profileHref}
+                aria-label="Profile"
+                aria-current={currentPath === profileHref ? 'page' : undefined}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onClick={(event) => {
+                  if (
+                    !navigate ||
+                    event.defaultPrevented ||
+                    event.button !== 0 ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return;
+                  event.preventDefault();
+                  navigate(profileHref);
+                }}
+              >
+                <Avatar user={user} size={32} />
+              </a>
+            ) : user ? (
               <ProfileMenu app={app} showThemeToggle={showThemeToggle} />
             ) : (
               <SignInButton app={app} label="Sign in" compactOnMobile />

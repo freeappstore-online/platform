@@ -93,6 +93,7 @@ function Tags() {
 | \`appName\` | Shown in the topbar. |
 | \`nav\` | The app's screens: \`NavItem[]\`. |
 | \`onNavigate(href)\` | Client-side navigation for nav clicks. |
+| \`profileHref\` | Optional app profile route. Signed-in avatar opens it through onNavigate; modified clicks work normally. Default keeps the dropdown. Add Profile to nav for signed-out access and render account/preferences/connections on that screen. |
 | \`renderNav(ctx)\` | Replace the built-in navbar. |
 | \`requireAuth\` | Show a sign-in screen until the user signs in. Default false. |
 | \`showThemeToggle\` | Default true. |
@@ -108,7 +109,7 @@ Everything below imports from '@freeappstore/sdk/ui'. Components use the CSS tok
 so they follow the app's light/dark theme. Prefer them to hand-rolled equivalents.
 
 **App frame and screens**
-- \`Shell\` (alias \`FasShell\`) — the app frame; see feature "shell". Props: app, appName?, nav?, onNavigate?, renderNav?, requireAuth?, showThemeToggle?, renderError?, renderLoading?
+- \`Shell\` (alias \`FasShell\`) — the app frame; see feature "shell". Props: app, appName?, nav?, onNavigate?, profileHref?, renderNav?, requireAuth?, showThemeToggle?, renderError?, renderLoading?
 - \`PageHeader\` — a screen's single h1. Props: title, description?, actions?
 - \`NavBar\` — the navbar Shell renders from \`nav\`, for custom layouts. Props: items, currentPath?, onNavigate?
 - \`activeHref(items, path)\` — which nav item is current. \`useCurrentPath()\` — [path, setPath], follows back/forward.

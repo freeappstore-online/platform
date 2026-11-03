@@ -70,6 +70,93 @@ afterEach(async () => {
   Reflect.deleteProperty(navigator, 'standalone');
 });
 
+describe('app-owned profile navigation (#336)', () => {
+  it('keeps the existing profile menu unless an app opts in', async () => {
+    const { app } = fakeApp();
+    await mount(
+      <Shell app={app}>
+        <p>Content</p>
+      </Shell>,
+    );
+    expect($('button[aria-label="Profile menu"]')).not.toBeNull();
+    expect($('a[aria-label="Profile"]')).toBeNull();
+  });
+
+  it('routes avatar clicks through the shell and focuses the profile heading', async () => {
+    const { app } = fakeApp();
+    function Example() {
+      const [path, setPath] = useState('/');
+      return (
+        <Shell
+          app={app}
+          profileHref="/profile"
+          nav={[{ href: '/profile', label: 'Profile', title: 'Profile — Demo' }]}
+          onNavigate={(href) => {
+            history.pushState(null, '', href);
+            setPath(href);
+          }}
+        >
+          <PageHeader title={path === '/profile' ? 'Your profile' : 'Home'} />
+        </Shell>
+      );
+    }
+    await mount(<Example />);
+    const link = $<HTMLAnchorElement>('a[aria-label="Profile"]')!;
+    expect(link.getAttribute('href')).toBe('/profile');
+    expect($('button[aria-label="Profile menu"]')).toBeNull();
+    await act(async () => link.click());
+    await nextFrame();
+    expect(location.pathname).toBe('/profile');
+    expect(document.title).toBe('Profile — Demo');
+    expect(document.activeElement?.textContent).toBe('Your profile');
+    expect(link.getAttribute('aria-current')).toBe('page');
+  });
+
+  it.each([
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ])('preserves native modified click behavior: %j', async (modifiers) => {
+    const { app } = fakeApp();
+    const navigate = vi.fn();
+    await mount(
+      <Shell app={app} profileHref="/profile" onNavigate={navigate}>
+        <p>Content</p>
+      </Shell>,
+    );
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, ...modifiers });
+    await act(async () => {
+      $('a[aria-label="Profile"]')!.dispatchEvent(event);
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('leaves a real href when no client router is supplied', async () => {
+    const { app } = fakeApp();
+    await mount(
+      <Shell app={app} profileHref="/profile">
+        <p>Content</p>
+      </Shell>,
+    );
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe('/profile');
+  });
+
+  it('keeps signed-out browsing and sign-in available', async () => {
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell app={app} profileHref="/profile">
+        <p>Public library</p>
+      </Shell>,
+    );
+    expect($('main')?.textContent).toContain('Public library');
+    expect($('a[aria-label="Profile"]')).toBeNull();
+    expect(container.textContent).toContain('Sign in');
+  });
+});
+
 describe('optional store footer (#331)', () => {
   it.each(['browser', 'standalone', 'ios'] as const)(
     'keeps the %s shell free of attribution and preserves bottom safe-area padding',
