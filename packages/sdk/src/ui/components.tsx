@@ -734,8 +734,8 @@ export interface FooterProps {
  * bottom chrome. This prevents accidental Siri activations on iPhones when
  * users tap near the bottom of the screen.
  *
- * The Shell component includes this automatically. Use Footer directly only
- * if you're building a custom layout without Shell.
+ * Opt-in only: Shell does not render a platform footer. Import Footer explicitly
+ * if your app chooses to display store attribution.
  */
 export function Footer({ text }: FooterProps) {
   const [isStandalone, setIsStandalone] = useState(false);
@@ -771,8 +771,7 @@ export function Footer({ text }: FooterProps) {
 
 /**
  * Returns true when the app is running in PWA standalone mode (installed
- * to home screen). Use this to add bottom padding to your content area
- * so it doesn't sit behind the Footer.
+ * to home screen). Use this for app-specific installed-mode behavior.
  */
 export function useStandalone(): boolean {
   const [standalone, setStandalone] = useState(false);

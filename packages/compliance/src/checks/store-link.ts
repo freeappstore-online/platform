@@ -14,8 +14,8 @@ import type { CheckResult } from '../types.js';
  * The link can be in JSX (`<a href="https://freeappstore.online">`),
  * a string constant, or even a footer comment — we don't enforce a
  * specific component, just that the link exists somewhere visible.
- * An app wrapped in the SDK's `Shell` passes too: its topbar links to
- * freeappstore.online.
+ * An app wrapped in the SDK's `Shell` passes too: standard app frames do not
+ * require platform attribution.
  */
 // `<Shell>` / `<FasShell>` rendered from @freeappstore/sdk/ui (not a local component).
 const SDK_SHELL_RE =
@@ -35,7 +35,7 @@ export async function checkStoreLink(source: FileSource): Promise<CheckResult> {
       return {
         name: 'Store link',
         status: 'pass',
-        detail: `${path} renders the SDK Shell, whose topbar links to ${domain}`,
+        detail: `${path} renders the SDK Shell; platform attribution is optional`,
       };
     }
   }

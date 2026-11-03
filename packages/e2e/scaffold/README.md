@@ -32,9 +32,9 @@ and restores the source in `finally`. Browser offline mode drives actual
 online/offline events. One worker keeps edits isolated across browser projects.
 Use disposable scaffolds for this test.
 
-The Footer intentionally renders only in installed PWA mode. The ordinary tab
-asserts its absence; a separate browser test emulates iOS `navigator.standalone`
-and verifies the real footer landmark and store link. It does not install a PWA
+The Shell does not add a store attribution footer. The ordinary tab asserts its
+absence; a separate browser test emulates iOS `navigator.standalone` and verifies
+that installed mode also has no attribution bar. It does not install a PWA
 or claim physical-device coverage. Mobile coverage uses Chromium with an iPhone
 viewport/touch configuration, not Safari.
 

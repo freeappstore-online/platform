@@ -77,6 +77,7 @@ What you get, with nothing to enable:
 | **Tab titles** | A `title` on a nav item becomes the tab title on its route; `useDocumentTitle()` in a screen overrides it. |
 | **Skip link** | "Skip to content", the first focusable element, hidden until focused. |
 | **Route changes** | With `onNavigate`: forward navigation scrolls to the top, back/forward restores the position, and focus moves to the new screen's `PageHeader` (else `<main>`). |
+| **Bottom safe area** | Padding for the home indicator, without a platform attribution bar in browser or installed mode. |
 
 FreeAppStore is free, so there is no subscription or upgrade screen: the only
 gate is the optional sign-in gate.
@@ -260,7 +261,7 @@ onto the standard frame:
 | Component | Props | Description |
 |-----------|-------|-------------|
 | `BuildInfo` | -- | Shows SDK version and build metadata |
-| `Footer` | -- | Standard platform footer |
+| `Footer` | `text` | Optional store attribution footer for installed apps; never added by `Shell` |
 
 ## Hooks (from `@freeappstore/sdk/ui`)
 

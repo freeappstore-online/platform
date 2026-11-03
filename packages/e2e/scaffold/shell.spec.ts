@@ -159,7 +159,7 @@ test('fresh scaffold: auth gate, landmarks, navigation and preferences', async (
     await page.reload();
   }
   await landmarks(page);
-  // Footer is intentionally installed-PWA-only; ordinary browser tabs omit it.
+  // The standard Shell does not add platform attribution bars.
   await expect(page.getByRole('contentinfo')).toHaveCount(0);
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
@@ -287,9 +287,9 @@ function BrowserProbe() {
   }
 });
 
-test('installed app exposes the footer landmark', async ({ page }) => {
+test('installed app keeps the frame free of platform attribution bars', async ({ page }) => {
   // Chromium cannot install a PWA in this context. Emulate the documented
-  // iOS installed-app flag, leaving the actual Footer and browser DOM intact.
+  // iOS installed-app flag, leaving the actual Shell and browser DOM intact.
   await page.addInitScript((signedIn) => {
     Object.defineProperty(navigator, 'standalone', { value: true });
     if (signedIn)
@@ -303,8 +303,6 @@ test('installed app exposes the footer landmark', async ({ page }) => {
   }, connected);
   await page.goto('/');
   await landmarks(page);
-  await expect(page.getByRole('contentinfo')).toBeVisible();
-  await expect(
-    page.getByRole('contentinfo').getByRole('link', { name: 'Part of FreeAppStore' }),
-  ).toHaveAttribute('href', 'https://freeappstore.online');
+  await expect(page.getByRole('contentinfo')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Part of FreeAppStore' })).toHaveCount(0);
 });

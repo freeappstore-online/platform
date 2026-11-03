@@ -38,7 +38,7 @@ describe('checkStoreLink', () => {
     expect(r.status).toBe('warn');
   });
 
-  it('passes for an app wrapped in the SDK Shell, whose topbar links to the store (#90)', async () => {
+  it('passes for an app wrapped in the SDK Shell without requiring store attribution', async () => {
     const files = new Map([
       [
         'web/src/App.tsx',

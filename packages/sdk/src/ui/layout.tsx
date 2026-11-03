@@ -1,7 +1,7 @@
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
-import { Footer, Modal, Spinner } from './components.js';
+import { Modal, Spinner } from './components.js';
 import { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
 import { activeHref, NavBar, type NavItem, useCurrentPath } from './navbar.js';
@@ -368,7 +368,7 @@ function normalizeShellAppName(appName?: string) {
 
 /**
  * Full wrapper: skip link, sticky topbar with main navigation, offline banner,
- * main content (error boundary + Suspense), toast region, footer. Optional auth
+ * main content (error boundary + Suspense), toast region, safe-area padding. Optional auth
  * gate. On client-side navigation (`onNavigate`) it scrolls to the top (or back
  * to where the route was left) and moves focus to the new screen's heading.
  */
@@ -454,7 +454,7 @@ export function Shell({
 
   return (
     <ToastProvider>
-      <div className="min-h-[100dvh] flex flex-col">
+      <div className="min-h-[100dvh] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
         <SkipLink mainRef={mainRef} />
         <header className="flex items-center justify-between p-[0.5rem_1rem] border-b border-line bg-panel sticky top-0 z-[50]">
           <div className="min-w-0">
@@ -479,7 +479,6 @@ export function Shell({
             <Suspense fallback={loadingNode}>{children}</Suspense>
           </ShellErrorBoundary>
         </main>
-        <Footer />
       </div>
     </ToastProvider>
   );
