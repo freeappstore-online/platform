@@ -44,7 +44,7 @@ function eligible(apps: PublicApp[], route: Route): PublicApp | undefined {
   return apps.find((app) => {
     if (
       !app ||
-      app.id !== route.slug ||
+      (app.id !== route.slug && route.r2_prefix !== `apps/${app.id}`) ||
       typeof app.name !== "string" ||
       !app.name.trim() ||
       typeof app.description !== "string" ||
