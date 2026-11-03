@@ -31,6 +31,9 @@ export const RESERVED_APP_IDS: ReadonlySet<string> = new Set([
   'create',
   'publisher',
   'freeappstore',
+  // Existing app address aliases; provisioning these would replace their routes.
+  'hanzi',
+  'yi',
 ]);
 
 export function isReservedAppId(id: string): boolean {
