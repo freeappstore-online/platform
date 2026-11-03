@@ -469,13 +469,13 @@ export function Shell({
             )}
           </div>
           {navNode}
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <TextSizeToggle />
             {showThemeToggle && !user && <ThemeToggle />}
             {user ? (
               <ProfileMenu app={app} showThemeToggle={showThemeToggle} />
             ) : (
-              <SignInButton app={app} label="Sign in" />
+              <SignInButton app={app} label="Sign in" compactOnMobile />
             )}
           </div>
         </header>

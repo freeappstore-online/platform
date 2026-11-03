@@ -184,7 +184,7 @@ onto the standard frame:
 | Component | Props | Description |
 |-----------|-------|-------------|
 | `Avatar` | `user`, `size` | GitHub avatar with fallback |
-| `SignInButton` | `app` | Sign in with GitHub button |
+| `SignInButton` | `app`, `label`, `compactOnMobile` | Sign-in button; `compactOnMobile` shows an avatar icon below the medium breakpoint (enabled in the Shell header) |
 
 ## Controls
 

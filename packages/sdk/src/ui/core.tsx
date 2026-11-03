@@ -45,16 +45,50 @@ export function Avatar({ user, size = 32 }: AvatarProps) {
 export interface SignInButtonProps {
   app: FreeAppStore;
   label?: string;
+  /** Use an avatar icon below the medium breakpoint for compact header layouts. */
+  compactOnMobile?: boolean;
 }
 
 /** Platform-branded sign-in button. Calls app.auth.signIn(). */
-export function SignInButton({ app, label = 'Sign in with GitHub' }: SignInButtonProps) {
+export function SignInButton({
+  app,
+  label = 'Sign in with GitHub',
+  compactOnMobile = false,
+}: SignInButtonProps) {
   return (
     <button
+      type="button"
       onClick={() => app.auth.signIn()}
-      className="bg-accent text-white border-0 p-[0.6rem_1.5rem] rounded text-[0.9rem] font-bold cursor-pointer font-[inherit]"
+      aria-label={label}
+      title={compactOnMobile ? label : undefined}
+      className={
+        compactOnMobile
+          ? 'w-9 h-9 shrink-0 rounded-full border border-line bg-panel text-ink inline-flex items-center justify-center p-0 md:w-auto md:h-auto md:rounded md:border-0 md:bg-accent md:text-white md:p-[0.6rem_1.5rem] text-[0.9rem] font-bold cursor-pointer font-[inherit]'
+          : 'bg-accent text-white border-0 p-[0.6rem_1.5rem] rounded text-[0.9rem] font-bold cursor-pointer font-[inherit]'
+      }
     >
-      {label}
+      {compactOnMobile ? (
+        <>
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="md:hidden"
+          >
+            <circle cx="12" cy="8" r="4" />
+            <path d="M5 21v-2a7 7 0 0 1 14 0v2" />
+          </svg>
+          <span className="hidden md:inline">{label}</span>
+        </>
+      ) : (
+        label
+      )}
     </button>
   );
 }
