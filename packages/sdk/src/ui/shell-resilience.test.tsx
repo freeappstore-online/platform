@@ -7,6 +7,7 @@ import { act, lazy, type ReactNode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FreeAppStore } from '../index.js';
+import { Footer } from './components.js';
 import { Shell } from './layout.js';
 import type { NavItem } from './navbar.js';
 import { PageHeader, useDocumentTitle } from './page.js';
@@ -66,6 +67,47 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.restoreAllMocks();
+  Reflect.deleteProperty(navigator, 'standalone');
+});
+
+describe('optional store footer (#331)', () => {
+  it.each(['browser', 'standalone', 'ios'] as const)(
+    'keeps the %s shell free of attribution and preserves bottom safe-area padding',
+    async (mode) => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(
+        (query) =>
+          ({
+            matches: mode === 'standalone' && query === '(display-mode: standalone)',
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          }) as unknown as MediaQueryList,
+      );
+      Object.defineProperty(navigator, 'standalone', {
+        value: mode === 'ios',
+        configurable: true,
+      });
+      const { app } = fakeApp();
+      await mount(
+        <Shell app={app}>
+          <p>App content</p>
+        </Shell>,
+      );
+      expect($('main')?.textContent).toContain('App content');
+      expect($('footer, [role="contentinfo"]')).toBeNull();
+      expect($('a[href="https://freeappstore.online"]')).toBeNull();
+      expect(container.textContent).not.toContain('Part of FreeAppStore');
+      const frame = $('main')?.parentElement;
+      expect(frame?.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true);
+
+      // The public Footer remains available when an app explicitly chooses it.
+      await mount(<Footer />);
+      expect($('footer') !== null).toBe(mode !== 'browser');
+      if (mode !== 'browser') {
+        expect($('footer a')?.textContent).toBe('Part of FreeAppStore');
+        expect($('footer a')?.getAttribute('href')).toBe('https://freeappstore.online');
+      }
+    },
+  );
 });
 
 // ── 1. Error boundary ───────────────────────────────────────────
