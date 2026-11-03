@@ -151,7 +151,7 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 **API keys and info**
 - \`KeyPrompt\` — app, provider, providerName?, message? (asks the user to add a key to their vault)
 - \`BuildInfo\` — version?, commit?, buildDate?, extra?
-- \`Footer\` — text? (Shell includes it)
+- \`Footer\` — text? (opt-in; Shell does NOT include it automatically)
 
 **Hooks**
 - \`useDocumentTitle(title)\` — the tab title for the current screen.
