@@ -29,7 +29,7 @@ Your app runs at `http://localhost:5173`. Edit `web/src/App.tsx` to build your a
 ## Build your app on the Shell
 
 Every FreeAppStore app has the same outer frame: `Shell` from `@freeappstore/sdk/ui`.
-It renders the topbar (FreeAppStore link, app name, sign-in and profile menu, theme and
+It renders the topbar (app name, sign-in and profile menu, theme and
 text size) and your app's navigation, and wraps your screens in an error boundary,
 loading fallback, toast region and offline banner. You write the screens.
 

@@ -86,14 +86,15 @@ describe('Shell', () => {
     expect(hasChild(nodes(main[0]))).toBe(true);
   });
 
-  it('brands the topbar as FreeAppStore with no ProAppStore links', async () => {
+  it('shows only the supplied app name in the topbar without a storefront link', async () => {
     auth.user = { id: 'gh:1', login: 'alice' };
     const tree = await renderShell();
     const header = nodes(tree.find((n) => n.type === 'header'));
     const hrefs = header.map((n) => n.props.href).filter(Boolean);
-    expect(hrefs).toContain('https://freeappstore.online');
+    expect(hrefs).not.toContain('https://freeappstore.online');
     expect(hrefs.join(' ')).not.toMatch(/proappstore/);
     expect(text(header)).toContain('Notes');
+    expect(text(header)).not.toMatch(/\bFree\b/);
   });
 
   it('shows the profile menu and text-size toggle to a signed-in user', async () => {

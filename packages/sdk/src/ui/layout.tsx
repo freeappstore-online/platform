@@ -457,15 +457,9 @@ export function Shell({
       <div className="min-h-[100dvh] flex flex-col">
         <SkipLink mainRef={mainRef} />
         <header className="flex items-center justify-between p-[0.5rem_1rem] border-b border-line bg-panel sticky top-0 z-[50]">
-          <div className="flex items-center gap-3">
-            <a
-              href="https://freeappstore.online"
-              className="font-extrabold text-[1rem] text-accent no-underline"
-            >
-              Free
-            </a>
-            {displayAppName && displayAppName !== 'FreeAppStore' && (
-              <span className="text-[0.85rem] font-semibold text-muted">{displayAppName}</span>
+          <div className="min-w-0">
+            {appName && (
+              <span className="block truncate text-[1rem] font-semibold text-ink">{appName}</span>
             )}
           </div>
           {navNode}

@@ -208,7 +208,7 @@ function App() {
 
 ### App shell
 
-Every app wraps itself in `Shell` from `@freeappstore/sdk/ui`: the topbar (FreeAppStore link, app name, text size, theme, sign-in / profile menu), the app's main navigation from `nav`, and an error boundary, loading fallback, toast region, offline banner and skip link around your screens. There is no paid tier, so the only gate is the optional sign-in gate (`requireAuth`).
+Every app wraps itself in `Shell` from `@freeappstore/sdk/ui`: the topbar (app name, text size, theme, sign-in / profile menu), the app's main navigation from `nav`, and an error boundary, loading fallback, toast region, offline banner and skip link around your screens. There is no paid tier, so the only gate is the optional sign-in gate (`requireAuth`).
 
 ```tsx
 import { type NavItem, PageHeader, Shell, useToast } from '@freeappstore/sdk/ui';

@@ -67,7 +67,7 @@ What you get, with nothing to enable:
 
 | Part | What it does |
 |------|--------------|
-| **Topbar** | `<header>` with the FreeAppStore link, your app name, text-size toggle, theme toggle, and sign-in button or profile menu. |
+| **Topbar** | `<header>` with your app name, text-size toggle, theme toggle, and sign-in button or profile menu. |
 | **Main navigation** | From `nav`: a `<nav aria-label="Main">` in the topbar, the current screen marked `aria-current="page"` (`/tags/42` marks `/tags`), a menu button below 640px (Escape or a click outside closes it), 44px targets and visible focus. |
 | **`<main id="main">`** | Your screens render here. |
 | **Error boundary** | A screen that throws while rendering shows **Try again** instead of a white page; the topbar stays. The error is recorded in `fas.log` (category `react.error-boundary`). Moving to another screen clears it. |
