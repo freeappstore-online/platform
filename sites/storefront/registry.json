@@ -2710,6 +2710,22 @@
       "discoveryRequestedAt": "2026-11-03T06:12:03.198Z",
       "creatorGithub": "serge-ivo",
       "permissions": []
+    },
+    {
+      "id": "chinese-reader",
+      "name": "chinese-reader",
+      "category": "Learning",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Read your own Chinese text with pinyin, word meanings, stroke order and tap-to-pause narration.",
+      "appUrl": "https://chinese-reader.freeappstore.online",
+      "repo": "freeappstore-online/chinese-reader",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-03T21:43:54.565Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
