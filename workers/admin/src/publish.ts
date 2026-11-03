@@ -158,7 +158,19 @@ export async function ghApi(env: Pick<PublishEnv, "GITHUB_TOKEN">, path: string,
  * backend's lib/apps.ts (RESERVED_APP_IDS); keep the two in sync.
  */
 // Hanzi and Yi are short addresses for existing apps, not new app identities.
-const RESERVED_IDS = new Set(["platform", "admin", "agent", "mcp", "host", "console", "create", "publisher", "freeappstore", "hanzi", "yi"]);
+const RESERVED_IDS = new Set([
+  "platform",
+  "admin",
+  "agent",
+  "mcp",
+  "host",
+  "console",
+  "create",
+  "publisher",
+  "freeappstore",
+  "hanzi",
+  "yi",
+]);
 
 export function isReservedId(id: string): boolean {
   const lower = id.toLowerCase();

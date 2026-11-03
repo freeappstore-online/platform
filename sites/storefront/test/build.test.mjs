@@ -18,6 +18,7 @@
  */
 
 import { test } from "node:test";
+import discovery from "../lib/discovery.cjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
@@ -32,7 +33,6 @@ const REAL_REGISTRY = join(REPO_ROOT, "registry.json");
 
 const XSS_PAYLOAD = "<script>alert(1)</script>";
 const FIXTURE_ID = "xss-fixture";
-const monitoringIds = new Set(JSON.parse(readFileSync(join(REPO_ROOT, '../../config/monitoring-fixtures.json'), 'utf8')).appIds);
 
 function runBuild({ withQualityScores = false, withStalePages = false, discoveryStatus } = {}) {
   // Use a unique temp dir per run so parallel test invocations don't
@@ -95,7 +95,7 @@ function runBuild({ withQualityScores = false, withStalePages = false, discovery
     timeout: 60_000,
   });
 
-  return { tmp, tmpDist, registry: { ...realRegistry, apps: realRegistry.apps.filter(app => !monitoringIds.has(app.id) && (app.status === undefined || ["live", "published", "approved"].includes(app.status))) } };
+  return { tmp, tmpDist, registry: { ...realRegistry, apps: realRegistry.apps.filter(discovery.isPublicListing) } };
 }
 
 test('designated monitoring fixtures stay registered but produce no public listing or fixture-only creator page', () => {
