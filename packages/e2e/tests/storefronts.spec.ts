@@ -110,7 +110,9 @@ test('an ordinary app detail preview uses <app-id>.freeappstore.online', async (
     return null;
   });
   if (!match) {
-    throw new Error('No storefront card uses the standard <app-id>.freeappstore.online preview host');
+    throw new Error(
+      'No storefront card uses the standard <app-id>.freeappstore.online preview host',
+    );
   }
   await expectDetailPreview(page, match);
 });
