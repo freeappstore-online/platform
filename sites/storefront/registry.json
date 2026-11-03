@@ -2691,7 +2691,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-03T03:59:58.448Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "hanzi-associations",
@@ -2707,7 +2708,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-03T06:12:03.198Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     }
   ]
 }
