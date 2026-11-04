@@ -200,23 +200,25 @@ jobs:
           SDK_VERSION="$(printf '%s\n' "$PUBLISHED_PACKAGES" | grep -oE '@freeappstore/sdk@[0-9]+\.[0-9]+\.[0-9]+' | cut -d@ -f3)"
           test -n "$CLI_VERSION"
           test -n "$SDK_VERSION"
+          # Each package gets at most 30 five-second requests and 29 five-second
+          # pauses (295 seconds). Never substitute a different release.
           wait_for_published_version() {
-            package="$1"
-            expected="$2"
-            for attempt in $(seq 1 30); do
-              actual="$(npm --fetch-timeout=5000 --fetch-retries=0 view "$package@$expected" version 2>/dev/null || true)"
-              if [ "$actual" = "$expected" ]; then
-                echo "$package@$expected is visible on npm"
+            local package="$1" version="$2" actual="" attempt
+            for ((attempt=1; attempt<=30; attempt++)); do
+              if actual=$(timeout 5s npm view "$package@$version" version \
+                --registry=https://registry.npmjs.org --prefer-online \
+                --fetch-retries=0 --fetch-timeout=4000 2>/dev/null) && [ "$actual" = "$version" ]; then
+                echo "Available: $package@$version (attempt $attempt/30)"
                 return 0
               fi
-              echo "Waiting for $package@$expected to propagate to npm ($attempt/30)"
+              echo "Waiting for $package@$version on https://registry.npmjs.org (attempt $attempt/30)"
               if [ "$attempt" -lt 30 ]; then sleep 5; fi
             done
-            echo "::error::$package@$expected did not become available on npm within five minutes"
+            echo "::error::Timed out waiting for $package@$version on https://registry.npmjs.org after 30 attempts (up to 295 seconds); last response: ${actual:-unavailable}"
             return 1
           }
-          wait_for_published_version @freeappstore/cli "$CLI_VERSION"
-          wait_for_published_version @freeappstore/sdk "$SDK_VERSION"
+          wait_for_published_version "@freeappstore/cli" "$CLI_VERSION"
+          wait_for_published_version "@freeappstore/sdk" "$SDK_VERSION"
           echo "CLI_VERSION=$CLI_VERSION" >> "$GITHUB_ENV"
           echo "SDK_VERSION=$SDK_VERSION" >> "$GITHUB_ENV"
           echo "Validating @freeappstore/cli@$CLI_VERSION against @freeappstore/sdk@$SDK_VERSION"
