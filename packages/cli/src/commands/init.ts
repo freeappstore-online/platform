@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
-import { access, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
+import { DEPLOY_YML } from './publish.js';
 
 const TEMPLATES = {
   // FreeAppStore templates
@@ -78,6 +79,25 @@ export async function runInit(opts: {
   // step in its README, but a CLI scaffold should never punt that on the
   // user — the result has to be runnable as-is.
   const substitutionCount = await substituteAppName(target, opts.appId);
+  if (!GAME_TEMPLATES.has(template)) {
+    // Preserve template-owned config (API declarations, isolation, etc.).
+    let config: Record<string, unknown> = {};
+    try {
+      config = JSON.parse(await readFile(join(target, 'fas.json'), 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    config.appId = opts.appId;
+    config.deploy ??= {
+      root: 'web',
+      command: 'pnpm build',
+      output: 'web/dist',
+      smoke: { selector: '[data-fas-feature]', text: 'REPLACE_WITH_A_REAL_FEATURE' },
+    };
+    await writeFile(join(target, 'fas.json'), `${JSON.stringify(config, null, 2)}\n`);
+    await mkdir(join(target, '.github/workflows'), { recursive: true });
+    await writeFile(join(target, '.github/workflows/deploy.yml'), DEPLOY_YML);
+  }
   await run('git', ['init', '-q', '-b', 'main'], target);
 
   // Stage and commit the template so the new repo has a real first commit.
@@ -130,8 +150,8 @@ async function substituteAppName(dir: string, appId: string): Promise<number> {
   for await (const file of walk(dir)) {
     if (!TEXT_EXTENSIONS.has(extname(file).toLowerCase())) continue;
     const content = await readFile(file, 'utf8');
-    if (!content.includes('APPNAME')) continue;
-    await writeFile(file, content.split('APPNAME').join(appId));
+    if (!content.includes('APPNAME') && !content.includes('APPID')) continue;
+    await writeFile(file, content.split('APPNAME').join(appId).split('APPID').join(appId));
     count++;
   }
   return count;

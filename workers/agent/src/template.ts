@@ -708,7 +708,7 @@ SOFTWARE.`,
 // R2_ACCOUNT_ID) are inherited from the store org — public repos get them
 // (console/notes already deploy this way). Contains no APPNAME placeholder.
 function deployWorkflow(config: StoreConfig): string {
-  return `name: Deploy to R2
+  const workflow = `name: Deploy to R2
 
 on:
   push:
@@ -751,6 +751,20 @@ jobs:
             --no-progress
           echo "Deployed ${config.nounPlural}/\${GITHUB_REPOSITORY##*/} from \${GITHUB_SHA::7} to R2"
 `;
+  if (config.store !== "apps") return workflow;
+  return workflow
+    .replace(
+      / {6}- name: Build[\s\S]*?(?= {6}- name: Upload to R2)/,
+      `      - name: Install browser smoke runner
+        run: |
+          pnpm add -D --ignore-workspace-root-check playwright
+          pnpm exec playwright install --with-deps chromium
+      - name: Build and verify release artifact
+        id: artifact
+        run: pnpm dlx @freeappstore/cli@^0.5.0 buildcheck --app-id "\${GITHUB_REPOSITORY##*/}"
+`,
+    )
+    .replace("aws s3 sync ./web/dist", 'aws s3 sync "${{ steps.artifact.outputs.output }}"');
 }
 
 // ── Public API ──
@@ -765,6 +779,23 @@ export function getTemplateFiles(config: StoreConfig, archetype?: AppArchetype):
     ...SHARED_FILES,
     ...(config.store === "games" ? GAME_FILES : APP_FILES),
     ...appArchetypeFiles,
+    ...(config.store === "apps"
+      ? {
+          "fas.json": JSON.stringify(
+            {
+              appId: "APPID",
+              deploy: {
+                root: "web",
+                command: "pnpm build",
+                output: "web/dist",
+                smoke: { selector: "[data-fas-feature]", text: "REPLACE_WITH_A_REAL_FEATURE" },
+              },
+            },
+            null,
+            2,
+          ),
+        }
+      : {}),
     ".github/workflows/deploy.yml": deployWorkflow(config),
   };
 }
@@ -899,6 +930,12 @@ proxy. The developer's API key is configured once in the platform and injected s
 localStorage is per-device and is wiped when the user clears their browser. When the user wants their
 data to PERSIST and FOLLOW THEM across devices ("save my X", "sync", "log in", "don't lose my data"),
 use the platform's free per-user cloud store instead:
+Before deploy, preserve fas.json's deploy contract and set deploy.smoke to a visible
+product feature you implemented (selector plus text). Add data-fas-feature to that
+feature if needed. REPLACE_WITH_A_REAL_FEATURE is deliberately not releasable.
+The build runs in deploy.root and uploads only deploy.output after browser smoke.
+If the app lives outside web/, update those paths rather than shipping the starter.
+
 1. Use the \`fas\` instance App.tsx already creates with \`initApp({ appId: "APPID" })\`.
 2. Storage is per signed-in user — gate it behind sign-in (\`useAuth\` from "@freeappstore/sdk/hooks",
    \`fas.auth.signIn()\`). One tap, no key.

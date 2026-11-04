@@ -216,5 +216,10 @@ exports[`failing-app snapshot > matches snapshot for full result shape 1`] = `
     "name": "Viewport support",
     "status": "fail",
   },
+  {
+    "detail": "No explicit deploy contract; legacy web/ target only. Add fas.json deploy and a rendered feature smoke assertion.",
+    "name": "deploy-target",
+    "status": "warn",
+  },
 ]
 `;

@@ -19,6 +19,7 @@ Requires Node 22+.
 | `fas doctor` | Health check -- Node, git, pnpm, config, API reachability |
 | `fas init <id>` | Scaffold a new app from a template |
 | `fas check` | Run compliance checks |
+| `fas buildcheck --app-id <id>` | Build and smoke-test the declared upload artifact |
 | `fas publish` | Provision repo + hosting + DNS and publish |
 | `fas list` | List your published apps |
 | `fas logs <id>` | Show recent deploy runs (GitHub Actions) |
@@ -183,3 +184,11 @@ fas quality timer --json
 |---------|---------|
 | `FAS_API_BASE` | Override API base URL (default: `https://api.freeappstore.online`) |
 | `NO_COLOR` | Disable ANSI colors |
+
+## Build and deploy target
+
+See [Verify the app you deploy](deploy-target.md) for fas.json identity, app root,
+build command, output and rendered-feature smoke configuration. `fas init` adds
+this contract; configure its product feature before `fas publish`. `fas doctor`
+and `fas check` report source target diagnostics; `fas buildcheck` verifies the
+actual built artifact in Chromium.

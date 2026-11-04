@@ -1,5 +1,6 @@
 /** Execute infra tools server-side. Extracted from session.ts to keep it manageable. */
 
+import { checkDeployTarget } from "../../../packages/compliance/src/checks/deploy-target";
 import type { CheckResult } from "../../../packages/compliance/src/types";
 import { checkBuildSanity, formatSanityBlock } from "./build-sanity";
 import { formatSharedFailure, runSharedChecks } from "./compliance";
@@ -106,6 +107,27 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   }
 
   if (tc.name === "deploy" || tc.name === "push_update") {
+    if (config.store === "apps") {
+      const id = (tc.input.id ?? ctx.appId) as string | undefined;
+      const files = new Map(ctx.files);
+      // Validate the same identity substitution that will be pushed, without changing session files.
+      if (id) applyPlaceholders(files, id, id);
+      const target = await checkDeployTarget(
+        {
+          async *list() {
+            yield* files.keys();
+          },
+          async read(path) {
+            return files.get(path) ?? null;
+          },
+        },
+        id,
+      );
+      if (target.status === "fail") {
+        await ctx.onDeployStatus({ phase: "error", error: target.detail });
+        return `Deploy BLOCKED: ${target.detail}`;
+      }
+    }
     const findings = checkBuildSanity(ctx.files);
     if (findings.length) {
       await ctx.onDeployStatus({

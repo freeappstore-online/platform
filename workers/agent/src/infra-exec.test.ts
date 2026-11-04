@@ -29,6 +29,18 @@ describe("applyPlaceholders", () => {
 
 const appsConfig = getConfig("apps");
 
+describe("deploy target preflight", () => {
+  it("rejects mismatched SDK identity before any provisioning or push", async () => {
+    const ctx = makeCtx();
+    ctx.files.set("web/index.html", '<script type="module" src="/src/App.tsx"></script>');
+    ctx.files.set("web/src/App.tsx", "import {initApp} from '@freeappstore/sdk'; initApp({appId:'my-app'});");
+    const result = await executeInfraTool({ id: "check", name: "deploy", input: { id: "planner" } }, ctx);
+    expect(result).toContain("Deploy BLOCKED");
+    expect(result).toContain("my-app");
+    expect(ctx.onAppDeployed).not.toHaveBeenCalled();
+  });
+});
+
 /**
  * Minimal in-memory stand-in for the `apps`/`routes` D1 tables — enough to
  * exercise the ownership checks in executeDeploy. `apps` maps id -> owner_login.

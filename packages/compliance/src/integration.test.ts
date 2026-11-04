@@ -53,7 +53,7 @@ describe('passing-app fixture', () => {
 
   it('warns on legacy unlayered CSS and bundle-size (no dist built)', async () => {
     const results = await runChecks(PASSING_APP);
-    expect(summarise(results).warn).toEqual(['CSS discipline', 'Bundle size']);
+    expect(summarise(results).warn).toEqual(['deploy-target', 'CSS discipline', 'Bundle size']);
   });
 });
 
@@ -88,6 +88,7 @@ describe('failing-app fixture', () => {
       'PWA meta tags',
       'Permissions declared',
       'Store link',
+      'deploy-target',
     ]);
     // Two passing checks on a maximally-broken app:
     //  - No scroll (games only) skips because it's not a game project.

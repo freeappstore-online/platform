@@ -39,6 +39,10 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install shared deployment parser
+        working-directory: .
+        run: pnpm install --filter @freeappstore/compliance --frozen-lockfile
+
       - name: Install
         run: pnpm install --frozen-lockfile
 

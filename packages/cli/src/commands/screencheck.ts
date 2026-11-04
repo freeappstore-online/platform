@@ -483,7 +483,7 @@ type Browser = {
   close: () => Promise<void>;
 };
 
-async function loadPlaywright(
+export async function loadPlaywright(
   targetDir: string,
 ): Promise<{ launch: () => Promise<Browser> } | null> {
   // playwright is an OPTIONAL peer dep installed in the user's project,
@@ -514,7 +514,10 @@ function runShell(cmd: string, args: string[], cwd: string): Promise<void> {
   });
 }
 
-async function startServer(rootDir: string, port: number): Promise<{ close: () => void }> {
+export async function startServer(
+  rootDir: string,
+  port: number,
+): Promise<{ close: () => void; url: string }> {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://x');
     let p = decodeURIComponent(url.pathname);
@@ -535,5 +538,7 @@ async function startServer(rootDir: string, port: number): Promise<{ close: () =
     }
   });
   await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
-  return { close: () => server.close() };
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Static server has no TCP address');
+  return { close: () => server.close(), url: `http://127.0.0.1:${address.port}` };
 }

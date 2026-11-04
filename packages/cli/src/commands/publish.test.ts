@@ -174,8 +174,9 @@ describe('DEPLOY_YML', () => {
   });
 
   it('includes build verification step', () => {
-    expect(DEPLOY_YML).toContain('Verify build output');
-    expect(DEPLOY_YML).toContain('web/dist');
+    expect(DEPLOY_YML).toContain('buildcheck --app-id');
+    expect(DEPLOY_YML).toContain('steps.artifact.outputs.output');
+    expect(DEPLOY_YML).not.toContain('aws s3 sync ./web/dist');
   });
 });
 

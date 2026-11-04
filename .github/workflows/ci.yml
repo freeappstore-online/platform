@@ -45,6 +45,9 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Install artifact smoke browser
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Test
         run: pnpm test
       - name: Styling standard documentation tests
@@ -106,6 +109,11 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install shared deployment parser
+        if: matrix.worker == 'agent'
+        working-directory: .
+        run: pnpm install --filter @freeappstore/compliance --frozen-lockfile
+
       - name: Install
         run: ${{ matrix.install }}
 
@@ -138,6 +146,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Install shared deployment parser
+        if: matrix.worker == 'agent'
+        working-directory: .
+        run: pnpm install --filter @freeappstore/compliance --frozen-lockfile
 
       - name: Install
         run: pnpm install --frozen-lockfile --ignore-workspace

@@ -4,6 +4,7 @@ import { checkBundleSize } from './checks/bundle-size.js';
 import { checkClaudeMdSlim } from './checks/claude-md-slim.js';
 import { checkCssDiscipline } from './checks/css-discipline.js';
 import { checkDarkMode } from './checks/dark-mode.js';
+import { checkDeployTarget } from './checks/deploy-target.js';
 import { checkHtmlMeta } from './checks/html-meta.js';
 import { checkLicenseMit } from './checks/license-mit.js';
 import { checkManifest } from './checks/manifest.js';
@@ -30,6 +31,8 @@ import { githubTreeSource } from './lib/github-tree-source.js';
 import { isGameProject } from './lib/project-type.js';
 import type { CheckResult } from './types.js';
 
+export type { DeployTarget } from './checks/deploy-target.js';
+export { parseDeployTarget, safeProjectPath } from './checks/deploy-target.js';
 export { INITIAL_LOAD_MAX_GZIP_BYTES, LAZY_ASSET_MAX_BYTES } from './lib/bundle-limits.js';
 export type { FileSource } from './lib/file-source.js';
 export { extractInlineManifest, type InlineManifest } from './lib/inline-manifest.js';
@@ -60,6 +63,7 @@ export {
   checkClaudeMdSlim,
   checkCssDiscipline,
   checkDarkMode,
+  checkDeployTarget,
   checkHtmlMeta,
   checkLicenseMit,
   checkManifest,
@@ -107,6 +111,7 @@ export async function runChecksFromFiles(files: Map<string, string>): Promise<Ch
 async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
   return Promise.all([
     checkLicenseMit(source),
+    checkDeployTarget(source),
     checkNoCommittedArtifacts(source),
     checkNoEnvProduction(source),
     checkNoPlaceholders(source),

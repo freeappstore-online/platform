@@ -44,6 +44,15 @@ describe("getTemplateFiles", () => {
     expect(appsFiles["web/public/manifest.json"]).toContain("#2563eb");
   });
 
+  it("apps declare a release contract and upload only browser-verified output", () => {
+    const contract = JSON.parse(appsFiles["fas.json"]!);
+    expect(contract.deploy.root).toBe("web");
+    expect(contract.deploy.smoke.text).toBe("REPLACE_WITH_A_REAL_FEATURE");
+    expect(appsFiles[".github/workflows/deploy.yml"]).toContain("buildcheck --app-id");
+    expect(appsFiles[".github/workflows/deploy.yml"]).toContain("steps.artifact.outputs.output");
+    expect(gamesFiles["fas.json"]).toBeUndefined();
+  });
+
   it("games theme color is green", () => {
     expect(gamesFiles["web/index.html"]).toContain("#10b981");
     expect(gamesFiles["web/public/manifest.json"]).toContain("#10b981");

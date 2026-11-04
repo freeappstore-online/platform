@@ -179,3 +179,10 @@ Don't want to code? Go to [freeappstore.online/app/build](https://freeappstore.o
 - [UI Components](ui.md) -- drop-in React components
 - [CLI Reference](cli.md) -- every `fas` command
 - [Proxy & Keys](proxy-and-keys.md) -- call third-party APIs safely
+
+## Verify the release target
+
+Before publishing, configure the generated fas.json deploy contract and select
+a visible product feature for its browser smoke assertion. Run `fas buildcheck`
+against fresh build output. See [deploy target validation](deploy-target.md) for
+alternate roots, workspace builds and the exact artifact uploaded by CI.

@@ -14,7 +14,7 @@ afterEach(() => {
 });
 
 describe('runDoctor', () => {
-  it('runs all 7 expected checks and returns them in stable order', async () => {
+  it('runs all 8 expected checks and returns them in stable order', async () => {
     const results = await runDoctor();
     const names = results.map((r) => r.name);
     expect(names).toEqual([
@@ -25,6 +25,7 @@ describe('runDoctor', () => {
       'Config file',
       'Signed in',
       'API reachable',
+      'deploy-target',
     ]);
   });
 

@@ -25,6 +25,14 @@ describe("stripToSkeleton", () => {
 });
 
 describe("checkBuildSanity", () => {
+  it("uses a declared alternate root without scanning unrelated examples", () => {
+    const files = new Map([
+      ["fas.json", JSON.stringify({ deploy: { root: "apps/planner" } })],
+      ["apps/planner/src/App.tsx", "function draw() {}\nfunction draw() {}"],
+      ["examples/demo.ts", "function demo() {}\nfunction demo() {}"],
+    ]);
+    expect(checkBuildSanity(files).map((finding) => finding.file)).toEqual(["apps/planner/src/App.tsx"]);
+  });
   it("flags duplicated top-level functions", () => {
     const findings = checkBuildSanity(
       f("web/src/App.tsx", `function draw() {}\nfunction lerp() {}\n\nfunction draw() {}\nfunction lerp() {}`),
