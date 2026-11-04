@@ -277,6 +277,13 @@ device-only import of `@freeappstore/sdk/persist`. It does not delete preference
 keys, IndexedDB databases, or edited files. An edited generated file is a conflict
 until you resolve it yourself. Saved data is not account-backed `fas.kv`.
 
+`fas add backup` (or `--preset backup`) installs `fas-capabilities/backup.ts` and,
+if needed, the persistence capability it depends on. It requires
+`@freeappstore/sdk >=0.16.21`; the recipe imports `@freeappstore/sdk/backup`.
+Installation and a later removal of those generated files do not delete saved
+data. Import still requires the app to choose merge or replace. An edited
+generated file is a conflict.
+
 The registry declares exact dependency versions, browser environment, owned files,
 config changes (none for connectivity), and generated-content validation. It runs
 no downloaded scripts and installs no npm dependencies.

@@ -1,7 +1,7 @@
 {
   "name": "@freeappstore/sdk",
   "version": "0.16.20",
-  "description": "Browser SDK for FreeAppStore — auth, KV, collections, counters, rooms, proxy, encrypted user keys, roles, friends, email, push reminders, device-local persistence, React hooks, and UI components.",
+  "description": "Browser SDK for FreeAppStore — auth, KV, collections, counters, rooms, proxy, encrypted user keys, roles, friends, email, push reminders, device-local persistence, validated backup and file export, React hooks, and UI components.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -34,6 +34,10 @@
     "./persist": {
       "types": "./dist/persist/index.d.ts",
       "import": "./dist/persist/index.js"
+    },
+    "./backup": {
+      "types": "./dist/backup/index.d.ts",
+      "import": "./dist/backup/index.js"
     }
   },
   "homepage": "https://github.com/freeappstore-online/platform#readme",

@@ -14,6 +14,39 @@ import type { FasInitOptions } from './types.js';
 import { Webhooks } from './webhooks.js';
 
 export type { AuthProvider } from './auth.js';
+export type {
+  BackupEnvelope,
+  BackupExampleHandlers,
+  BackupExampleView,
+  BackupFailure,
+  BackupInspection,
+  BackupPreview,
+  BackupResult,
+  BackupSchema,
+  ExportBackupOptions,
+  ImportBackupOptions,
+  ImportMode,
+  ShareOrDownloadOptions,
+  TransferHandle,
+  TransferSupport,
+} from './backup/index.js';
+export {
+  ABSOLUTE_BACKUP_MAX_BYTES,
+  BACKUP_CAPABILITY_NAME,
+  BACKUP_ENVELOPE_VERSION,
+  BACKUP_FORMAT,
+  backupFilename,
+  DEFAULT_BACKUP_MAX_BYTES,
+  detectTransferSupport,
+  exportBackup,
+  getBackupCapability,
+  importBackup,
+  mountBackupExample,
+  previewBackup,
+  probeBackupCapability,
+  registerBackupCapability,
+  shareOrDownloadBackup,
+} from './backup/index.js';
 export type { Collection, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';

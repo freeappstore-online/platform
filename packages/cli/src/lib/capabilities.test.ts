@@ -123,6 +123,41 @@ it('installs persistence at init and later without touching saved data or edited
   expect(await readFile(join(root, 'user.txt'), 'utf8')).toBe('keep');
 });
 
+it('installs backup at init and later without deleting saved data or edited files', async () => {
+  const root = await app();
+  await writeFile(join(root, 'notes.json'), '{"keep":true}');
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.21' } }),
+  );
+  const plan = await installCapabilities(root, ['backup']);
+  expect(plan.join('\n')).toContain('CREATE');
+  expect(plan.join('\n')).toContain('fas-capabilities/persistence.ts');
+  expect(plan.join('\n')).toContain('fas-capabilities/backup.ts');
+  expect(plan.join('\n')).toContain('merge');
+  expect(await readFile(join(root, 'notes.json'), 'utf8')).toBe('{"keep":true}');
+  expect(await installCapabilities(root, ['backup'])).toEqual(['No changes.']);
+  const file = join(root, 'fas-capabilities/backup.ts');
+  await writeFile(file, 'app edited backup');
+  await expect(installCapabilities(root, ['backup'])).rejects.toThrow('conflict');
+  expect(await readFile(file, 'utf8')).toBe('app edited backup');
+  expect(await readFile(join(root, 'notes.json'), 'utf8')).toBe('{"keep":true}');
+  expect(await readFile(join(root, 'user.txt'), 'utf8')).toBe('keep');
+});
+
+it('requires the published backup SDK before writing capability files', async () => {
+  const root = await app();
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.20' } }),
+  );
+  await expect(installCapabilities(root, ['backup'])).rejects.toThrow(
+    'requires @freeappstore/sdk >=0.16.21',
+  );
+  await expect(readFile(join(root, 'fas-capabilities/backup.ts'))).rejects.toThrow();
+  await expect(readFile(join(root, 'fas-capabilities/persistence.ts'))).rejects.toThrow();
+});
+
 it('retries an interrupted version update and detects edits afterwards', async () => {
   const root = await app();
   await installCapabilities(root, ['a'], { source: { a: cap('a') } });

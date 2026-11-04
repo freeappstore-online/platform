@@ -125,6 +125,47 @@ See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
     configChanges: ['Import fas-capabilities/persistence.ts where the app reads device-local data'],
     validate: (content) => content.includes('device-only') && content.includes('getPreference'),
   },
+  backup: {
+    id: 'backup',
+    version: '1.0.0',
+    dependencies: { persistence: '1.0.0' },
+    packages: [{ name: '@freeappstore/sdk', range: '>=0.16.21', location: 'root' }],
+    environment: 'browser',
+    metadata: { data: 'device-only', import: 'explicit-merge-or-replace' },
+    files: {
+      'fas-capabilities/backup.ts': `/**
+ * Validated backup and browser file export for device-local data.
+ * Not fas.kv and not an account backup.
+ * Installation and removal do not delete saved data or edited files.
+ * previewBackup shows counts before any write. importBackup requires an explicit
+ * merge or replace choice. A failed write restores the snapshot.
+ */
+export {
+  exportBackup,
+  previewBackup,
+  importBackup,
+  shareOrDownloadBackup,
+  registerBackupCapability,
+  mountBackupExample,
+} from '@freeappstore/sdk/backup';
+`,
+      'fas-capabilities/backup.md': `# Validated backup
+
+Requires @freeappstore/sdk/backup and the persistence capability.
+Requires @freeappstore/sdk >=0.16.21. This recipe copies app-owned device-local data; it does not upload to fas.kv.
+Call previewBackup before import. Pass merge or replace explicitly.
+shareOrDownloadBackup shares the file, downloads it, or returns JSON text, and
+revokes any object URL it created. Installation and removal do not delete app data.
+See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
+`,
+    },
+    configChanges: ['Import fas-capabilities/backup.ts where the app exports or imports a backup'],
+    validate: (content) =>
+      content.includes('do not delete') &&
+      content.includes('merge') &&
+      content.includes('replace') &&
+      content.includes('@freeappstore/sdk/backup'),
+  },
 };
 
 export const presets: Record<string, string[]> = {
@@ -132,6 +173,7 @@ export const presets: Record<string, string[]> = {
   connectivity: ['connectivity'],
   pwa: ['pwa'],
   persistence: ['persistence'],
+  backup: ['backup'],
 };
 interface Ownership {
   version: string;

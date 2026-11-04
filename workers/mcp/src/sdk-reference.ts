@@ -222,6 +222,36 @@ watchPreference('notes', 'draft', (notice) => {
 \`\`\`
 
 IndexedDB: \`openStore\`, \`getRecord\`, \`putRecord\`, \`deleteRecord\`, \`withTransaction\` (success after the transaction commits). Large files: \`openFileStore\`, \`putFile\`, \`getFile\`, \`getFileMetadata\`, \`listFiles\`. \`putFile\` keeps metadata separate from the payload and calls the app's \`resolveConflict\` when the id already exists. \`installCapability\` / \`getCapability\` register a store at init or later; \`not-installed\` is different from \`unavailable\` on an installed store. Reasons: unavailable, corrupt, quota, validation, aborted, conflict, not-installed.`,
+  backup: `## Validated backup and file export
+
+Device-local copy of app-owned data. Not \`fas.kv\`. The app owns the schema, migration, and conflict policy. Installing or removing the backup capability does not delete saved data.
+
+\`\`\`ts
+import {
+  exportBackup,
+  previewBackup,
+  importBackup,
+  shareOrDownloadBackup,
+  registerBackupCapability,
+  mountBackupExample,
+} from '@freeappstore/sdk/backup'
+
+registerBackupCapability()
+const envelope = await exportBackup({ appId: 'notes', data: { notes: ['hello'] } })
+const preview = await previewBackup(envelope.value, schema)
+// preview.value.preview.counts — show these before replacement. preview does not write.
+
+const imported = await importBackup({
+  raw: envelope.value,
+  mode: 'replace', // or 'merge'. There is no default.
+  schema,
+  snapshot: readCurrent,
+  apply: writeAppData,
+  restore: putSnapshotBack,
+})
+\`\`\`
+
+\`previewBackup\` checks the versioned envelope, checksum, and size limit, then returns counts. \`importBackup\` is all-or-nothing: a failed or cancelled write restores the snapshot. \`{ ok: false, reason: 'rollback' }\` means restore also failed and stored data may be partial. \`shareOrDownloadBackup\` uses \`navigator.share\` when \`canShare\` accepts the file, otherwise an object URL download whose \`release\` revokes the URL, otherwise the JSON text. \`mountBackupExample\` keeps Import disabled until a preview and an explicit merge or replace choice exist.`,
   counters: `## Shared Counters
 \`\`\`tsx
 const count = await fas.counters.get('likes')        // public, no auth

@@ -136,6 +136,28 @@ describe("sdk_reference", () => {
     }
   });
 
+  it("'backup' documents a validated envelope, explicit import choice, and object URL cleanup", () => {
+    const backup = getSdkReference("backup");
+    for (const part of [
+      "@freeappstore/sdk/backup",
+      "exportBackup",
+      "previewBackup",
+      "importBackup",
+      "shareOrDownloadBackup",
+      "registerBackupCapability",
+      "mountBackupExample",
+      "merge",
+      "replace",
+      "all-or-nothing",
+      "checksum",
+      "does not delete",
+      "object URL",
+      "fas.kv",
+    ]) {
+      expect(backup, part).toContain(part);
+    }
+  });
+
   it("'hooks' covers the screen helpers", () => {
     const hooks = getSdkReference("hooks");
     for (const hook of ["useToast", "useDocumentTitle", "useOnline"]) expect(hooks).toContain(hook);

@@ -98,6 +98,29 @@ watchPreference('notes', 'draft', (notice) => {
 
 `openStore` runs the caller's versioned `upgrade` and preserves records already in the `records` store. `openFileStore` keeps file metadata and file bytes in separate object stores so listing files does not read the payloads.
 
+## Backup and file export (`@freeappstore/sdk/backup`)
+
+Requires `@freeappstore/sdk >=0.16.21`. This is an optional copy of app-owned device-local data. A backup file is not `fas.kv` and it is not written until the app imports it. The app supplies the schema, the migration, and the merge policy.
+
+`previewBackup` checks the versioned envelope, the SHA-256 checksum, and the size limit, then returns counts. It does not write. `importBackup` requires an explicit `merge` or `replace` choice. There is no default. The import snapshots current data, applies the app's policy, and restores that snapshot if the write throws or the user cancels during the write. Success is returned only after apply finishes. If restore also throws, the result is `{ ok: false, reason: 'rollback' }` and the detail says the stored data may be partial.
+
+`shareOrDownloadBackup` uses `navigator.share` when `canShare` accepts the file. Otherwise it downloads through an object URL and revokes that URL. When neither API exists it returns the JSON text. `mountBackupExample` is an accessible preview: import stays disabled until the user has a preview and has chosen merge or replace. Registering the `backup` capability, or removing the screen, does not delete saved data.
+
+```ts
+import {
+  exportBackup,
+  previewBackup,
+  importBackup,
+  shareOrDownloadBackup,
+  registerBackupCapability,
+} from '@freeappstore/sdk/backup';
+
+registerBackupCapability();
+const envelope = await exportBackup({ appId: 'notes', data: { notes: ['hello'] } });
+```
+
+The default envelope limit is 4 MiB and the hard cap is 16 MiB.
+
 ## Shared counters (`fas.counters`)
 
 App-wide atomic counters. Anyone can read; authenticated users can increment.

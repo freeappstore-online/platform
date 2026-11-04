@@ -11,6 +11,12 @@ keys remain `fas.kv`. A failed save returns a status instead of throwing a
 success path, and corrupt values are left in place. See
 [device-local persistence](https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md#device-local-persistence-freeappstoresdkpersist).
 
+Validated backup, import, and browser file export live at `@freeappstore/sdk/backup`.
+This subpath requires `@freeappstore/sdk >=0.16.21`.
+The app owns the records and the merge policy. Import is all-or-nothing and does
+not delete data when the capability is installed or removed. See
+[backup and file export](https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md#backup-and-file-export-freeappstoresdkbackup).
+
 ## Installation
 
 ```bash
