@@ -3,10 +3,13 @@
 // toasts, offline banner, per-route title, PageHeader, skip link, and scroll +
 // focus on client-side route changes.
 
+import 'fake-indexeddb/auto';
+import { deleteDB } from 'idb';
 import { act, lazy, type ReactNode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FreeAppStore } from '../index.js';
+import { getRecord, openStore, putRecord } from '../persist/index.js';
 import { Footer } from './components.js';
 import { ProfileMenu, ProfilePage, Shell } from './layout.js';
 import type { NavItem } from './navbar.js';
@@ -614,6 +617,25 @@ describe('toasts', () => {
 
 describe('offline banner', () => {
   const banner = () => $('.fas-offline');
+
+  it('reports only connectivity on an offline mount while local drafts can still be saved', async () => {
+    setOnline(false);
+    const { app } = fakeApp();
+    await mount(<Shell app={app}>Local draft</Shell>);
+    expect(banner()?.querySelector('span')?.textContent).toBe("You're offline.");
+    const opened = await openStore({ namespace: 'offline-banner-test', version: 1 });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) throw new Error('Could not open local draft store');
+    try {
+      const draft = { text: 'Saved while offline' };
+      expect(await putRecord(opened.value, 'draft', draft)).toEqual({ ok: true, value: draft });
+      expect(await getRecord(opened.value, 'draft')).toEqual({ ok: true, value: draft });
+      expect(banner()?.querySelector('span')?.textContent).toBe("You're offline.");
+    } finally {
+      opened.value.close();
+      await deleteDB('fas:offline-banner-test');
+    }
+  });
 
   it('clears dismissal when reconnect and disconnect are batched in the same task', async () => {
     const { app } = fakeApp();

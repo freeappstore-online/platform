@@ -254,7 +254,7 @@ export function OfflineBanner() {
     <div role="status" aria-live="polite">
       {!online && !dismissed && (
         <div className="fas-offline flex items-center justify-between gap-3 border-b border-l-[3px] border-line border-l-warning bg-panel py-1 pl-4 pr-2 text-sm text-ink">
-          <span>You're offline. Changes can't be saved until the connection is back.</span>
+          <span>You're offline.</span>
           <button
             type="button"
             className="fas-dismiss inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-[1.1rem] leading-none text-inherit opacity-75 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2"

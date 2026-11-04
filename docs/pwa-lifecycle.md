@@ -56,7 +56,10 @@ new page's reload guard still applies. Subsequent workers wait for approval.
 ## Offline contract
 
 Installability, a cached shell and offline feature availability are distinct.
-The offline banner says only the downloaded shell is available by default. Cloud
+The shared Shell banner says only "You're offline." It does not describe save or
+sync state: device-local persistence and queued workflows can still save offline.
+Apps own save/sync feedback and must use actual storage results before reporting
+success. The PWA lifecycle notice describes downloaded shell availability. Cloud
 storage, remote media, account operations and model inference are not promised
 offline. Browser online/offline events are hints, not proof of server reachability.
 Apps can pass verified local feature descriptions to `startPwa({ offlineFeatures })`.
@@ -80,6 +83,12 @@ canvas or another gesture surface, never the page. Check narrow screens and
 enlarged text in the app's own layouts.
 
 ## Release regression
+
+For #353's offline-local-app behavior matrix, include an initially offline Shell:
+the neutral banner remains visible while a synthetic IndexedDB draft is saved and
+read back successfully. Verify dismissal, reconnect, repeated disconnects and the
+polite status region as well. `shell-resilience.test.tsx` covers these cases with
+fake IndexedDB; browser/release validation must also use the delivered package.
 
 `packages/sdk/src/pwa.test.ts` tests guards, independent activation/reload,
 legacy-worker control changes, public asset readiness and cache-policy defaults.
