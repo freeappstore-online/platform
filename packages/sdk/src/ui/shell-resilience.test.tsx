@@ -8,7 +8,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FreeAppStore } from '../index.js';
 import { Footer } from './components.js';
-import { ProfileMenu, Shell } from './layout.js';
+import { ProfileMenu, ProfilePage, Shell } from './layout.js';
 import type { NavItem } from './navbar.js';
 import { PageHeader, useDocumentTitle } from './page.js';
 import { useToast } from './shell-resilience.js';
@@ -1098,4 +1098,218 @@ describe('URL state regressions (#339)', () => {
       expect($('[role="alert"]')).toBeNull();
     },
   );
+});
+
+describe('shell and profile sweep (#339)', () => {
+  it('refreshes the return destination on same-path history navigation', async () => {
+    history.replaceState(null, '', '/profile?returnTo=%2Fnotes');
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/notes');
+    await act(async () => {
+      history.replaceState(null, '', '/profile?returnTo=%2Fsettings');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/settings');
+  });
+
+  it('captures native hash changes in the profile return destination', async () => {
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    await act(async () => {
+      history.replaceState(null, '', '/#details');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe(
+      '/profile?returnTo=%2F%23details',
+    );
+  });
+
+  it('navigates to the configured profile tab even when the pathname is already current', async () => {
+    history.replaceState(null, '', '/account?tab=security');
+    const { app } = fakeApp();
+    const navigate = vi.fn();
+    await mount(
+      <Shell app={app} profileHref="/account?tab=profile" onNavigate={navigate}>
+        <p>Account</p>
+      </Shell>,
+    );
+    await act(async () => $('a[aria-label="Profile"]')!.click());
+    expect(navigate).toHaveBeenCalledWith('/account?tab=profile');
+  });
+
+  it('leaves off-site profile links to the browser even with a local router', async () => {
+    const { app } = fakeApp();
+    const navigate = vi.fn();
+    await mount(
+      <Shell app={app} profileHref="https://accounts.example/profile" onNavigate={navigate}>
+        <p>App</p>
+      </Shell>,
+    );
+    let intercepted = false;
+    document.addEventListener(
+      'click',
+      (event) => {
+        intercepted = event.defaultPrevented;
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(async () => $('a[aria-label="Profile"]')!.dispatchEvent(event));
+    expect(intercepted).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('resolves a relative destination before the router changes history', async () => {
+    history.replaceState(null, '', '/teams/one/');
+    const { app } = fakeApp();
+    await mount(
+      <Shell
+        app={app}
+        nav={[{ href: '../profile', label: 'Team profile' }]}
+        onNavigate={(href) => history.pushState(null, '', href)}
+        renderNav={({ currentPath, onNavigate }) => (
+          <nav>
+            <span data-path>{currentPath}</span>
+            <button type="button" onClick={() => onNavigate('../profile')}>
+              Go
+            </button>
+          </nav>
+        )}
+      >
+        <p>App</p>
+      </Shell>,
+    );
+    await act(async () => byText('button', 'Go')!.click());
+    expect(location.pathname).toBe('/teams/profile');
+    expect($('[data-path]')?.textContent).toBe('/teams/profile');
+  });
+
+  it('does not submit an enclosing app form when changing profile preferences', async () => {
+    const { app } = fakeApp();
+    const submit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    await mount(
+      <form onSubmit={submit}>
+        <ProfilePage app={app} />
+      </form>,
+    );
+    await act(async () => byText('button', 'Large')!.click());
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('guards deletion in the legacy profile menu and handles failures without closing it', async () => {
+    const { app } = fakeApp();
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+    let resolve!: () => void;
+    vi.mocked(app.auth.deleteAccount).mockImplementation(
+      () =>
+        new Promise<void>((done) => {
+          resolve = done;
+        }),
+    );
+    await mount(<ProfileMenu app={app} />);
+    await act(async () => $('button[aria-label="Profile menu"]')!.click());
+    await act(async () => {
+      byText('button', 'Delete account')!.click();
+      byText('button', 'Delete account')?.click();
+    });
+    expect(app.auth.deleteAccount).toHaveBeenCalledTimes(1);
+    await act(async () => resolve());
+    expect($('button[aria-label="Profile menu"]')?.getAttribute('aria-expanded')).toBe('false');
+    vi.mocked(app.auth.deleteAccount).mockRejectedValue(new Error('offline'));
+    await act(async () => $('button[aria-label="Profile menu"]')!.click());
+    await act(async () => byText('button', 'Delete account')!.click());
+    expect($('[role="alert"]')?.textContent).toContain('Unable to delete');
+    expect($('button[aria-label="Profile menu"]')?.getAttribute('aria-expanded')).toBe('true');
+  });
+});
+
+describe('query and fragment route effects (#339)', () => {
+  it('keeps separate scroll positions for query variants of the same pathname', async () => {
+    history.replaceState(null, '', '/notes?view=all');
+    const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const { app } = fakeApp();
+    await mount(
+      <Shell
+        app={app}
+        nav={[{ label: 'Recent', href: '/notes?view=recent' }]}
+        onNavigate={(href) => history.pushState(null, '', href)}
+      >
+        <PageHeader title="Notes" />
+      </Shell>,
+    );
+    Object.defineProperty(window, 'scrollY', { value: 300, configurable: true });
+    await act(async () => byText('a', 'Recent')!.click());
+    await nextFrame();
+    expect(scroll).toHaveBeenLastCalledWith(0, 0);
+    Object.defineProperty(window, 'scrollY', { value: 80, configurable: true });
+    await act(async () => {
+      history.replaceState(null, '', '/notes?view=all');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    await nextFrame();
+    expect(scroll).toHaveBeenLastCalledWith(0, 300);
+  });
+
+  it('scrolls to a fragment target instead of resetting the page to the top', async () => {
+    const { app } = fakeApp();
+    await mount(
+      <Shell
+        app={app}
+        nav={[{ label: 'Details', href: '/#saved%20notes' }]}
+        onNavigate={(href) => history.pushState(null, '', href)}
+      >
+        <PageHeader title="Notes" />
+        <h2 id="saved notes" tabIndex={-1}>
+          Saved notes
+        </h2>
+      </Shell>,
+    );
+    const target = $('h2')!;
+    const scroll = vi.spyOn(target, 'scrollIntoView');
+    await act(async () => byText('a', 'Details')!.click());
+    await nextFrame();
+    expect(scroll).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(target);
+  });
+
+  it('closes the legacy menu with Escape and restores avatar focus', async () => {
+    const { app } = fakeApp();
+    await mount(<ProfileMenu app={app} />);
+    const toggle = $('button[aria-label="Profile menu"]')!;
+    await act(async () => toggle.click());
+    byText('button', 'Sign out')!.focus();
+    await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(toggle);
+  });
+});
+
+it('does not submit app forms from the topbar theme and text-size controls (#339)', async () => {
+  const { app } = fakeApp(false);
+  const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
+  await mount(
+    <form onSubmit={submit}>
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>
+    </form>,
+  );
+  await act(async () => {
+    $('button[aria-label^="Theme:"]')!.click();
+    $('button[aria-label^="Text:"]')!.click();
+  });
+  expect(submit).not.toHaveBeenCalled();
 });

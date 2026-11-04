@@ -335,9 +335,23 @@ export function useRouteChangeEffects(
     // A frame later, so a router that renders the new screen in its own update
     // has committed it before we scroll to it and look for its heading.
     const frame = requestAnimationFrame(() => {
-      window.scrollTo(0, back ? (positions.current.get(path) ?? 0) : 0);
       const main = mainRef.current;
-      const target = main?.querySelector<HTMLElement>('[data-fas-page-heading]') ?? main;
+      // Forward links with fragments should reach their anchor, including when
+      // returning from Profile. Back/forward keeps the saved scroll position.
+      let anchor: HTMLElement | null = null;
+      if (!back) {
+        const hash = path.split('#').slice(1).join('#');
+        if (hash) {
+          try {
+            anchor = document.getElementById(decodeURIComponent(hash));
+          } catch {
+            anchor = document.getElementById(hash);
+          }
+        }
+      }
+      if (anchor) anchor.scrollIntoView();
+      else window.scrollTo(0, back ? (positions.current.get(path) ?? 0) : 0);
+      const target = anchor ?? main?.querySelector<HTMLElement>('[data-fas-page-heading]') ?? main;
       target?.focus({ preventScroll: true });
     });
     return () => cancelAnimationFrame(frame);

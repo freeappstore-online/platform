@@ -76,7 +76,7 @@ What you get, with nothing to enable:
 | **Offline banner** | Shown under the topbar while the connection is down; announced, dismissible, cleared on reconnect. `useOnline()` gives screens the same signal. |
 | **Tab titles** | A `title` on a nav item becomes the tab title on its route; `useDocumentTitle()` in a screen overrides it. |
 | **Skip link** | "Skip to content", the first focusable element, hidden until focused. |
-| **Route changes** | With `onNavigate`: forward navigation scrolls to the top, back/forward restores the position, and focus moves to the new screen's `PageHeader` (else `<main>`). |
+| **Route changes** | With `onNavigate`: forward navigation follows a fragment target or scrolls to the top; back/forward restores the position. Without a fragment, focus moves to the screen's `PageHeader` (else `<main>`). |
 | **Bottom safe area** | Padding for the home indicator, without a platform attribution bar in browser or installed mode. |
 
 FreeAppStore is free, so there is no subscription or upgrade screen: the only
@@ -178,7 +178,9 @@ onto the standard frame:
   the browser manages navigation and scroll restoration; full reloads of asynchronously rendered
   screens may not recover the exact scroll position. The built-in profile remembers the originating in-app URL in `returnTo`, so
   **Back to app** keeps the original path, query and fragment through reload and sign-in;
-  off-site destinations and loops back to the profile are rejected. The host serves your app's `index.html`
+  off-site return destinations and loops back to the profile are rejected. Query-only and
+  fragment-only history changes update the shell too. External links, downloads, and links targeting
+  another window retain native browser behavior even with `onNavigate`. The host serves your app's `index.html`
   for any path without a file extension, so deep links like `/tags` work on reload.
 - **The Shell does not load fonts or tokens.** They come from your app's `index.css`
   (the templates include them).
@@ -208,7 +210,7 @@ onto the standard frame:
 | `Shell` | see [Shell](#shell-the-standard-app-frame) | The app frame: topbar, main navigation, error boundary, toasts |
 | `NavBar` | `items`, `currentPath?`, `onNavigate?` | The navbar `Shell` renders from `nav`, for custom layouts |
 | `PageHeader` | `title`, `description?`, `actions?` | A screen's single `<h1>` |
-| `ProfileMenu` | `app`, `user` | Dropdown with profile, settings, sign out |
+| `ProfileMenu` | `app`, `showThemeToggle?`, `children?` | Legacy dropdown with profile, settings, sign out, and deletion feedback; Shell uses the separate Profile page |
 | `ProfilePage` | `app` | Full profile page with account management |
 | `Tabs` | `tabs`, `active`, `onChange` | Tab navigation |
 

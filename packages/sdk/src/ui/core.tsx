@@ -167,6 +167,7 @@ export function ThemeToggle() {
 
   return (
     <button
+      type="button"
       onClick={cycle}
       aria-label={`Theme: ${preference}`}
       title={`Theme: ${preference}`}
@@ -238,6 +239,7 @@ export function TextSizeToggle() {
 
   return (
     <button
+      type="button"
       onClick={cycle}
       aria-label={title}
       title={title}

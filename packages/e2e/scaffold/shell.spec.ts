@@ -658,3 +658,52 @@ test('query/hash navigation preserves profile return destination (#339)', async 
     await writeFile(appFile, original);
   }
 });
+
+test('hash navigation keeps its anchor and updates the avatar return URL (#339)', async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'fas:session',
+      JSON.stringify({
+        token: 'browser-test-only',
+        user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+      }),
+    ),
+  );
+  await page.goto('/');
+  await expect(page.locator('header')).toBeVisible();
+  await page.evaluate(() => {
+    const main = document.querySelector('main')!;
+    const link = document.createElement('a');
+    link.href = '#sweep-details';
+    link.textContent = 'Jump to sweep details';
+    const spacer = document.createElement('div');
+    spacer.style.height = '1200px';
+    const target = document.createElement('h2');
+    target.id = 'sweep-details';
+    target.tabIndex = -1;
+    target.textContent = 'Sweep details';
+    main.append(link, spacer, target);
+  });
+  await page.getByRole('link', { name: 'Jump to sweep details' }).click();
+  const target = page.getByRole('heading', { name: 'Sweep details' });
+  await expect(target).toBeInViewport();
+  await expect(target).toBeFocused();
+  await expect(
+    page.locator('header').getByRole('link', { name: 'Profile', exact: true }).last(),
+  ).toHaveAttribute('href', '/profile?returnTo=%2F%23sweep-details');
+});
+
+test('query-only history changes refresh the profile return link (#339)', async ({ page }) => {
+  await page.goto('/profile?returnTo=%2Fabout');
+  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/about');
+  // Seed another same-document entry, as an app-owned router can do.
+  await page.evaluate(() => {
+    history.pushState(null, '', '/profile?returnTo=%2Fnotes');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  });
+  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/notes');
+  await page.goBack();
+  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/about');
+});

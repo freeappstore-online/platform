@@ -1,5 +1,12 @@
 import { type MouseEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { canFollowLink, routeHref, routeUrl } from './navigation.js';
+import {
+  canFollowLink,
+  isLocalRoute,
+  routeHref,
+  routePath,
+  routeUrl,
+  useCurrentLocation,
+} from './navigation.js';
 
 /** One screen in the app's main navigation. */
 export interface NavItem {
@@ -31,44 +38,34 @@ export interface NavBarProps {
 
 /** The browser's current URL path, query and hash, following back/forward. `initial` wins when given. */
 export function useCurrentPath(initial?: string): [string, (path: string) => void] {
-  const [path, setPath] = useState(
-    () =>
-      initial ?? (typeof window === 'undefined' ? '/' : routeHref(new URL(window.location.href))),
-  );
-  // Routers can update history and re-render their layout without a popstate event.
-  const browserPath =
-    typeof window === 'undefined' ? '/' : routeHref(new URL(window.location.href));
-  useEffect(() => {
-    if (initial !== undefined) {
-      setPath(initial);
-      return;
-    }
-    setPath(browserPath);
-    const sync = () => setPath(routeHref(new URL(window.location.href)));
-    window.addEventListener('popstate', sync);
-    window.addEventListener('hashchange', sync);
-    return () => {
-      window.removeEventListener('popstate', sync);
-      window.removeEventListener('hashchange', sync);
-    };
-  }, [initial, browserPath]);
-  return [initial ?? path, setPath];
+  return useCurrentLocation(initial);
 }
 
 /** The item to mark current: an exact match, else the longest prefix (`/notes` for `/notes/42`). */
 export function activeHref(items: NavItem[], path: string): string | null {
   let best: string | null = null;
+  let bestLength = -1;
+  let bestSpecificity = -1;
+  const currentUrl = routeUrl(path);
+  const current = routePath(path);
   for (const { href } of items) {
     const url = routeUrl(href);
-    const current = routeUrl(path);
-    if (url.origin !== current.origin) continue;
+    if (!isLocalRoute(url)) continue;
+    const candidate = routePath(url.pathname);
     const matches =
-      (!url.search || url.search === current.search) &&
-      (!url.hash || url.hash === current.hash) &&
-      (url.pathname === current.pathname ||
-        (url.pathname !== '/' &&
-          current.pathname.startsWith(`${url.pathname.replace(/\/+$/, '')}/`)));
-    if (matches && (best === null || href.length > best.length)) best = href;
+      (!url.search || url.search === currentUrl?.search) &&
+      (!url.hash || url.hash === currentUrl?.hash) &&
+      (candidate === current || (candidate !== '/' && current.startsWith(`${candidate}/`)));
+    const specificity = url.search.length + url.hash.length;
+    if (
+      matches &&
+      (candidate.length > bestLength ||
+        (candidate.length === bestLength && specificity > bestSpecificity))
+    ) {
+      best = href;
+      bestLength = candidate.length;
+      bestSpecificity = specificity;
+    }
   }
   return best;
 }
@@ -83,7 +80,7 @@ export function activeHref(items: NavItem[], path: string): string | null {
  * Renders nothing when there are no items.
  */
 export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
-  const [path, setPath] = useCurrentPath(currentPath);
+  const [location, setLocation] = useCurrentLocation(currentPath);
   const [open, setOpen] = useState(false);
   const listId = useId();
   const navRef = useRef<HTMLElement>(null);
@@ -94,7 +91,7 @@ export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: a route change itself closes the drawer.
   useEffect(() => {
     setOpen(false);
-  }, [path]);
+  }, [location]);
 
   useEffect(() => {
     if (!open) return;
@@ -117,15 +114,15 @@ export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
   }, [open]);
 
   if (items.length === 0) return null;
-  const current = activeHref(items, path);
+  const current = activeHref(items, location);
 
   const follow = (e: MouseEvent<HTMLAnchorElement>, href: string) => {
     setOpen(false);
     if (!onNavigate || !canFollowLink(e, href)) return;
+    const destination = routeUrl(href)!;
     e.preventDefault();
-    const destination = routeHref(routeUrl(href));
-    onNavigate(destination);
-    if (currentPath === undefined) setPath(destination);
+    onNavigate(routeHref(destination));
+    if (currentPath === undefined) setLocation(routeHref(destination));
   };
 
   return (

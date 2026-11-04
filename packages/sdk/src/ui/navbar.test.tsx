@@ -259,3 +259,53 @@ describe('NavBar behaviour', () => {
     expect(document.querySelectorAll('#fas-nav-css')).toHaveLength(0);
   });
 });
+
+describe('navigation URL sweep (#339)', () => {
+  it('normalizes trailing slashes and query strings when matching a section', () => {
+    const items = [{ label: 'Notes', href: '/notes/' }];
+    expect(activeHref(items, '/notes?sort=recent#saved')).toBe('/notes/');
+    expect(activeHref(items, '/notes')).toBe('/notes/');
+  });
+
+  it('does not send external destinations to an app router', async () => {
+    const navigate = vi.fn();
+    await mount(
+      <NavBar items={[{ label: 'Help', href: 'https://help.example/' }]} onNavigate={navigate} />,
+    );
+    let intercepted = false;
+    document.addEventListener(
+      'click',
+      (event) => {
+        intercepted = event.defaultPrevented;
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(async () => link('Help').dispatchEvent(event));
+    expect(intercepted).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+});
+
+it.each(['target', 'download'])(
+  'preserves native %s behavior on navigation links',
+  async (attribute) => {
+    const navigate = vi.fn();
+    await mount(<NavBar items={ITEMS} onNavigate={navigate} />);
+    link('Notes').setAttribute(attribute, attribute === 'target' ? '_blank' : 'notes.txt');
+    let intercepted = false;
+    document.addEventListener(
+      'click',
+      (event) => {
+        intercepted = event.defaultPrevented;
+        event.preventDefault();
+      },
+      { once: true },
+    );
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(async () => link('Notes').dispatchEvent(event));
+    expect(intercepted).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  },
+);
