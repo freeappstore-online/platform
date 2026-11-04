@@ -12,9 +12,9 @@ import {
   substituteAppName,
 } from '../../../workers/agent/src/template';
 import * as hooks from './hooks.js';
-import * as pwaSdk from './pwa.js';
-import { registerMediaBusyGuard } from './media.js';
 import * as sdk from './index.js';
+import { registerMediaBusyGuard } from './media.js';
+import * as pwaSdk from './pwa.js';
 import * as ui from './ui.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

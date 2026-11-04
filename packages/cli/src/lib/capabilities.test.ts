@@ -83,12 +83,44 @@ it('shares generated-file planning semantics for clean, dry-run, and edited in-m
 });
 
 it('uses npm semver range semantics for shared capability prerequisites', () => {
-  expect(satisfiesCapabilityPackageRange('0.16.26-beta.1', '>=0.16.26', { validRange, minVersion, subset })).toBe(false);
-  expect(satisfiesCapabilityPackageRange('^0.16.26-beta.1', '>=0.16.26', { validRange, minVersion, subset })).toBe(false);
-  expect(satisfiesCapabilityPackageRange('>=0.16.26 <0.17.0', '>=0.16.26', { validRange, minVersion, subset })).toBe(true);
-  expect(satisfiesCapabilityPackageRange('1.3.x', '^1.0.0', { validRange, minVersion, subset })).toBe(true);
-  expect(satisfiesCapabilityPackageRange('0.16.26+build.1', '>=0.16.26', { validRange, minVersion, subset })).toBe(true);
-  expect(satisfiesCapabilityPackageRange('0.16.26 - 0.16.30', '>=0.16.26', { validRange, minVersion, subset })).toBe(true);
+  expect(
+    satisfiesCapabilityPackageRange('0.16.26-beta.1', '>=0.16.26', {
+      validRange,
+      minVersion,
+      subset,
+    }),
+  ).toBe(false);
+  expect(
+    satisfiesCapabilityPackageRange('^0.16.26-beta.1', '>=0.16.26', {
+      validRange,
+      minVersion,
+      subset,
+    }),
+  ).toBe(false);
+  expect(
+    satisfiesCapabilityPackageRange('>=0.16.26 <0.17.0', '>=0.16.26', {
+      validRange,
+      minVersion,
+      subset,
+    }),
+  ).toBe(true);
+  expect(
+    satisfiesCapabilityPackageRange('1.3.x', '^1.0.0', { validRange, minVersion, subset }),
+  ).toBe(true);
+  expect(
+    satisfiesCapabilityPackageRange('0.16.26+build.1', '>=0.16.26', {
+      validRange,
+      minVersion,
+      subset,
+    }),
+  ).toBe(true);
+  expect(
+    satisfiesCapabilityPackageRange('0.16.26 - 0.16.30', '>=0.16.26', {
+      validRange,
+      minVersion,
+      subset,
+    }),
+  ).toBe(true);
 });
 it('describes the explicit room-restricted backend data model accurately', () => {
   const cloud = registry['cloud-data'];

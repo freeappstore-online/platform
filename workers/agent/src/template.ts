@@ -1069,7 +1069,7 @@ async function applyCapabilitiesToTemplateAsync(
       ...(capability.metadata ? { metadata: capability.metadata } : {}),
     };
   }
-  const nextManifest = JSON.stringify(manifest, null, 2) + "\n";
+  const nextManifest = `${JSON.stringify(manifest, null, 2)}\n`;
   const manifestChanged = nextManifest !== manifestText;
   const files = dryRun ? currentFiles : { ...currentFiles, ...plan.writes, ...(manifestChanged ? { [manifestPath]: nextManifest } : {}) };
   const changes = dryRun

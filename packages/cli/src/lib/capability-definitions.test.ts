@@ -30,5 +30,7 @@ it.each([
   ['1.0.0', 'broken', false],
   ['1.0.0', '<0.0.0', false],
 ])('checks %s against %s as %s', (declared, required, expected) => {
-  expect(satisfiesCapabilityPackageRange(declared, required, { validRange, minVersion, subset })).toBe(expected);
+  expect(
+    satisfiesCapabilityPackageRange(declared, required, { validRange, minVersion, subset }),
+  ).toBe(expected);
 });

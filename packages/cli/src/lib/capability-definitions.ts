@@ -445,7 +445,10 @@ export function satisfiesCapabilityPackageRange(
   const actualRange = semver.validRange(declared);
   const requiredRange = semver.validRange(required);
   return Boolean(
-    actualRange && requiredRange && semver.minVersion(actualRange) && semver.subset(actualRange, requiredRange),
+    actualRange &&
+      requiredRange &&
+      semver.minVersion(actualRange) &&
+      semver.subset(actualRange, requiredRange),
   );
 }
 

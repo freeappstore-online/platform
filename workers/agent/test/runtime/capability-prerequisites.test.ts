@@ -3,6 +3,8 @@ import { expect, it } from "vitest";
 import { minVersion, subset, validRange } from "semver";
 import { checkCapabilityPackagePrerequisites, resolveCapabilities, satisfiesCapabilityPackageRange } from "../../../../packages/cli/src/lib/capability-definitions";
 
+const semver = { validRange, minVersion, subset };
+
 it.each([
   ["0.16.26-beta.1", ">=0.16.26", false],
   ["^0.16.26-beta.1", ">=0.16.26", false],
@@ -13,7 +15,7 @@ it.each([
   ["0.16.26 - 0.16.30", ">=0.16.26", true],
   ["^0.16.26", ">=0.16.26", true],
 ])("checks bundled prerequisite %s against %s", (declared, required, expected) => {
-  expect(satisfiesCapabilityPackageRange(declared, required, { minVersion, subset, validRange })).toBe(expected);
+  expect(satisfiesCapabilityPackageRange(declared, required, semver)).toBe(expected);
 });
 
 it.each([
@@ -24,6 +26,11 @@ it.each([
   const pkg = (sdk?: string) => JSON.stringify({ dependencies: {
     ...(sdk ? { "@freeappstore/sdk": sdk } : {}), "vite-plugin-pwa": "1.3.0",
   } });
-  const result = checkCapabilityPackagePrerequisites(resolveCapabilities([id]), pkg(root), web === undefined ? undefined : pkg(web), { minVersion, subset, validRange });
+  const result = checkCapabilityPackagePrerequisites(
+    resolveCapabilities([id]),
+    pkg(root),
+    web === undefined ? undefined : pkg(web),
+    semver,
+  );
   expect(result.errors.length === 0).toBe(accepted);
 });
