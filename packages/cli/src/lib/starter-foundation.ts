@@ -385,7 +385,7 @@ export default function App() {
   // and moves focus to the new screen's PageHeader.
   const navigate = (href: string) => {
     window.history.pushState(null, "", href);
-    setPath(href);
+    setPath(window.location.pathname);
   };
 
   return (

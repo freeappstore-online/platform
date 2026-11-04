@@ -542,6 +542,45 @@ test('profile returns to the originating URL after reload and OAuth', async ({ p
   expect(callback.searchParams.get('returnTo')).toBe(origin);
 });
 
+test('query and hash navigation keeps the current screen after Profile return (#387)', async ({
+  page,
+}) => {
+  const original = await readFile(appFile, 'utf8');
+  const instrumented = original.replace(
+    '{ label: "About", href: "/about", title: "About — ',
+    '{ label: "About", href: "/about?sort=recent#saved", title: "About — ',
+  );
+  try {
+    await writeFile(appFile, instrumented);
+    await expect
+      .poll(async () =>
+        (await (await page.request.get('/src/App.tsx')).text()).includes('sort=recent'),
+      )
+      .toBe(true);
+    await page.goto('/');
+    await openMenu(page);
+    await page.getByRole('link', { name: 'About', exact: true }).click();
+    await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
+    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+    await page.locator('header a[aria-label="Profile"]').click();
+    await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute(
+      'href',
+      '/about?sort=recent#saved',
+    );
+    await page.reload();
+    await page.getByRole('link', { name: 'Back to app' }).click();
+    await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
+    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
+    await page.goForward();
+    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+  } finally {
+    await writeFile(appFile, original);
+  }
+});
+
 test('profile contains long names and keyboard navigation closes the drawer', async ({ page }) => {
   const login = 'a'.repeat(39);
   await page.setViewportSize({ width: 320, height: 800 });
@@ -738,8 +777,12 @@ for (const blocked of [false, true]) {
     );
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
     await page.getByRole('button', { name: 'Large', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Text: large', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Text: large', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Large', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.locator('html')).toHaveAttribute('data-text', 'lg');
+    await page.getByRole('button', { name: 'Small', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Small', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -790,11 +833,11 @@ test('preference changes synchronize across tabs (#340)', async ({ page, context
       'true',
     );
     await other.getByRole('button', { name: 'Large', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Text: large', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Large', exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
+    await expect(page.locator('html')).toHaveAttribute('data-text', 'lg');
   } finally {
     await other.close();
   }
