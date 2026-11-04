@@ -60,9 +60,20 @@ fas.auth.onChange(cb);     // fires immediately + on change, returns Unsubscribe
 await fas.auth.init();     // capture callback, must be called once
 ```
 
+### Data access contract
+
+| Model | Service | Guarantee |
+| --- | --- | --- |
+| Device-local | `@freeappstore/sdk/persist` | This browser profile and origin only; not account sync. |
+| Private per-account | `fas.kv` | Server-side `(appId, userId)` isolation; authentication required. |
+| Public shared | `fas.collections` | Public reads, owner-only writes. Visibility is public even when a query filters by owner. |
+| Room-restricted | Backend data-room HTTP API | Authenticated endpoints enforce room membership. They are separate from public collections and realtime room broadcasts; the SDK does not yet provide a wrapper. See the [data-room API](../../docs/data-rooms.md). |
+
+`fas.collections.collection(name, { visibility: 'public-read' })` makes the current visibility explicit in code. Other visibility claims are rejected by the SDK type and runtime.
+
 ### Per-user KV
 
-Per-user, per-app key-value store. Scoped to `(appId, userId)` server-side, so apps cannot read each other's data and users cannot read each other's data.
+Private per-account cloud storage scoped to `(appId, userId)` server-side. Use it for data that follows a signed-in user across devices. Requests require the account; do not gate unrelated public screens behind sign-in.
 
 ```ts
 await fas.kv.set('theme', { color: 'plum' });
@@ -114,14 +125,14 @@ room.send({ text: 'hello' });
 room.close();
 ```
 
-Limits (server-enforced): 32 peers per room, 100 msgs/sec per peer, 4KB per message, 24h idle eviction, 64 active rooms per app.
+Rooms provide ephemeral realtime broadcast, not durable storage or a room-membership access-control list. Do not use them to claim private-room confidentiality. Limits (server-enforced): 32 peers per room, 100 msgs/sec per peer, 4KB per message, 24h idle eviction, 64 active rooms per app.
 
 ### Collections (document database)
 
-Simple document store for apps that need public, queryable data. No SQL required — just JSON in, JSON out.
+Public-read document store for queryable shared data. Anyone can read documents; authenticated owners can write their own. An `owner` query filter is not a privacy boundary. No SQL required — just JSON in, JSON out.
 
 ```ts
-const posts = fas.collections.collection('posts');
+const posts = fas.collections.collection('posts', { visibility: 'public-read' });
 
 // Create (auth required, you become the owner)
 const post = await posts.create({ title: 'Hello', body: '...' });
@@ -315,3 +326,6 @@ Also add the token `@theme inline` mapping and animation keyframes from
 [the styling guide](https://github.com/freeappstore-online/platform/blob/main/docs/ui.md#styling).
 Both official templates include the complete setup. Floating UI uses opaque
 `--popover` (default `var(--paper)`); `--panel` is opaque and glass is opt-in.
+
+
+The connected draft hook and example are a supported SDK recipe. The canonical generated connected template is not wired to this feature in #350; carry starter wiring and adoption into #352 rather than claiming existing generated templates changed.

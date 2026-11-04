@@ -1,6 +1,6 @@
 interface AuthLike {
   token: string | null;
-  handleUnauthorized(): void;
+  handleUnauthorized(requestToken?: string): void;
 }
 
 export interface Friend {
@@ -51,7 +51,7 @@ export class Friends {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       return [];
     }
     if (!res.ok) return [];
@@ -74,7 +74,7 @@ export class Friends {
       body: JSON.stringify({ userId }),
     });
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!res.ok) {
@@ -94,7 +94,7 @@ export class Friends {
       body: JSON.stringify({ action }),
     });
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!res.ok) {
@@ -112,7 +112,7 @@ export class Friends {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!res.ok) {

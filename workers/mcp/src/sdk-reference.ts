@@ -264,7 +264,7 @@ const filtered = await fas.counters.list({ prefix: 'vote:' })
 Not user-scoped. Atomic. Use for votes, views, leaderboards.`,
   collections: `## Collections (Document Database)
 \`\`\`tsx
-const posts = fas.collections.collection('posts')
+const posts = fas.collections.collection('posts', { visibility: 'public-read' })
 const doc = await posts.create({ title: 'Hello', body: '...' })
 const post = await posts.get(doc.id)
 const all = await posts.query()

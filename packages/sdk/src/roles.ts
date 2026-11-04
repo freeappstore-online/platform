@@ -1,6 +1,6 @@
 interface AuthLike {
   token: string | null;
-  handleUnauthorized(): void;
+  handleUnauthorized(requestToken?: string): void;
 }
 
 export interface RoleAssignment {
@@ -70,7 +70,7 @@ export class Roles {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!res.ok) throw new Error(`roles.listAll failed: ${res.status}`);
@@ -105,7 +105,7 @@ export class Roles {
       body: JSON.stringify(body),
     });
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!res.ok) {
@@ -123,7 +123,7 @@ export class Roles {
       body: JSON.stringify(body),
     });
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!res.ok) {

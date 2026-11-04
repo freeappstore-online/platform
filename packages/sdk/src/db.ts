@@ -24,6 +24,11 @@ export interface QueryResult<T> {
   total: number;
 }
 
+/** Collections are currently public-read; this explicit option prevents implying private visibility. */
+export interface CollectionOptions {
+  visibility: 'public-read';
+}
+
 /** Document database — organize data into named collections. */
 export class Collections {
   constructor(
@@ -32,14 +37,23 @@ export class Collections {
     private readonly auth: Auth,
   ) {}
 
-  /** Get a collection handle for the given name. */
-  collection(name: string): Collection {
+  /** Legacy selection; collection visibility is public-read. */
+  /** @deprecated Pass `{ visibility: 'public-read' }` to make the access contract explicit. */
+  collection(name: string): Collection;
+  /** Select a collection and acknowledge its server-enforced public-read visibility. */
+  collection(name: string, options: CollectionOptions): Collection;
+  collection(name: string, options?: CollectionOptions): Collection {
+    if (options && options.visibility !== 'public-read') {
+      throw new Error('Collections are public-read. Use fas.kv for private per-account data.');
+    }
     return new Collection(this.appId, name, this.apiBase, this.auth);
   }
 }
 
 /** A named collection of JSON documents. */
 export class Collection {
+  readonly visibility = 'public-read' as const;
+
   constructor(
     private readonly appId: string,
     private readonly name: string,
@@ -64,7 +78,7 @@ export class Collection {
       body: JSON.stringify(doc),
     });
     if (response.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!response.ok) {
@@ -130,7 +144,7 @@ export class Collection {
       body: JSON.stringify(patch),
     });
     if (response.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!response.ok) {
@@ -153,7 +167,7 @@ export class Collection {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (response.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!response.ok && response.status !== 404) {

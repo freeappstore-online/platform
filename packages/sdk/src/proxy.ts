@@ -29,16 +29,17 @@ export class ApiProxy {
    *   - a full "https://host/path?query" URL (we strip the scheme)
    */
   async fetch(target: string, init?: RequestInit): Promise<Response> {
-    if (!this.auth.token) {
+    const token = this.auth.token;
+    if (!token) {
       throw new Error('proxy.fetch: not signed in. Call fas.auth.signIn() first.');
     }
     const url = `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/proxy/${normalizeTarget(target)}`;
     const headers = new Headers(init?.headers);
-    headers.set('Authorization', `Bearer ${this.auth.token}`);
+    headers.set('Authorization', `Bearer ${token}`);
     const proxyResponse = await fetch(url, { ...init, headers });
     if (proxyResponse.status === 401) {
-      this.auth.handleUnauthorized();
-      throw new Error('proxy.fetch: session expired. User has been signed out.');
+      this.auth.handleUnauthorized(token);
+      throw new Error('proxy.fetch: request was unauthorized.');
     }
     return proxyResponse;
   }

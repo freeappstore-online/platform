@@ -1,5 +1,12 @@
 # @freeappstore/sdk
 
+## 0.16.25
+
+- Preserve the corrected JSON-normalized backup result types from #360.
+- Add explicit public-read collection selection and security-model types/docs.
+- Add a race-safe connected KV draft hook and account-isolation guards for stale 401, profile, and account-delete responses.
+
+
 ## 0.16.0
 
 - Migrate all React UI to compiled Tailwind 4 utilities on design tokens. Apps upgrading must add the SDK `@source`, token mapping and animation setup documented in `docs/ui.md#styling`; runtime stylesheets are no longer injected.

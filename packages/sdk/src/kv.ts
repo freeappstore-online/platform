@@ -41,7 +41,7 @@ export class Kv {
       ...(opts?.signal && { signal: opts.signal }),
     });
     if (listResponse.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!listResponse.ok) throw new Error(`kv.list failed: ${listResponse.status}`);
@@ -123,7 +123,7 @@ export class Kv {
     if (body !== undefined) init.body = body;
     const kvResponse = await fetch(url, init);
     if (kvResponse.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     return kvResponse;

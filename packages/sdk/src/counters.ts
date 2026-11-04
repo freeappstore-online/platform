@@ -35,7 +35,8 @@ export class Counters {
 
   /** Increment (or decrement) a counter. Requires auth. Returns new value. */
   async increment(key: string, amount = 1): Promise<number> {
-    if (!this.auth.token) throw new Error('Not signed in.');
+    const token = this.auth.token;
+    if (!token) throw new Error('Not signed in.');
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/counters/${encodeURIComponent(key)}`,
       this.apiBase,
@@ -43,13 +44,13 @@ export class Counters {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${this.auth.token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ increment: amount }),
     });
     if (response.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (!response.ok) throw new Error(`counters.increment failed: ${response.status}`);

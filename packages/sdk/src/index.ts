@@ -47,7 +47,7 @@ export {
   registerBackupCapability,
   shareOrDownloadBackup,
 } from './backup/index.js';
-export type { Collection, GeoBBox, QueryOptions, QueryResult } from './db.js';
+export type { Collection, CollectionOptions, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
 export type {
@@ -66,7 +66,7 @@ export {
 export type { DefaultRole, RoleAssignment } from './roles.js';
 export { DEFAULT_ROLES } from './roles.js';
 export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
-export type { FasInitOptions, Unsubscribe, User } from './types.js';
+export type { DataAccessModel, FasInitOptions, Unsubscribe, User } from './types.js';
 // React-dependent exports (useVoiceInput, UseVoiceInputReturn) live in the
 // './hooks' subpath, NOT this barrel. Re-exporting them here forced the main
 // entry to statically import 'react' — an *optional* peer dep — so any

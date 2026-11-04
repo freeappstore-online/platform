@@ -1,5 +1,10 @@
 # @freeappstore/cli
 
+## 0.4.53
+
+- Add cloud-data capability metadata and guidance for device-local, private-account, public-shared, and backend-authorized room-restricted data.
+
+
 ## 0.4.25
 
 - **Fix (DX):** Clearer auth messaging on `fas publish`. An expired session used to surface as `401 Unauthorized` → "Not signed in", which reads as a _permissions_ problem and sent creators chasing access grants that don't exist (real support thread: a creator asked to be "granted publishing permission" when their token had simply expired). Now the CLI:

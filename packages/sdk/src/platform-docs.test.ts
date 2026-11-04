@@ -36,7 +36,11 @@ function apiExpressions(code: string): string[] {
         const callee = init.expression.getText(source);
         if (callee === 'fas.collections.collection' || callee === 'fas.rooms.join') {
           aliases.add(node.name.text);
-          declarations.push(`const ${node.name.text} = ${callee}('docs-example');`);
+          declarations.push(
+            callee === 'fas.collections.collection'
+              ? `const ${node.name.text} = ${callee}('docs-example', { visibility: 'public-read' });`
+              : `const ${node.name.text} = ${callee}('docs-example');`,
+          );
         }
       }
     }

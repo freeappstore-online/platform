@@ -89,13 +89,51 @@ export function watchConnectivity(listener: (online: boolean) => void): () => vo
     configChanges: [],
     validate: (content) => content.includes('export function watchConnectivity'),
   },
+  'cloud-data': {
+    id: 'cloud-data',
+    version: '1.0.0',
+    dependencies: {},
+    environment: 'browser',
+    metadata: {
+      models: 'device-local,private-account,public-shared,room-restricted',
+      'device-local': 'sdk-persist',
+      'private-account': 'sdk-kv',
+      'public-shared': 'sdk-collections:public-read',
+      'room-restricted': 'backend-http:data-rooms',
+    },
+    files: {
+      'fas-capabilities/cloud-data.md': `# Cloud data access models
+
+Device-local data uses @freeappstore/sdk/persist and does not sync.
+Private per-account data uses fas.kv and requires sign-in.
+Public shared data uses fas.collections and is public-read, owner-write.
+Select it explicitly with collection(name, { visibility: 'public-read' }).
+An owner query filter does not make a document private.
+Room-restricted durable data uses authenticated backend data-room endpoints,
+documented at https://github.com/freeappstore-online/platform/blob/main/docs/data-rooms.md.
+The SDK does not yet wrap these endpoints. Realtime rooms are broadcast channels,
+not authorization boundaries. Do not store hidden votes or private room data in
+public collections.
+See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
+`,
+    },
+    configChanges: [
+      'Choose a data access model from fas-capabilities/cloud-data.md before storing app data',
+    ],
+    validate: (content) => content.includes('room-restricted') && content.includes('public-read'),
+  },
   persistence: {
     id: 'persistence',
     packages: [{ name: '@freeappstore/sdk', range: '>=0.16.18', location: 'root' }],
     version: '1.0.0',
     dependencies: {},
     environment: 'browser',
-    metadata: { data: 'device-only', account: 'fas.kv' },
+    metadata: {
+      data: 'device-local',
+      account: 'private-per-account:fas.kv',
+      shared: 'public-read:fas.collections',
+      roomRestricted: 'backend-http:data-rooms',
+    },
     files: {
       'fas-capabilities/persistence.ts': `/**
  * Device-local persistence. This data is device-only. Not an account backup and not fas.kv.

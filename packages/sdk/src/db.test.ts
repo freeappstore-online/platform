@@ -23,7 +23,7 @@ afterEach(() => {
 describe('Db.collection', () => {
   it('returns a Collection instance', () => {
     const db = new Collections('test-app', 'https://api.example', fakeAuth('tok') as any);
-    const col = db.collection('posts');
+    const col = db.collection('posts', { visibility: 'public-read' });
     expect(col).toBeDefined();
   });
 });
@@ -36,7 +36,9 @@ describe('Collection.create', () => {
         new Response(JSON.stringify({ id: 'abc123', title: 'Hello' }), { status: 201 }),
       );
     const db = new Collections('myapp', 'https://api.example', fakeAuth('tok') as any);
-    const result = await db.collection('posts').create({ title: 'Hello' });
+    const result = await db
+      .collection('posts', { visibility: 'public-read' })
+      .create({ title: 'Hello' });
     expect(result).toEqual({ id: 'abc123', title: 'Hello' });
     const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(call[0].toString()).toContain('/v1/apps/myapp/db/posts');
@@ -45,7 +47,9 @@ describe('Collection.create', () => {
 
   it('throws when not signed in', async () => {
     const db = new Collections('myapp', 'https://api.example', fakeAuth(null) as any);
-    await expect(db.collection('posts').create({ title: 'x' })).rejects.toThrow(/not signed in/i);
+    await expect(
+      db.collection('posts', { visibility: 'public-read' }).create({ title: 'x' }),
+    ).rejects.toThrow(/not signed in/i);
   });
 });
 
@@ -57,7 +61,9 @@ describe('Collection.query', () => {
       }),
     );
     const db = new Collections('myapp', 'https://api.example', fakeAuth(null) as any);
-    const result = await db.collection('posts').query({ limit: 10, order: 'desc' });
+    const result = await db
+      .collection('posts', { visibility: 'public-read' })
+      .query({ limit: 10, order: 'desc' });
     expect(result.documents).toHaveLength(1);
     expect(result.total).toBe(1);
     const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0].toString();
@@ -74,14 +80,14 @@ describe('Collection.get', () => {
         new Response(JSON.stringify({ id: 'abc', title: 'Test' }), { status: 200 }),
       );
     const db = new Collections('myapp', 'https://api.example', fakeAuth(null) as any);
-    const doc = await db.collection('posts').get('abc');
+    const doc = await db.collection('posts', { visibility: 'public-read' }).get('abc');
     expect(doc).toEqual({ id: 'abc', title: 'Test' });
   });
 
   it('returns null on 404', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response('not found', { status: 404 }));
     const db = new Collections('myapp', 'https://api.example', fakeAuth(null) as any);
-    const doc = await db.collection('posts').get('missing');
+    const doc = await db.collection('posts', { visibility: 'public-read' }).get('missing');
     expect(doc).toBeNull();
   });
 });
@@ -94,7 +100,9 @@ describe('Collection.update', () => {
         new Response(JSON.stringify({ id: 'abc', title: 'Updated' }), { status: 200 }),
       );
     const db = new Collections('myapp', 'https://api.example', fakeAuth('tok') as any);
-    const result = await db.collection('posts').update('abc', { title: 'Updated' });
+    const result = await db
+      .collection('posts', { visibility: 'public-read' })
+      .update('abc', { title: 'Updated' });
     expect(result).toEqual({ id: 'abc', title: 'Updated' });
     const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(call[1].method).toBe('PUT');
@@ -102,7 +110,9 @@ describe('Collection.update', () => {
 
   it('throws when not signed in', async () => {
     const db = new Collections('myapp', 'https://api.example', fakeAuth(null) as any);
-    await expect(db.collection('posts').update('abc', {})).rejects.toThrow(/not signed in/i);
+    await expect(
+      db.collection('posts', { visibility: 'public-read' }).update('abc', {}),
+    ).rejects.toThrow(/not signed in/i);
   });
 });
 
@@ -110,21 +120,32 @@ describe('Collection.delete', () => {
   it('sends DELETE', async () => {
     globalThis.fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     const db = new Collections('myapp', 'https://api.example', fakeAuth('tok') as any);
-    await db.collection('posts').delete('abc');
+    await db.collection('posts', { visibility: 'public-read' }).delete('abc');
     const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
     expect(call[1].method).toBe('DELETE');
   });
 
   it('throws when not signed in', async () => {
     const db = new Collections('myapp', 'https://api.example', fakeAuth(null) as any);
-    await expect(db.collection('posts').delete('abc')).rejects.toThrow(/not signed in/i);
+    await expect(
+      db.collection('posts', { visibility: 'public-read' }).delete('abc'),
+    ).rejects.toThrow(/not signed in/i);
   });
 
   it('calls handleUnauthorized on 401', async () => {
     const auth = fakeAuth('expired');
     globalThis.fetch = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
     const db = new Collections('myapp', 'https://api.example', auth as any);
-    await expect(db.collection('posts').delete('abc')).rejects.toThrow();
+    await expect(
+      db.collection('posts', { visibility: 'public-read' }).delete('abc'),
+    ).rejects.toThrow();
     expect(auth.handleUnauthorized).toHaveBeenCalled();
+  });
+});
+
+describe('collection visibility contract', () => {
+  it('rejects an unsupported privacy claim at collection selection', () => {
+    const db = new Collections('demo', 'https://api.example', fakeAuth(null) as any);
+    expect(() => db.collection('votes', { visibility: 'private' } as any)).toThrow(/public-read/i);
   });
 });

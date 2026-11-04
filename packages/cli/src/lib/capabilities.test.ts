@@ -42,6 +42,16 @@ it('resolves dependencies before dependents and rejects incompatible versions an
     'cycle',
   );
 });
+it('describes the explicit room-restricted backend data model accurately', () => {
+  const cloud = registry['cloud-data'];
+  const persistence = registry.persistence;
+  expect(cloud?.metadata?.['room-restricted']).toBe('backend-http:data-rooms');
+  expect(cloud?.files['fas-capabilities/cloud-data.md']).toContain('docs/data-rooms.md');
+  expect(cloud?.files['fas-capabilities/cloud-data.md']).toContain(
+    'Realtime rooms are broadcast channels',
+  );
+  expect(persistence?.metadata?.roomRestricted).toBe('backend-http:data-rooms');
+});
 it('adopts existing apps, previews without writes, installs idempotently and preserves unrelated files', async () => {
   const root = await app();
   expect((await installCapabilities(root, ['connectivity'], { dryRun: true })).join()).toContain(

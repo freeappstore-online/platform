@@ -110,8 +110,8 @@ export class Auth {
    * Clears the stale session so the UI reacts immediately.
    * Do not call directly — use `signOut()` instead.
    */
-  handleUnauthorized(): void {
-    if (this.session) this.signOut();
+  handleUnauthorized(requestToken?: string): void {
+    if (this.session && (!requestToken || this.session.token === requestToken)) this.signOut();
   }
 
   /**
@@ -125,11 +125,13 @@ export class Auth {
    * revocation yet.
    */
   async deleteAccount(): Promise<void> {
-    const token = this.session?.token;
-    if (!token) {
+    const session = this.session;
+    if (!session) {
       this.signOut();
       return;
     }
+    const { token } = session;
+    const revision = this.sessionRevision;
     const res = await fetch(new URL('/v1/auth/me', this.apiBase), {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
@@ -137,7 +139,7 @@ export class Auth {
     if (!res.ok) {
       throw new Error(`account deletion failed (${res.status})`);
     }
-    this.signOut();
+    if (revision === this.sessionRevision && this.session?.token === token) this.signOut();
   }
 
   /**
@@ -190,6 +192,7 @@ export class Auth {
       const user = await this.fetchUser(token);
       // A sign-out during verification must win over this stale callback.
       if (revision !== this.sessionRevision) return;
+      this.sessionRevision++;
       this.session = { token, user };
       // Emit/ensure BEFORE persisting: writeStorage() can throw in
       // storage-restricted contexts (private-mode webviews, disabled/full
@@ -217,17 +220,20 @@ export class Auth {
    * @param dateOfBirth ISO 'YYYY-MM-DD' string.
    */
   async setDateOfBirth(dateOfBirth: string): Promise<User> {
-    if (!this.session) throw new Error('Not signed in.');
+    const session = this.session;
+    if (!session) throw new Error('Not signed in.');
+    const { token } = session;
+    const revision = this.sessionRevision;
     const response = await fetch(new URL('/v1/auth/me/date-of-birth', this.apiBase), {
       method: 'PATCH',
       headers: {
-        Authorization: `Bearer ${this.session.token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ dateOfBirth }),
     });
     if (response.status === 401) {
-      this.handleUnauthorized();
+      this.handleUnauthorized(token);
       throw new Error('Not signed in.');
     }
     if (response.status === 409) {
@@ -238,7 +244,10 @@ export class Auth {
       throw new Error(`setDateOfBirth failed (${response.status}): ${body}`);
     }
     const user = (await response.json()) as User;
-    this.session = { ...this.session, user };
+    if (revision !== this.sessionRevision || this.session?.token !== token) {
+      throw new Error('Session changed while updating profile. Please retry.');
+    }
+    this.session = { ...session, user };
     this.writeStorage(this.session);
     this.emit();
     return user;

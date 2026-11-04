@@ -332,3 +332,187 @@ describe('Auth callback lifecycle (#340)', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Auth protects the active session from stale requests (#350/#361)', () => {
+  function storedSession(window: FakeWindow, token: string, login: string) {
+    window.localStorage.setItem(
+      'fas:session',
+      JSON.stringify({
+        token,
+        user: { id: `id:${login}`, login, avatarUrl: null, dateOfBirth: null },
+      }),
+    );
+  }
+
+  it('does not let a delayed account A KV 401 sign out account B', async () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    (globalThis as Record<string, unknown>).history = window.history;
+    storedSession(window, 'token-a', 'alice');
+    const auth = new Auth('demo', 'https://api.example');
+    let rejectA!: (response: Response) => void;
+    let rejectCollectionA!: (response: Response) => void;
+    let rejectProxyA!: (response: Response) => void;
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes('/kv/draft'))
+        return new Promise<Response>((resolve) => {
+          rejectA = resolve;
+        });
+      if (String(input).includes('/db/notes'))
+        return new Promise<Response>((resolve) => {
+          rejectCollectionA = resolve;
+        });
+      if (String(input).includes('/proxy/'))
+        return new Promise<Response>((resolve) => {
+          rejectProxyA = resolve;
+        });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ id: 'id:bob', login: 'bob', avatarUrl: null, dateOfBirth: null }),
+        ),
+      );
+    });
+    const oldRequest = new (await import('./kv.js')).Kv('demo', 'https://api.example', auth).get(
+      'draft',
+    );
+    const oldCollectionWrite = new (await import('./db.js')).Collections(
+      'demo',
+      'https://api.example',
+      auth,
+    )
+      .collection('notes', { visibility: 'public-read' })
+      .create({ text: 'synthetic' });
+    const oldProxyRequest = new (await import('./proxy.js')).ApiProxy(
+      'demo',
+      'https://api.example',
+      auth,
+    ).fetch('example.test/data');
+    const oldRequestResult = oldRequest.then(
+      () => null,
+      (error) => error,
+    );
+    const oldCollectionResult = oldCollectionWrite.then(
+      () => null,
+      (error) => error,
+    );
+    const oldProxyResult = oldProxyRequest.then(
+      () => null,
+      (error) => error,
+    );
+    auth.signOut();
+    window.location.hash = '#fas_session=token-b';
+    await auth.init();
+    expect(auth.user?.login).toBe('bob');
+    rejectA(new Response('', { status: 401 }));
+    rejectCollectionA(new Response('', { status: 401 }));
+    rejectProxyA(new Response('', { status: 401 }));
+    expect(String(await oldRequestResult)).toMatch(/not signed in/i);
+    expect(String(await oldCollectionResult)).toMatch(/not signed in/i);
+    expect(String(await oldProxyResult)).toMatch(/unauthorized/i);
+    expect(auth.user?.login).toBe('bob');
+    expect(auth.token).toBe('token-b');
+    expect(window.localStorage.getItem('fas:session')).toContain('token-b');
+  });
+
+  it('still invalidates the matching current session on a 401', async () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    storedSession(window, 'token-a', 'alice');
+    const auth = new Auth('demo', 'https://api.example');
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
+    await expect(
+      new (await import('./kv.js')).Kv('demo', 'https://api.example', auth).get('draft'),
+    ).rejects.toThrow(/not signed in/i);
+    expect(auth.user).toBeNull();
+    expect(auth.token).toBeNull();
+    expect(window.localStorage.getItem('fas:session')).toBeNull();
+  });
+
+  it('keeps sign-out effective when a pending request later returns 401', async () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    storedSession(window, 'token-a', 'alice');
+    const auth = new Auth('demo', 'https://api.example');
+    let rejectRequest!: (response: Response) => void;
+    globalThis.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          rejectRequest = resolve;
+        }),
+    );
+    const request = new (await import('./kv.js')).Kv('demo', 'https://api.example', auth).get(
+      'draft',
+    );
+    auth.signOut();
+    rejectRequest(new Response('', { status: 401 }));
+    await expect(request).rejects.toThrow(/not signed in/i);
+    expect(auth.user).toBeNull();
+    expect(window.localStorage.getItem('fas:session')).toBeNull();
+  });
+
+  it('does not persist account A profile data over account B after a delayed success', async () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    (globalThis as Record<string, unknown>).history = window.history;
+    storedSession(window, 'token-a', 'alice');
+    const auth = new Auth('demo', 'https://api.example');
+    let finishA!: (response: Response) => void;
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) => {
+      if (String(input).includes('/date-of-birth'))
+        return new Promise<Response>((resolve) => {
+          finishA = resolve;
+        });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ id: 'id:bob', login: 'bob', avatarUrl: null, dateOfBirth: null }),
+        ),
+      );
+    });
+    const oldUpdate = auth.setDateOfBirth('1990-01-01');
+    auth.signOut();
+    window.location.hash = '#fas_session=token-b';
+    await auth.init();
+    finishA(
+      new Response(
+        JSON.stringify({
+          id: 'id:alice',
+          login: 'alice',
+          avatarUrl: null,
+          dateOfBirth: '1990-01-01',
+        }),
+      ),
+    );
+    await expect(oldUpdate).rejects.toThrow(/session changed/i);
+    expect(auth.user?.login).toBe('bob');
+    expect(auth.token).toBe('token-b');
+    expect(window.localStorage.getItem('fas:session')).toContain('token-b');
+  });
+
+  it('does not let a delayed account deletion sign out a replacement account', async () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    (globalThis as Record<string, unknown>).history = window.history;
+    storedSession(window, 'token-a', 'alice');
+    const auth = new Auth('demo', 'https://api.example');
+    let finishDelete!: (response: Response) => void;
+    globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('/v1/auth/me') && init?.method === 'DELETE')
+        return new Promise<Response>((resolve) => {
+          finishDelete = resolve;
+        });
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ id: 'id:bob', login: 'bob', avatarUrl: null, dateOfBirth: null }),
+        ),
+      );
+    });
+    const deletion = auth.deleteAccount();
+    auth.signOut();
+    window.location.hash = '#fas_session=token-b';
+    await auth.init();
+    finishDelete(new Response(null, { status: 204 }));
+    await deletion;
+    expect(auth.user?.login).toBe('bob');
+    expect(auth.token).toBe('token-b');
+  });
+});

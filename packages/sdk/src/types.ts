@@ -11,6 +11,13 @@ export interface User {
   dateOfBirth: string | null;
 }
 
+/** Security boundary for app data. `room-restricted` is a requirement, not a service currently provided by public collections. */
+export type DataAccessModel =
+  | 'device-local'
+  | 'private-account'
+  | 'public-shared'
+  | 'room-restricted';
+
 /** Options for initializing the SDK via `initApp()`. */
 export interface FasInitOptions {
   /** The app's unique identifier (e.g. "tuner", "quicknotes"). */

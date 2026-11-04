@@ -148,10 +148,10 @@ await fas.counters.increment('lives', -1);                 // decrement
 
 ## Collections (`fas.collections`)
 
-Simple document store for public, queryable data.
+Simple document store for public-read, queryable data. Select visibility explicitly with `fas.collections.collection(name, { visibility: 'public-read' })`; public collections cannot represent private rooms or hidden votes.
 
 ```ts
-const posts = fas.collections.collection('posts');
+const posts = fas.collections.collection('posts', { visibility: 'public-read' });
 
 // Create (auth required, you become the owner)
 const post = await posts.create({ title: 'Hello', body: '...' });
@@ -346,3 +346,12 @@ function App() {
 ```
 
 Record and file operations resolve transaction-start failures through `StorageResult`, including `unavailable` after explicit close or automatic close when another tab upgrades the database. Existing data remains intact; the app owns reopening the handle. Record validators should return a boolean: false reports `validation`, while a thrown validator error rejects the API promise. A throwing or rejecting `withTransaction` callback aborts its writes and resolves a classified storage failure.
+
+
+## Connected data example
+
+For race-safe private per-account editing, see the [connected data example](https://github.com/freeappstore-online/platform/tree/main/examples/connected-data) and `useConnectedKvDraft` from `@freeappstore/sdk/hooks`. It guards initial loading, preserves dirty edits, supports retry/save status, and isolates requests on app, record, account, and sign-out changes. Gate only the private-data feature; leave public browsing available. If an app owns its profile route, render `AccountSection` so GitHub and Google choices remain available.
+
+#350 ships the SDK hook and standalone example. The canonical generated connected template remains unchanged; carry its wiring and adoption into #352. Planning Poker's app-owned remediation is tracked in [Planning Poker #1](https://github.com/freeappstore-online/planning-poker/issues/1). No room or user data was read or changed.
+
+Durable room-restricted records use the backend's authenticated data-room endpoints documented in [data rooms](data-rooms.md); the SDK does not yet wrap those endpoints. These private endpoints are separate from public collections and realtime room broadcasts. Membership is enforced by the backend for each request.

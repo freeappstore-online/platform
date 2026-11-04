@@ -335,10 +335,10 @@ Use for: vote tallies, view counts, leaderboards, any shared numeric state.
 
 ### Collections (Document Database)
 
-Firestore-style public queryable JSON documents with ownership.
+Public-read queryable JSON documents with owner-only writes. Owner filters are not a privacy boundary.
 
 ```tsx
-const col = fas.collections.collection('posts')
+const col = fas.collections.collection('posts', { visibility: 'public-read' })
 
 // Create (requires auth, auto-assigns id + owner)
 const doc = await col.create({ title: 'Hello', body: 'World' })

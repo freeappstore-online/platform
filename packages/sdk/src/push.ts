@@ -306,7 +306,7 @@ export class Push {
       },
     );
     if (res.status === 401) {
-      this.auth.handleUnauthorized();
+      this.auth.handleUnauthorized(token);
       throw new PushNotSignedInError();
     }
     if (!res.ok && !allow.includes(res.status)) {
