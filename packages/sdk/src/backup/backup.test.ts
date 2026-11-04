@@ -634,6 +634,37 @@ describe('backup file transfer', () => {
     create.mockRestore();
   });
 
+  it('removes a failed download anchor and revokes its object URL', async () => {
+    const exported = await exportBackup({ appId: 'notes', data: { notes: ['a'] }, exportedAt });
+    if (!exported.ok) throw new Error('export failed');
+    const removed = vi.fn();
+    const anchor = {
+      href: '',
+      download: '',
+      rel: '',
+      style: { display: '' },
+      click: () => {
+        throw new Error('synthetic click failure');
+      },
+      remove: removed,
+    };
+    const doc = {
+      body: { appendChild: vi.fn() },
+      createElement: () => anchor,
+    } as unknown as Document;
+    const revoked: string[] = [];
+    const result = await shareOrDownloadBackup({
+      envelope: exported.value,
+      canShare: () => false,
+      createObjectURL: () => 'blob:failed-backup',
+      revokeObjectURL: (url) => revoked.push(url),
+      document: doc,
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'unavailable' });
+    expect(removed).toHaveBeenCalledOnce();
+    expect(revoked).toEqual(['blob:failed-backup']);
+  });
+
   it('returns JSON text when share and download are unavailable, and treats share dismiss as cancel', async () => {
     const exported = await exportBackup({ appId: 'notes', data: { notes: ['a'] }, exportedAt });
     if (!exported.ok) throw new Error('export failed');

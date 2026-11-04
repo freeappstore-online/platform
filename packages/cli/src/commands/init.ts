@@ -134,7 +134,7 @@ export const initCommand = new Command('init')
   .option('--capabilities <ids>', 'Comma-separated first-party capability IDs')
   .option(
     '--preset <name>',
-    'Capability list: minimal | connectivity | pwa | persistence | backup',
+    'Capability list: minimal | connectivity | pwa | persistence | backup | realtime | media',
     'minimal',
   )
   .action(

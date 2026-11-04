@@ -129,8 +129,9 @@ export class Room {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    this.socket?.close();
+    const socket = this.socket;
     this.socket = null;
+    socket?.close();
     this._peers = [];
     this.setState('closed');
     this.listeners.clear();
@@ -166,6 +167,7 @@ export class Room {
       if (!res.ok) throw new Error(`ticket request failed (${res.status})`);
       ticket = ((await res.json()) as { ticket: string }).ticket;
     } catch (e) {
+      if (this.explicitlyClosed) return;
       if (this.debug) console.warn('[rooms] ticket fetch failed', e);
       this.setState('error');
       this.scheduleReconnect();
@@ -185,12 +187,14 @@ export class Room {
     this.socket = socket;
 
     socket.addEventListener('open', () => {
+      if (this.explicitlyClosed || this.socket !== socket) return;
       this.reconnectAttempt = 0;
       this.setState('open');
       if (this.debug) console.log(`[rooms] connected to ${this.roomId}`);
     });
 
     socket.addEventListener('message', (ev) => {
+      if (this.explicitlyClosed || this.socket !== socket) return;
       if (this.debug) console.log('[rooms] ←', ev.data);
       let parsed:
         | { kind: 'msg'; from: RoomPeer; data: unknown; at: number }
@@ -213,29 +217,28 @@ export class Room {
     });
 
     socket.addEventListener('close', (ev) => {
+      if (this.explicitlyClosed || this.socket !== socket) return;
       if (this.debug) console.log(`[rooms] closed (code=${ev.code} reason=${ev.reason || 'none'})`);
-      if (this.socket === socket) {
-        this.socket = null;
-        // Nobody is reachable while disconnected; the server resends the
-        // list on reconnect. room.peers used to keep the stale list (#283).
-        if (this._peers.length > 0) {
-          this._peers = [];
-          callEach(this.peerListeners, this._peers);
-        }
+      this.socket = null;
+      // Nobody is reachable while disconnected; the server resends the
+      // list on reconnect. room.peers used to keep the stale list (#283).
+      if (this._peers.length > 0) {
+        this._peers = [];
+        callEach(this.peerListeners, this._peers);
       }
-      if (this.explicitlyClosed) return;
       this.setState('closed');
       this.scheduleReconnect();
     });
 
     socket.addEventListener('error', () => {
+      if (this.explicitlyClosed || this.socket !== socket) return;
       if (this.debug) console.warn(`[rooms] socket error on ${this.roomId}`);
       this.setState('error');
     });
   }
 
   private scheduleReconnect(): void {
-    if (this.reconnectTimer !== null) return;
+    if (this.explicitlyClosed || this.reconnectTimer !== null) return;
     // Exponential backoff capped at 30s, with up to 1s of jitter so a
     // backend hiccup doesn't produce a thundering herd of reconnects.
     const backoff = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** this.reconnectAttempt);
@@ -255,7 +258,7 @@ export class Room {
   private setState(state: ConnectionState): void {
     if (this.connectionState === state) return;
     this.connectionState = state;
-    for (const l of this.stateListeners) l(state);
+    callEach(this.stateListeners, state);
   }
 }
 

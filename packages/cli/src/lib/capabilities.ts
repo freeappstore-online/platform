@@ -216,6 +216,147 @@ See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
       content.includes('replace') &&
       content.includes('@freeappstore/sdk/backup'),
   },
+  realtime: {
+    id: 'realtime',
+    version: '1.0.0',
+    dependencies: {},
+    packages: [{ name: '@freeappstore/sdk', range: '>=0.16.26', location: 'root' }],
+    environment: 'browser',
+    metadata: {
+      transport: 'sdk-rooms:websocket-fanout',
+      lifecycle: 'explicit-close,unsubscribe,reconnect-state',
+      access: 'ephemeral-broadcast-not-private',
+      transfer: 'p2p-app-owned',
+    },
+    files: {
+      'fas-capabilities/realtime.ts': `import type { FreeAppStore, Room, ConnectionState } from '@freeappstore/sdk';
+
+/** Join one ephemeral broadcast room and bind every listener to its lifetime. */
+export function watchRoom(
+  fas: FreeAppStore,
+  roomId: string,
+  handlers: {
+    onState?: (state: ConnectionState) => void;
+    onPeers?: (count: number) => void;
+    onMessage?: (message: unknown) => void;
+  },
+  signal?: AbortSignal,
+): { room: Room; close: () => void } {
+  const room = fas.rooms.join(roomId);
+  const unsubscribe = [
+    room.onConnectionState((state) => handlers.onState?.(state)),
+    room.onPeers((peers) => handlers.onPeers?.(peers.length)),
+    room.onMessage((message) => handlers.onMessage?.(message)),
+  ];
+  let closed = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    signal?.removeEventListener('abort', close);
+    for (const stop of unsubscribe) stop();
+    room.close(); // cancels reconnect and releases the socket
+  };
+  if (signal?.aborted) close();
+  else signal?.addEventListener('abort', close, { once: true });
+  return { room, close };
+}
+`,
+      'fas-capabilities/realtime.md': `# Optional realtime rooms
+
+Requires @freeappstore/sdk >=0.16.26. Import watchRoom from
+fas-capabilities/realtime.ts; keep its returned close function in the owning
+component's cleanup or pass an AbortSignal. The helper unsubscribes all handlers,
+closes the room and cancels reconnect on disposal. Observe connecting/open/closed/error
+to render reconnect state; messages sent while disconnected are dropped.
+
+fas.rooms is a small ephemeral WebSocket broadcast adapter, not durable storage,
+an access-control list, or a private room. Validate message shape and size in your
+app. Use it for low-state presence or coordination, not file transfer. WebShare's
+receiver acknowledgement, checksum and flow-control lessons remain essential for
+P2P transfer; signaling and P2P transport stay app-owned and must remain the
+transport choice for large files. Do not tunnel files through room messages.
+
+Room use requires sign-in and a supported WebSocket connection. Reconnect is
+automatic with bounded backoff; close() is permanent. Data is not persisted and
+the server may evict idle rooms. Register a PWA busy guard only for active work
+that must finish before reload; an idle room alone need not block an update.
+The room captures the authenticated identity when it connects. On sign-out or
+account change, close it and join a new room after the replacement session is
+ready; do not expect an existing socket to switch profiles.
+This recipe creates no room until imported and used, and installs no service.
+`,
+    },
+    configChanges: ['Import realtime helpers only in features that need ephemeral room messages'],
+    validate: (content) =>
+      content.startsWith('# Optional realtime rooms') ||
+      (content.includes('room.close()') &&
+        content.includes('removeEventListener') &&
+        content.includes('AbortSignal')),
+  },
+  media: {
+    id: 'media',
+    version: '1.0.0',
+    dependencies: {},
+    environment: 'browser',
+    packages: [{ name: '@freeappstore/sdk', range: '>=0.16.26', location: 'root' }],
+    metadata: {
+      permissions: 'user-gesture-only,no-persistent-grants',
+      lifecycle: 'tracks-stopped,recorder-stop,busy-update-guard-removable',
+      export: 'share-or-download',
+      mobileTabCapture: 'unsupported',
+    },
+    files: {
+      'fas-capabilities/media.ts': `// Shared capture, permission, cleanup, export and PWA-guard lifecycle.
+// Keep recording UI, event handlers and app-specific file naming in this app.
+export {
+  mediaSupport,
+  requestCapture,
+  chooseRecordingType,
+  stopTracks,
+  stopRecording,
+  registerMediaBusyGuard,
+  exportRecording,
+} from '@freeappstore/sdk/media';
+export type { CaptureKind, MediaExportResult, MediaSupport } from '@freeappstore/sdk/media';
+`,
+      'fas-capabilities/media.md': `# Optional browser media
+
+This recipe uses browser APIs only; it provisions no service and stores no media.
+Call requestCapture directly from a user gesture. Permission denial rejects and
+must be shown as a recoverable app error. Browser permission prompts cannot be
+programmatically dismissed: aborting while the prompt is open stops tracks if a
+stream arrives later. Call stopRecording(recorder, stream) when a recording
+finishes, is cancelled or its component unmounts; it lets the recorder emit its
+final data before stopping tracks. For preview-only capture, call stopTracks.
+No persistent permission grant is requested.
+
+Use mediaSupport before showing controls. Choose a recording MIME type at runtime
+with chooseRecordingType and handle an empty result as the browser default or an
+unsupported recording path. Export with exportRecording; it shares a file when
+the platform supports file sharing and otherwise downloads it. Revoke any object
+URLs your own preview creates. The PWA busy guard should cover active recording
+and unsaved media, then be removed when the feature unmounts:
+
+    const removeUpdateGuard = registerMediaBusyGuard(
+      pwa,
+      () => recorder?.state !== 'inactive' || hasUnsavedMedia,
+    );
+    // On cleanup: await stopRecording(recorder, stream); removeUpdateGuard();
+
+Microphone/camera support requires a secure context and user permission. Display
+capture is not consistently available on mobile, especially browser-tab capture;
+show a clear unsupported state and let users choose an existing file or another
+device. Do not claim tab/audio capture works on mobile. Never start capture on
+mount or silently retry a denied permission.
+`,
+    },
+    configChanges: ['Import media helpers only from a user-triggered capture or export feature'],
+    validate: (content) =>
+      content.startsWith('# Optional browser media') ||
+      (content.includes("from '@freeappstore/sdk/media'") &&
+        content.includes('registerMediaBusyGuard') &&
+        content.includes('exportRecording')),
+  },
 };
 
 export const presets: Record<string, string[]> = {
@@ -224,6 +365,8 @@ export const presets: Record<string, string[]> = {
   pwa: ['pwa'],
   persistence: ['persistence'],
   backup: ['backup'],
+  realtime: ['realtime'],
+  media: ['media'],
 };
 interface Ownership {
   version: string;

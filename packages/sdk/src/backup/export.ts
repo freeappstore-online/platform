@@ -216,8 +216,9 @@ function downloadOrText(
       // Already revoked.
     }
   };
+  let anchor: HTMLAnchorElement | undefined;
   try {
-    const anchor = doc.createElement('a');
+    anchor = doc.createElement('a');
     anchor.href = objectUrl;
     anchor.download = filename;
     anchor.rel = 'noopener';
@@ -226,6 +227,11 @@ function downloadOrText(
     anchor.click();
     anchor.remove();
   } catch (error) {
+    try {
+      anchor?.remove();
+    } catch {
+      // Continue revoking the object URL even if DOM cleanup throws.
+    }
     release();
     return backupFailure('unavailable', errorText(error));
   }

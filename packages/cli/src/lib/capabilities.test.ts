@@ -52,6 +52,60 @@ it('describes the explicit room-restricted backend data model accurately', () =>
   );
   expect(persistence?.metadata?.roomRestricted).toBe('backend-http:data-rooms');
 });
+it('defines optional realtime and media recipes with bounded lifecycle and permission behavior', () => {
+  const realtime = registry.realtime;
+  const media = registry.media;
+  expect(realtime?.metadata).toMatchObject({
+    transport: 'sdk-rooms:websocket-fanout',
+    access: 'ephemeral-broadcast-not-private',
+    transfer: 'p2p-app-owned',
+  });
+  expect(realtime?.files['fas-capabilities/realtime.ts']).toContain('signal?.addEventListener');
+  expect(realtime?.files['fas-capabilities/realtime.ts']).toContain('room.close()');
+  expect(realtime?.files['fas-capabilities/realtime.md']).toContain('checksum and flow-control');
+  expect(media?.metadata).toMatchObject({
+    permissions: 'user-gesture-only,no-persistent-grants',
+    mobileTabCapture: 'unsupported',
+  });
+  expect(media?.packages?.[0]).toMatchObject({
+    name: '@freeappstore/sdk',
+    range: '>=0.16.26',
+  });
+  expect(media?.files['fas-capabilities/media.ts']).toContain("from '@freeappstore/sdk/media'");
+  expect(media?.files['fas-capabilities/media.ts']).toContain('stopRecording');
+  expect(media?.files['fas-capabilities/media.md']).toContain('Permission denial');
+  expect(media?.files['fas-capabilities/media.md']).toContain('existing file');
+});
+it('installs realtime and media independently without external package or service setup', async () => {
+  const root = await app();
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.26' } }),
+  );
+  await installCapabilities(root, ['realtime', 'media']);
+  expect(await readFile(join(root, 'fas-capabilities/realtime.ts'), 'utf8')).toContain(
+    'room.close()',
+  );
+  expect(await readFile(join(root, 'fas-capabilities/media.ts'), 'utf8')).toContain(
+    'exportRecording',
+  );
+  expect(JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))).toEqual({
+    dependencies: { '@freeappstore/sdk': '^0.16.26' },
+  });
+  expect(await installCapabilities(root, ['realtime', 'media'])).toEqual(['No changes.']);
+});
+it('requires the SDK release with permanent-close and media helpers before writing either recipe', async () => {
+  const root = await app();
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.25' } }),
+  );
+  await expect(installCapabilities(root, ['realtime', 'media'])).rejects.toThrow(
+    '@freeappstore/sdk >=0.16.26',
+  );
+  await expect(readFile(join(root, 'fas-capabilities/realtime.ts'))).rejects.toThrow();
+  await expect(readFile(join(root, 'fas-capabilities/media.ts'))).rejects.toThrow();
+});
 it('adopts existing apps, previews without writes, installs idempotently and preserves unrelated files', async () => {
   const root = await app();
   expect((await installCapabilities(root, ['connectivity'], { dryRun: true })).join()).toContain(

@@ -38,6 +38,10 @@
     "./backup": {
       "types": "./dist/backup/index.d.ts",
       "import": "./dist/backup/index.js"
+    },
+    "./media": {
+      "types": "./dist/media.d.ts",
+      "import": "./dist/media.js"
     }
   },
   "homepage": "https://github.com/freeappstore-online/platform#readme",

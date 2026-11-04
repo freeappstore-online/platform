@@ -194,6 +194,26 @@ Room properties: `room.state`, `room.peers`, `room.isReconnecting`, `room.reconn
 
 **Limits:** 32 peers/room, 100 msgs/sec/peer, 4KB/message, 64 active rooms/app (a new room past that gets `429`), 24h idle eviction. Room ids: 1–64 characters of letters, digits and `. _ ~ : @ -`.
 
+For component cleanup, unsubscribe listeners and call `room.close()`; closing is
+permanent and cancels reconnect. Rejoin after sign-in or account changes because
+the connected identity is captured when the room opens. Rooms are ephemeral
+broadcast, not private membership or file transport. See the optional realtime
+capability recipe from `fas add realtime` for an abort-bound adapter.
+
+## Optional browser media (`@freeappstore/sdk/media`)
+
+This separate entry point is not part of the root SDK bundle. Install the optional
+`media` capability for generated wiring and integration guidance. Call
+`requestCapture()` only from a user action; handle denial and unsupported APIs,
+and pass an `AbortSignal` so a late permission grant has its tracks stopped.
+`stopRecording(recorder, stream)` waits for the recorder's final event and then
+stops every track. Choose a browser-supported recording type at runtime, and
+register a removable PWA busy guard for recording or unsaved media. `exportRecording`
+uses file sharing where supported and otherwise offers a download with a releasable
+object URL. Display/tab capture is not consistently supported on mobile browsers.
+No permission is requested until the app calls capture, and no media is stored by
+the SDK.
+
 ## Secret-injecting proxy (`fas.proxy`)
 
 Call third-party APIs without exposing keys to the browser.

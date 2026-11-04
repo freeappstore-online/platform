@@ -49,6 +49,9 @@ class FakeWebSocket {
     this.readyState = FakeWebSocket.CLOSED;
     this.fire('close', {});
   }
+  triggerPeers(peers: RoomPeer[]): void {
+    this.fire('message', { data: JSON.stringify({ kind: 'peers', peers }) });
+  }
 
   private fire(type: string, ev: unknown): void {
     for (const fn of this.listeners.get(type) ?? []) fn(ev);
@@ -323,6 +326,46 @@ describe('Room.close', () => {
     vi.advanceTimersByTime(60_000); // jump past any backoff
     await flush();
     expect(created).toHaveLength(1); // no second connect
+  });
+
+  it('ignores a rejected ticket that settles after permanent close', async () => {
+    let reject!: (error: Error) => void;
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise((_, fail) => (reject = fail)));
+    const room = new Rooms('demo', 'https://api.example', fakeAuth('tok')).join('lobby');
+    room.close();
+    reject(new Error('late ticket failure'));
+    await flush();
+    expect(room.state).toBe('closed');
+    expect(room.isReconnecting).toBe(false);
+    expect(created).toHaveLength(0);
+  });
+
+  it('ignores queued callbacks from a socket after permanent close', async () => {
+    const room = await newRoom();
+    const state: string[] = [];
+    room.onConnectionState((value) => state.push(value));
+    const socket = created[0]!;
+    room.close();
+    socket.triggerOpen();
+    socket.triggerPeers([{ uid: 'gh:1', login: 'alice' }]);
+    expect(room.state).toBe('closed');
+    expect(room.peers).toEqual([]);
+    expect(state.at(-1)).toBe('closed');
+  });
+
+  it('completes close and clears all listeners when a state observer throws', async () => {
+    const room = await newRoom();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    room.onConnectionState((value) => {
+      if (value === 'closed') throw new Error('observer failure');
+    });
+    room.onMessage(() => {});
+    room.onPeers(() => {});
+    expect(() => room.close()).not.toThrow();
+    expect(room.state).toBe('closed');
+    expect(room.listenerCount).toBe(0);
+    expect(errors).toHaveBeenCalledWith('[rooms] listener threw', expect.any(Error));
+    errors.mockRestore();
   });
 });
 

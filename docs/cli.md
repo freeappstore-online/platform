@@ -288,6 +288,17 @@ The registry declares exact dependency versions, browser environment, owned file
 config changes (none for connectivity), and generated-content validation. It runs
 no downloaded scripts and installs no npm dependencies.
 
+Install `realtime` or `media` only when needed. `fas add realtime` provides a
+cleanup-bound `fas.rooms` adapter for ephemeral broadcast; it is not private or
+file transport. `fas add media` provides user-triggered capture, runtime format
+selection, track cleanup and share/download export helpers. Review the generated
+`fas-capabilities/realtime.md` and `fas-capabilities/media.md` before integrating.
+Both require `@freeappstore/sdk >=0.16.26`; media helpers are shared from the
+optional `@freeappstore/sdk/media` entry point and are absent from the root bundle.
+The media APIs depend on secure-context browser support and user permission;
+display capture is unavailable in some mobile browsers. Neither capability
+requests permission at installation or provisions external services.
+
 Commit `.fas-capabilities.json` with your app. Schema version 1 records each
 capability's version and SHA-256 hashes of its owned files. Repeated installation
 is a no-op. Existing apps need no migration: missing generated files are added;

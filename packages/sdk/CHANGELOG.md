@@ -1,5 +1,11 @@
 # @freeappstore/sdk
 
+## 0.16.26
+
+- Add optional media lifecycle helpers under `@freeappstore/sdk/media` for permission-aware capture, recorder/track cleanup, busy update guards, MIME negotiation, and share/download export.
+- Keep a permanently closed realtime room terminal when tickets or stale socket callbacks settle late; isolate state observer failures during cleanup.
+- Remove failed-download anchors and URLs in both media and backup export paths.
+
 ## 0.16.25
 
 - Preserve the corrected JSON-normalized backup result types from #360.

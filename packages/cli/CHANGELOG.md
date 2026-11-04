@@ -1,5 +1,9 @@
 # @freeappstore/cli
 
+## 0.4.54
+
+- Add optional realtime and media capability recipes with lifecycle guidance, plus package preflight for the SDK media entry point.
+
 ## 0.4.53
 
 - Add cloud-data capability metadata and guidance for device-local, private-account, public-shared, and backend-authorized room-restricted data.
