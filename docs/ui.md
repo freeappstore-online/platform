@@ -174,7 +174,11 @@ onto the standard frame:
 - **`useToast` works only inside `Shell`.** Outside it throws
   `useToast must be used inside <Shell>`.
 - **Navigation and focus.** Profile and navigation links use `onNavigate` for client-side
-  routing and deterministic in-app scroll restoration. Without it, they are normal links and
+  routing and deterministic in-app scroll restoration. Route state includes query strings and
+  fragments, even when the pathname stays the same. Relative in-app destinations are resolved
+  before the router runs; external destinations, modified clicks, downloads and links targeting
+  another window retain native browser behavior. `renderNav` receives the full URL path in
+  `currentPath`. Without `onNavigate`, links are normal links and
   the browser manages navigation and scroll restoration; full reloads of asynchronously rendered
   screens may not recover the exact scroll position. The built-in profile remembers the originating in-app URL in `returnTo`, so
   **Back to app** keeps the original path, query and fragment through reload and sign-in;
