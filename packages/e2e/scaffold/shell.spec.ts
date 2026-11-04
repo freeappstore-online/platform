@@ -88,7 +88,7 @@ for (const theme of ['light', 'dark'] as const) {
           return getComputedStyle(el).backgroundColor === expected;
         }),
       ).toBe(true);
-      await expect(page.getByRole('button', { name: 'Profile menu' })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Profile', exact: true }).last()).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(menu).toBeFocused();
       await expect(drawer).toBeHidden();
@@ -96,8 +96,10 @@ for (const theme of ['light', 'dark'] as const) {
       await expect(menu).toBeHidden();
       await expect(page.locator('.fas-nav__list')).toHaveCSS('display', 'flex');
     }
-    await page.getByRole('button', { name: 'Profile menu' }).click();
-    const profile = page.getByRole('button', { name: 'API Keys', exact: true }).locator('..');
+    await page.getByRole('link', { name: 'Profile', exact: true }).last().click();
+    const profile = page
+      .getByRole('button', { name: 'Manage API Keys', exact: true })
+      .locator('..');
     const opaque = async (locator: typeof profile) =>
       locator.evaluate((el) => {
         const context = document.createElement('canvas').getContext('2d')!;
@@ -106,7 +108,7 @@ for (const theme of ['light', 'dark'] as const) {
         return context.getImageData(0, 0, 1, 1).data[3];
       });
     expect(await opaque(profile)).toBe(255);
-    await page.getByRole('button', { name: 'Friends', exact: true }).click();
+    await page.getByRole('button', { name: 'Manage Friends', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Friends' });
     await expect(dialog).toBeVisible();
     expect(await opaque(dialog)).toBe(255);
@@ -161,8 +163,8 @@ test('fresh scaffold: auth gate, landmarks, navigation and preferences', async (
   await page.goto('/');
   if (connected) {
     await expect(page.getByText('Sign in to continue.', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Sign in/ })).toBeVisible();
-    await expect(page.getByRole('main')).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Open profile to sign in' })).toBeVisible();
+    await expect(page.getByRole('main')).toBeVisible();
     await page.evaluate(() =>
       localStorage.setItem(
         'fas:session',
@@ -182,9 +184,9 @@ test('fresh scaffold: auth gate, landmarks, navigation and preferences', async (
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
   await openMenu(page);
-  const destination = connected ? 'Account' : 'About';
+  const destination = connected ? 'Profile' : 'About';
   await page.getByRole('navigation').getByRole('link', { name: destination }).click();
-  await expect(page).toHaveURL(connected ? /\/account$/ : /\/about$/);
+  await expect(page).toHaveURL(connected ? /\/profile$/ : /\/about$/);
   await expect(
     page.getByRole('main').getByRole('heading', { name: destination, exact: true }),
   ).toBeFocused();
@@ -408,4 +410,67 @@ test('published SDK still supports an explicitly chosen Footer (#332)', async ({
   } finally {
     await writeFile(appFile, original);
   }
+});
+
+for (const provider of ['github', 'google']) {
+  test(`avatar opens profile before choosing ${provider}`, async ({ page }, testInfo) => {
+    const starts: string[] = [];
+    page.on('request', (request) => {
+      if (/\/v1\/auth\/[^/]+\/start/.test(request.url())) starts.push(request.url());
+    });
+    await page.goto('/');
+    const avatar = page
+      .locator('header > div')
+      .last()
+      .getByRole('link', { name: 'Profile', exact: true });
+    await expect(page.locator('header').getByRole('button', { name: /Sign in/ })).toHaveCount(0);
+    await avatar.click();
+    await expect(page).toHaveURL(/\/profile$/);
+    await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeFocused();
+    expect(starts).toEqual([]);
+    if (provider === 'github')
+      await page.screenshot({
+        path: testInfo.outputPath('profile-signed-out.png'),
+        fullPage: true,
+      });
+    await expect(page.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/$/);
+    await avatar.click();
+    const request = page.waitForRequest((req) => req.url().includes(`/v1/auth/${provider}/start`));
+    await page
+      .getByRole('button', { name: `Sign in with ${provider === 'github' ? 'GitHub' : 'Google'}` })
+      .click();
+    const url = new URL((await request).url());
+    expect(new URL(url.searchParams.get('return_to')!).pathname).toBe('/profile');
+  });
+}
+
+test('signed-in avatar opens account page and sign-out keeps profile available', async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'fas:session',
+      JSON.stringify({
+        token: 'browser-test-only',
+        user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+      }),
+    ),
+  );
+  await page.goto('/');
+  await page
+    .locator('header > div')
+    .last()
+    .getByRole('link', { name: 'Profile', exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByRole('main')).toContainText('browser-test');
+  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toHaveCount(0);
 });

@@ -67,7 +67,7 @@ What you get, with nothing to enable:
 
 | Part | What it does |
 |------|--------------|
-| **Topbar** | `<header>` with your app name, text-size toggle, theme toggle, and sign-in button or profile menu. |
+| **Topbar** | `<header>` with your app name, text-size toggle, theme toggle, and avatar link to the profile page in both auth states. |
 | **Main navigation** | From `nav`: a `<nav aria-label="Main">` in the topbar, the current screen marked `aria-current="page"` (`/tags/42` marks `/tags`), a menu button below 640px (Escape or a click outside closes it), 44px targets and visible focus. |
 | **`<main id="main">`** | Your screens render here. |
 | **Error boundary** | A screen that throws while rendering shows **Try again** instead of a white page; the topbar stays. The error is recorded in `fas.log` (category `react.error-boundary`). Moving to another screen clears it. |
@@ -91,8 +91,8 @@ gate is the optional sign-in gate.
 | `nav` | The app's screens: `{ label, href, icon?, title? }[]`. No `nav` (or an empty list): no navbar. |
 | `onNavigate(href)` | Client-side navigation for nav clicks, e.g. `history.pushState` + your route state, or a router's `navigate`. Without it, nav items are ordinary links (the host serves your app for any path). |
 | `renderNav({ items, currentPath, onNavigate })` | Replace the built-in navbar; the result still goes in the topbar. Render a `<nav aria-label="Main">`. |
-| `profileHref` | Optional app-owned profile route, e.g. `/profile`. The signed-in avatar becomes a Profile link using `onNavigate`; modified clicks retain native behavior. Omit to keep the existing dropdown. Render account/preferences actions on your profile screen, and include Profile in `nav` so signed-out users can reach app connection settings too. |
-| `requireAuth` | Show a sign-in screen instead of the app until the user signs in. Default `false`. |
+| `profileHref` | Optional app-owned profile route, e.g. `/account`, accessible in both auth states. Omit to use the built-in `/profile` page with GitHub/Google sign-in choices and account management. Avatar clicks navigate using `onNavigate` when supplied; modified clicks retain native behavior. A custom profile route must render its own signed-out and signed-in UI. |
+| `requireAuth` | Protect app content until sign-in; the topbar and profile route remain accessible. Default `false`. |
 | `showThemeToggle` | Default `true`. |
 | `renderError({ error, reset })` | Replace the error fallback. |
 | `renderLoading()` | Replace the loading spinner. |
@@ -162,16 +162,19 @@ onto the standard frame:
 
 ### Caveats
 
-- **Sign-in is optional.** Signed-out visitors see a "Sign in" button in the topbar
-  even in apps that only use localStorage; that is expected. `requireAuth` hides the
-  whole app, navigation included, behind a sign-in screen.
+- **The avatar always opens a profile page.** It never starts OAuth or opens a dropdown.
+  The built-in `/profile` route offers GitHub and Google sign-in when signed out, and
+  account/preferences actions when signed in. It supports direct links, reloads and back/forward.
+  `requireAuth` protects app content while keeping the frame and profile page accessible.
+  Apps that own `/profile` already should pass `profileHref="/profile"` and render their own page.
 - **The error boundary catches render errors only.** Errors thrown in event handlers
   or async code are not caught by React; handle them there (for example
   `catch (e) { toast.show('Could not save', { variant: 'error' }) }`). Caught render
   errors are kept in `fas.log` and uploaded only for signed-in users.
 - **`useToast` works only inside `Shell`.** Outside it throws
   `useToast must be used inside <Shell>`.
-- **Scroll and focus handling needs `onNavigate`.** Without it every nav click is a
+- **Navigation and focus.** The built-in profile handles its own navigation. Other screens
+  need `onNavigate` for client-side routing; without it, links use a
   full page load, which the browser handles. The host serves your app's `index.html`
   for any path without a file extension, so deep links like `/tags` work on reload.
 - **The Shell does not load fonts or tokens.** They come from your app's `index.css`

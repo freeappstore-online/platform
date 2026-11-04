@@ -186,7 +186,7 @@ describe('Shell navigation (#88)', () => {
     expect(link('Home').getAttribute('aria-current')).toBeNull();
   });
 
-  it('keeps nav hidden behind the sign-in gate', async () => {
+  it('keeps navigation available while gating private content', async () => {
     const app = {
       appId: 'demo',
       auth: { user: null, init: async () => {}, onChange: () => () => {} },
@@ -196,7 +196,7 @@ describe('Shell navigation (#88)', () => {
         <p>content</p>
       </Shell>,
     );
-    expect(navs()).toHaveLength(0);
+    expect(navs()).toHaveLength(1);
     expect(container.textContent).toContain('Sign in to continue.');
   });
 });

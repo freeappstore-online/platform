@@ -97,21 +97,21 @@ describe('Shell', () => {
     expect(text(header)).not.toMatch(/\bFree\b/);
   });
 
-  it('shows the profile menu and text-size toggle to a signed-in user', async () => {
+  it('shows the profile link and text-size toggle to a signed-in user', async () => {
     auth.user = { id: 'gh:1', login: 'alice' };
-    const { ProfileMenu } = await import('./layout.js');
     const { TextSizeToggle } = await import('./core.js');
     const header = nodes((await renderShell()).find((n) => n.type === 'header'));
-    expect(header.some((n) => n.type === ProfileMenu)).toBe(true);
+    expect(header.some((n) => n.type === 'a' && n.props['aria-label'] === 'Profile')).toBe(true);
     expect(header.some((n) => n.type === TextSizeToggle)).toBe(true);
   });
 
-  it('without requireAuth, renders the app to signed-out users with sign-in and theme toggle in the topbar', async () => {
+  it('without requireAuth, renders the app to signed-out users with profile link and theme toggle in the topbar', async () => {
     const { SignInButton, ThemeToggle } = await import('./core.js');
     const tree = await renderShell();
     expect(hasChild(tree)).toBe(true);
     const header = nodes(tree.find((n) => n.type === 'header'));
-    expect(header.some((n) => n.type === SignInButton)).toBe(true);
+    expect(header.some((n) => n.type === SignInButton)).toBe(false);
+    expect(header.some((n) => n.type === 'a' && n.props.href === '/profile')).toBe(true);
     expect(header.some((n) => n.type === ThemeToggle)).toBe(true);
   });
 
@@ -120,8 +120,8 @@ describe('Shell', () => {
       const { SignInButton } = await import('./core.js');
       const tree = await renderShell({ requireAuth: true });
       expect(hasChild(tree)).toBe(false);
-      expect(tree.some((n) => n.type === 'main')).toBe(false);
-      expect(tree.some((n) => n.type === SignInButton)).toBe(true);
+      expect(tree.some((n) => n.type === 'main')).toBe(true);
+      expect(tree.some((n) => n.type === SignInButton)).toBe(false);
       expect(tree.filter((n) => n.type === 'h1')).toHaveLength(1);
       expect(text(tree)).toContain('Sign in to continue.');
     });

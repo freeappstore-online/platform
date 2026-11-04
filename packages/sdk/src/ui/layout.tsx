@@ -1,10 +1,19 @@
-import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
 import { Modal, Spinner } from './components.js';
 import { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
 import { activeHref, NavBar, type NavItem, useCurrentPath } from './navbar.js';
+import { PageHeader } from './page.js';
 import {
   OfflineBanner,
   ShellErrorBoundary,
@@ -147,9 +156,13 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
 
   if (!user) {
     return (
-      <div className="p-8 text-center">
-        <p className="text-muted mb-4">Sign in to view your profile.</p>
-        <SignInButton app={app} />
+      <div className="mx-auto w-full max-w-120 px-4 py-8">
+        <PageHeader title="Profile" />
+        <p className="text-muted mb-6">Sign in to manage your profile and account.</p>
+        <div className="flex flex-col gap-3">
+          <SignInButton app={app} provider="github" />
+          <SignInButton app={app} provider="google" />
+        </div>
       </div>
     );
   }
@@ -178,7 +191,8 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   ];
 
   return (
-    <div className="max-w-120 m-[0_auto] p-[2rem_1rem]">
+    <div className="w-full max-w-120 m-[0_auto] p-[2rem_1rem]">
+      <PageHeader title="Profile" />
       {/* Identity */}
       <div className="flex items-center gap-4 mb-8">
         <Avatar user={user} size={64} />
@@ -351,7 +365,7 @@ export interface ShellProps {
    * Without it, nav items are ordinary links (full page load).
    */
   onNavigate?: (href: string) => void;
-  /** App-owned profile route. Replaces the signed-in avatar menu with a link. */
+  /** App-owned profile route for both auth states. Omit to use the built-in /profile page. */
   profileHref?: string;
   /**
    * Replace the fallback shown when a screen throws while rendering. The error
@@ -390,37 +404,29 @@ export function Shell({
   const { user, loading } = useAuth(app);
   const [currentPath, setCurrentPath] = useCurrentPath();
   const mainRef = useRef<HTMLElement>(null);
-  const beforeNavigate = useRouteChangeEffects(currentPath, mainRef, onNavigate !== undefined);
+  const initialTitle = useRef(typeof document === 'undefined' ? '' : document.title);
+  const beforeNavigate = useRouteChangeEffects(currentPath, mainRef, !!onNavigate || !profileHref);
+  const profilePath = profileHref ?? '/profile';
+  const isProfile = currentPath.replace(/\/+$/, '') === profilePath.replace(/\/+$/, '');
+  const builtInProfile = !profileHref && isProfile;
   const displayAppName = normalizeShellAppName(appName);
 
   // A nav item's `title` becomes the tab title on its route. A layout effect
   // runs before every passive effect, so a screen's own useDocumentTitle wins.
   const navItems = nav ?? [];
-  const navTitle = navItems.find((item) => item.href === activeHref(navItems, currentPath))?.title;
+  const navTitle = builtInProfile
+    ? `Profile${displayAppName ? ` — ${displayAppName}` : ''}`
+    : (navItems.find((item) => item.href === activeHref(navItems, currentPath))?.title ??
+      (!profileHref ? displayAppName || initialTitle.current : undefined));
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-apply on every route change, even when two routes share a title.
   useLayoutEffect(() => {
-    if (navTitle) document.title = navTitle;
+    if (navTitle !== undefined) document.title = navTitle;
   }, [navTitle, currentPath]);
 
   if (loading) {
     return (
       <div className="min-h-[100dvh] flex items-center justify-center">
         <p className="text-muted">Loading...</p>
-      </div>
-    );
-  }
-
-  if (requireAuth && !user) {
-    return (
-      <div className="min-h-[100dvh] flex items-center justify-center p-8">
-        <div className="max-w-100 text-center">
-          <h1 className="text-[1.5rem] font-extrabold mb-2 text-ink">
-            {displayAppName || 'FreeAppStore'}
-          </h1>
-          <p className="text-muted text-[0.9rem] mb-4">Sign in to continue.</p>
-          <SignInButton app={app} />
-          <p className="text-muted text-[0.75rem] mt-3">One account for all Free apps.</p>
-        </div>
       </div>
     );
   }
@@ -434,6 +440,26 @@ export function Shell({
         setCurrentPath(href);
       }
     : undefined;
+  const openProfile = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (
+      (profileHref && !navigate) ||
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return;
+    event.preventDefault();
+    if (isProfile) return;
+    if (navigate) navigate(profilePath);
+    else {
+      window.history.pushState(null, '', profilePath);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      beforeNavigate();
+    }
+  };
   const navNode =
     navItems.length === 0 ? null : renderNav ? (
       renderNav({
@@ -469,40 +495,59 @@ export function Shell({
           <div className="flex shrink-0 items-center gap-2">
             <TextSizeToggle />
             {showThemeToggle && !user && <ThemeToggle />}
-            {user && profileHref ? (
-              <a
-                href={profileHref}
-                aria-label="Profile"
-                aria-current={currentPath === profileHref ? 'page' : undefined}
-                className="flex min-h-11 min-w-11 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                onClick={(event) => {
-                  if (
-                    !navigate ||
-                    event.defaultPrevented ||
-                    event.button !== 0 ||
-                    event.metaKey ||
-                    event.ctrlKey ||
-                    event.shiftKey ||
-                    event.altKey
-                  )
-                    return;
-                  event.preventDefault();
-                  navigate(profileHref);
-                }}
-              >
-                <Avatar user={user} size={32} />
-              </a>
-            ) : user ? (
-              <ProfileMenu app={app} showThemeToggle={showThemeToggle} />
-            ) : (
-              <SignInButton app={app} label="Sign in" compactOnMobile />
-            )}
+            <a
+              href={profilePath}
+              aria-label="Profile"
+              aria-current={isProfile ? 'page' : undefined}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              onClick={openProfile}
+            >
+              <Avatar user={user} size={user ? 32 : 24} />
+            </a>
           </div>
         </header>
         <OfflineBanner />
         <main id="main" ref={mainRef} tabIndex={-1} className="fas-main flex-1 flex flex-col">
           <ShellErrorBoundary app={app} renderError={renderError} resetKey={currentPath}>
-            <Suspense fallback={loadingNode}>{children}</Suspense>
+            <Suspense fallback={loadingNode}>
+              {builtInProfile ? (
+                <>
+                  <a
+                    href="/"
+                    className="self-start m-4 text-accent underline"
+                    onClick={(event) => {
+                      if (
+                        !navigate ||
+                        event.defaultPrevented ||
+                        event.button !== 0 ||
+                        event.metaKey ||
+                        event.ctrlKey ||
+                        event.shiftKey ||
+                        event.altKey
+                      )
+                        return;
+                      event.preventDefault();
+                      navigate('/');
+                    }}
+                  >
+                    Back to app
+                  </a>
+                  <ProfilePage app={app} showThemeToggle={showThemeToggle} />
+                </>
+              ) : requireAuth && !user && !isProfile ? (
+                <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
+                  <h1 className="text-2xl font-bold text-ink mb-2">
+                    {displayAppName || 'Welcome'}
+                  </h1>
+                  <p className="text-muted mb-4">Sign in to continue.</p>
+                  <a href={profilePath} className="text-accent underline" onClick={openProfile}>
+                    Open profile to sign in
+                  </a>
+                </div>
+              ) : (
+                children
+              )}
+            </Suspense>
           </ShellErrorBoundary>
         </main>
       </div>

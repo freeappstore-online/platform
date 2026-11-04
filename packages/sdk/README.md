@@ -208,7 +208,7 @@ function App() {
 
 ### App shell
 
-Every app wraps itself in `Shell` from `@freeappstore/sdk/ui`: the topbar (app name, text size, theme, sign-in / profile menu), the app's main navigation from `nav`, and an error boundary, loading fallback, toast region, offline banner and skip link around your screens. There is no paid tier, so the only gate is the optional sign-in gate (`requireAuth`).
+Every app wraps itself in `Shell` from `@freeappstore/sdk/ui`: the topbar (app name, text size, theme, avatar link to a profile page), the app's main navigation from `nav`, and an error boundary, loading fallback, toast region, offline banner and skip link around your screens. The avatar opens `/profile` in both auth states: GitHub and Google sign-in choices when signed out, account and preferences when signed in. Pass `profileHref` for an app-owned profile route. The optional sign-in gate (`requireAuth`) protects app content while keeping the profile page accessible.
 
 ```tsx
 import { type NavItem, PageHeader, Shell, useToast } from '@freeappstore/sdk/ui';

@@ -29,7 +29,7 @@ Your app runs at `http://localhost:5173`. Edit `web/src/App.tsx` to build your a
 ## Build your app on the Shell
 
 Every FreeAppStore app has the same outer frame: `Shell` from `@freeappstore/sdk/ui`.
-It renders the topbar (app name, sign-in and profile menu, theme and
+It renders the topbar (app name, avatar link to the profile page, theme and
 text size) and your app's navigation, and wraps your screens in an error boundary,
 loading fallback, toast region and offline banner. You write the screens.
 
@@ -106,7 +106,7 @@ fas init racing --template game-3d         # 3D game
 | Template | Use case |
 |----------|----------|
 | `standalone` | Apps that only need localStorage. No sign-in. Starts inside `Shell` with two screens in `nav`: Home (`/`) and About (`/about`). |
-| `connected` | Apps that work with the user's data through the SDK (auth, KV, collections, rooms, proxy). Starts inside `Shell` with `requireAuth` (a sign-in screen until the user signs in) and two screens in `nav`: Home (`/`, a note saved to per-user KV) and Account (`/account`, the SDK's `ProfilePage`). |
+| `connected` | Apps that work with the user's data through the SDK (auth, KV, collections, rooms, proxy). Starts inside `Shell` with `requireAuth` (a sign-in screen until the user signs in) and two screens in `nav`: Home (`/`, a note saved to per-user KV) and Profile (`/profile`, the SDK-owned profile page). The avatar also opens Profile while signed out, with GitHub and Google sign-in choices. |
 
 Both app templates route screens by `location.pathname` with `onNavigate`, so adding
 a screen is one `nav` entry plus one branch in `App`.

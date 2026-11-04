@@ -23,8 +23,11 @@ function fakeApp(signedIn = true) {
       user: signedIn ? { id: 'gh:1', login: 'alice', avatarUrl: null, dateOfBirth: null } : null,
       init: async () => {},
       onChange: () => () => {},
+      signIn: vi.fn(),
+      signOut: vi.fn(),
     },
     log: { _renderError: renderError },
+    friends: { requests: async () => [] },
   } as unknown as FreeAppStore;
   return { app, renderError };
 }
@@ -71,15 +74,15 @@ afterEach(async () => {
 });
 
 describe('app-owned profile navigation (#336)', () => {
-  it('keeps the existing profile menu unless an app opts in', async () => {
+  it('links to the built-in profile page by default', async () => {
     const { app } = fakeApp();
     await mount(
       <Shell app={app}>
         <p>Content</p>
       </Shell>,
     );
-    expect($('button[aria-label="Profile menu"]')).not.toBeNull();
-    expect($('a[aria-label="Profile"]')).toBeNull();
+    expect($('button[aria-label="Profile menu"]')).toBeNull();
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe('/profile');
   });
 
   it('routes avatar clicks through the shell and focuses the profile heading', async () => {
@@ -152,8 +155,74 @@ describe('app-owned profile navigation (#336)', () => {
       </Shell>,
     );
     expect($('main')?.textContent).toContain('Public library');
-    expect($('a[aria-label="Profile"]')).toBeNull();
-    expect(container.textContent).toContain('Sign in');
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe('/profile');
+    expect($('header')?.textContent).not.toContain('Sign in');
+  });
+});
+
+describe('built-in profile navigation (#337)', () => {
+  it.each([false, true])(
+    'opens a profile page without starting OAuth (signed in: %s)',
+    async (signedIn) => {
+      const { app } = fakeApp(signedIn);
+      await mount(
+        <Shell app={app} appName="Demo">
+          <p>App content</p>
+        </Shell>,
+      );
+      await act(async () =>
+        $('a[aria-label="Profile"]')!.dispatchEvent(
+          new MouseEvent('click', { bubbles: true, cancelable: true }),
+        ),
+      );
+      await nextFrame();
+      expect(location.pathname).toBe('/profile');
+      expect(document.title).toBe('Profile — Demo');
+      expect(document.activeElement?.textContent).toBe('Profile');
+      expect($('main')?.textContent).not.toContain('App content');
+      expect(app.auth.signIn).not.toHaveBeenCalled();
+      if (signedIn) {
+        expect($('main')?.textContent).toContain('alice');
+        expect(byText('button', 'Sign out')).toBeDefined();
+      } else {
+        for (const provider of ['GitHub', 'Google']) {
+          await act(async () => byText('button', `Sign in with ${provider}`)!.click());
+          expect(app.auth.signIn).toHaveBeenLastCalledWith(provider.toLowerCase());
+        }
+      }
+      await act(async () => {
+        history.replaceState(null, '', '/');
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      });
+      expect($('main')?.textContent).toContain('App content');
+    },
+  );
+
+  it.each(['/profile', '/profile/'])(
+    'allows direct signed-out profile navigation through the auth gate: %s',
+    async (path) => {
+      history.replaceState(null, '', path);
+      const { app } = fakeApp(false);
+      await mount(
+        <Shell app={app} requireAuth>
+          <p>Private content</p>
+        </Shell>,
+      );
+      expect($('h1')?.textContent).toBe('Profile');
+      expect(byText('button', 'Sign in with Google')).toBeDefined();
+      expect(container.textContent).not.toContain('Private content');
+    },
+  );
+
+  it('allows an app-owned signed-out profile through the auth gate', async () => {
+    history.replaceState(null, '', '/account');
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell app={app} profileHref="/account" requireAuth>
+        <PageHeader title="Custom profile" />
+      </Shell>,
+    );
+    expect($('h1')?.textContent).toBe('Custom profile');
   });
 });
 
@@ -611,7 +680,7 @@ describe('client-side route changes', () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const { app } = fakeApp();
     await mount(
-      <Shell app={app} nav={NAV}>
+      <Shell app={app} nav={NAV} profileHref="/account">
         <p>content</p>
       </Shell>,
     );
@@ -628,7 +697,7 @@ describe('client-side route changes', () => {
 // ── Backward compatibility ──────────────────────────────────────
 
 describe('backward compatibility', () => {
-  it('the sign-in gate is unchanged: no skip link, banner or toast region before sign-in', async () => {
+  it('keeps the frame and profile link available while protecting app content', async () => {
     const { app } = fakeApp(false);
     await mount(
       <Shell app={app} requireAuth>
@@ -636,8 +705,9 @@ describe('backward compatibility', () => {
       </Shell>,
     );
     expect(container.textContent).toContain('Sign in to continue.');
-    expect($('.fas-skip-link')).toBeNull();
-    expect($('.fas-toast-region')).toBeNull();
-    expect($('main')).toBeNull();
+    expect($('.fas-skip-link')).not.toBeNull();
+    expect($('.fas-toast-region')).not.toBeNull();
+    expect($('main')).not.toBeNull();
+    expect($('main')?.textContent).not.toBe('content');
   });
 });
