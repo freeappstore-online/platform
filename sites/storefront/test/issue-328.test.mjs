@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, execFileSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -67,46 +68,81 @@ function writeFixture(dir) {
   return pathToFileURL(file).href;
 }
 
-function startChrome() {
-  const executable = findChrome();
-  const userData = mkdtempSync(join(tmpdir(), "fas-chrome-328-"));
-  const chrome = spawn(executable, [
-    "--headless=new",
-    "--disable-gpu",
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--force-device-scale-factor=1",
-    `--user-data-dir=${userData}`,
-    "--remote-debugging-port=0",
-    "about:blank",
-  ], { stdio: ["ignore", "ignore", "pipe"] });
+function startChrome({ launch = spawn, timeoutMs = 10_000, retries = 3 } = {}) {
+  const executable = launch === spawn ? findChrome() : "mock-chrome";
+  let activeChrome;
+  let activeUserData;
+  const ready = (async () => {
+    const failures = [];
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      const userData = mkdtempSync(join(tmpdir(), "fas-chrome-328-"));
+      let chrome;
+      let stderr = "";
+      try {
+        chrome = launch(executable, [
+          "--headless=new",
+          "--disable-gpu",
+          "--no-sandbox",
+          "--disable-dev-shm-usage",
+          "--no-first-run",
+          "--no-default-browser-check",
+          "--force-device-scale-factor=1",
+          `--user-data-dir=${userData}`,
+          "--remote-debugging-port=0",
+          "about:blank",
+        ], { stdio: ["ignore", "ignore", "pipe"] });
+        activeChrome = chrome;
+        activeUserData = userData;
 
-  const ready = new Promise((resolve, reject) => {
-    let buf = "";
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      reject(new Error(`Chrome did not open a DevTools port\n${buf}`));
-    }, 20_000);
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      fn(value);
-    };
-    chrome.stderr.on("data", (chunk) => {
-      buf += chunk.toString();
-      const match = buf.match(/DevTools listening on (ws:\/\/\S+)/);
-      if (match) finish(resolve, match[1]);
-    });
-    chrome.on("error", (error) => finish(reject, error));
-    chrome.on("exit", (code) => finish(reject, new Error(`Chrome exited ${code} before DevTools\n${buf}`)));
-  });
+        const browserWs = await new Promise((resolve, reject) => {
+          let settled = false;
+          const finish = (fn, value) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            fn(value);
+          };
+          const timer = setTimeout(() => {
+            finish(reject, new Error("Chrome did not open a DevTools port"));
+          }, timeoutMs);
+          chrome.stderr.on("data", (chunk) => {
+            stderr += chunk.toString();
+            const match = stderr.match(/DevTools listening on (ws:\/\/\S+)/);
+            if (match) finish(resolve, match[1]);
+          });
+          chrome.on("error", (error) => finish(reject, error));
+          chrome.on("exit", (code, signal) => {
+            finish(reject, new Error(`Chrome exited before DevTools (code ${code}, signal ${signal})`));
+          });
+        });
+        return browserWs;
+      } catch (error) {
+        const diagnostic = `attempt ${attempt} failed: ${error.message}\n${stderr}`;
+        failures.push(diagnostic);
+        console.error(diagnostic);
+        if (chrome?.pid && chrome.exitCode === null && chrome.signalCode === null) {
+          chrome.kill("SIGKILL");
+          await Promise.race([
+            new Promise((resolve) => chrome.once("exit", resolve)),
+            delay(1_000),
+          ]);
+        }
+        await removeTempDirectory(userData);
+        activeChrome = undefined;
+        activeUserData = undefined;
+      }
+    }
+    throw new AggregateError(
+      failures.map((message) => new Error(message)),
+      `Chrome failed to start after ${retries} attempts:\n${failures.join("\n")}`,
+    );
+  })();
 
-  return { chrome, userData, ready };
+  return {
+    get chrome() { return activeChrome; },
+    get userData() { return activeUserData; },
+    ready,
+  };
 }
 
 async function removeTempDirectory(path, remove = rmSync) {
@@ -335,4 +371,79 @@ test("issue #328: iframe starts at or below the camera island and still fits a p
       await removeTempDirectory(dir);
     }
   }
+});
+
+function mockChrome() {
+  const chrome = new EventEmitter();
+  chrome.stderr = new EventEmitter();
+  chrome.exitCode = null;
+  chrome.signalCode = null;
+  chrome.kill = (signal) => {
+    chrome.signalCode = signal;
+    queueMicrotask(() => chrome.emit("exit", null, signal));
+  };
+  return chrome;
+}
+
+test("startChrome retries DevTools timeouts and reports attempt diagnostics", async () => {
+  let attempts = 0;
+  const launched = startChrome({
+    launch: () => {
+      attempts++;
+      const chrome = mockChrome();
+      queueMicrotask(() => chrome.stderr.emit("data", "mock startup output"));
+      return chrome;
+    },
+    timeoutMs: 10,
+    retries: 2,
+  });
+  await assert.rejects(launched.ready, (error) => {
+    assert.match(error.message, /DevTools/);
+    assert.match(error.message, /attempt 1 failed/);
+    assert.match(error.message, /mock startup output/);
+    return true;
+  });
+  assert.equal(attempts, 2);
+});
+
+test("startChrome retries Chrome exits before DevTools and reports stderr", async () => {
+  let attempts = 0;
+  const launched = startChrome({
+    launch: () => {
+      attempts++;
+      const chrome = mockChrome();
+      queueMicrotask(() => {
+        chrome.stderr.emit("data", "mock early-exit output");
+        chrome.exitCode = 1;
+        chrome.emit("exit", 1, null);
+      });
+      return chrome;
+    },
+    timeoutMs: 100,
+    retries: 2,
+  });
+  await assert.rejects(launched.ready, /Chrome failed to start after 2 attempts/);
+  assert.equal(attempts, 2);
+});
+
+test("startChrome succeeds on a later DevTools attempt", async () => {
+  let attempts = 0;
+  const launched = startChrome({
+    launch: () => {
+      attempts++;
+      const chrome = mockChrome();
+      if (attempts === 1) {
+        queueMicrotask(() => chrome.emit("exit", 1, null));
+      } else {
+        queueMicrotask(() => chrome.stderr.emit("data", "DevTools listening on ws://127.0.0.1:9222/devtools/browser/mock\n"));
+      }
+      return chrome;
+    },
+    timeoutMs: 100,
+    retries: 2,
+  });
+  assert.match(await launched.ready, /^ws:\/\/127\.0\.0\.1:9222/);
+  assert.equal(attempts, 2);
+  assert.ok(launched.chrome);
+  await removeTempDirectory(launched.userData);
 });
