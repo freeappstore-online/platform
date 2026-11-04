@@ -17,7 +17,9 @@ export interface CurrentUser {
   appRoles: Record<string, string[]>;
 }
 
-export async function requireUser(c: Context<{ Bindings: Env }>): Promise<CurrentUser> {
+export async function requireUser<E extends { Bindings: Env }>(
+  c: Context<E>,
+): Promise<CurrentUser> {
   const auth = c.req.header('authorization');
   if (!auth?.startsWith('Bearer ')) {
     throw new HttpError(401, 'missing bearer token');

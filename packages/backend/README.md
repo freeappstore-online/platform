@@ -61,6 +61,12 @@ Then attach the custom domain `api.freeappstore.online` to this Worker via the C
 - **`return_to`** in the OAuth flow is allowlisted (`*.freeappstore.online` + localhost). Without this allowlist an attacker could craft a sign-in URL pointing `return_to` at their own site and exfiltrate the session token from the redirect fragment.
 - **KV writes** are pre-checked against per-user quotas (`lib/quota.ts`) using a single SUM aggregate over the user's keys.
 
+## Durable authorized data
+
+See [data rooms](../../docs/data-rooms.md) for authenticated room membership and
+durable collection endpoints. Public collections and WebSocket rooms have separate
+access semantics.
+
 ## License
 
 MIT.
