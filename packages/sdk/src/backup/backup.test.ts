@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getPreference, setPreference } from '../persist/prefs.js';
+import { readEnvelopeFields } from './envelope.js';
 import {
   type BackupSchema,
   exportBackup,
@@ -54,6 +55,19 @@ afterEach(() => {
 });
 
 describe('backup envelope', () => {
+  it('does not retain caller-owned data when reading envelope fields directly', async () => {
+    const exported = await exportBackup({
+      appId: 'notes',
+      data: { notes: ['original'] },
+      exportedAt,
+    });
+    if (!exported.ok) throw new Error('export failed');
+    const fields = readEnvelopeFields(exported.value);
+    exported.value.data.notes[0] = '999';
+    exported.value.data.notes.push('unchecked');
+    expect(fields).toMatchObject({ ok: true, value: { data: { notes: ['original'] } } });
+  });
+
   it('round-trips export and replace import, and previews counts before writing', async () => {
     const db = memory();
     const exported = await exportBackup({

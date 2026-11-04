@@ -215,6 +215,10 @@ export function readEnvelopeFields(value: unknown): BackupResult<BackupEnvelope<
     return backupFailure('validation', 'Malformed backup.');
   }
   if (!Object.hasOwn(record, 'data')) return backupFailure('validation', 'Malformed backup.');
+  // Also detach for direct callers of this helper. previewBackup already owns
+  // a bounded JSON snapshot, but this function must not return caller-owned data.
+  const data = detachJson(record.data);
+  if (!data.ok) return data;
   return {
     ok: true,
     value: {
@@ -222,7 +226,7 @@ export function readEnvelopeFields(value: unknown): BackupResult<BackupEnvelope<
       version: record.version,
       exportedAt: record.exportedAt,
       appId: appId.value,
-      data: record.data,
+      data: data.value,
       checksum: record.checksum.toLowerCase(),
     },
   };
