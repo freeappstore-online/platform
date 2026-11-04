@@ -157,26 +157,21 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
-test('fresh scaffold: auth gate, landmarks, navigation and preferences', async ({ page }) => {
+test('fresh scaffold: public screens, feature-level sign-in and Profile preferences', async ({
+  page,
+}) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto('/');
-  if (connected) {
-    await expect(page.getByText('Sign in to continue.', { exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Open profile to sign in' })).toBeVisible();
-    await expect(page.getByRole('main')).toBeVisible();
-    await page.evaluate(() =>
-      localStorage.setItem(
-        'fas:session',
-        JSON.stringify({
-          token: 'browser-test-only',
-          user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
-        }),
-      ),
-    );
-    await page.reload();
-  }
   await landmarks(page);
+  await expect(page.getByRole('main').getByRole('heading', { name: /Welcome/ })).toBeVisible();
+  if (connected) {
+    await expect(
+      page.getByText(
+        'Sign in to load or save your private draft. Public parts of the app remain available.',
+      ),
+    ).toBeVisible();
+  }
   // The standard Shell does not add platform attribution bars.
   await expect(page.getByRole('contentinfo')).toHaveCount(0);
   await page.keyboard.press('Tab');
@@ -184,15 +179,18 @@ test('fresh scaffold: auth gate, landmarks, navigation and preferences', async (
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
   await openMenu(page);
-  const destination = connected ? 'Profile' : 'About';
-  await page.getByRole('navigation').getByRole('link', { name: destination }).click();
-  await expect(page).toHaveURL(connected ? /\/profile(?:\?|$)/ : /\/about$/);
+  await page.getByRole('navigation').getByRole('link', { name: 'About', exact: true }).click();
+  await expect(page).toHaveURL(/\/about$/);
   await expect(
-    page.getByRole('main').getByRole('heading', { name: destination, exact: true }),
+    page.getByRole('main').getByRole('heading', { name: 'About', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('main')).toBeVisible();
+  await expect(
+    page.getByRole('main').getByRole('heading', { name: 'About', exact: true }),
   ).toBeFocused();
   await openMenu(page);
   await expect(
-    page.getByRole('navigation').getByRole('link', { name: destination }),
+    page.getByRole('navigation').getByRole('link', { name: 'About', exact: true }),
   ).toHaveAttribute('aria-current', 'page');
   const menu = page.getByRole('button', { name: 'Menu', exact: true });
   if (await menu.isVisible()) {
@@ -201,18 +199,17 @@ test('fresh scaffold: auth gate, landmarks, navigation and preferences', async (
     await expect(menu).toBeFocused();
     await expect(menu).toHaveCSS('outline-style', 'solid');
   }
-  const lightPanel = await page
-    .locator('header')
-    .evaluate((el) => getComputedStyle(el).backgroundColor);
-  if (connected) {
-    await page.getByRole('button', { name: 'Dark', exact: true }).click();
-  } else {
-    await page.getByRole('button', { name: 'Theme: system', exact: true }).click();
-    await page.getByRole('button', { name: 'Theme: light', exact: true }).click();
-  }
+  await page.locator('header a[aria-label="Profile"]').click();
+  await expect(page).toHaveURL(/\/profile(?:\?|$)/);
+  await expect(
+    page.getByRole('main').getByRole('heading', { name: 'Profile', exact: true }),
+  ).toBeFocused();
+  await expect(page.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const originalSize = await page.locator('html').evaluate((el) => getComputedStyle(el).fontSize);
-  await page.getByRole('button', { name: 'Text: default', exact: true }).click();
+  await page.getByRole('button', { name: 'Large', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-text', 'lg');
   await expect
     .poll(() => page.locator('html').evaluate((el) => getComputedStyle(el).fontSize))
@@ -221,9 +218,14 @@ test('fresh scaffold: auth gate, landmarks, navigation and preferences', async (
   await landmarks(page);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-text', 'lg');
-  await expect
-    .poll(() => page.locator('header').evaluate((el) => getComputedStyle(el).backgroundColor))
-    .not.toBe(lightPanel);
+  await expect(page.getByRole('button', { name: 'Large', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   expect(errors).toEqual([]);
 });
 

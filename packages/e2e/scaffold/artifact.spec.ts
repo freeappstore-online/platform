@@ -2,16 +2,6 @@ import { expect, test } from '@playwright/test';
 
 test('produced artifact renders navigation and persists a real theme change', async ({ page }) => {
   const connected = process.env.SCAFFOLD_TEMPLATE === 'connected';
-  if (connected)
-    await page.addInitScript(() =>
-      localStorage.setItem(
-        'fas:session',
-        JSON.stringify({
-          token: 'artifact-browser-test',
-          user: { id: 'gh:1', login: 'testuser', avatarUrl: null, dateOfBirth: '2000-01-01' },
-        }),
-      ),
-    );
   await page.route('https://api.freeappstore.online/**', (route) =>
     route.fulfill({ json: { value: null, friends: [], requests: [] } }),
   );
@@ -22,16 +12,27 @@ test('produced artifact renders navigation and persists a real theme change', as
   await expect(page.getByRole('status', { name: 'Task count' })).toHaveText('1');
   const menu = page.getByRole('button', { name: 'Menu', exact: true });
   if (await menu.isVisible()) await menu.click();
-  await page
-    .getByRole('navigation')
-    .getByRole('link', { name: connected ? 'Profile' : 'About', exact: true })
-    .click();
+  await page.getByRole('navigation').getByRole('link', { name: 'About', exact: true }).click();
+  await expect(
+    page.getByRole('main').getByRole('heading', { name: 'About', exact: true }),
+  ).toBeVisible();
+  await page.locator('header a[aria-label="Profile"]').click();
+  await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
   if (connected) {
-    await page.getByRole('button', { name: 'Dark', exact: true }).click();
-  } else {
-    await page.getByRole('button', { name: 'Theme: system', exact: true }).click();
-    await page.getByRole('button', { name: 'Theme: light', exact: true }).click();
+    await page.getByRole('link', { name: 'Back to app', exact: true }).click();
+    const homeMenu = page.getByRole('button', { name: 'Menu', exact: true });
+    if (await homeMenu.isVisible()) await homeMenu.click();
+    await page.getByRole('navigation').getByRole('link', { name: 'Home', exact: true }).click();
+    await expect(
+      page.getByText(
+        'Sign in to load or save your private draft. Public parts of the app remain available.',
+      ),
+    ).toBeVisible();
+    await page.locator('header a[aria-label="Profile"]').click();
   }
+  await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');

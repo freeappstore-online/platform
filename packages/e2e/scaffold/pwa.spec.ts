@@ -36,9 +36,12 @@ test('PWA preserves work across activation, reloads offline deep links and suppo
   for (const icon of manifest.icons) expect((await context.request.get(icon.src)).ok()).toBe(true);
   await page.setViewportSize({ width: 320, height: 760 });
   await page.addStyleTag({ content: 'html { font-size: 200%; }' });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
-    true,
-  );
+  expect(
+    await page.evaluate(
+      (width) => document.documentElement.scrollWidth <= width,
+      page.viewportSize()!.width,
+    ),
+  ).toBe(true);
   await page.getByRole('textbox', { name: 'Unsaved note' }).fill('Keep this work');
   const swPath = resolve(process.env.SCAFFOLD_DIR!, 'web/dist/sw.js');
   const original = await readFile(swPath, 'utf8');

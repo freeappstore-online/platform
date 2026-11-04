@@ -29,7 +29,7 @@ function PwaWork() {
   const [dirty, setDirty] = useState(false);
   const [active, setActive] = useState(false);
   return <section aria-label="Update protection" data-dirty={dirty}>
-    <label>Unsaved note<input aria-label="Unsaved note" onChange={() => setDirty(true)} /></label>
+    <label style={{ display: 'block' }}>Unsaved note<input aria-label="Unsaved note" style={{ width: '100%', maxWidth: '18rem', boxSizing: 'border-box' }} onChange={() => setDirty(true)} /></label>
     <button onClick={() => setDirty(false)}>Save note</button>
     <button onClick={() => {
       if (recording?.state === 'recording') { recording.stop(); setActive(false); return; }
