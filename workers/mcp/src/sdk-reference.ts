@@ -195,6 +195,33 @@ const filtered = await fas.kv.list({ prefix: 'draft:' })
 const many = await fas.kv.getMany(['k1', 'k2']) // batch read
 \`\`\`
 Limits: 1 MiB/user/app, 100 keys/user/app, 64 KiB/value. The KV routes do not enforce separate daily-active-user or per-minute KV caps.`,
+  persistence: `## Device-local persistence
+
+Not account data. \`fas.kv\` is the signed-in user's server store. Helpers below keep data on this origin on this device only. A failed save returns \`{ ok: false, reason }\` and must not be shown as saved. Corrupt stored JSON is left in place.
+
+\`\`\`ts
+import {
+  getPreference,
+  setPreference,
+  watchPreference,
+  openStore,
+  putRecord,
+  openFileStore,
+  putFile,
+  installCapability,
+  getCapability,
+} from '@freeappstore/sdk/persist'
+
+const saved = setPreference('notes', 'draft', { text: 'hello' })
+// saved.ok is true only after localStorage accepts the write
+
+watchPreference('notes', 'draft', (notice) => {
+  // notice.notification === 'storage-changed'
+  // Cross-tab notification only. not a merge and not conflict resolution
+})
+\`\`\`
+
+IndexedDB: \`openStore\`, \`getRecord\`, \`putRecord\`, \`deleteRecord\`, \`withTransaction\` (success after the transaction commits). Large files: \`openFileStore\`, \`putFile\`, \`getFile\`, \`getFileMetadata\`, \`listFiles\`. \`putFile\` keeps metadata separate from the payload and calls the app's \`resolveConflict\` when the id already exists. \`installCapability\` / \`getCapability\` register a store at init or later; \`not-installed\` is different from \`unavailable\` on an installed store. Reasons: unavailable, corrupt, quota, validation, aborted, conflict, not-installed.`,
   counters: `## Shared Counters
 \`\`\`tsx
 const count = await fas.counters.get('likes')        // public, no auth

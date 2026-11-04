@@ -111,6 +111,31 @@ describe("sdk_reference", () => {
     expect(ui).not.toContain("requireAuth");
   });
 
+  it("'persistence' documents device-local saves, not account data or silent merges", () => {
+    const persistence = getSdkReference("persistence");
+    for (const part of [
+      "@freeappstore/sdk/persist",
+      "getPreference",
+      "setPreference",
+      "watchPreference",
+      "openStore",
+      "putRecord",
+      "withTransaction",
+      "openFileStore",
+      "putFile",
+      "getFileMetadata",
+      "resolveConflict",
+      "installCapability",
+      "getCapability",
+      "not-installed",
+      "device",
+      "fas.kv",
+      "not a merge and not conflict resolution",
+    ]) {
+      expect(persistence, part).toContain(part);
+    }
+  });
+
   it("'hooks' covers the screen helpers", () => {
     const hooks = getSdkReference("hooks");
     for (const hook of ["useToast", "useDocumentTitle", "useOnline"]) expect(hooks).toContain(hook);

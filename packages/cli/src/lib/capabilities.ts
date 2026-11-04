@@ -70,12 +70,60 @@ export function watchConnectivity(listener: (online: boolean) => void): () => vo
     configChanges: [],
     validate: (content) => content.includes('export function watchConnectivity'),
   },
+  persistence: {
+    id: 'persistence',
+    version: '1.0.0',
+    dependencies: {},
+    environment: 'browser',
+    metadata: { data: 'device-only', account: 'fas.kv' },
+    files: {
+      'fas-capabilities/persistence.ts': `/**
+ * Device-local persistence. This data is device-only. Not an account backup and not fas.kv.
+ * Import this module from app code. Installation does not read or delete saved data.
+ * A failed save returns { ok: false, reason } and must not be shown as saved.
+ * watchPreference notifies other tabs; it does not merge and is not conflict resolution.
+ * Put an app-owned resolveConflict on putFile when a file id may already exist.
+ */
+export {
+  getPreference,
+  setPreference,
+  removePreference,
+  watchPreference,
+  openStore,
+  getRecord,
+  putRecord,
+  deleteRecord,
+  withTransaction,
+  openFileStore,
+  putFile,
+  getFile,
+  getFileMetadata,
+  listFiles,
+  installCapability,
+  getCapability,
+} from '@freeappstore/sdk/persist';
+`,
+      'fas-capabilities/persistence.md': `# Device-local persistence
+
+Requires @freeappstore/sdk with the persist export (0.16.18 or newer).
+This capability is device-only: localStorage and IndexedDB on this origin.
+Account-backed keys stay on fas.kv. Public documents stay on fas.collections.
+Import getPreference and the other helpers from fas-capabilities/persistence.ts.
+Do not delete existing preference keys or databases when installing later.
+A cross-tab watchPreference notice is a notification, not conflict resolution.
+See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
+`,
+    },
+    configChanges: ['Import fas-capabilities/persistence.ts where the app reads device-local data'],
+    validate: (content) => content.includes('device-only') && content.includes('getPreference'),
+  },
 };
 
 export const presets: Record<string, string[]> = {
   minimal: [],
   connectivity: ['connectivity'],
   pwa: ['pwa'],
+  persistence: ['persistence'],
 };
 interface Ownership {
   version: string;

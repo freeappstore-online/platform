@@ -103,6 +103,22 @@ it('rejects unowned collisions, overlapping ownership and traversal', async () =
   expect(registry.connectivity?.environment).toBe('browser');
 });
 
+it('installs persistence at init and later without touching saved data or edited files', async () => {
+  const root = await app();
+  await writeFile(join(root, 'notes.json'), '{"keep":true}');
+  const plan = await installCapabilities(root, ['persistence']);
+  expect(plan.join('\n')).toContain('CREATE');
+  expect(plan.join('\n')).toContain('device-only');
+  expect(await readFile(join(root, 'notes.json'), 'utf8')).toBe('{"keep":true}');
+  expect(await installCapabilities(root, ['persistence'])).toEqual(['No changes.']);
+  const file = join(root, 'fas-capabilities/persistence.ts');
+  await writeFile(file, 'app edited persistence');
+  await expect(installCapabilities(root, ['persistence'])).rejects.toThrow('conflict');
+  expect(await readFile(file, 'utf8')).toBe('app edited persistence');
+  expect(await readFile(join(root, 'notes.json'), 'utf8')).toBe('{"keep":true}');
+  expect(await readFile(join(root, 'user.txt'), 'utf8')).toBe('keep');
+});
+
 it('retries an interrupted version update and detects edits afterwards', async () => {
   const root = await app();
   await installCapabilities(root, ['a'], { source: { a: cap('a') } });

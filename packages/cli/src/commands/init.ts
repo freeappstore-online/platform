@@ -126,7 +126,11 @@ export const initCommand = new Command('init')
   .argument('<app-id>', 'Short id (lowercase, single word). e.g. "calendar" or "asteroids"')
   .option('-t, --template <name>', `Template: ${ALL_TEMPLATES.join(' | ')}`, 'standalone')
   .option('--capabilities <ids>', 'Comma-separated first-party capability IDs')
-  .option('--preset <name>', 'Capability list: minimal | connectivity | pwa', 'minimal')
+  .option(
+    '--preset <name>',
+    'Capability list: minimal | connectivity | pwa | persistence',
+    'minimal',
+  )
   .action(
     async (appId: string, opts: { template: string; capabilities?: string; preset?: string }) => {
       if (!(opts.template in TEMPLATES)) {

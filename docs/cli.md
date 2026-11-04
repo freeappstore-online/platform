@@ -239,6 +239,13 @@ without writing. The bundled browser capability creates
 `fas-capabilities/connectivity.ts`; import `watchConnectivity` from that module in
 your app to subscribe to online/offline hints, and call its returned cleanup
 function on unmount. It does not promise server reachability or offline storage.
+
+`fas add persistence` (or `--preset persistence` / `--capabilities persistence` at init)
+installs the same way, now or later. It adds `fas-capabilities/persistence.ts`, a
+device-only import of `@freeappstore/sdk/persist`. It does not delete preference
+keys, IndexedDB databases, or edited files. An edited generated file is a conflict
+until you resolve it yourself. Saved data is not account-backed `fas.kv`.
+
 The registry declares exact dependency versions, browser environment, owned files,
 config changes (none for connectivity), and generated-content validation. It runs
 no downloaded scripts and installs no npm dependencies.

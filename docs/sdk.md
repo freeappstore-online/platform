@@ -52,6 +52,52 @@ const notes = await fas.kv.getMany<Note>(noteKeys); // bulk fetch
 
 **Limits:** 1MB per user, 100 keys, 64KB per value. All methods accept `{ signal }` for AbortController.
 
+## Device-local persistence (`@freeappstore/sdk/persist`)
+
+This data stays on this origin on this device. Clearing site data removes it. It is not a backup and it is not the signed-in account.
+
+| Class | API | Where it lives |
+| --- | --- | --- |
+| Device-local | `@freeappstore/sdk/persist` | This browser profile only |
+| Private account | `fas.kv` | The signed-in user's keys on the server |
+| Public shared | `fas.collections` | Public read, owner writes |
+| Room fan-out | `fas.rooms` | Ephemeral broadcast, not an access list |
+
+A save reports `{ ok: true, value }` only after `localStorage` accepts the write or the IndexedDB transaction commits. Do not show a success toast before that. `{ ok: false, reason }` is `unavailable` (storage blocked), `corrupt` (unreadable bytes, left in place), `quota`, `validation`, `aborted`, `conflict`, or `not-installed`. Nothing in this module deletes corrupt data or resets it to a default.
+
+`watchPreference` fires when a namespaced key changes. That event is a notification, not a merge and not conflict resolution. Read the key and apply an app-owned policy if two tabs disagree. File overwrites use `resolveConflict` on `putFile`; without that function an existing file id is left untouched and the save reports `conflict`.
+
+Preference keys are `fas:<namespace>:<key>`. IndexedDB database names start with `fas:`.
+
+```ts
+import {
+  getPreference,
+  setPreference,
+  watchPreference,
+  openStore,
+  putRecord,
+  openFileStore,
+  putFile,
+} from '@freeappstore/sdk/persist';
+
+const isDraft = (value: unknown): value is { text: string } =>
+  typeof value === 'object' && value !== null && 'text' in value &&
+  typeof value.text === 'string';
+
+const saved = setPreference('notes', 'draft', { text: 'hello' }, isDraft);
+if (!saved.ok) {
+  // saved.reason — do not tell the user the draft was saved
+}
+
+watchPreference('notes', 'draft', (notice) => {
+  // notice.notification === 'storage-changed'
+  // Not a merged document. Call getPreference and decide in app code.
+  void notice;
+});
+```
+
+`openStore` runs the caller's versioned `upgrade` and preserves records already in the `records` store. `openFileStore` keeps file metadata and file bytes in separate object stores so listing files does not read the payloads.
+
 ## Shared counters (`fas.counters`)
 
 App-wide atomic counters. Anyone can read; authenticated users can increment.

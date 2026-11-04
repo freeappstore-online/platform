@@ -5,6 +5,12 @@ Browser SDK for free apps published on **freeappstore.online**.
 PWA lifecycle APIs live at `@freeappstore/sdk/pwa`, with Vite options at
 `@freeappstore/sdk/pwa-config`. See [safe updates and offline capabilities](https://github.com/freeappstore-online/platform/blob/main/docs/pwa-lifecycle.md).
 
+Device-local preferences, IndexedDB, and large-file metadata live at
+`@freeappstore/sdk/persist`. That data is not the signed-in account. Account
+keys remain `fas.kv`. A failed save returns a status instead of throwing a
+success path, and corrupt values are left in place. See
+[device-local persistence](https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md#device-local-persistence-freeappstoresdkpersist).
+
 ## Installation
 
 ```bash
