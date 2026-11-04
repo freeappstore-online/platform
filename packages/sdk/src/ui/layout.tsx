@@ -63,7 +63,8 @@ export interface ShellProps {
   /**
    * Header control slot. Rendered in the topbar beside the profile avatar,
    * inside `[data-fas-header-actions]`. Put app buttons here instead of
-   * patching the header DOM. The avatar stays a profile link.
+   * patching the header DOM. The avatar links to Profile, then becomes its
+   * close control while the built-in Profile screen is open.
    */
   headerActions?: ReactNode;
   /**
@@ -165,12 +166,16 @@ export function Shell({
         setCurrentLocation(routeHref(destination));
       }
     : undefined;
-  const openProfile = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    if (!navigate || !canFollowLink(event, profileLink)) return;
+  const followShellLink = (event: ReactMouseEvent<HTMLAnchorElement>, href: string) => {
+    if (!navigate || !canFollowLink(event, href)) return;
     event.preventDefault();
-    if (routeUrl(profileLink)?.href === routeUrl(currentLocation)?.href) return;
-    navigate(profileLink);
+    if (routeUrl(href)?.href === routeUrl(currentLocation)?.href) return;
+    navigate(href);
   };
+  const openProfile = (event: ReactMouseEvent<HTMLAnchorElement>) =>
+    followShellLink(event, profileLink);
+  const closeProfile = (event: ReactMouseEvent<HTMLAnchorElement>) =>
+    followShellLink(event, returnHref);
   const navNode =
     navItems.length === 0 ? null : renderNav ? (
       renderNav({
@@ -219,15 +224,38 @@ export function Shell({
                 {headerActions}
               </div>
             ) : null}
-            <a
-              href={profileLink}
-              aria-label="Profile"
-              aria-current={isProfile ? 'page' : undefined}
-              className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              onClick={openProfile}
-            >
-              <Avatar user={user} size={user ? 32 : 24} />
-            </a>
+            {builtInProfile ? (
+              <a
+                href={returnHref}
+                aria-label="Close profile"
+                className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onClick={closeProfile}
+              >
+                <svg
+                  aria-hidden="true"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                >
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+                <span className="sr-only">Close profile</span>
+              </a>
+            ) : (
+              <a
+                href={profileLink}
+                aria-label="Profile"
+                aria-current={isProfile ? 'page' : undefined}
+                className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                onClick={openProfile}
+              >
+                <Avatar user={user} size={user ? 32 : 24} />
+              </a>
+            )}
           </div>
         </header>
         <OfflineBanner />
@@ -235,20 +263,7 @@ export function Shell({
           <ShellErrorBoundary app={app} renderError={renderError} resetKey={currentLocation}>
             <Suspense fallback={loadingNode}>
               {builtInProfile ? (
-                <>
-                  <a
-                    href={returnHref}
-                    className="self-start m-4 text-accent underline"
-                    onClick={(event) => {
-                      if (!navigate || !canFollowLink(event, returnHref)) return;
-                      event.preventDefault();
-                      navigate(returnHref);
-                    }}
-                  >
-                    Back to app
-                  </a>
-                  <ProfilePage app={app} showThemeToggle={showThemeToggle} />
-                </>
+                <ProfilePage app={app} showThemeToggle={showThemeToggle} />
               ) : requireAuth && !user && !isProfile ? (
                 <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
                   <h1 className="text-2xl font-bold text-ink mb-2">

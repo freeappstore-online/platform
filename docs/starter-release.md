@@ -52,7 +52,7 @@ In the builder, ask it to install the capability and use its `install_capabiliti
 
 ## Capability support and package prerequisites
 
-These are the registry's declared API minimums. Fresh Shell starters have a separate `@freeappstore/sdk ^0.16.32` baseline. The CLI preflights package requirements at the package location listed below; it does not silently upgrade an existing app's dependencies.
+These are the registry's declared API minimums. Fresh Shell starters have a separate `@freeappstore/sdk ^0.16.35` baseline, which includes the built-in Profile close control from platform #397. The CLI preflights package requirements at the package location listed below; it does not silently upgrade an existing app's dependencies. The standalone and connected template repositories are generated mirrors; after this platform release, sync their manifests from the canonical starter and refresh each mirror's lockfile before apps created from those mirrors receive the new floor. Existing app lockfiles keep their resolved SDK until the app owner deliberately refreshes them.
 
 | Capability | What it provides | Prerequisite |
 | --- | --- | --- |

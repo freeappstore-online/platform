@@ -299,7 +299,58 @@ describe('profile review regressions (#338)', () => {
         <p>App</p>
       </Shell>,
     );
-    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/');
+    expect($('a[aria-label="Close profile"]')?.getAttribute('href')).toBe('/');
+    expect(byText('a', 'Back to app')).toBeUndefined();
+  });
+
+  it.each([false, true])(
+    'uses an accessible close link on built-in Profile, signedIn=%s',
+    async (signedIn) => {
+      history.replaceState(null, '', '/profile?returnTo=%2Fnotes%3Fsort%3Dnew%23saved');
+      const { app } = fakeApp(signedIn);
+      const navigate = vi.fn((href: string) => history.pushState(null, '', href));
+      await mount(
+        <Shell app={app} onNavigate={navigate}>
+          <p>App</p>
+        </Shell>,
+      );
+      const close = $<HTMLAnchorElement>('a[aria-label="Close profile"]')!;
+      expect(close.getAttribute('href')).toBe('/notes?sort=new#saved');
+      expect(close.querySelector('svg')?.getAttribute('width')).toBe('24');
+      expect(close.className).toContain('focus-visible:outline');
+      expect(byText('a', 'Back to app')).toBeUndefined();
+      await act(async () => close.click());
+      expect(navigate).toHaveBeenCalledWith('/notes?sort=new#saved');
+      expect(app.auth.signIn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves native modified close-link navigation', async () => {
+    history.replaceState(null, '', '/profile?returnTo=%2Fnotes%23saved');
+    const { app } = fakeApp(false);
+    const navigate = vi.fn();
+    await mount(
+      <Shell app={app} onNavigate={navigate}>
+        <p>App</p>
+      </Shell>,
+    );
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: true });
+    await act(async () => $('a[aria-label="Close profile"]')!.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('leaves an unmodified close link to native navigation without a router', async () => {
+    history.replaceState(null, '', '/profile?returnTo=%2Fnotes%23saved');
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(async () => $('a[aria-label="Close profile"]')!.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
   });
 
   it('normalizes query strings when routing to an app-owned public profile', async () => {
@@ -387,7 +438,9 @@ describe('profile review regressions (#338)', () => {
     expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe(href);
     history.replaceState(null, '', href);
     await act(async () => window.dispatchEvent(new PopStateEvent('popstate')));
-    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/notes?sort=recent#saved');
+    expect($('a[aria-label="Close profile"]')?.getAttribute('href')).toBe(
+      '/notes?sort=recent#saved',
+    );
   });
 });
 
@@ -934,7 +987,7 @@ describe('profile edge cases (#338)', () => {
         <p>App</p>
       </Shell>,
     );
-    const back = byText('a', 'Back to app')!;
+    const back = $<HTMLAnchorElement>('a[aria-label="Close profile"]')!;
     const expected = target === '/notes/42?q=test#details' ? target : '/';
     expect(back.getAttribute('href')).toBe(expected);
     await act(async () => back.click());
@@ -1131,12 +1184,12 @@ describe('shell and profile sweep (#339)', () => {
         <p>App</p>
       </Shell>,
     );
-    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/notes');
+    expect($('a[aria-label="Close profile"]')?.getAttribute('href')).toBe('/notes');
     await act(async () => {
       history.replaceState(null, '', '/profile?returnTo=%2Fsettings');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/settings');
+    expect($('a[aria-label="Close profile"]')?.getAttribute('href')).toBe('/settings');
   });
 
   it('captures native hash changes in the profile return destination', async () => {

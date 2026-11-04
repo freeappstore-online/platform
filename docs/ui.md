@@ -71,7 +71,7 @@ What you get, with nothing to enable:
 
 | Part | What it does |
 |------|--------------|
-| **Topbar** | `<header>` with your app name, text-size toggle, theme toggle, and avatar link to the profile page in both auth states. |
+| **Topbar** | `<header>` with your app name, text-size toggle, theme toggle, and a 44px avatar link to Profile in both auth states. On the built-in Profile page, the avatar position becomes a 24px X close link. |
 | **Main navigation** | From `nav`: a `<nav aria-label="Main">` in the topbar, the current screen marked `aria-current="page"` (`/tags/42` marks `/tags`), a menu button below 640px (Escape or a click outside closes it), 44px targets and visible focus. |
 | **`<main id="main">`** | Your screens render here. |
 | **Error boundary** | A screen that throws while rendering shows **Try again** instead of a white page; the topbar stays. The error is recorded in `fas.log` (category `react.error-boundary`). Moving to another screen clears it. |
@@ -95,7 +95,7 @@ gate is the optional sign-in gate.
 | `nav` | The app's screens: `{ label, href, icon?, title? }[]`. No `nav` (or an empty list): no navbar. |
 | `onNavigate(href)` | Client-side navigation for nav clicks, e.g. `history.pushState` + your route state, or a router's `navigate`. Without it, nav items are ordinary links (the host serves your app for any path). |
 | `renderNav({ items, currentPath, onNavigate })` | Replace the built-in navbar; the result still goes in the topbar. Render a `<nav aria-label="Main">`. |
-| `headerActions` | Header control slot, rendered beside the profile avatar inside `[data-fas-header-actions]`. App buttons go here. The avatar stays a profile link in both auth states. |
+| `headerActions` | Header control slot, rendered beside the profile control inside `[data-fas-header-actions]`. App buttons go here. The avatar links to Profile in both auth states; on the built-in Profile page, that slot shows a 24px X close link in the same 44px target, with accessible name `Close profile`. App-owned `profileHref` pages keep their own header and navigation behavior. |
 | `profileHref` | Optional app-owned profile route, e.g. `/account`, accessible in both auth states. Omit to use the built-in `/profile` page with GitHub/Google sign-in choices and account management. Avatar clicks navigate using `onNavigate` when supplied; modified clicks retain native behavior. A custom profile route must render its own signed-out and signed-in UI. |
 | `requireAuth` | Protect app content until sign-in; the topbar and profile route remain accessible. Default `false`. |
 | `showThemeToggle` | Default `true`. The topbar shows it while signed out. `ProfilePage` shows it while signed in. |
@@ -237,6 +237,10 @@ or `maximum-scale` on the document.
 - **The avatar always opens a profile page.** It never starts OAuth or opens a dropdown.
   The built-in `/profile` route renders `ProfilePage`, with GitHub and Google
   `SignInButton`s when signed out and account/preferences actions when signed in.
+  The header avatar slot becomes the `Close profile` link and the separate
+  **Back to app** row is omitted. Closing follows the safe in-app `returnTo`
+  destination, including its query and fragment; direct, invalid, off-site and
+  profile-loop entries fall back to `/`.
   `Shell` does not mount `SignInButton` or `ProfileMenu` in the header.
   It supports direct links, reloads and back/forward.
   `requireAuth` protects app content while keeping the frame and profile page accessible.
@@ -256,7 +260,7 @@ or `maximum-scale` on the document.
   `currentPath`. Without `onNavigate`, links are normal links and
   the browser manages navigation and scroll restoration; full reloads of asynchronously rendered
   screens may not recover the exact scroll position. The built-in profile remembers the originating in-app URL in `returnTo`, so
-  **Back to app** keeps the original path, query and fragment through reload and sign-in;
+  **Close profile** keeps the original path, query and fragment through reload and sign-in;
   off-site return destinations and loops back to the profile are rejected. Query-only and
   fragment-only history changes update the shell too. External links, downloads, and links targeting
   another window retain native browser behavior even with `onNavigate`. The host serves your app's `index.html`

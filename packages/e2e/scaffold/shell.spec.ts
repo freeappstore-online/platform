@@ -483,7 +483,7 @@ test('profile returns to the originating URL after reload and OAuth preserves it
   await page.goto('/?view=recent#entry');
   await page.locator('header').getByRole('link', { name: 'Profile', exact: true }).last().click();
   await page.reload();
-  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute(
+  await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute(
     'href',
     '/?view=recent#entry',
   );
@@ -493,7 +493,7 @@ test('profile returns to the originating URL after reload and OAuth preserves it
   const callback = new URL(start.searchParams.get('return_to')!);
   expect(callback.searchParams.get('returnTo')).toBe('/?view=recent#entry');
   await page.goto(callback.pathname + callback.search);
-  await page.getByRole('link', { name: 'Back to app' }).click();
+  await page.getByRole('link', { name: 'Close profile' }).click();
   await expect(page).toHaveURL(/\/\?view=recent#entry$/);
 });
 test('long account names fit narrow screens (#338)', async ({ page }) => {
@@ -525,8 +525,8 @@ test('profile returns to the originating URL after reload and OAuth', async ({ p
   await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
   expect(new URL(page.url()).searchParams.get('returnTo')).toBe(origin);
   await page.reload();
-  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', origin);
-  await page.getByRole('link', { name: 'Back to app' }).click();
+  await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute('href', origin);
+  await page.getByRole('link', { name: 'Close profile' }).click();
   await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
   if (!connected)
     await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
@@ -564,12 +564,17 @@ test('query and hash navigation keeps the current screen after Profile return (#
     await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
     await page.locator('header a[aria-label="Profile"]').click();
     await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute(
+    const close = page.getByRole('link', { name: 'Close profile', exact: true });
+    await expect(close).toHaveAttribute('href', '/about?sort=recent#saved');
+    await expect(close.locator('svg')).toHaveAttribute('width', '24');
+    await expect(close.locator('svg')).toHaveAttribute('height', '24');
+    await expect(page.getByRole('link', { name: 'Back to app' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute(
       'href',
       '/about?sort=recent#saved',
     );
     await page.reload();
-    await page.getByRole('link', { name: 'Back to app' }).click();
+    await page.getByRole('link', { name: 'Close profile' }).click();
     await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
     await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
     await page.goBack();
@@ -691,7 +696,7 @@ test('query/hash navigation preserves profile return destination (#339)', async 
     await expect(profile).toHaveAttribute('href', '/profile?returnTo=%2F%3Ffilter%3Dnew%23results');
     await profile.click();
     await page.reload();
-    await page.getByRole('link', { name: 'Back to app', exact: true }).click();
+    await page.getByRole('link', { name: 'Close profile', exact: true }).click();
     await expect(page).toHaveURL(/\?filter=new#results$/);
     await expect(page).toHaveTitle('Filtered');
     await landmarks(page);
@@ -738,15 +743,15 @@ test('hash navigation keeps its anchor and updates the avatar return URL (#339)'
 
 test('query-only history changes refresh the profile return link (#339)', async ({ page }) => {
   await page.goto('/profile?returnTo=%2Fabout');
-  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/about');
+  await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute('href', '/about');
   // Seed another same-document entry, as an app-owned router can do.
   await page.evaluate(() => {
     history.pushState(null, '', '/profile?returnTo=%2Fnotes');
     window.dispatchEvent(new PopStateEvent('popstate'));
   });
-  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/notes');
+  await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute('href', '/notes');
   await page.goBack();
-  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/about');
+  await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute('href', '/about');
 });
 
 for (const blocked of [false, true]) {
@@ -788,7 +793,7 @@ for (const blocked of [false, true]) {
       'true',
     );
     await expect(page.locator('html')).toHaveAttribute('data-text', 'sm');
-    await page.getByRole('link', { name: 'Back to app', exact: true }).click();
+    await page.getByRole('link', { name: 'Close profile', exact: true }).click();
     await page.locator('header a[aria-label="Profile"]').click();
     await expect(page.getByRole('button', { name: 'Small', exact: true })).toHaveAttribute(
       'aria-pressed',

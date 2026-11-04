@@ -21,7 +21,7 @@ test('produced artifact renders navigation and persists a real theme change', as
   await expect(page.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
   if (connected) {
-    await page.getByRole('link', { name: 'Back to app', exact: true }).click();
+    await page.getByRole('link', { name: 'Close profile', exact: true }).click();
     const homeMenu = page.getByRole('button', { name: 'Menu', exact: true });
     if (await homeMenu.isVisible()) await homeMenu.click();
     await page.getByRole('navigation').getByRole('link', { name: 'Home', exact: true }).click();
