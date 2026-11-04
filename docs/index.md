@@ -11,13 +11,15 @@ For creators it is a free, open-source PWA platform. Every app gets its own subd
 ## For developers
 
 **Start here: [Build your app on the Shell](getting-started.md#build-your-app-on-the-shell).**
-Every FreeAppStore app wraps itself in `Shell` from `@freeappstore/sdk/ui`, with one `nav`
-entry per screen. The Shell provides the topbar, the app's navigation, an error boundary,
-toasts and an offline banner; you write the screens.
+The supported default wraps the app in `Shell` from `@freeappstore/sdk/ui`, with one `nav`
+entry per primary screen. The Shell provides the topbar, the app's navigation, an error boundary,
+toasts and an offline banner; you write the screens. Custom frames are described in the
+[composable starter contract](composable-starter-contract.md).
 
 - **[Getting Started](getting-started.md)** -- scaffold, build, and publish your first app with the CLI
 - **[SDK Reference](sdk.md)** -- auth, KV, counters, collections, rooms, proxy, keys, roles, friends, email, and push reminders
-- **[UI Components](ui.md)** -- the standard app `Shell` (topbar, navigation, error boundary, toasts) and 25+ drop-in React components
+- **[UI Components](ui.md)** -- the supported default `Shell` (topbar, navigation, error boundary, toasts) and 25+ drop-in React components
+- **[Composable starter contract](composable-starter-contract.md)** -- one foundation, presets, and which layout choices stay free
 - **[CLI Reference](cli.md)** -- the `fas` command-line tool
 - **[Publishing](publishing.md)** -- how `fas publish` provisions and deploys your app
 - **[Proxy & Keys](proxy-and-keys.md)** -- secret-injecting proxy and user API key vault

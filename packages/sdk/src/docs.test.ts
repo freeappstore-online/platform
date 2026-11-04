@@ -102,6 +102,7 @@ const DEVELOPER_DOCS = [
   'docs/getting-started.md',
   'docs/sdk.md',
   'docs/ui.md',
+  'docs/composable-starter-contract.md',
   'docs/cli.md',
   'docs/publishing.md',
   'docs/proxy-and-keys.md',

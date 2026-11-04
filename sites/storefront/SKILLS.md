@@ -593,7 +593,7 @@ The maintained free limits are at https://docs.freeappstore.online/platform-limi
 
 ## App UI Components (`@freeappstore/sdk/ui` + `@freeappstore/sdk/hooks`)
 
-**Connected apps MUST use the SDK components for auth, profile, and theme.** No custom sign-in buttons, no custom avatar components, no custom theme toggles. The SDK components enforce brand consistency and handle the full auth lifecycle (sign in, sign out, delete account, session management).
+**Account UI on the default profile page is `ProfilePage`.** Signed out, that page shows GitHub and Google `SignInButton`s. Do not put `SignInButton` or `ProfileMenu` in the topbar. The Shell avatar is a compact link to the profile route in both auth states. An app that sets `profileHref` renders its own signed-out and signed-in UI and still must not start OAuth from the avatar. Theme and text size use the SDK controls. The [composable starter contract](https://docs.freeappstore.online/composable-starter-contract/) is the layout and ownership rule.
 
 ```bash
 pnpm add @freeappstore/sdk
@@ -601,7 +601,7 @@ pnpm add @freeappstore/sdk
 
 ### Shell -- the app wrapper (every app starts here)
 
-**Every app wraps itself in `Shell` with one `nav` entry per screen.** It provides: sticky topbar with brand logo + app name + text size + theme + ProfileMenu (or SignInButton when signed out), the app's main navigation from `nav` (`<nav aria-label="Main">`, current screen highlighted, a menu button on phones), and around your screens an error boundary, loading fallback, toast region, offline banner and skip link. Optional auth gate. Needs `@freeappstore/sdk` 0.14.30+. `FasShell` is the same component under its older name.
+**`Shell` is the supported default, with one `nav` entry per primary screen.** Detail routes do not each need a nav item. It provides: a topbar with the app name only, text size, theme (while signed out), and a compact avatar to the profile page in both auth states. It does not mount `ProfileMenu` or `SignInButton`. Primary navigation comes from `nav` (`<nav aria-label="Main">`, current screen highlighted, a menu button on phones). Around your screens: an error boundary, loading fallback, toast region, offline banner and skip link. Optional auth gate. Needs `@freeappstore/sdk` 0.14.30+. `FasShell` is the same component under its older name. A custom frame, sidebar, or bottom nav is allowed under the composable starter contract.
 
 ```tsx
 import { useEffect, useState } from 'react'
@@ -610,7 +610,7 @@ import { type NavItem, PageHeader, Shell, useToast } from '@freeappstore/sdk/ui'
 
 const fas = initApp({ appId: 'my-app' })
 
-// One entry per screen. `title` becomes the browser tab title on that route.
+// One entry per primary screen. `title` becomes the browser tab title on that route.
 const NAV: NavItem[] = [
   { label: 'Home', href: '/', title: 'My App' },
   { label: 'Settings', href: '/settings', title: 'Settings — My App' },
@@ -648,15 +648,16 @@ Props:
 - `nav` -- the app's screens: `{ label, href, icon?, title? }[]`
 - `onNavigate` -- client-side navigation for nav clicks (without it, nav items are ordinary links; the host serves the app for any path)
 - `renderNav` -- replace the built-in navbar (still placed in the topbar)
-- `requireAuth` -- if `true`, shows a sign-in screen instead of the app when not authenticated. Only for apps where everything needs an account; there is no paid tier or upgrade screen
-- `showThemeToggle` -- theme toggle in the ProfileMenu dropdown (default `true`)
+- `requireAuth` -- if `true`, shows a sign-in screen instead of the app when not authenticated. Only for apps where everything needs an account; there is no paid tier or upgrade screen. The frame and profile route stay reachable
+- `profileHref` -- optional app-owned profile route for both auth states. Omit it to use the built-in `/profile` page (`ProfilePage`)
+- `showThemeToggle` -- theme toggle in the topbar while signed out, and on `ProfilePage` while signed in (default `true`). It is not a `ProfileMenu` dropdown
 - `renderError` / `renderLoading` -- replace the error / loading fallback
 
 Each screen starts with `<PageHeader title description? actions? />` (its single h1, and the focus target after navigation). `useToast()` raises feedback, `useDocumentTitle()` sets a screen's tab title, `useOnline()` reports the connection. Full guide: https://docs.freeappstore.online/getting-started/#build-your-app-on-the-shell
 
 ### Individual components
 
-Use these inside `Shell`'s screens, or for layouts that don't use `Shell`. `Shell` uses the account components internally.
+Use these inside `Shell`'s screens, or in a custom frame. `Shell` mounts `Avatar`, `TextSizeToggle`, `ThemeToggle` (while signed out), and `ProfilePage`. It does not mount `ProfileMenu` or `SignInButton`. `ProfilePage` renders the provider `SignInButton`s.
 
 ```tsx
 import {
@@ -671,11 +672,11 @@ import {
 | Component | What it does | Key props |
 |-----------|-------------|-----------|
 | `Avatar` | GitHub avatar with colored-initial fallback | `user`, `size` (px, default 32) |
-| `SignInButton` | Branded "Sign in with GitHub" button | `app`, `label` (override text) |
+| `SignInButton` | Provider sign-in button. `ProfilePage` uses it for GitHub and Google. Not the Shell header | `app`, `label`, `provider` |
 | `ThemeToggle` | Sun/moon button cycling system/light/dark | none (reads theme from context) |
 | `TextSizeToggle` | A/A+/A- button cycling default/large/small text | none |
-| `ProfileMenu` | Avatar dropdown (username, theme, API keys, sign out, delete account) | `app`, `showThemeToggle` |
-| `ProfilePage` | Full-page settings view (avatar, username, theme selector, sign out, delete account) | `app`, `showThemeToggle` |
+| `ProfileMenu` | Legacy dropdown (username, theme, API keys, sign out, delete account). `Shell` does not mount it | `app`, `showThemeToggle` |
+| `ProfilePage` | Profile page `Shell` renders at `/profile` unless `profileHref` is set (avatar, username, theme, sign out, delete account) | `app`, `showThemeToggle` |
 
 **Reusable building blocks:**
 
@@ -711,18 +712,16 @@ import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
 
 ### When to use Shell vs individual components
 
-- **Every app:** Use `Shell` with `nav`. It handles the topbar, navigation, footer, auth gate, theme, error boundary and toasts in one wrapper. Both templates (`fas init`) already start inside it.
-- **Custom navigation:** Keep `Shell` and pass `renderNav`, or use the exported `NavBar`.
-- **Older apps** with a custom local shell or `FasShell` without `nav`: move to `Shell` with `nav`. See https://docs.freeappstore.online/ui/#migrating-to-the-shell
+- **Supported default:** Use `Shell` with `nav` for primary screens. It handles the topbar, navigation, auth gate, theme, error boundary and toasts. It does not add a footer. Both `fas init` presets start inside it.
+- **Custom navigation:** Keep `Shell` and pass `renderNav`, use the exported `NavBar`, or replace the frame under the composable starter contract. A sidebar or bottom nav is allowed. Detail routes stay off `nav`.
+- **Older apps** with a local shell or `FasShell` without `nav`: move to `Shell` with `nav`, or keep a custom frame that meets the contract. See https://docs.freeappstore.online/ui/#migrating-to-the-shell
 
 ### What NOT to do
 
-- Do NOT build a custom header, sidebar, tab bar, bottom dock or error boundary, and do NOT put navigation inside a screen. Use `Shell` with `nav`.
-- Do NOT build custom sign-in buttons. Use `SignInButton` or `Shell`.
-- Do NOT build custom avatar components. Use `Avatar`.
-- Do NOT build custom theme toggles. Use `ThemeToggle`.
-- Do NOT build custom profile/settings pages. Use `ProfilePage` or `ProfileMenu`.
-- Do NOT handle sign-out or account deletion manually. The SDK components handle the full lifecycle including data cleanup.
+- Do NOT drop the accessibility, platform-identity, or security contracts to get a custom frame. No payments, ads, tracking, or upgrade screen. Page zoom stays on.
+- Do NOT mount `SignInButton` or `ProfileMenu` in the header. The avatar opens `ProfilePage` or the `profileHref` route.
+- Do NOT add a compulsory store attribution bar. `Footer` is opt-in.
+- Do NOT handle sign-out or account deletion by bypassing the SDK account actions. `ProfilePage` covers that lifecycle, including data cleanup.
 - Do NOT build custom modals, spinners, tabs, badges, or search inputs. Use the SDK components.
 - Do NOT build custom API key entry UI. Use `KeyPrompt` to redirect users to the platform key management page.
 

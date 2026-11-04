@@ -60,3 +60,9 @@ one styling model. Theme switching and branding flow through token values.
 Existing surfaces need migration; this decision does not claim legacy code
 already complies. Migration and broader mechanical enforcement belong to #318.
 The existing design-system lint checks token aliases and theme conventions.
+
+Layout is a separate decision. The [composable starter contract](../composable-starter-contract.md)
+allows a custom frame, sidebar, bottom navigation, or detail route. Those
+screens still follow this styling decision. This ADR does not restart #326 and
+does not change warn-only styling checks to fail. #327 remains the shared
+design-system spec. This ADR does not edit it.

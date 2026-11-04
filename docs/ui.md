@@ -35,9 +35,11 @@ import {
 
 ## Shell: the standard app frame
 
-Every FreeAppStore app wraps itself in `Shell`. It is the frame that stays put
-while screens change inside it, so apps don't build their own header, navigation
-or error handling. New apps from VibeCode and `fas init` start inside it.
+`Shell` is the supported default frame. It stays put while screens change
+inside it: topbar, primary navigation, error handling, toasts and an offline
+banner. New apps from VibeCode and `fas init` start inside it. A custom frame,
+sidebar, bottom nav, or detail route is allowed when it keeps the
+[composable starter contract](composable-starter-contract.md).
 
 ```tsx
 import { initApp } from '@freeappstore/sdk';
@@ -93,15 +95,17 @@ gate is the optional sign-in gate.
 | `renderNav({ items, currentPath, onNavigate })` | Replace the built-in navbar; the result still goes in the topbar. Render a `<nav aria-label="Main">`. |
 | `profileHref` | Optional app-owned profile route, e.g. `/account`, accessible in both auth states. Omit to use the built-in `/profile` page with GitHub/Google sign-in choices and account management. Avatar clicks navigate using `onNavigate` when supplied; modified clicks retain native behavior. A custom profile route must render its own signed-out and signed-in UI. |
 | `requireAuth` | Protect app content until sign-in; the topbar and profile route remain accessible. Default `false`. |
-| `showThemeToggle` | Default `true`. |
+| `showThemeToggle` | Default `true`. The topbar shows it while signed out. `ProfilePage` shows it while signed in. |
 | `renderError({ error, reset })` | Replace the error fallback. |
 | `renderLoading()` | Replace the loading spinner. |
 
 ### Screens
 
-- **Navigation lives in `nav`.** Don't build a header, sidebar, tab bar or
-  bottom dock, and don't put navigation inside a screen.
-- **Start each screen with `PageHeader`.** `<PageHeader title description? actions? />`
+- **Primary navigation defaults to `nav`.** Detail routes do not need their own
+  nav item. A custom frame, sidebar, or bottom nav is allowed under the
+  [composable starter contract](composable-starter-contract.md). Keep a labelled
+  navigation landmark, keyboard access, and visible focus.
+- **Start each primary screen with `PageHeader`.** `<PageHeader title description? actions? />`
   renders the screen's single `<h1>`, and it is where focus lands after navigation.
 - **Raise feedback with `useToast`.** It must be called inside `Shell`.
 
@@ -139,8 +143,9 @@ custom layouts.
 
 ### Migrating to the Shell
 
-Older apps and older copies of this guide used a hand-rolled layout. To move an app
-onto the standard frame:
+Older apps and older copies of this guide used a hand-rolled layout. These steps
+move an app onto the supported default. They are not a ban on a custom frame.
+To move an app onto the standard frame:
 
 1. **Update the SDK** to `@freeappstore/sdk@^0.14.30` or later. That is the first
    release with `nav`, `PageHeader`, `useToast` and the resilience layer.
@@ -163,8 +168,10 @@ onto the standard frame:
 ### Caveats
 
 - **The avatar always opens a profile page.** It never starts OAuth or opens a dropdown.
-  The built-in `/profile` route offers GitHub and Google sign-in when signed out, and
-  account/preferences actions when signed in. It supports direct links, reloads and back/forward.
+  The built-in `/profile` route renders `ProfilePage`, with GitHub and Google
+  `SignInButton`s when signed out and account/preferences actions when signed in.
+  `Shell` does not mount `SignInButton` or `ProfileMenu` in the header.
+  It supports direct links, reloads and back/forward.
   `requireAuth` protects app content while keeping the frame and profile page accessible.
   Apps that own `/profile` already should pass `profileHref="/profile"` and render their own page.
 - **The error boundary catches render errors only.** Errors thrown in event handlers
@@ -198,7 +205,7 @@ onto the standard frame:
 | Component | Props | Description |
 |-----------|-------|-------------|
 | `Avatar` | `user`, `size` | GitHub avatar with fallback |
-| `SignInButton` | `app`, `label`, `compactOnMobile` | Sign-in button; `compactOnMobile` shows an avatar icon below the medium breakpoint (enabled in the Shell header) |
+| `SignInButton` | `app`, `label`, `provider`, `compactOnMobile` | Provider button used on `ProfilePage` (GitHub and Google). Not mounted in the Shell header. `compactOnMobile` is for a custom layout that wants an icon below the medium breakpoint |
 
 ## Controls
 

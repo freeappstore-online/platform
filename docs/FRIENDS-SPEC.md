@@ -252,7 +252,9 @@ The calendar event modal currently has a free-text username input for attendees.
 
 ## What About the ProfileMenu?
 
-The SDK's `ProfileMenu` component (the avatar dropdown in the top bar) should get a "Friends" item that opens a friends management panel. This gives every app a consistent way to manage friends without building custom UI.
+`Shell` does not mount `ProfileMenu`. The avatar opens `ProfilePage` in both auth states (#337). Friends UI belongs on that page, or on an app-owned `profileHref`. See the [composable starter contract](composable-starter-contract.md). The dropdown sketch below is historical.
+
+The old guidance said the SDK's `ProfileMenu` component (the avatar dropdown in the top bar) should get a "Friends" item that opens a friends management panel.
 
 ```
 [Avatar] janedoe

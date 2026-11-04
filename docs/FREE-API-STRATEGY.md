@@ -183,6 +183,6 @@ Most users already have an OpenAI account. Don't ask them to sign up for a new p
 | User key vault (Model 3) | **Live** |
 | Proxy user-key fallback | **Live** |
 | `<KeyPrompt>` SDK component | **Live** |
-| "API Keys" in ProfileMenu | **Live** |
+| API keys on ProfilePage | **Live** (`ProfileMenu` still has the action; `Shell` does not mount it) |
 | Platform key management page | **Live** |
 | OpenRouter recommendation in docs | Needs addition |

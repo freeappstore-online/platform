@@ -6,7 +6,7 @@
 - **Backend:** Cloudflare Workers + D1 + Durable Objects + R2
 - **Auth:** GitHub, Google, Apple, Email (magic link) OAuth. HMAC-signed sessions, 30-day TTL
 - **Realtime:** one Durable Object per room with WebSocket fan-out
-- **Apps:** standalone PWA template (Vite + React + Tailwind), built on the SDK `Shell` (topbar, navigation, error boundary, toasts), deployed to R2 via GitHub Actions, served by host Worker
+- **Apps:** Vite + React + Tailwind PWA. The supported default frame is the SDK `Shell` (topbar, navigation, error boundary, toasts). Custom frames are allowed under the [composable starter contract](composable-starter-contract.md). Deployed to R2 via GitHub Actions, served by host Worker
 
 ## Infrastructure
 

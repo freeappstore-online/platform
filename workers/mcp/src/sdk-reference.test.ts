@@ -42,7 +42,10 @@ describe("the build hand-off (every create-app path returns it)", () => {
     expect(teachesShellWithNav(BUILD_HANDOFF_BLOCK)).toBe(true);
     expect(BUILD_HANDOFF_BLOCK).toMatch(/^1\. Wrap the whole app in `<Shell>`/m);
     expect(BUILD_HANDOFF_BLOCK).toContain("PageHeader");
-    expect(BUILD_HANDOFF_BLOCK).toMatch(/never put navigation inside a screen/i);
+    expect(BUILD_HANDOFF_BLOCK).toMatch(/supported default/);
+    expect(BUILD_HANDOFF_BLOCK).toContain("ProfilePage");
+    expect(BUILD_HANDOFF_BLOCK).not.toMatch(/profile menu/i);
+    expect(BUILD_HANDOFF_BLOCK).not.toMatch(/Default keeps the dropdown/);
   });
 
   it("says FreeAppStore has no paid tier and keeps requireAuth off by default", () => {

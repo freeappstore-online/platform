@@ -46,11 +46,11 @@ An AI building over this server learns the standard app frame from the tool outp
 hand-off, and `sdk_reference` leads with it:
 
 1. Wrap the whole app in `<Shell app={fas} appName="My App" nav={NAV} onNavigate={navigate}>` from
-   `@freeappstore/sdk/ui`, with a `nav` entry per screen. The Shell renders the topbar and
+   `@freeappstore/sdk/ui`, with a `nav` entry per primary screen. The Shell renders the topbar and
    `<nav aria-label="Main">`, plus the error boundary, toasts, offline banner and skip link.
 2. Start each screen with `PageHeader`, and build it from the SDK components.
-3. No hand-rolled header, sidebar or dock, and no subscription or upgrade screen (FreeAppStore is
-   free). `requireAuth` only when the whole app needs sign-in.
+3. `Shell` is the supported default. A custom frame, sidebar, or bottom nav is allowed under the composable starter contract. No subscription or upgrade screen (FreeAppStore is
+   free). `requireAuth` only when the whole app needs sign-in. The avatar opens the profile page. Do not mount `SignInButton` or `ProfileMenu` in the header.
 
 `src/sdk-reference.test.ts` keeps this true: the `components` section is checked against the
 SDK's `packages/sdk/src/ui/index.ts` exports, and the tools are pinned to return the hand-off.

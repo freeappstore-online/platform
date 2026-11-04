@@ -33,14 +33,18 @@ It renders the topbar (app name, avatar link to the profile page, theme and
 text size) and your app's navigation, and wraps your screens in an error boundary,
 loading fallback, toast region and offline banner. You write the screens.
 
-1. **Wrap the app in `Shell`, with one `nav` entry per screen.** The Shell renders them
+1. **Wrap the app in `Shell`, with one `nav` entry per primary screen.** Detail
+   routes do not each need a nav item. The Shell renders primary items
    as `<nav aria-label="Main">`, highlights the current screen, and collapses to a menu
    on phones.
-2. **Start each screen with `PageHeader`**, its single `<h1>`.
-3. **Give feedback with `useToast()`**, and build screens from the
-   [SDK components](ui.md) instead of hand-rolled chrome.
-4. **Don't add** your own header, sidebar, tab bar, bottom dock or error boundary, and
-   don't put navigation inside a screen.
+2. **Start each primary screen with `PageHeader`**, its single `<h1>`.
+3. **Give feedback with `useToast()`**, and build repeated controls from the
+   [SDK components](ui.md).
+4. **`Shell` is the supported default, not the only legal frame.** A custom frame,
+   sidebar, or bottom nav must keep the
+   [composable starter contract](composable-starter-contract.md): accessibility,
+   platform identity, security, and the React styling rule. Do not add a second
+   account menu. The avatar opens the profile page.
 
 ```tsx
 import { useEffect, useState } from 'react';
@@ -108,8 +112,11 @@ fas init racing --template game-3d         # 3D game
 | `standalone` | Apps that only need localStorage. No sign-in. Starts inside `Shell` with two screens in `nav`: Home (`/`) and About (`/about`). |
 | `connected` | Apps that work with the user's data through the SDK (auth, KV, collections, rooms, proxy). Starts inside `Shell` with `requireAuth` (a sign-in screen until the user signs in) and two screens in `nav`: Home (`/`, a note saved to per-user KV) and Profile (`/profile`, the SDK-owned profile page). The avatar also opens Profile while signed out, with GitHub and Google sign-in choices. |
 
-Both app templates route screens by `location.pathname` with `onNavigate`, so adding
-a screen is one `nav` entry plus one branch in `App`.
+Both names are presets over one foundation. They are still cloned from two
+repositories until [#352](https://github.com/freeappstore-online/platform/issues/352).
+See the [composable starter contract](composable-starter-contract.md). Both route
+screens by `location.pathname` with `onNavigate`, so adding a primary screen is
+one `nav` entry plus one branch in `App`. A detail route does not need a nav item.
 
 Game templates are available for scaffolding, but publish games with the separate `fgs` CLI:
 

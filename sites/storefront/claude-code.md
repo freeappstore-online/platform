@@ -64,7 +64,7 @@ Full guide: https://docs.freeappstore.online/mcp/
 - Node >=22
 - All styling via CSS variables defined in `web/src/index.css`
 - Layout via the SDK's `Shell` (`import { Shell } from '@freeappstore/sdk/ui'`, SDK 0.14.30+), already the root of `web/src/App.tsx`
-- Build your app inside `<Shell app={fas} appName="…" nav={NAV} onNavigate={navigate}>` with one `NAV` entry per screen — it renders the topbar, the app's navigation (`<nav aria-label="Main">`), an error boundary, toasts and an offline banner. Start each screen with `<PageHeader title="…" />`; use `useToast()` for feedback. Never build your own header, sidebar, tab bar or bottom dock. Guide: https://docs.freeappstore.online/getting-started/#build-your-app-on-the-shell
+- The supported default is `<Shell app={fas} appName="…" nav={NAV} onNavigate={navigate}>` with one `NAV` entry per primary screen, not per detail route. It renders the topbar (app name, compact avatar to the profile page, theme, text size), `<nav aria-label="Main">`, an error boundary, toasts and an offline banner. Start each primary screen with `<PageHeader title="…" />`; use `useToast()` for feedback. A custom frame, sidebar, or bottom nav is allowed under the composable starter contract: https://docs.freeappstore.online/composable-starter-contract/ — keep accessibility, platform identity, and security. Do not put `SignInButton` or `ProfileMenu` in the header. Guide: https://docs.freeappstore.online/getting-started/#build-your-app-on-the-shell
 
 ## Brand rules (mandatory)
 
@@ -96,7 +96,7 @@ my-app/
     └── src/
         ├── main.tsx       (do not modify)
         ├── index.css      (brand tokens — modify only to add app-specific vars)
-        ├── App.tsx         (your app entry point: <Shell> with a NAV entry per screen)
+        ├── App.tsx         (your app entry point: <Shell> with a NAV entry per primary screen)
         └── components/     (your screens)
 ```
 

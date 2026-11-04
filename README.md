@@ -41,7 +41,7 @@ Full guide: <https://freeappstore.online/contribute.html>
 - **Backend:** Cloudflare Workers + D1 (users, KV, ownership) + Durable Objects (rooms) + R2 (daily backups). The API is one Worker; hosting, provisioning, AI builds, MCP, and docs use separate Workers in this monorepo.
 - **Auth:** GitHub device flow for CLI; GitHub, Google, Apple, or email magic links for browser sign-in (subject to configured credentials). HMAC-signed sessions, 30-day TTL.
 - **Realtime:** one Durable Object per room with WebSocket fan-out. Ephemeral, capped — sized for cursors / presence / lightweight multiplayer.
-- **Apps:** standalone PWA template (Vite + React + Tailwind) deployed to R2 via GitHub Actions, served by host Worker with custom subdomain. Every app is built on the SDK `Shell` with one `nav` entry per screen: see [Build your app on the Shell](docs/getting-started.md#build-your-app-on-the-shell).
+- **Apps:** Vite + React + Tailwind PWA deployed to R2 via GitHub Actions, served by host Worker with custom subdomain. The supported default is the SDK `Shell` with one `nav` entry per primary screen. Custom frames are allowed under the [composable starter contract](docs/composable-starter-contract.md). See [Build your app on the Shell](docs/getting-started.md#build-your-app-on-the-shell).
 
 ## What this SDK is *not*
 

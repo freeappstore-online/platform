@@ -122,8 +122,11 @@ Load from Google Fonts:
 
 ### App Shell
 
-All apps use the SDK's `Shell` (`@freeappstore/sdk/ui`), so every app has the same frame.
-Apps don't draw their own header, sidebar or dock. See
+The supported default is the SDK's `Shell` (`@freeappstore/sdk/ui`). The default
+topbar shows the app name only, with a compact avatar that opens the profile
+page. There is no compulsory attribution bar. A custom frame, sidebar, or
+bottom nav is allowed under the
+[composable starter contract](../docs/composable-starter-contract.md). See
 [Build your app on the Shell](../docs/getting-started.md#build-your-app-on-the-shell).
 
 ```

@@ -213,7 +213,7 @@ const fas = initApp({ appId: "APPID" });
 
 // The app's screens. Shell renders them as the navbar: a <nav> in its topbar
 // with the current screen highlighted, collapsing to a menu on phones.
-// Add one entry per screen; \`title\` becomes the browser tab title.
+// Add one entry per primary screen; \`title\` becomes the browser tab title.
 const NAV: NavItem[] = [
   { label: "Home", href: "/", title: "APPNAME" },
   { label: "About", href: "/about", title: "About — APPNAME" },
@@ -797,20 +797,24 @@ Users describe an app idea and you build it. You write TypeScript + React code, 
 - All data in localStorage (no backend, no server, no database)
 - Must work offline after first load (PWA)
 
-## The app shell (mandatory)
-web/src/App.tsx already wraps the app in the platform's standard frame, \`<Shell>\` from
-"@freeappstore/sdk/ui". Keep it as the root and build every screen inside it. Shell provides:
-- The topbar: FreeAppStore link, app name, text size, theme toggle, sign-in / profile menu.
+## The app shell (supported default)
+web/src/App.tsx already wraps the app in \`<Shell>\` from "@freeappstore/sdk/ui". Keep that
+root unless the user asks for a custom frame. Shell provides:
+- The topbar: app name only, text size, theme toggle while signed out, and a compact avatar
+  that opens the profile page in both auth states. Do not mount SignInButton or ProfileMenu
+  in the header. There is no store logo and no attribution bar.
 - The main navigation from the \`nav\` prop: a <nav aria-label="Main"> with the current screen
-  highlighted, collapsing to a menu on phones. Declare every screen in \`NAV\` (label + href, and
-  a \`title\` for the browser tab); switch screens on \`path\` in App. Never build your own header,
-  sidebar, tab bar or bottom dock, and don't put navigation inside a screen.
+  highlighted, collapsing to a menu on phones. Declare each primary screen in \`NAV\` (label + href, and
+  a \`title\` for the browser tab); switch screens on \`path\` in App. Detail routes do not need a NAV entry.
 - An error boundary (a crashing screen shows "Try again", not a white page), a loading spinner
-  for React.lazy screens, an offline banner, and a skip link. Don't add your own.
+  for React.lazy screens, an offline banner, and a skip link.
 - Feedback: \`const toast = useToast(); toast.show("Saved", { variant: "success" })\`.
-Start each screen with \`<PageHeader title="…" />\` (its one h1, and the focus target after
+Start each primary screen with \`<PageHeader title="…" />\` (its one h1, and the focus target after
 navigation). \`useDocumentTitle("…")\` sets a screen's tab title when the nav title isn't enough.
-All of these import from "@freeappstore/sdk/ui". FreeAppStore is free: there is no paid tier,
+All of these import from "@freeappstore/sdk/ui". A custom frame, sidebar, or bottom nav is allowed
+under the composable starter contract (docs/composable-starter-contract.md) when it keeps
+accessibility, platform identity, and security. Do not add a second account menu.
+FreeAppStore is free: there is no paid tier,
 subscription or upgrade screen. Only pass \`requireAuth\` to Shell if the whole app needs sign-in.
 
 ## Brand Rules (mandatory)
@@ -819,7 +823,7 @@ subscription or upgrade screen. Only pass \`requireAuth\` to Shell if the whole 
 - Dark mode via :root[data-theme="dark"] in index.css (the SDK sets it from the system or the
   Shell's theme toggle); just use the CSS variables
 - Border radius: 1.25rem for cards, 0.75rem for buttons
-- The freeappstore.online link is in the Shell topbar (already included)
+- The topbar shows the app name only. Do not add a store logo or attribution bar. Footer is optional and is not part of Shell
 
 ## Privacy Rules (mandatory)
 - ZERO analytics, tracking, cookies, or third-party scripts (except Google Fonts which is in the template)
@@ -842,7 +846,7 @@ subscription or upgrade screen. Only pass \`requireAuth\` to Shell if the whole 
 2. You ONLY need to write: web/src/App.tsx (your main component) and any additional components in web/src/components/.
 3. Do NOT write package.json, vite.config.ts, tsconfig files, index.css, or main.tsx — they are already correct.
 4. Keep <Shell> from "@freeappstore/sdk/ui" as the root in App.tsx. Build your app's screens inside it.
-5. Add one NAV entry per screen (see "The app shell"); the navbar comes from Shell.
+5. Add one NAV entry per primary screen (detail routes stay off the nav). The supported default navbar comes from Shell.
 6. BEFORE deploying, run run_compliance_check to validate the project passes all platform rules. Fix any failures.
 7. After compliance passes, IMMEDIATELY deploy — do NOT ask "ready to deploy?". Just call the deploy tool right away. Pick a sensible app ID, name, category, icon, and description based on what was built.
 8. Never wait for user confirmation to deploy. Build -> compliance -> deploy. That's the flow.

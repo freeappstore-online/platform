@@ -229,7 +229,7 @@ const toast = useToast(); toast.show('Saved', { variant: 'success' });
 
 `onNavigate` makes nav clicks client-side (scroll and focus are handled on route changes); without it the items are ordinary links. `FasShell` is the same component under its older name. Full reference: [docs/ui.md](../../docs/ui.md#shell-the-standard-app-frame).
 
-Set `profileHref="/profile"` to make the signed-in avatar open your app's profile screen through the same navigation. Without it, the existing profile dropdown remains. Add Profile to `nav` for signed-out access, and render your account, preferences and connection controls on that screen.
+Omit `profileHref` and the avatar opens the built-in `/profile` page (`ProfilePage`) in both auth states. Set `profileHref` for an app-owned route and render both states yourself. `ProfileMenu` is a legacy dropdown. `Shell` does not mount it. Layout ownership: [composable starter contract](../../docs/composable-starter-contract.md).
 
 ### UI Components
 

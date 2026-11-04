@@ -8,21 +8,20 @@
  * first, before writing any screen.
  */
 export const BUILD_HANDOFF_BLOCK = `## Build it on the Shell (required)
-1. Wrap the whole app in \`<Shell>\` from "@freeappstore/sdk/ui" with a \`nav\` entry for every screen:
+1. Wrap the whole app in \`<Shell>\` from "@freeappstore/sdk/ui" with a \`nav\` entry for every primary screen, not every detail route:
    \`<Shell app={fas} appName="My App" nav={NAV} onNavigate={navigate}>\`. The Shell renders the topbar
-   (FreeAppStore link, sign-in / profile menu, theme, text size) and the navigation as
-   \`<nav aria-label="Main">\`. Do this first, on the first render, even for a one-screen app.
-2. Start each screen with \`<PageHeader title="…" />\` (its one h1). Use \`useToast\` for feedback.
-3. Build screens from the SDK components (\`sdk_reference\` feature "components"). Never hand-roll a
-   header, sidebar, tab bar, bottom dock or error boundary, and never put navigation inside a screen.
+   (app name only, compact avatar to the profile page in both auth states, theme, text size) and the navigation as
+   \`<nav aria-label="Main">\`. Do this first, on the first render, even for a one-screen app. This is the supported default.
+2. Start each primary screen with \`<PageHeader title="…" />\` (its one h1). Use \`useToast\` for feedback.
+3. Build repeated controls from the SDK components (\`sdk_reference\` feature "components"). A custom frame, sidebar, bottom nav, or detail route is allowed under the composable starter contract when it keeps accessibility, platform identity, and security. Do not mount \`SignInButton\` or \`ProfileMenu\` in the header. The avatar opens \`ProfilePage\` (or \`profileHref\`).
 4. FreeAppStore is free: no subscription, paywall or upgrade screen. Leave \`requireAuth\` off unless
    the whole app needs sign-in.
 Full example: \`sdk_reference\` feature "shell".`;
 
 const SHELL = `## Shell: the standard app frame (start here)
-Every FreeAppStore app wraps itself in \`Shell\`. It is the frame that stays put while screens change:
-topbar, main navigation, error boundary, loading fallback, toasts, offline banner and skip link.
-Build screens inside it; never build your own header or navbar.
+\`Shell\` is the supported default frame. It stays put while screens change:
+topbar (app name only, compact avatar to the profile page), main navigation, error boundary, loading fallback, toasts, offline banner and skip link.
+A custom frame, sidebar, bottom nav, or detail route is allowed under the composable starter contract. Do not mount \`SignInButton\` or \`ProfileMenu\` in the header. The avatar opens \`ProfilePage\` unless \`profileHref\` is set.
 
 \`\`\`tsx
 import { useEffect, useState } from 'react'
@@ -31,7 +30,7 @@ import { type NavItem, PageHeader, Shell, useToast } from '@freeappstore/sdk/ui'
 
 const fas = initApp({ appId: 'my-app' })
 
-// One entry per screen. \`title\` becomes the browser tab title on that route.
+// One entry per primary screen. \`title\` becomes the browser tab title on that route.
 const NAV: NavItem[] = [
   { label: 'Notes', href: '/', title: 'Notes' },
   { label: 'Tags', href: '/tags', title: 'Tags — Notes' },
@@ -73,7 +72,7 @@ function Tags() {
   the screen for \`location.pathname\`.
 - \`renderNav({ items, currentPath, onNavigate })\` replaces the built-in navbar; the result still goes in
   the topbar. Render a \`<nav aria-label="Main">\`.
-- Never put navigation inside a screen, and never add a second bar, sidebar or bottom dock.
+- Detail routes do not need a nav item. A custom sidebar or bottom nav is allowed under the composable starter contract. Do not add a second account menu.
 
 ### Built in (nothing to enable)
 - Error boundary: a screen that throws shows "Try again" instead of a white page; the topbar stays. The
@@ -93,7 +92,7 @@ function Tags() {
 | \`appName\` | Shown in the topbar. |
 | \`nav\` | The app's screens: \`NavItem[]\`. |
 | \`onNavigate(href)\` | Client-side navigation for nav clicks. |
-| \`profileHref\` | Optional app profile route. Signed-in avatar opens it through onNavigate; modified clicks work normally. Default keeps the dropdown. Add Profile to nav for signed-out access and render account/preferences/connections on that screen. |
+| \`profileHref\` | Optional app-owned profile route for both auth states. Omit it and the avatar opens built-in \`/profile\` (\`ProfilePage\`) with GitHub and Google sign-in when signed out. The avatar never opens a dropdown. A custom route must render both auth states. |
 | \`renderNav(ctx)\` | Replace the built-in navbar. |
 | \`requireAuth\` | Show a sign-in screen until the user signs in. Default false. |
 | \`showThemeToggle\` | Default true. |
@@ -133,11 +132,11 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 - \`Modal\` — open, onClose, children, title?, maxWidth?
 - \`ConfirmDialog\` — open, onConfirm, onCancel, title, message, confirmLabel?, variant? ('danger' | 'default')
 
-**Account (Shell's topbar already has these)**
-- \`SignInButton\` — app, label?
-- \`Avatar\` — user, size?
-- \`ProfileMenu\` — app, showThemeToggle?, children?
-- \`ProfilePage\` — app, showThemeToggle?
+**Account (the Shell header is a compact avatar, not these buttons)**
+- \`SignInButton\` — app, label?, provider?. Used on \`ProfilePage\` for GitHub and Google. Not the Shell header.
+- \`Avatar\` — user, size?. The compact profile link.
+- \`ProfileMenu\` — app, showThemeToggle?, children?. Legacy dropdown. Shell does not mount it.
+- \`ProfilePage\` — app, showThemeToggle?. The page Shell renders at \`/profile\` unless \`profileHref\` is set.
 - \`ThemeToggle\`, \`TextSizeToggle\` — no props. \`useTextSize()\` — the text size preference.
 
 **Friends**
