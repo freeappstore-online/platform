@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -106,6 +106,10 @@ it('rejects unowned collisions, overlapping ownership and traversal', async () =
 it('installs persistence at init and later without touching saved data or edited files', async () => {
   const root = await app();
   await writeFile(join(root, 'notes.json'), '{"keep":true}');
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.19' } }),
+  );
   const plan = await installCapabilities(root, ['persistence']);
   expect(plan.join('\n')).toContain('CREATE');
   expect(plan.join('\n')).toContain('device-only');
@@ -139,4 +143,85 @@ it('retries an interrupted version update and detects edits afterwards', async (
   await expect(installCapabilities(root, ['a'], { source, update: true })).rejects.toThrow(
     'conflict',
   );
+});
+
+it.each([
+  undefined,
+  '0.16.14',
+  '^0.16.14',
+  '*',
+  '>=0.15.0',
+  'workspace:*',
+  'workspace:^0.16.19',
+  'file:../sdk',
+  '0.17.0-beta.1',
+])('rejects unproven persistence prerequisite %s before any writes', async (version) => {
+  const root = await app();
+  const pkg = JSON.stringify({ dependencies: version ? { '@freeappstore/sdk': version } : {} });
+  await writeFile(join(root, 'package.json'), pkg);
+  await writeFile(join(root, 'pnpm-lock.yaml'), 'custom lockfile');
+  const before = await readdir(root);
+  const preview = await installCapabilities(root, ['connectivity', 'persistence'], {
+    dryRun: true,
+  });
+  expect(preview.join('\n')).toContain('INCOMPLETE');
+  expect(preview.join('\n')).toContain('@freeappstore/sdk >=0.16.18');
+  await expect(installCapabilities(root, ['connectivity', 'persistence'])).rejects.toThrow(
+    'prerequisites unmet',
+  );
+  expect(await readdir(root)).toEqual(before);
+  expect(await readFile(join(root, 'package.json'), 'utf8')).toBe(pkg);
+  expect(await readFile(join(root, 'pnpm-lock.yaml'), 'utf8')).toBe('custom lockfile');
+});
+
+it.each(['0.16.18', '^0.16.18', '~0.16.19', '>=0.16.18 <0.17.0', '^0.16.19 || ^0.17.0'])(
+  'accepts compatible range %s without changing package choices',
+  async (version) => {
+    const root = await app();
+    const pkg = JSON.stringify({ dependencies: { '@freeappstore/sdk': version } });
+    await writeFile(join(root, 'package.json'), pkg);
+    expect(
+      (await installCapabilities(root, ['persistence'], { dryRun: true })).join('\n'),
+    ).toContain('PREREQUISITE');
+    await expect(readFile(join(root, '.fas-capabilities.json'))).rejects.toThrow();
+    await installCapabilities(root, ['persistence']);
+    expect(await readFile(join(root, 'package.json'), 'utf8')).toBe(pkg);
+    await writeFile(join(root, 'package.json'), '{}');
+    const manifest = await readFile(join(root, '.fas-capabilities.json'), 'utf8');
+    await expect(installCapabilities(root, ['persistence'])).rejects.toThrow('prerequisites');
+    expect(await readFile(join(root, '.fas-capabilities.json'), 'utf8')).toBe(manifest);
+  },
+);
+
+it('checks PWA prerequisites in web/package.json rather than accepting unrelated root dependencies', async () => {
+  const root = await app();
+  const dependencies = { '@freeappstore/sdk': '^0.16.19', 'vite-plugin-pwa': '^1.3.0' };
+  await writeFile(join(root, 'package.json'), JSON.stringify({ dependencies }));
+  await mkdir(join(root, 'web'));
+  await writeFile(join(root, 'web/package.json'), '{}');
+  await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('web/package.json');
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.19' } }),
+  );
+  await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('vite-plugin-pwa');
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({
+      dependencies: { '@freeappstore/sdk': '^0.16.19' },
+      devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
+    }),
+  );
+  await installCapabilities(root, ['pwa']);
+  expect(await installCapabilities(root, ['pwa'])).toEqual(['No changes.']);
+});
+
+it('requires root SDK for a root persistence import even when web has SDK', async () => {
+  const root = await app();
+  await mkdir(join(root, 'web'));
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.19' } }),
+  );
+  await expect(installCapabilities(root, ['persistence'])).rejects.toThrow('package.json requires');
 });

@@ -228,6 +228,37 @@ fas quality timer --json
 
 ## Optional first-party capabilities
 
+Both init and later-add validate package prerequisites before writing capability
+files or recording ownership. Persistence requires `@freeappstore/sdk >=0.16.18`
+in the root `package.json`, because its generated module lives at the root.
+PWA requires SDK `>=0.16.15` and `vite-plugin-pwa ^1.0.0` in
+`web/package.json` when present, otherwise the root package. Development
+dependencies are accepted for bundled browser apps. Capability-ID dependencies
+and these package requirements are separate registry fields.
+
+The entire declared semver range must satisfy the prerequisite: `^0.16.14`
+does not establish persistence compatibility, even if a lockfile currently picks
+a newer release. Workspace, file, link, git and tag references cannot establish
+published package compatibility and are rejected with guidance. Keep those
+choices and integrate manually if appropriate, or explicitly choose and install
+a compatible published range. The CLI never changes package choices or lockfiles,
+runs installation scripts, or reads app data. A dry-run prints prerequisites;
+unmet requirements produce an `INCOMPLETE` plan with no writes. Apply rejects
+before any capability writes. Correct prerequisites and rerun the preview.
+
+Installing files still requires the printed manual integration steps: import the
+persistence helper from app code; for PWA wrap the existing VitePWA options,
+import the browser module, and register busy guards. The ownership manifest
+records generated files, not completion of those steps. Fresh init uses the same
+package preflight and no longer silently rewrites SDK dependencies.
+
+Release validation for #353 must include the published-package fixture added in
+#356: set `FAS_TEST_PUBLISHED=1` and run
+`pnpm test packages/cli/src/lib/capability-packages.integration.test.ts`.
+This checks generated persistence/PWA imports with TypeScript and a Vite PWA build.
+The fixture is opt-in because it installs published packages over the network.
+This is a narrow prerequisite for the canonical-foundation work in #352.
+
 `fas init myapp --preset connectivity` or `fas init myapp --capabilities connectivity`
 uses the same dependency resolver and install plan as `fas add connectivity` in an
 existing app root (a directory with `package.json`). The default `minimal` preset

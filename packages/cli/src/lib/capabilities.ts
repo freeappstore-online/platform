@@ -1,11 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { minVersion, subset, validRange } from 'semver';
 
 export interface Capability {
   id: string;
   version: string;
   dependencies: Record<string, string>;
+  /** Package requirements are separate from capability-ID dependencies. */
+  packages?: { name: string; range: string; location: 'root' | 'web' }[];
   environment: 'browser';
   files: Record<string, string>;
   configChanges: string[];
@@ -17,6 +20,10 @@ export interface Capability {
 export const registry: Record<string, Capability> = {
   pwa: {
     id: 'pwa',
+    packages: [
+      { name: '@freeappstore/sdk', range: '>=0.16.15', location: 'web' },
+      { name: 'vite-plugin-pwa', range: '^1.0.0', location: 'web' },
+    ],
     version: '1.0.0',
     dependencies: {},
     environment: 'browser',
@@ -32,7 +39,7 @@ export { pwaOptions } from '@freeappstore/sdk/pwa-config';
 `,
       'fas-capabilities/pwa.md': `# PWA integration
 
-Requires @freeappstore/sdk >=0.16.15 and vite-plugin-pwa.
+Requires @freeappstore/sdk >=0.16.15 and vite-plugin-pwa ^1.0.0.
 In web/vite.config.ts import pwaOptions from ./fas-pwa-config
 and use VitePWA(pwaOptions({ /* your existing options */ })).
 Import ./fas-capabilities/pwa from web/src/main.tsx.
@@ -72,6 +79,7 @@ export function watchConnectivity(listener: (online: boolean) => void): () => vo
   },
   persistence: {
     id: 'persistence',
+    packages: [{ name: '@freeappstore/sdk', range: '>=0.16.18', location: 'root' }],
     version: '1.0.0',
     dependencies: {},
     environment: 'browser',
@@ -200,6 +208,44 @@ export async function installCapabilities(
   const packageText = await readOptional(join(root, 'package.json'));
   if (!packageText) throw new Error('Run fas add in an app root containing package.json.');
   JSON.parse(packageText);
+  const capabilities = resolveCapabilities(ids, options.source);
+  const prerequisites: string[] = [];
+  const checked: string[] = [];
+  for (const cap of capabilities) {
+    for (const requirement of cap.packages ?? []) {
+      // Resolve from the generated import's directory. A root-level persistence
+      // module cannot import dependencies installed only under web/node_modules.
+      const web =
+        requirement.location === 'web'
+          ? await readOptional(await safePath(root, 'web/package.json'))
+          : undefined;
+      const location = web ? 'web/package.json' : 'package.json';
+      const pkg = JSON.parse(web ?? packageText);
+      const declared =
+        pkg.dependencies?.[requirement.name] ?? pkg.devDependencies?.[requirement.name];
+      checked.push(
+        `PREREQUISITE ${cap.id}: ${location} ${requirement.name} ${requirement.range} (declared ${declared ?? 'missing'})`,
+      );
+      if (
+        typeof declared !== 'string' ||
+        !validRange(declared) ||
+        !minVersion(declared) ||
+        !subset(declared, requirement.range)
+      ) {
+        prerequisites.push(
+          `${cap.id}: ${location} requires ${requirement.name} ${requirement.range}; found ${declared ?? 'missing'}. Set a compatible explicit version/range and install dependencies. Workspace/link/file/git specs must be verified and replaced with a compatible published range before using this installer.`,
+        );
+      }
+    }
+  }
+  if (prerequisites.length) {
+    const report = [
+      'INCOMPLETE: package prerequisites unmet; no files or manifest written.',
+      ...prerequisites,
+    ];
+    if (options.dryRun) return report;
+    throw new Error(report.join('\n'));
+  }
   const manifestPath = await safePath(root, manifestName);
   const text = await readOptional(manifestPath);
   const manifest: Manifest = text ? JSON.parse(text) : { schemaVersion: 1, capabilities: {} };
@@ -209,10 +255,10 @@ export async function installCapabilities(
     typeof manifest.capabilities !== 'object'
   )
     throw new Error('Unsupported capability manifest.');
-  const plan: string[] = [];
+  const plan: string[] = options.dryRun ? checked : [];
   const writes: { path: string; content: string }[] = [];
   const owners = new Set<string>();
-  for (const cap of resolveCapabilities(ids, options.source)) {
+  for (const cap of capabilities) {
     const old = Object.hasOwn(manifest.capabilities, cap.id)
       ? manifest.capabilities[cap.id]
       : undefined;

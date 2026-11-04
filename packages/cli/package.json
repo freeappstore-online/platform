@@ -44,11 +44,13 @@
     "ink-spinner": "^5.0.0",
     "prompts": "^2.4.2",
     "react": "^19.3.0",
+    "semver": "^7.8.6",
     "typescript": "^5.9.3"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
     "@types/prompts": "^2.4.9",
-    "@types/react": "^19.3.0"
+    "@types/react": "^19.3.0",
+    "@types/semver": "^7.8.0"
   }
 }

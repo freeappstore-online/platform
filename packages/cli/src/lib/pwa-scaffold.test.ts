@@ -12,7 +12,10 @@ it('wires a fresh template, retains custom caching/denylist, enables zoom and re
     await writeFile(join(root, 'package.json'), '{}');
     await writeFile(
       join(root, 'web/package.json'),
-      JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.14.0' } }),
+      JSON.stringify({
+        dependencies: { '@freeappstore/sdk': '^0.16.19' },
+        devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
+      }),
     );
     await writeFile(
       join(root, 'web/vite.config.ts'),
@@ -27,7 +30,9 @@ it('wires a fresh template, retains custom caching/denylist, enables zoom and re
       '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">',
     );
     await installCapabilities(root, ['pwa']);
+    const packageBefore = await readFile(join(root, 'web/package.json'), 'utf8');
     await configureFreshPwa(root);
+    expect(await readFile(join(root, 'web/package.json'), 'utf8')).toBe(packageBefore);
     const config = await readFile(join(root, 'web/vite.config.ts'), 'utf8');
     expect(config).toContain('pwaOptions(');
     expect(config).toContain('public-fonts');

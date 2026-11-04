@@ -33,10 +33,6 @@ export async function configureFreshPwa(root: string) {
     mainPath,
     `import './fas-capabilities/pwa';\n${await readFile(mainPath, 'utf8')}`,
   );
-  const packagePath = join(root, 'web/package.json');
-  const pkg = JSON.parse(await readFile(packagePath, 'utf8'));
-  pkg.dependencies['@freeappstore/sdk'] = '^0.16.15';
-  await writeFile(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
   const htmlPath = join(root, 'web/index.html');
   const html = await readFile(htmlPath, 'utf8');
   await writeFile(
