@@ -1381,12 +1381,14 @@ export class AgentSession implements DurableObject {
       role: m.role,
       content: m.content,
       toolCalls: m.toolCalls?.map((tc) => ({
+        id: tc.id,
         name: tc.name,
         input: { path: tc.input.path, id: tc.input.id },
       })),
       toolResults: m.toolResults?.map((tr) => ({
         id: tr.id,
         content: tr.content.slice(0, 500),
+        isError: tr.isError ?? false,
       })),
     }));
     return json(

@@ -76,7 +76,14 @@ async function sessionRow(sessionId: string) {
 
 async function history(sessionId: string) {
   const res = await exports.default.fetch(new Request(`https://agent.freeappstore.online/session/${sessionId}/history`, { headers: ALICE }));
-  return (await res.json()) as { messages: Array<{ role: string; content: string }> };
+  return (await res.json()) as {
+    messages: Array<{
+      role: string;
+      content: string;
+      toolCalls?: Array<{ id: string; name: string }>;
+      toolResults?: Array<{ id: string; content: string; isError: boolean }>;
+    }>;
+  };
 }
 
 describe("alarm loop on a real Durable Object (#41)", () => {
@@ -89,7 +96,16 @@ describe("alarm loop on a real Durable Object (#41)", () => {
     expect(await pendingOf("alarm-closed-tab")).toBeUndefined();
     const files = await runInDurableObject(stubFor("alarm-closed-tab"), async (_i, state) => (await state.storage.get<{ files: Record<string, string> }>("session"))?.files);
     expect(files?.["web/src/App.tsx"]).toContain("Built");
-    expect((await history("alarm-closed-tab")).messages.at(-1)).toMatchObject({ role: "assistant", content: "Done — built it." });
+    const messages = (await history("alarm-closed-tab")).messages;
+    expect(messages.at(-1)).toMatchObject({ role: "assistant", content: "Done — built it." });
+    expect(messages.find((message) => message.toolCalls?.length)).toMatchObject({
+      role: "assistant",
+      toolCalls: [{ id: "tu_1", name: "write_file" }],
+    });
+    expect(messages.find((message) => message.role === "tool_result")).toMatchObject({
+      content: "",
+      toolResults: [{ id: "tu_1", isError: false }],
+    });
 
     const row = await sessionRow("alarm-closed-tab");
     expect(JSON.parse(row!.messages).at(-1).content).toBe("Done — built it.");

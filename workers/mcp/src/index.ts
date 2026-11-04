@@ -10,6 +10,7 @@ import { ownsApp, ownershipGateText } from "./ownership.js";
 import { type RateLimiter, withRateLimit } from "./ratelimit.js";
 import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
 import { BUILD_HANDOFF_BLOCK, getSdkReference, SDK_REFERENCE_FEATURES, withBuildHandoff } from "./sdk-reference.js";
+import { formatAgentActivity, formatAgentStatus } from "./agent-observability.js";
 
 interface Env {
   API_BASE: string;
@@ -434,7 +435,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     // ── agent_status ───────────────────────────────────────────
     this.server.tool(
       "agent_status",
-      "Check a VibeCode agent build session (started with agent_build): the app id it's building, deploy phase, and live URL once ready.",
+      "Check a VibeCode agent build session (started with agent_build): active, deploying, failed, or idle status, app id, deploy phase, and live URL once ready.",
       { session_id: z.string().describe("The session_id returned by agent_build") },
       async ({ session_id }) => {
         const token = this.props.token;
@@ -446,15 +447,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) return txt(`Status fetch failed (${res.status}).`);
-        const s = (await res.json()) as { appId?: string | null; appUrl?: string | null; deployStatus?: { phase?: string; error?: string } | null; messageCount?: number };
-        const lines = [
-          `Session **${session_id}**`,
-          `App: ${s.appId ?? "(not deployed yet)"}`,
-          `Deploy phase: ${s.deployStatus?.phase ?? "—"}${s.deployStatus?.error ? ` (error: ${s.deployStatus.error.slice(0, 200)})` : ""}`,
-          s.appUrl ? `Live: ${s.appUrl}` : s.appId ? `URL (once live): https://${s.appId}.freeappstore.online` : "",
-          `Messages: ${s.messageCount ?? 0}`,
-        ].filter(Boolean);
-        return txt(lines.join("\n"));
+        const s = (await res.json()) as Parameters<typeof formatAgentStatus>[1];
+        return txt(formatAgentStatus(session_id, s));
       },
     );
 
@@ -476,24 +470,18 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (res.status === 404 || res.status === 400) return txt(`No session "${session_id}" found.`);
         if (!res.ok) return txt(`History fetch failed (${res.status}).`);
         const data = (await res.json()) as {
-          messages?: Array<{ role: string; content: string; toolCalls?: Array<{ name: string; input?: { path?: string; id?: string } }> }>;
+          messages?: Array<{
+            role: string;
+            content: string;
+            toolCalls?: Array<{ id?: string; name: string; input?: { path?: string; id?: string } }>;
+            toolResults?: Array<{ id: string; content?: string; isError?: boolean }>;
+          }>;
           appId?: string | null;
           appName?: string | null;
         };
         const msgs = data.messages ?? [];
         if (msgs.length === 0) return txt(`Session **${session_id}**${data.appId ? ` (${data.appId})` : ""}: no messages yet.`);
-        const recent = msgs.slice(-(limit ?? 30));
-        const rendered = recent
-          .map((m) => {
-            if (m.toolCalls?.length) {
-              const calls = m.toolCalls.map((tc) => `${tc.name}(${tc.input?.path ?? tc.input?.id ?? ""})`).join(", ");
-              return `[agent → tools] ${calls}`;
-            }
-            if (m.role === "tool") return `[tool result] ${m.content.slice(0, 200)}`;
-            return `**${m.role}:** ${m.content.slice(0, 1200)}`;
-          })
-          .join("\n\n");
-        return txt(`Session **${session_id}**${data.appName ? ` — ${data.appName}` : ""} (${msgs.length} messages, showing ${recent.length}):\n\n${rendered}`);
+        return txt(formatAgentActivity(session_id, msgs, limit ?? 30, data.appName));
       },
     );
 
