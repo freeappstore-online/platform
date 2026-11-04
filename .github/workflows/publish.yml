@@ -200,21 +200,30 @@ jobs:
           SDK_VERSION="$(printf '%s\n' "$PUBLISHED_PACKAGES" | grep -oE '@freeappstore/sdk@[0-9]+\.[0-9]+\.[0-9]+' | cut -d@ -f3)"
           test -n "$CLI_VERSION"
           test -n "$SDK_VERSION"
-          # Each package gets at most 30 five-second requests and 29 five-second
-          # pauses (295 seconds). Never substitute a different release.
+          # Wait up to five minutes of wall-clock time for this exact release.
+          # Each registry request and pause is capped by the remaining deadline.
           wait_for_published_version() {
-            local package="$1" version="$2" actual="" attempt
-            for ((attempt=1; attempt<=30; attempt++)); do
-              if actual=$(timeout 5s npm view "$package@$version" version \
+            local package="$1" version="$2" actual="unavailable" attempt=0
+            local deadline=$(( $(date +%s) + 300 )) remaining request_seconds fetch_timeout_ms sleep_seconds
+            while true; do
+              remaining=$(( deadline - $(date +%s) ))
+              if [ "$remaining" -le 0 ]; then break; fi
+              attempt=$((attempt + 1))
+              request_seconds=$(( remaining < 5 ? remaining : 5 ))
+              fetch_timeout_ms=$(( request_seconds * 1000 - 500 ))
+              if actual=$(timeout "${request_seconds}s" npm view "$package@$version" version \
                 --registry=https://registry.npmjs.org --prefer-online \
-                --fetch-retries=0 --fetch-timeout=4000 2>/dev/null) && [ "$actual" = "$version" ]; then
-                echo "Available: $package@$version (attempt $attempt/30)"
+                --fetch-retries=0 --fetch-timeout="$fetch_timeout_ms" 2>/dev/null) && [ "$actual" = "$version" ]; then
+                echo "Available: $package@$version (attempt $attempt; within five-minute deadline)"
                 return 0
               fi
-              echo "Waiting for $package@$version on https://registry.npmjs.org (attempt $attempt/30)"
-              if [ "$attempt" -lt 30 ]; then sleep 5; fi
+              remaining=$(( deadline - $(date +%s) ))
+              if [ "$remaining" -le 0 ]; then break; fi
+              sleep_seconds=$(( remaining < 5 ? remaining : 5 ))
+              echo "Waiting for $package@$version on https://registry.npmjs.org (check $attempt; ${remaining}s remain)"
+              sleep "$sleep_seconds"
             done
-            echo "::error::Timed out waiting for $package@$version on https://registry.npmjs.org after 30 attempts (up to 295 seconds); last response: ${actual:-unavailable}"
+            echo "::error::$package@$version did not become available on https://registry.npmjs.org within five minutes; last response: ${actual:-unavailable}"
             return 1
           }
           wait_for_published_version "@freeappstore/cli" "$CLI_VERSION"
