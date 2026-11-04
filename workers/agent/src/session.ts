@@ -26,7 +26,7 @@ import { editAccess, executeInfraTool, readAppOwner } from "./infra-exec";
 import { AI_SOURCES, type AIConfig, type AiSource, type Message, type TokenUsage, type ToolCall } from "./providers/types";
 import { type PushSubscription, sendWebPush } from "./push";
 import { fetchRepoFiles } from "./repo-import";
-import { APP_ARCHETYPES, type AppArchetype, getTemplateFiles } from "./template";
+import { APP_ARCHETYPES, type AppArchetype, type AppPreset, getTemplateFiles } from "./template";
 
 interface ErrorEntry {
   timestamp: string;
@@ -69,6 +69,7 @@ interface SessionState {
   tokenHash: string | null;
   tokenValidatedAt: number | null;
   sessionId: string | null;
+  preset?: AppPreset;
   archetype?: AppArchetype;
 }
 
@@ -96,7 +97,7 @@ const LATEST_TURN_ID_KEY = "latestTurnId";
 
 type TurnPhase = "main" | "main-infra" | "followup" | "followup-infra";
 /** aiSource is set by the worker entry (index.ts), never by the client. */
-type ChatBody = { message: string; aiConfig: AIConfig; archetype?: AppArchetype; aiSource?: AiSource };
+type ChatBody = { preset?: AppPreset; message: string; aiConfig: AIConfig; archetype?: AppArchetype; aiSource?: AiSource };
 type AgentTurnResult = Awaited<ReturnType<typeof runAgentTurn>>;
 
 export interface PendingTurn {
@@ -207,7 +208,7 @@ export class AgentSession implements DurableObject {
 
   private freshSession(overrides?: Partial<SessionState>): SessionState {
     const archetype = overrides?.archetype;
-    const templateFiles = getTemplateFiles(this.config, archetype);
+    const templateFiles = getTemplateFiles(this.config, archetype, overrides?.preset);
     return {
       messages: [],
       files: { ...templateFiles },
@@ -228,11 +229,18 @@ export class AgentSession implements DurableObject {
     };
   }
 
-  private applyArchetypeToEmptySession(session: SessionState, archetype: AppArchetype | undefined): boolean {
-    if (!archetype || this.config.store === "games") return false;
-    if (session.archetype || session.messages.length > 0 || session.appId) return false;
-    session.archetype = archetype;
-    session.files = { ...getTemplateFiles(this.config, archetype) };
+  private applyArchetypeToEmptySession(session: SessionState, archetype: AppArchetype | undefined, preset?: AppPreset): boolean {
+    if ((!archetype && !preset) || this.config.store === "games") return false;
+    if (session.messages.length > 0 || session.appId) return false;
+    const nextArchetype = archetype ?? session.archetype;
+    const nextPreset = preset ?? session.preset ?? "standalone";
+    if (session.archetype === nextArchetype && session.preset === nextPreset) return false;
+    // Metadata headers and the first chat body can supply different parts of
+    // the selection. Combine them only while the generated files are pristine.
+    if (JSON.stringify(session.files) !== JSON.stringify(session.baselineFiles)) return false;
+    session.archetype = nextArchetype;
+    session.preset = nextPreset;
+    session.files = { ...getTemplateFiles(this.config, nextArchetype, nextPreset) };
     session.baselineFiles = { ...session.files };
     return true;
   }
@@ -256,7 +264,8 @@ export class AgentSession implements DurableObject {
     if (this.session.tokenValidatedAt === undefined) this.session.tokenValidatedAt = null;
     if (this.session.sessionId === undefined) this.session.sessionId = null;
     this.session.archetype = parseAppArchetype(this.session.archetype);
-    if (!this.session.baselineFiles) this.session.baselineFiles = { ...getTemplateFiles(this.config, this.session.archetype) };
+    if (!this.session.baselineFiles)
+      this.session.baselineFiles = { ...getTemplateFiles(this.config, this.session.archetype, this.session.preset) };
     return this.session;
   }
 
@@ -356,7 +365,12 @@ export class AgentSession implements DurableObject {
         session.sessionId = headerSessionId;
         changed = true;
       }
-      changed = this.applyArchetypeToEmptySession(session, requestedArchetype) || changed;
+      changed =
+        this.applyArchetypeToEmptySession(
+          session,
+          requestedArchetype,
+          (request.headers.get("X-App-Preset") ?? url.searchParams.get("preset")) === "connected" ? "connected" : undefined,
+        ) || changed;
       if (changed) await this.save();
     }
   }
@@ -459,9 +473,10 @@ export class AgentSession implements DurableObject {
       body.message = body.message.slice(0, 50_000);
     }
     const requestedArchetype = parseAppArchetype(body.archetype);
-    if (requestedArchetype) {
+    if (requestedArchetype || body.preset === "connected") {
       const session = await this.load();
-      if (this.applyArchetypeToEmptySession(session, requestedArchetype)) await this.save();
+      if (this.applyArchetypeToEmptySession(session, requestedArchetype, body.preset === "connected" ? "connected" : undefined))
+        await this.save();
     }
 
     if (this.env.ALARM_LOOP === "true") return this.startAlarmTurn(request, body);

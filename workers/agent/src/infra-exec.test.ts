@@ -489,3 +489,17 @@ describe("executeInfraTool — no payments / no ads preflight", () => {
     }
   });
 });
+
+it.each(["dashboard", "tracker", "calculator", "generic"] as const)(
+  "resolves connected %s SDK identity at the deploy boundary",
+  async (archetype) => {
+    const { getTemplateFiles, substituteAppName } = await import("./template");
+    const generated = substituteAppName(getTemplateFiles(getConfig("apps"), archetype, "connected"), "connected-test", "Connected Test");
+    expect(generated["web/src/App.tsx"]).toContain('appId: "APPID"');
+    const files = new Map(Object.entries(generated));
+    applyPlaceholders(files, "connected-test", "Connected Test");
+    expect(files.get("web/src/App.tsx")).toContain('appId: "connected-test"');
+    expect([...files.values()].join("\n")).not.toContain("APPID");
+    expect(JSON.parse(files.get("fas.json")!).appId).toBe("connected-test");
+  },
+);

@@ -2,6 +2,8 @@
 
 import type { StoreConfig } from "./config";
 
+export type AppPreset = "standalone" | "connected";
+
 export type AppArchetype = "dashboard" | "tracker" | "calculator" | "generic";
 
 export const APP_ARCHETYPES: readonly AppArchetype[] = ["dashboard", "tracker", "calculator", "generic"];
@@ -771,13 +773,62 @@ ${config.store === "apps" ? `          OUTPUT_PATH: \${{ steps.target.outputs.ou
 
 // ── Public API ──
 
+const CONNECTED_DRAFT = `import { useConnectedKvDraft } from '@freeappstore/sdk/hooks';
+import { SignInButton } from '@freeappstore/sdk/ui';
+import type { FreeAppStore } from '@freeappstore/sdk';
+
+/** Keep the sign-in gate on this private-data feature, not on public app screens. */
+export function ConnectedDraft({ app: fas }: { app: FreeAppStore }) {
+  const draft = useConnectedKvDraft(fas, 'private-draft', '');
+
+  if (!draft.user) {
+    return (
+      <section aria-labelledby="draft-title">
+        <h2 id="draft-title">Private draft</h2>
+        <p>Sign in to load or save your private draft. Public parts of the app remain available.</p>
+        <SignInButton app={fas} />
+      </section>
+    );
+  }
+
+  return (
+    <section aria-labelledby="draft-title">
+      <h2 id="draft-title">Private draft</h2>
+      {draft.loading ? <p role="status">Loading your draft…</p> : null}
+      {draft.error ? (
+        <p role="alert">
+          {draft.error}{' '}
+          <button type="button" onClick={draft.retry}>
+            Retry
+          </button>
+        </p>
+      ) : null}
+      <label htmlFor="private-draft">Your notes</label>
+      <textarea
+        id="private-draft"
+        value={draft.draft}
+        onChange={(event) => draft.setDraft(event.currentTarget.value)}
+      />
+      <button
+        type="button"
+        disabled={!draft.dirty || draft.saving}
+        onClick={() => void draft.save()}
+      >
+        {draft.saving ? 'Saving…' : 'Save'}
+      </button>
+      {draft.dirty ? <span>Unsaved changes</span> : null}
+    </section>
+  );
+}
+`;
+
 export function getArchetypeFiles(archetype: AppArchetype): Record<string, string> {
   return APP_ARCHETYPE_FILES[archetype];
 }
 
-export function getTemplateFiles(config: StoreConfig, archetype?: AppArchetype): Record<string, string> {
+export function getTemplateFiles(config: StoreConfig, archetype?: AppArchetype, preset: AppPreset = "standalone"): Record<string, string> {
   const appArchetypeFiles = config.store === "games" ? {} : getArchetypeFiles(archetype ?? "generic");
-  return {
+  const files: Record<string, string> = {
     ...SHARED_FILES,
     ...(config.store === "games" ? GAME_FILES : APP_FILES),
     ...(config.store === "apps"
@@ -824,6 +875,18 @@ img, video, canvas { max-width: 100%; }
     ...appArchetypeFiles,
     ".github/workflows/deploy.yml": deployWorkflow(config),
   };
+  if (config.store === "apps" && preset === "connected") {
+    // Features receive the app-owned singleton; a second initApp retains stale auth.
+    files["web/src/App.tsx"] = files["web/src/App.tsx"]
+      .replace("import { initApp }", 'import { ConnectedDraft } from "./components/ConnectedDraft";\nimport { initApp }')
+      .replace(
+        '  return <PageHeader title="Welcome to APPNAME" description="Edit web/src/App.tsx to get started." />;',
+        '  return <><PageHeader title="Welcome to APPNAME" description="Your public home." /><ConnectedDraft app={fas} /></>;',
+      );
+    files["web/src/components/ConnectedDraft.tsx"] = CONNECTED_DRAFT;
+    files["web/package.json"] = files["web/package.json"].replace('"^0.16.15"', '"^0.16.26"');
+  }
+  return files;
 }
 
 export function substituteAppName(files: Record<string, string>, appId: string, displayName: string): Record<string, string> {
@@ -956,7 +1019,7 @@ proxy. The developer's API key is configured once in the platform and injected s
 localStorage is per-device and is wiped when the user clears their browser. When the user wants their
 data to PERSIST and FOLLOW THEM across devices ("save my X", "sync", "log in", "don't lose my data"),
 use the platform's free per-user cloud store instead:
-1. Use the \`fas\` instance App.tsx already creates with \`initApp({ appId: "APPID" })\`.
+1. Share the app-owned SDK instance with private features via props. Never initialize a second instance in a feature: profile sign-out must revoke its access too. Keep Home/About public; gate private data rather than Shell. Use the \`fas\` instance App.tsx already creates with \`initApp({ appId: "APPID" })\`.
 2. Storage is per signed-in user — gate it behind sign-in (\`useAuth\` from "@freeappstore/sdk/hooks",
    \`fas.auth.signIn()\`). One tap, no key.
 3. Read/write JSON values:

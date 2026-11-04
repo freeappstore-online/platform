@@ -857,3 +857,35 @@ describe("AI usage persistence (#16)", () => {
     expect(stmts.some((s) => s.sql.includes("SET messages = ?"))).toBe(true);
   });
 });
+
+describe("connected starter session selection (#368)", () => {
+  it.each(["body", "header", "mixed"])("persists the preset from %s and preserves customized files after eviction", async (via) => {
+    const { state, store } = fakeState();
+    const { env } = fakeEnv();
+    const original = chatRequest();
+    const body = (await original.json()) as Record<string, unknown>;
+    body.archetype = "tracker";
+    if (via !== "header") body.preset = "connected";
+    const headers = new Headers(original.headers);
+    if (via === "header") headers.set("X-App-Preset", "connected");
+    if (via === "mixed") headers.set("X-App-Archetype", "tracker");
+    const res = await new AgentSession(state, env).fetch(
+      new Request(original.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      }),
+    );
+    await res.body?.cancel();
+    const saved = store.get("session") as any;
+    expect(saved.preset).toBe("connected");
+    expect(saved.archetype).toBe("tracker");
+    expect(saved.files["web/src/App.tsx"]).toContain("<ConnectedDraft app={fas} />");
+    expect(saved.baselineFiles).toEqual(saved.files);
+    saved.files["web/src/App.tsx"] = "// customized app";
+    store.set("session", saved);
+    const next = await new AgentSession(state, env).fetch(new Request("https://agent/files", { headers }));
+    await next.body?.cancel();
+    expect((store.get("session") as any).files["web/src/App.tsx"]).toBe("// customized app");
+  });
+});

@@ -266,3 +266,20 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
     }
   });
 });
+
+describe("connected preset (#368)", () => {
+  it.each(APP_ARCHETYPES)("shares one app instance and gates only private data: %s", (archetype) => {
+    const files = getTemplateFiles(appsConfig, archetype, "connected");
+    const source = Object.values(files).join("\n");
+    expect(source.match(/initApp\(/g)).toHaveLength(1);
+    expect(files["web/src/App.tsx"]).toContain("<ConnectedDraft app={fas} />");
+    expect(files["web/src/App.tsx"]).not.toContain("requireAuth");
+    expect(files["web/src/components/ConnectedDraft.tsx"]).toContain("if (!draft.user)");
+    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.16.26");
+  });
+
+  it("does not change standalone or game templates", () => {
+    expect(getTemplateFiles(appsConfig, "generic", "standalone")).toEqual(getTemplateFiles(appsConfig, "generic"));
+    expect(getTemplateFiles(gamesConfig, "generic", "connected")).toEqual(getTemplateFiles(gamesConfig, "generic"));
+  });
+});
