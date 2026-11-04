@@ -44,6 +44,7 @@ describe('fresh scaffold capability checks', () => {
     expect(JSON.parse(files['web/package.json']!).dependencies['@freeappstore/sdk']).toBe(
       '^0.16.32',
     );
+    expect(files['CLAUDE.md']).toContain('/docs/starter-release.md');
   });
 
   it('keeps the optional PWA API minimum separate from the fresh Shell baseline', async () => {

@@ -1,145 +1,68 @@
 # Composable starter contract
 
-Accepted for epic #342 by issue #343. This page is the architecture and ownership contract. It does not add APIs, merge templates, migrate apps, or change check severity.
+This page describes the shipped starter architecture and the boundaries between platform infrastructure and app-owned product code. For commands and the tested release baseline, see [Starter release and adoption](starter-release.md). It does not authorize automatic migrations of existing apps.
 
-The supported way to start an app stays the SDK `Shell` described in [Getting Started](getting-started.md#build-your-app-on-the-shell) and [UI Components](ui.md#shell-the-standard-app-frame). Product layout is not a platform requirement.
+The SDK `Shell` is the supported default, not a required product layout. Apps may keep it, compose it, or own a custom frame while preserving the user-facing requirements below.
 
-## What already exists
+## One canonical foundation
 
-Reuse this machinery. Do not replace it with a plugin host.
+Standalone and connected starters are presets generated from `packages/cli/src/lib/starter-foundation.ts`. The CLI calls `getTemplateFiles` from `packages/cli/src/commands/init.ts`; `workers/agent/src/template.ts` imports that same generator for the builder and adds the selected archetype. `fas init` writes its generated files directly. The external standalone and connected template repositories are release mirrors of the canonical output. The game templates retain their separate clone path.
 
-| Piece | Where it lives | What it already does |
+Builder capability changes use the `install_capabilities` chat tool and the session capabilities API. CLI users use the same bundled, first-party definitions through `fas add`. Capabilities are versioned files and package prerequisites, recorded in `.fas-capabilities.json`; there is no marketplace, downloaded install script, or arbitrary package installer.
+
+| Starter | Default data/auth behavior | Generated product example |
 | --- | --- | --- |
-| App archetypes (#18) | `workers/agent/src/template.ts` (`dashboard`, `tracker`, `calculator`, `generic`) | Prompt seeds on the shared app scaffold. Not separate products. |
-| Build sanity (#10) | `workers/agent/src/build-sanity.ts` | Blocks duplicate top-level declarations and a second `export default` before deploy. |
-| Delta deploy (#13) | `workers/agent` deploy path | Pushes the agent delta over the provisioned scaffold so platform files survive. |
-| CLI scaffolds | `packages/cli/src/commands/init.ts`, `packages/cli/src/lib/starter-foundation.ts` | `fas init` generates standalone and connected apps from the shared foundation. External template repositories are release mirrors; game templates keep their separate clone path. |
-| Builder scaffold | `workers/agent/src/template.ts` `getTemplateFiles` | Consumes the same worker-safe generator as the CLI, then adds archetype files. |
-| Shell account (#337–#340) | `packages/sdk/src/ui/layout.tsx`, `profile.tsx` | Compact avatar opens `ProfilePage` in both auth states. `profileHref` is the app-owned route. Preferences and auth lifecycle are shared. |
-| Styling (#320, ADR-001) | [ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md) | React + Tailwind 4 on FAS tokens for every React surface, including apps, the SDK, console, and admin. |
+| `standalone` | No sign-in gate; device-local app | Public Home and About screens |
+| `connected` | Auth is available, but public screens stay public; private draft data is gated at its feature boundary | Public Home/About and a signed-in private draft |
 
-`fas add`, a capability manifest and the shared generated foundation now ship. Use the safe adoption workflow below.
+`connected` does not make every screen private. The Profile route remains reachable while signed out. Game templates are separate from these app presets.
 
-## Foundation, capabilities, and presets
+## Ownership and safe changes
 
-One foundation: the PWA toolchain, SDK runtime, design tokens, and the default `Shell`. Standalone and connected are presets, not two maintained implementations. The CLI and builder use `packages/cli/src/lib/starter-foundation.ts`; `fas init --template standalone|connected` selects the preset, and the external template repositories are updated from that source with `sync:templates`.
+The platform owns versioned infrastructure: the SDK client and auth lifecycle, storage and room APIs, the default `Shell` and `ProfilePage`, generated capability helpers, PWA runtime/config helpers, and the CLI/builder capability resolver.
 
-A capability is a versioned, first-party unit a preset can include at `fas init` or later with `fas add` ([#345](https://github.com/freeappstore-online/platform/issues/345)). It declares an id, a version, dependencies, the environment it supports, the files and config it owns, and how to validate it. Presets are lists of those ids. There is no plugin marketplace and no remote script execution.
+The app owns its editable product code: screens, navigation and route handling, domain models, workflows, content, and any custom frame. Authors may replace a generated example while retaining the platform infrastructure they need. A custom layout is a supported choice, including sidebars, bottom navigation, and focused canvas views.
 
-Ship these presets:
+Install and update operations are idempotent and support dry runs. They report conflicts instead of overwriting edited generated files, replacing app configuration silently, or deleting app data. A generated-content change advances its capability version; existing tracked versions require an explicit `--update` after preview. Review a conflict and resolve it in the app's repository; there is no force-overwrite switch. Keep version control backups before applying an update. Removing an import or generated helper is an app-owned edit; the installer does not provide an automatic removal or data-migration command.
 
-| Preset | Means | Today |
+The generated router is app-owned. An SDK update does not rewrite existing `App.tsx` routing. If an app needs the query/hash Profile-return fix, review its route handlers and preserve the full URL in history while deriving screen state from the browser's resulting pathname:
+
+```ts
+window.history.pushState(null, "", href);
+setPath(window.location.pathname);
+```
+
+Adapt this narrowly to the app's router; keep query parameters and fragments in the history URL. Do not apply an automatic rewrite across existing apps.
+
+## User-facing requirements
+
+The following are behavior requirements, not layout or markup templates:
+
+- Keep public content reachable without signing in. Gate only features that require a particular account or data permission.
+- Provide a reachable Profile/account path in signed-out and signed-in states. The generated compact avatar opens Profile and does not itself start OAuth. Appearance preferences are available from Profile in both auth states and persist across the app's controls.
+- Preserve keyboard operation, visible focus, meaningful labels, loading/error feedback, and a way to skip repeated navigation. Keep interactive targets usable (the default Shell uses 44px targets). Keep browser page zoom enabled; do not set `user-scalable=no` or a `maximum-scale` restriction. Support enlarged text and narrow screens.
+- Keep the generated MIT license notice when distributing substantial portions of the starter. Store attribution is optional; apps do not have to add a footer or store mark.
+- Do not add payments, ads, direct tracking, secrets in client code, or credentials in `VITE_*` values. Ensure `initApp` uses the deployed app id. Do not describe public data as private.
+- React app styling follows [ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md), including custom frames. This does not prescribe a component tree, exact navigation markup, typography, or screen composition.
+
+## PWA, offline behavior, and data boundaries
+
+The PWA capability ships with the starter. The shared runtime prompts before activating an update; app-owned busy guards can defer activation/reload while edits, recording, or other declared work is active. Keep one controller and remove guards when their work ends. The generated PWA setup caches the application shell and build assets. A cached shell does not imply that a network feature, media source, or remote model works offline. Describe save/sync state accurately and surface failed local writes as failures.
+
+| Data class | API or mechanism | Actual access and durability |
 | --- | --- | --- |
-| `standalone` | Device-local data. No sign-in gate. | Home and About inside `Shell`. |
-| `connected` | Platform account services (auth, KV, and the others the preset lists). | Public Home/About plus an app-owned private draft that gates only its own data. Profile remains reachable signed out. |
+| Device-local | `@freeappstore/sdk/persist` (localStorage/IndexedDB helpers) | Stored on this origin and device; does not sync or constitute a backup. A failed write is not a successful save. |
+| Private account | `fas.kv` | Per-user keys for this app; requires a signed-in account. Clear/hide account data when the session changes and ignore stale responses. |
+| Public shared | `fas.collections` | Public read, owner write. UI filtering or an owner query does not make documents private. |
+| Durable room data | Authenticated data-room endpoints | Explicit room members have equal CRUD access to room documents. Members can read, change, and delete shared votes or records; membership does not hide one member's values from another. |
+| Realtime room | `fas.rooms` | Ephemeral WebSocket broadcast, not durable storage, an access-control list, or a private room. |
 
-Game templates are not FAS presets.
+Choose a data class deliberately. Do not put private values or hidden votes in public collections or realtime broadcasts. Device-local backups are explicit user-managed files: validation/checksum checks complete before writes, then the SDK calls the app's apply callback with an explicit merge or replace choice. If apply fails, the SDK attempts the app-supplied snapshot restore. A successful restore is reported as a failed import with the prior data restored. If restore also fails, the result is `{ ok: false, reason: 'rollback' }` and stored data may be partial; surface that failure without claiming success or intact old bytes. Capability installation and PWA updates do not migrate or delete existing records.
 
-## Ownership
+## Builder and CLI adoption
 
-Runtime and packages own versioned infrastructure:
+The builder exposes first-party capability installation through the `install_capabilities` chat tool and `POST /session/:id/capabilities`. Preview with `dryRun: true`, review package prerequisites and file conflicts, then apply the reviewed plan. The CLI provides the corresponding `fas add <capability> --dry-run` and apply flow. Capability-owned files/configuration and their declared dependencies may change; app-owned edits remain protected. See [Starter release and adoption](starter-release.md) for recipes, package minimums, verification evidence, and known limits.
 
-- SDK client, auth, KV, collections, rooms, proxy, and the default `Shell` / `ProfilePage`
-- compliance checks and the CLI resolver that will install capabilities
-- the PWA update runtime and its app-owned busy guards ([#346](https://github.com/freeappstore-online/platform/issues/346))
+## Scope boundaries
 
-Fresh Shell starters use SDK `^0.16.32` for the verified compact header and Profile appearance controls. Optional capabilities retain their independent API minimums (for example, PWA remains `>=0.16.15`).
-
-The app owns generated product code after the author edits it:
-
-- screens, navigation structure, domain models, and workflows
-- a custom frame, when the app chooses one
-- user data and app-chosen backup files
-
-Install and update must be idempotent, support a dry-run, and refuse to overwrite an edited generated file or delete user data. Conflict detection reports the file. It does not guess.
-
-## Defaults and requirements
-
-Supported defaults (replaceable):
-
-- `Shell` as the frame: app name, text size, theme, compact avatar, primary navigation in the topbar, error boundary, toasts, offline banner, skip link
-- one `nav` entry per primary screen, rendered as `<nav aria-label="Main">`
-- `PageHeader` as the primary screen's single `h1`
-- React + Vite, with the token styling rule below
-
-A custom frame, sidebar, bottom nav, or detail route is allowed. A detail route does not need its own `nav` item. `renderNav` and `NavBar` remain for apps that keep `Shell` and replace only the navbar.
-
-These stay requirements:
-
-| Contract | Rule |
-| --- | --- |
-| Accessibility | Labelled navigation, keyboard use, visible focus, a skip link or equivalent, and page zoom. The default Shell keeps 44px targets. Do not set `user-scalable=no` or `maximum-scale` on the document. A canvas may call `preventDefault` on its own element. |
-| Platform identity | No payments, ads, or tracking. No upgrade or subscription screen. The default topbar shows the app name only. Store attribution is the opt-in `Footer`, and `Shell` never mounts it. |
-| Security | No secrets in client code or `VITE_*` values. The `initApp` id must be the deployed app id ([#344](https://github.com/freeappstore-online/platform/issues/344)). Public data must not be described as private. |
-| Styling | [ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md) still applies to React UI, including a custom frame. Platform-owned UI (SDK, console, admin) does not get a second styling system. |
-
-`requireAuth` gates app content only. The frame and the profile route stay reachable.
-
-## Account, attribution, zoom, updates, and data
-
-Account behaviour shipped in #337–#340:
-
-- The topbar shows `appName` only. It does not show a store logo.
-- The avatar is a compact link (24px signed out, 32px signed in, 44px hit target) to the profile route in both auth states. It does not start OAuth and does not open a dropdown.
-- With no `profileHref`, `/profile` renders `ProfilePage`. Signed out, that page shows GitHub and Google `SignInButton`s. Signed in, it shows account and preference actions.
-- `profileHref` selects an app-owned route. That route must render both auth states.
-- The theme toggle is in the topbar while signed out, and on `ProfilePage` while signed in. Text size and theme stay shared across those controls (#340).
-- `SignInButton` and `ProfileMenu` stay exported. `Shell` does not mount them. `ProfileMenu` is the legacy dropdown. New guidance must not tell agents to put either in the header.
-- `Footer` is optional installed-mode attribution. Its default label, when an app imports it, is "Part of FreeAppStore".
-
-Zoom, safe update, and honest offline are specified here and implemented in #346. This issue does not change service workers.
-
-- Installability, useful offline behaviour, and update activation are three contracts.
-- A cached shell does not mean cloud, media, or model features work offline.
-- The target update behaviour is a prompt. Activation and reload wait while the app has unsaved edits, an active recording, or another declared busy guard.
-- Several surfaces still set vite-plugin-pwa `registerType: 'autoUpdate'`. That is not the target, and `registerType` alone is not a promise that every tab reloads. #346 replaces it and covers the upgrade.
-
-Data access, as the API behaves today. #350 adds race-safe examples. It must not invent a privacy flag the server does not enforce.
-
-| Class | Mechanism | Meaning |
-| --- | --- | --- |
-| Device-local | `localStorage` or IndexedDB | This origin on this device. A failed write must surface (#348, following the #341 pattern of catching storage failures). Not a backup. |
-| Private-account | `fas.kv` | The signed-in user's keys for this app. |
-| Public-shared | `fas.collections` | Public read. Owner writes. Hiding a value in the UI is not confidentiality. |
-| Room fan-out | `fas.rooms` | Ephemeral broadcast. Not an access-control list and not a private room. |
-
-Capability install and PWA update must not delete those records.
-
-## Styling epic #318, fleet migration #326, and #327
-
-#318 remains the styling epic: one React + Tailwind 4 on FAS tokens model. ADR-001 (#320) is the accepted decision. This contract does not reopen it and does not weaken that rule.
-
-#327 remains the shared design-system spec (opaque `--panel`, opt-in glass, `--popover`). That file is shared with other stores. This issue does not edit it and does not change sibling stores.
-
-#326 is the fleet migration that would move every app onto that styling model and then flip styling checks to fail. It stays where it is. This issue does not migrate apps, does not write to app repositories, and does not change `css-discipline`, `opaque-surface`, or the related styling checks from warn to fail.
-
-Hard checks stay on security, the deployed artifact, accessibility, and data integrity. Layout choice is not one of them.
-
-## Plan for the remaining children
-
-Each child is a small addition to the files below. None of them introduces a generic plugin framework. Do not start a child until its predecessor is actually on `main`.
-
-| Order | Issue | Add | Reuse |
-| --- | --- | --- | --- |
-| 2 | [#344](https://github.com/freeappstore-online/platform/issues/344) | Compliance check plus doctor output for the declared app id, package root, build command, and uploaded artifact. Fixtures for an excluded second app and a leftover `my-app` id. | `workers/agent/src/build-sanity.ts`, `packages/cli/src/one-shot/doctor.ts`, `packages/cli/src/commands/check.ts`, `packages/compliance/src/checks/`. Do not fail a repo only because it has several packages. |
-| 3 | [#345](https://github.com/freeappstore-online/platform/issues/345) | `packages/cli/src/lib/capabilities.ts`, `packages/cli/src/commands/add.ts`, and a `fas.capabilities.json` manifest. `fas init` and `fas add` share one resolver. Dry-run, idempotent reinstall, and a conflict when a generated file was edited. | Presets are capability id lists. First-party registry only. |
-| 4 | [#346](https://github.com/freeappstore-online/platform/issues/346) | One PWA capability: manifest, icons, install, offline truth, zoom, and a prompted update with a busy guard. | The manifest and viewport checks in `packages/compliance`. Replace copied `registerType: 'autoUpdate'` blocks. Do not cache authenticated responses. |
-| 5 | [#347](https://github.com/freeappstore-online/platform/issues/347) | Composable frame, account, and routing primitives so apps stop patching Shell DOM. Guidance: [Migrating from DOM overrides](ui.md#migrating-from-dom-overrides). | `packages/sdk/src/ui/layout.tsx` and `profile.tsx` (`headerActions`, `renderNav`, `profileHref`, `AccountSection`, `ProfilePage`). |
-| 6 | [#348](https://github.com/freeappstore-online/platform/issues/348) | Typed local persistence with an explicit save failure. | The storage-failure handling added for the logger in #341. App data must not pretend a failed write succeeded. |
-| 7 | [#349](https://github.com/freeappstore-online/platform/issues/349) | Validated backup/import and a browser file export on the #348 helper. | No new backend. |
-| 8 | [#350](https://github.com/freeappstore-online/platform/issues/350) | Connected examples for the four data classes, including a race-safe KV update. | `docs/sdk.md` and `fas.kv` / `fas.collections` / `fas.rooms`. Do not add a private-room mode the API does not enforce. |
-| 9 | [#351](https://github.com/freeappstore-online/platform/issues/351) | Optional realtime and media recipes with close, permission, and busy-update checks. | `fas.rooms`. Custom signaling stays app-owned. |
-| 10 | [#352](https://github.com/freeappstore-online/platform/issues/352) | Generate standalone and connected presets from the shared foundation and keep external template mirrors current. | `packages/cli/src/lib/starter-foundation.ts`, `packages/cli/src/commands/init.ts`, `workers/agent/src/template.ts`, and builder capability entrypoint. #18 archetypes stay seeds. |
-| 11 | [#353](https://github.com/freeappstore-online/platform/issues/353) | Fresh-scaffold and published-package evidence, plus adoption notes. | No fleet rewrite and no sibling-store edits. |
-
-## Out of scope
-
-App-specific bugs stay in each app repository. This contract does not restart #326, does not edit sibling stores, and does not flip warn-only styling checks to fail.
-
-## Builder adoption guidance
-
-The effective app builder prompt follows this contract: Shell is the supported default, and app-owned screens, navigation, styles and edited configuration remain editable. Custom frames must preserve labelled navigation, keyboard access, visible focus, a skip link or equivalent, zoom, 44px targets, account/profile access in both auth states, shared preferences and error/loading feedback.
-
-Choose device-local helpers from `@freeappstore/sdk/persist` with validation and explicit save-result handling, private-account `fas.kv`, public-read/owner-write `fas.collections`, or ephemeral `fas.rooms` according to requirements. Device-local data is not a backup; collections and room fan-out are not private storage. See [persistence and connected examples](sdk.md). Keep public screens reachable, share the app-owned SDK instance and guard against stale account responses. A cached shell does not make network features work offline.
-
-Builder infrastructure remains locked to direct `write_file` calls. Install first-party capabilities through `POST /session/:id/capabilities` with `dryRun: true`, review prerequisites/conflicts, then apply; local adopters use `fas add --dry-run` before applying. Capability-owned dependencies/configuration may change through that workflow. Preserve edited generated files and user data; do not bypass locks or install arbitrary dependencies. Chat tools without access to the session API must describe the required action without claiming it ran.
+This contract governs the canonical generated foundation and its adoption guidance. It does not migrate existing app repositories, update sibling stores, or claim that every published app has adopted the starter. App-specific product work belongs in that app's repository. Styling checks and security, accessibility, license, and data-integrity requirements remain independently enforced.

@@ -47,7 +47,7 @@ export function mountBackupExample(
   const help = container.ownerDocument.createElement('p');
   help.id = helpId;
   help.textContent =
-    'Choose merge or replace before import. Import is all or nothing: a failed write restores the previous data. Removing this screen does not delete saved data.';
+    'Choose merge or replace after previewing. If importing and restoring both fail, some data may have changed. Keep your backup file and check the reported error before retrying. Removing this screen does not delete saved data.';
 
   const exportButton = button(container.ownerDocument, 'Export backup', helpId);
   const shareButton = button(container.ownerDocument, 'Share or download backup', helpId);

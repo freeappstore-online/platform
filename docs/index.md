@@ -23,6 +23,7 @@ work and recordings, install support, and explicit offline capabilities.
 - **[SDK Reference](sdk.md)** -- auth, KV, counters, collections, rooms, proxy, keys, roles, friends, email, and push reminders
 - **[UI Components](ui.md)** -- the supported default `Shell` (topbar, navigation, error boundary, toasts) and 25+ drop-in React components
 - **[Composable starter contract](composable-starter-contract.md)** -- one foundation, presets, and which layout choices stay free
+- **[Starter release and adoption](starter-release.md)** -- install, extend, update, data boundaries, and verified release evidence
 - **[CLI Reference](cli.md)** -- the `fas` command-line tool
 - **[Publishing](publishing.md)** -- how `fas publish` provisions and deploys your app
 - **[Proxy & Keys](proxy-and-keys.md)** -- secret-injecting proxy and user API key vault

@@ -103,6 +103,7 @@ const DEVELOPER_DOCS = [
   'docs/sdk.md',
   'docs/ui.md',
   'docs/composable-starter-contract.md',
+  'docs/starter-release.md',
   'docs/pwa-lifecycle.md',
   'docs/cli.md',
   'docs/publishing.md',

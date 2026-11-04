@@ -36,6 +36,9 @@ describe('backup example UI', () => {
     expect(host.querySelector('[role="status"]')?.getAttribute('aria-live')).toBe('polite');
     const titleId = section?.getAttribute('aria-labelledby');
     expect(host.querySelector(`#${titleId}`)?.textContent).toBe('Backup');
+    expect(host.textContent).toContain(
+      'If importing and restoring both fail, some data may have changed.',
+    );
     expect(host.querySelector('button')?.textContent).toBe('Export backup');
 
     const importButton = [...host.querySelectorAll('button')].find(
@@ -65,6 +68,8 @@ describe('backup example UI', () => {
 
     view.setStatus('Import failed and the previous data was restored.');
     expect(host.querySelector('[role="status"]')?.textContent).toContain('restored');
+    view.setStatus('Import failed: rollback failed; stored data may be partial.');
+    expect(host.querySelector('[role="status"]')?.textContent).toContain('partial');
 
     const file = new File(['{}'], 'backup.json', { type: 'application/json' });
     const input = host.querySelector('input[type="file"]');

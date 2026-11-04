@@ -45,6 +45,9 @@ test('PWA preserves work across activation, reloads offline deep links and suppo
   await page.getByRole('textbox', { name: 'Unsaved note' }).fill('Keep this work');
   const swPath = resolve(process.env.SCAFFOLD_DIR!, 'web/dist/sw.js');
   const original = await readFile(swPath, 'utf8');
+  let testFailed = false;
+  let testFailure: unknown;
+  const cleanupFailures: unknown[] = [];
   try {
     await writeFile(swPath, `${original}\n// update regression ${Date.now()}\n`);
     await page.evaluate(async () => {
@@ -84,8 +87,34 @@ test('PWA preserves work across activation, reloads offline deep links and suppo
     await page.goto('/never-visited/deep-link');
     await expect(page.getByRole('main')).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/never-visited/deep-link');
+  } catch (error) {
+    testFailed = true;
+    testFailure = error;
   } finally {
-    await context.setOffline(false);
-    await writeFile(swPath, original);
+    try {
+      await context.setOffline(false);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        !/Target page, context or browser has been closed|Browser has been closed|Context closed/i.test(
+          message,
+        )
+      ) {
+        cleanupFailures.push(error);
+      }
+    }
+    try {
+      await writeFile(swPath, original);
+    } catch (error) {
+      cleanupFailures.push(error);
+    }
   }
+  if (cleanupFailures.length > 0 && testFailed)
+    throw new AggregateError(
+      [testFailure, ...cleanupFailures],
+      'PWA browser test and cleanup both failed',
+    );
+  if (cleanupFailures.length > 0)
+    throw new AggregateError(cleanupFailures, 'PWA browser test cleanup failed');
+  if (testFailed) throw testFailure;
 });

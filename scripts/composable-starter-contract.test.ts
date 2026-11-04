@@ -1,7 +1,6 @@
 /**
- * #343: the composable starter contract stays the layout/ownership rule, and
- * platform-facing guides do not put SignInButton or ProfileMenu back in the
- * Shell header or ban custom frames outright.
+ * The published starter contract describes shipped generation, ownership,
+ * safe data boundaries, and preserves app-owned layout choices.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,49 +42,28 @@ describe('composable starter contract (#343)', () => {
 
   it('defines one foundation, presets, ownership, and the behaviour contracts', () => {
     for (const part of [
-      'One foundation',
+      'One canonical foundation',
       '`standalone`',
       '`connected`',
-      'fas.capabilities.json',
+      '.fas-capabilities.json',
       'ProfilePage',
-      'user-scalable=no',
-      "registerType: 'autoUpdate'",
       'fas.collections',
       'fas.rooms',
       'Device-local',
-      'Private-account',
-      'Public-shared',
+      'Private account',
+      'Public shared',
+      'custom frame',
+      'zoom',
+      "reason: 'rollback'",
     ]) {
       expect(contract, part).toContain(part);
     }
-  });
-
-  it('names #318, #326, and #327 without restarting fleet migration or fail-mode', () => {
-    expect(contract).toContain('#318');
-    expect(contract).toContain('#326');
-    expect(contract).toContain('#327');
-    expect(contract).toMatch(/does not restart #326/);
-    expect(contract).toMatch(/does not change `css-discipline`/);
-    expect(contract).toMatch(/sibling stores/);
-    expect(contract).toMatch(/warn-only styling checks to fail/);
-  });
-
-  it('lists every later child and the file each one extends', () => {
-    for (const issue of [344, 345, 346, 347, 348, 349, 350, 351, 352, 353]) {
-      expect(contract).toContain(`#${issue}`);
-    }
-    for (const path of [
-      'workers/agent/src/build-sanity.ts',
-      'packages/cli/src/lib/capabilities.ts',
-      'packages/cli/src/commands/init.ts',
-      'packages/sdk/src/ui/layout.tsx',
-    ]) {
-      expect(contract, path).toContain(path);
-    }
+    expect(contract).toContain('Keep browser page zoom enabled');
   });
 
   it('publishes the contract with the other developer docs', () => {
     expect(read('.github/workflows/publish-docs.yml')).toContain('composable-starter-contract.md');
+    expect(read('.github/workflows/publish-docs.yml')).toContain('starter-release.md');
     expect(read('packages/sdk/src/docs.test.ts')).toContain('docs/composable-starter-contract.md');
   });
 

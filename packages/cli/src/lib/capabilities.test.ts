@@ -281,6 +281,10 @@ it('installs backup at init and later without deleting saved data or edited file
   expect(plan.join('\n')).toContain('fas-capabilities/persistence.ts');
   expect(plan.join('\n')).toContain('fas-capabilities/backup.ts');
   expect(plan.join('\n')).toContain('merge');
+  expect(plan.join('\n')).toContain("reason: 'rollback'");
+  expect(plan.join('\n')).toContain('stored data may be partial');
+  const installed = JSON.parse(await readFile(join(root, '.fas-capabilities.json'), 'utf8'));
+  expect(installed.capabilities.backup.version).toBe('1.0.1');
   expect(await readFile(join(root, 'notes.json'), 'utf8')).toBe('{"keep":true}');
   expect(await installCapabilities(root, ['backup'])).toEqual(['No changes.']);
   const file = join(root, 'fas-capabilities/backup.ts');
@@ -289,6 +293,33 @@ it('installs backup at init and later without deleting saved data or edited file
   expect(await readFile(file, 'utf8')).toBe('app edited backup');
   expect(await readFile(join(root, 'notes.json'), 'utf8')).toBe('{"keep":true}');
   expect(await readFile(join(root, 'user.txt'), 'utf8')).toBe('keep');
+});
+
+it('requires an explicit dry-run update when the backup recipe version changes', async () => {
+  const root = await app();
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.32' } }),
+  );
+  const previousBackup = { ...registry.backup!, version: '1.0.0' };
+  const previousSource = { ...registry, backup: previousBackup };
+  await installCapabilities(root, ['backup'], { source: previousSource });
+  const previousManifest = await readFile(join(root, '.fas-capabilities.json'), 'utf8');
+  expect(JSON.parse(previousManifest).capabilities.backup.version).toBe('1.0.0');
+
+  await expect(installCapabilities(root, ['backup'], { dryRun: true })).rejects.toThrow(
+    'review --dry-run --update',
+  );
+  const preview = await installCapabilities(root, ['backup'], { dryRun: true, update: true });
+  expect(preview.join('\n')).toContain('.fas-capabilities.json');
+  expect(await readFile(join(root, '.fas-capabilities.json'), 'utf8')).toBe(previousManifest);
+
+  await installCapabilities(root, ['backup'], { update: true });
+  const updatedManifest = JSON.parse(await readFile(join(root, '.fas-capabilities.json'), 'utf8'));
+  expect(updatedManifest.capabilities.backup.version).toBe('1.0.1');
+  expect(await readFile(join(root, 'fas-capabilities/backup.ts'), 'utf8')).toContain(
+    "'rollback' and stored data may be partial",
+  );
 });
 
 it('requires the published backup SDK before writing capability files', async () => {

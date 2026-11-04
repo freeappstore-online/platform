@@ -308,7 +308,7 @@ identical files can be adopted; different unowned files and edited owned files
 produce conflicts before any writes. Unrelated files are untouched. Generated
 modules are optional imports, so installation does not rewrite application code.
 
-For a future bundled version, first inspect `fas add connectivity --update
+To update a tracked bundled capability, first inspect `fas add connectivity --update
 --dry-run`, then run with `--update`. Only files matching their recorded hashes
 or the exact target bytes are accepted. Resolve edits manually; there is no force
 overwrite. Removed generated files remain tracked and on disk. No migration hooks,

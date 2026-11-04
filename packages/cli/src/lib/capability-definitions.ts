@@ -180,7 +180,7 @@ See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
   },
   backup: {
     id: 'backup',
-    version: '1.0.0',
+    version: '1.0.1',
     dependencies: { persistence: '1.0.0' },
     packages: [{ name: '@freeappstore/sdk', range: '>=0.16.21', location: 'root' }],
     environment: 'browser',
@@ -190,8 +190,12 @@ See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
  * Validated backup and browser file export for device-local data.
  * Not fas.kv and not an account backup.
  * Installation and removal do not delete saved data or edited files.
- * previewBackup shows counts before any write. importBackup requires an explicit
- * merge or replace choice. A failed write restores the snapshot.
+ * previewBackup shows counts before any write. Validate the envelope before
+ * writes and require an explicit merge or replace.
+ * The app supplies apply and restore callbacks. If apply fails, the SDK attempts
+ * to restore the snapshot; if that callback also fails, result.reason is
+ * 'rollback' and stored data may be partial. Surface that failure; never claim
+ * success or that the previous data is intact unless the result confirms it.
  */
 export {
   exportBackup,
@@ -206,7 +210,13 @@ export {
 
 Requires @freeappstore/sdk/backup and the persistence capability.
 Requires @freeappstore/sdk >=0.16.21. This recipe copies app-owned device-local data; it does not upload to fas.kv.
-Call previewBackup before import. Pass merge or replace explicitly.
+Call previewBackup before import; validation and checksum checks finish before
+the SDK asks the app to apply any writes. Pass merge or replace explicitly. The
+app supplies the apply and restore callbacks. After an apply failure the SDK
+attempts to restore the saved snapshot. A successful restore is reported as a
+failed import with the previous data restored. If restore fails, the result is
+{ ok: false, reason: 'rollback' }, stored data may be partial, and the app must
+surface the failure and provide a recovery path; do not claim old bytes or success.
 shareOrDownloadBackup shares the file, downloads it, or returns JSON text, and
 revokes any object URL it created. Installation and removal do not delete app data.
 See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md

@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL('../../../', import.meta.url));
 const read = (path: string) => readFileSync(join(root, path), 'utf8');
 const examples = [
   ['docs/sdk.md', read('docs/sdk.md')],
+  ['docs/starter-release.md', read('docs/starter-release.md')],
   ['packages/sdk/README.md', read('packages/sdk/README.md')],
   ['sites/storefront/SKILLS.md', read('sites/storefront/SKILLS.md')],
   ['sites/storefront/claude-code.md', read('sites/storefront/claude-code.md')],
