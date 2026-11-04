@@ -13,6 +13,7 @@ import { Modal, Spinner } from './components.js';
 import { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
 import { activeHref, NavBar, type NavItem, useCurrentPath } from './navbar.js';
+import { canFollowLink, routeHref, routeUrl } from './navigation.js';
 import { PageHeader } from './page.js';
 import {
   OfflineBanner,
@@ -27,6 +28,36 @@ import {
 // ProfileMenu
 // ---------------------------------------------------------------------------
 
+function useAccountDeletion(deleteAccount: () => Promise<void>, onSuccess?: () => void) {
+  const deleting = useRef(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const handleDelete = async () => {
+    if (deleting.current) return;
+    if (
+      !confirm(
+        'Delete your account? This permanently removes ALL your data across ALL apps. This cannot be undone.',
+      )
+    )
+      return;
+    if (!confirm('Are you absolutely sure? Last chance.')) return;
+    deleting.current = true;
+    setDeletePending(true);
+    setDeleteError('');
+    try {
+      await deleteAccount();
+      onSuccess?.();
+    } catch {
+      setDeleteError('Unable to delete your account. Please try again.');
+    } finally {
+      deleting.current = false;
+      setDeletePending(false);
+    }
+  };
+
+  return { handleDelete, deletePending, deleteError };
+}
+
 export interface ProfileMenuProps {
   app: FreeAppStore;
   showThemeToggle?: boolean;
@@ -39,6 +70,9 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
   const [open, setOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const { handleDelete, deletePending, deleteError } = useAccountDeletion(deleteAccount, () =>
+    setOpen(false),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -53,17 +87,6 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
 
   const handleSignOut = () => {
     signOut();
-    setOpen(false);
-  };
-  const handleDelete = async () => {
-    if (
-      !confirm(
-        'Delete your account? This permanently removes ALL your data across ALL apps. This cannot be undone.',
-      )
-    )
-      return;
-    if (!confirm('Are you absolutely sure? Last chance.')) return;
-    await deleteAccount();
     setOpen(false);
   };
 
@@ -115,11 +138,17 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
             Sign out
           </button>
           <button
+            disabled={deletePending}
             onClick={handleDelete}
             className="block w-full p-[0.5rem_1rem] bg-transparent border-0 text-left text-[0.85rem] cursor-pointer text-danger font-[inherit]"
           >
-            Delete account
+            {deletePending ? 'Deleting...' : 'Delete account'}
           </button>
+          {deleteError && (
+            <p role="alert" className="px-4 text-danger">
+              {deleteError}
+            </p>
+          )}
         </div>
       )}
       <Modal
@@ -149,9 +178,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   const { preference, setPreference } = useTheme();
   const { size: textSize, setSize: setTextSize } = useTextSize();
   const [friendsOpen, setFriendsOpen] = useState(false);
-  const deleting = useRef(false);
-  const [deletePending, setDeletePending] = useState(false);
-  const [deleteError, setDeleteError] = useState('');
+  const { handleDelete, deletePending, deleteError } = useAccountDeletion(deleteAccount);
 
   if (loading) {
     return <div className="p-8 text-center text-muted">Loading...</div>;
@@ -169,28 +196,6 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
       </div>
     );
   }
-
-  const handleDelete = async () => {
-    if (deleting.current) return;
-    if (
-      !confirm(
-        'Delete your account? This permanently removes ALL your data across ALL apps. This cannot be undone.',
-      )
-    )
-      return;
-    if (!confirm('Are you absolutely sure? Last chance.')) return;
-    deleting.current = true;
-    setDeletePending(true);
-    setDeleteError('');
-    try {
-      await deleteAccount();
-    } catch {
-      setDeleteError('Unable to delete your account. Please try again.');
-    } finally {
-      deleting.current = false;
-      setDeletePending(false);
-    }
-  };
 
   const themeOptions: Array<{ value: 'light' | 'dark' | 'system'; label: string }> = [
     { value: 'system', label: 'System' },
@@ -364,7 +369,7 @@ function ToggleButton({
 
 export interface ShellNavContext {
   items: NavItem[];
-  /** The path the shell considers current (`location.pathname`, following back/forward). */
+  /** The path the shell considers current (pathname, query and hash, following back/forward). */
   currentPath: string;
   /** Navigate to `href`: the shell's `onNavigate`, else a full page load. */
   onNavigate: (href: string) => void;
@@ -402,13 +407,6 @@ export interface ShellProps {
   renderLoading?: () => ReactNode;
   requireAuth?: boolean;
   showThemeToggle?: boolean;
-}
-
-function routeUrl(href: string): URL {
-  return new URL(
-    href,
-    typeof window === 'undefined' ? 'https://fas.invalid/' : window.location.href,
-  );
 }
 
 /** Only allow an in-app return destination, never an off-site URL or a profile loop. */
@@ -457,14 +455,18 @@ export function Shell({
   const profileTarget = routeUrl(profileHref ?? '/profile');
   const isProfile =
     profileTarget.origin === routeUrl('/').origin &&
-    currentPath.replace(/\/+$/, '') === profileTarget.pathname.replace(/\/+$/, '');
+    routeUrl(currentPath).pathname.replace(/\/+$/, '') ===
+      profileTarget.pathname.replace(/\/+$/, '') &&
+    (!profileHref ||
+      ((!profileTarget.search || routeUrl(currentPath).search === profileTarget.search) &&
+        (!profileTarget.hash || routeUrl(currentPath).hash === profileTarget.hash)));
   const builtInProfile = !profileHref && isProfile;
   const currentHref =
     typeof window === 'undefined'
       ? '/'
       : window.location.pathname + window.location.search + window.location.hash;
   const profileLink =
-    profileHref ??
+    (profileHref ? routeHref(profileTarget) : undefined) ??
     (isProfile
       ? currentHref
       : typeof window === 'undefined'
@@ -496,24 +498,22 @@ export function Shell({
   // Without onNavigate, items are plain links.
   const navigate = onNavigate
     ? (href: string) => {
+        // Resolve before the router changes location, so relative links stay stable.
+        const target = routeUrl(href);
+        if (target.origin !== routeUrl('/').origin) {
+          window.location.assign(target.href);
+          return;
+        }
+        const destination = routeHref(target);
         beforeNavigate();
-        onNavigate(href);
-        setCurrentPath(routeUrl(href).pathname);
+        onNavigate(destination);
+        setCurrentPath(destination);
       }
     : undefined;
   const openProfile = (event: ReactMouseEvent<HTMLAnchorElement>) => {
-    if (
-      !navigate ||
-      event.defaultPrevented ||
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
+    if (!navigate || !canFollowLink(event, profileLink)) return;
     event.preventDefault();
-    if (isProfile) return;
+    if (routeUrl(profileLink).href === routeUrl(currentPath).href) return;
     navigate(profileLink);
   };
   const navNode =
@@ -572,16 +572,7 @@ export function Shell({
                     href={returnHref}
                     className="self-start m-4 text-accent underline"
                     onClick={(event) => {
-                      if (
-                        !navigate ||
-                        event.defaultPrevented ||
-                        event.button !== 0 ||
-                        event.metaKey ||
-                        event.ctrlKey ||
-                        event.shiftKey ||
-                        event.altKey
-                      )
-                        return;
+                      if (!navigate || !canFollowLink(event, returnHref)) return;
                       event.preventDefault();
                       navigate(returnHref);
                     }}

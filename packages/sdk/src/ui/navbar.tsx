@@ -1,4 +1,5 @@
 import { type MouseEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { canFollowLink, routeHref, routeUrl } from './navigation.js';
 
 /** One screen in the app's main navigation. */
 export interface NavItem {
@@ -17,7 +18,7 @@ export interface NavItem {
 export interface NavBarProps {
   items: NavItem[];
   /**
-   * The route to mark as current. Defaults to `location.pathname`, kept in step
+   * The route to mark as current. Defaults to pathname, query and hash, kept in step
    * with back/forward (`popstate`). Pass your router's location when you use one.
    */
   currentPath?: string;
@@ -28,22 +29,28 @@ export interface NavBarProps {
   onNavigate?: (href: string) => void;
 }
 
-/** The browser's current path, following back/forward. `initial` wins when given. */
+/** The browser's current URL path, query and hash, following back/forward. `initial` wins when given. */
 export function useCurrentPath(initial?: string): [string, (path: string) => void] {
   const [path, setPath] = useState(
-    () => initial ?? (typeof window === 'undefined' ? '/' : window.location.pathname),
+    () =>
+      initial ?? (typeof window === 'undefined' ? '/' : routeHref(new URL(window.location.href))),
   );
   // Routers can update history and re-render their layout without a popstate event.
-  const browserPath = typeof window === 'undefined' ? '/' : window.location.pathname;
+  const browserPath =
+    typeof window === 'undefined' ? '/' : routeHref(new URL(window.location.href));
   useEffect(() => {
     if (initial !== undefined) {
       setPath(initial);
       return;
     }
     setPath(browserPath);
-    const sync = () => setPath(window.location.pathname);
+    const sync = () => setPath(routeHref(new URL(window.location.href)));
     window.addEventListener('popstate', sync);
-    return () => window.removeEventListener('popstate', sync);
+    window.addEventListener('hashchange', sync);
+    return () => {
+      window.removeEventListener('popstate', sync);
+      window.removeEventListener('hashchange', sync);
+    };
   }, [initial, browserPath]);
   return [initial ?? path, setPath];
 }
@@ -52,8 +59,15 @@ export function useCurrentPath(initial?: string): [string, (path: string) => voi
 export function activeHref(items: NavItem[], path: string): string | null {
   let best: string | null = null;
   for (const { href } of items) {
+    const url = routeUrl(href);
+    const current = routeUrl(path);
+    if (url.origin !== current.origin) continue;
     const matches =
-      href === path || (href !== '/' && path.startsWith(`${href.replace(/\/+$/, '')}/`));
+      (!url.search || url.search === current.search) &&
+      (!url.hash || url.hash === current.hash) &&
+      (url.pathname === current.pathname ||
+        (url.pathname !== '/' &&
+          current.pathname.startsWith(`${url.pathname.replace(/\/+$/, '')}/`)));
     if (matches && (best === null || href.length > best.length)) best = href;
   }
   return best;
@@ -107,19 +121,11 @@ export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
 
   const follow = (e: MouseEvent<HTMLAnchorElement>, href: string) => {
     setOpen(false);
-    if (
-      !onNavigate ||
-      e.defaultPrevented ||
-      e.button !== 0 ||
-      e.metaKey ||
-      e.ctrlKey ||
-      e.shiftKey ||
-      e.altKey
-    )
-      return;
+    if (!onNavigate || !canFollowLink(e, href)) return;
     e.preventDefault();
-    onNavigate(href);
-    if (currentPath === undefined) setPath(href);
+    const destination = routeHref(routeUrl(href));
+    onNavigate(destination);
+    if (currentPath === undefined) setPath(destination);
   };
 
   return (

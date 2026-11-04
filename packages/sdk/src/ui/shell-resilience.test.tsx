@@ -8,7 +8,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FreeAppStore } from '../index.js';
 import { Footer } from './components.js';
-import { Shell } from './layout.js';
+import { ProfileMenu, Shell } from './layout.js';
 import type { NavItem } from './navbar.js';
 import { PageHeader, useDocumentTitle } from './page.js';
 import { useToast } from './shell-resilience.js';
@@ -904,7 +904,7 @@ describe('profile edge cases (#338)', () => {
     '/profile',
     'https://evil.example',
   ])('validates the return URL after reload: %s', async (target) => {
-    history.replaceState(null, '', '/profile?returnTo=' + encodeURIComponent(target));
+    history.replaceState(null, '', `/profile?returnTo=${encodeURIComponent(target)}`);
     const { app } = fakeApp(false);
     const navigate = vi.fn();
     await mount(
@@ -953,4 +953,149 @@ describe('profile edge cases (#338)', () => {
     await act(async () => reject(new Error('offline')));
     vi.unstubAllGlobals();
   });
+});
+
+describe('navigation and account actions (#339)', () => {
+  it('updates the profile return link after same-path query navigation', async () => {
+    const { app } = fakeApp();
+    await mount(
+      <Shell
+        app={app}
+        nav={[{ label: 'Filter', href: '/?filter=new#results' }]}
+        onNavigate={(href) => history.pushState(null, '', href)}
+      >
+        <p>App</p>
+      </Shell>,
+    );
+    await act(async () => byText('a', 'Filter')?.click());
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe(
+      '/profile?returnTo=%2F%3Ffilter%3Dnew%23results',
+    );
+  });
+  it('follows custom profile queries even on the same pathname', async () => {
+    history.replaceState(null, '', '/account?tab=other');
+    const { app } = fakeApp();
+    const navigate = vi.fn((href) => history.pushState(null, '', href));
+    await mount(
+      <Shell app={app} profileHref="?tab=profile#settings" onNavigate={navigate}>
+        <p>App</p>
+      </Shell>,
+    );
+    await act(async () => $('a[aria-label="Profile"]')?.click());
+    expect(navigate).toHaveBeenCalledWith('/account?tab=profile#settings');
+  });
+  it.each(['https://external.invalid/account', 'mailto:help@example.com'])(
+    'preserves native external links: %s',
+    async (href) => {
+      const { app } = fakeApp();
+      const navigate = vi.fn();
+      await mount(
+        <Shell
+          app={app}
+          profileHref={href}
+          nav={[{ label: 'External', href }]}
+          onNavigate={navigate}
+        >
+          <p>App</p>
+        </Shell>,
+      );
+      for (const link of [$('a[aria-label="Profile"]')!, byText('a', 'External')!]) {
+        const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+        let intercepted = false;
+        document.addEventListener(
+          'click',
+          (e) => {
+            intercepted = e.defaultPrevented;
+            e.preventDefault(); // Keep the DOM emulator from leaving the test origin.
+          },
+          { once: true },
+        );
+        await act(async () => {
+          link.dispatchEvent(event);
+        });
+        expect(intercepted).toBe(false);
+      }
+      expect(navigate).not.toHaveBeenCalled();
+    },
+  );
+  it('handles legacy menu deletion failures, duplicates, retry and success', async () => {
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+    const { app } = fakeApp();
+    let reject!: (reason: Error) => void;
+    app.auth.deleteAccount = vi.fn(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    await mount(<ProfileMenu app={app} />);
+    await act(async () => $('button[aria-label="Profile menu"]')?.click());
+    const button = byText('button', 'Delete account')! as HTMLButtonElement;
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(app.auth.deleteAccount).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(true);
+    await act(async () => reject(new Error('offline')));
+    expect($('[role="alert"]')?.textContent).toContain('Unable to delete');
+    vi.mocked(app.auth.deleteAccount).mockResolvedValueOnce(undefined);
+    await act(async () => button.click());
+    expect(app.auth.deleteAccount).toHaveBeenCalledTimes(2);
+    expect($('button[aria-label="Profile menu"]')?.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+describe('URL state regressions (#339)', () => {
+  it('resolves relative navigation before the router mutates history', async () => {
+    history.replaceState(null, '', '/notes/42');
+    const { app } = fakeApp();
+    const navigate = vi.fn((href) => history.pushState(null, '', href));
+    await mount(
+      <Shell
+        app={app}
+        nav={[{ label: 'Account', href: '../account?tab=profile#settings' }]}
+        onNavigate={navigate}
+      >
+        <p>App</p>
+      </Shell>,
+    );
+    await act(async () => byText('a', 'Account')?.click());
+    expect(navigate).toHaveBeenCalledWith('/account?tab=profile#settings');
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe(
+      '/profile?returnTo=%2Faccount%3Ftab%3Dprofile%23settings',
+    );
+  });
+  it('tracks hashchange events without changing the pathname', async () => {
+    const { app } = fakeApp();
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    await act(async () => {
+      history.replaceState(null, '', '/#details');
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+    });
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe(
+      '/profile?returnTo=%2F%23details',
+    );
+  });
+  it.each([false, true])(
+    'cancels legacy account deletion at either confirmation: %s',
+    async (first) => {
+      const confirm = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(false);
+      vi.stubGlobal('confirm', confirm);
+      const { app } = fakeApp();
+      await mount(<ProfileMenu app={app} />);
+      await act(async () => $('button[aria-label="Profile menu"]')?.click());
+      await act(async () => byText('button', 'Delete account')?.click());
+      expect(app.auth.deleteAccount).not.toHaveBeenCalled();
+      expect(confirm).toHaveBeenCalledTimes(first ? 2 : 1);
+      expect($('[role="alert"]')).toBeNull();
+    },
+  );
 });

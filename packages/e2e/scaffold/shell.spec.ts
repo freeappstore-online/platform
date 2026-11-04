@@ -617,3 +617,44 @@ test('profile without a router preserves native navigation and browser scroll ow
     await writeFile(appFile, original);
   }
 });
+
+test('query/hash navigation preserves profile return destination (#339)', async ({
+  page,
+  request,
+}) => {
+  const original = await readFile(appFile, 'utf8');
+  const instrumented = original.replace(
+    'const NAV: NavItem[] = [',
+    "const NAV: NavItem[] = [{ label: 'Filtered', href: '/?filter=new#results', title: 'Filtered' },",
+  );
+  try {
+    await writeFile(appFile, instrumented);
+    await expect
+      .poll(async () => (await (await request.get('/src/App.tsx')).text()).includes('Filtered'))
+      .toBe(true);
+    if (connected)
+      await page.addInitScript(() =>
+        localStorage.setItem(
+          'fas:session',
+          JSON.stringify({
+            token: 'browser-test-only',
+            user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+          }),
+        ),
+      );
+    await page.goto('/');
+    await openMenu(page);
+    await page.getByRole('link', { name: 'Filtered', exact: true }).click();
+    await expect(page).toHaveURL(/\?filter=new#results$/);
+    const profile = page.locator('header a[aria-label="Profile"]');
+    await expect(profile).toHaveAttribute('href', '/profile?returnTo=%2F%3Ffilter%3Dnew%23results');
+    await profile.click();
+    await page.reload();
+    await page.getByRole('link', { name: 'Back to app', exact: true }).click();
+    await expect(page).toHaveURL(/\?filter=new#results$/);
+    await expect(page).toHaveTitle('Filtered');
+    await landmarks(page);
+  } finally {
+    await writeFile(appFile, original);
+  }
+});
