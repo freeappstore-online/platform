@@ -7,6 +7,15 @@ test('PWA preserves work across activation, reloads offline deep links and suppo
   context,
 }) => {
   test.setTimeout(90_000);
+  // The connected fixture uses a synthetic session. Keep backend responses
+  // deterministic so a real 401 cannot sign out the app mid-lifecycle test.
+  // Only intercept the API; service workers, assets and offline navigation
+  // continue through the real built artifact.
+  await page.route('https://api.freeappstore.online/**', (route) =>
+    new URL(route.request().url()).pathname === '/v1/analytics.js'
+      ? route.fulfill({ contentType: 'application/javascript', body: '' })
+      : route.fulfill({ json: { value: null, friends: [], requests: [] } }),
+  );
   if (process.env.SCAFFOLD_TEMPLATE === 'connected')
     await page.addInitScript(() =>
       localStorage.setItem(
