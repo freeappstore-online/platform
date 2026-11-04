@@ -495,7 +495,7 @@ it.each(["dashboard", "tracker", "calculator", "generic"] as const)(
   async (archetype) => {
     const { getTemplateFiles, substituteAppName } = await import("./template");
     const generated = substituteAppName(getTemplateFiles(getConfig("apps"), archetype, "connected"), "connected-test", "Connected Test");
-    expect(generated["web/src/App.tsx"]).toContain('appId: "APPID"');
+    expect(generated["web/src/App.tsx"]).toContain('appId: "connected-test"');
     const files = new Map(Object.entries(generated));
     applyPlaceholders(files, "connected-test", "Connected Test");
     expect(files.get("web/src/App.tsx")).toContain('appId: "connected-test"');

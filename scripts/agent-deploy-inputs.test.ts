@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 describe('agent shared resolver release wiring', () => {
@@ -24,11 +25,37 @@ describe('agent shared resolver release wiring', () => {
   it.each([
     'packages/cli/src/lib/capability-definitions.ts',
     'packages/cli/src/lib/starter-presets.ts',
+    'packages/cli/src/lib/starter-foundation.ts',
     'packages/compliance/**',
     'packages/backend/src/lib/web-push.ts',
   ])('redeploys when %s changes', (input) => {
     const paths = workflow.split('  workflow_dispatch:')[0];
     expect(paths).toContain(`- '${input}'`);
+  });
+
+  it('keeps every transitive starter input dependency-portable and deploy-triggered', () => {
+    const seen = new Set<string>();
+    const visit = (file: string) => {
+      if (seen.has(file)) return;
+      seen.add(file);
+      const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest);
+      const paths = workflow.split('  workflow_dispatch:')[0];
+      expect(paths, file).toContain(`- '${file}'`);
+      // Parse real module declarations, not imports inside generated app strings.
+      for (const statement of source.statements) {
+        if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
+        const specifier = statement.moduleSpecifier;
+        if (!specifier || !ts.isStringLiteral(specifier)) continue;
+        expect(specifier.text, `${file} must obtain package operations from its consumer`).toMatch(
+          /^\./,
+        );
+        const dependency = resolve(dirname(file), specifier.text.replace(/\.js$/, '.ts'));
+        visit(relative(process.cwd(), dependency).replaceAll('\\', '/'));
+      }
+    };
+    visit('packages/cli/src/lib/starter-foundation.ts');
+    expect(seen.has('packages/cli/src/lib/capability-definitions.ts')).toBe(true);
+    expect(seen.has('packages/cli/src/lib/starter-presets.ts')).toBe(true);
   });
 
   it('gates deployment on isolated bundling and the existing release checks', () => {

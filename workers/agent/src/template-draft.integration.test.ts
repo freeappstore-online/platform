@@ -23,7 +23,7 @@ it.skipIf(process.env.FAS_TEST_PUBLISHED !== "1")(
     let server: ReturnType<typeof spawn> | undefined;
     try {
       const files = substituteAppName(getTemplateFiles(getConfig("apps"), "generic", "connected"), "draft-check", "Draft Check");
-      files["web/package.json"] = files["web/package.json"].replace(/\^0\.16\.\d+/, "0.16.29");
+      files["web/package.json"] = files["web/package.json"].replace(/\^0\.16\.\d+/, "0.16.32");
       for (const [name, content] of Object.entries(files)) {
         const target = join(dir, name);
         await mkdir(dirname(target), { recursive: true });

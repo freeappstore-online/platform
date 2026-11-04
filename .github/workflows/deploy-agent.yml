@@ -19,6 +19,7 @@ on:
       # The worker consumes canonical capability resolution shared with the CLI.
       - 'packages/cli/src/lib/capability-definitions.ts'
       - 'packages/cli/src/lib/starter-presets.ts'
+      - 'packages/cli/src/lib/starter-foundation.ts'
       - '.github/workflows/deploy-agent.yml'
   workflow_dispatch:
 

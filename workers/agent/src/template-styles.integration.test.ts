@@ -26,7 +26,7 @@ it.skipIf(process.env.FAS_TEST_PUBLISHED !== "1")(
         const dir = join(root, preset);
         const files = substituteAppName(getTemplateFiles(getConfig("apps"), "generic", preset), "style-check", "Style Check");
         // Pin the independently reported published distribution for reproducibility.
-        files["web/package.json"] = files["web/package.json"].replace(/\^0\.16\.\d+/, "0.16.26");
+        files["web/package.json"] = files["web/package.json"].replace(/\^0\.16\.\d+/, "0.16.32");
         for (const [name, content] of Object.entries(files)) {
           const target = join(dir, name);
           await mkdir(dirname(target), { recursive: true });
@@ -36,7 +36,7 @@ it.skipIf(process.env.FAS_TEST_PUBLISHED !== "1")(
         await run(process.execPath, [cli, "install", "--no-frozen-lockfile"], options);
         await run(process.execPath, [cli, "build"], options);
         const installed = JSON.parse(await readFile(join(dir, "web/node_modules/@freeappstore/sdk/package.json"), "utf8"));
-        expect(installed.version).toBe("0.16.26");
+        expect(installed.version).toBe("0.16.32");
         const server = spawn(
           process.execPath,
           [join(dir, "web/node_modules/vite/bin/vite.js"), "preview", "--host", "127.0.0.1", "--port", "5195", "--strictPort"],
