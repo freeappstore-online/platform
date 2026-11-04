@@ -129,8 +129,8 @@ jobs:
       - name: Scaffold starts on the SDK Shell with nav (#93)
         # Every new app must render the SDK Shell with real nav items from the
         # first render: no hand-rolled Shell.tsx, no Firebase, an SDK with the
-        # navbar + resilience layer; connected apps sign in (requireAuth),
-        # standalone apps don't.
+        # navbar + resilience layer. Both presets keep public screens available;
+        # connected features request sign-in at the feature boundary.
         working-directory: /tmp/scaffold-smoke
         run: bash "$GITHUB_WORKSPACE/scripts/check-scaffold-shell.sh" "$APP_ID" "${{ matrix.template }}"
 

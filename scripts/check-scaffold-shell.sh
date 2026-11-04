@@ -15,10 +15,10 @@ fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
 [ -f "$app" ] || { echo "FAIL: $app not found"; exit 1; }
 
 # The SDK Shell is the root, with a nav item per screen.
-grep -Eq "import \{[^}]*\bShell\b[^}]*\} from '@freeappstore/sdk/ui'" "$app" ||
+grep -Eq "import \{[^}]*\bShell\b[^}]*\} from ['\"]@freeappstore/sdk/ui['\"]" "$app" ||
   fail "App.tsx does not import Shell from @freeappstore/sdk/ui"
 grep -Eq "<Shell [^>]*\bnav=\{" "$app" || fail "App.tsx does not render <Shell … nav={…}>"
-grep -Eq "\{ label: '[^']+', href: '/[^']*'" "$app" || fail "App.tsx declares no nav items"
+grep -Eq "\{ label: ['\"][^'\"]+['\"], href: ['\"]/[^'\"]*['\"]" "$app" || fail "App.tsx declares no nav items"
 
 # No hand-rolled shell, and no Firebase (the platform SDK is the backend).
 [ ! -e "$dir/web/src/components/Shell.tsx" ] || fail "hand-rolled web/src/components/Shell.tsx is present"
@@ -34,16 +34,14 @@ elif [[ ! "$range" =~ ^\^?(0\.(1[5-9]|[2-9][0-9])|[1-9][0-9]*)\. ]]; then
   fail "@freeappstore/sdk range '$range' is missing or below 0.14.30"
 fi
 
-# The canonical builder output includes ConnectedDraft and keeps public screens
-# available. CLI still clones the legacy external template until #369 lands, so
-# retain its current smoke coverage without claiming the external convergence is done.
+# Fresh scaffolds keep public screens available; sign-in belongs at the feature
+# boundary. Do not infer this contract from a component's filename or location.
+# This smoke gate checks fresh output, not existing app-owned customizations.
 case "$template" in
-  connected)
-    if [ -f "$dir/web/src/fas-capabilities/ConnectedDraft.tsx" ]; then
-      ! grep -Eq "<Shell [^>]*\brequireAuth\b" "$app" || fail "canonical connected starter gates public screens with requireAuth"
-    fi
+  connected|standalone)
+    ! tr '\n\r' '  ' < "$app" | grep -Eq '<Shell[[:space:]][^>]*\brequireAuth\b' ||
+      fail "$template starter gates public screens with requireAuth"
     ;;
-  standalone) ! grep -Eq "<Shell [^>]*\brequireAuth\b" "$app" || fail "standalone starter gates public screens with requireAuth" ;;
   *) echo "unknown template '$template' (standalone|connected)"; exit 2 ;;
 esac
 
