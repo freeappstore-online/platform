@@ -1,6 +1,6 @@
 import type { IDBPDatabase, IDBPTransaction } from 'idb';
 import { openFasDatabase } from './database.js';
-import { failure, type StorageResult, settleTransaction } from './status.js';
+import { failure, type StorageResult, startTransaction } from './status.js';
 
 /**
  * Large files split into a small metadata record and a separate payload.
@@ -100,7 +100,7 @@ export async function putFile<M extends FileMetadata>(
     payload: Blob | ArrayBuffer | Uint8Array;
     /**
      * Called only when this id is already stored. Return the record to commit,
-     * or null to leave the stored file untouched.
+     * with the same id, or null to leave the stored file untouched.
      */
     resolveConflict?:
       | ((local: StoredFile<M>, incoming: StoredFile<M>) => StoredFile<M> | null)
@@ -115,13 +115,9 @@ export async function putFile<M extends FileMetadata>(
   } catch (error) {
     return failure('validation', error instanceof Error ? error.message : 'Unreadable payload.');
   }
-  const tx = store.database.transaction([METADATA, PAYLOADS], 'readwrite');
-  const settled = await settleTransaction<
-    { type: 'written'; metadata: M } | { type: 'conflict' } | { type: 'rejected'; detail: string }
-  >(
-    tx.done,
-    () => tx.abort(),
-    async () => writeFile(tx, input.metadata, payload, input.resolveConflict),
+  const settled = await startTransaction(
+    () => store.database.transaction([METADATA, PAYLOADS], 'readwrite'),
+    async (tx) => writeFile(tx, input.metadata, payload, input.resolveConflict),
   );
   if (!settled.ok) return settled;
   if (settled.value.type === 'conflict') {
@@ -143,7 +139,8 @@ async function writeFile<M extends FileMetadata>(
 > {
   const metaStore = tx.objectStore(METADATA);
   const payloadStore = tx.objectStore(PAYLOADS);
-  const existing = (await metaStore.get(metadata.id)) as M | undefined;
+  const originalId = metadata.id;
+  const existing = (await metaStore.get(originalId)) as M | undefined;
   let nextMetadata = { ...metadata, byteLength: payload.byteLength };
   let nextPayload = payload;
   if (existing !== undefined) {
@@ -164,6 +161,9 @@ async function writeFile<M extends FileMetadata>(
       };
     }
     if (!resolved) return { type: 'conflict' };
+    if (resolved.metadata.id !== originalId) {
+      return { type: 'rejected', detail: 'Conflict policy must preserve the file id.' };
+    }
     const resolvedError = metadataError(resolved.metadata);
     if (resolvedError) return { type: 'rejected', detail: resolvedError };
     nextPayload = resolved.payload;
@@ -178,11 +178,9 @@ export async function getFile<M extends FileMetadata>(
   store: FileStore,
   id: string,
 ): Promise<StorageResult<StoredFile<M> | undefined>> {
-  const tx = store.database.transaction([METADATA, PAYLOADS], 'readonly');
-  return settleTransaction(
-    tx.done,
-    () => tx.abort(),
-    async () => {
+  return startTransaction(
+    () => store.database.transaction([METADATA, PAYLOADS], 'readonly'),
+    async (tx) => {
       const metadata = (await tx.objectStore(METADATA).get(id)) as M | undefined;
       if (metadata === undefined) return undefined;
       const payload = (await tx.objectStore(PAYLOADS).get(id)) as Uint8Array | undefined;
@@ -198,11 +196,9 @@ export async function getFileMetadata<M extends FileMetadata>(
   store: FileStore,
   id: string,
 ): Promise<StorageResult<M | undefined>> {
-  const tx = store.database.transaction(METADATA, 'readonly');
-  return settleTransaction(
-    tx.done,
-    () => tx.abort(),
-    async () => {
+  return startTransaction(
+    () => store.database.transaction(METADATA, 'readonly'),
+    async (tx) => {
       return (await tx.store.get(id)) as M | undefined;
     },
   );
@@ -211,11 +207,9 @@ export async function getFileMetadata<M extends FileMetadata>(
 export async function listFiles<M extends FileMetadata>(
   store: FileStore,
 ): Promise<StorageResult<M[]>> {
-  const tx = store.database.transaction(METADATA, 'readonly');
-  return settleTransaction(
-    tx.done,
-    () => tx.abort(),
-    async () => {
+  return startTransaction(
+    () => store.database.transaction(METADATA, 'readonly'),
+    async (tx) => {
       return (await tx.store.getAll()) as M[];
     },
   );

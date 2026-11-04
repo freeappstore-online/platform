@@ -65,7 +65,7 @@ This data stays on this origin on this device. Clearing site data removes it. It
 
 A save reports `{ ok: true, value }` only after `localStorage` accepts the write or the IndexedDB transaction commits. Do not show a success toast before that. `{ ok: false, reason }` is `unavailable` (storage blocked), `corrupt` (unreadable bytes, left in place), `quota`, `validation`, `aborted`, `conflict`, or `not-installed`. Nothing in this module deletes corrupt data or resets it to a default.
 
-`watchPreference` fires when a namespaced key changes. That event is a notification, not a merge and not conflict resolution. Read the key and apply an app-owned policy if two tabs disagree. File overwrites use `resolveConflict` on `putFile`; without that function an existing file id is left untouched and the save reports `conflict`.
+`watchPreference` fires when a namespaced key changes. That event is a notification, not a merge and not conflict resolution. Read the key and apply an app-owned policy if two tabs disagree. File overwrites use `resolveConflict` on `putFile`; without that function an existing file id is left untouched and the save reports `conflict`. A resolver must preserve the incoming file id; changing it returns `validation` before either metadata or payload is written. Returning null reports `conflict`; a throwing resolver reports `validation` and preserves the stored file.
 
 Preference keys are `fas:<namespace>:<key>`. IndexedDB database names start with `fas:`.
 
@@ -310,3 +310,5 @@ function App() {
   const { isListening, start, stop, transcript } = useVoiceInput((text) => console.log(text));
 }
 ```
+
+Record and file operations resolve transaction-start failures through `StorageResult`, including `unavailable` after explicit close or automatic close when another tab upgrades the database. Existing data remains intact; the app owns reopening the handle. Record validators should return a boolean: false reports `validation`, while a thrown validator error rejects the API promise. A throwing or rejecting `withTransaction` callback aborts its writes and resolves a classified storage failure.

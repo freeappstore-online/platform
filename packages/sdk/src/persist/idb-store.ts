@@ -4,7 +4,7 @@ import {
   checkSegment,
   failure,
   type StorageResult,
-  settleTransaction,
+  startTransaction,
   type Validator,
 } from './status.js';
 
@@ -71,11 +71,9 @@ export async function getRecord<T>(
 ): Promise<StorageResult<T | undefined>> {
   const checked = recordKey(key);
   if (!checked.ok) return checked;
-  const tx = store.database.transaction(RECORDS, 'readonly');
-  const settled = await settleTransaction(
-    tx.done,
-    () => tx.abort(),
-    async () => {
+  const settled = await startTransaction(
+    () => store.database.transaction(RECORDS, 'readonly'),
+    async (tx) => {
       // idb resolves a missing key to undefined. The untyped database schema
       // types that result as any, so the cast restores the caller's record type.
       const raw = (await tx.store.get(checked.value)) as T | undefined;
@@ -101,11 +99,9 @@ export async function putRecord<T>(
   if (validate && !validate(value)) {
     return failure('validation', 'Value did not match the validator.');
   }
-  const tx = store.database.transaction(RECORDS, 'readwrite');
-  return settleTransaction(
-    tx.done,
-    () => tx.abort(),
-    async () => {
+  return startTransaction(
+    () => store.database.transaction(RECORDS, 'readwrite'),
+    async (tx) => {
       await tx.store.put(value, checked.value);
       return value;
     },
@@ -115,11 +111,9 @@ export async function putRecord<T>(
 export async function deleteRecord(store: LocalStore, key: string): Promise<StorageResult<true>> {
   const checked = recordKey(key);
   if (!checked.ok) return checked;
-  const tx = store.database.transaction(RECORDS, 'readwrite');
-  return settleTransaction(
-    tx.done,
-    () => tx.abort(),
-    async () => {
+  return startTransaction(
+    () => store.database.transaction(RECORDS, 'readwrite'),
+    async (tx) => {
       await tx.store.delete(checked.value);
       return true as const;
     },
@@ -148,11 +142,9 @@ export async function withTransaction<T>(
   // Split the mode so put and delete keep their receiver. A union mode types
   // those methods as `function | undefined`, and detaching them drops `this`.
   if (mode === 'readonly') {
-    const tx = store.database.transaction(RECORDS, 'readonly');
-    return settleTransaction(
-      tx.done,
-      () => tx.abort(),
-      async () =>
+    return startTransaction(
+      () => store.database.transaction(RECORDS, 'readonly'),
+      async (tx) =>
         run({
           get: (key) => tx.store.get(key),
           put: async () => {
@@ -165,11 +157,9 @@ export async function withTransaction<T>(
         }),
     );
   }
-  const tx = store.database.transaction(RECORDS, 'readwrite');
-  return settleTransaction(
-    tx.done,
-    () => tx.abort(),
-    async () =>
+  return startTransaction(
+    () => store.database.transaction(RECORDS, 'readwrite'),
+    async (tx) =>
       run({
         get: (key) => tx.store.get(key),
         put: async (key, value) => {

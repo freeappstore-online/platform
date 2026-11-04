@@ -2,7 +2,7 @@
 import 'fake-indexeddb/auto';
 import { deleteDB } from 'idb';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRecord, openStore, putRecord, withTransaction } from './idb-store.js';
+import { deleteRecord, getRecord, openStore, putRecord, withTransaction } from './idb-store.js';
 import { settleTransaction } from './status.js';
 
 const namespaces: string[] = [];
@@ -143,4 +143,54 @@ describe('IndexedDB records', () => {
     );
     expect(result).toMatchObject({ ok: false, reason: 'aborted' });
   });
+});
+
+describe.each(['explicit', 'versionchange'] as const)('%s close', (kind) => {
+  it('contains every record transaction start and preserves old data', async () => {
+    const store = await opened();
+    await putRecord(store, 'draft', { text: 'kept' });
+    if (kind === 'explicit') store.close();
+    const next = await openStore({
+      namespace: store.namespace,
+      version: kind === 'explicit' ? 1 : 2,
+    });
+    if (!next.ok) throw new Error('reopen');
+    try {
+      const run = vi.fn(() => true);
+      for (const operation of [
+        () => getRecord(store, 'draft'),
+        () => putRecord(store, 'draft', { text: 'lost' }),
+        () => deleteRecord(store, 'draft'),
+        () => withTransaction(store, 'readonly', run),
+        () => withTransaction(store, 'readwrite', run),
+      ])
+        await expect(operation()).resolves.toMatchObject({ ok: false, reason: 'unavailable' });
+      expect(run).not.toHaveBeenCalled();
+      expect(await getRecord(next.value, 'draft')).toEqual({ ok: true, value: { text: 'kept' } });
+      expect(
+        await withTransaction(next.value, 'readwrite', async (tx) => {
+          await tx.put('second', 2);
+          return tx.get('second');
+        }),
+      ).toEqual({ ok: true, value: 2 });
+    } finally {
+      next.value.close();
+    }
+  });
+});
+
+it('contains throwing transaction callbacks and rolls back their writes', async () => {
+  const store = await opened();
+  try {
+    await putRecord(store, 'draft', 'kept');
+    await expect(
+      withTransaction(store, 'readwrite', async (tx) => {
+        await tx.put('draft', 'lost');
+        throw new Error('callback failed');
+      }),
+    ).resolves.toMatchObject({ ok: false, detail: 'callback failed' });
+    expect(await getRecord(store, 'draft')).toEqual({ ok: true, value: 'kept' });
+  } finally {
+    store.close();
+  }
 });

@@ -79,3 +79,20 @@ export async function settleTransaction<T>(
     return failure(classifyStorageError(error), errorMessage(error));
   }
 }
+
+/** Include transaction creation in the StorageResult boundary. */
+export async function startTransaction<Tx extends { done: Promise<void>; abort(): void }, T>(
+  create: () => Tx,
+  work: (tx: Tx) => Promise<T>,
+): Promise<StorageResult<T>> {
+  try {
+    const tx = create();
+    return await settleTransaction(
+      tx.done,
+      () => tx.abort(),
+      () => work(tx),
+    );
+  } catch (error) {
+    return failure(classifyStorageError(error), errorMessage(error));
+  }
+}

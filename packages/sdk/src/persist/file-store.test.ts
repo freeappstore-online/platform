@@ -120,3 +120,76 @@ describe('file metadata and payload', () => {
     files.close();
   });
 });
+
+describe.each(['explicit', 'versionchange'] as const)('%s close', (kind) => {
+  it('contains all file transaction starts and preserves metadata and bytes', async () => {
+    const files = await store();
+    await putFile(files, { metadata: meta(1), payload: text('kept') });
+    const before = await getFile(files, 'note');
+    if (kind === 'explicit') files.close();
+    const next = await openFileStore({
+      namespace: files.namespace,
+      version: kind === 'explicit' ? 1 : 2,
+    });
+    if (!next.ok) throw new Error('reopen');
+    try {
+      for (const operation of [
+        () => getFile(files, 'note'),
+        () => getFileMetadata(files, 'note'),
+        () => listFiles(files),
+        () =>
+          putFile(files, {
+            metadata: meta(2),
+            payload: text('lost'),
+            resolveConflict: (_, incoming) => incoming,
+          }),
+      ])
+        await expect(operation()).resolves.toMatchObject({ ok: false, reason: 'unavailable' });
+      expect(await getFile(next.value, 'note')).toEqual(before);
+    } finally {
+      next.value.close();
+    }
+  });
+});
+
+it.each(['copy', 'mutate'] as const)(
+  'rejects cross-ID conflict resolution (%s) preserving both files',
+  async (kind) => {
+    const files = await store();
+    try {
+      await putFile(files, { metadata: meta(1, 'a'), payload: text('one') });
+      await putFile(files, { metadata: meta(2, 'b'), payload: text('two') });
+      const beforeA = await getFile(files, 'a');
+      const beforeB = await getFile(files, 'b');
+      const metadata = meta(3, 'a');
+      await expect(
+        putFile(files, {
+          metadata,
+          payload: text('three'),
+          resolveConflict: (_, incoming) => {
+            if (kind === 'mutate') {
+              metadata.id = 'b';
+              incoming.metadata.id = 'b';
+              return incoming;
+            }
+            return { ...incoming, metadata: { ...incoming.metadata, id: 'b' } };
+          },
+        }),
+      ).resolves.toMatchObject({ ok: false, reason: 'validation' });
+      expect(await getFile(files, 'a')).toEqual(beforeA);
+      expect(await getFile(files, 'b')).toEqual(beforeB);
+      await expect(
+        putFile(files, {
+          metadata: meta(4, 'a'),
+          payload: text('four'),
+          resolveConflict: () => {
+            throw new Error('policy failed');
+          },
+        }),
+      ).resolves.toMatchObject({ ok: false, reason: 'validation', detail: 'policy failed' });
+      expect(await getFile(files, 'a')).toEqual(beforeA);
+    } finally {
+      files.close();
+    }
+  },
+);
