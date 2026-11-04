@@ -5,12 +5,21 @@ import { resolve } from 'node:path';
 // The release validator should reject untouched starter instructions.
 const appPath = resolve(process.argv[2], 'web/src/App.tsx');
 let source = await readFile(appPath, 'utf8');
-if (!source.includes('<Home />') || !source.includes('Edit web/src/App.tsx to start building.')) {
+const starterDescriptions = [
+  'description="Edit web/src/App.tsx to get started."',
+  'description="Editable app-owned starter screen."',
+];
+const starterDescription = starterDescriptions.find((description) => source.includes(description));
+const homeReturn = /function Home\(\)\s*\{\s*return ([\s\S]*?);\s*\}/;
+if (!homeReturn.test(source) || !starterDescription) {
   throw new Error('Scaffold Home changed; update the artifact feature fixture');
 }
 source = source
-  .replaceAll('Edit web/src/App.tsx to start building.', 'Artifact feature fixture.')
-  .replaceAll('<Home />', '<><ArtifactCounter /><PwaWork /><Home /></>');
+  .replace(starterDescription, 'description="Artifact feature fixture."')
+  .replace(
+    homeReturn,
+    (_match, home) => `function Home() { return <><ArtifactCounter /><PwaWork />${home}</>; }`,
+  );
 source += `
 import { pwa } from './fas-capabilities/pwa';
 let recording: MediaRecorder | undefined;
