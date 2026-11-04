@@ -113,7 +113,18 @@ jobs:
           APP_ID="${APP_ID//[^a-z0-9-]/}"
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
           node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" \
-            init "$APP_ID" --template="${{ matrix.template }}"
+            init "$APP_ID" --template="${{ matrix.template }}" --preset connectivity
+
+      - name: Capability repeat install preserves the fresh scaffold
+        working-directory: /tmp/scaffold-smoke
+        run: |
+          set -euo pipefail
+          cd "$APP_ID"
+          node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add connectivity --dry-run
+          node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" add connectivity
+          test -z "$(git status --porcelain)"
+          test -f fas-capabilities/connectivity.ts
+          test -f .fas-capabilities.json
 
       - name: Scaffold starts on the SDK Shell with nav (#93)
         # Every new app must render the SDK Shell with real nav items from the

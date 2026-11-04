@@ -3,6 +3,7 @@ import { access, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
+import { installCapabilities, presets, resolveCapabilities } from '../lib/capabilities.js';
 
 const TEMPLATES = {
   // FreeAppStore templates
@@ -57,8 +58,14 @@ const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.next', '.cache']);
 export async function runInit(opts: {
   appId: string;
   template?: TemplateName;
+  capabilities?: string[];
+  preset?: string;
 }): Promise<{ path: string; substitutionCount: number }> {
   assertValidAppId(opts.appId);
+  const preset = opts.preset ?? 'minimal';
+  if (!Object.hasOwn(presets, preset)) throw new Error(`Unknown preset: ${preset}`);
+  const capabilities = [...(presets[preset] ?? []), ...(opts.capabilities ?? [])];
+  resolveCapabilities(capabilities);
   const template = opts.template ?? 'standalone';
   if (!(template in TEMPLATES)) {
     throw new Error(`Unknown template "${template}". Choose: ${ALL_TEMPLATES.join(', ')}.`);
@@ -96,6 +103,7 @@ export async function runInit(opts: {
       2,
     )}\n`,
   );
+  await installCapabilities(target, capabilities);
   await run('git', ['init', '-q', '-b', 'main'], target);
 
   // Stage and commit the template so the new repo has a real first commit.
@@ -111,37 +119,43 @@ export const initCommand = new Command('init')
   .description('Scaffold a new free app or game from a template.')
   .argument('<app-id>', 'Short id (lowercase, single word). e.g. "calendar" or "asteroids"')
   .option('-t, --template <name>', `Template: ${ALL_TEMPLATES.join(' | ')}`, 'standalone')
-  .action(async (appId: string, opts: { template: string }) => {
-    if (!(opts.template in TEMPLATES)) {
-      process.stderr.write(
-        `Unknown template "${opts.template}". Choose: ${ALL_TEMPLATES.join(', ')}.\n`,
+  .option('--capabilities <ids>', 'Comma-separated first-party capability IDs')
+  .option('--preset <name>', 'Capability list: minimal | connectivity', 'minimal')
+  .action(
+    async (appId: string, opts: { template: string; capabilities?: string; preset?: string }) => {
+      if (!(opts.template in TEMPLATES)) {
+        process.stderr.write(
+          `Unknown template "${opts.template}". Choose: ${ALL_TEMPLATES.join(', ')}.\n`,
+        );
+        process.exit(1);
+      }
+      const result = await runInit({
+        appId,
+        template: opts.template as TemplateName,
+        capabilities: opts.capabilities?.split(',').filter(Boolean) ?? [],
+        preset: opts.preset ?? 'minimal',
+      });
+      const isGame = GAME_TEMPLATES.has(opts.template as TemplateName);
+      const publishCmd = isGame ? 'fas publish --store games' : 'fas publish';
+      const docsUrl = isGame
+        ? 'https://freegamestore.online/contribute.html'
+        : 'https://freeappstore.online/contribute.html';
+      process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${opts.template} template.\n`);
+      process.stdout.write(
+        `  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`,
       );
-      process.exit(1);
-    }
-    const result = await runInit({
-      appId,
-      template: opts.template as TemplateName,
-    });
-    const isGame = GAME_TEMPLATES.has(opts.template as TemplateName);
-    const publishCmd = isGame ? 'fas publish --store games' : 'fas publish';
-    const docsUrl = isGame
-      ? 'https://freegamestore.online/contribute.html'
-      : 'https://freeappstore.online/contribute.html';
-    process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${opts.template} template.\n`);
-    process.stdout.write(
-      `  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`,
-    );
-    process.stdout.write('Next steps:\n');
-    process.stdout.write(`  cd ${appId}\n`);
-    process.stdout.write('  pnpm install            # one-time setup\n');
-    process.stdout.write('  pnpm dev                # local dev server\n');
-    process.stdout.write('  fas check               # compliance — run before publishing\n');
-    // Pad the publish line so the `#` comment column aligns. Length
-    // varies by store: `fas publish` (12) vs `fas publish --store games` (25).
-    const padded = publishCmd.padEnd(23);
-    process.stdout.write(`  ${padded} # provisions repo + hosting + DNS\n\n`);
-    process.stdout.write(`Docs: ${docsUrl}\n`);
-  });
+      process.stdout.write('Next steps:\n');
+      process.stdout.write(`  cd ${appId}\n`);
+      process.stdout.write('  pnpm install            # one-time setup\n');
+      process.stdout.write('  pnpm dev                # local dev server\n');
+      process.stdout.write('  fas check               # compliance — run before publishing\n');
+      // Pad the publish line so the `#` comment column aligns. Length
+      // varies by store: `fas publish` (12) vs `fas publish --store games` (25).
+      const padded = publishCmd.padEnd(23);
+      process.stdout.write(`  ${padded} # provisions repo + hosting + DNS\n\n`);
+      process.stdout.write(`Docs: ${docsUrl}\n`);
+    },
+  );
 
 async function substituteAppName(dir: string, appId: string): Promise<number> {
   let count = 0;
