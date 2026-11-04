@@ -79,7 +79,8 @@ function Tags() {
   error is logged to \`fas.log\` (category \`react.error-boundary\`). \`renderError({ error, reset })\` replaces it.
 - Loading: a \`<Suspense>\` spinner while a \`React.lazy\` screen loads. \`renderLoading()\` replaces it.
 - Toasts: one polite live region. \`const toast = useToast(); toast.show('Saved', { variant: 'success' })\`
-  (variants info | success | error; \`duration\` ms, 0 = until dismissed). Only inside Shell.
+  (variants info | success | error; \`duration\` ms, 0 = until dismissed). \`Shell\` includes the provider.
+  A custom frame mounts \`ToastProvider\`; without either, \`useToast\` throws.
 - Offline banner under the topbar while the connection is down. \`useOnline()\` gives screens the same signal.
 - Tab title per route: \`title\` on a nav item, or \`useDocumentTitle('…')\` in the screen (wins).
 - Skip link to \`<main id="main">\`. With \`onNavigate\`, route changes scroll to the top (back/forward restores
@@ -92,6 +93,7 @@ function Tags() {
 | \`appName\` | Shown in the topbar. |
 | \`nav\` | The app's screens: \`NavItem[]\`. |
 | \`onNavigate(href)\` | Client-side navigation for nav clicks. |
+| \`headerActions\` | Header control slot, rendered beside the profile avatar. App buttons go here. The avatar stays a profile link in both auth states and never signs in. |
 | \`profileHref\` | Optional app-owned profile route for both auth states. Omit it and the avatar opens built-in \`/profile\` (\`ProfilePage\`) with GitHub and Google sign-in when signed out. The avatar never opens a dropdown. A custom route must render both auth states. |
 | \`renderNav(ctx)\` | Replace the built-in navbar. |
 | \`requireAuth\` | Show a sign-in screen until the user signs in. Default false. |
@@ -108,14 +110,18 @@ Everything below imports from '@freeappstore/sdk/ui'. Components use the CSS tok
 so they follow the app's light/dark theme. Prefer them to hand-rolled equivalents.
 
 **App frame and screens**
-- \`Shell\` (alias \`FasShell\`) — the app frame; see feature "shell". Props: app, appName?, nav?, onNavigate?, profileHref?, renderNav?, requireAuth?, showThemeToggle?, renderError?, renderLoading?
+- \`Shell\` (alias \`FasShell\`) — the app frame; see feature "shell". Props: app, appName?, nav?, onNavigate?, headerActions?, profileHref?, renderNav?, requireAuth?, showThemeToggle?, renderError?, renderLoading?
 - \`PageHeader\` — a screen's single h1. Props: title, description?, actions?
 - \`NavBar\` — the navbar Shell renders from \`nav\`, for custom layouts. Props: items, currentPath?, onNavigate?
 - \`activeHref(items, path)\` — which nav item is current. \`useCurrentPath()\` — [path, setPath], follows back/forward.
 - \`OfflineBanner\` — the offline notice Shell shows; for layouts without Shell.
+- \`ToastProvider\` — toast queue for a custom frame. \`Shell\` already includes one. Props: children.
+- \`ShellErrorBoundary\` — the render-error boundary \`Shell\` uses around the screen. Props: app, resetKey, renderError?, children.
+- \`SkipLink\` — skip link targeting \`<main id="main">\`. Props: mainRef.
+- \`useRouteChangeEffects(location, mainRef, enabled)\` — focus and scroll on client-side moves. Returns the function to call before a forward navigation.
 
 **Feedback**
-- \`useToast()\` — { show(message, { variant?, duration? }), dismiss(id) }. Inside Shell only.
+- \`useToast()\` — { show(message, { variant?, duration? }), dismiss(id) }. Needs \`Shell\` or \`ToastProvider\`.
 - \`Spinner\` — size?, color?
 - \`ProgressBar\` — value, max?, color?, height?, label?
 - \`Badge\` — children, variant? ('default' | 'accent' | 'success' | 'warning' | 'danger')
@@ -133,6 +139,7 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 - \`ConfirmDialog\` — open, onConfirm, onCancel, title, message, confirmLabel?, variant? ('danger' | 'default')
 
 **Account (the Shell header is a compact avatar, not these buttons)**
+- \`AccountSection\` — embeddable account block for a custom frame. Signed out it offers GitHub and Google and an avatar link to the profile. Signed in, the avatar and name link to the profile. \`children\` is app-specific settings. The avatar never signs in. Props: app, profileHref?, onNavigate?, location?, children?
 - \`SignInButton\` — app, label?, provider?. Used on \`ProfilePage\` for GitHub and Google. Not the Shell header.
 - \`Avatar\` — user, size?. The compact profile link.
 - \`ProfileMenu\` — app, showThemeToggle?, children?. Legacy dropdown. Shell does not mount it.
@@ -152,6 +159,14 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 - \`KeyPrompt\` — app, provider, providerName?, message? (asks the user to add a key to their vault)
 - \`BuildInfo\` — version?, commit?, buildDate?, extra?
 - \`Footer\` — text? (opt-in; Shell does NOT include it automatically)
+
+**Routing** (keep pathname, query and hash; these do not replace the app's router)
+- \`routeUrl(href)\` — resolve an href against the current page. Returns a URL or null.
+- \`routeHref(url)\` — pathname + query + hash for a same-origin URL, otherwise the full href.
+- \`canFollowLink(event, href)\` — true for a plain left click on an in-app link. Modified clicks, downloads, external URLs and other windows stay with the browser.
+- \`isLocalRoute(url)\` — whether a resolved URL stays on this origin.
+- \`useCurrentLocation(controlled?)\` — [href, setHref], including query and hash. Follows back/forward.
+- \`profileReturnHref(location)\` — a safe in-app \`returnTo\`, or \`/\`.
 
 **Hooks**
 - \`useDocumentTitle(title)\` — the tab title for the current screen.
@@ -262,7 +277,7 @@ import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
 const { user, loading, signIn, signOut, deleteAccount } = useAuth(fas)
 const { theme, preference, setPreference } = useTheme()
 
-// Screen helpers, from '@freeappstore/sdk/ui' (inside Shell):
+// Screen helpers, from '@freeappstore/sdk/ui' (inside Shell, or ToastProvider for useToast):
 import { useToast, useDocumentTitle, useOnline } from '@freeappstore/sdk/ui'
 const toast = useToast()               // toast.show('Saved', { variant: 'success' })
 useDocumentTitle('Tags — Notes')       // tab title for this screen
