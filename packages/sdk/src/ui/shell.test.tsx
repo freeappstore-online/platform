@@ -112,22 +112,22 @@ describe('Shell', () => {
     expect(header.some((n) => n.type === 'a' && n.props['aria-label'] === 'Profile')).toBe(true);
   });
 
-  it('shows the profile link and text-size toggle to a signed-in user', async () => {
+  it('shows the profile link without secondary settings in the default topbar', async () => {
     auth.user = { id: 'gh:1', login: 'alice' };
     const { TextSizeToggle } = await import('./core.js');
     const header = nodes((await renderShell()).find((n) => n.type === 'header'));
     expect(header.some((n) => n.type === 'a' && n.props['aria-label'] === 'Profile')).toBe(true);
-    expect(header.some((n) => n.type === TextSizeToggle)).toBe(true);
+    expect(header.some((n) => n.type === TextSizeToggle)).toBe(false);
   });
 
-  it('without requireAuth, renders the app to signed-out users with profile link and theme toggle in the topbar', async () => {
+  it('without requireAuth, renders the app to signed-out users with a profile link and appearance settings in Profile', async () => {
     const { SignInButton, ThemeToggle } = await import('./core.js');
     const tree = await renderShell();
     expect(hasChild(tree)).toBe(true);
     const header = nodes(tree.find((n) => n.type === 'header'));
     expect(header.some((n) => n.type === SignInButton)).toBe(false);
     expect(header.some((n) => n.type === 'a' && n.props.href === '/profile')).toBe(true);
-    expect(header.some((n) => n.type === ThemeToggle)).toBe(true);
+    expect(header.some((n) => n.type === ThemeToggle)).toBe(false);
   });
 
   describe('auth gate (requireAuth)', () => {

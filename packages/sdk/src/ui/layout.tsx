@@ -199,7 +199,7 @@ export function Shell({
       <div className="min-h-[100dvh] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
         <SkipLink mainRef={mainRef} />
         <header className="flex flex-wrap items-center justify-between gap-2 p-[0.5rem_1rem] border-b border-line bg-panel sticky top-0 z-[50]">
-          <div className="min-w-0 flex-[1_1_12rem]">
+          <div className="min-w-0 flex-[1_1_auto]">
             {appName && (
               <span className="block [overflow-wrap:anywhere] text-[1rem] font-semibold text-ink">
                 {appName}
@@ -208,8 +208,9 @@ export function Shell({
           </div>
           {navNode}
           <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2 [&>button]:min-h-[44px] [&>button]:min-w-[44px]">
-            <TextSizeToggle />
-            {showThemeToggle && !user && <ThemeToggle />}
+            {/* Built-in Profile owns appearance settings. Custom profile routes retain header access. */}
+            {profileHref && <TextSizeToggle />}
+            {profileHref && showThemeToggle && <ThemeToggle />}
             {headerActions ? (
               <div
                 data-fas-header-actions=""

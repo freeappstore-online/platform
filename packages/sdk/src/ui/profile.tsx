@@ -283,20 +283,6 @@ export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePa
     return <div className="p-8 text-center text-muted">Loading...</div>;
   }
 
-  if (!user) {
-    return (
-      <div className="mx-auto w-full max-w-120 px-4 py-8">
-        <PageHeader title="Profile" />
-        <p className="text-muted mb-6">Sign in to manage your profile and account.</p>
-        <div className="flex flex-col gap-3">
-          <SignInButton app={app} provider="github" />
-          <SignInButton app={app} provider="google" />
-        </div>
-        {children}
-      </div>
-    );
-  }
-
   const themeOptions: Array<{ value: 'light' | 'dark' | 'system'; label: string }> = [
     { value: 'system', label: 'System' },
     { value: 'light', label: 'Light' },
@@ -312,25 +298,34 @@ export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePa
   return (
     <div className="w-full max-w-120 m-[0_auto] p-[2rem_1rem]">
       <PageHeader title="Profile" />
-      {/* Identity */}
-      <div className="flex items-center gap-4 mb-8">
-        <div className="shrink-0">
-          <Avatar user={user} size={64} />
-        </div>
-        <div className="min-w-0">
-          <div className="[overflow-wrap:anywhere] text-[1.25rem] font-bold text-ink-strong">
-            {user.login}
+      {!user ? (
+        <div className="mb-8">
+          <p className="text-muted mb-6">Sign in to manage your profile and account.</p>
+          <div className="flex flex-col gap-3">
+            <SignInButton app={app} provider="github" />
+            <SignInButton app={app} provider="google" />
           </div>
-          <div className="text-[0.85rem] text-muted">FreeAppStore account</div>
         </div>
-      </div>
+      ) : (
+        <div className="flex items-center gap-4 mb-8">
+          <div className="shrink-0">
+            <Avatar user={user} size={64} />
+          </div>
+          <div className="min-w-0">
+            <div className="[overflow-wrap:anywhere] text-[1.25rem] font-bold text-ink-strong">
+              {user.login}
+            </div>
+            <div className="text-[0.85rem] text-muted">FreeAppStore account</div>
+          </div>
+        </div>
+      )}
 
       {/* Appearance */}
       <ProfileSection title="Appearance">
         {showThemeToggle && (
           <>
             <ProfileLabel>Theme</ProfileLabel>
-            <div className="flex gap-2 mb-4">
+            <div className="flex flex-wrap gap-2 mb-4">
               {themeOptions.map((opt) => (
                 <ToggleButton
                   key={opt.value}
@@ -344,7 +339,7 @@ export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePa
           </>
         )}
         <ProfileLabel>Text Size</ProfileLabel>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {textSizeOptions.map((opt) => (
             <ToggleButton
               key={opt.value}
@@ -357,56 +352,60 @@ export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePa
         </div>
       </ProfileSection>
 
-      {/* Friends */}
-      <ProfileSection title="Friends">
-        <button
-          type="button"
-          onClick={() => setFriendsOpen(true)}
-          className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit] flex items-center justify-between"
-        >
-          Manage Friends <FriendRequestBadge app={app} />
-        </button>
-      </ProfileSection>
+      {user && (
+        <>
+          {/* Friends */}
+          <ProfileSection title="Friends">
+            <button
+              type="button"
+              onClick={() => setFriendsOpen(true)}
+              className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit] flex items-center justify-between"
+            >
+              Manage Friends <FriendRequestBadge app={app} />
+            </button>
+          </ProfileSection>
 
-      {/* API Keys */}
-      <ProfileSection title="API Keys">
-        <button
-          type="button"
-          onClick={() => app.keys.manage()}
-          className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit]"
-        >
-          Manage API Keys
-        </button>
-      </ProfileSection>
+          {/* API Keys */}
+          <ProfileSection title="API Keys">
+            <button
+              type="button"
+              onClick={() => app.keys.manage()}
+              className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit]"
+            >
+              Manage API Keys
+            </button>
+          </ProfileSection>
 
-      {/* Account */}
-      <button
-        type="button"
-        onClick={signOut}
-        className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit] mb-6"
-      >
-        Sign out
-      </button>
+          {/* Account */}
+          <button
+            type="button"
+            onClick={signOut}
+            className="w-full p-3 rounded border border-line bg-panel text-ink text-[0.9rem] font-semibold cursor-pointer font-[inherit] mb-6"
+          >
+            Sign out
+          </button>
 
-      <div className="border border-danger rounded p-5">
-        <div className="text-[0.9rem] font-bold text-danger mb-2">Danger zone</div>
-        <p className="text-[0.85rem] text-muted mb-3">
-          Permanently delete your account and all data across all apps.
-        </p>
-        <button
-          type="button"
-          disabled={deletePending}
-          onClick={handleDelete}
-          className="p-[0.5rem_1rem] rounded-sm border border-danger bg-transparent text-danger text-[0.85rem] font-semibold cursor-pointer font-[inherit]"
-        >
-          {deletePending ? 'Deleting...' : 'Delete account'}
-        </button>
-        {deleteError && (
-          <p role="alert" className="mt-3 text-danger">
-            {deleteError}
-          </p>
-        )}
-      </div>
+          <div className="border border-danger rounded p-5">
+            <div className="text-[0.9rem] font-bold text-danger mb-2">Danger zone</div>
+            <p className="text-[0.85rem] text-muted mb-3">
+              Permanently delete your account and all data across all apps.
+            </p>
+            <button
+              type="button"
+              disabled={deletePending}
+              onClick={handleDelete}
+              className="p-[0.5rem_1rem] rounded-sm border border-danger bg-transparent text-danger text-[0.85rem] font-semibold cursor-pointer font-[inherit]"
+            >
+              {deletePending ? 'Deleting...' : 'Delete account'}
+            </button>
+            {deleteError && (
+              <p role="alert" className="mt-3 text-danger">
+                {deleteError}
+              </p>
+            )}
+          </div>
+        </>
+      )}
 
       {children}
 
@@ -450,7 +449,7 @@ function ToggleButton({
       onClick={onClick}
       aria-pressed={active}
       className={[
-        'flex-1',
+        'flex-[1_0_auto] min-h-[44px] whitespace-nowrap',
         'p-2',
         'rounded-sm',
         active ? 'border-2 border-accent' : 'border border-line',

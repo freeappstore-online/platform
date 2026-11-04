@@ -1324,7 +1324,7 @@ it('does not submit app forms from the topbar theme and text-size controls (#339
   const submit = vi.fn((event: React.FormEvent) => event.preventDefault());
   await mount(
     <form onSubmit={submit}>
-      <Shell app={app}>
+      <Shell app={app} profileHref="/settings">
         <p>App</p>
       </Shell>
     </form>,
@@ -1335,3 +1335,23 @@ it('does not submit app forms from the topbar theme and text-size controls (#339
   });
   expect(submit).not.toHaveBeenCalled();
 });
+
+for (const signedIn of [false, true]) {
+  it(
+    'shares working appearance settings in Profile, signedIn=' + signedIn + ' (#379)',
+    async () => {
+      const { app } = fakeApp(signedIn);
+      await mount(<ProfilePage app={app} />);
+      expect(byText('div', 'Appearance')).toBeDefined();
+      await act(async () => byText('button', 'Large')!.click());
+      expect(byText('button', 'Large')!.getAttribute('aria-pressed')).toBe('true');
+      await act(async () => byText('button', 'Dark')!.click());
+      expect(byText('button', 'Dark')!.getAttribute('aria-pressed')).toBe('true');
+      expect(container.querySelectorAll('button[aria-pressed]')).toHaveLength(6);
+      await mount(<ProfilePage app={app} showThemeToggle={false} />);
+      expect(byText('button', 'Dark')).toBeUndefined();
+      expect(byText('button', 'Large')).toBeDefined();
+      if (!signedIn) expect(container.textContent).not.toContain('Danger zone');
+    },
+  );
+}
