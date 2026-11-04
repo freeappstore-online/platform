@@ -149,6 +149,9 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   const { preference, setPreference } = useTheme();
   const { size: textSize, setSize: setTextSize } = useTextSize();
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const deleting = useRef(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   if (loading) {
     return <div className="p-8 text-center text-muted">Loading...</div>;
@@ -168,6 +171,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
   }
 
   const handleDelete = async () => {
+    if (deleting.current) return;
     if (
       !confirm(
         'Delete your account? This permanently removes ALL your data across ALL apps. This cannot be undone.',
@@ -175,7 +179,17 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
     )
       return;
     if (!confirm('Are you absolutely sure? Last chance.')) return;
-    await deleteAccount();
+    deleting.current = true;
+    setDeletePending(true);
+    setDeleteError('');
+    try {
+      await deleteAccount();
+    } catch {
+      setDeleteError('Unable to delete your account. Please try again.');
+    } finally {
+      deleting.current = false;
+      setDeletePending(false);
+    }
   };
 
   const themeOptions: Array<{ value: 'light' | 'dark' | 'system'; label: string }> = [
@@ -195,9 +209,13 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
       <PageHeader title="Profile" />
       {/* Identity */}
       <div className="flex items-center gap-4 mb-8">
-        <Avatar user={user} size={64} />
-        <div>
-          <div className="text-[1.25rem] font-bold text-ink-strong">{user.login}</div>
+        <div className="shrink-0">
+          <Avatar user={user} size={64} />
+        </div>
+        <div className="min-w-0">
+          <div className="[overflow-wrap:anywhere] text-[1.25rem] font-bold text-ink-strong">
+            {user.login}
+          </div>
           <div className="text-[0.85rem] text-muted">FreeAppStore account</div>
         </div>
       </div>
@@ -268,11 +286,17 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
           Permanently delete your account and all data across all apps.
         </p>
         <button
+          disabled={deletePending}
           onClick={handleDelete}
           className="p-[0.5rem_1rem] rounded-sm border border-danger bg-transparent text-danger text-[0.85rem] font-semibold cursor-pointer font-[inherit]"
         >
-          Delete account
+          {deletePending ? 'Deleting...' : 'Delete account'}
         </button>
+        {deleteError && (
+          <p role="alert" className="mt-3 text-danger">
+            {deleteError}
+          </p>
+        )}
       </div>
 
       <Modal
@@ -405,11 +429,32 @@ export function Shell({
   const [currentPath, setCurrentPath] = useCurrentPath();
   const mainRef = useRef<HTMLElement>(null);
   const initialTitle = useRef(typeof document === 'undefined' ? '' : document.title);
-  const beforeNavigate = useRouteChangeEffects(currentPath, mainRef, !!onNavigate || !profileHref);
+  const beforeNavigate = useRouteChangeEffects(currentPath, mainRef, !!onNavigate);
   const profilePath = profileHref ?? '/profile';
   const isProfile = currentPath.replace(/\/+$/, '') === profilePath.replace(/\/+$/, '');
   const builtInProfile = !profileHref && isProfile;
   const displayAppName = normalizeShellAppName(appName);
+  const returnPath = (() => {
+    if (typeof window === 'undefined') return '/';
+    const candidate = new URLSearchParams(window.location.search).get('returnTo');
+    if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) return '/';
+    try {
+      const url = new URL(candidate, window.location.origin);
+      if (url.origin !== window.location.origin || url.pathname.replace(/\/+$/, '') === '/profile')
+        return '/';
+      return url.pathname + url.search + url.hash;
+    } catch {
+      return '/';
+    }
+  })();
+  const profileLink =
+    profileHref || isProfile || typeof window === 'undefined'
+      ? profilePath
+      : profilePath +
+        '?returnTo=' +
+        encodeURIComponent(
+          window.location.pathname + window.location.search + window.location.hash,
+        );
 
   // A nav item's `title` becomes the tab title on its route. A layout effect
   // runs before every passive effect, so a screen's own useDocumentTitle wins.
@@ -437,12 +482,12 @@ export function Shell({
     ? (href: string) => {
         beforeNavigate();
         onNavigate(href);
-        setCurrentPath(href);
+        setCurrentPath(new URL(href, window.location.href).pathname);
       }
     : undefined;
   const openProfile = (event: ReactMouseEvent<HTMLAnchorElement>) => {
     if (
-      (profileHref && !navigate) ||
+      !navigate ||
       event.defaultPrevented ||
       event.button !== 0 ||
       event.metaKey ||
@@ -453,12 +498,7 @@ export function Shell({
       return;
     event.preventDefault();
     if (isProfile) return;
-    if (navigate) navigate(profilePath);
-    else {
-      window.history.pushState(null, '', profilePath);
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      beforeNavigate();
-    }
+    navigate(profileLink);
   };
   const navNode =
     navItems.length === 0 ? null : renderNav ? (
@@ -496,7 +536,7 @@ export function Shell({
             <TextSizeToggle />
             {showThemeToggle && !user && <ThemeToggle />}
             <a
-              href={profilePath}
+              href={profileLink}
               aria-label="Profile"
               aria-current={isProfile ? 'page' : undefined}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
@@ -513,7 +553,7 @@ export function Shell({
               {builtInProfile ? (
                 <>
                   <a
-                    href="/"
+                    href={returnPath}
                     className="self-start m-4 text-accent underline"
                     onClick={(event) => {
                       if (
@@ -527,7 +567,7 @@ export function Shell({
                       )
                         return;
                       event.preventDefault();
-                      navigate('/');
+                      navigate(returnPath);
                     }}
                   >
                     Back to app
@@ -540,7 +580,7 @@ export function Shell({
                     {displayAppName || 'Welcome'}
                   </h1>
                   <p className="text-muted mb-4">Sign in to continue.</p>
-                  <a href={profilePath} className="text-accent underline" onClick={openProfile}>
+                  <a href={profileLink} className="text-accent underline" onClick={openProfile}>
                     Open profile to sign in
                   </a>
                 </div>

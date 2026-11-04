@@ -82,7 +82,7 @@ describe('app-owned profile navigation (#336)', () => {
       </Shell>,
     );
     expect($('button[aria-label="Profile menu"]')).toBeNull();
-    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe('/profile');
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe('/profile?returnTo=%2F');
   });
 
   it('routes avatar clicks through the shell and focuses the profile heading', async () => {
@@ -166,7 +166,7 @@ describe('built-in profile navigation (#337)', () => {
     async (signedIn) => {
       const { app } = fakeApp(signedIn);
       await mount(
-        <Shell app={app} appName="Demo">
+        <Shell app={app} appName="Demo" onNavigate={(href) => history.pushState(null, '', href)}>
           <p>App content</p>
         </Shell>,
       );
@@ -709,5 +709,86 @@ describe('backward compatibility', () => {
     expect($('.fas-toast-region')).not.toBeNull();
     expect($('main')).not.toBeNull();
     expect($('main')?.textContent).not.toBe('content');
+  });
+});
+
+describe('profile edge cases (#338)', () => {
+  it('leaves native navigation and scroll restoration to the browser', async () => {
+    history.replaceState(null, '', '/notes/42?q=test#details');
+    const pop = vi.fn();
+    window.addEventListener('popstate', pop);
+    const scroll = vi.spyOn(window, 'scrollTo');
+    const { app } = fakeApp();
+    await mount(
+      <Shell app={app}>
+        <p>Notes</p>
+      </Shell>,
+    );
+    const link = $('a[aria-label="Profile"]')!;
+    expect(link.getAttribute('href')).toBe('/profile?returnTo=%2Fnotes%2F42%3Fq%3Dtest%23details');
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(async () => link.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(false);
+    expect(pop).not.toHaveBeenCalled();
+    expect(history.scrollRestoration).not.toBe('manual');
+    expect(scroll).not.toHaveBeenCalled();
+    window.removeEventListener('popstate', pop);
+  });
+
+  it.each([
+    '/notes/42?q=test#details',
+    '//evil.example',
+    '/\\evil.example',
+    '/profile',
+    'https://evil.example',
+  ])('validates the return URL after reload: %s', async (target) => {
+    history.replaceState(null, '', '/profile?returnTo=' + encodeURIComponent(target));
+    const { app } = fakeApp(false);
+    const navigate = vi.fn();
+    await mount(
+      <Shell app={app} onNavigate={navigate}>
+        <p>App</p>
+      </Shell>,
+    );
+    const back = byText('a', 'Back to app')!;
+    const expected = target === '/notes/42?q=test#details' ? target : '/';
+    expect(back.getAttribute('href')).toBe(expected);
+    await act(async () => back.click());
+    expect(navigate).toHaveBeenCalledWith(expected);
+  });
+
+  it('blocks duplicate deletions, shows failure, and permits retry', async () => {
+    history.replaceState(null, '', '/profile');
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+    const { app } = fakeApp();
+    let reject!: (error: Error) => void;
+    app.auth.deleteAccount = vi.fn(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    const button = byText('button', 'Delete account')! as HTMLButtonElement;
+    await act(async () => {
+      button.click();
+      button.click();
+    });
+    expect(app.auth.deleteAccount).toHaveBeenCalledTimes(1);
+    expect(button.disabled).toBe(true);
+    await act(async () => reject(new Error('offline')));
+    expect($('[role="alert"]')?.textContent).toContain('Unable to delete');
+    expect(button.disabled).toBe(false);
+    await act(async () => button.click());
+    expect(app.auth.deleteAccount).toHaveBeenCalledTimes(2);
+    await act(async () => reject(new Error('offline')));
+    vi.unstubAllGlobals();
   });
 });

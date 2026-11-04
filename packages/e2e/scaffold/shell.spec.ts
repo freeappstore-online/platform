@@ -186,7 +186,7 @@ test('fresh scaffold: auth gate, landmarks, navigation and preferences', async (
   await openMenu(page);
   const destination = connected ? 'Profile' : 'About';
   await page.getByRole('navigation').getByRole('link', { name: destination }).click();
-  await expect(page).toHaveURL(connected ? /\/profile$/ : /\/about$/);
+  await expect(page).toHaveURL(connected ? /\/profile(?:\?|$)/ : /\/about$/);
   await expect(
     page.getByRole('main').getByRole('heading', { name: destination, exact: true }),
   ).toBeFocused();
@@ -425,7 +425,7 @@ for (const provider of ['github', 'google']) {
       .getByRole('link', { name: 'Profile', exact: true });
     await expect(page.locator('header').getByRole('button', { name: /Sign in/ })).toHaveCount(0);
     await avatar.click();
-    await expect(page).toHaveURL(/\/profile$/);
+    await expect(page).toHaveURL(/\/profile(?:\?|$)/);
     await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeFocused();
     expect(starts).toEqual([]);
     if (provider === 'github')
@@ -467,10 +467,47 @@ test('signed-in avatar opens account page and sign-out keeps profile available',
     .last()
     .getByRole('link', { name: 'Profile', exact: true })
     .click();
-  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page).toHaveURL(/\/profile(?:\?|$)/);
   await expect(page.getByRole('main')).toContainText('browser-test');
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(page).toHaveURL(/\/profile$/);
+  await expect(page).toHaveURL(/\/profile(?:\?|$)/);
   await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toHaveCount(0);
+});
+
+test('profile returns to the originating URL after reload and OAuth preserves it (#338)', async ({
+  page,
+}) => {
+  await page.goto('/?view=recent#entry');
+  await page.locator('header').getByRole('link', { name: 'Profile', exact: true }).click();
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute(
+    'href',
+    '/?view=recent#entry',
+  );
+  const request = page.waitForRequest((req) => req.url().includes('/v1/auth/github/start'));
+  await page.getByRole('button', { name: 'Sign in with GitHub' }).click();
+  const start = new URL((await request).url());
+  const callback = new URL(start.searchParams.get('return_to')!);
+  expect(callback.searchParams.get('returnTo')).toBe('/?view=recent#entry');
+  await page.goto(callback.pathname + callback.search);
+  await page.getByRole('link', { name: 'Back to app' }).click();
+  await expect(page).toHaveURL(/\/\?view=recent#entry$/);
+});
+test('long account names fit narrow screens (#338)', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'fas:session',
+      JSON.stringify({
+        token: 'browser-test-only',
+        user: { id: 'gh:1', login: 'a'.repeat(200), avatarUrl: null, dateOfBirth: '2000-01-01' },
+      }),
+    ),
+  );
+  await page.goto('/profile');
+  await expect(page.getByText('a'.repeat(200), { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 });
