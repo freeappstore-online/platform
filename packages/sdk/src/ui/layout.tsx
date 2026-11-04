@@ -29,8 +29,8 @@ import {
   useRouteChangeEffects,
 } from './shell-resilience.js';
 
-export type { ProfileMenuProps, ProfilePageProps } from './profile.js';
-export { ProfileMenu, ProfilePage } from './profile.js';
+export type { AccountSectionProps, ProfileMenuProps, ProfilePageProps } from './profile.js';
+export { AccountSection, ProfileMenu, ProfilePage } from './profile.js';
 
 // ---------------------------------------------------------------------------
 // Shell (also exported as FasShell for backwards compatibility)
@@ -60,6 +60,12 @@ export interface ShellProps {
   nav?: NavItem[];
   /** Replace the built-in NavBar (still placed in the topbar) with your own. */
   renderNav?: (ctx: ShellNavContext) => ReactNode;
+  /**
+   * Header control slot. Rendered in the topbar beside the profile avatar,
+   * inside `[data-fas-header-actions]`. Put app buttons here instead of
+   * patching the header DOM. The avatar stays a profile link.
+   */
+  headerActions?: ReactNode;
   /**
    * Client-side navigation for nav clicks (e.g. your router's `navigate`).
    * Without it, nav items are ordinary links (full page load).
@@ -94,6 +100,7 @@ export function Shell({
   appName,
   nav,
   renderNav,
+  headerActions,
   onNavigate,
   profileHref,
   renderError,
@@ -201,6 +208,11 @@ export function Shell({
           <div className="flex shrink-0 items-center gap-2">
             <TextSizeToggle />
             {showThemeToggle && !user && <ThemeToggle />}
+            {headerActions ? (
+              <div data-fas-header-actions="" className="flex items-center gap-2">
+                {headerActions}
+              </div>
+            ) : null}
             <a
               href={profileLink}
               aria-label="Profile"

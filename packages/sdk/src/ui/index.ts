@@ -36,23 +36,41 @@ export { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from '
 export type { AddFriendButtonProps, FriendRequestBadgeProps, FriendsListProps } from './friends.js';
 export { AddFriendButton, FriendRequestBadge, FriendsList } from './friends.js';
 export type {
+  AccountSectionProps,
   ProfileMenuProps,
   ProfilePageProps,
   ShellNavContext,
   ShellProps,
   ShellProps as FasShellProps,
 } from './layout.js';
-export { ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';
+export { AccountSection, ProfileMenu, ProfilePage, Shell, Shell as FasShell } from './layout.js';
 export type { NavBarProps, NavItem } from './navbar.js';
 export { activeHref, NavBar, useCurrentPath } from './navbar.js';
+export {
+  canFollowLink,
+  isLocalRoute,
+  profileReturnHref,
+  routeHref,
+  routeUrl,
+  useCurrentLocation,
+} from './navigation.js';
 export type { PageHeaderProps } from './page.js';
 export { PageHeader, useDocumentTitle } from './page.js';
 export type {
+  ShellErrorBoundaryProps,
   ShellErrorContext,
   ToastApi,
   ToastOptions,
   ToastVariant,
 } from './shell-resilience.js';
-export { OfflineBanner, useOnline, useToast } from './shell-resilience.js';
+export {
+  OfflineBanner,
+  ShellErrorBoundary,
+  SkipLink,
+  ToastProvider,
+  useOnline,
+  useRouteChangeEffects,
+  useToast,
+} from './shell-resilience.js';
 export type { VoiceButtonProps, VoiceTextAreaProps } from './voice.js';
 export { VoiceButton, VoiceTextArea } from './voice.js';

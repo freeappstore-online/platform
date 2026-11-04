@@ -24,9 +24,10 @@ export interface ShellErrorContext {
   reset: () => void;
 }
 
-interface BoundaryProps {
+export interface ShellErrorBoundaryProps {
   app: FreeAppStore;
-  renderError: ((ctx: ShellErrorContext) => ReactNode) | undefined;
+  /** Replace the fallback. The error is already recorded via `app.log`. */
+  renderError?: ((ctx: ShellErrorContext) => ReactNode) | undefined;
   /** A change (the current route) clears a caught error, so navigating away recovers. */
   resetKey: string;
   children: ReactNode;
@@ -43,7 +44,7 @@ interface BoundaryState {
  * error React catches never reaches `window.onerror`, so the logger's automatic
  * capture would miss it.
  */
-export class ShellErrorBoundary extends Component<BoundaryProps, BoundaryState> {
+export class ShellErrorBoundary extends Component<ShellErrorBoundaryProps, BoundaryState> {
   override state: BoundaryState = { error: null, resetKey: this.props.resetKey };
 
   static getDerivedStateFromError(error: unknown): Partial<BoundaryState> {
@@ -51,7 +52,7 @@ export class ShellErrorBoundary extends Component<BoundaryProps, BoundaryState> 
   }
 
   static getDerivedStateFromProps(
-    props: BoundaryProps,
+    props: ShellErrorBoundaryProps,
     state: BoundaryState,
   ): Partial<BoundaryState> | null {
     return props.resetKey !== state.resetKey ? { error: null, resetKey: props.resetKey } : null;
@@ -123,8 +124,8 @@ const MAX_TOASTS = 4;
 const ToastContext = createContext<ToastApi | null>(null);
 
 /**
- * Raise a message from any screen inside Shell. Messages appear in the shell's
- * single polite live region.
+ * Raise a message from any screen inside `Shell` or `ToastProvider`. Messages
+ * appear in that provider's single polite live region.
  *
  * ```tsx
  * const toast = useToast()
@@ -133,7 +134,7 @@ const ToastContext = createContext<ToastApi | null>(null);
  */
 export function useToast(): ToastApi {
   const api = useContext(ToastContext);
-  if (!api) throw new Error('useToast must be used inside <Shell>');
+  if (!api) throw new Error('useToast must be used inside <Shell> or <ToastProvider>');
   return api;
 }
 
@@ -162,9 +163,10 @@ function ToastItem({ toast, onDismiss }: { toast: QueuedToast; onDismiss: (id: n
 }
 
 /**
- * The shell's toast queue. The region is always rendered, so it's already in
- * the accessibility tree when a message arrives (a live region created together
- * with its first message is often not announced). Items have no live role.
+ * Toast queue for a custom frame. `Shell` already mounts one. The region is
+ * always rendered, so it's already in the accessibility tree when a message
+ * arrives (a live region created together with its first message is often not
+ * announced). Items have no live role.
  */
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<QueuedToast[]>([]);

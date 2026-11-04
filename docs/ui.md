@@ -9,7 +9,9 @@ Drop-in React components from `@freeappstore/sdk/ui`. Components use CSS custom 
 import {
   // App shell (start here)
   Shell, PageHeader, useToast, useDocumentTitle, useOnline, NavBar,
-  ProfileMenu, ProfilePage,
+  ProfileMenu, ProfilePage, AccountSection,
+  ToastProvider, ShellErrorBoundary, SkipLink, useRouteChangeEffects,
+  routeUrl, routeHref, canFollowLink, profileReturnHref, useCurrentLocation, isLocalRoute,
   // Auth & identity
   Avatar, SignInButton,
   // Controls
@@ -93,6 +95,7 @@ gate is the optional sign-in gate.
 | `nav` | The app's screens: `{ label, href, icon?, title? }[]`. No `nav` (or an empty list): no navbar. |
 | `onNavigate(href)` | Client-side navigation for nav clicks, e.g. `history.pushState` + your route state, or a router's `navigate`. Without it, nav items are ordinary links (the host serves your app for any path). |
 | `renderNav({ items, currentPath, onNavigate })` | Replace the built-in navbar; the result still goes in the topbar. Render a `<nav aria-label="Main">`. |
+| `headerActions` | Header control slot, rendered beside the profile avatar inside `[data-fas-header-actions]`. App buttons go here. The avatar stays a profile link in both auth states. |
 | `profileHref` | Optional app-owned profile route, e.g. `/account`, accessible in both auth states. Omit to use the built-in `/profile` page with GitHub/Google sign-in choices and account management. Avatar clicks navigate using `onNavigate` when supplied; modified clicks retain native behavior. A custom profile route must render its own signed-out and signed-in UI. |
 | `requireAuth` | Protect app content until sign-in; the topbar and profile route remain accessible. Default `false`. |
 | `showThemeToggle` | Default `true`. The topbar shows it while signed out. `ProfilePage` shows it while signed in. |
@@ -107,7 +110,7 @@ gate is the optional sign-in gate.
   navigation landmark, keyboard access, and visible focus.
 - **Start each primary screen with `PageHeader`.** `<PageHeader title description? actions? />`
   renders the screen's single `<h1>`, and it is where focus lands after navigation.
-- **Raise feedback with `useToast`.** It must be called inside `Shell`.
+- **Raise feedback with `useToast`.** `Shell` provides it. A custom frame mounts `ToastProvider`.
 
 ```tsx
 function NoteScreen({ note }: { note: Note }) {
@@ -139,7 +142,9 @@ useEffect(() => {
 
 `FasShell` is the same component under its older name, and apps that don't use
 `Shell` are unaffected by any of this. `NavBar` and `activeHref` are exported for
-custom layouts.
+custom layouts. A sidebar, bottom nav, or focused canvas should compose the
+exported providers instead of patching Shell's DOM. See
+[Migrating from DOM overrides](#migrating-from-dom-overrides).
 
 ### Migrating to the Shell
 
@@ -165,6 +170,68 @@ To move an app onto the standard frame:
    if you route client-side), and remove `requireAuth` unless the whole app needs
    sign-in.
 
+### Migrating from DOM overrides
+
+Some apps reached into the Shell DOM because the frame had no place for their own
+controls. One rewrote header buttons on a timer. Another styled internal Shell
+nodes. Those overrides break on the next SDK release. Delete the timer, the
+`querySelector` pass, and the CSS that depends on Shell's private markup, and use
+the extension points below.
+
+**Stay on Shell and add header controls.** `headerActions` is the header control
+slot. It renders in the topbar beside the profile avatar, inside
+`[data-fas-header-actions]`. The avatar still opens the profile in both auth
+states and never starts sign-in. `renderNav` still replaces only the navbar.
+
+```tsx
+<Shell
+  app={fas}
+  appName="Notes"
+  nav={NAV}
+  headerActions={<button type="button" onClick={createNote}>New</button>}
+>
+  <PageHeader title="Notes" />
+</Shell>
+```
+
+**Compose a custom frame** for a sidebar, a bottom nav, or a focused canvas. Do
+not mount a second `Shell` around it. Keep one `header` and one `main`. A detail
+screen does not need its own nav item. Wrap the tree in the same pieces `Shell`
+uses:
+
+- `ToastProvider` and `useToast` for feedback. `Shell` already includes the provider.
+- `ShellErrorBoundary` with `app` and `resetKey` set to the current route, for render errors.
+- `SkipLink` plus `<main id="main" tabIndex={-1}>`.
+- `useRouteChangeEffects(location, mainRef, true)` for focus and scroll on client-side moves.
+- `AccountSection` for identity. Signed out, it offers GitHub and Google and an avatar link to the profile. Signed in, the avatar and name link to the profile. Pass `children` for app-specific settings. The avatar never calls sign-in.
+- `ProfilePage` accepts `children` after its built-in account sections when the app keeps the built-in profile route.
+- `Footer` stays the opt-in attribution. Neither `Shell` nor `AccountSection` mounts it.
+
+**Router integration.** Pass the router's navigate function as `onNavigate` on
+`Shell`, `NavBar`, or `AccountSection`. Keep pathname, query, and hash: give the
+router `routeHref(routeUrl(href))`, not the pathname alone. `canFollowLink` leaves
+modified clicks, downloads, external URLs, and other windows to the browser.
+`profileReturnHref` reads a safe in-app `returnTo`. `useCurrentLocation` follows
+back and forward. `isLocalRoute` tells an in-app destination from an off-site one.
+These helpers work with an existing history router. They do not replace it.
+
+```tsx
+function navigate(href: string) {
+  const destination = routeUrl(href);
+  if (!destination || !isLocalRoute(destination)) {
+    window.location.assign(href);
+    return;
+  }
+  history.pushState(null, '', routeHref(destination));
+}
+```
+
+A focused canvas may set `touch-none` on that canvas. Do not set `user-scalable=no`
+or `maximum-scale` on the document.
+
+`ProfileMenu` stays exported for older menus. New code uses the profile link and
+`AccountSection`.
+
 ### Caveats
 
 - **The avatar always opens a profile page.** It never starts OAuth or opens a dropdown.
@@ -178,8 +245,9 @@ To move an app onto the standard frame:
   or async code are not caught by React; handle them there (for example
   `catch (e) { toast.show('Could not save', { variant: 'error' }) }`). Caught render
   errors are kept in `fas.log` and uploaded only for signed-in users.
-- **`useToast` works only inside `Shell`.** Outside it throws
-  `useToast must be used inside <Shell>`.
+- **`useToast` needs `Shell` or `ToastProvider`.** `Shell` includes the provider.
+  A custom frame mounts `ToastProvider` itself. With neither, `useToast` throws
+  `useToast must be used inside <Shell> or <ToastProvider>`.
 - **Navigation and focus.** Profile and navigation links use `onNavigate` for client-side
   routing and deterministic in-app scroll restoration. Route state includes query strings and
   fragments, even when the pathname stays the same. Relative in-app destinations are resolved
@@ -221,8 +289,12 @@ To move an app onto the standard frame:
 | `Shell` | see [Shell](#shell-the-standard-app-frame) | The app frame: topbar, main navigation, error boundary, toasts |
 | `NavBar` | `items`, `currentPath?`, `onNavigate?` | The navbar `Shell` renders from `nav`, for custom layouts |
 | `PageHeader` | `title`, `description?`, `actions?` | A screen's single `<h1>` |
+| `AccountSection` | `app`, `profileHref?`, `onNavigate?`, `location?`, `children?` | Embeddable account block. GitHub and Google when signed out. Avatar and name link to the profile in both auth states. `children` is app-specific settings. |
 | `ProfileMenu` | `app`, `showThemeToggle?`, `children?` | Legacy dropdown with profile, settings, sign out, and deletion feedback; Shell uses the separate Profile page |
-| `ProfilePage` | `app` | Full profile page with account management |
+| `ProfilePage` | `app`, `showThemeToggle?`, `children?` | Full profile page. `children` render after the built-in account sections. |
+| `ToastProvider` | `children` | Toast queue for a custom frame. `Shell` already includes one. |
+| `ShellErrorBoundary` | `app`, `resetKey`, `renderError?` | Render-error boundary `Shell` uses around the screen. |
+| `SkipLink` | `mainRef` | Skip link targeting `<main id="main">`. |
 | `Tabs` | `tabs`, `active`, `onChange` | Tab navigation |
 
 ## Friends

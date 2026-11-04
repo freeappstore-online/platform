@@ -97,6 +97,21 @@ describe('Shell', () => {
     expect(text(header)).not.toMatch(/\bFree\b/);
   });
 
+  it('renders headerActions in the single topbar without a sign-in button', async () => {
+    const action = {
+      type: 'button',
+      props: { children: 'New', 'data-testid': 'header-action' },
+    };
+    const tree = await renderShell({ headerActions: action });
+    expect(tree.filter((n) => n.type === 'header')).toHaveLength(1);
+    const header = nodes(tree.find((n) => n.type === 'header'));
+    expect(header.some((n) => n.props['data-testid'] === 'header-action')).toBe(true);
+    expect(header.some((n) => n.props['data-fas-header-actions'] !== undefined)).toBe(true);
+    const { SignInButton } = await import('./core.js');
+    expect(header.some((n) => n.type === SignInButton)).toBe(false);
+    expect(header.some((n) => n.type === 'a' && n.props['aria-label'] === 'Profile')).toBe(true);
+  });
+
   it('shows the profile link and text-size toggle to a signed-in user', async () => {
     auth.user = { id: 'gh:1', login: 'alice' };
     const { TextSizeToggle } = await import('./core.js');

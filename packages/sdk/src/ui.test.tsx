@@ -64,6 +64,18 @@ describe('UI component exports', () => {
     // Hooks
     expect(typeof mod.useTextSize).toBe('function');
     expect(typeof mod.TextSizeToggle).toBe('function');
+    expect(typeof mod.AccountSection).toBe('function');
+    expect(typeof mod.ToastProvider).toBe('function');
+    expect(typeof mod.ShellErrorBoundary).toBe('function');
+    expect(typeof mod.SkipLink).toBe('function');
+    expect(typeof mod.useRouteChangeEffects).toBe('function');
+    expect(typeof mod.useToast).toBe('function');
+    expect(typeof mod.routeUrl).toBe('function');
+    expect(typeof mod.routeHref).toBe('function');
+    expect(typeof mod.canFollowLink).toBe('function');
+    expect(typeof mod.profileReturnHref).toBe('function');
+    expect(typeof mod.useCurrentLocation).toBe('function');
+    expect(typeof mod.isLocalRoute).toBe('function');
   });
 
   it('Avatar renders with user', async () => {

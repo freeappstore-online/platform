@@ -232,7 +232,7 @@ const toast = useToast(); toast.show('Saved', { variant: 'success' });
 
 `onNavigate` makes nav clicks client-side (scroll and focus are handled on route changes); without it the items are ordinary links. `FasShell` is the same component under its older name. Full reference: [docs/ui.md](../../docs/ui.md#shell-the-standard-app-frame).
 
-Omit `profileHref` and the avatar opens the built-in `/profile` page (`ProfilePage`) in both auth states. Set `profileHref` for an app-owned route and render both states yourself. `ProfileMenu` is a legacy dropdown. `Shell` does not mount it. Layout ownership: [composable starter contract](../../docs/composable-starter-contract.md).
+Omit `profileHref` and the avatar opens the built-in `/profile` page (`ProfilePage`) in both auth states. Set `profileHref` for an app-owned route and render both states yourself. `headerActions` is the header control slot. A custom frame uses `ToastProvider`, `AccountSection`, and the router helpers instead of patching the Shell DOM. `ProfileMenu` is a legacy dropdown. `Shell` does not mount it. Layout ownership: [composable starter contract](../../docs/composable-starter-contract.md). Migration: [Migrating from DOM overrides](../../docs/ui.md#migrating-from-dom-overrides).
 
 ### UI Components
 

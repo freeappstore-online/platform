@@ -1,9 +1,23 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import {
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
 import { Modal } from './components.js';
 import { Avatar, SignInButton, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
+import {
+  canFollowLink,
+  isLocalRoute,
+  routeHref,
+  routePath,
+  routeUrl,
+  useCurrentLocation,
+} from './navigation.js';
 import { PageHeader } from './page.js';
 
 /** Shared by both public profile surfaces so failures and duplicate clicks behave alike. */
@@ -34,6 +48,85 @@ function useAccountDeletion(deleteAccount: () => Promise<void>, onDeleted?: () =
     }
   };
   return { pending: deletePending, error: deleteError, remove };
+}
+
+// ---------------------------------------------------------------------------
+// AccountSection
+// ---------------------------------------------------------------------------
+
+export interface AccountSectionProps {
+  app: FreeAppStore;
+  /** In-app profile route. Default `/profile`, which keeps a safe `returnTo`. */
+  profileHref?: string;
+  /**
+   * Client-side navigation for the avatar. Without it the avatar is an ordinary
+   * link. The avatar never starts sign-in.
+   */
+  onNavigate?: (href: string) => void;
+  /** Current in-app URL when the app owns the router. Omit to follow the browser. */
+  location?: string;
+  /** App-specific settings, rendered after the identity block. */
+  children?: ReactNode;
+}
+
+/**
+ * Embeddable account block for a custom sidebar, settings page, or header.
+ * Signed out, it offers GitHub and Google and an avatar link to the profile.
+ * Signed in, the avatar and name link to the profile. The avatar never signs in.
+ */
+export function AccountSection({
+  app,
+  profileHref = '/profile',
+  onNavigate,
+  location,
+  children,
+}: AccountSectionProps) {
+  const { user, loading } = useAuth(app);
+  const [currentLocation] = useCurrentLocation(location);
+  const target = routeUrl(profileHref);
+  const onProfile =
+    isLocalRoute(target) &&
+    routePath(currentLocation) === routePath(target.pathname) &&
+    (!target.search || routeUrl(currentLocation)?.search === target.search) &&
+    (!target.hash || routeUrl(currentLocation)?.hash === target.hash);
+  const profileLink =
+    profileHref === '/profile'
+      ? onProfile
+        ? currentLocation
+        : `/profile?returnTo=${encodeURIComponent(currentLocation)}`
+      : target && isLocalRoute(target)
+        ? routeHref(target)
+        : profileHref;
+  const openProfile = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (!onNavigate || !canFollowLink(event, profileLink)) return;
+    event.preventDefault();
+    const destination = routeUrl(profileLink);
+    if (!destination || destination.href === routeUrl(currentLocation)?.href) return;
+    onNavigate(routeHref(destination));
+  };
+
+  return (
+    <section aria-label="Account" className="flex flex-col gap-3">
+      <a
+        href={profileLink}
+        aria-label="Profile"
+        className="inline-flex min-h-11 min-w-11 items-center gap-3 self-start rounded-full text-ink no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        onClick={openProfile}
+      >
+        <Avatar user={user} size={user ? 32 : 24} />
+        {user ? (
+          <span className="[overflow-wrap:anywhere] font-semibold text-ink">{user.login}</span>
+        ) : null}
+      </a>
+      {!loading && !user ? (
+        <div className="flex flex-col gap-3">
+          <SignInButton app={app} provider="github" />
+          <SignInButton app={app} provider="google" />
+        </div>
+      ) : null}
+      {children}
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -170,10 +263,12 @@ export function ProfileMenu({ app, showThemeToggle = true, children }: ProfileMe
 export interface ProfilePageProps {
   app: FreeAppStore;
   showThemeToggle?: boolean;
+  /** App-specific settings, rendered after the built-in account sections. */
+  children?: ReactNode;
 }
 
 /** Full-page profile & preferences: avatar, theme, text size, friends, sign out, delete. */
-export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
+export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePageProps) {
   const { user, loading, signOut, deleteAccount } = useAuth(app);
   const { preference, setPreference } = useTheme();
   const { size: textSize, setSize: setTextSize } = useTextSize();
@@ -197,6 +292,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
           <SignInButton app={app} provider="github" />
           <SignInButton app={app} provider="google" />
         </div>
+        {children}
       </div>
     );
   }
@@ -311,6 +407,8 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
           </p>
         )}
       </div>
+
+      {children}
 
       <Modal
         open={friendsOpen}
