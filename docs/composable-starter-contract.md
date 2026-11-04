@@ -18,11 +18,11 @@ Reuse this machinery. Do not replace it with a plugin host.
 | Shell account (#337–#340) | `packages/sdk/src/ui/layout.tsx`, `profile.tsx` | Compact avatar opens `ProfilePage` in both auth states. `profileHref` is the app-owned route. Preferences and auth lifecycle are shared. |
 | Styling (#320, ADR-001) | [ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md) | React + Tailwind 4 on FAS tokens for every React surface, including apps, the SDK, console, and admin. |
 
-`fas add`, a capability manifest, and a single generated foundation do not exist yet. Later children add them. This page only names the files.
+`fas add`, a capability manifest and the shared generated foundation now ship. Use the safe adoption workflow below.
 
 ## Foundation, capabilities, and presets
 
-One foundation: the PWA toolchain, SDK runtime, design tokens, and the default `Shell`. Standalone and connected are presets, not two maintained implementations. Today they are still two cloneable repos. [#352](https://github.com/freeappstore-online/platform/issues/352) generates both from this foundation. Until that lands, `fas init --template standalone|connected` keeps cloning the existing repos.
+One foundation: the PWA toolchain, SDK runtime, design tokens, and the default `Shell`. Standalone and connected are presets, not two maintained implementations. [#352](https://github.com/freeappstore-online/platform/issues/352) generates both from the shared foundation; `fas init --template standalone|connected` selects the preset.
 
 A capability is a versioned, first-party unit a preset can include at `fas init` or later with `fas add` ([#345](https://github.com/freeappstore-online/platform/issues/345)). It declares an id, a version, dependencies, the environment it supports, the files and config it owns, and how to validate it. Presets are lists of those ids. There is no plugin marketplace and no remote script execution.
 
@@ -133,3 +133,11 @@ Each child is a small addition to the files below. None of them introduces a gen
 ## Out of scope
 
 App-specific bugs stay in each app repository. This contract does not restart #326, does not edit sibling stores, and does not flip warn-only styling checks to fail.
+
+## Builder adoption guidance
+
+The effective app builder prompt follows this contract: Shell is the supported default, and app-owned screens, navigation, styles and edited configuration remain editable. Custom frames must preserve labelled navigation, keyboard access, visible focus, a skip link or equivalent, zoom, 44px targets, account/profile access in both auth states, shared preferences and error/loading feedback.
+
+Choose device-local helpers from `@freeappstore/sdk/persist` with validation and explicit save-result handling, private-account `fas.kv`, public-read/owner-write `fas.collections`, or ephemeral `fas.rooms` according to requirements. Device-local data is not a backup; collections and room fan-out are not private storage. See [persistence and connected examples](sdk.md). Keep public screens reachable, share the app-owned SDK instance and guard against stale account responses. A cached shell does not make network features work offline.
+
+Builder infrastructure remains locked to direct `write_file` calls. Install first-party capabilities through `POST /session/:id/capabilities` with `dryRun: true`, review prerequisites/conflicts, then apply; local adopters use `fas add --dry-run` before applying. Capability-owned dependencies/configuration may change through that workflow. Preserve edited generated files and user data; do not bypass locks or install arbitrary dependencies. Chat tools without access to the session API must describe the required action without claiming it ran.
