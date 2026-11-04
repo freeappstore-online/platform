@@ -25,6 +25,8 @@ permissions:
 
 jobs:
   publish:
+    outputs:
+      versions: ${{ steps.publish.outputs.versions }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +34,8 @@ jobs:
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
 
       - uses: actions/setup-node@v4
         with:
@@ -138,6 +142,9 @@ jobs:
 
           echo "bumped=$BUMPED" >> "$GITHUB_OUTPUT"
           echo "failed=$FAILED" >> "$GITHUB_OUTPUT"
+          SDK_VERSION=$(node -p "require('./packages/sdk/package.json').version")
+          CLI_VERSION=$(node -p "require('./packages/cli/package.json').version")
+          echo "versions=@freeappstore/sdk@$SDK_VERSION @freeappstore/cli@$CLI_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Commit version bumps
         if: steps.publish.outputs.bumped != ''
@@ -176,11 +183,28 @@ jobs:
           node-version: 22
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
 
       - name: Configure scaffold commit identity
         run: |
           git config --global user.email "published-scaffold@freeappstore.online"
           git config --global user.name "Published Scaffold Smoke"
+
+      - name: Select this publish run's CLI and SDK versions
+        env:
+          PUBLISHED_PACKAGES: ${{ needs.publish.outputs.versions }}
+        run: |
+          set -euo pipefail
+          CLI_VERSION="$(printf '%s\n' "$PUBLISHED_PACKAGES" | grep -oE '@freeappstore/cli@[0-9]+\.[0-9]+\.[0-9]+' | cut -d@ -f3)"
+          SDK_VERSION="$(printf '%s\n' "$PUBLISHED_PACKAGES" | grep -oE '@freeappstore/sdk@[0-9]+\.[0-9]+\.[0-9]+' | cut -d@ -f3)"
+          test -n "$CLI_VERSION"
+          test -n "$SDK_VERSION"
+          test "$(npm view "@freeappstore/cli@$CLI_VERSION" version)" = "$CLI_VERSION"
+          test "$(npm view "@freeappstore/sdk@$SDK_VERSION" version)" = "$SDK_VERSION"
+          echo "CLI_VERSION=$CLI_VERSION" >> "$GITHUB_ENV"
+          echo "SDK_VERSION=$SDK_VERSION" >> "$GITHUB_ENV"
+          echo "Validating @freeappstore/cli@$CLI_VERSION against @freeappstore/sdk@$SDK_VERSION"
 
       - name: Initialize from the published CLI and current template
         run: |
@@ -188,19 +212,41 @@ jobs:
           mkdir -p /tmp/published-capability-scaffold
           cd /tmp/published-capability-scaffold
           APP_ID="smoke-${{ matrix.template }}-${{ matrix.preset }}"
-          npx --yes @freeappstore/cli@latest init "$APP_ID" \
+          npx --yes "@freeappstore/cli@$CLI_VERSION" init "$APP_ID" \
             --template="${{ matrix.template }}" --preset "${{ matrix.preset }}"
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
 
       - name: Install published SDK dependencies
         working-directory: /tmp/published-capability-scaffold
-        run: pnpm --dir "$APP_ID" install --no-frozen-lockfile
+        run: |
+          set -euo pipefail
+          cd "$APP_ID"
+          # Pin this run's SDK release in both packages so a later registry
+          # publication cannot change what this smoke test actually verifies.
+          node --input-type=module -e '
+            import { readFileSync, writeFileSync } from "node:fs";
+            for (const path of ["package.json", "web/package.json"]) {
+              const pkg = JSON.parse(readFileSync(path, "utf8"));
+              for (const section of ["dependencies", "devDependencies"]) {
+                if (pkg[section]?.["@freeappstore/sdk"]) {
+                  pkg[section]["@freeappstore/sdk"] = process.env.SDK_VERSION;
+                }
+              }
+              writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
+            }
+          '
+          pnpm install --no-frozen-lockfile
 
       - name: Compile generated capability imports against the published SDK
         working-directory: /tmp/published-capability-scaffold
         run: |
           set -euo pipefail
           cd "$APP_ID"
-          pnpm dlx --package=typescript@5.9.3 tsc --noEmit --skipLibCheck \
+          if [ "${{ matrix.preset }}" = "backup" ]; then
+            ENTRYPOINT=fas-capabilities/backup.ts
+          else
+            ENTRYPOINT=fas-capabilities/persistence.ts
+          fi
+          pnpm --package=typescript@5.9.3 dlx tsc --noEmit --skipLibCheck \
             --target ES2022 --module NodeNext --moduleResolution NodeNext \
-            fas-capabilities/persistence.ts fas-capabilities/backup.ts
+            "$ENTRYPOINT"
