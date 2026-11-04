@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest';
+
 it('builder foundation provides installed navigation metadata, safe areas and local gesture policy', async () => {
   const { getConfig } = await import('../workers/agent/src/config.js');
   const { getTemplateFiles } = await import('../workers/agent/src/template.js');

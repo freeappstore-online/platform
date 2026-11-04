@@ -1,7 +1,7 @@
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import { expect, it, vi } from 'vitest';
 import { pwaOptions } from './pwa-config.js';
