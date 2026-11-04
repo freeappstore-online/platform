@@ -354,4 +354,4 @@ For race-safe private per-account editing, see the [connected data example](http
 
 #350 ships the SDK hook and standalone example. The canonical generated connected template remains unchanged; carry its wiring and adoption into #352. Planning Poker's app-owned remediation is tracked in [Planning Poker #1](https://github.com/freeappstore-online/planning-poker/issues/1). No room or user data was read or changed.
 
-Durable room-restricted records use the backend's authenticated data-room endpoints documented in [data rooms](data-rooms.md); the SDK does not yet wrap those endpoints. These private endpoints are separate from public collections and realtime room broadcasts. Membership is enforced by the backend for each request.
+Durable room-restricted records use the backend's authenticated data-room endpoints documented in [data rooms](https://github.com/freeappstore-online/platform/blob/main/docs/data-rooms.md); the SDK does not yet wrap those endpoints. These private endpoints are separate from public collections and realtime room broadcasts. Membership is enforced by the backend for each request.
