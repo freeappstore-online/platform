@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fsFileSource, validateBuildTarget } from '@freeappstore/compliance';
 import { readConfig } from '../lib/config.js';
 
 export type CheckStatus = 'pass' | 'fail' | 'warn';
@@ -26,6 +27,7 @@ export async function runDoctor(): Promise<CheckResult[]> {
     checkConfigFile(),
     checkSignedIn(),
     checkApiReachable(),
+    validateBuildTarget(fsFileSource(process.cwd())),
   ]);
   return checks;
 }

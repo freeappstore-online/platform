@@ -19,6 +19,7 @@ Requires Node 22+.
 | `fas doctor` | Health check -- Node, git, pnpm, config, API reachability |
 | `fas init <id>` | Scaffold a new app from a template |
 | `fas check` | Run compliance checks |
+| `fas build-target [--artifact] [--app-id <id>]` | Validate selected app entry, identity, build and release output |
 | `fas publish` | Provision repo + hosting + DNS and publish |
 | `fas list` | List your published apps |
 | `fas logs <id>` | Show recent deploy runs (GitHub Actions) |
@@ -33,6 +34,43 @@ Requires Node 22+.
 Signs in with GitHub via device-authorization flow. Opens a browser to authorize, exchanges the token for a platform session. Both are cached at `~/.fas/config.json` (mode `0600`).
 
 ## `fas init <app-id>`
+
+Init records the app identity and build target in `fas.json`, preserving template layout settings.
+For an existing app or an alternate layout, configure repository-relative paths explicitly:
+
+```json
+{
+  "appId": "taskflow",
+  "applicationRoot": "apps/tasks",
+  "outputPath": "release/tasks",
+  "buildCommand": "pnpm --filter ./apps/tasks build"
+}
+```
+
+`applicationRoot` contains `index.html`; `outputPath` contains the produced `index.html` and
+JavaScript assets. Configure the bundler to emit that output; these settings do not rewrite
+Vite configuration or move files. Defaults are `web`, `web/dist`, and `pnpm build`.
+Without an explicit ID, legacy package names (including `@app-id/root`) supply the identity.
+Use the provisioned ID, not `my-app` or an unresolved template placeholder.
+
+`fas doctor` includes source build-target diagnostics. `fas publish` validates the target and
+compares its ID with the requested publishing ID even with `--skip-checks`. Before uploading,
+run `fas build-target --artifact --app-id <provisioned-id>`. Generated deployment CI resolves
+the build command and upload path from the same configuration with `--github-output`, then
+validates output before R2 upload. Existing custom workflows are preserved: align their build
+and upload commands explicitly; a known literal upload-path mismatch is an error.
+
+The validator follows local entry imports rather than searching every package for banned text.
+Example/demo files are allowed. It diagnoses an excluded developed app when the selected entry
+still contains starter UI, checks reachable literal SDK `initApp` identities, and checks release
+HTML/JavaScript references for missing chunks and starter markers. Static tracing supports local
+relative and root-relative imports; arbitrary aliases, computed imports and runtime identity
+expressions still require a browser test. It does not prove arbitrary shell commands execute the
+intended build. Use an explicit package filter or directory in custom build commands and smoke-test
+a real feature in the output served by deployment. Scaffold CI serves the built artifact with
+Vite preview and verifies an app-owned task counter, navigation and a theme change surviving reload.
+The disposable smoke scaffold replaces starter instructions and adds that feature before building;
+an untouched starter is intentionally rejected by the release-artifact check.
 
 Scaffolds a new app from a platform template.
 

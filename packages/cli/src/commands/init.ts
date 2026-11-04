@@ -78,6 +78,24 @@ export async function runInit(opts: {
   // step in its README, but a CLI scaffold should never punt that on the
   // user — the result has to be runnable as-is.
   const substitutionCount = await substituteAppName(target, opts.appId);
+  // Keep deployment identity explicit, preserving any template-specific layout.
+  const configPath = join(target, 'fas.json');
+  const config = (await exists(configPath)) ? JSON.parse(await readFile(configPath, 'utf8')) : {};
+  await writeFile(
+    configPath,
+    `${JSON.stringify(
+      {
+        applicationRoot: 'web',
+        outputPath:
+          config.applicationRoot === '.' ? 'dist' : `${config.applicationRoot ?? 'web'}/dist`,
+        buildCommand: 'pnpm build',
+        ...config,
+        appId: opts.appId,
+      },
+      null,
+      2,
+    )}\n`,
+  );
   await run('git', ['init', '-q', '-b', 'main'], target);
 
   // Stage and commit the template so the new repo has a real first commit.

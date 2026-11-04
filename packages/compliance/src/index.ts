@@ -1,4 +1,7 @@
 import { checkBrandFonts } from './checks/brand-fonts.js';
+
+export { type BuildTarget, readBuildTarget, validateBuildTarget } from './checks/build-target.js';
+
 import { checkBrandTokens } from './checks/brand-tokens.js';
 import { checkBundleSize } from './checks/bundle-size.js';
 import { checkClaudeMdSlim } from './checks/claude-md-slim.js';

@@ -29,6 +29,18 @@ describe("applyPlaceholders", () => {
 
 const appsConfig = getConfig("apps");
 
+describe("build target deployment guard", () => {
+  it("blocks a mismatched identity before provisioning or upload", async () => {
+    const ctx = makeCtx({ appId: "weather-app", ownerLogin: "alice", apps: new Map([["weather-app", "alice"]]) });
+    ctx.files.set("fas.json", JSON.stringify({ appId: "different-app" }));
+    const result = await executeInfraTool({ id: "target", name: "push_update", input: {} }, ctx);
+    expect(result).toContain("Deploy BLOCKED");
+    expect(result).toContain("differs from deployment ID weather-app");
+    expect(ctx.onDeployStatus).toHaveBeenCalledWith(expect.objectContaining({ phase: "error" }));
+    expect(ctx.onAppDeployed).not.toHaveBeenCalled();
+  });
+});
+
 /**
  * Minimal in-memory stand-in for the `apps`/`routes` D1 tables — enough to
  * exercise the ownership checks in executeDeploy. `apps` maps id -> owner_login.

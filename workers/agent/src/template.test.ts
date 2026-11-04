@@ -10,6 +10,20 @@ describe("getTemplateFiles", () => {
   const appsFiles = getTemplateFiles(appsConfig);
   const gamesFiles = getTemplateFiles(gamesConfig);
 
+  it("uses one declared target for the apps build, verification and upload", () => {
+    const files = substituteAppName(appsFiles, "weather-app", "Weather App");
+    expect(JSON.parse(files["fas.json"])).toEqual({
+      appId: "weather-app",
+      applicationRoot: "web",
+      outputPath: "web/dist",
+      buildCommand: "pnpm build",
+    });
+    const workflow = files[".github/workflows/deploy.yml"];
+    expect(workflow).toContain('build-target --app-id "${GITHUB_REPOSITORY##*/}" --github-output');
+    expect(workflow).toContain("build-target --artifact");
+    expect(workflow).toContain('aws s3 sync "$OUTPUT_PATH"');
+  });
+
   it("apps template has no local shell component: it uses the SDK Shell (#90)", () => {
     expect(appsFiles).not.toHaveProperty("web/src/components/Shell.tsx");
     expect(appsFiles).not.toHaveProperty("web/src/components/GameShell.tsx");

@@ -1,5 +1,6 @@
 /** Execute infra tools server-side. Extracted from session.ts to keep it manageable. */
 
+import { validateBuildTarget } from "../../../packages/compliance/src/checks/build-target";
 import type { CheckResult } from "../../../packages/compliance/src/types";
 import { checkBuildSanity, formatSanityBlock } from "./build-sanity";
 import { formatSharedFailure, runSharedChecks } from "./compliance";
@@ -106,6 +107,26 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   }
 
   if (tc.name === "deploy" || tc.name === "push_update") {
+    if (config.store === "apps" && ctx.files.has("fas.json")) {
+      const preview = new Map(ctx.files);
+      const expectedAppId = (tc.input.id as string | undefined) ?? ctx.appId ?? undefined;
+      if (expectedAppId) applyPlaceholders(preview, expectedAppId, (tc.input.name as string) ?? expectedAppId);
+      const target = await validateBuildTarget(
+        {
+          async *list() {
+            yield* preview.keys();
+          },
+          async read(path) {
+            return preview.get(path) ?? null;
+          },
+        },
+        { expectedAppId },
+      );
+      if (target.status === "fail") {
+        await ctx.onDeployStatus({ phase: "error", error: target.detail });
+        return `Deploy BLOCKED: ${target.detail}`;
+      }
+    }
     const findings = checkBuildSanity(ctx.files);
     if (findings.length) {
       await ctx.onDeployStatus({

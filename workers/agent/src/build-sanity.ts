@@ -4,7 +4,7 @@
  * would otherwise leave the old R2 artifact live while the session looks shipped.
  */
 
-const SRC_RE = /^web\/src\/.+\.(?:tsx?|jsx?|mjs|cjs)$/;
+const SRC_RE = /\.(?:tsx?|jsx?|mjs|cjs)$/;
 
 export interface SanityFinding {
   file: string;
@@ -174,9 +174,15 @@ function duplicateDeclarations(skeleton: string): string[] {
 
 export function checkBuildSanity(files: Map<string, string>): SanityFinding[] {
   const findings: SanityFinding[] = [];
+  let root = "web";
+  try {
+    root = JSON.parse(files.get("fas.json") ?? "{}").applicationRoot ?? root;
+  } catch {
+    return [{ file: "fas.json", problem: "Invalid JSON; fix the declared build target before deploying." }];
+  }
 
   for (const [path, content] of files) {
-    if (!SRC_RE.test(path)) continue;
+    if (!path.startsWith(root === "." ? "src/" : `${root}/src/`) || !SRC_RE.test(path)) continue;
 
     const skeleton = stripToSkeleton(content);
     const dups = duplicateDeclarations(skeleton);

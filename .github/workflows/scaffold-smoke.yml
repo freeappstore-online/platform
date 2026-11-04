@@ -143,6 +143,7 @@ jobs:
         working-directory: /tmp/scaffold-smoke
         run: |
           cd "$APP_ID"
+          node "$GITHUB_WORKSPACE/packages/e2e/scaffold/prepare-artifact.mjs" .
           pnpm build
 
       - name: Run CLI compliance check on the scaffold
@@ -155,6 +156,19 @@ jobs:
 
       - name: Install browser
         run: pnpm --filter @freeappstore/e2e exec playwright install --with-deps chromium
+
+      - name: Validate deployment artifact and identity
+        working-directory: /tmp/scaffold-smoke
+        run: |
+          cd "$APP_ID"
+          node "$GITHUB_WORKSPACE/packages/cli/dist/index.js" build-target --artifact --app-id "$APP_ID"
+
+      - name: Browser feature smoke against produced artifact
+        env:
+          SCAFFOLD_DIR: /tmp/scaffold-smoke/${{ env.APP_ID }}
+          SCAFFOLD_TEMPLATE: ${{ matrix.template }}
+          SCAFFOLD_ARTIFACT: '1'
+        run: pnpm --filter @freeappstore/e2e exec playwright test --config scaffold.config.ts
 
       - name: Browser check of fresh scaffold (published SDK)
         env:

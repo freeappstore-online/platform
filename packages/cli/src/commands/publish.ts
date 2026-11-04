@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { runChecks } from '@freeappstore/compliance';
+import { fsFileSource, runChecks, validateBuildTarget } from '@freeappstore/compliance';
 import { Command } from 'commander';
 import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
@@ -213,6 +213,10 @@ export const publishCommand = new Command('publish')
       // Provision. There is no manual submission fallback: provisioning either
       // succeeds, or we fail loudly with the reason so it gets fixed (rather
       // than silently shunting the creator to a form they hate).
+      const targetResult = await validateBuildTarget(fsFileSource(process.cwd()), {
+        expectedAppId: input.name,
+      });
+      if (targetResult.status === 'fail') throw new Error(targetResult.detail);
       const autoResult = await tryAutoProvision(input, store);
       if (autoResult.kind === 'success') {
         const noun = store === 'games' ? 'game' : 'app';
@@ -607,22 +611,27 @@ jobs:
       # Example:
       #   env:
       #     VITE_GOOGLE_CLIENT_ID: \${{ vars.VITE_GOOGLE_CLIENT_ID }}
+      - name: Resolve build target
+        id: target
+        run: npx @freeappstore/cli build-target --app-id "$\{GITHUB_REPOSITORY##*/}" --github-output
+
       - name: Build
-        run: pnpm build
+        env:
+          BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
+        run: bash -e -c "$BUILD_COMMAND"
 
       - name: Verify build output
-        run: |
-          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
-          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
+        run: npx @freeappstore/cli build-target --artifact --app-id "$\{GITHUB_REPOSITORY##*/}"
 
       - name: Upload to R2
         env:
+          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}
           AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
         run: |
-          aws s3 sync ./web/dist "s3://fas-apps/apps/$\{GITHUB_REPOSITORY##*/}/" \\
+          aws s3 sync "$OUTPUT_PATH" "s3://fas-apps/apps/$\{GITHUB_REPOSITORY##*/}/" \\
             --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
             --delete \\
             --no-progress

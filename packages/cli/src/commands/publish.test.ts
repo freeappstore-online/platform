@@ -175,7 +175,9 @@ describe('DEPLOY_YML', () => {
 
   it('includes build verification step', () => {
     expect(DEPLOY_YML).toContain('Verify build output');
-    expect(DEPLOY_YML).toContain('web/dist');
+    expect(DEPLOY_YML).toContain('build-target --artifact');
+    expect(DEPLOY_YML).toContain('steps.target.outputs.output-path');
+    expect(DEPLOY_YML).toContain('aws s3 sync "$OUTPUT_PATH"');
   });
 });
 

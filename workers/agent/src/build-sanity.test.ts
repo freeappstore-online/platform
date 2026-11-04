@@ -25,6 +25,13 @@ describe("stripToSkeleton", () => {
 });
 
 describe("checkBuildSanity", () => {
+  it("checks the configured application root", () => {
+    const files = new Map([
+      ["fas.json", '{"applicationRoot":"apps/tasks"}'],
+      ["apps/tasks/src/App.tsx", "const X = 1;\nconst X = 2;"],
+    ]);
+    expect(checkBuildSanity(files)).toHaveLength(1);
+  });
   it("flags duplicated top-level functions", () => {
     const findings = checkBuildSanity(
       f("web/src/App.tsx", `function draw() {}\nfunction lerp() {}\n\nfunction draw() {}\nfunction lerp() {}`),

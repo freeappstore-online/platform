@@ -732,20 +732,36 @@ jobs:
           node-version: 22
       - name: Install
         run: pnpm install --no-frozen-lockfile
+${
+  config.store === "apps"
+    ? `      - name: Resolve build target
+        id: target
+        run: npx @freeappstore/cli build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
+      - name: Build
+        env:
+          BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
+        run: bash -e -c "$BUILD_COMMAND"
+      - name: Verify build output
+        run: npx @freeappstore/cli build-target --artifact --app-id "\${GITHUB_REPOSITORY##*/}"
+`
+    : `\
       - name: Build
         run: pnpm build
       - name: Verify build output
         run: |
           test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
           test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
+`
+}\
       - name: Upload to R2
         env:
+${config.store === "apps" ? `          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}\n` : ""}\
           AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
         run: |
-          aws s3 sync ./web/dist "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/" \\
+          aws s3 sync ${config.store === "apps" ? '"$OUTPUT_PATH"' : "./web/dist"} "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/" \\
             --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
             --delete \\
             --no-progress
@@ -764,6 +780,15 @@ export function getTemplateFiles(config: StoreConfig, archetype?: AppArchetype):
   return {
     ...SHARED_FILES,
     ...(config.store === "games" ? GAME_FILES : APP_FILES),
+    ...(config.store === "apps"
+      ? {
+          "fas.json": JSON.stringify(
+            { appId: "APPID", applicationRoot: "web", outputPath: "web/dist", buildCommand: "pnpm build" },
+            null,
+            2,
+          ),
+        }
+      : {}),
     ...appArchetypeFiles,
     ".github/workflows/deploy.yml": deployWorkflow(config),
   };
@@ -773,7 +798,7 @@ export function substituteAppName(files: Record<string, string>, appId: string, 
   const out: Record<string, string> = {};
   for (const [path, content] of Object.entries(files)) {
     out[path] = content.replace(/APPNAME/g, path.includes("package.json") || path.includes("pnpm-workspace") ? appId : displayName);
-    if (path === "web/index.html") out[path] = out[path].replace(/APPID/g, appId);
+    if (path === "web/index.html" || path === "fas.json") out[path] = out[path].replace(/APPID/g, appId);
   }
   // Fix package.json files to use the ID (lowercase, no spaces)
   if (out["package.json"]) {
