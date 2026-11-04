@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { gt, minVersion, subset, validRange } from 'semver';
+import { satisfiesCapabilityPackageRange } from './capability-definitions.js';
 
 type CapabilityPackage = {
   name: string;
@@ -557,12 +558,7 @@ export async function installCapabilities(
       checked.push(
         `PREREQUISITE ${cap.id}: ${location} ${requirement.name} ${requirement.range} (declared ${declared ?? 'missing'})`,
       );
-      if (
-        typeof declared !== 'string' ||
-        !validRange(declared) ||
-        !minVersion(declared) ||
-        !subset(declared, requirement.range)
-      ) {
+      if (!satisfiesCapabilityPackageRange(declared, requirement.range)) {
         prerequisites.push(
           `${cap.id}: ${location} requires ${requirement.name} ${requirement.range}; found ${declared ?? 'missing'}. Set a compatible explicit version/range and install dependencies. Workspace/link/file/git specs must be verified and replaced with a compatible published range before using this installer.`,
         );

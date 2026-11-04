@@ -304,6 +304,12 @@ it.each([
   'workspace:^0.16.19',
   'file:../sdk',
   '0.17.0-beta.1',
+  '0.16.26-beta.1',
+  '^0.16.26-beta.1',
+  '>=0.16.18 || 0.16.18-beta.1',
+  'git+https://github.com/example/sdk.git',
+  'latest',
+  'not a range',
 ])('rejects unproven persistence prerequisite %s before any writes', async (version) => {
   const root = await app();
   const pkg = JSON.stringify({ dependencies: version ? { '@freeappstore/sdk': version } : {} });
@@ -323,22 +329,50 @@ it.each([
   expect(await readFile(join(root, 'pnpm-lock.yaml'), 'utf8')).toBe('custom lockfile');
 });
 
-it.each(['0.16.18', '^0.16.18', '~0.16.19', '>=0.16.18 <0.17.0', '^0.16.19 || ^0.17.0'])(
-  'accepts compatible range %s without changing package choices',
+it.each([
+  '0.16.18',
+  '^0.16.18',
+  '~0.16.19',
+  '>=0.16.18 <0.17.0',
+  '^0.16.19 || ^0.17.0',
+  '0.16.26+build.1',
+  '>= 0.16.26 < 0.17.0',
+  '0.16.26 - 0.16.30',
+  '1.x',
+])('accepts compatible range %s without changing package choices', async (version) => {
+  const root = await app();
+  const pkg = JSON.stringify({ dependencies: { '@freeappstore/sdk': version } });
+  await writeFile(join(root, 'package.json'), pkg);
+  expect((await installCapabilities(root, ['persistence'], { dryRun: true })).join('\n')).toContain(
+    'PREREQUISITE',
+  );
+  await expect(readFile(join(root, '.fas-capabilities.json'))).rejects.toThrow();
+  await installCapabilities(root, ['persistence']);
+  expect(await readFile(join(root, 'package.json'), 'utf8')).toBe(pkg);
+  await writeFile(join(root, 'package.json'), '{}');
+  const manifest = await readFile(join(root, '.fas-capabilities.json'), 'utf8');
+  await expect(installCapabilities(root, ['persistence'])).rejects.toThrow('prerequisites');
+  expect(await readFile(join(root, '.fas-capabilities.json'), 'utf8')).toBe(manifest);
+});
+
+it.each(['1.3.x', '^1.2.3', '~1.0.0', '1.0.0 - 1.3.0'])(
+  'accepts PWA plugin range %s without dry-run writes',
   async (version) => {
     const root = await app();
-    const pkg = JSON.stringify({ dependencies: { '@freeappstore/sdk': version } });
+    const pkg = JSON.stringify({
+      dependencies: { '@freeappstore/sdk': '>=1.0.0', 'vite-plugin-pwa': version },
+    });
     await writeFile(join(root, 'package.json'), pkg);
-    expect(
-      (await installCapabilities(root, ['persistence'], { dryRun: true })).join('\n'),
-    ).toContain('PREREQUISITE');
-    await expect(readFile(join(root, '.fas-capabilities.json'))).rejects.toThrow();
-    await installCapabilities(root, ['persistence']);
+    const before = await readdir(root);
+    const preview = await installCapabilities(root, ['pwa'], { dryRun: true });
+    expect(preview.join('\n')).not.toContain('INCOMPLETE');
+    expect(await readdir(root)).toEqual(before);
     expect(await readFile(join(root, 'package.json'), 'utf8')).toBe(pkg);
-    await writeFile(join(root, 'package.json'), '{}');
-    const manifest = await readFile(join(root, '.fas-capabilities.json'), 'utf8');
-    await expect(installCapabilities(root, ['persistence'])).rejects.toThrow('prerequisites');
-    expect(await readFile(join(root, '.fas-capabilities.json'), 'utf8')).toBe(manifest);
+    await installCapabilities(root, ['pwa']);
+    expect(await readFile(join(root, 'package.json'), 'utf8')).toBe(pkg);
+    expect(await readFile(join(root, 'web/src/fas-capabilities/pwa.ts'), 'utf8')).toContain(
+      'startPwa',
+    );
   },
 );
 
