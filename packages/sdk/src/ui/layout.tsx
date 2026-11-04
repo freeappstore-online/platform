@@ -198,18 +198,23 @@ export function Shell({
     <ToastProvider>
       <div className="min-h-[100dvh] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
         <SkipLink mainRef={mainRef} />
-        <header className="flex items-center justify-between p-[0.5rem_1rem] border-b border-line bg-panel sticky top-0 z-[50]">
-          <div className="min-w-0">
+        <header className="flex flex-wrap items-center justify-between gap-2 p-[0.5rem_1rem] border-b border-line bg-panel sticky top-0 z-[50]">
+          <div className="min-w-0 flex-[1_1_12rem]">
             {appName && (
-              <span className="block truncate text-[1rem] font-semibold text-ink">{appName}</span>
+              <span className="block [overflow-wrap:anywhere] text-[1rem] font-semibold text-ink">
+                {appName}
+              </span>
             )}
           </div>
           {navNode}
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2 [&>button]:min-h-[44px] [&>button]:min-w-[44px]">
             <TextSizeToggle />
             {showThemeToggle && !user && <ThemeToggle />}
             {headerActions ? (
-              <div data-fas-header-actions="" className="flex items-center gap-2">
+              <div
+                data-fas-header-actions=""
+                className="flex max-w-full min-w-0 flex-wrap items-center gap-2 [overflow-wrap:anywhere]"
+              >
                 {headerActions}
               </div>
             ) : null}
@@ -217,7 +222,7 @@ export function Shell({
               href={profileLink}
               aria-label="Profile"
               aria-current={isProfile ? 'page' : undefined}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-full text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               onClick={openProfile}
             >
               <Avatar user={user} size={user ? 32 : 24} />
