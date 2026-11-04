@@ -63,7 +63,7 @@ export default function App() {
   }, []);
   const navigate = (href: string) => {
     history.pushState(null, '', href);
-    setPath(href);
+    setPath(window.location.pathname);
   };
 
   return (

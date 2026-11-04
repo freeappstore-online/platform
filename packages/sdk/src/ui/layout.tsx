@@ -286,6 +286,7 @@ export function ProfilePage({ app, showThemeToggle = true }: ProfilePageProps) {
           Permanently delete your account and all data across all apps.
         </p>
         <button
+          type="button"
           disabled={deletePending}
           onClick={handleDelete}
           className="p-[0.5rem_1rem] rounded-sm border border-danger bg-transparent text-danger text-[0.85rem] font-semibold cursor-pointer font-[inherit]"
@@ -336,6 +337,7 @@ function ToggleButton({
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       className={[
         'flex-1',
         'p-2',
@@ -402,6 +404,28 @@ export interface ShellProps {
   showThemeToggle?: boolean;
 }
 
+function routeUrl(href: string): URL {
+  return new URL(
+    href,
+    typeof window === 'undefined' ? 'https://fas.invalid/' : window.location.href,
+  );
+}
+
+/** Only allow an in-app return destination, never an off-site URL or a profile loop. */
+function profileReturnHref(): string {
+  if (typeof window === 'undefined') return '/';
+  const candidate = new URLSearchParams(window.location.search).get('returnTo');
+  if (!candidate?.startsWith('/') || candidate.startsWith('//')) return '/';
+  try {
+    const url = new URL(candidate, window.location.origin);
+    if (url.origin !== window.location.origin || url.pathname.replace(/\/+$/, '') === '/profile')
+      return '/';
+    return url.pathname + url.search + url.hash;
+  } catch {
+    return '/';
+  }
+}
+
 function normalizeShellAppName(appName?: string) {
   return appName === 'AppStore' ? 'FreeAppStore' : appName;
 }
@@ -430,32 +454,24 @@ export function Shell({
   const mainRef = useRef<HTMLElement>(null);
   const initialTitle = useRef(typeof document === 'undefined' ? '' : document.title);
   const beforeNavigate = useRouteChangeEffects(currentPath, mainRef, !!onNavigate);
-  const profilePath = profileHref ?? '/profile';
-  const isProfile = currentPath.replace(/\/+$/, '') === profilePath.replace(/\/+$/, '');
+  const profileTarget = routeUrl(profileHref ?? '/profile');
+  const isProfile =
+    profileTarget.origin === routeUrl('/').origin &&
+    currentPath.replace(/\/+$/, '') === profileTarget.pathname.replace(/\/+$/, '');
   const builtInProfile = !profileHref && isProfile;
-  const displayAppName = normalizeShellAppName(appName);
-  const returnPath = (() => {
-    if (typeof window === 'undefined') return '/';
-    const candidate = new URLSearchParams(window.location.search).get('returnTo');
-    if (!candidate || !candidate.startsWith('/') || candidate.startsWith('//')) return '/';
-    try {
-      const url = new URL(candidate, window.location.origin);
-      if (url.origin !== window.location.origin || url.pathname.replace(/\/+$/, '') === '/profile')
-        return '/';
-      return url.pathname + url.search + url.hash;
-    } catch {
-      return '/';
-    }
-  })();
+  const currentHref =
+    typeof window === 'undefined'
+      ? '/'
+      : window.location.pathname + window.location.search + window.location.hash;
   const profileLink =
-    profileHref || isProfile || typeof window === 'undefined'
-      ? profilePath
-      : profilePath +
-        '?returnTo=' +
-        encodeURIComponent(
-          window.location.pathname + window.location.search + window.location.hash,
-        );
-
+    profileHref ??
+    (isProfile
+      ? currentHref
+      : typeof window === 'undefined'
+        ? '/profile'
+        : `/profile?returnTo=${encodeURIComponent(currentHref)}`);
+  const returnHref = profileReturnHref();
+  const displayAppName = normalizeShellAppName(appName);
   // A nav item's `title` becomes the tab title on its route. A layout effect
   // runs before every passive effect, so a screen's own useDocumentTitle wins.
   const navItems = nav ?? [];
@@ -482,7 +498,7 @@ export function Shell({
     ? (href: string) => {
         beforeNavigate();
         onNavigate(href);
-        setCurrentPath(new URL(href, window.location.href).pathname);
+        setCurrentPath(routeUrl(href).pathname);
       }
     : undefined;
   const openProfile = (event: ReactMouseEvent<HTMLAnchorElement>) => {
@@ -553,7 +569,7 @@ export function Shell({
               {builtInProfile ? (
                 <>
                   <a
-                    href={returnPath}
+                    href={returnHref}
                     className="self-start m-4 text-accent underline"
                     onClick={(event) => {
                       if (
@@ -567,7 +583,7 @@ export function Shell({
                       )
                         return;
                       event.preventDefault();
-                      navigate(returnPath);
+                      navigate(returnHref);
                     }}
                   >
                     Back to app

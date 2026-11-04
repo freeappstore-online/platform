@@ -33,16 +33,19 @@ export function useCurrentPath(initial?: string): [string, (path: string) => voi
   const [path, setPath] = useState(
     () => initial ?? (typeof window === 'undefined' ? '/' : window.location.pathname),
   );
+  // Routers can update history and re-render their layout without a popstate event.
+  const browserPath = typeof window === 'undefined' ? '/' : window.location.pathname;
   useEffect(() => {
     if (initial !== undefined) {
       setPath(initial);
       return;
     }
+    setPath(browserPath);
     const sync = () => setPath(window.location.pathname);
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
-  }, [initial]);
-  return [path, setPath];
+  }, [initial, browserPath]);
+  return [initial ?? path, setPath];
 }
 
 /** The item to mark current: an exact match, else the longest prefix (`/notes` for `/notes/42`). */
@@ -71,6 +74,13 @@ export function NavBar({ items, currentPath, onNavigate }: NavBarProps) {
   const listId = useId();
   const navRef = useRef<HTMLElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+
+  // Profile links, browser Back, and app-owned navigation can change routes
+  // without going through this menu's own link handler.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a route change itself closes the drawer.
+  useEffect(() => {
+    setOpen(false);
+  }, [path]);
 
   useEffect(() => {
     if (!open) return;

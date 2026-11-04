@@ -511,3 +511,109 @@ test('long account names fit narrow screens (#338)', async ({ page }) => {
     true,
   );
 });
+
+test('profile returns to the originating URL after reload and OAuth', async ({ page }) => {
+  const origin = '/about?sort=recent#saved';
+  await page.goto(origin);
+  await page
+    .locator('header > div')
+    .last()
+    .getByRole('link', { name: 'Profile', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('returnTo')).toBe(origin);
+  await page.reload();
+  await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', origin);
+  await page.getByRole('link', { name: 'Back to app' }).click();
+  await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
+  if (!connected)
+    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+  await page
+    .locator('header > div')
+    .last()
+    .getByRole('link', { name: 'Profile', exact: true })
+    .click();
+  const request = page.waitForRequest((req) => req.url().includes('/v1/auth/google/start'));
+  await page.getByRole('button', { name: 'Sign in with Google' }).click();
+  const oauth = new URL((await request).url());
+  const callback = new URL(oauth.searchParams.get('return_to')!);
+  expect(callback.searchParams.get('returnTo')).toBe(origin);
+});
+
+test('profile contains long names and keyboard navigation closes the drawer', async ({ page }) => {
+  const login = 'a'.repeat(39);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.addInitScript(
+    (login) =>
+      localStorage.setItem(
+        'fas:session',
+        JSON.stringify({
+          token: 'browser-test-only',
+          user: { id: 'gh:1', login, avatarUrl: null, dateOfBirth: '2000-01-01' },
+        }),
+      ),
+    login,
+  );
+  await page.goto('/');
+  const menu = page.getByRole('button', { name: 'Menu', exact: true });
+  await menu.click();
+  const avatar = page
+    .locator('header > div')
+    .last()
+    .getByRole('link', { name: 'Profile', exact: true });
+  await avatar.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeFocused();
+  const name = page.getByText(login, { exact: true });
+  await expect(name).toBeVisible();
+  const right = await name.evaluate((el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return Math.max(...Array.from(range.getClientRects()).map((rect) => rect.right));
+  });
+  expect(right).toBeLessThanOrEqual(320);
+});
+
+test('profile without a router preserves native navigation and browser scroll ownership', async ({
+  page,
+}) => {
+  const original = await readFile(appFile, 'utf8');
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'fas:session',
+      JSON.stringify({
+        token: 'browser-test-only',
+        user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+      }),
+    ),
+  );
+  try {
+    await writeFile(appFile, original.replace('onNavigate={navigate}', ''));
+    // Wait for the edited module before loading the page. Reloading a stale
+    // router module can retain its manual scroll mode in the history entry.
+    await expect
+      .poll(async () => (await page.request.get('/src/App.tsx')).text())
+      .not.toMatch(/onNavigate:\s*navigate/);
+    await page.goto('/');
+    await expect(page.locator('header')).toBeVisible();
+    expect(await page.evaluate(() => history.scrollRestoration)).toBe('auto');
+    await page.evaluate(() => {
+      document.documentElement.dataset.nativeProbe = 'before';
+    });
+    await page
+      .locator('header > div')
+      .last()
+      .getByRole('link', { name: 'Profile', exact: true })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.dataset.nativeProbe)).toBeUndefined();
+    expect(await page.evaluate(() => history.scrollRestoration)).toBe('auto');
+    await page.goBack();
+    await expect(page.getByRole('main')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => history.scrollRestoration)).toBe('auto');
+  } finally {
+    await writeFile(appFile, original);
+  }
+});

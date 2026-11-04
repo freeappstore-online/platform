@@ -128,7 +128,7 @@ useEffect(() => {
   return () => removeEventListener('popstate', sync);
 }, []);
 
-<Shell app={fas} appName="Notes" nav={NAV} onNavigate={(href) => { history.pushState(null, '', href); setPath(href); }}>
+<Shell app={fas} appName="Notes" nav={NAV} onNavigate={(href) => { history.pushState(null, '', href); setPath(window.location.pathname); }}>
   {path === '/tags' ? <TagsScreen /> : <NotesScreen />}
 </Shell>
 ```
@@ -173,9 +173,12 @@ onto the standard frame:
   errors are kept in `fas.log` and uploaded only for signed-in users.
 - **`useToast` works only inside `Shell`.** Outside it throws
   `useToast must be used inside <Shell>`.
-- **Navigation and focus.** The built-in profile handles its own navigation. Other screens
-  need `onNavigate` for client-side routing; without it, links use a
-  full page load, which the browser handles. The host serves your app's `index.html`
+- **Navigation and focus.** Profile and navigation links use `onNavigate` for client-side
+  routing and deterministic in-app scroll restoration. Without it, they are normal links and
+  the browser manages navigation and scroll restoration; full reloads of asynchronously rendered
+  screens may not recover the exact scroll position. The built-in profile remembers the originating in-app URL in `returnTo`, so
+  **Back to app** keeps the original path, query and fragment through reload and sign-in;
+  off-site destinations and loops back to the profile are rejected. The host serves your app's `index.html`
   for any path without a file extension, so deep links like `/tags` work on reload.
 - **The Shell does not load fonts or tokens.** They come from your app's `index.css`
   (the templates include them).

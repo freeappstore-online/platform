@@ -25,6 +25,7 @@ function fakeApp(signedIn = true) {
       onChange: () => () => {},
       signIn: vi.fn(),
       signOut: vi.fn(),
+      deleteAccount: vi.fn(),
     },
     log: { _renderError: renderError },
     friends: { requests: async () => [] },
@@ -70,6 +71,7 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   Reflect.deleteProperty(navigator, 'standalone');
 });
 
@@ -223,6 +225,166 @@ describe('built-in profile navigation (#337)', () => {
       </Shell>,
     );
     expect($('h1')?.textContent).toBe('Custom profile');
+  });
+});
+
+describe('profile review regressions (#338)', () => {
+  it('follows an app router that navigates outside the shell navigation callback', async () => {
+    history.replaceState(null, '', '/profile');
+    const { app } = fakeApp(false);
+    function AppRouter() {
+      const [path, setPath] = useState('/profile');
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              history.pushState(null, '', '/notes');
+              setPath('/notes');
+            }}
+          >
+            App router link
+          </button>
+          <Shell app={app}>
+            <PageHeader title={path === '/notes' ? 'Notes' : 'Home'} />
+          </Shell>
+        </>
+      );
+    }
+    await mount(<AppRouter />);
+    expect($('h1')?.textContent).toBe('Profile');
+    await act(async () => byText('button', 'App router link')!.click());
+    expect($('h1')?.textContent).toBe('Notes');
+  });
+
+  it('closes an open navigation drawer when the keyboard activates the avatar', async () => {
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell
+        app={app}
+        nav={[{ href: '/', label: 'Home' }]}
+        onNavigate={(href) => history.pushState(null, '', href)}
+      >
+        <p>Home</p>
+      </Shell>,
+    );
+    await act(async () =>
+      $('button[aria-label="Menu"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    expect($('button[aria-label="Menu"]')?.getAttribute('aria-expanded')).toBe('true');
+    // Keyboard-generated click has no preceding pointerdown outside the drawer.
+    await act(async () =>
+      $('a[aria-label="Profile"]')!.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect($('button[aria-label="Menu"]')?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it.each([
+    '//outside.test',
+    '/\\outside.test',
+    '/profile',
+    '/notes/../profile/',
+    'https://outside.test',
+    'javascript:alert(1)',
+  ])('rejects unsafe or circular return destinations: %s', async (target) => {
+    history.replaceState(null, '', `/profile?returnTo=${encodeURIComponent(target)}`);
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/');
+  });
+
+  it('normalizes query strings when routing to an app-owned public profile', async () => {
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell
+        app={app}
+        requireAuth
+        profileHref="/account?tab=login"
+        onNavigate={(href) => history.pushState(null, '', href)}
+      >
+        <PageHeader title="Custom profile" />
+      </Shell>,
+    );
+    await act(async () =>
+      $('a[aria-label="Profile"]')!.dispatchEvent(
+        new MouseEvent('click', { bubbles: true, cancelable: true }),
+      ),
+    );
+    expect($('h1')?.textContent).toBe('Custom profile');
+    expect(location.search).toBe('?tab=login');
+    expect($('a[aria-label="Profile"]')?.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('shows deletion failures, prevents repeat requests while pending, and permits retry', async () => {
+    history.replaceState(null, '', '/profile');
+    const { app } = fakeApp();
+    vi.stubGlobal(
+      'confirm',
+      vi.fn(() => true),
+    );
+    let reject!: (error: Error) => void;
+    vi.mocked(app.auth.deleteAccount).mockImplementation(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    );
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    await act(async () => {
+      byText('button', 'Delete account')!.click();
+      byText('button', 'Delete account')!.click();
+    });
+    expect(app.auth.deleteAccount).toHaveBeenCalledTimes(1);
+    expect(byText('button', 'Deleting...')?.hasAttribute('disabled')).toBe(true);
+    await act(async () => reject(new Error('offline')));
+    expect($('[role="alert"]')?.textContent).toContain('Unable to delete your account');
+    expect(byText('button', 'Delete account')?.hasAttribute('disabled')).toBe(false);
+    expect(app.auth.signOut).not.toHaveBeenCalled();
+    vi.mocked(app.auth.deleteAccount).mockResolvedValue(undefined);
+    await act(async () => byText('button', 'Delete account')!.click());
+    expect(app.auth.deleteAccount).toHaveBeenCalledTimes(2);
+    expect($('[role="alert"]')).toBeNull();
+  });
+
+  it('lets the browser follow the profile link without synthetic history events when there is no router', async () => {
+    const { app } = fakeApp(false);
+    await mount(
+      <Shell app={app}>
+        <p>App</p>
+      </Shell>,
+    );
+    const pop = vi.fn();
+    window.addEventListener('popstate', pop);
+    const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+    await act(async () => $('a[aria-label="Profile"]')!.dispatchEvent(click));
+    window.removeEventListener('popstate', pop);
+    expect(click.defaultPrevented).toBe(false);
+    expect(pop).not.toHaveBeenCalled();
+  });
+
+  it('preserves the originating URL through a profile reload', async () => {
+    history.replaceState(null, '', '/notes?sort=recent#saved');
+    const { app } = fakeApp(false);
+    const href = `/profile?returnTo=${encodeURIComponent('/notes?sort=recent#saved')}`;
+    await mount(
+      <Shell app={app}>
+        <p>Notes</p>
+      </Shell>,
+    );
+    expect($('a[aria-label="Profile"]')?.getAttribute('href')).toBe(href);
+    history.replaceState(null, '', href);
+    await act(async () => window.dispatchEvent(new PopStateEvent('popstate')));
+    expect(byText('a', 'Back to app')?.getAttribute('href')).toBe('/notes?sort=recent#saved');
   });
 });
 
@@ -680,7 +842,7 @@ describe('client-side route changes', () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     const { app } = fakeApp();
     await mount(
-      <Shell app={app} nav={NAV} profileHref="/account">
+      <Shell app={app} nav={NAV}>
         <p>content</p>
       </Shell>,
     );
