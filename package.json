@@ -24,8 +24,12 @@
     "lint:platform-ui": "node scripts/check-platform-ui.mjs",
     "test:coverage": "vitest run --coverage"
   },
+  "dependencies": {
+    "semver": "^7.8.6"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
+    "@types/semver": "^7.8.0",
     "@vitest/coverage-v8": "5.0.3",
     "typescript": "^5.9.3",
     "vitest": "^5.0.3"
