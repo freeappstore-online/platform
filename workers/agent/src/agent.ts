@@ -137,22 +137,21 @@ export function prepareTurn(
         resultIndex++;
       }
       const resultMessage = trimmedHistory[resultIndex];
-      if (resultMessage?.role === "tool_result") {
-        const results = new Map((resultMessage.toolResults ?? []).map((result) => [result.id, result]));
-        const toolResults = m.toolCalls.map(
-          (call) =>
-            results.get(call.id) ?? {
-              id: call.id,
-              content: "The previous action result was not recorded. Recheck the current session state before retrying this action.",
-              isError: true,
-            },
-        );
-        cleaned.push(m, { ...resultMessage, toolResults });
-        for (let between = i + 1; between < resultIndex; between++) {
-          if (trimmedHistory[between].role !== "tool_result") cleaned.push(trimmedHistory[between]);
-        }
-        i = resultIndex;
+      const existingResults = resultMessage?.role === "tool_result" ? (resultMessage.toolResults ?? []) : [];
+      const results = new Map(existingResults.map((result) => [result.id, result]));
+      const toolResults = m.toolCalls!.map(
+        (call) =>
+          results.get(call.id) ?? {
+            id: call.id,
+            content: "The previous action result was not recorded. Recheck the current session state before retrying this action.",
+            isError: true,
+          },
+      );
+      cleaned.push(m, { role: "tool_result", content: "", toolResults });
+      for (let between = i + 1; between < resultIndex; between++) {
+        if (trimmedHistory[between].role !== "tool_result") cleaned.push(trimmedHistory[between]);
       }
+      i = resultMessage?.role === "tool_result" ? resultIndex : resultIndex - 1;
       // else: orphaned tool_use — drop both
     } else if (m.role === "tool_result") {
       // Orphaned tool_result without preceding tool_use — drop it

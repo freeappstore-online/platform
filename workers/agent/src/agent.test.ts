@@ -36,6 +36,26 @@ describe("prepareTurn tool history recovery", () => {
     expect(toolResult?.toolResults?.[0]).toMatchObject({ isError: true });
     expect(prepared.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool_result", "user", "user"]);
   });
+
+  it("preserves tool calls when the persisted result group is entirely missing", () => {
+    const prepared = prepareTurn(
+      aiConfig,
+      [
+        { role: "user", content: "Build it" },
+        { role: "assistant", content: "", toolCalls: [{ id: "lost-result", name: "write_file", input: {} }] },
+        { role: "user", content: "Continue" },
+      ],
+      "Resume",
+      storeConfig,
+    );
+
+    expect(prepared.messages[1]).toMatchObject({ role: "assistant", toolCalls: [{ id: "lost-result" }] });
+    expect(prepared.messages[2]).toMatchObject({
+      role: "tool_result",
+      toolResults: [{ id: "lost-result", isError: true }],
+    });
+    expect(prepared.messages[3]).toMatchObject({ role: "user", content: "Continue" });
+  });
 });
 
 const aiConfig: AIConfig = {
