@@ -16,6 +16,9 @@ entry per primary screen. The Shell provides the topbar, the app's navigation, a
 toasts and an offline banner; you write the screens. Custom frames are described in the
 [composable starter contract](composable-starter-contract.md).
 
+The [PWA lifecycle](pwa-lifecycle.md) provides prompted updates, guards for unsaved
+work and recordings, install support, and explicit offline capabilities.
+
 - **[Getting Started](getting-started.md)** -- scaffold, build, and publish your first app with the CLI
 - **[SDK Reference](sdk.md)** -- auth, KV, counters, collections, rooms, proxy, keys, roles, friends, email, and push reminders
 - **[UI Components](ui.md)** -- the supported default `Shell` (topbar, navigation, error boundary, toasts) and 25+ drop-in React components

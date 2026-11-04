@@ -8,6 +8,10 @@ npm i -g @freeappstore/cli
 
 Requires Node 22+.
 
+Fresh app scaffolds include the versioned `pwa` capability. Existing apps can use
+`fas add pwa --dry-run` and follow the generated integration instructions. See
+[PWA lifecycle](pwa-lifecycle.md) for busy guards, optional downloads and offline limits.
+
 ## Commands
 
 | Command | Description |

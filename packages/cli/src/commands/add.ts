@@ -3,8 +3,8 @@ import { installCapabilities, presets } from '../lib/capabilities.js';
 
 export const addCommand = new Command('add')
   .description('Install bundled first-party browser capabilities without overwriting edits.')
-  .argument('[capabilities...]', 'Capability IDs (currently: connectivity)')
-  .option('--preset <name>', 'Capability list: minimal | connectivity')
+  .argument('[capabilities...]', 'Capability IDs: connectivity | pwa')
+  .option('--preset <name>', 'Capability list: minimal | connectivity | pwa')
   .option('--dry-run', 'Print the plan without writing files')
   .option('--update', 'Explicitly update tracked generated files if unedited')
   .action(async (ids: string[], opts: { preset?: string; dryRun?: boolean; update?: boolean }) => {

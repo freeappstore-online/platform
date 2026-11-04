@@ -782,6 +782,38 @@ export function getTemplateFiles(config: StoreConfig, archetype?: AppArchetype):
     ...(config.store === "games" ? GAME_FILES : APP_FILES),
     ...(config.store === "apps"
       ? {
+          "web/package.json": SHARED_FILES["web/package.json"]
+            .replace('"^0.14.30"', '"^0.16.15"')
+            .replace('"vite": "^6"', '"vite": "^6",\n    "vite-plugin-pwa": "^1.0"'),
+          "web/vite.config.ts": `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+import { VitePWA } from 'vite-plugin-pwa';
+import { pwaOptions } from '@freeappstore/sdk/pwa-config';
+export default defineConfig({ plugins: [react(), tailwindcss(), VitePWA(pwaOptions())] });`,
+          "web/src/pwa.ts": `import { startPwa } from '@freeappstore/sdk/pwa';
+export const pwa = startPwa();
+// Register pwa.addBusyGuard(() => dirty || recording) in app workflows.
+`,
+          "web/src/main.tsx": `import './pwa';\n${SHARED_FILES["web/src/main.tsx"]}`,
+          "web/public/icon.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="64" fill="#2563eb"/><path d="M160 160h192v48H208v48h120v48H208v48h-48z" fill="white"/></svg>`,
+          "web/public/manifest.json": JSON.stringify(
+            {
+              ...JSON.parse(APP_FILES["web/public/manifest.json"]),
+              id: "/",
+              scope: "/",
+              min_viewport_width: 320,
+              icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" }],
+            },
+            null,
+            2,
+          ),
+          "web/index.html": APP_FILES["web/index.html"].replace("initial-scale=1.0", "initial-scale=1.0, viewport-fit=cover"),
+          "web/src/index.css": `${APP_FILES["web/src/index.css"]}
+html { overflow-wrap: anywhere; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+img, video, canvas { max-width: 100%; }
+`,
           "fas.json": JSON.stringify(
             { appId: "APPID", applicationRoot: "web", outputPath: "web/dist", buildCommand: "pnpm build" },
             null,

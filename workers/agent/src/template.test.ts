@@ -91,12 +91,9 @@ describe("getTemplateFiles", () => {
     const sharedPaths = [
       "pnpm-workspace.yaml",
       "package.json",
-      "web/package.json",
-      "web/vite.config.ts",
       "web/tsconfig.json",
       "web/tsconfig.app.json",
       "web/tsconfig.node.json",
-      "web/src/main.tsx",
       ".gitignore",
     ];
     for (const p of sharedPaths) {
@@ -239,12 +236,21 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
     expect(app).not.toMatch(/<h1\b/);
   });
 
-  it("depends on an SDK with the navbar and resilience layer (>= 0.14.30)", () => {
+  it("depends on an SDK with safe PWA lifecycle support (>= 0.16.15)", () => {
     const range = JSON.parse(files["web/package.json"]!).dependencies["@freeappstore/sdk"] as string;
     const [major, minor, patch] = range.replace(/^\^/, "").split(".").map(Number);
     expect(major).toBe(0);
-    expect(minor).toBe(14);
-    expect(patch).toBeGreaterThanOrEqual(30);
+    expect(minor).toBe(16);
+    expect(patch).toBeGreaterThanOrEqual(15);
+  });
+
+  it("wires the shared PWA runtime, safe config, install icons and zoom", () => {
+    expect(files["web/vite.config.ts"]).toContain("VitePWA(pwaOptions())");
+    expect(files["web/src/main.tsx"]).toContain("import './pwa'");
+    expect(files["web/src/pwa.ts"]).toContain("startPwa");
+    expect(JSON.parse(files["web/public/manifest.json"]!).icons[0].purpose).toContain("maskable");
+    expect(files["web/public/icon.svg"]).toContain("viewBox");
+    expect(files["web/index.html"]).not.toMatch(/user-scalable|maximum-scale/);
   });
 
   it("applies Fraunces to headings", () => {

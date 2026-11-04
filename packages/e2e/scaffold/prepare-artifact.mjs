@@ -10,8 +10,30 @@ if (!source.includes('<Home />') || !source.includes('Edit web/src/App.tsx to st
 }
 source = source
   .replaceAll('Edit web/src/App.tsx to start building.', 'Artifact feature fixture.')
-  .replaceAll('<Home />', '<><ArtifactCounter /><Home /></>');
+  .replaceAll('<Home />', '<><ArtifactCounter /><PwaWork /><Home /></>');
 source += `
+import { pwa } from './fas-capabilities/pwa';
+let recording: MediaRecorder | undefined;
+pwa.addBusyGuard(() => !!document.querySelector('[data-dirty="true"]'));
+pwa.addBusyGuard(() => recording?.state === 'recording');
+function PwaWork() {
+  const [dirty, setDirty] = useState(false);
+  const [active, setActive] = useState(false);
+  return <section aria-label="Update protection" data-dirty={dirty}>
+    <label>Unsaved note<input aria-label="Unsaved note" onChange={() => setDirty(true)} /></label>
+    <button onClick={() => setDirty(false)}>Save note</button>
+    <button onClick={() => {
+      if (recording?.state === 'recording') { recording.stop(); setActive(false); return; }
+      const context = new AudioContext();
+      const destination = context.createMediaStreamDestination();
+      const oscillator = context.createOscillator();
+      oscillator.connect(destination); oscillator.start();
+      recording = new MediaRecorder(destination.stream);
+      recording.onstop = () => { oscillator.stop(); void context.close(); };
+      recording.start(); setActive(true);
+    }}>{active ? 'Stop recording' : 'Start recording'}</button>
+  </section>
+}
 function ArtifactCounter() {
   const [count, setCount] = useState(0)
   return <section aria-label="Task counter">

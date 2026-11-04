@@ -9,11 +9,45 @@ export interface Capability {
   environment: 'browser';
   files: Record<string, string>;
   configChanges: string[];
+  metadata?: Record<string, string>;
   validate: (content: string) => boolean;
 }
 
 /** Bounded, bundled first-party code only. No downloaded install hooks. */
 export const registry: Record<string, Capability> = {
+  pwa: {
+    id: 'pwa',
+    version: '1.0.0',
+    dependencies: {},
+    environment: 'browser',
+    metadata: { install: 'manifest', updates: 'prompt-with-busy-guards', offline: 'shell-only' },
+    files: {
+      'web/src/fas-capabilities/pwa.ts': `// Import this module once from the browser entry point after installing SDK >=0.16.15.
+import { startPwa } from '@freeappstore/sdk/pwa';
+export const pwa = startPwa();
+// pwa.addBusyGuard(() => dirtyForm || recorder.state === 'recording');
+`,
+      'web/fas-pwa-config.ts': `// Wrap the existing VitePWA options; retain app-specific manifest and caching configuration.
+export { pwaOptions } from '@freeappstore/sdk/pwa-config';
+`,
+      'fas-capabilities/pwa.md': `# PWA integration
+
+Requires @freeappstore/sdk >=0.16.15 and vite-plugin-pwa.
+In web/vite.config.ts import pwaOptions from ./fas-pwa-config
+and use VitePWA(pwaOptions({ /* your existing options */ })).
+Import ./fas-capabilities/pwa from web/src/main.tsx.
+Register pwa.addBusyGuard callbacks for dirty forms, recordings and transfers.
+Keep the public manifest, icons and app-specific denylist. Review custom runtimeCaching:
+never cache authenticated responses; the shared defaults cache only build assets.
+Keep page zoom enabled; restrict gestures only on a canvas element.
+See https://github.com/freeappstore-online/platform/blob/main/docs/pwa-lifecycle.md
+`,
+    },
+    configChanges: [
+      'Wrap VitePWA options with pwaOptions; import browser entry; declare busy guards',
+    ],
+    validate: (content) => content.length > 0,
+  },
   connectivity: {
     id: 'connectivity',
     version: '1.0.0',
@@ -38,10 +72,15 @@ export function watchConnectivity(listener: (online: boolean) => void): () => vo
   },
 };
 
-export const presets: Record<string, string[]> = { minimal: [], connectivity: ['connectivity'] };
+export const presets: Record<string, string[]> = {
+  minimal: [],
+  connectivity: ['connectivity'],
+  pwa: ['pwa'],
+};
 interface Ownership {
   version: string;
   files: Record<string, string>;
+  metadata?: Record<string, string>;
 }
 interface Manifest {
   schemaVersion: 1;
@@ -129,6 +168,8 @@ export async function installCapabilities(
     const old = Object.hasOwn(manifest.capabilities, cap.id)
       ? manifest.capabilities[cap.id]
       : undefined;
+    if (!old && cap.configChanges.length)
+      plan.push(`INTEGRATE ${cap.id}: ${cap.configChanges.join('; ')}`);
     if (old && old.version !== cap.version && !options.update)
       throw new Error(
         `${cap.id}: installed ${old.version}; review --dry-run --update before updating to ${cap.version}.`,
@@ -162,7 +203,11 @@ export async function installCapabilities(
       }
     }
     // Removed files are retained and remain tracked: no implicit destructive migrations.
-    manifest.capabilities[cap.id] = { version: cap.version, files: { ...old?.files, ...files } };
+    manifest.capabilities[cap.id] = {
+      version: cap.version,
+      files: { ...old?.files, ...files },
+      ...(cap.metadata ? { metadata: cap.metadata } : {}),
+    };
   }
   const next = `${JSON.stringify(manifest, null, 2)}\n`;
   if (next !== text) plan.push(`UPDATE ${manifestName}\n${next}`);

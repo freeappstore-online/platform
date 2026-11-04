@@ -4,6 +4,7 @@ import { extname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
 import { installCapabilities, presets, resolveCapabilities } from '../lib/capabilities.js';
+import { configureFreshPwa } from '../lib/pwa-scaffold.js';
 
 const TEMPLATES = {
   // FreeAppStore templates
@@ -64,7 +65,11 @@ export async function runInit(opts: {
   assertValidAppId(opts.appId);
   const preset = opts.preset ?? 'minimal';
   if (!Object.hasOwn(presets, preset)) throw new Error(`Unknown preset: ${preset}`);
-  const capabilities = [...(presets[preset] ?? []), ...(opts.capabilities ?? [])];
+  const capabilities = [
+    ...(presets[preset] ?? []),
+    ...(opts.capabilities ?? []),
+    ...(GAME_TEMPLATES.has(opts.template ?? 'standalone') ? [] : ['pwa']),
+  ];
   resolveCapabilities(capabilities);
   const template = opts.template ?? 'standalone';
   if (!(template in TEMPLATES)) {
@@ -104,6 +109,7 @@ export async function runInit(opts: {
     )}\n`,
   );
   await installCapabilities(target, capabilities);
+  if (!GAME_TEMPLATES.has(template)) await configureFreshPwa(target);
   await run('git', ['init', '-q', '-b', 'main'], target);
 
   // Stage and commit the template so the new repo has a real first commit.
@@ -120,7 +126,7 @@ export const initCommand = new Command('init')
   .argument('<app-id>', 'Short id (lowercase, single word). e.g. "calendar" or "asteroids"')
   .option('-t, --template <name>', `Template: ${ALL_TEMPLATES.join(' | ')}`, 'standalone')
   .option('--capabilities <ids>', 'Comma-separated first-party capability IDs')
-  .option('--preset <name>', 'Capability list: minimal | connectivity', 'minimal')
+  .option('--preset <name>', 'Capability list: minimal | connectivity | pwa', 'minimal')
   .action(
     async (appId: string, opts: { template: string; capabilities?: string; preset?: string }) => {
       if (!(opts.template in TEMPLATES)) {

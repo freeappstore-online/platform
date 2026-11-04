@@ -1,0 +1,91 @@
+# PWA lifecycle and offline capabilities
+
+Fresh `fas init` app scaffolds install the versioned `pwa` capability. Games keep
+their existing foundation. The builder's app scaffold uses the same SDK runtime
+and Vite configuration. No existing app repositories are migrated.
+
+For an existing app, run `fas add pwa --dry-run`, then `fas add pwa`. This adds
+integration modules and records install/update/offline metadata in
+`.fas-capabilities.json`. Existing application files are preserved. Finish the
+printed integration steps: install `@freeappstore/sdk >=0.16.15` and
+`vite-plugin-pwa`, import `./fas-capabilities/pwa` in `web/src/main.tsx`, and wrap
+your existing `VitePWA` options:
+
+```ts
+import { pwaOptions } from './fas-pwa-config';
+// In plugins:
+VitePWA(pwaOptions({ workbox: { navigateFallbackDenylist: [/^\/oauth/] } }));
+```
+
+The helper defaults to a public static manifest and build-asset precaching, and
+adds API navigation denylists. It preserves app-specific options and custom
+denylists. Inline manifests are also supported. Keep the manifest's name, icons,
+start URL, scope and display mode appropriate to your app. Custom runtime caches
+remain an app-owned decision: audit them for cookies, authorization and private
+data. There is no default API response cache. This helper supports `generateSW`;
+apps with a custom `injectManifest` worker must implement and review that worker's
+waiting/message protocol themselves.
+
+## Update contract
+
+The SDK owns registration; `injectRegister` is disabled. `skipWaiting` is disabled
+even if an old config requested it. A waiting worker prompts the user to activate.
+After a different worker takes control, a separate button offers page reload.
+Neither a controller change nor another tab's activation reloads a page.
+
+Register guards for **every** workflow that has unsaved or active work:
+
+```ts
+import { pwa } from './fas-capabilities/pwa';
+const removeGuard = pwa.addBusyGuard(() => form.isDirty || recorder.state === 'recording');
+// Call removeGuard when the workflow is disposed.
+```
+
+Guards are evaluated again at activation and at reload, and exceptions block the
+action. They protect this page. Another tab may activate a worker, but this runtime
+still preserves the current page until its user requests a guarded reload.
+There is no claim that `registerType` alone reloads every tab.
+
+During upgrade from a legacy autoUpdate worker, a newly loaded page uses this
+runtime immediately and never automatically reloads on `controllerchange`. An
+already open page still running legacy application JavaScript cannot be patched
+retroactively; save work and close/reopen those pages when adopting this release.
+The old active worker may activate the first upgraded worker automatically; the
+new page's reload guard still applies. Subsequent workers wait for approval.
+
+## Offline contract
+
+Installability, a cached shell and offline feature availability are distinct.
+The offline banner says only the downloaded shell is available by default. Cloud
+storage, remote media, account operations and model inference are not promised
+offline. Browser online/offline events are hints, not proof of server reachability.
+Apps can pass verified local feature descriptions to `startPwa({ offlineFeatures })`.
+
+For optional public assets, use `offlineAssets('model-v1', ['/model.bin'])` from
+`@freeappstore/sdk/pwa`. Download only after the user asks; `ready()` checks every
+declared cache entry, including after eviction or partial failure. Use `read()`
+to consume cached responses offline. These caches do not intercept arbitrary
+fetches. Version the ID when assets change. `remove()` removes only this asset
+set. Downloads omit credentials, reject redirects, cross-origin/query URLs,
+private/no-store responses and credential-dependent `Vary` responses. Only declare
+public assets: an endpoint that incorrectly labels private data as public cannot
+be made safe by a client helper. Handle quota, network and cache failures in the
+app and do not report readiness before it is verified.
+
+Navigation fallback serves the precached shell for unvisited SPA links, retaining
+the original URL; the app router must render that route. API and app-specific
+denylisted paths do not receive the shell. Keep page zoom enabled. Use
+`viewport-fit=cover` with safe-area padding; use `touch-action: none` only on a
+canvas or another gesture surface, never the page. Check narrow screens and
+enlarged text in the app's own layouts.
+
+## Release regression
+
+`packages/sdk/src/pwa.test.ts` tests guards, independent activation/reload,
+legacy-worker control changes, public asset readiness and cache-policy defaults.
+The scaffold artifact browser test builds through `fas init`, starts a genuine
+worker, updates it, protects a dirty form and an active audio recording, then
+reloads offline and opens an unvisited deep link. It also validates manifest
+icons, enabled zoom and 320px layout with enlarged text. CI runs it for both app
+presets against installed SDK packages. The release must pass these checks on
+the delivered SHA; a successful local build alone is not release acceptance.

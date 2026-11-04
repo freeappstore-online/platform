@@ -2,6 +2,9 @@
 
 Browser SDK for free apps published on **freeappstore.online**.
 
+PWA lifecycle APIs live at `@freeappstore/sdk/pwa`, with Vite options at
+`@freeappstore/sdk/pwa-config`. See [safe updates and offline capabilities](https://github.com/freeappstore-online/platform/blob/main/docs/pwa-lifecycle.md).
+
 ## Installation
 
 ```bash

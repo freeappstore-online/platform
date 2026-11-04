@@ -1,0 +1,20 @@
+import { expect, it } from 'vitest';
+it('builder foundation provides installed navigation metadata, safe areas and local gesture policy', async () => {
+  const { getConfig } = await import('../workers/agent/src/config.js');
+  const { getTemplateFiles } = await import('../workers/agent/src/template.js');
+  const files = getTemplateFiles(getConfig('apps'));
+  const manifest = JSON.parse(files['web/public/manifest.json']!);
+  expect(manifest.display).toBe('standalone');
+  expect(manifest.scope).toBe('/');
+  expect(manifest.start_url).toBe('/');
+  for (const icon of manifest.icons) expect(files[`web/public${icon.src}`]).toBeTruthy();
+  expect(files['web/index.html']).toContain('viewport-fit=cover');
+  expect(files['web/index.html']).not.toMatch(/maximum-scale|user-scalable/);
+  const css = files['web/src/index.css']!;
+  expect(css).toContain('safe-area-inset-top');
+  expect(css).toContain('safe-area-inset-bottom');
+  expect(css).toContain('overflow-wrap: anywhere');
+  expect(css).not.toMatch(/touch-action:\s*none/);
+  expect(files['web/src/App.tsx']).toContain('popstate');
+  expect(files['web/src/App.tsx']).toContain('location.pathname');
+});

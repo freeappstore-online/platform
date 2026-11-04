@@ -86,6 +86,7 @@ jobs:
             - SDK: sdk.md
             - UI Components: ui.md
             - Composable starter: composable-starter-contract.md
+            - PWA lifecycle: pwa-lifecycle.md
             - CLI: cli.md
             - Publishing: publishing.md
             - Proxy & Keys: proxy-and-keys.md
