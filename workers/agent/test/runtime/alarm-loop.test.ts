@@ -156,7 +156,16 @@ describe("alarm loop on a real Durable Object (#41)", () => {
 
     expect(second.status).toBe(409);
     expect(second.headers.get("Retry-After")).toBeTruthy();
-    await fetch("https://control.test/release");
+    // The alarm may not have reached the scripted model yet. Releasing once
+    // can release zero requests and leave the subsequent model call hung.
+    const deadline = Date.now() + 2000;
+    let released = 0;
+    while (!released && Date.now() < deadline) {
+      const response = await fetch("https://control.test/release");
+      released = ((await response.json()) as { released: number }).released;
+      if (!released) await sleep(20);
+    }
+    expect(released, "the alarm must reach and release the held model request").toBe(1);
     await waitForTurnEnd("alarm-busy");
   });
 });

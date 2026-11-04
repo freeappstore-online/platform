@@ -37,6 +37,15 @@ including by coding agents, is committed and pushed directly to `main`:
 A push to `main` deploys: each Worker's deploy workflow runs its tests first,
 so a failing test blocks that deploy.
 
+On Windows, run agent integration tests with `pnpm --dir workers/agent test:runtime`.
+The launcher gives workerd an isolated directory under `%LOCALAPPDATA%/Temp`
+and removes it after the run. A deeply nested inherited `TEMP`/`TMP` (such as a
+browser-runner session directory) can make workerd's Durable Object SQLite paths
+exceed Windows path limits, producing opaque `internal error; reference = ...`
+failures on every session request while `/health` still passes (#354). The
+launcher prints the selected directory and forwards Vitest arguments and exit
+status. Linux/macOS keep their existing temporary-directory settings.
+
 ## Dependabot
 
 Dependabot still opens pull requests, since that's the only way it can offer

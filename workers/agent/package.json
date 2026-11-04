@@ -12,7 +12,7 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:runtime": "vitest run --config vitest.runtime.ts",
+    "test:runtime": "node scripts/test-runtime.mjs",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/"
