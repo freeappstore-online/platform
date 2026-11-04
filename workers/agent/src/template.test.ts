@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { runComplianceCheck } from "./compliance";
 import { getConfig } from "./config";
-import { APP_ARCHETYPES, applyCapabilitiesToTemplate, getArchetypeFiles, getSystemPrompt, getTemplateFiles, substituteAppName } from "./template";
+import {
+  APP_ARCHETYPES,
+  applyCapabilitiesToTemplate,
+  getArchetypeFiles,
+  getSystemPrompt,
+  getTemplateFiles,
+  substituteAppName,
+} from "./template";
 
 const appsConfig = getConfig("apps");
 const gamesConfig = getConfig("games");
@@ -165,9 +172,7 @@ describe("getTemplateFiles", () => {
     expect(preview.files).not.toHaveProperty("fas-capabilities/connectivity.ts");
     const applied = await applyCapabilitiesToTemplate(scaffold, ["connectivity"]);
     expect(applied.files["fas-capabilities/connectivity.ts"]).toContain("watchConnectivity");
-    expect((await applyCapabilitiesToTemplate(applied.files, ["connectivity"])).changes).toContain(
-      "No changes.",
-    );
+    expect((await applyCapabilitiesToTemplate(applied.files, ["connectivity"])).changes).toContain("No changes.");
     const edited = { ...applied.files, "fas-capabilities/connectivity.ts": "custom" };
     await expect(applyCapabilitiesToTemplate(edited, ["connectivity"])).rejects.toThrow("conflict");
 
@@ -335,7 +340,11 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
     expect(files["web/src/main.tsx"]).toContain("import './fas-capabilities/pwa'");
     expect(files["web/src/pwa.ts"]).toContain("export { pwa } from './fas-capabilities/pwa'");
     expect(files["web/src/pwa.ts"]).not.toContain("startPwa");
-    expect(Object.values(files).join("\n").match(/startPwa\(/g)).toHaveLength(1);
+    expect(
+      Object.values(files)
+        .join("\n")
+        .match(/startPwa\(/g),
+    ).toHaveLength(1);
     expect(files["web/src/index.css"]).toContain('@source "../node_modules/@freeappstore/sdk/dist";');
     expect(files["web/src/index.css"]).toContain('@source "../../node_modules/@freeappstore/sdk/dist";');
     expect(files["web/src/index.css"]).toContain("@theme inline");

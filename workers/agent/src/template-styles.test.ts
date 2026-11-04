@@ -11,7 +11,15 @@ describe("Builder SDK stylesheet contract (#373)", () => {
     for (const archetype of APP_ARCHETYPES) {
       it(`${preset}/${archetype} includes the CLI's documented source, token and animation contract`, () => {
         const css = getTemplateFiles(getConfig("apps"), archetype, preset)["web/src/index.css"];
-        expect(css.replace(/\r\n/g, "\n")).toContain(contract.replace(/\r\n/g, "\n"));
+        // The CLI can supply fallback values; the builder defines its own theme.
+        // Compare the source directives, token bindings and animations separately.
+        for (const [directive] of contract.matchAll(/@(?:import|source)[^;]+;/g)) {
+          expect(css).toContain(directive);
+        }
+        for (const [, name, token] of contract.matchAll(/(--[\w-]+): var\((--[\w-]+)/g)) {
+          expect(css).toMatch(new RegExp(`${name}: var\\(${token}(?:,|\\))`));
+        }
+        expect(css.replace(/\r\n/g, "\n")).toContain(contract.slice(contract.indexOf("@theme {")).replace(/\r\n/g, "\n"));
         // Every mapped SDK token has an app-owned value, including floating surfaces.
         for (const [, token] of contract.matchAll(/var\(--([\w-]+)/g)) {
           expect(css.slice(css.indexOf(":root {")), token).toMatch(new RegExp(`--${token}:\\s*[^;]+;`));

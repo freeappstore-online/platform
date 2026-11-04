@@ -59,6 +59,10 @@ jobs:
       - name: Runtime integration tests
         run: pnpm test:runtime
 
+      # Shared source must resolve with only this worker's dependencies installed.
+      - name: Isolated worker bundle regression
+        run: pnpm test:bundle
+
       - name: Deploy
         run: pnpm exec wrangler deploy
         env:

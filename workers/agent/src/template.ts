@@ -1,9 +1,13 @@
 /** Template files and system prompts — parameterized by store config. */
 
-import type { StoreConfig } from "./config";
 import { minVersion, subset, validRange } from "semver";
+import {
+  checkCapabilityPackagePrerequisites,
+  planCapabilityChanges,
+  resolveCapabilities,
+} from "../../../packages/cli/src/lib/capability-definitions";
 import { resolveStarterPreset } from "../../../packages/cli/src/lib/starter-presets";
-import { checkCapabilityPackagePrerequisites, planCapabilityChanges, resolveCapabilities } from "../../../packages/cli/src/lib/capability-definitions";
+import type { StoreConfig } from "./config";
 
 export type AppPreset = "standalone" | "connected";
 
@@ -992,7 +996,6 @@ img, video, canvas { max-width: 100%; }
   return files;
 }
 
-
 /** Builder-side equivalent of `fas add`: preview or apply canonical capabilities to an existing virtual app. */
 export function applyCapabilitiesToTemplate(
   currentFiles: Record<string, string>,
@@ -1012,22 +1015,17 @@ async function applyCapabilitiesToTemplateAsync(
   const capabilities = resolveCapabilities(ids);
   const rootPackageText = currentFiles["package.json"];
   if (!rootPackageText) throw new Error("Builder app is missing package.json; no capability files changed.");
-  const prerequisiteResult = checkCapabilityPackagePrerequisites(
-    capabilities,
-    rootPackageText,
-    currentFiles["web/package.json"],
-    { validRange, minVersion, subset },
-  );
+  const prerequisiteResult = checkCapabilityPackagePrerequisites(capabilities, rootPackageText, currentFiles["web/package.json"], {
+    validRange,
+    minVersion,
+    subset,
+  });
   if (prerequisiteResult.errors.length && !dryRun)
     throw new Error(`INCOMPLETE: package prerequisites unmet; no files changed.\n${prerequisiteResult.errors.join("\n")}`);
   if (prerequisiteResult.errors.length) {
     return {
       files: currentFiles,
-      changes: [
-        "INCOMPLETE: package prerequisites unmet; no files changed.",
-        ...prerequisiteResult.checked,
-        ...prerequisiteResult.errors,
-      ],
+      changes: ["INCOMPLETE: package prerequisites unmet; no files changed.", ...prerequisiteResult.checked, ...prerequisiteResult.errors],
       prerequisites: prerequisiteResult.errors,
     };
   }
@@ -1038,9 +1036,7 @@ async function applyCapabilitiesToTemplateAsync(
   };
   const manifestPath = ".fas-capabilities.json";
   const manifestText = currentFiles[manifestPath];
-  const manifest: CapabilityManifest = manifestText
-    ? JSON.parse(manifestText)
-    : { schemaVersion: 1, capabilities: {} };
+  const manifest: CapabilityManifest = manifestText ? JSON.parse(manifestText) : { schemaVersion: 1, capabilities: {} };
   if (manifest.schemaVersion !== 1 || !manifest.capabilities || typeof manifest.capabilities !== "object")
     throw new Error("Unsupported capability manifest; no files changed.");
   const owners: Record<string, string> = {};
@@ -1075,9 +1071,7 @@ async function applyCapabilitiesToTemplateAsync(
   }
   const nextManifest = JSON.stringify(manifest, null, 2) + "\n";
   const manifestChanged = nextManifest !== manifestText;
-  const files = dryRun
-    ? currentFiles
-    : { ...currentFiles, ...plan.writes, ...(manifestChanged ? { [manifestPath]: nextManifest } : {}) };
+  const files = dryRun ? currentFiles : { ...currentFiles, ...plan.writes, ...(manifestChanged ? { [manifestPath]: nextManifest } : {}) };
   const changes = dryRun
     ? [...prerequisiteResult.checked, ...plan.changes, ...(manifestChanged ? [`UPDATE ${manifestPath}`] : [])]
     : [...plan.changes, ...(manifestChanged ? [`UPDATE ${manifestPath}`] : [])];

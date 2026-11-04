@@ -26,7 +26,7 @@ import { editAccess, executeInfraTool, readAppOwner } from "./infra-exec";
 import { AI_SOURCES, type AIConfig, type AiSource, type Message, type TokenUsage, type ToolCall } from "./providers/types";
 import { type PushSubscription, sendWebPush } from "./push";
 import { fetchRepoFiles } from "./repo-import";
-import { APP_ARCHETYPES, applyCapabilitiesToTemplate, type AppArchetype, type AppPreset, getTemplateFiles } from "./template";
+import { APP_ARCHETYPES, type AppArchetype, type AppPreset, applyCapabilitiesToTemplate, getTemplateFiles } from "./template";
 
 interface ErrorEntry {
   timestamp: string;
@@ -270,7 +270,8 @@ export class AgentSession implements DurableObject {
     if (this.session.sessionId === undefined) this.session.sessionId = null;
     this.session.archetype = parseAppArchetype(this.session.archetype);
     this.session.preset = this.session.preset === "connected" ? "connected" : "standalone";
-    if (!this.session.baselineFiles) this.session.baselineFiles = { ...getTemplateFiles(this.config, this.session.archetype, this.session.preset) };
+    if (!this.session.baselineFiles)
+      this.session.baselineFiles = { ...getTemplateFiles(this.config, this.session.archetype, this.session.preset) };
     return this.session;
   }
 
@@ -1410,7 +1411,12 @@ export class AgentSession implements DurableObject {
   private async handleCapabilities(request: Request): Promise<Response> {
     const reply = (body: unknown, status = 200) => json(body, status, request, this.config.domain);
     const body = await request.json<{ capabilities?: string[]; dryRun?: boolean; update?: boolean }>().catch(() => null);
-    if (!Array.isArray(body?.capabilities) || body.capabilities.length === 0 || body.capabilities.length > 32 || body.capabilities.some((id) => typeof id !== "string"))
+    if (
+      !Array.isArray(body?.capabilities) ||
+      body.capabilities.length === 0 ||
+      body.capabilities.length > 32 ||
+      body.capabilities.some((id) => typeof id !== "string")
+    )
       return reply({ error: "capabilities must be a non-empty array of capability IDs" }, 400);
     if (body.dryRun !== true && (await this.activePendingTurn()))
       return reply({ error: "Cannot apply capabilities while a build is in progress." }, 409);

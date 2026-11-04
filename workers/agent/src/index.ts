@@ -94,7 +94,9 @@ export default {
     }
 
     // Routes: /session/:id/chat, /session/:id/capabilities, /session/:id/live, ...
-    const match = path.match(/^\/session\/([a-zA-Z0-9_-]{1,64})\/(chat|capabilities|live|status|files|history|errors|import|reset|push-subscribe)$/);
+    const match = path.match(
+      /^\/session\/([a-zA-Z0-9_-]{1,64})\/(chat|capabilities|live|status|files|history|errors|import|reset|push-subscribe)$/,
+    );
     if (!match) {
       return new Response(JSON.stringify({ error: "not found", hint: "Use /session/:id/chat" }), {
         status: 404,

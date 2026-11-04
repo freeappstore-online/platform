@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:runtime": "node scripts/test-runtime.mjs",
+    "test:bundle": "node scripts/test-isolated-bundle.mjs",
     "lint": "biome check src/",
     "lint:fix": "biome check --write src/",
     "format": "biome format --write src/"
