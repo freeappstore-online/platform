@@ -2,6 +2,35 @@ import { describe, expect, it } from "vitest";
 import worker from "./index";
 
 describe("agent key resolution", () => {
+  it("exposes capability additions through the public session route", async () => {
+    let forwardedPath = "";
+    let forwardedBody = "";
+    const env = {
+      STORE: "apps",
+      SESSION: {
+        idFromName: (name: string) => name,
+        get: () => ({
+          fetch: async (request: Request) => {
+            forwardedPath = new URL(request.url).pathname;
+            forwardedBody = await request.text();
+            return Response.json({ ok: true });
+          },
+        }),
+      },
+    };
+    const response = await worker.fetch(
+      new Request("https://agent.freeappstore.online/session/s1/capabilities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ capabilities: ["persistence"], dryRun: true }),
+      }),
+      env as unknown as Parameters<typeof worker.fetch>[1],
+    );
+    expect(response.status).toBe(200);
+    expect(forwardedPath).toBe("/capabilities");
+    expect(forwardedBody).toContain('"dryRun":true');
+  });
+
   it("calls the platform backend through the internal service-binding host", async () => {
     let platformUrl = "";
     let forwardedBody: { aiConfig?: { apiKey?: string; provider?: string; model?: string } } | null = null;

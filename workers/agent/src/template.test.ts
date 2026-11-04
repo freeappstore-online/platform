@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runComplianceCheck } from "./compliance";
 import { getConfig } from "./config";
-import { APP_ARCHETYPES, getArchetypeFiles, getSystemPrompt, getTemplateFiles, substituteAppName } from "./template";
+import { APP_ARCHETYPES, applyCapabilitiesToTemplate, getArchetypeFiles, getSystemPrompt, getTemplateFiles, substituteAppName } from "./template";
 
 const appsConfig = getConfig("apps");
 const gamesConfig = getConfig("games");
@@ -128,6 +128,92 @@ describe("getTemplateFiles", () => {
     expect(files).not.toHaveProperty("web/src/components/Tracker.tsx");
     expect(files).not.toHaveProperty("web/src/components/Calculator.tsx");
   });
+
+  it("generates the connected preset from the shared resolver and #350 app-owned draft wiring", () => {
+    for (const archetype of APP_ARCHETYPES) {
+      const files = getTemplateFiles(appsConfig, archetype, "connected");
+      const app = files["web/src/App.tsx"];
+      const draft = files["web/src/components/ConnectedDraft.tsx"];
+      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.16.26"');
+      expect(files["fas-capabilities/cloud-data.md"]).toContain("Room-restricted");
+      expect(draft).toContain("useConnectedKvDraft");
+      expect(draft).toContain("draft.retry");
+      expect(draft).toContain("app: FreeAppStore");
+      expect(draft).not.toContain("initApp(");
+      expect(draft).toContain("pwa.addBusyGuard(() => busy.current)");
+      expect(app).not.toContain("requireAuth");
+      expect(app).toContain("<ConnectedDraft app={fas} />");
+      expect(app).toContain("Editable app-owned starter screen");
+      expect(app.match(/initApp\(/g)).toHaveLength(1);
+    }
+  });
+
+  it("keeps standalone builder generation on the same canonical PWA resolver", () => {
+    const files = getTemplateFiles(appsConfig, "generic", "standalone");
+    expect(files["web/src/fas-capabilities/pwa.ts"]).toContain("@freeappstore/sdk/pwa");
+    expect(files["web/src/pwa.ts"]).toContain("export { pwa } from './fas-capabilities/pwa'");
+    expect(files["web/src/pwa.ts"]).not.toContain("startPwa");
+    expect(files["web/src/main.tsx"]).toContain("import './fas-capabilities/pwa'");
+    expect(files["fas-capabilities/pwa.md"]).toContain("addBusyGuard");
+    expect(files["web/src/App.tsx"]).not.toContain("requireAuth");
+  });
+
+  it("supports shared dry-run, prerequisite rejection, apply, and conflict behavior for later builder adds", async () => {
+    const scaffold = getTemplateFiles(appsConfig);
+    const preview = await applyCapabilitiesToTemplate(scaffold, ["connectivity"], true);
+    expect(preview.changes.join("\n")).toContain("CREATE fas-capabilities/connectivity.ts");
+    expect(preview.files).not.toHaveProperty("fas-capabilities/connectivity.ts");
+    const applied = await applyCapabilitiesToTemplate(scaffold, ["connectivity"]);
+    expect(applied.files["fas-capabilities/connectivity.ts"]).toContain("watchConnectivity");
+    expect((await applyCapabilitiesToTemplate(applied.files, ["connectivity"])).changes).toContain(
+      "No changes.",
+    );
+    const edited = { ...applied.files, "fas-capabilities/connectivity.ts": "custom" };
+    await expect(applyCapabilitiesToTemplate(edited, ["connectivity"])).rejects.toThrow("conflict");
+
+    const installed = JSON.parse(applied.files[".fas-capabilities.json"]!);
+    installed.capabilities.connectivity.version = "0.9.0";
+    const older = { ...applied.files, ".fas-capabilities.json": JSON.stringify(installed) };
+    await expect(applyCapabilitiesToTemplate(older, ["connectivity"])).rejects.toThrow("review a dry-run");
+    const updated = await applyCapabilitiesToTemplate(older, ["connectivity"], false, true);
+    expect(JSON.parse(updated.files[".fas-capabilities.json"]!).capabilities.connectivity.version).toBe("1.0.0");
+
+    const oldSdk = {
+      ...scaffold,
+      "package.json": JSON.stringify({ dependencies: { "@freeappstore/sdk": "0.16.14" } }),
+    };
+    const rejected = await applyCapabilitiesToTemplate(oldSdk, ["persistence"], true);
+    expect(rejected.prerequisites.join("\n")).toContain("requires @freeappstore/sdk >=0.16.18");
+    expect(rejected.files).not.toHaveProperty("fas-capabilities/persistence.ts");
+    await expect(applyCapabilitiesToTemplate(oldSdk, ["persistence"])).rejects.toThrow("no files changed");
+
+    const webOnlySdk = {
+      ...scaffold,
+      "package.json": JSON.stringify({ dependencies: {} }),
+      "web/package.json": JSON.stringify({ dependencies: { "@freeappstore/sdk": "^0.16.26" } }),
+    };
+    const rootPrerequisite = await applyCapabilitiesToTemplate(webOnlySdk, ["persistence"], true);
+    expect(rootPrerequisite.prerequisites.join("\n")).toContain("package.json");
+    expect(rootPrerequisite.files).not.toHaveProperty("fas-capabilities/persistence.ts");
+
+    const rootSdkOldWeb = {
+      ...scaffold,
+      "package.json": JSON.stringify({ dependencies: { "@freeappstore/sdk": "^0.16.26" } }),
+      "web/package.json": JSON.stringify({ dependencies: { "@freeappstore/sdk": "0.14.30" } }),
+    };
+    await expect(applyCapabilitiesToTemplate(rootSdkOldWeb, ["persistence"])).resolves.toBeTruthy();
+
+    const rootOnlyPwa = {
+      ...scaffold,
+      "package.json": JSON.stringify({
+        dependencies: { "@freeappstore/sdk": "^0.16.26" },
+        devDependencies: { "vite-plugin-pwa": "^1.3.0" },
+      }),
+    };
+    delete rootOnlyPwa["web/package.json"];
+    const rootOnlyPreview = await applyCapabilitiesToTemplate(rootOnlyPwa, ["pwa"], true);
+    expect(rootOnlyPreview.prerequisites).toEqual([]);
+  });
 });
 
 describe("getArchetypeFiles", () => {
@@ -236,7 +322,7 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
     expect(app).not.toMatch(/<h1\b/);
   });
 
-  it("depends on an SDK with safe PWA lifecycle support (>= 0.16.15)", () => {
+  it("depends on the current shared SDK package line, including lifecycle helpers", () => {
     const range = JSON.parse(files["web/package.json"]!).dependencies["@freeappstore/sdk"] as string;
     const [major, minor, patch] = range.replace(/^\^/, "").split(".").map(Number);
     expect(major).toBe(0);
@@ -247,8 +333,13 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
   it("wires the shared PWA runtime, safe config, install icons and zoom", () => {
     expect(files["web/vite.config.ts"]).toContain("VitePWA(pwaOptions())");
     expect(files["web/src/main.tsx"]).toContain("import './fas-capabilities/pwa'");
-    expect(files["web/src/pwa.ts"]).toBe("export { pwa } from './fas-capabilities/pwa';\n");
+    expect(files["web/src/pwa.ts"]).toContain("export { pwa } from './fas-capabilities/pwa'");
+    expect(files["web/src/pwa.ts"]).not.toContain("startPwa");
     expect(Object.values(files).join("\n").match(/startPwa\(/g)).toHaveLength(1);
+    expect(files["web/src/index.css"]).toContain('@source "../node_modules/@freeappstore/sdk/dist";');
+    expect(files["web/src/index.css"]).toContain('@source "../../node_modules/@freeappstore/sdk/dist";');
+    expect(files["web/src/index.css"]).toContain("@theme inline");
+    expect(files["web/src/index.css"]).toContain("--color-popover: var(--popover");
     expect(JSON.parse(files["web/public/manifest.json"]!).icons[0].purpose).toContain("maskable");
     expect(files["web/public/icon.svg"]).toContain("viewBox");
     expect(files["web/index.html"]).not.toMatch(/user-scalable|maximum-scale/);

@@ -93,8 +93,8 @@ export default {
       );
     }
 
-    // Routes: /session/:id/chat, /session/:id/live, /session/:id/status, /session/:id/files, /session/:id/reset
-    const match = path.match(/^\/session\/([a-zA-Z0-9_-]{1,64})\/(chat|live|status|files|history|errors|import|reset|push-subscribe)$/);
+    // Routes: /session/:id/chat, /session/:id/capabilities, /session/:id/live, ...
+    const match = path.match(/^\/session\/([a-zA-Z0-9_-]{1,64})\/(chat|capabilities|live|status|files|history|errors|import|reset|push-subscribe)$/);
     if (!match) {
       return new Response(JSON.stringify({ error: "not found", hint: "Use /session/:id/chat" }), {
         status: 404,
@@ -125,6 +125,9 @@ export default {
       } catch {
         // Unparseable body — forward it as-is; the session rejects it.
       }
+    }
+    if (route === "capabilities" && request.method === "POST") {
+      forwardBody = await request.text();
     }
 
     const doHeaders = new Headers(request.headers);

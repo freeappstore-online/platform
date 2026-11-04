@@ -19,12 +19,17 @@ it.skipIf(process.env.FAS_TEST_PUBLISHED !== '1')(
         JSON.stringify({
           private: true,
           type: 'module',
-          dependencies: { '@freeappstore/sdk': '0.16.21' },
+          dependencies: {
+            '@freeappstore/sdk': '0.16.26',
+            react: '19.0.0',
+            'react-dom': '19.0.0',
+          },
           devDependencies: { vite: '8.3.4', 'vite-plugin-pwa': '1.3.0', typescript: '5.9.3' },
         }),
       );
-      // No web package: generated imports resolve the root's published dependencies.
-      await installCapabilities(root, ['persistence', 'backup', 'pwa']);
+      // Root-only manifests remain supported; web imports may resolve from the
+      // parent node_modules tree when there is no web/package.json.
+      await installCapabilities(root, ['persistence', 'backup', 'pwa', 'realtime', 'media']);
       await writeFile(
         join(root, 'web/index.html'),
         '<html><body><script type="module" src="/src/main.ts"></script></body></html>',
@@ -34,7 +39,13 @@ it.skipIf(process.env.FAS_TEST_PUBLISHED !== '1')(
         `import './fas-capabilities/pwa';
 import { getPreference, putFile } from '../../fas-capabilities/persistence';
 import { exportBackup } from '../../fas-capabilities/backup';
-console.log(getPreference, putFile, exportBackup);
+import { exportRecording } from '../../fas-capabilities/media';
+import { watchRoom } from '../../fas-capabilities/realtime';
+import { initApp } from '@freeappstore/sdk';
+import { useConnectedKvDraft } from '@freeappstore/sdk/hooks';
+import { Shell } from '@freeappstore/sdk/ui';
+const fas = initApp({ appId: 'published-fixture' });
+console.log(getPreference, putFile, exportBackup, exportRecording, watchRoom, useConnectedKvDraft, Shell, fas);
 `,
       );
       await writeFile(
@@ -61,6 +72,8 @@ export default defineConfig({ plugins: [VitePWA(pwaOptions({ manifest: { name: '
           'es2022',
           'fas-capabilities/persistence.ts',
           'fas-capabilities/backup.ts',
+          'fas-capabilities/media.ts',
+          'fas-capabilities/realtime.ts',
           'web/src/fas-capabilities/pwa.ts',
           'web/fas-pwa-config.ts',
         ],

@@ -88,8 +88,9 @@ fas init asteroids --template game-canvas
 |------|---------|
 | `-t, --template <name>` | `standalone`, `connected`, `game-canvas`, `game-grid`, `game-3d` |
 
-`standalone` and `connected` are presets over one foundation, still cloned from
-two repositories until that generation lands. See the
+`standalone` and `connected` are generated from the same versioned capability
+registry used by `fas add`; the CLI currently uses the authorized standalone and
+connected template repos for its editable screen foundation. See the
 [composable starter contract](composable-starter-contract.md). Both start inside
 the SDK `Shell` with real `nav` items: `standalone` has Home and About and no
 sign-in; `connected` has Home behind the sign-in gate and an accessible Profile

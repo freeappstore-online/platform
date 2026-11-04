@@ -1,21 +1,10 @@
-import { minVersion, subset, validRange } from 'semver';
-
-/**
- * Pure prerequisite policy shared by filesystem installers and Worker callers.
- * Every version allowed by the declaration must satisfy the requirement.
- * Keep npm's default prerelease semantics; workspace/file/git specs are unproven.
- */
-export function satisfiesCapabilityPackageRange(declared: unknown, required: string): boolean {
-  return (
-    typeof declared === 'string' &&
-    !!validRange(declared) &&
-    !!minVersion(declared) &&
-    !!validRange(required) &&
-    !!minVersion(required) &&
-    subset(declared, required)
-  );
+export interface SemverRangeOperations {
+  validRange(range: string): string | null;
+  minVersion(range: string): { version: string } | null;
+  subset(sub: string, dom: string): boolean;
 }
 
+/** Worker-safe canonical capability definitions consumed by CLI and builder. */
 export type CapabilityPackage = {
   name: string;
   range: string;
@@ -68,8 +57,7 @@ Requires @freeappstore/sdk >=0.16.15 and vite-plugin-pwa ^1.0.0.
 In web/vite.config.ts import pwaOptions from ./fas-pwa-config
 and use VitePWA(pwaOptions({ /* your existing options */ })).
 Import ./fas-capabilities/pwa from web/src/main.tsx.
-In features, import { pwa } from the same web/src/fas-capabilities/pwa module.
-Register pwa.addBusyGuard callbacks for dirty forms, recordings and transfers; remove on cleanup.
+Register pwa.addBusyGuard callbacks for dirty forms, recordings and transfers.
 Keep the public manifest, icons and app-specific denylist. Review custom runtimeCaching:
 never cache authenticated responses; the shared defaults cache only build assets.
 Keep page zoom enabled; restrict gestures only on a canvas element.
@@ -134,7 +122,8 @@ See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
     configChanges: [
       'Choose a data access model from fas-capabilities/cloud-data.md before storing app data',
     ],
-    validate: (content) => content.includes('room-restricted') && content.includes('public-read'),
+    validate: (content) =>
+      content.toLowerCase().includes('room-restricted') && content.includes('public-read'),
   },
   persistence: {
     id: 'persistence',
@@ -351,11 +340,9 @@ the platform supports file sharing and otherwise downloads it. Revoke any object
 URLs your own preview creates. The PWA busy guard should cover active recording
 and unsaved media, then be removed when the feature unmounts:
 
-    // Import { pwa } from '../fas-capabilities/pwa' in web/src components.
-    // Reuse the app-owned controller; never startPwa in media features.
     const removeUpdateGuard = registerMediaBusyGuard(
       pwa,
-      () => Boolean(recorder && recorder.state !== 'inactive') || hasUnsavedMedia,
+      () => recorder?.state !== 'inactive' || hasUnsavedMedia,
     );
     // On cleanup: await stopRecording(recorder, stream); removeUpdateGuard();
 
@@ -385,55 +372,113 @@ export const presets: Record<string, string[]> = {
   media: ['media'],
 };
 
-export function resolveCapabilities(ids: string[], source = registry): Capability[] {
+/** Resolve the canonical bundled registry in dependency order. This module is worker-safe. */
+export function resolveCapabilities(
+  ids: string[],
+  source: Record<string, Capability> = registry,
+): Capability[] {
   const result: Capability[] = [];
   const visiting = new Set<string>();
   const done = new Set<string>();
-  function visit(id: string, version?: string) {
-    const cap = Object.hasOwn(source, id) ? source[id] : undefined;
-    if (!cap || (version && cap.version !== version))
-      throw new Error(`Unknown or incompatible capability: ${id}${version ? `@${version}` : ''}`);
+  const visit = (id: string, requiredVersion?: string) => {
+    const capability = Object.hasOwn(source, id) ? source[id] : undefined;
+    if (!capability || (requiredVersion && capability.version !== requiredVersion))
+      throw new Error(
+        `Unknown or incompatible capability: ${id}${requiredVersion ? `@${requiredVersion}` : ''}`,
+      );
     if (visiting.has(id)) throw new Error(`Capability dependency cycle: ${id}`);
     if (done.has(id)) return;
     visiting.add(id);
-    for (const [dep, required] of Object.entries(cap.dependencies)) visit(dep, required);
+    for (const [dependency, version] of Object.entries(capability.dependencies))
+      visit(dependency, version);
     visiting.delete(id);
     done.add(id);
-    result.push(cap);
-  }
+    result.push(capability);
+  };
   for (const id of ids) visit(id);
   return result;
 }
 
-export function checkCapabilityPackagePrerequisites(
+/** Shared conflict/dry-run change plan for filesystem and in-memory generators. */
+export function planCapabilityChanges(
   capabilities: Capability[],
-  root: PackageDependencies,
-  web?: PackageDependencies,
-) {
-  const prerequisites: string[] = [];
-  const checked: string[] = [];
-  for (const cap of capabilities) {
-    for (const requirement of cap.packages ?? []) {
-      // Resolve from the generated import's directory. A root-level persistence
-      // module cannot import dependencies installed only under web/node_modules.
-      const selectedWeb = requirement.location === 'web' ? web : undefined;
-      const location = selectedWeb !== undefined ? 'web/package.json' : 'package.json';
-      const pkg = selectedWeb ?? root;
-      const declared =
-        pkg.dependencies?.[requirement.name] ?? pkg.devDependencies?.[requirement.name];
-      checked.push(
-        `PREREQUISITE ${cap.id}: ${location} ${requirement.name} ${requirement.range} (declared ${declared ?? 'missing'})`,
-      );
-      if (!satisfiesCapabilityPackageRange(declared, requirement.range)) {
-        prerequisites.push(
-          `${cap.id}: ${location} requires ${requirement.name} ${requirement.range}; found ${declared ?? 'missing'}. Set a compatible explicit version/range and install dependencies. Workspace/link/file/git specs must be verified and replaced with a compatible published range before using this installer.`,
+  currentFiles: Record<string, string>,
+  owners: Record<string, string>,
+  isUnmodifiedOwnedFile: (path: string, content: string) => boolean,
+): { writes: Record<string, string>; changes: string[] } {
+  const writes: Record<string, string> = {};
+  const changes: string[] = [];
+  const plannedOwners = new Map<string, string>();
+  for (const capability of capabilities) {
+    for (const [path, content] of Object.entries(capability.files)) {
+      if (!capability.validate(content))
+        throw new Error(`Capability validation failed: ${capability.id}/${path}`);
+      const previousOwner = plannedOwners.get(path);
+      if (previousOwner && previousOwner !== capability.id)
+        throw new Error(`Multiple capabilities own ${path}`);
+      plannedOwners.set(path, capability.id);
+      const recordedOwner = owners[path];
+      if (recordedOwner && recordedOwner !== capability.id)
+        throw new Error(`Ownership conflict: ${path} belongs to ${recordedOwner}`);
+      const current = currentFiles[path];
+      if (current !== undefined && current !== content && !isUnmodifiedOwnedFile(path, current))
+        throw new Error(
+          `Edited or unowned file conflict: ${path}. Preserve your changes and resolve manually.`,
+        );
+      if (current !== content) {
+        writes[path] = content;
+        changes.push(
+          `${current === undefined ? 'CREATE' : 'UPDATE'} ${path} (${capability.id}@${capability.version})`,
         );
       }
     }
   }
-  return { checked, prerequisites };
+  return { writes, changes };
 }
-interface PackageDependencies {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
+
+export function satisfiesCapabilityPackageRange(
+  declared: unknown,
+  required: string,
+  semver: SemverRangeOperations,
+): boolean {
+  if (typeof declared !== 'string') return false;
+  const actualRange = semver.validRange(declared);
+  const requiredRange = semver.validRange(required);
+  return Boolean(
+    actualRange && requiredRange && semver.minVersion(actualRange) && semver.subset(actualRange, requiredRange),
+  );
+}
+
+export function checkCapabilityPackagePrerequisites(
+  capabilities: Capability[],
+  rootPackageText: string,
+  webPackageText: string | undefined,
+  semver: SemverRangeOperations,
+): { checked: string[]; errors: string[] } {
+  const root = JSON.parse(rootPackageText) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+  };
+  const web = webPackageText ? (JSON.parse(webPackageText) as typeof root) : undefined;
+  const checked: string[] = [];
+  const errors: string[] = [];
+  for (const capability of capabilities) {
+    for (const requirement of capability.packages ?? []) {
+      // Web imports resolve from web/node_modules when a web manifest exists;
+      // root-only apps resolve through the parent node_modules tree.
+      const useWeb = requirement.location === 'web' && web !== undefined;
+      const pkg = useWeb ? web : root;
+      const file = useWeb ? 'web/package.json' : 'package.json';
+      const declared =
+        pkg?.dependencies?.[requirement.name] ?? pkg?.devDependencies?.[requirement.name];
+      checked.push(
+        `PREREQUISITE ${capability.id}: ${file} ${requirement.name} ${requirement.range} (declared ${declared ?? 'missing'})`,
+      );
+      if (!declared || !satisfiesCapabilityPackageRange(declared, requirement.range, semver))
+        errors.push(
+          `${capability.id}: ${file} requires ${requirement.name} ${requirement.range}; found ${declared ?? 'missing'}. Set a compatible explicit version/range and install dependencies. Workspace/link/file/git specs must be verified and replaced with a compatible published range before using this installer.`,
+        );
+    }
+  }
+  return { checked, errors };
 }

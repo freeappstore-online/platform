@@ -10,6 +10,7 @@ import {
   resolveCapabilities,
 } from '../lib/capabilities.js';
 import { configureFreshPwa } from '../lib/pwa-scaffold.js';
+import { resolveStarterPreset } from '../lib/starter-presets.js';
 
 const TEMPLATES = {
   // FreeAppStore templates
@@ -70,11 +71,13 @@ export async function runInit(opts: {
   assertValidAppId(opts.appId);
   const preset = opts.preset ?? 'minimal';
   if (!Object.hasOwn(presets, preset)) throw new Error(`Unknown preset: ${preset}`);
-  const capabilities = [
-    ...(presets[preset] ?? []),
-    ...(opts.capabilities ?? []),
-    ...(GAME_TEMPLATES.has(opts.template ?? 'standalone') ? [] : ['pwa']),
-  ];
+  const additions = [...(presets[preset] ?? []), ...(opts.capabilities ?? [])];
+  const capabilities = GAME_TEMPLATES.has(opts.template ?? 'standalone')
+    ? additions
+    : resolveStarterPreset(
+        opts.template === 'connected' ? 'connected' : 'standalone',
+        additions,
+      ).map((capability) => capability.id);
   resolveCapabilities(capabilities);
   const template = opts.template ?? 'standalone';
   if (!(template in TEMPLATES)) {

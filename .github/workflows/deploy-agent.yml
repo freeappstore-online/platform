@@ -16,6 +16,9 @@ on:
       # source, so compliance changes alter the deployed Worker even when
       # workers/agent itself doesn't change.
       - 'packages/compliance/**'
+      # The worker consumes canonical capability resolution shared with the CLI.
+      - 'packages/cli/src/lib/capability-definitions.ts'
+      - 'packages/cli/src/lib/starter-presets.ts'
       - '.github/workflows/deploy-agent.yml'
   workflow_dispatch:
 

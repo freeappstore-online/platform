@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { satisfies } from 'semver';
+import { minVersion, satisfies, subset, validRange } from 'semver';
 import { afterEach, expect, it } from 'vitest';
 import {
   type Capability,
@@ -10,6 +10,11 @@ import {
   registry,
   resolveCapabilities,
 } from './capabilities.js';
+import {
+  planCapabilityChanges,
+  satisfiesCapabilityPackageRange,
+} from './capability-definitions.js';
+import { resolveStarterPreset } from './starter-presets.js';
 
 const roots: string[] = [];
 async function app() {
@@ -41,6 +46,49 @@ it('resolves dependencies before dependents and rejects incompatible versions an
   expect(() => resolveCapabilities(['a'], { ...source, b: cap('b', { a: '1.0.0' }) })).toThrow(
     'cycle',
   );
+});
+
+it('uses the same canonical resolver for standalone/connected profiles and later additions', () => {
+  expect(resolveStarterPreset('standalone').map(({ id }) => id)).toEqual(['pwa']);
+  expect(resolveStarterPreset('connected').map(({ id }) => id)).toEqual(['pwa', 'cloud-data']);
+  expect(resolveStarterPreset('connected', ['backup']).map(({ id }) => id)).toEqual([
+    'pwa',
+    'cloud-data',
+    'persistence',
+    'backup',
+  ]);
+});
+
+it('shares generated-file planning semantics for clean, dry-run, and edited in-memory files', () => {
+  const capability = registry.connectivity!;
+  const clean = planCapabilityChanges([capability], {}, {}, () => false);
+  expect(clean.changes[0]).toMatch(/^CREATE fas-capabilities\/connectivity\.ts/);
+  expect(clean.writes['fas-capabilities/connectivity.ts']).toContain('watchConnectivity');
+  expect(
+    planCapabilityChanges(
+      [capability],
+      { 'fas-capabilities/connectivity.ts': capability.files['fas-capabilities/connectivity.ts']! },
+      {},
+      () => false,
+    ).changes,
+  ).toEqual([]);
+  expect(() =>
+    planCapabilityChanges(
+      [capability],
+      { 'fas-capabilities/connectivity.ts': 'app edit' },
+      {},
+      () => false,
+    ),
+  ).toThrow('conflict');
+});
+
+it('uses npm semver range semantics for shared capability prerequisites', () => {
+  expect(satisfiesCapabilityPackageRange('0.16.26-beta.1', '>=0.16.26', { validRange, minVersion, subset })).toBe(false);
+  expect(satisfiesCapabilityPackageRange('^0.16.26-beta.1', '>=0.16.26', { validRange, minVersion, subset })).toBe(false);
+  expect(satisfiesCapabilityPackageRange('>=0.16.26 <0.17.0', '>=0.16.26', { validRange, minVersion, subset })).toBe(true);
+  expect(satisfiesCapabilityPackageRange('1.3.x', '^1.0.0', { validRange, minVersion, subset })).toBe(true);
+  expect(satisfiesCapabilityPackageRange('0.16.26+build.1', '>=0.16.26', { validRange, minVersion, subset })).toBe(true);
+  expect(satisfiesCapabilityPackageRange('0.16.26 - 0.16.30', '>=0.16.26', { validRange, minVersion, subset })).toBe(true);
 });
 it('describes the explicit room-restricted backend data model accurately', () => {
   const cloud = registry['cloud-data'];
@@ -397,6 +445,57 @@ it('checks PWA prerequisites in web/package.json rather than accepting unrelated
   );
   await installCapabilities(root, ['pwa']);
   expect(await installCapabilities(root, ['pwa'])).toEqual(['No changes.']);
+});
+
+it('checks root and web package prerequisites independently', async () => {
+  const root = await app();
+  await mkdir(join(root, 'web'));
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.26' } }),
+  );
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '0.14.30' } }),
+  );
+  await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('web/package.json');
+  await writeFile(join(root, 'package.json'), JSON.stringify({ dependencies: {} }));
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.26' } }),
+  );
+  await expect(installCapabilities(root, ['persistence'])).rejects.toThrow('package.json');
+});
+
+it('keeps a web dependency in the web manifest when it exists', async () => {
+  const root = await app();
+  await mkdir(join(root, 'web'));
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({
+      dependencies: { '@freeappstore/sdk': '^0.16.26', 'vite-plugin-pwa': '^1.3.0' },
+    }),
+  );
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.26' } }),
+  );
+  await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('web/package.json');
+});
+
+it('uses root package prerequisites for web imports in root-only apps', async () => {
+  const root = await app();
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({
+      dependencies: { '@freeappstore/sdk': '^0.16.26' },
+      devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
+    }),
+  );
+  await installCapabilities(root, ['pwa']);
+  expect(await readFile(join(root, 'web/src/fas-capabilities/pwa.ts'), 'utf8')).toContain(
+    'startPwa',
+  );
 });
 
 it('requires root SDK for a root persistence import even when web has SDK', async () => {

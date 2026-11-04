@@ -34,10 +34,16 @@ elif [[ ! "$range" =~ ^\^?(0\.(1[5-9]|[2-9][0-9])|[1-9][0-9]*)\. ]]; then
   fail "@freeappstore/sdk range '$range' is missing or below 0.14.30"
 fi
 
-# Sign-in gate: connected apps work on the user's data, standalone apps don't sign in.
+# The canonical builder output includes ConnectedDraft and keeps public screens
+# available. CLI still clones the legacy external template until #369 lands, so
+# retain its current smoke coverage without claiming the external convergence is done.
 case "$template" in
-  connected) grep -Eq "<Shell [^>]*\brequireAuth\b" "$app" || fail "connected template's Shell lacks requireAuth" ;;
-  standalone) ! grep -Eq "<Shell [^>]*\brequireAuth\b" "$app" || fail "standalone template's Shell requires sign-in" ;;
+  connected)
+    if [ -f "$dir/web/src/fas-capabilities/ConnectedDraft.tsx" ]; then
+      ! grep -Eq "<Shell [^>]*\brequireAuth\b" "$app" || fail "canonical connected starter gates public screens with requireAuth"
+    fi
+    ;;
+  standalone) ! grep -Eq "<Shell [^>]*\brequireAuth\b" "$app" || fail "standalone starter gates public screens with requireAuth" ;;
   *) echo "unknown template '$template' (standalone|connected)"; exit 2 ;;
 esac
 

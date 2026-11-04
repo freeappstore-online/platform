@@ -2,18 +2,20 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { gt, minVersion, subset, validRange } from 'semver';
+
 import {
-  checkCapabilityPackagePrerequisites,
-  registry,
-  resolveCapabilities,
   type Capability,
   type CapabilityPackage,
-} from './capability-definitions.js';
-export {
-  registry,
-  presets,
+  checkCapabilityPackagePrerequisites,
+  planCapabilityChanges,
   resolveCapabilities,
+} from './capability-definitions.js';
+
+export {
   type Capability,
+  presets,
+  registry,
+  resolveCapabilities,
 } from './capability-definitions.js';
 
 interface Ownership {
@@ -165,13 +167,17 @@ export async function installCapabilities(
   if (!packageText) throw new Error('Run fas add in an app root containing package.json.');
   JSON.parse(packageText);
   const capabilities = resolveCapabilities(ids, options.source);
-  const webText = capabilities.some((cap) => cap.packages?.some((pkg) => pkg.location === 'web'))
+  const needsWebPackage = capabilities.some((capability) =>
+    capability.packages?.some((requirement) => requirement.location === 'web'),
+  );
+  const webPackageText = needsWebPackage
     ? await readOptional(await safePath(root, 'web/package.json'))
     : undefined;
-  const { checked, prerequisites } = checkCapabilityPackagePrerequisites(
+  const { checked, errors: prerequisites } = checkCapabilityPackagePrerequisites(
     capabilities,
-    JSON.parse(packageText),
-    webText === undefined ? undefined : JSON.parse(webText),
+    packageText,
+    webPackageText,
+    { validRange, minVersion, subset },
   );
   if (prerequisites.length) {
     const report = [
@@ -190,9 +196,39 @@ export async function installCapabilities(
     typeof manifest.capabilities !== 'object'
   )
     throw new Error('Unsupported capability manifest.');
+  const plannedPaths = [
+    ...new Set(capabilities.flatMap((capability) => Object.keys(capability.files))),
+  ];
+  const currentFiles: Record<string, string> = {};
+  const owners: Record<string, string> = {};
+  for (const [owner, owned] of Object.entries(manifest.capabilities)) {
+    for (const path of Object.keys(owned.files)) owners[path] = owner;
+  }
+  for (const file of plannedPaths) {
+    const current = await readOptional(await safePath(root, file));
+    if (current !== undefined) currentFiles[file] = current;
+  }
+  const capabilityPlan = planCapabilityChanges(
+    capabilities,
+    currentFiles,
+    owners,
+    (file, current) => {
+      const owner = owners[file];
+      const expectedHash = owner ? manifest.capabilities[owner]?.files[file] : undefined;
+      return expectedHash !== undefined && hash(current) === expectedHash;
+    },
+  );
   const plan: string[] = options.dryRun ? checked : [];
-  const writes: { path: string; content: string }[] = [];
-  const owners = new Set<string>();
+  const writes = Object.entries(capabilityPlan.writes).map(([file, content]) => ({
+    path: resolve(root, file),
+    content,
+  }));
+  const changeByPath = new Map(
+    capabilityPlan.changes.map((change) => [
+      change.slice(change.indexOf(' ') + 1, change.indexOf(' (')),
+      change,
+    ]),
+  );
   for (const cap of capabilities) {
     const old = Object.hasOwn(manifest.capabilities, cap.id)
       ? manifest.capabilities[cap.id]
@@ -205,30 +241,17 @@ export async function installCapabilities(
       );
     const files: Record<string, string> = {};
     for (const [file, content] of Object.entries(cap.files)) {
-      if (owners.has(file)) throw new Error(`Multiple capabilities own ${file}`);
-      owners.add(file);
-      for (const [other, owned] of Object.entries(manifest.capabilities)) {
-        if (other !== cap.id && Object.hasOwn(owned.files, file))
-          throw new Error(`Ownership conflict: ${file} belongs to ${other}`);
-      }
-      if (!cap.validate(content))
-        throw new Error(`Capability validation failed: ${cap.id}/${file}`);
-      const path = await safePath(root, file);
-      const current = await readOptional(path);
-      const expected = old?.files[file];
-      if (current !== undefined && current !== content && (!expected || hash(current) !== expected))
-        throw new Error(
-          `Edited or unowned file conflict: ${file}. Preserve your changes and resolve manually.`,
-        );
+      await safePath(root, file);
+      const current = currentFiles[file];
       files[file] = hash(content);
       if (current !== content) {
+        const description = changeByPath.get(file);
         plan.push(
-          `${current === undefined ? 'CREATE' : 'UPDATE'} ${file} (${cap.id}@${cap.version})\n${content
+          `${description ?? `CREATE ${file} (${cap.id}@${cap.version})`}\n${content
             .split('\n')
             .map((line) => `+ ${line}`)
             .join('\n')}`,
         );
-        writes.push({ path, content });
       }
     }
     // Removed files are retained and remain tracked: no implicit destructive migrations.

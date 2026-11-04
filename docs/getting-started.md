@@ -100,7 +100,7 @@ from older layouts, and caveats: [the Shell](ui.md#shell-the-standard-app-frame)
 ## Templates
 
 ```bash
-fas init my-app                          # default: standalone (localStorage only)
+fas init my-app                          # default: standalone (device-local, no sign-in gate)
 fas init my-app --template connected     # uses platform backend (KV, rooms, etc.)
 fas init asteroids --template game-canvas  # HTML5 canvas game
 fas init chess --template game-grid        # grid-based game
@@ -109,8 +109,8 @@ fas init racing --template game-3d         # 3D game
 
 | Template | Use case |
 |----------|----------|
-| `standalone` | Apps that only need localStorage. No sign-in. Starts inside `Shell` with two screens in `nav`: Home (`/`) and About (`/about`). |
-| `connected` | Apps that work with the user's data through the SDK (auth, KV, collections, rooms, proxy). Starts inside `Shell` with `requireAuth` (a sign-in screen until the user signs in) and two screens in `nav`: Home (`/`, a note saved to per-user KV) and Profile (`/profile`, the SDK-owned profile page). The avatar also opens Profile while signed out, with GitHub and Google sign-in choices. |
+| `standalone` | Device-local by default, with no sign-in gate. Add IndexedDB or optional account capabilities as needed. Starts inside `Shell` with Home and About screens. |
+| `connected` | Apps using platform account services through the SDK (auth, KV, collections, rooms, proxy). The generated connected example uses the race-safe private draft hook from #350. Keep app screens editable and gate only features that need sign-in where possible. The SDK profile page offers configured sign-in choices. |
 
 Both names are presets over one foundation. They are still cloned from two
 repositories until [#352](https://github.com/freeappstore-online/platform/issues/352).

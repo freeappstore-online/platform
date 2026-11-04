@@ -1,7 +1,9 @@
 /** Template files and system prompts — parameterized by store config. */
 
-import { checkCapabilityPackagePrerequisites, resolveCapabilities } from "../../../packages/cli/src/lib/capability-definitions";
 import type { StoreConfig } from "./config";
+import { minVersion, subset, validRange } from "semver";
+import { resolveStarterPreset } from "../../../packages/cli/src/lib/starter-presets";
+import { checkCapabilityPackagePrerequisites, planCapabilityChanges, resolveCapabilities } from "../../../packages/cli/src/lib/capability-definitions";
 
 export type AppPreset = "standalone" | "connected";
 
@@ -42,7 +44,7 @@ const SHARED_FILES: Record<string, string> = {
   "dependencies": {
     "react": "^19",
     "react-dom": "^19",
-    "@freeappstore/sdk": "^0.14.30"
+    "@freeappstore/sdk": "^0.16.26"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1",
@@ -169,37 +171,37 @@ const APP_FILES: Record<string, string> = {
 
 @theme inline {
   --color-paper: var(--paper);
-  --color-paper-deep: var(--paper-deep);
+  --color-paper-deep: var(--paper-deep, var(--paper));
   --color-ink: var(--ink);
-  --color-ink-strong: var(--ink-strong);
+  --color-ink-strong: var(--ink-strong, var(--ink));
   --color-muted: var(--muted);
   --color-line: var(--line);
-  --color-line-strong: var(--line-strong);
+  --color-line-strong: var(--line-strong, var(--line));
   --color-panel: var(--panel);
-  --color-panel-glass: var(--panel-glass);
-  --color-popover: var(--popover);
+  --color-panel-glass: var(--panel-glass, var(--panel));
+  --color-popover: var(--popover, var(--paper));
   --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-  --color-accent-deep: var(--accent-deep);
-  --color-accent-hover: var(--accent-hover);
-  --color-sky: var(--sky);
-  --color-sky-soft: var(--sky-soft);
-  --color-sky-deep: var(--sky-deep);
-  --color-mint: var(--mint);
-  --color-mint-soft: var(--mint-soft);
-  --color-mint-deep: var(--mint-deep);
+  --color-accent-soft: var(--accent-soft, var(--accent));
+  --color-accent-deep: var(--accent-deep, var(--accent));
+  --color-accent-hover: var(--accent-hover, var(--accent));
+  --color-sky: var(--sky, #0ea5e9);
+  --color-sky-soft: var(--sky-soft, #e0f2fe);
+  --color-sky-deep: var(--sky-deep, #0369a1);
+  --color-mint: var(--mint, #10b981);
+  --color-mint-soft: var(--mint-soft, #d1fae5);
+  --color-mint-deep: var(--mint-deep, #047857);
   --color-success: var(--success);
-  --color-success-soft: var(--success-soft);
+  --color-success-soft: var(--success-soft, var(--success));
   --color-warning: var(--warning);
-  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft: var(--warning-soft, var(--warning));
   --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
-  --color-scrim: var(--scrim);
-  --radius: var(--radius);
-  --radius-sm: var(--radius-sm);
+  --color-danger-soft: var(--danger-soft, var(--danger));
+  --color-scrim: var(--scrim, rgb(0 0 0 / 45%));
+  --radius: var(--radius, 12px);
+  --radius-sm: var(--radius-sm, 8px);
   --radius-lg: var(--radius-lg, var(--radius));
-  --shadow-sm: var(--shadow);
-  --shadow-lg: var(--shadow-lg, var(--shadow));
+  --shadow-sm: var(--shadow, 0 1px 2px rgb(0 0 0 / 8%));
+  --shadow-lg: var(--shadow-lg, 0 12px 32px rgb(0 0 0 / 18%));
 }
 
 @theme {
@@ -865,10 +867,10 @@ ${config.store === "apps" ? `          OUTPUT_PATH: \${{ steps.target.outputs.ou
 // ── Public API ──
 
 const CONNECTED_DRAFT = `import { useEffect, useRef } from 'react';
-import { pwa } from '../fas-capabilities/pwa';
 import { useConnectedKvDraft } from '@freeappstore/sdk/hooks';
 import { SignInButton } from '@freeappstore/sdk/ui';
 import type { FreeAppStore } from '@freeappstore/sdk';
+import { pwa } from '../fas-capabilities/pwa';
 
 /** Keep the sign-in gate on this private-data feature, not on public app screens. */
 export function ConnectedDraft({ app: fas }: { app: FreeAppStore }) {
@@ -924,6 +926,10 @@ export function getArchetypeFiles(archetype: AppArchetype): Record<string, strin
 
 export function getTemplateFiles(config: StoreConfig, archetype?: AppArchetype, preset: AppPreset = "standalone"): Record<string, string> {
   const appArchetypeFiles = config.store === "games" ? {} : getArchetypeFiles(archetype ?? "generic");
+  const capabilities = config.store === "apps" ? resolveStarterPreset(preset) : [];
+  const foundationFiles = { ...SHARED_FILES, ...APP_FILES };
+  const capabilityPlan = planCapabilityChanges(capabilities, foundationFiles, {}, () => false);
+  const capabilityFiles = capabilityPlan.writes;
   const files: Record<string, string> = {
     ...SHARED_FILES,
     ...(config.store === "games" ? GAME_FILES : APP_FILES),
@@ -938,12 +944,9 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { pwaOptions } from '@freeappstore/sdk/pwa-config';
 export default defineConfig({ plugins: [react(), tailwindcss(), VitePWA(pwaOptions())] });`,
-          "web/src/fas-capabilities/pwa.ts": `// Import this module once from the browser entry point after installing SDK >=0.16.15.
-import { startPwa } from '@freeappstore/sdk/pwa';
-export const pwa = startPwa();
-// pwa.addBusyGuard(() => dirtyForm || recorder.state === 'recording');
+          "web/src/pwa.ts": `// Compatibility path: the canonical app-owned controller lives in fas-capabilities/pwa.ts.
+export { pwa } from './fas-capabilities/pwa';
 `,
-          "web/src/pwa.ts": `export { pwa } from './fas-capabilities/pwa';\n`,
           "web/src/main.tsx": `import './fas-capabilities/pwa';\n${SHARED_FILES["web/src/main.tsx"]}`,
           "web/public/icon.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="64" fill="#2563eb"/><path d="M160 160h192v48H208v48h120v48H208v48h-48z" fill="white"/></svg>`,
           "web/public/manifest.json": JSON.stringify(
@@ -968,23 +971,121 @@ img, video, canvas { max-width: 100%; }
             null,
             2,
           ),
+          ...capabilityFiles,
         }
       : {}),
     ...appArchetypeFiles,
     ".github/workflows/deploy.yml": deployWorkflow(config),
   };
+
   if (config.store === "apps" && preset === "connected") {
-    // Features receive the app-owned singleton; a second initApp retains stale auth.
     files["web/src/App.tsx"] = files["web/src/App.tsx"]
       .replace("import { initApp }", 'import { ConnectedDraft } from "./components/ConnectedDraft";\nimport { initApp }')
       .replace(
         '  return <PageHeader title="Welcome to APPNAME" description="Edit web/src/App.tsx to get started." />;',
-        '  return <><PageHeader title="Welcome to APPNAME" description="Your public home." /><ConnectedDraft app={fas} /></>;',
+        '  return <><PageHeader title="Welcome to APPNAME" description="Editable app-owned starter screen." /><ConnectedDraft app={fas} /></>;',
       );
     files["web/src/components/ConnectedDraft.tsx"] = CONNECTED_DRAFT;
     files["web/package.json"] = files["web/package.json"].replace('"^0.16.15"', '"^0.16.26"');
   }
+
   return files;
+}
+
+
+/** Builder-side equivalent of `fas add`: preview or apply canonical capabilities to an existing virtual app. */
+export function applyCapabilitiesToTemplate(
+  currentFiles: Record<string, string>,
+  ids: string[],
+  dryRun = false,
+  update = false,
+): Promise<{ files: Record<string, string>; changes: string[]; prerequisites: string[] }> {
+  return applyCapabilitiesToTemplateAsync(currentFiles, ids, dryRun, update);
+}
+
+async function applyCapabilitiesToTemplateAsync(
+  currentFiles: Record<string, string>,
+  ids: string[],
+  dryRun: boolean,
+  update: boolean,
+): Promise<{ files: Record<string, string>; changes: string[]; prerequisites: string[] }> {
+  const capabilities = resolveCapabilities(ids);
+  const rootPackageText = currentFiles["package.json"];
+  if (!rootPackageText) throw new Error("Builder app is missing package.json; no capability files changed.");
+  const prerequisiteResult = checkCapabilityPackagePrerequisites(
+    capabilities,
+    rootPackageText,
+    currentFiles["web/package.json"],
+    { validRange, minVersion, subset },
+  );
+  if (prerequisiteResult.errors.length && !dryRun)
+    throw new Error(`INCOMPLETE: package prerequisites unmet; no files changed.\n${prerequisiteResult.errors.join("\n")}`);
+  if (prerequisiteResult.errors.length) {
+    return {
+      files: currentFiles,
+      changes: [
+        "INCOMPLETE: package prerequisites unmet; no files changed.",
+        ...prerequisiteResult.checked,
+        ...prerequisiteResult.errors,
+      ],
+      prerequisites: prerequisiteResult.errors,
+    };
+  }
+
+  type CapabilityManifest = {
+    schemaVersion: 1;
+    capabilities: Record<string, { version: string; files: Record<string, string>; metadata?: Record<string, string> }>;
+  };
+  const manifestPath = ".fas-capabilities.json";
+  const manifestText = currentFiles[manifestPath];
+  const manifest: CapabilityManifest = manifestText
+    ? JSON.parse(manifestText)
+    : { schemaVersion: 1, capabilities: {} };
+  if (manifest.schemaVersion !== 1 || !manifest.capabilities || typeof manifest.capabilities !== "object")
+    throw new Error("Unsupported capability manifest; no files changed.");
+  const owners: Record<string, string> = {};
+  for (const [owner, owned] of Object.entries(manifest.capabilities)) {
+    for (const path of Object.keys(owned.files)) owners[path] = owner;
+  }
+  const digests = new Map<string, string>();
+  const digest = async (text: string) => {
+    const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  };
+  for (const [path, owner] of Object.entries(owners)) {
+    const current = currentFiles[path];
+    const expected = manifest.capabilities[owner]?.files[path];
+    if (current !== undefined && expected !== undefined) digests.set(path, await digest(current));
+  }
+  const plan = planCapabilityChanges(capabilities, currentFiles, owners, (path) => {
+    const owner = owners[path];
+    return !!owner && digests.get(path) === manifest.capabilities[owner]?.files[path];
+  });
+  for (const capability of capabilities) {
+    const old = manifest.capabilities[capability.id];
+    if (old && old.version !== capability.version && !update)
+      throw new Error(`${capability.id}: installed ${old.version}; review a dry-run with update before updating to ${capability.version}.`);
+    const files: Record<string, string> = {};
+    for (const [path, content] of Object.entries(capability.files)) files[path] = await digest(content);
+    manifest.capabilities[capability.id] = {
+      version: capability.version,
+      files: { ...old?.files, ...files },
+      ...(capability.metadata ? { metadata: capability.metadata } : {}),
+    };
+  }
+  const nextManifest = JSON.stringify(manifest, null, 2) + "\n";
+  const manifestChanged = nextManifest !== manifestText;
+  const files = dryRun
+    ? currentFiles
+    : { ...currentFiles, ...plan.writes, ...(manifestChanged ? { [manifestPath]: nextManifest } : {}) };
+  const changes = dryRun
+    ? [...prerequisiteResult.checked, ...plan.changes, ...(manifestChanged ? [`UPDATE ${manifestPath}`] : [])]
+    : [...plan.changes, ...(manifestChanged ? [`UPDATE ${manifestPath}`] : [])];
+  return {
+    files,
+    changes: changes.length ? changes : ["No changes."],
+    prerequisites: prerequisiteResult.errors,
+  };
 }
 
 export function substituteAppName(files: Record<string, string>, appId: string, displayName: string): Record<string, string> {
@@ -1013,7 +1114,6 @@ Users describe an app idea and you build it. You write TypeScript + React code, 
 ## Tech Stack (mandatory)
 - TypeScript, React 19, Vite 6, Tailwind CSS 4.1, @freeappstore/sdk
 - All data in localStorage (no backend, no server, no database)
-- Import pwa from web/src/fas-capabilities/pwa.ts for dirty/saving and media guards; remove guards on cleanup. Never start a second PWA controller.
 - Must work offline after first load (PWA)
 
 ## The app shell (supported default)
@@ -1256,39 +1356,4 @@ Do NOT attempt to edit these. Build your game entirely in web/src/ (App.tsx + co
 
 export function getSystemPrompt(config: StoreConfig): string {
   return config.store === "games" ? GAME_SYSTEM_PROMPT : APP_SYSTEM_PROMPT;
-}
-
-/** Apply capability recipes only after every generated import's package has passed preflight.
- * Returns a new file map; failures and previews never mutate the caller's template.
- */
-export async function applyCapabilitiesToTemplate(
-  files: Record<string, string>, ids: string[], options: { dryRun?: boolean } = {},
-): Promise<Record<string, string>> {
-  const capabilities = resolveCapabilities(ids);
-  const { prerequisites } = checkCapabilityPackagePrerequisites(
-    capabilities,
-    JSON.parse(files["package.json"] ?? "{}"),
-    files["web/package.json"] === undefined ? undefined : JSON.parse(files["web/package.json"]),
-  );
-  if (prerequisites.length) throw new Error([
-    "INCOMPLETE: package prerequisites unmet; no files or manifest written.", ...prerequisites,
-  ].join("\n"));
-  if (options.dryRun) return { ...files };
-  const next = { ...files };
-  const manifest = JSON.parse(files[".fas-capabilities.json"] ?? '{"schemaVersion":1,"capabilities":{}}');
-  if (manifest.schemaVersion !== 1 || !manifest.capabilities) throw new Error("Unsupported capability manifest.");
-  for (const cap of capabilities) {
-    const hashes: Record<string, string> = {};
-    for (const [path, content] of Object.entries(cap.files)) {
-      if (next[path] !== undefined && next[path] !== content) throw new Error(
-        "Capability file conflict: " + path,
-      );
-      next[path] = content;
-      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
-      hashes[path] = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-    }
-    manifest.capabilities[cap.id] = { version: cap.version, files: hashes, ...(cap.metadata ? { metadata: cap.metadata } : {}) };
-  }
-  next[".fas-capabilities.json"] = JSON.stringify(manifest, null, 2) + "\n";
-  return next;
 }
