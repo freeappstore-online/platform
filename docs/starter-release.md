@@ -101,7 +101,7 @@ The completed release publishes CLI `0.4.63` and SDK `0.16.33` from platform sou
 
 The published CLI `0.4.63` was independently checked for migration from the prior published CLI `0.4.62`: backup `1.0.0` dry-run left every file unchanged; apply changed only `backup.ts`, `backup.md`, and `.fas-capabilities.json`; repeating apply was idempotent; and an edited prior helper was rejected without writes. Fresh standalone and connected presets both contain the corrected recipe and a link to this guide. The published SDK `0.16.33` backup sample renders plain, truthful restoration-failure text, exposes no developer result code, and removes its view on destroy. Evidence: [independent release verification](https://github.com/freeappstore-online/platform/issues/353#issuecomment-6640907483) and local artifacts `/var/folders/xg/xf69lhnj7zd9khr1_10ps0xr0000gn/T/fas-published-063-review-08l5Uf/migration-review.json` and `published-sdk-ui.json`.
 
-The following runtime checks were performed against the prior published CLI `0.4.62` and SDK `0.16.32`; they remain representative predecessor evidence and were not rerun against `0.4.63` / `0.16.33`. The final release changes generated guidance, sample UI text and PWA test cleanup, not SDK runtime behavior:
+The table combines the CLI `0.4.62` / SDK `0.16.32` runtime baseline with earlier accepted child checks; their exact versions are recorded in the linked evidence. Those runtime checks were not rerun against `0.4.63` / `0.16.33`. The external-mirrors row records the final `0.4.63` release. The final release changes generated guidance, sample UI text and PWA test cleanup, not SDK runtime behavior.
 
 | Surface | Verified outcome |
 | --- | --- |
