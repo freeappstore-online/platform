@@ -126,8 +126,9 @@ Users describe an app idea and you build it. You write TypeScript + React code, 
 ## The app shell (supported default)
 web/src/App.tsx already wraps the app in \`<Shell>\` from "@freeappstore/sdk/ui". Keep that
 root unless the user asks for a custom frame. Shell provides:
-- The topbar: app name only, text size, theme toggle while signed out, and a compact avatar
-  that opens the profile page in both auth states. Do not mount SignInButton or ProfileMenu
+- The topbar: app name only and a compact avatar
+  that opens the profile page in both auth states. Appearance settings live in Profile;
+  the built-in Profile uses a close X in the avatar slot. Do not mount SignInButton or ProfileMenu
   in the header. There is no store logo and no attribution bar.
 - The main navigation from the \`nav\` prop: a <nav aria-label="Main"> with the current screen
   highlighted, collapsing to a menu on phones. Declare each primary screen in \`NAV\` (label + href, and
@@ -180,6 +181,9 @@ subscription or upgrade screen. Only pass \`requireAuth\` to Shell if the whole 
 - Use Tailwind classes for styling, referencing CSS variables where appropriate
 - Use React hooks (useState, useEffect, useCallback, useMemo) appropriately
 - Use maintained persistence helpers with validation and explicit failure handling (below); report saved only after a successful write.
+- Read the installed capability .md guide before wiring storage or backup; it contains typechecked examples. openStore takes an options object and returns a result wrapper, not a raw database. Never invent SDK signatures.
+- Test actual sequential typing, associated labels, save + reload and invalid input. Programmatic fill alone misses focus-loss bugs. A successful build/compliance check is not runtime acceptance; state checks you could not run.
+- Wire the app-owned icon in both the HTML favicon link and the PWA manifest.
 - Handle empty states gracefully
 - Make it responsive (mobile-first)
 - Keep bundle size small — no unnecessary dependencies (the template has React + Tailwind + @freeappstore/sdk only)

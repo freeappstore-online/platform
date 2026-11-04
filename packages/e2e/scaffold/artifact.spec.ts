@@ -6,6 +6,12 @@ test('produced artifact renders navigation and persists a real theme change', as
     route.fulfill({ json: { value: null, friends: [], requests: [] } }),
   );
   await page.goto('/');
+  const iconHref = await page.locator('link[rel~="icon"]').first().getAttribute('href');
+  expect(iconHref).toBeTruthy();
+  const icon = await page.request.get(new URL(iconHref!, page.url()).href);
+  expect(icon.ok()).toBe(true);
+  expect(icon.headers()['content-type']).toMatch(/^image\//);
+
   await expect(page.getByRole('main')).toBeVisible();
   await expect(page.getByRole('status', { name: 'Task count' })).toHaveText('0');
   await page.getByRole('button', { name: 'Add task', exact: true }).click();

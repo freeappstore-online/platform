@@ -183,6 +183,14 @@ package prerequisites before applying; root recipe imports need a root SDK depen
 Keep edited capability files and review conflicts rather than overwriting them.
 Keep one PWA controller and register busy guards for unsaved work and capture.
 
+Before reporting completion, typecheck and build; exercise a real user flow,
+including sequential keyboard typing (not only programmatic fill), associated
+labels, save + reload, validation failures, and avatar/Profile return navigation.
+Check the browser favicon separately from the PWA manifest/install icon.
+Use available browser tooling; state explicitly when runtime checks were not run.
+Practical review guide:
+https://github.com/freeappstore-online/platform/blob/main/docs/app-verification.md
+
 Canonical source and guidance:
 https://github.com/freeappstore-online/platform/blob/main/docs/composable-starter-contract.md
 https://github.com/freeappstore-online/platform/blob/main/docs/starter-release.md
@@ -197,6 +205,7 @@ https://github.com/freeappstore-online/platform/blob/main/CONTRIBUTING.md#updati
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&display=swap" rel="stylesheet" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#2563eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

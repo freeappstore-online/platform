@@ -104,6 +104,8 @@ const DEVELOPER_DOCS = [
   'docs/ui.md',
   'docs/composable-starter-contract.md',
   'docs/starter-release.md',
+  'docs/app-verification.md',
+  'docs/build-experience-pitstop.md',
   'docs/pwa-lifecycle.md',
   'docs/cli.md',
   'docs/publishing.md',

@@ -63,6 +63,17 @@ describe('fresh scaffold capability checks', () => {
   });
 });
 
+it.each(['standalone', 'connected'] as const)('declares a real favicon asset for %s', (preset) => {
+  const files = getTemplateFiles(
+    { store: 'apps', nounPlural: 'apps', r2Bucket: 'fas-apps' },
+    'generic',
+    preset,
+  );
+  const href = /<link[^>]*rel="icon"[^>]*href="([^"]+)"/.exec(files['web/index.html']!)?.[1];
+  expect(href).toBeTruthy();
+  expect(files[`web/public${href}`]).toMatch(/<svg\s/);
+});
+
 describe('starter display name substitution', () => {
   it.each([
     'Notes [Beta',

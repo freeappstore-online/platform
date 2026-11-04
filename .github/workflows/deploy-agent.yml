@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'workers/agent/**'
+      - 'packages/cli/src/lib/developer-recipes.ts'
       # The agent imports the shared Web Push sender from the backend (#146).
       - 'packages/backend/src/lib/web-push.ts'
       # The agent imports the no-payments and no-ads checks from compliance

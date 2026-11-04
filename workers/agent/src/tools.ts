@@ -1,4 +1,4 @@
-import { registry } from "../../../packages/cli/src/lib/capability-definitions";
+import { registry, resolveCapabilities } from "../../../packages/cli/src/lib/capability-definitions";
 import { runComplianceCheck } from "./compliance";
 import type { StoreConfig } from "./config";
 import type { ToolCall, ToolDef, ToolResult } from "./providers/types";
@@ -282,6 +282,15 @@ export async function executeTool(
             status: incomplete ? "incomplete" : input.dryRun ? "preview" : "applied",
             changes: result.changes,
             prerequisites: result.prerequisites,
+            ...(!incomplete && !input.dryRun
+              ? {
+                  integrationGuides: resolveCapabilities(ids).flatMap((capability) =>
+                    Object.keys(capability.files).filter((path) => path.endsWith(".md")),
+                  ),
+                  nextStep:
+                    "Read these app-owned integration guides before wiring the capability into screens. Installation alone does not connect feature data or UI.",
+                }
+              : {}),
             ...(incomplete
               ? {
                   remediation:

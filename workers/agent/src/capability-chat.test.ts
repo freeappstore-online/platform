@@ -64,6 +64,8 @@ it.each(["standalone", "connected"] as const)(
     const applied = await chat(files, { capabilities: ["persistence", "backup"], dryRun: false }, true);
     expect(applied.isError).toBe(false);
     expect(JSON.parse(applied.content).status).toBe("applied");
+    expect(JSON.parse(applied.content).integrationGuides).toEqual(["fas-capabilities/persistence.md", "fas-capabilities/backup.md"]);
+    for (const path of JSON.parse(applied.content).integrationGuides) expect(files.has(path)).toBe(true);
     expect(JSON.parse(files.get("package.json")!).dependencies["@freeappstore/sdk"]).toBe("^0.16.21");
     expect(files.has("fas-capabilities/persistence.ts")).toBe(true);
     expect(files.has("fas-capabilities/backup.ts")).toBe(true);

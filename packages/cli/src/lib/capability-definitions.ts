@@ -1,3 +1,5 @@
+import { BACKUP_EXAMPLE, PERSISTENCE_EXAMPLE } from './developer-recipes.js';
+
 export interface SemverRangeOperations {
   validRange(range: string): string | null;
   minVersion(range: string): { version: string } | null;
@@ -132,7 +134,7 @@ See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
   persistence: {
     id: 'persistence',
     packages: [{ name: '@freeappstore/sdk', range: '>=0.16.18', location: 'root' }],
-    version: '1.0.0',
+    version: '1.0.1',
     dependencies: {},
     environment: 'browser',
     metadata: {
@@ -176,6 +178,10 @@ Account-backed keys stay on fas.kv. Public documents stay on fas.collections.
 Import getPreference and the other helpers from fas-capabilities/persistence.ts.
 Do not delete existing preference keys or databases when installing later.
 A cross-tab watchPreference notice is a notification, not conflict resolution.
+
+Example (adapt the namespace and app-owned validator; inspect every result.ok):
+\`\`\`ts
+${PERSISTENCE_EXAMPLE}\`\`\`
 See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
 `,
     },
@@ -184,8 +190,8 @@ See https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md
   },
   backup: {
     id: 'backup',
-    version: '1.0.1',
-    dependencies: { persistence: '1.0.0' },
+    version: '1.0.2',
+    dependencies: { persistence: '1.0.1' },
     packages: [{ name: '@freeappstore/sdk', range: '>=0.16.21', location: 'root' }],
     environment: 'browser',
     metadata: { data: 'device-only', import: 'explicit-merge-or-replace' },
@@ -214,6 +220,10 @@ export {
 
 Requires @freeappstore/sdk/backup and the persistence capability.
 Requires @freeappstore/sdk >=0.16.21. This recipe copies app-owned device-local data; it does not upload to fas.kv.
+Example (replace the app-owned schema and merge policy):
+\`\`\`ts
+${BACKUP_EXAMPLE}\`\`\`
+
 Call previewBackup before import; validation and checksum checks finish before
 the SDK asks the app to apply any writes. Pass merge or replace explicitly. The
 app supplies the apply and restore callbacks. After an apply failure the SDK

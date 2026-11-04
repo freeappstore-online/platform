@@ -1,3 +1,5 @@
+import { BACKUP_EXAMPLE, PERSISTENCE_EXAMPLE } from "../../../packages/cli/src/lib/developer-recipes";
+
 // The @freeappstore/sdk reference the MCP hands to connecting AIs (#91). Apps
 // built over the MCP only use the Shell, its navbar and the SDK components if
 // this output tells the building AI they exist, so every build path (the
@@ -7,10 +9,10 @@
  * The build hand-off every create-app path returns: what the calling AI must do
  * first, before writing any screen.
  */
-export const BUILD_HANDOFF_BLOCK = `## Build it on the Shell (required)
+export const BUILD_HANDOFF_BLOCK = `## Build it on the Shell (supported default)
 1. Wrap the whole app in \`<Shell>\` from "@freeappstore/sdk/ui" with a \`nav\` entry for every primary screen, not every detail route:
    \`<Shell app={fas} appName="My App" nav={NAV} onNavigate={navigate}>\`. The Shell renders the topbar
-   (app name only, compact avatar to the profile page in both auth states, theme, text size) and the navigation as
+    (app name only, compact avatar to the profile page in both auth states) and the navigation as
    \`<nav aria-label="Main">\`. Do this first, on the first render, even for a one-screen app. This is the supported default.
 2. Start each primary screen with \`<PageHeader title="…" />\` (its one h1). Use \`useToast\` for feedback.
 3. Build repeated controls from the SDK components (\`sdk_reference\` feature "components"). A custom frame, sidebar, bottom nav, or detail route is allowed under the composable starter contract when it keeps accessibility, platform identity, and security. Do not mount \`SignInButton\` or \`ProfileMenu\` in the header. The avatar opens \`ProfilePage\` (or \`profileHref\`).
@@ -43,7 +45,7 @@ export default function App() {
     addEventListener('popstate', sync)
     return () => removeEventListener('popstate', sync)
   }, [])
-  const navigate = (href: string) => { history.pushState(null, '', href); setPath(href) }
+  const navigate = (href: string) => { history.pushState(null, '', href); setPath(location.pathname) }
 
   return (
     <Shell app={fas} appName="Notes" nav={NAV} onNavigate={navigate}>
@@ -197,61 +199,22 @@ const many = await fas.kv.getMany(['k1', 'k2']) // batch read
 Limits: 1 MiB/user/app, 100 keys/user/app, 64 KiB/value. The KV routes do not enforce separate daily-active-user or per-minute KV caps.`,
   persistence: `## Device-local persistence
 
-Not account data. \`fas.kv\` is the signed-in user's server store. Helpers below keep data on this origin on this device only. A failed save returns \`{ ok: false, reason }\` and must not be shown as saved. Corrupt stored JSON is left in place.
+Data stays on this device and origin. Account data uses \`fas.kv\`. Check every result.ok before accessing result.value or reporting a successful save. A missing record is different from a failed read; never silently reset unreadable data.
 
 \`\`\`ts
-import {
-  getPreference,
-  setPreference,
-  watchPreference,
-  openStore,
-  putRecord,
-  openFileStore,
-  putFile,
-  installCapability,
-  getCapability,
-} from '@freeappstore/sdk/persist'
+${PERSISTENCE_EXAMPLE}\`\`\`
 
-const saved = setPreference('notes', 'draft', { text: 'hello' })
-// saved.ok is true only after localStorage accepts the write
-
-watchPreference('notes', 'draft', (notice) => {
-  // notice.notification === 'storage-changed'
-  // Cross-tab notification only. not a merge and not conflict resolution
-})
-\`\`\`
-
-IndexedDB: \`openStore\`, \`getRecord\`, \`putRecord\`, \`deleteRecord\`, \`withTransaction\` (success after the transaction commits). Large files: \`openFileStore\`, \`putFile\`, \`getFile\`, \`getFileMetadata\`, \`listFiles\`. \`putFile\` keeps metadata separate from the payload and calls the app's \`resolveConflict\` when the id already exists. \`installCapability\` / \`getCapability\` register a store at init or later; \`not-installed\` is different from \`unavailable\` on an installed store. Reasons: unavailable, corrupt, quota, validation, aborted, conflict, not-installed.`,
+Preferences use getPreference(namespace, key, validator) and setPreference(namespace, key, value). watchPreference is a cross-tab storage-changed notification, not a merge and not conflict resolution. The SDK also provides withTransaction, openFileStore, putFile, getFile, getFileMetadata, listFiles, installCapability and getCapability. putFile requires app-owned resolveConflict when IDs collide. not-installed is different from unavailable. See the optional persistence capability guide for integration.`,
   backup: `## Validated backup and file export
 
-Device-local copy of app-owned data. Not \`fas.kv\`. The app owns the schema, migration, and conflict policy. Installing or removing the backup capability does not delete saved data.
+Device-local copy of app-owned data, not fas.kv. The app owns its schema, migrations and conflict policy. Installing or removing the capability does not delete saved data.
 
 \`\`\`ts
-import {
-  exportBackup,
-  previewBackup,
-  importBackup,
-  shareOrDownloadBackup,
-  registerBackupCapability,
-  mountBackupExample,
-} from '@freeappstore/sdk/backup'
+${BACKUP_EXAMPLE}\`\`\`
 
-registerBackupCapability()
-const envelope = await exportBackup({ appId: 'notes', data: { notes: ['hello'] } })
-const preview = await previewBackup(envelope.value, schema)
-// preview.value.preview.counts — show these before replacement. preview does not write.
+previewBackup checks the envelope version, checksum, size and whole payload before writes. Check result.ok before reading result.value.preview.counts. Display those counts and require an explicit merge or replace choice. Never filter malformed records into a valid empty replacement.
 
-const imported = await importBackup({
-  raw: envelope.value,
-  mode: 'replace', // or 'merge'. There is no default.
-  schema,
-  snapshot: readCurrent,
-  apply: writeAppData,
-  restore: putSnapshotBack,
-})
-\`\`\`
-
-\`previewBackup\` checks the versioned envelope, checksum, and size limit, then returns counts. \`importBackup\` is all-or-nothing: a failed or cancelled write restores the snapshot. \`{ ok: false, reason: 'rollback' }\` means restore also failed and stored data may be partial. \`shareOrDownloadBackup\` uses \`navigator.share\` when \`canShare\` accepts the file, otherwise an object URL download whose \`release\` revokes the URL, otherwise the JSON text. \`mountBackupExample\` keeps Import disabled until a preview and an explicit merge or replace choice exist.`,
+A failed apply causes an attempt to restore the snapshot. A successful restore reports failure with the previous data restored; reason 'rollback' means restore also failed and stored data may be partial. Do not promise unconditional atomicity. shareOrDownloadBackup uses navigator.share when canShare permits, otherwise an object URL download with release cleanup, otherwise copyable JSON text. registerBackupCapability and mountBackupExample support optional integration; mountBackupExample disables import until preview and an explicit choice exist.`,
   counters: `## Shared Counters
 \`\`\`tsx
 const count = await fas.counters.get('likes')        // public, no auth

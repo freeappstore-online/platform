@@ -284,7 +284,7 @@ it('installs backup at init and later without deleting saved data or edited file
   expect(plan.join('\n')).toContain("reason: 'rollback'");
   expect(plan.join('\n')).toContain('stored data may be partial');
   const installed = JSON.parse(await readFile(join(root, '.fas-capabilities.json'), 'utf8'));
-  expect(installed.capabilities.backup.version).toBe('1.0.1');
+  expect(installed.capabilities.backup.version).toBe('1.0.2');
   expect(await readFile(join(root, 'notes.json'), 'utf8')).toBe('{"keep":true}');
   expect(await installCapabilities(root, ['backup'])).toEqual(['No changes.']);
   const file = join(root, 'fas-capabilities/backup.ts');
@@ -316,7 +316,7 @@ it('requires an explicit dry-run update when the backup recipe version changes',
 
   await installCapabilities(root, ['backup'], { update: true });
   const updatedManifest = JSON.parse(await readFile(join(root, '.fas-capabilities.json'), 'utf8'));
-  expect(updatedManifest.capabilities.backup.version).toBe('1.0.1');
+  expect(updatedManifest.capabilities.backup.version).toBe('1.0.2');
   expect(await readFile(join(root, 'fas-capabilities/backup.ts'), 'utf8')).toContain(
     "'rollback' and stored data may be partial",
   );

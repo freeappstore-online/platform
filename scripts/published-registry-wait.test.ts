@@ -3,12 +3,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 const workflow = readFileSync(new URL('../.github/workflows/publish.yml', import.meta.url), 'utf8');
-const helper = workflow
-  .slice(
-    workflow.indexOf('          wait_for_published_version() {'),
-    workflow.indexOf('          wait_for_published_version "@freeappstore/cli"'),
-  )
-  .replace(/^ {10}/gm, '');
+const helper = readFileSync(new URL('./published-scaffold.sh', import.meta.url), 'utf8');
 const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
 
 // Run the actual workflow function. Mock registry requests and time so tests
@@ -76,12 +71,14 @@ describe('published scaffold registry propagation', () => {
       expect(workflow.indexOf(call)).toBeGreaterThan(
         workflow.indexOf('needs.publish.outputs.versions'),
       );
-      expect(workflow.indexOf(call)).toBeLessThan(workflow.indexOf('npx --yes'));
+      expect(workflow.indexOf(call)).toBeLessThan(
+        workflow.indexOf('initialize_published_scaffold'),
+      );
     }
     const requestTimeout = '$' + '{request_seconds}s';
     expect(helper).toContain(`timeout "${requestTimeout}" npm view "$package@$version" version`);
     expect(helper).toContain('--registry=https://registry.npmjs.org');
-    expect(helper).toContain('deadline=$(( $(date +%s) + 300 ))');
+    expect(helper).toContain('PUBLISHED_REGISTRY_DEADLINE');
     expect(helper).toContain('fetch_timeout_ms=$(( request_seconds * 1000 - 500 ))');
   });
 });

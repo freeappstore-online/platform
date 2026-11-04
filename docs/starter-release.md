@@ -115,3 +115,13 @@ The table combines the CLI `0.4.62` / SDK `0.16.32` runtime baseline with earlie
 | External mirrors | Final standalone mirror [`ea997c1`](https://github.com/freeappstore-online/template-standalone/commit/ea997c141181a8d218cf0ca1003781992a6baf8b) passed [CI](https://github.com/freeappstore-online/template-standalone/actions/runs/41903251533) and [Compliance](https://github.com/freeappstore-online/template-standalone/actions/runs/41903251558); connected mirror [`47bbcd9`](https://github.com/freeappstore-online/template-connected/commit/47bbcd9da2044afd96840e516c92106d8da604e1) passed [CI](https://github.com/freeappstore-online/template-connected/actions/runs/41903402328) and [Compliance](https://github.com/freeappstore-online/template-connected/actions/runs/41903402366). Both are clean on main; deploy was intentionally skipped. Independent parity checks against the published CLI `0.4.63` generator matched 24/24 standalone and 26/26 connected files. Earlier mirror commits [`4bdd7c6`](https://github.com/freeappstore-online/template-standalone/commit/4bdd7c6864ebc1953cdebe8abf61171a5ed39c9b) and [`b22f680`](https://github.com/freeappstore-online/template-connected/commit/b22f6803f1b85963d87f1ec71d1f0a782ab3e22b) are predecessor baselines. |
 
 This evidence verifies the named release and representative synthetic cases. It does not claim that existing apps have migrated or that every app-specific workflow works offline. Existing custom apps should test their own routes, account switching, busy guards, and data model after any deliberate change.
+
+## Executable recipe guidance follow-up (#400)
+
+The local first-build review adds compiled persistence and backup integration examples.
+These generated guide changes advance persistence to `1.0.1` and backup to `1.0.2`.
+Existing installs must preview `fas add backup --dry-run --update` before applying
+`fas add backup --update`; edited app-owned guides remain conflicts to review.
+This does not migrate stored data or change app schemas. See
+[the build experience review](build-experience-pitstop.md) and
+[practical app verification](app-verification.md).

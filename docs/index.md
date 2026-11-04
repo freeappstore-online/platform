@@ -23,6 +23,8 @@ work and recordings, install support, and explicit offline capabilities.
 - **[SDK Reference](sdk.md)** -- auth, KV, counters, collections, rooms, proxy, keys, roles, friends, email, and push reminders
 - **[UI Components](ui.md)** -- the supported default `Shell` (topbar, navigation, error boundary, toasts) and 25+ drop-in React components
 - **[Composable starter contract](composable-starter-contract.md)** -- one foundation, presets, and which layout choices stay free
+- **[App verification](app-verification.md)** -- practical keyboard, data, routing and identity checks
+- **[Pitstop build experience](build-experience-pitstop.md)** -- observed friction, fixes and priorities
 - **[Starter release and adoption](starter-release.md)** -- install, extend, update, data boundaries, and verified release evidence
 - **[CLI Reference](cli.md)** -- the `fas` command-line tool
 - **[Publishing](publishing.md)** -- how `fas publish` provisions and deploys your app

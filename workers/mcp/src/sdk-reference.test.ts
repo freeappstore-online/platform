@@ -148,7 +148,7 @@ describe("sdk_reference", () => {
       "mountBackupExample",
       "merge",
       "replace",
-      "all-or-nothing",
+      "stored data may be partial",
       "checksum",
       "does not delete",
       "object URL",

@@ -87,6 +87,8 @@ jobs:
             - UI Components: ui.md
             - Composable starter: composable-starter-contract.md
             - Starter release: starter-release.md
+            - App verification: app-verification.md
+            - Pitstop build review: build-experience-pitstop.md
             - PWA lifecycle: pwa-lifecycle.md
             - CLI: cli.md
             - Publishing: publishing.md

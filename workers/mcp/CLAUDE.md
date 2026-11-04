@@ -42,10 +42,10 @@ Note: `create_app`/`update_files` need no AI key (the client model is the author
 | `platform_guide` | None | Fetch SKILLS.md (full platform guide), then the current build rules |
 | `sdk_reference` | None | SDK reference: `shell` and `components` first, then auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui, free-apis |
 
-**Apps are built on the SDK Shell (#91).** Whatever an AI builds through this server, the output
-must tell it to wrap the app in `<Shell app={fas} nav={NAV}>` from `@freeappstore/sdk/ui` with a nav
-item per screen, start screens with `PageHeader`, and use the SDK components instead of
-hand-rolled chrome. The text lives in `src/sdk-reference.ts` (`BUILD_HANDOFF_BLOCK`, the `shell` and
+**SDK Shell is the supported default (#91).** For a new default scaffold, the output
+teaches wrapping the app in `<Shell app={fas} nav={NAV}>` from `@freeappstore/sdk/ui` with a nav
+item per screen, start screens with `PageHeader`, and use the SDK components. Custom accessible frames are supported by the composable
+starter contract; preserve app-owned choices instead of replacing their layouts. The text lives in `src/sdk-reference.ts` (`BUILD_HANDOFF_BLOCK`, the `shell` and
 `components` sections); `create_app` (dry run and result) and `platform_guide` return the hand-off.
 When the SDK's UI exports or Shell props change, update `sdk-reference.ts`;
 `sdk-reference.test.ts` fails until the `components` list matches `packages/sdk/src/ui/index.ts`.
