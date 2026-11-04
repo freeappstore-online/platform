@@ -908,6 +908,7 @@ export function ConnectedDraft({ app: fas }: { app: FreeAppStore }) {
       <label htmlFor="private-draft">Your notes</label>
       <textarea
         id="private-draft"
+        style={{ display: 'block', boxSizing: 'border-box', width: '100%', minWidth: 0, maxWidth: '100%', resize: 'vertical' }}
         value={draft.draft}
         onChange={(event) => draft.setDraft(event.currentTarget.value)}
       />

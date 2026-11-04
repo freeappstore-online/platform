@@ -177,6 +177,13 @@ it('profile sign-out clears a mounted generated draft and blocks its retained sa
   );
   const input = container.querySelector('textarea')!;
   expect(input.value).toBe('private saved text');
+  // Intrinsic textarea columns must not force the generated editor wider than
+  // its container when text grows. Real layout is covered in Chromium too.
+  expect(input.style.width).toBe('100%');
+  expect(input.style.maxWidth).toBe('100%');
+  expect(Number.parseFloat(input.style.minWidth)).toBe(0);
+  expect(input.style.boxSizing).toBe('border-box');
+  expect(input.style.resize).toBe('vertical');
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
     setter.call(input, 'unsaved secret');
