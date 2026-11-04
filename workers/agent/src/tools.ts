@@ -1,9 +1,30 @@
+import { registry } from "../../../packages/cli/src/lib/capability-definitions";
 import { runComplianceCheck } from "./compliance";
 import type { StoreConfig } from "./config";
 import type { ToolCall, ToolDef, ToolResult } from "./providers/types";
+import { applyCapabilitiesToTemplate } from "./template";
 
 /** File tools — identical across all stores */
 const FILE_TOOLS: ToolDef[] = [
+  {
+    name: "install_capabilities",
+    description:
+      "Preview or apply bundled first-party capabilities to this app using the canonical planner. Preview first, review prerequisites/conflicts, then apply only the requested capabilities. Preserves edited files and infrastructure locks. Does not install arbitrary packages.",
+    parameters: {
+      type: "object",
+      properties: {
+        capabilities: {
+          type: "array",
+          items: { type: "string", enum: Object.keys(registry) },
+          minItems: 1,
+          maxItems: 32,
+        },
+        dryRun: { type: "boolean", description: "Required: true to preview, false to apply." },
+        update: { type: "boolean", description: "Explicitly update tracked, unedited generated files." },
+      },
+      required: ["capabilities", "dryRun"],
+    },
+  },
   {
     name: "write_file",
     description: "Create or overwrite a file in the project. Path is relative to project root (e.g. 'web/src/App.tsx').",
@@ -221,6 +242,52 @@ export async function executeTool(toolCall: ToolCall, files: Map<string, string>
   const { name, input, id } = toolCall;
 
   switch (name) {
+    case "install_capabilities": {
+      const ids = input.capabilities;
+      if (
+        !Array.isArray(ids) ||
+        !ids.length ||
+        ids.length > 32 ||
+        ids.some((id) => typeof id !== "string") ||
+        typeof input.dryRun !== "boolean" ||
+        (input.update !== undefined && typeof input.update !== "boolean")
+      ) {
+        return {
+          id,
+          content:
+            "Error: capabilities must be a non-empty array of at most 32 capability IDs; dryRun must be a boolean and update must be a boolean if supplied.",
+          isError: true,
+        };
+      }
+      // Operate on this turn's isolated map, just like write_file. The session
+      // owns authorization, serialization and persistence; no nested HTTP call.
+      try {
+        const result = await applyCapabilitiesToTemplate(Object.fromEntries(files), ids, input.dryRun, input.update === true);
+        if (!input.dryRun) for (const [path, content] of Object.entries(result.files)) files.set(path, content);
+        const incomplete = result.prerequisites.length > 0;
+        return {
+          id,
+          content: JSON.stringify({
+            status: incomplete ? "incomplete" : input.dryRun ? "preview" : "applied",
+            changes: result.changes,
+            prerequisites: result.prerequisites,
+            ...(incomplete
+              ? {
+                  remediation:
+                    "In a local checkout, set the reported package.json dependencies to compatible published ranges and run pnpm install. Run fas add <requested capability IDs> --dry-run, review the plan, then fas add <requested capability IDs>. Complete the reported configuration steps; commit and push, then reopen/import the app in the builder. No capability was installed here.",
+                }
+              : {}),
+          }),
+          isError: incomplete,
+        };
+      } catch (error) {
+        return {
+          id,
+          content: `Error: ${error instanceof Error ? error.message : "Capability planning failed"}\nNo files changed. For package prerequisites, set the reported package.json dependencies to compatible published ranges in a local checkout and run pnpm install. Then run fas add <requested capability IDs> --dry-run, review, and fas add <requested capability IDs>. Complete reported configuration steps, commit and push, and reopen/import the app.`,
+          isError: true,
+        };
+      }
+    }
     case "write_file": {
       const path = input.path as string;
       const content = input.content as string;

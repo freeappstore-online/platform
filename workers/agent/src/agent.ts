@@ -246,7 +246,9 @@ export async function runAgentStep(
   for (const tc of fileToolCalls) {
     const toolOutput = await executeTool(tc, files, storeConfig);
     // Truncate large results in conversation history (e.g. read_file returning full file)
-    const truncated = { ...toolOutput, content: toolOutput.content.slice(0, 1500) };
+    // Capability plans are bounded by the bundled registry. Keep the complete
+    // plan so prerequisites and configuration instructions cannot be cut off.
+    const truncated = tc.name === "install_capabilities" ? toolOutput : { ...toolOutput, content: toolOutput.content.slice(0, 1500) };
     results.push(truncated);
     // No `result` on the wire: tool output (file bodies, search hits) must
     // never reach the creator chat (#36). The client only needs `tool`.
@@ -274,6 +276,9 @@ export async function runAgentStep(
  */
 export function emptyNoOutputError(newMessages: Message[], infraRequests: InfraRequest[], anyToolCallsMade: boolean): string | undefined {
   if (infraRequests.length > 0 || !anyToolCallsMade) return undefined;
+  // Preview, conflicts and unmet prerequisites are valid capability outcomes;
+  // don't nudge the model into arbitrary writes to manufacture progress.
+  if (newMessages.some((m) => m.toolCalls?.some((tc) => tc.name === "install_capabilities"))) return undefined;
   const hasWriteFile = newMessages.some((m) => m.toolCalls?.some((tc) => tc.name === "write_file"));
   return hasWriteFile ? undefined : "empty-no-output: turn exited with tool calls but no write_file or infra requests";
 }

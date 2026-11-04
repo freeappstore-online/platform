@@ -6,6 +6,8 @@ const prompt = getSystemPrompt(getConfig("apps"));
 describe("effective builder prompt contract (#377)", () => {
   it("allows app-owned screens, styles and custom frames", () => {
     for (const text of [
+      "install_capabilities chat tool",
+      "dryRun: false",
       "custom frame is allowed",
       "index.css as needed",
       "labelled navigation",
