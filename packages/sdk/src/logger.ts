@@ -108,8 +108,12 @@ export class Logger {
     this.buffer = [];
     this.uploadedThrough = 0;
     this.evicted = 0;
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem(`${STORAGE_KEY_PREFIX}${this.appId}`);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(`${STORAGE_KEY_PREFIX}${this.appId}`);
+      }
+    } catch {
+      // Storage may be blocked; memory has still been cleared.
     }
   }
 
@@ -198,8 +202,8 @@ export class Logger {
   // were already uploaded, so a reload doesn't send them again (#280) while
   // entries a crash left behind still go out once.
   private saveToStorage() {
-    if (typeof localStorage === 'undefined') return;
     try {
+      if (typeof localStorage === 'undefined') return;
       const entries = this.buffer.slice(-STORAGE_LIMIT);
       const skipped = this.buffer.length - entries.length;
       const uploadedInBuffer = this.uploadedThrough - this.evicted - skipped;
@@ -214,8 +218,8 @@ export class Logger {
   }
 
   private loadFromStorage() {
-    if (typeof localStorage === 'undefined') return;
     try {
+      if (typeof localStorage === 'undefined') return;
       const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${this.appId}`);
       if (!raw) return;
       const saved = JSON.parse(raw) as LogEntry[] | { entries?: unknown; uploaded?: unknown };
@@ -230,7 +234,7 @@ export class Logger {
       this.evicted = 0;
       this.uploadedThrough = Math.min(Math.max(uploaded - dropped, 0), this.buffer.length);
     } catch {
-      // Corrupted, ignore
+      // Storage blocked or corrupted, ignore
     }
   }
 
