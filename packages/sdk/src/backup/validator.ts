@@ -101,6 +101,14 @@ export async function previewBackup<T>(
     if (byteLengthOf(encoded) > limit.value) {
       return backupFailure('oversized', 'Backup exceeds the size limit.');
     }
+    try {
+      // Work from the exact bounded JSON representation. Keeping `raw` here
+      // would let the caller mutate data while hashing or while import snapshots
+      // the current store, changing the bytes eventually validated or applied.
+      parsed = JSON.parse(encoded);
+    } catch {
+      return backupFailure('validation', 'Malformed backup.');
+    }
   }
 
   const fields = readEnvelopeFields(parsed);

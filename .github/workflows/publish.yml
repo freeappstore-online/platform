@@ -154,3 +154,53 @@ jobs:
         run: |
           echo "::error::Failed to publish:${{ steps.publish.outputs.failed }}"
           exit 1
+
+  published-capability-scaffold:
+    needs: publish
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - template: connected
+            preset: persistence
+          - template: connected
+            preset: backup
+          - template: standalone
+            preset: persistence
+          - template: standalone
+            preset: backup
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Configure scaffold commit identity
+        run: |
+          git config --global user.email "published-scaffold@freeappstore.online"
+          git config --global user.name "Published Scaffold Smoke"
+
+      - name: Initialize from the published CLI and current template
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/published-capability-scaffold
+          cd /tmp/published-capability-scaffold
+          APP_ID="smoke-${{ matrix.template }}-${{ matrix.preset }}"
+          npx --yes @freeappstore/cli@latest init "$APP_ID" \
+            --template="${{ matrix.template }}" --preset "${{ matrix.preset }}"
+          echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
+
+      - name: Install published SDK dependencies
+        working-directory: /tmp/published-capability-scaffold
+        run: pnpm --dir "$APP_ID" install --no-frozen-lockfile
+
+      - name: Compile generated capability imports against the published SDK
+        working-directory: /tmp/published-capability-scaffold
+        run: |
+          set -euo pipefail
+          cd "$APP_ID"
+          pnpm dlx --package=typescript@5.9.3 tsc --noEmit --skipLibCheck \
+            --target ES2022 --module NodeNext --moduleResolution NodeNext \
+            fas-capabilities/persistence.ts fas-capabilities/backup.ts

@@ -1,14 +1,21 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { minVersion, subset, validRange } from 'semver';
+import { gt, minVersion, subset, validRange } from 'semver';
+
+type CapabilityPackage = {
+  name: string;
+  range: string;
+  location: 'root' | 'web';
+  section?: 'dependencies' | 'devDependencies';
+};
 
 export interface Capability {
   id: string;
   version: string;
   dependencies: Record<string, string>;
   /** Package requirements are separate from capability-ID dependencies. */
-  packages?: { name: string; range: string; location: 'root' | 'web' }[];
+  packages?: CapabilityPackage[];
   environment: 'browser';
   files: Record<string, string>;
   configChanges: string[];
@@ -22,7 +29,12 @@ export const registry: Record<string, Capability> = {
     id: 'pwa',
     packages: [
       { name: '@freeappstore/sdk', range: '>=0.16.15', location: 'web' },
-      { name: 'vite-plugin-pwa', range: '^1.0.0', location: 'web' },
+      {
+        name: 'vite-plugin-pwa',
+        range: '^1.0.0',
+        location: 'web',
+        section: 'devDependencies',
+      },
     ],
     version: '1.0.0',
     dependencies: {},
@@ -184,6 +196,11 @@ interface Manifest {
   schemaVersion: 1;
   capabilities: Record<string, Ownership>;
 }
+interface PackageManifest {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  [key: string]: unknown;
+}
 const manifestName = '.fas-capabilities.json';
 const hash = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -205,6 +222,94 @@ export function resolveCapabilities(ids: string[], source = registry): Capabilit
   }
   for (const id of ids) visit(id);
   return result;
+}
+
+/**
+ * Prepare package dependencies only in freshly cloned platform templates.
+ * Existing apps still go through the strict installer preflight and are never
+ * normalized by `fas add`.
+ */
+export async function normalizeFreshCapabilityPackages(rootPath: string, ids: string[]) {
+  const root = resolve(rootPath);
+  const capabilities = resolveCapabilities(ids);
+  const rootText = await readOptional(join(root, 'package.json'));
+  if (!rootText) throw new Error('Fresh template has no root package.json.');
+  const rootPackage = JSON.parse(rootText) as PackageManifest;
+  const webPath = join(root, 'web/package.json');
+  const webText = await readOptional(webPath);
+  const webPackage = webText ? (JSON.parse(webText) as PackageManifest) : undefined;
+  let rootChanged = false;
+  let webChanged = false;
+
+  const byPackage = new Map<string, { requirement: CapabilityPackage; target: 'root' | 'web' }[]>();
+  for (const capability of capabilities) {
+    for (const requirement of capability.packages ?? []) {
+      const target = requirement.location === 'web' && webPackage ? 'web' : 'root';
+      const requirements = byPackage.get(requirement.name) ?? [];
+      requirements.push({ requirement, target });
+      byPackage.set(requirement.name, requirements);
+    }
+  }
+
+  for (const [name, requirements] of byPackage) {
+    const minima = requirements.map(({ requirement }) => minVersion(requirement.range));
+    const validMinima = minima.filter(
+      (minimum): minimum is NonNullable<typeof minimum> => minimum !== null,
+    );
+    if (validMinima.length !== minima.length) continue;
+    const minimum = validMinima.reduce((floor, candidate) =>
+      gt(candidate, floor) ? candidate : floor,
+    );
+    // A bounded range satisfies the selected minimum without silently admitting
+    // a future breaking major when npm resolves the fresh template.
+    const bounded = `^${minimum.version}`;
+    if (!requirements.every(({ requirement }) => subset(bounded, requirement.range))) continue;
+
+    const targets = new Map<'root' | 'web', CapabilityPackage[]>();
+    for (const { requirement, target } of requirements) {
+      const atTarget = targets.get(target) ?? [];
+      atTarget.push(requirement);
+      targets.set(target, atTarget);
+    }
+
+    for (const [target, targetRequirements] of targets) {
+      const manifest = target === 'web' ? webPackage! : rootPackage;
+      const declared = manifest.dependencies?.[name] ?? manifest.devDependencies?.[name];
+      if (typeof declared === 'string') {
+        // Keep any valid template range already compatible with every selected
+        // recipe. Invalid custom specs remain for the strict preflight to reject.
+        if (
+          !validRange(declared) ||
+          requirements.every(({ requirement }) => subset(declared, requirement.range))
+        ) {
+          continue;
+        }
+      }
+
+      const section =
+        manifest.dependencies?.[name] !== undefined
+          ? 'dependencies'
+          : manifest.devDependencies?.[name] !== undefined
+            ? 'devDependencies'
+            : (targetRequirements[0]?.section ?? 'dependencies');
+      if (section === 'dependencies') {
+        manifest.dependencies ??= {};
+        manifest.dependencies[name] = bounded;
+      } else {
+        manifest.devDependencies ??= {};
+        manifest.devDependencies[name] = bounded;
+      }
+      if (target === 'web') webChanged = true;
+      else rootChanged = true;
+    }
+  }
+
+  if (webChanged && webPackage) {
+    await writeFile(webPath, `${JSON.stringify(webPackage, null, 2)}\n`);
+  }
+  if (rootChanged) {
+    await writeFile(join(root, 'package.json'), `${JSON.stringify(rootPackage, null, 2)}\n`);
+  }
 }
 
 async function readOptional(path: string): Promise<string | undefined> {

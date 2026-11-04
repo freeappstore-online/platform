@@ -3,7 +3,12 @@ import { access, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
-import { installCapabilities, presets, resolveCapabilities } from '../lib/capabilities.js';
+import {
+  installCapabilities,
+  normalizeFreshCapabilityPackages,
+  presets,
+  resolveCapabilities,
+} from '../lib/capabilities.js';
 import { configureFreshPwa } from '../lib/pwa-scaffold.js';
 
 const TEMPLATES = {
@@ -108,6 +113,7 @@ export async function runInit(opts: {
       2,
     )}\n`,
   );
+  await normalizeFreshCapabilityPackages(target, capabilities);
   await installCapabilities(target, capabilities);
   if (!GAME_TEMPLATES.has(template)) await configureFreshPwa(target);
   await run('git', ['init', '-q', '-b', 'main'], target);

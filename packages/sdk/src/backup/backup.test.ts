@@ -356,6 +356,83 @@ describe('backup envelope', () => {
     expect(db.notes).toEqual(['a']);
   });
 
+  it('detaches object input before checksum work can yield', async () => {
+    const exported = await exportBackup({
+      appId: 'records',
+      data: { records: [{ value: 1 }] },
+      exportedAt,
+    });
+    if (!exported.ok) throw new Error('export failed');
+    const raw = structuredClone(exported.value);
+    const schema: BackupSchema<{ records: { value: number }[] }> = {
+      supportedVersions: [1],
+      validate: (value): value is { records: { value: number }[] } =>
+        !!value &&
+        typeof value === 'object' &&
+        Array.isArray((value as { records?: unknown }).records) &&
+        typeof (value as { records: { value?: unknown }[] }).records[0]?.value === 'number',
+      counts: (data) => ({ records: data.records.length }),
+    };
+
+    const pending = previewBackup(raw, schema);
+    raw.data.records[0]!.value = 999;
+    const preview = await pending;
+
+    expect(preview.ok).toBe(true);
+    if (!preview.ok) return;
+    expect(preview.value.data.records[0]?.value).toBe(1);
+  });
+
+  it('applies the verified object snapshot if the caller mutates during storage snapshot', async () => {
+    const exported = await exportBackup({
+      appId: 'records',
+      data: { records: [{ value: 1 }] },
+      exportedAt,
+    });
+    if (!exported.ok) throw new Error('export failed');
+    const raw = structuredClone(exported.value);
+    const schema: BackupSchema<{ records: { value: number }[] }> = {
+      supportedVersions: [1],
+      validate: (value): value is { records: { value: number }[] } =>
+        !!value &&
+        typeof value === 'object' &&
+        Array.isArray((value as { records?: unknown }).records) &&
+        typeof (value as { records: { value?: unknown }[] }).records[0]?.value === 'number',
+      counts: (data) => ({ records: data.records.length }),
+    };
+    let enterSnapshot!: () => void;
+    const snapshotEntered = new Promise<void>((resolve) => {
+      enterSnapshot = resolve;
+    });
+    let finishSnapshot!: () => void;
+    const snapshotGate = new Promise<void>((resolve) => {
+      finishSnapshot = resolve;
+    });
+    let appliedValue: number | undefined;
+    const pending = importBackup({
+      raw,
+      mode: 'replace',
+      schema,
+      snapshot: async () => {
+        enterSnapshot();
+        await snapshotGate;
+        return { existing: true };
+      },
+      apply: (data) => {
+        appliedValue = data.records[0]?.value;
+      },
+      restore: () => {},
+    });
+
+    await snapshotEntered;
+    raw.data.records[0]!.value = 999;
+    finishSnapshot();
+    const imported = await pending;
+
+    expect(imported.ok).toBe(true);
+    expect(appliedValue).toBe(1);
+  });
+
   it('returns a validation failure for cyclic data', async () => {
     const data: { self?: unknown } = {};
     data.self = data;

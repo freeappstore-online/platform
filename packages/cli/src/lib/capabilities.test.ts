@@ -1,10 +1,12 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { satisfies } from 'semver';
 import { afterEach, expect, it } from 'vitest';
 import {
   type Capability,
   installCapabilities,
+  normalizeFreshCapabilityPackages,
   registry,
   resolveCapabilities,
 } from './capabilities.js';
@@ -156,6 +158,54 @@ it('requires the published backup SDK before writing capability files', async ()
   );
   await expect(readFile(join(root, 'fas-capabilities/backup.ts'))).rejects.toThrow();
   await expect(readFile(join(root, 'fas-capabilities/persistence.ts'))).rejects.toThrow();
+});
+
+it('normalizes stale SDK ranges only in a fresh template for the selected capabilities', async () => {
+  const root = await app();
+  await mkdir(join(root, 'web'), { recursive: true });
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({
+      dependencies: { '@freeappstore/sdk': '^0.16.12', react: '^19.0.0' },
+      devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
+    }),
+  );
+
+  await normalizeFreshCapabilityPackages(root, ['pwa']);
+
+  const web = JSON.parse(await readFile(join(root, 'web/package.json'), 'utf8'));
+  const sdkRange = web.dependencies['@freeappstore/sdk'];
+  expect(sdkRange).toBe('^0.16.15');
+  expect(satisfies('0.16.21', sdkRange)).toBe(true);
+  expect(satisfies('1.0.0', sdkRange)).toBe(false);
+  expect(web.dependencies.react).toBe('^19.0.0');
+  expect(web.devDependencies['vite-plugin-pwa']).toBe('^1.3.0');
+  expect(await readFile(join(root, 'package.json'), 'utf8')).toBe('{}');
+});
+
+it('prepares root and web SDK dependencies for a fresh backup preset', async () => {
+  const root = await app();
+  await mkdir(join(root, 'web'), { recursive: true });
+  await writeFile(
+    join(root, 'web/package.json'),
+    JSON.stringify({
+      dependencies: { '@freeappstore/sdk': '^0.16.12', react: '^19.0.0' },
+      devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
+    }),
+  );
+
+  await normalizeFreshCapabilityPackages(root, ['backup', 'pwa']);
+  const plan = await installCapabilities(root, ['backup', 'pwa']);
+
+  const rootManifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
+  const webManifest = JSON.parse(await readFile(join(root, 'web/package.json'), 'utf8'));
+  expect(rootManifest.dependencies['@freeappstore/sdk']).toBe('^0.16.21');
+  expect(webManifest.dependencies['@freeappstore/sdk']).toBe('^0.16.21');
+  expect(satisfies('0.16.30', rootManifest.dependencies['@freeappstore/sdk'])).toBe(true);
+  expect(satisfies('1.0.0', rootManifest.dependencies['@freeappstore/sdk'])).toBe(false);
+  expect(plan.join('\n')).toContain('fas-capabilities/persistence.ts');
+  expect(plan.join('\n')).toContain('fas-capabilities/backup.ts');
+  expect(plan.join('\n')).toContain('web/src/fas-capabilities/pwa.ts');
 });
 
 it('retries an interrupted version update and detects edits afterwards', async () => {

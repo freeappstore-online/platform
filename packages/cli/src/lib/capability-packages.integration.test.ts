@@ -8,7 +8,7 @@ import { installCapabilities } from './capabilities.js';
 
 // Explicit network-backed release check: FAS_TEST_PUBLISHED=1 pnpm test <this file>.
 it.skipIf(process.env.FAS_TEST_PUBLISHED !== '1')(
-  'builds generated persistence and PWA imports with published packages',
+  'builds generated persistence, backup, and PWA imports with published packages',
   async () => {
     const root = await mkdtemp(join(tmpdir(), 'fas-published-capabilities-'));
     const run = promisify(execFile);
@@ -19,12 +19,12 @@ it.skipIf(process.env.FAS_TEST_PUBLISHED !== '1')(
         JSON.stringify({
           private: true,
           type: 'module',
-          dependencies: { '@freeappstore/sdk': '0.16.19' },
+          dependencies: { '@freeappstore/sdk': '0.16.21' },
           devDependencies: { vite: '8.3.4', 'vite-plugin-pwa': '1.3.0', typescript: '5.9.3' },
         }),
       );
       // No web package: generated imports resolve the root's published dependencies.
-      await installCapabilities(root, ['persistence', 'pwa']);
+      await installCapabilities(root, ['persistence', 'backup', 'pwa']);
       await writeFile(
         join(root, 'web/index.html'),
         '<html><body><script type="module" src="/src/main.ts"></script></body></html>',
@@ -33,7 +33,8 @@ it.skipIf(process.env.FAS_TEST_PUBLISHED !== '1')(
         join(root, 'web/src/main.ts'),
         `import './fas-capabilities/pwa';
 import { getPreference, putFile } from '../../fas-capabilities/persistence';
-console.log(getPreference, putFile);
+import { exportBackup } from '../../fas-capabilities/backup';
+console.log(getPreference, putFile, exportBackup);
 `,
       );
       await writeFile(
@@ -59,6 +60,7 @@ export default defineConfig({ plugins: [VitePWA(pwaOptions({ manifest: { name: '
           '--target',
           'es2022',
           'fas-capabilities/persistence.ts',
+          'fas-capabilities/backup.ts',
           'web/src/fas-capabilities/pwa.ts',
           'web/fas-pwa-config.ts',
         ],
