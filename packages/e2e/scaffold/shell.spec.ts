@@ -5,7 +5,7 @@ import { expect, type Page, test } from '@playwright/test';
 const connected = process.env.SCAFFOLD_TEMPLATE === 'connected';
 const appFile = resolve(process.env.SCAFFOLD_DIR!, 'web/src/App.tsx');
 
-test('fresh scaffold resolves a published SDK with navigation/account fixes (#339)', async () => {
+test('fresh scaffold resolves a published SDK with preference/auth lifecycle fixes (#340)', async () => {
   // Read the installed package, not the declared range: pnpm can retain an
   // older release in a template lockfile even when a fixed release is on npm.
   const { version } = JSON.parse(
@@ -16,8 +16,8 @@ test('fresh scaffold resolves a published SDK with navigation/account fixes (#33
   );
   const [major, minor, patch] = version.split('.').map(Number);
   expect(
-    major > 0 || minor > 16 || (minor === 16 && patch >= 10),
-    `Installed SDK ${version} predates the verified profile-navigation release; update the template lockfile`,
+    major > 0 || minor > 16 || (minor === 16 && patch >= 12),
+    `Installed SDK ${version} predates the shared-preference/auth lifecycle release; update the template lockfile`,
   ).toBe(true);
 });
 
