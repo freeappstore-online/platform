@@ -383,6 +383,48 @@ describe('backup envelope', () => {
     expect(preview.value.data.records[0]?.value).toBe(1);
   });
 
+  it('imports original bytes and counts while checksum hashing is paused', async () => {
+    const exported = await exportBackup({
+      appId: 'notes',
+      data: { notes: ['original'] },
+      exportedAt,
+    });
+    if (!exported.ok) throw new Error('export failed');
+    const raw = structuredClone(exported.value);
+    const byteLength = new TextEncoder().encode(JSON.stringify(raw)).length;
+    const digest = crypto.subtle.digest.bind(crypto.subtle);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const spy = vi.spyOn(crypto.subtle, 'digest').mockImplementation(async (algorithm, data) => {
+      await gate;
+      return digest(algorithm, data);
+    });
+    try {
+      const db = memory();
+      const pending = importBackup({
+        raw,
+        mode: 'replace',
+        schema: notesSchema,
+        snapshot: db.snapshot,
+        apply: db.apply,
+        restore: db.restore,
+      });
+      expect(spy).toHaveBeenCalledOnce();
+      raw.data.notes[0] = '999';
+      raw.data.notes.push('unchecked');
+      release();
+      expect(await pending).toMatchObject({
+        ok: true,
+        value: { byteLength, counts: { notes: 1 } },
+      });
+      expect(db.store.notes).toEqual(['original']);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('applies the verified object snapshot if the caller mutates during storage snapshot', async () => {
     const exported = await exportBackup({
       appId: 'records',
@@ -425,11 +467,14 @@ describe('backup envelope', () => {
     });
 
     await snapshotEntered;
+    const byteLength = new TextEncoder().encode(JSON.stringify(raw)).length;
     raw.data.records[0]!.value = 999;
+    raw.data.records.push({ value: 999 });
     finishSnapshot();
     const imported = await pending;
 
     expect(imported.ok).toBe(true);
+    expect(imported).toMatchObject({ ok: true, value: { byteLength, counts: { records: 1 } } });
     expect(appliedValue).toBe(1);
   });
 
