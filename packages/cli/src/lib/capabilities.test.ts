@@ -408,3 +408,34 @@ it('requires root SDK for a root persistence import even when web has SDK', asyn
   );
   await expect(installCapabilities(root, ['persistence'])).rejects.toThrow('package.json requires');
 });
+
+it.each([
+  ['0.16.26', '0.14.30', ['persistence'], true],
+  ['0.16.26', undefined, ['pwa'], true],
+  ['0.16.26', '0.16.26', ['persistence', 'pwa'], true],
+  ['0.16.26', '0.14.30', ['persistence', 'pwa'], false],
+])('resolves capability imports from root %s and web %s', async (sdk, web, ids, succeeds) => {
+  const root = await app();
+  const pkg = (version: string) =>
+    JSON.stringify({
+      dependencies: {
+        '@freeappstore/sdk': version,
+        'vite-plugin-pwa': '1.3.0',
+      },
+    });
+  await writeFile(join(root, 'package.json'), pkg(sdk));
+  if (web !== undefined) {
+    await mkdir(join(root, 'web'));
+    await writeFile(join(root, 'web/package.json'), pkg(web));
+  }
+  const before = await readdir(root, { recursive: true });
+  await installCapabilities(root, ids, { dryRun: true });
+  expect(await readdir(root, { recursive: true })).toEqual(before);
+  if (succeeds) {
+    await installCapabilities(root, ids);
+    expect(await readFile(join(root, '.fas-capabilities.json'), 'utf8')).toContain(ids[0]);
+  } else {
+    await expect(installCapabilities(root, ids)).rejects.toThrow('web/package.json');
+    expect(await readdir(root, { recursive: true })).toEqual(before);
+  }
+});

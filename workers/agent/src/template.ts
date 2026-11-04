@@ -1,5 +1,6 @@
 /** Template files and system prompts — parameterized by store config. */
 
+import { checkCapabilityPackagePrerequisites, resolveCapabilities } from "../../../packages/cli/src/lib/capability-definitions";
 import type { StoreConfig } from "./config";
 
 export type AppPreset = "standalone" | "connected";
@@ -1165,4 +1166,39 @@ Do NOT attempt to edit these. Build your game entirely in web/src/ (App.tsx + co
 
 export function getSystemPrompt(config: StoreConfig): string {
   return config.store === "games" ? GAME_SYSTEM_PROMPT : APP_SYSTEM_PROMPT;
+}
+
+/** Apply capability recipes only after every generated import's package has passed preflight.
+ * Returns a new file map; failures and previews never mutate the caller's template.
+ */
+export async function applyCapabilitiesToTemplate(
+  files: Record<string, string>, ids: string[], options: { dryRun?: boolean } = {},
+): Promise<Record<string, string>> {
+  const capabilities = resolveCapabilities(ids);
+  const { prerequisites } = checkCapabilityPackagePrerequisites(
+    capabilities,
+    JSON.parse(files["package.json"] ?? "{}"),
+    files["web/package.json"] === undefined ? undefined : JSON.parse(files["web/package.json"]),
+  );
+  if (prerequisites.length) throw new Error([
+    "INCOMPLETE: package prerequisites unmet; no files or manifest written.", ...prerequisites,
+  ].join("\n"));
+  if (options.dryRun) return { ...files };
+  const next = { ...files };
+  const manifest = JSON.parse(files[".fas-capabilities.json"] ?? '{"schemaVersion":1,"capabilities":{}}');
+  if (manifest.schemaVersion !== 1 || !manifest.capabilities) throw new Error("Unsupported capability manifest.");
+  for (const cap of capabilities) {
+    const hashes: Record<string, string> = {};
+    for (const [path, content] of Object.entries(cap.files)) {
+      if (next[path] !== undefined && next[path] !== content) throw new Error(
+        "Capability file conflict: " + path,
+      );
+      next[path] = content;
+      const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content));
+      hashes[path] = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+    }
+    manifest.capabilities[cap.id] = { version: cap.version, files: hashes, ...(cap.metadata ? { metadata: cap.metadata } : {}) };
+  }
+  next[".fas-capabilities.json"] = JSON.stringify(manifest, null, 2) + "\n";
+  return next;
 }

@@ -1,6 +1,6 @@
 // Run the shared pure policy in workerd: semver must bundle without Node APIs.
 import { expect, it } from "vitest";
-import { satisfiesCapabilityPackageRange } from "../../../../packages/cli/src/lib/capability-definitions";
+import { checkCapabilityPackagePrerequisites, resolveCapabilities, satisfiesCapabilityPackageRange } from "../../../../packages/cli/src/lib/capability-definitions";
 
 it.each([
   ["0.16.26-beta.1", ">=0.16.26", false],
@@ -13,4 +13,16 @@ it.each([
   ["^0.16.26", ">=0.16.26", true],
 ])("checks bundled prerequisite %s against %s", (declared, required, expected) => {
   expect(satisfiesCapabilityPackageRange(declared, required)).toBe(expected);
+});
+
+it.each([
+  [undefined, "0.16.26", "persistence", false],
+  ["0.16.26", "0.14.30", "persistence", true],
+  ["0.16.26", undefined, "pwa", true],
+])("checks bundled package locations %s / %s for %s", (root, web, id, accepted) => {
+  const pkg = (sdk?: string) => ({ dependencies: {
+    ...(sdk ? { "@freeappstore/sdk": sdk } : {}), "vite-plugin-pwa": "1.3.0",
+  } });
+  const result = checkCapabilityPackagePrerequisites(resolveCapabilities([id]), pkg(root), web === undefined ? undefined : pkg(web));
+  expect(result.prerequisites.length === 0).toBe(accepted);
 });
