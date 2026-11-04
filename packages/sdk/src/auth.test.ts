@@ -516,3 +516,96 @@ describe('Auth protects the active session from stale requests (#350/#361)', () 
     expect(auth.token).toBe('token-b');
   });
 });
+
+describe('Auth synchronizes same-origin tabs', () => {
+  it('clears a stale account when another tab signs out from the shared session', () => {
+    const sharedStorage: FakeStorage = {
+      store: new Map([
+        [
+          'fas:session',
+          JSON.stringify({
+            token: 'token-a',
+            user: { id: 'id:alice', login: 'alice', avatarUrl: null, dateOfBirth: null },
+          }),
+        ],
+      ]),
+      getItem: (key) => sharedStorage.store.get(key) ?? null,
+      setItem: (key, value) => void sharedStorage.store.set(key, value),
+      removeItem: (key) => void sharedStorage.store.delete(key),
+    };
+    const tabA = new EventTarget() as EventTarget & FakeWindow;
+    const tabB = new EventTarget() as EventTarget & FakeWindow;
+    for (const tab of [tabA, tabB]) {
+      Object.assign(tab, {
+        location: {
+          href: 'https://app.example/',
+          hash: '',
+          pathname: '/',
+          search: '',
+          assign: () => undefined,
+        },
+        localStorage: sharedStorage,
+        history: { replaceState: () => undefined },
+      });
+    }
+
+    (globalThis as Record<string, unknown>).window = tabA;
+    const authA = new Auth('demo', 'https://api.example');
+    (globalThis as Record<string, unknown>).window = tabB;
+    const authB = new Auth('demo', 'https://api.example');
+
+    tabA.dispatchEvent(
+      Object.assign(new Event('storage'), {
+        key: 'unrelated',
+        newValue: null,
+        storageArea: sharedStorage,
+      }),
+    );
+    tabA.dispatchEvent(
+      Object.assign(new Event('storage'), {
+        key: 'fas:session',
+        newValue: null,
+        storageArea: { ...sharedStorage },
+      }),
+    );
+    expect(authA.user?.login).toBe('alice');
+
+    authB.signOut();
+
+    const storageEvent = Object.assign(new Event('storage'), {
+      key: 'fas:session',
+      newValue: null,
+      storageArea: sharedStorage,
+    });
+    tabA.dispatchEvent(storageEvent);
+    expect(authA.user).toBeNull();
+    expect(authA.token).toBeNull();
+
+    sharedStorage.setItem(
+      'fas:session',
+      JSON.stringify({
+        token: 'token-b',
+        user: { id: 'id:bob', login: 'bob', avatarUrl: null, dateOfBirth: null },
+      }),
+    );
+    tabA.dispatchEvent(
+      Object.assign(new Event('storage'), {
+        key: 'fas:session',
+        newValue: sharedStorage.getItem('fas:session'),
+        storageArea: sharedStorage,
+      }),
+    );
+    expect(authA.user?.login).toBe('bob');
+    expect(authA.token).toBe('token-b');
+
+    sharedStorage.store.clear();
+    tabA.dispatchEvent(
+      Object.assign(new Event('storage'), {
+        key: null,
+        newValue: null,
+        storageArea: sharedStorage,
+      }),
+    );
+    expect(authA.user).toBeNull();
+  });
+});

@@ -26,6 +26,9 @@ export class Auth {
   ) {
     this.session = this.readStorage();
     if (this.session) this.ensureMember();
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('storage', this.onStorage);
+    }
   }
 
   /** Current signed-in user, or null if not authenticated. */
@@ -290,6 +293,23 @@ export class Auth {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
     } catch {}
   }
+
+  private readonly onStorage = (event: StorageEvent): void => {
+    if (event.key !== null && event.key !== STORAGE_KEY) return;
+    try {
+      if (event.storageArea && event.storageArea !== window.localStorage) return;
+    } catch {
+      return;
+    }
+
+    // Read the current value rather than replaying event.newValue: multiple
+    // account changes can land before this tab handles its queued events.
+    const previousToken = this.session?.token;
+    this.sessionRevision++;
+    this.session = this.readStorage();
+    if (this.session && this.session.token !== previousToken) this.ensureMember();
+    this.emit();
+  };
 
   private emit(): void {
     for (const listener of this.listeners) listener(this.user);
