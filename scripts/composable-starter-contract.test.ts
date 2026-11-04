@@ -67,6 +67,15 @@ describe('composable starter contract (#343)', () => {
     expect(read('packages/sdk/src/docs.test.ts')).toContain('docs/composable-starter-contract.md');
   });
 
+  it('preserves the styling and fleet-migration scope boundary', () => {
+    expect(contract).toContain('#318');
+    expect(contract).toContain('ADR-001');
+    expect(contract).toContain('#327');
+    expect(contract).toMatch(/does not restart #326/);
+    expect(contract).toMatch(/warn-only styling checks to fail/);
+    expect(contract).toMatch(/edit sibling stores/);
+  });
+
   it('keeps generator and platform guides off the old header and dropdown claims', () => {
     for (const path of GUIDES) {
       const text = read(path);

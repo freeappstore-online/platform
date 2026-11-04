@@ -66,3 +66,5 @@ The builder exposes first-party capability installation through the `install_cap
 ## Scope boundaries
 
 This contract governs the canonical generated foundation and its adoption guidance. It does not migrate existing app repositories, update sibling stores, or claim that every published app has adopted the starter. App-specific product work belongs in that app's repository. Styling checks and security, accessibility, license, and data-integrity requirements remain independently enforced.
+
+#318 and [ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md) remain the governing styling work, and #327 remains the shared design-system specification. This release does not restart #326, change warn-only styling checks to fail, or edit sibling stores.
