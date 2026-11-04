@@ -479,7 +479,7 @@ test('profile returns to the originating URL after reload and OAuth preserves it
   page,
 }) => {
   await page.goto('/?view=recent#entry');
-  await page.locator('header').getByRole('link', { name: 'Profile', exact: true }).click();
+  await page.locator('header').getByRole('link', { name: 'Profile', exact: true }).last().click();
   await page.reload();
   await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute(
     'href',
