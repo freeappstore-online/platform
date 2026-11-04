@@ -17,6 +17,8 @@ interface Session {
 export class Auth {
   private session: Session | null = null;
   private listeners = new Set<(user: User | null) => void>();
+  private initialization: Promise<void> | null = null;
+  private sessionRevision = 0;
 
   constructor(
     private readonly appId: string,
@@ -93,6 +95,7 @@ export class Auth {
 
   /** Clear the session and notify listeners. */
   signOut(): void {
+    this.sessionRevision++;
     this.session = null;
     if (typeof window !== 'undefined') {
       try {
@@ -144,13 +147,26 @@ export class Auth {
    * URL hash, persists it to localStorage, and clears the hash. On a normal
    * page load it's a no-op — the constructor already restored any cached
    * session from localStorage.
+   * Concurrent callers wait for the same verification. Signing out while it
+   * is pending prevents that callback from restoring the session afterward.
    *
    * @example
    *   const fas = initApp({ appId: 'my-app' });
    *   await fas.auth.init();
    *   render();
    */
-  async init(): Promise<void> {
+  init(): Promise<void> {
+    if (this.initialization) return this.initialization;
+    const pending = this.consumeCallback();
+    this.initialization = pending;
+    const clear = () => {
+      if (this.initialization === pending) this.initialization = null;
+    };
+    void pending.then(clear, clear);
+    return pending;
+  }
+
+  private async consumeCallback(): Promise<void> {
     if (typeof window === 'undefined') return;
     const hash = window.location.hash;
     if (!hash.startsWith('#fas_session=')) return;
@@ -169,8 +185,11 @@ export class Auth {
     }
     if (!token) return;
 
+    const revision = this.sessionRevision;
     try {
       const user = await this.fetchUser(token);
+      // A sign-out during verification must win over this stale callback.
+      if (revision !== this.sessionRevision) return;
       this.session = { token, user };
       // Emit/ensure BEFORE persisting: writeStorage() can throw in
       // storage-restricted contexts (private-mode webviews, disabled/full

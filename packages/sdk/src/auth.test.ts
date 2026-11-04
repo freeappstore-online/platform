@@ -279,3 +279,56 @@ describe('Auth with storage blocked (SecurityError on access)', () => {
     expect(seen).toContain(null);
   });
 });
+
+// A callback is shared by Shell, profile consumers, and StrictMode effect retries.
+describe('Auth callback lifecycle (#340)', () => {
+  function pendingCallback() {
+    const { window } = makeWindow({ href: 'https://app.example/profile#fas_session=test-token' });
+    window.history.replaceState = () => {
+      window.location.hash = '';
+    };
+    (globalThis as Record<string, unknown>).window = window;
+    (globalThis as Record<string, unknown>).history = window.history;
+    let resolve!: (response: Response) => void;
+    const fetch = vi.fn(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    );
+    globalThis.fetch = fetch;
+    const auth = new Auth('demo', 'https://api.example');
+    const finish = () =>
+      resolve(
+        new Response(
+          JSON.stringify({ id: 'gh:1', login: 'alice', avatarUrl: null, dateOfBirth: null }),
+        ),
+      );
+    return { auth, window, fetch, finish };
+  }
+
+  it('all init callers wait for the same pending callback', async () => {
+    const { auth, finish } = pendingCallback();
+    const first = auth.init();
+    const ready = vi.fn();
+    const second = auth.init().then(ready);
+    await Promise.resolve();
+    const completedEarly = ready.mock.calls.length;
+    finish();
+    await Promise.all([first, second]);
+    expect(completedEarly).toBe(0);
+    expect(auth.user?.login).toBe('alice');
+  });
+
+  it('does not restore a session after sign-out while callback verification is pending', async () => {
+    const { auth, window, finish, fetch } = pendingCallback();
+    const pending = auth.init();
+    auth.signOut();
+    finish();
+    await pending;
+    expect(auth.user).toBeNull();
+    expect(auth.token).toBeNull();
+    expect(window.localStorage.getItem('fas:session')).toBeNull();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('react', () => ({
   useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
@@ -8,6 +8,11 @@ vi.mock('react', () => ({
   useCallback: (fn: unknown) => fn,
   useRef: (init: unknown) => ({ current: init }),
 }));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe('useTheme with the system preference', () => {
   it('reports the new theme after the OS switches to dark', async () => {
@@ -28,5 +33,15 @@ describe('useTheme with the system preference', () => {
     onChange?.();
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(useTheme().theme).toBe('dark');
+
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    useTheme().setPreference('light');
+    expect(useTheme().preference).toBe('light');
+    expect(useTheme().theme).toBe('light');
+    onChange?.();
+    expect(useTheme().theme).toBe('light');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
   });
 });

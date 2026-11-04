@@ -707,3 +707,93 @@ test('query-only history changes refresh the profile return link (#339)', async 
   await page.goBack();
   await expect(page.getByRole('link', { name: 'Back to app' })).toHaveAttribute('href', '/about');
 });
+
+for (const blocked of [false, true]) {
+  test(`profile and topbar share preferences with storage ${blocked ? 'blocked' : 'available'} (#340)`, async ({
+    page,
+  }) => {
+    await page.addInitScript((blocked) => {
+      localStorage.setItem(
+        'fas:session',
+        JSON.stringify({
+          token: 'browser-test-only',
+          user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+        }),
+      );
+      if (blocked) {
+        const setItem = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+          if (key.startsWith('stores-')) throw new DOMException('Blocked', 'SecurityError');
+          setItem.call(this, key, value);
+        };
+      }
+    }, blocked);
+    await page.goto('/profile');
+    await page.getByRole('button', { name: 'Dark', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.getByRole('button', { name: 'Large', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Text: large', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Text: large', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Small', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.locator('html')).toHaveAttribute('data-text', 'sm');
+    await page.getByRole('link', { name: 'Back to app', exact: true }).click();
+    await page.locator('header a[aria-label="Profile"]').click();
+    await expect(page.getByRole('button', { name: 'Small', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    if (!blocked) {
+      await page.reload();
+      await expect(page.getByRole('button', { name: 'Small', exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+    }
+  });
+}
+
+test('preference changes synchronize across tabs (#340)', async ({ page, context }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'fas:session',
+      JSON.stringify({
+        token: 'browser-test-only',
+        user: { id: 'gh:1', login: 'browser-test', avatarUrl: null, dateOfBirth: '2000-01-01' },
+      }),
+    ),
+  );
+  await page.goto('/profile');
+  const other = await context.newPage();
+  try {
+    await other.route('https://api.freeappstore.online/**', (route) =>
+      new URL(route.request().url()).pathname === '/v1/analytics.js'
+        ? route.fulfill({ contentType: 'application/javascript', body: '' })
+        : route.fulfill({ json: { value: null, friends: [], requests: [] } }),
+    );
+    await other.goto('/profile');
+    await page.getByRole('button', { name: 'Dark', exact: true }).click();
+    await expect(other.getByRole('button', { name: 'Dark', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await other.getByRole('button', { name: 'Large', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Text: large', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Large', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  } finally {
+    await other.close();
+  }
+});

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import type { AuthProvider } from '../auth.js';
 import { useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
+import { createPreferenceStore } from '../preferences.js';
 import type { User } from '../types.js';
 
 // ---------------------------------------------------------------------------
@@ -182,18 +183,7 @@ export function ThemeToggle() {
 // TextSizeToggle
 // ---------------------------------------------------------------------------
 
-const TEXT_SIZE_KEY = 'stores-text-size';
 type TextSize = 'default' | 'lg' | 'sm';
-
-function getTextSize(): TextSize {
-  if (typeof window === 'undefined') return 'default';
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(TEXT_SIZE_KEY);
-  } catch {} // storage blocked
-  if (stored === 'lg' || stored === 'sm') return stored;
-  return 'default';
-}
 
 function applyTextSize(size: TextSize): void {
   if (typeof document === 'undefined') return;
@@ -204,24 +194,22 @@ function applyTextSize(size: TextSize): void {
   }
 }
 
-/** Hook for text size state. Used by TextSizeToggle and ProfilePage. */
+const textSizeStore = createPreferenceStore({
+  key: 'stores-text-size',
+  defaultValue: 'default' as TextSize,
+  parse: (stored): TextSize => (stored === 'lg' || stored === 'sm' ? stored : 'default'),
+  resolve: (size) => size,
+  apply: applyTextSize,
+});
+
+/** Shared text size state for the topbar, Profile page, and custom controls. */
 export function useTextSize() {
-  const [size, setSize] = useState<TextSize>(getTextSize);
-
-  useEffect(() => {
-    applyTextSize(size);
-  }, [size]);
-
-  const set = useCallback((next: TextSize) => {
-    setSize(next);
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.setItem(TEXT_SIZE_KEY, next);
-      } catch {} // storage blocked: the size applies but isn't saved
-    }
-  }, []);
-
-  return { size, setSize: set };
+  const size = useSyncExternalStore(
+    textSizeStore.subscribe,
+    textSizeStore.getSnapshot,
+    textSizeStore.getSnapshot,
+  );
+  return { size, setSize: textSizeStore.set };
 }
 
 /** Text size toggle. Cycles: default -> large -> small. Shows A/A+/A-. */

@@ -1,33 +1,18 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Friend } from './friends.js';
 import type { FreeAppStore } from './index.js';
-import type { User } from './types.js';
+import { createPreferenceStore } from './preferences.js';
 
 export type { User } from './types.js';
 export type { UseVoiceInputReturn } from './voice.js';
 export { useVoiceInput } from './voice.js';
 
-const THEME_KEY = 'stores-theme';
-
 type ThemePreference = 'light' | 'dark' | 'system';
 type ResolvedTheme = 'light' | 'dark';
-
-// Shared theme state — all useTheme() callers share this via DOM + localStorage
-const themeListeners = new Set<() => void>();
 
 function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined') return 'light';
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
-
-function getStoredPreference(): ThemePreference {
-  if (typeof window === 'undefined') return 'system';
-  let stored: string | null = null;
-  try {
-    stored = window.localStorage.getItem(THEME_KEY);
-  } catch {} // storage blocked: fall back to the system theme
-  if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
-  return 'system';
 }
 
 function resolveTheme(pref: ThemePreference): ResolvedTheme {
@@ -43,38 +28,19 @@ function applyTheme(theme: ResolvedTheme): void {
   }
 }
 
-function notifyThemeListeners(): void {
-  for (const fn of themeListeners) fn();
-}
+const themeStore = createPreferenceStore({
+  key: 'stores-theme',
+  defaultValue: 'system' as ThemePreference,
+  parse: (stored): ThemePreference => (stored === 'light' || stored === 'dark' ? stored : 'system'),
+  resolve: (preference) => ({ preference, theme: resolveTheme(preference) }),
+  apply: (snapshot) => applyTheme(snapshot.theme),
+});
 
-// Initialize on first import (browser only)
 if (typeof window !== 'undefined') {
-  applyTheme(resolveTheme(getStoredPreference()));
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    if (getStoredPreference() === 'system') {
-      applyTheme(getSystemTheme());
-      // useSyncExternalStore only re-renders when the snapshot object changes.
-      cachedSnapshot = getThemeSnapshot();
-      notifyThemeListeners();
-    }
+    // Resolve from the active choice, including a choice that could not be persisted.
+    themeStore.refresh();
   });
-}
-
-function subscribeTheme(cb: () => void): () => void {
-  themeListeners.add(cb);
-  return () => themeListeners.delete(cb);
-}
-
-function getThemeSnapshot(): { theme: ResolvedTheme; preference: ThemePreference } {
-  const preference = getStoredPreference();
-  return { theme: resolveTheme(preference), preference };
-}
-
-// Stable reference for useSyncExternalStore — only changes when listeners fire
-let cachedSnapshot = getThemeSnapshot();
-
-function getSnapshot(): { theme: ResolvedTheme; preference: ThemePreference } {
-  return cachedSnapshot;
 }
 
 /**
@@ -88,19 +54,12 @@ function getSnapshot(): { theme: ResolvedTheme; preference: ThemePreference } {
  * ```
  */
 export function useTheme() {
-  const snapshot = useSyncExternalStore(subscribeTheme, getSnapshot, getSnapshot);
-
-  const setPreference = useCallback((pref: ThemePreference) => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(THEME_KEY, pref);
-    } catch {} // storage blocked: the choice is applied but not saved
-    applyTheme(resolveTheme(pref));
-    cachedSnapshot = getThemeSnapshot();
-    notifyThemeListeners();
-  }, []);
-
-  return { theme: snapshot.theme, preference: snapshot.preference, setPreference };
+  const snapshot = useSyncExternalStore(
+    themeStore.subscribe,
+    themeStore.getSnapshot,
+    themeStore.getSnapshot,
+  );
+  return { theme: snapshot.theme, preference: snapshot.preference, setPreference: themeStore.set };
 }
 
 /**
@@ -115,12 +74,25 @@ export function useTheme() {
  * ```
  */
 export function useAuth(app: FreeAppStore) {
-  const [user, setUser] = useState<User | null>(app.auth.user);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState(() => ({ app, user: app.auth.user, loading: true }));
+  // Do not expose the previous app's user for the render before effects run.
+  const { user, loading } = state.app === app ? state : { user: app.auth.user, loading: true };
 
   useEffect(() => {
-    app.auth.init().finally(() => setLoading(false));
-    return app.auth.onChange(setUser);
+    let active = true;
+    setState({ app, user: app.auth.user, loading: true });
+    const unsubscribe = app.auth.onChange((user) => {
+      if (active)
+        setState((current) => ({ app, user, loading: current.app !== app || current.loading }));
+    });
+    const ready = () => {
+      if (active) setState({ app, user: app.auth.user, loading: false });
+    };
+    void app.auth.init().then(ready, ready);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [app]);
 
   const signIn = useCallback(() => app.auth.signIn(), [app]);

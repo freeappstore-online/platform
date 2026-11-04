@@ -286,6 +286,11 @@ onto the standard frame:
 | `useTextSize` | `{ size, setSize }` | Text size preference |
 | `useStandalone` | `boolean` | Detects PWA standalone mode |
 
+Theme and text-size preferences are shared by the topbar, Profile page, and custom
+controls. Changes also synchronize across tabs on the same origin. When storage is
+blocked, choices still apply for the current page session; persistence across reloads
+requires working local storage. Templates provide the CSS tokens and font-size rules.
+
 ## Theming
 
 All components respect the platform design system tokens. Override accent color:
