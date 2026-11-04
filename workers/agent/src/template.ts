@@ -164,6 +164,58 @@ const APP_FILES: Record<string, string> = {
 }`,
 
   "web/src/index.css": `@import "tailwindcss";
+@source "../node_modules/@freeappstore/sdk/dist";
+@source "../../node_modules/@freeappstore/sdk/dist";
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-deep: var(--paper-deep);
+  --color-ink: var(--ink);
+  --color-ink-strong: var(--ink-strong);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-panel: var(--panel);
+  --color-panel-glass: var(--panel-glass);
+  --color-popover: var(--popover);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-deep: var(--accent-deep);
+  --color-accent-hover: var(--accent-hover);
+  --color-sky: var(--sky);
+  --color-sky-soft: var(--sky-soft);
+  --color-sky-deep: var(--sky-deep);
+  --color-mint: var(--mint);
+  --color-mint-soft: var(--mint-soft);
+  --color-mint-deep: var(--mint-deep);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-scrim: var(--scrim);
+  --radius: var(--radius);
+  --radius-sm: var(--radius-sm);
+  --radius-lg: var(--radius-lg, var(--radius));
+  --shadow-sm: var(--shadow);
+  --shadow-lg: var(--shadow-lg, var(--shadow));
+}
+
+@theme {
+  --animate-sdk-fade-in: sdk-fade-in 150ms ease-out;
+  --animate-sdk-slide-up: sdk-slide-up 200ms ease-out;
+  --animate-sdk-drawer: sdk-drawer 200ms ease-out;
+  @keyframes sdk-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sdk-slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sdk-drawer {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
+}
 
 :root {
   --paper: #ffffff;
@@ -176,6 +228,28 @@ const APP_FILES: Record<string, string> = {
   --warning: #d97706;
   --danger: #dc2626;
   --accent: #2563eb;
+  --paper-deep: #f3f4f6;
+  --ink-strong: var(--ink);
+  --panel-glass: rgba(255, 255, 255, 0.72);
+  --popover: var(--paper);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --accent-soft: #dbeafe;
+  --accent-deep: #1e40af;
+  --accent-hover: var(--accent-deep);
+  --sky: #0284c7;
+  --sky-soft: #e0f2fe;
+  --sky-deep: #075985;
+  --mint: #059669;
+  --mint-soft: #d1fae5;
+  --mint-deep: #065f46;
+  --success-soft: color-mix(in srgb, var(--success) 15%, var(--paper));
+  --warning-soft: color-mix(in srgb, var(--warning) 15%, var(--paper));
+  --danger-soft: color-mix(in srgb, var(--danger) 15%, var(--paper));
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-lg: 1rem;
+  --shadow: 0 12px 28px rgba(26, 41, 81, 0.08);
+  --shadow-lg: var(--shadow);
   --font-display: "Fraunces", Georgia, serif;
   font-family: "Manrope", system-ui, sans-serif;
 }
@@ -193,7 +267,23 @@ const APP_FILES: Record<string, string> = {
   --success: #22c55e;
   --warning: #fbbf24;
   --danger: #ef4444;
+  --paper-deep: #0a0a0a;
+  --panel-glass: rgba(26, 26, 26, 0.8);
+  --accent: #60a5fa;
+  --accent-soft: #172554;
+  --accent-deep: #bfdbfe;
+  --sky: #38bdf8;
+  --sky-soft: #082f49;
+  --sky-deep: #bae6fd;
+  --mint: #34d399;
+  --mint-soft: #022c22;
+  --mint-deep: #a7f3d0;
+  --shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
 }
+
+/* Shell text preferences scale rem-based typography without blocking zoom. */
+:root[data-text="lg"] { font-size: 112.5%; }
+:root[data-text="sm"] { font-size: 87.5%; }
 
 body {
   margin: 0;
