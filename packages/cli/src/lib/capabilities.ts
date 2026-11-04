@@ -55,7 +55,8 @@ Requires @freeappstore/sdk >=0.16.15 and vite-plugin-pwa ^1.0.0.
 In web/vite.config.ts import pwaOptions from ./fas-pwa-config
 and use VitePWA(pwaOptions({ /* your existing options */ })).
 Import ./fas-capabilities/pwa from web/src/main.tsx.
-Register pwa.addBusyGuard callbacks for dirty forms, recordings and transfers.
+In features, import { pwa } from the same web/src/fas-capabilities/pwa module.
+Register pwa.addBusyGuard callbacks for dirty forms, recordings and transfers; remove on cleanup.
 Keep the public manifest, icons and app-specific denylist. Review custom runtimeCaching:
 never cache authenticated responses; the shared defaults cache only build assets.
 Keep page zoom enabled; restrict gestures only on a canvas element.
@@ -337,9 +338,11 @@ the platform supports file sharing and otherwise downloads it. Revoke any object
 URLs your own preview creates. The PWA busy guard should cover active recording
 and unsaved media, then be removed when the feature unmounts:
 
+    // Import { pwa } from '../fas-capabilities/pwa' in web/src components.
+    // Reuse the app-owned controller; never startPwa in media features.
     const removeUpdateGuard = registerMediaBusyGuard(
       pwa,
-      () => recorder?.state !== 'inactive' || hasUnsavedMedia,
+      () => Boolean(recorder && recorder.state !== 'inactive') || hasUnsavedMedia,
     );
     // On cleanup: await stopRecording(recorder, stream); removeUpdateGuard();
 

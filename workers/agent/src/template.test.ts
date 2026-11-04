@@ -246,8 +246,9 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
 
   it("wires the shared PWA runtime, safe config, install icons and zoom", () => {
     expect(files["web/vite.config.ts"]).toContain("VitePWA(pwaOptions())");
-    expect(files["web/src/main.tsx"]).toContain("import './pwa'");
-    expect(files["web/src/pwa.ts"]).toContain("startPwa");
+    expect(files["web/src/main.tsx"]).toContain("import './fas-capabilities/pwa'");
+    expect(files["web/src/pwa.ts"]).toBe("export { pwa } from './fas-capabilities/pwa';\n");
+    expect(Object.values(files).join("\n").match(/startPwa\(/g)).toHaveLength(1);
     expect(JSON.parse(files["web/public/manifest.json"]!).icons[0].purpose).toContain("maskable");
     expect(files["web/public/icon.svg"]).toContain("viewBox");
     expect(files["web/index.html"]).not.toMatch(/user-scalable|maximum-scale/);

@@ -773,13 +773,18 @@ ${config.store === "apps" ? `          OUTPUT_PATH: \${{ steps.target.outputs.ou
 
 // ── Public API ──
 
-const CONNECTED_DRAFT = `import { useConnectedKvDraft } from '@freeappstore/sdk/hooks';
+const CONNECTED_DRAFT = `import { useEffect, useRef } from 'react';
+import { pwa } from '../fas-capabilities/pwa';
+import { useConnectedKvDraft } from '@freeappstore/sdk/hooks';
 import { SignInButton } from '@freeappstore/sdk/ui';
 import type { FreeAppStore } from '@freeappstore/sdk';
 
 /** Keep the sign-in gate on this private-data feature, not on public app screens. */
 export function ConnectedDraft({ app: fas }: { app: FreeAppStore }) {
   const draft = useConnectedKvDraft(fas, 'private-draft', '');
+  const busy = useRef(false);
+  busy.current = draft.dirty || draft.saving;
+  useEffect(() => pwa.addBusyGuard(() => busy.current), []);
 
   if (!draft.user) {
     return (
@@ -842,11 +847,13 @@ import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { pwaOptions } from '@freeappstore/sdk/pwa-config';
 export default defineConfig({ plugins: [react(), tailwindcss(), VitePWA(pwaOptions())] });`,
-          "web/src/pwa.ts": `import { startPwa } from '@freeappstore/sdk/pwa';
+          "web/src/fas-capabilities/pwa.ts": `// Import this module once from the browser entry point after installing SDK >=0.16.15.
+import { startPwa } from '@freeappstore/sdk/pwa';
 export const pwa = startPwa();
-// Register pwa.addBusyGuard(() => dirty || recording) in app workflows.
+// pwa.addBusyGuard(() => dirtyForm || recorder.state === 'recording');
 `,
-          "web/src/main.tsx": `import './pwa';\n${SHARED_FILES["web/src/main.tsx"]}`,
+          "web/src/pwa.ts": `export { pwa } from './fas-capabilities/pwa';\n`,
+          "web/src/main.tsx": `import './fas-capabilities/pwa';\n${SHARED_FILES["web/src/main.tsx"]}`,
           "web/public/icon.svg": `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="64" fill="#2563eb"/><path d="M160 160h192v48H208v48h120v48H208v48h-48z" fill="white"/></svg>`,
           "web/public/manifest.json": JSON.stringify(
             {
@@ -915,6 +922,7 @@ Users describe an app idea and you build it. You write TypeScript + React code, 
 ## Tech Stack (mandatory)
 - TypeScript, React 19, Vite 6, Tailwind CSS 4.1, @freeappstore/sdk
 - All data in localStorage (no backend, no server, no database)
+- Import pwa from web/src/fas-capabilities/pwa.ts for dirty/saving and media guards; remove guards on cleanup. Never start a second PWA controller.
 - Must work offline after first load (PWA)
 
 ## The app shell (supported default)

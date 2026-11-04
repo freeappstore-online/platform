@@ -12,10 +12,15 @@ import {
   substituteAppName,
 } from '../../../workers/agent/src/template';
 import * as hooks from './hooks.js';
+import * as pwaSdk from './pwa.js';
+import { registerMediaBusyGuard } from './media.js';
 import * as sdk from './index.js';
 import * as ui from './ui.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+let pwa: ReturnType<typeof pwaSdk.startPwa>;
+let waiting: { postMessage: ReturnType<typeof vi.fn> };
+let serviceWorker: ServiceWorkerContainer;
 let root: Root;
 let container: HTMLDivElement;
 let requests: Array<{ url: string; method: string }>;
@@ -35,6 +40,20 @@ function compile(source: string, modules: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  waiting = { postMessage: vi.fn() };
+  serviceWorker = Object.assign(new EventTarget(), {
+    controller: {},
+    register: vi
+      .fn()
+      .mockResolvedValue(Object.assign(new EventTarget(), { waiting, installing: null })),
+  }) as unknown as ServiceWorkerContainer;
+  Object.defineProperty(navigator, 'serviceWorker', { value: serviceWorker, configurable: true });
+  const files = getTemplateFiles(getConfig('apps'), 'generic', 'connected');
+  pwa = (
+    compile(files['web/src/fas-capabilities/pwa.ts'], {
+      '@freeappstore/sdk/pwa': pwaSdk,
+    }) as unknown as { pwa: typeof pwa }
+  ).pwa;
   history.replaceState(null, '', '/');
   localStorage.clear();
   requests = [];
@@ -52,6 +71,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(async () => root.unmount());
+  pwa.dispose();
   container.remove();
   localStorage.clear();
   vi.unstubAllGlobals();
@@ -79,6 +99,7 @@ it.each(APP_ARCHETYPES)(
     );
     const modules: Record<string, unknown> = {
       react: React,
+      '../fas-capabilities/pwa': { pwa },
       'react/jsx-runtime': jsx,
       '@freeappstore/sdk': sdk,
       '@freeappstore/sdk/hooks': hooks,
@@ -140,6 +161,8 @@ it('profile sign-out clears a mounted generated draft and blocks its retained sa
     'web/src/components/ConnectedDraft.tsx'
   ];
   const Feature = compile(source, {
+    react: React,
+    '../fas-capabilities/pwa': { pwa },
     'react/jsx-runtime': jsx,
     '@freeappstore/sdk/hooks': hooks,
     '@freeappstore/sdk/ui': ui,
@@ -178,3 +201,79 @@ it('profile sign-out clears a mounted generated draft and blocks its retained sa
   expect(requests.length).toBe(before);
   expect(app.auth.token).toBeNull();
 });
+it.each(APP_ARCHETYPES)(
+  'generated %s entry, draft and media share guarded updates (#370)',
+  async (archetype) => {
+    localStorage.setItem(
+      'fas:session',
+      JSON.stringify({ token: 'token', user: { id: 'user', login: 'user' } }),
+    );
+    const files = substituteAppName(
+      getTemplateFiles(getConfig('apps'), archetype, 'connected'),
+      'test-app',
+      'Test App',
+    );
+    const canonical = { pwa };
+    const alias = compile(files['web/src/pwa.ts'], {
+      './fas-capabilities/pwa': canonical,
+    }) as unknown as typeof canonical;
+    expect(alias.pwa).toBe(pwa);
+    const modules: Record<string, unknown> = {
+      react: React,
+      'react/jsx-runtime': jsx,
+      '@freeappstore/sdk': sdk,
+      '@freeappstore/sdk/hooks': hooks,
+      '@freeappstore/sdk/ui': ui,
+      '../fas-capabilities/pwa': canonical,
+    };
+    modules['./components/ConnectedDraft'] = compile(
+      files['web/src/components/ConnectedDraft.tsx'],
+      modules,
+    );
+    const appModule = compile(files['web/src/App.tsx'], modules);
+    await act(async () => {
+      compile(files['web/src/main.tsx'], {
+        ...modules,
+        './fas-capabilities/pwa': canonical,
+        './App.tsx': appModule,
+        './App': appModule,
+        './index.css': {},
+        'react-dom/client': { createRoot: () => root },
+      });
+    });
+    await pwa.ready;
+    expect(
+      document.querySelectorAll('aside[aria-label="App installation and updates"]'),
+    ).toHaveLength(1);
+    expect(serviceWorker.register).toHaveBeenCalledOnce();
+    const input = container.querySelector('textarea')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        input,
+        'dirty notes',
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(container.textContent).toContain('Unsaved changes');
+    expect(alias.pwa.activate()).toBe(false);
+    expect(waiting.postMessage).not.toHaveBeenCalled();
+    // An update activated elsewhere must still be blocked from reloading dirty work.
+    Object.assign(serviceWorker, { controller: {} });
+    serviceWorker.dispatchEvent(new Event('controllerchange'));
+    expect(alias.pwa.reload()).toBe(false);
+    let recording = true;
+    const removeMediaGuard = registerMediaBusyGuard(pwa, () => recording);
+    await act(async () => {
+      history.pushState(null, '', '/about');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    });
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(alias.pwa.activate()).toBe(false);
+    expect(alias.pwa.reload()).toBe(false);
+    expect(waiting.postMessage).not.toHaveBeenCalled();
+    recording = false;
+    removeMediaGuard();
+    expect(alias.pwa.activate()).toBe(true);
+    expect(waiting.postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'SKIP_WAITING' });
+  },
+);

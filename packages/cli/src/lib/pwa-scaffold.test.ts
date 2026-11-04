@@ -46,7 +46,10 @@ it('wires a fresh template, retains custom caching/denylist, enables zoom and re
     );
     const manifest = JSON.parse(await readFile(join(root, '.fas-capabilities.json'), 'utf8'));
     expect(manifest.capabilities.pwa.metadata.offline).toBe('shell-only');
+    const customEntry = "import './fas-capabilities/pwa';\nrenderCustomApp();";
+    await writeFile(join(root, 'web/src/main.tsx'), customEntry);
     expect(await installCapabilities(root, ['pwa'])).toEqual(['No changes.']);
+    expect(await readFile(join(root, 'web/src/main.tsx'), 'utf8')).toBe(customEntry);
     await writeFile(join(root, 'web/src/fas-capabilities/pwa.ts'), 'my guards');
     await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('conflict');
   } finally {
