@@ -123,3 +123,30 @@ from this iteration.
 The next evaluation should compare the repaired platform against this baseline using
 the same observable user flows, and then another independently designed app. Success
 means less intervention and a useful verified feature, not just more generated files.
+
+## Local follow-up delivery
+
+The implementation is [platform 5d79558](https://github.com/freeappstore-online/platform/commit/5d79558022357afd0f6ba4b95a242ad669abcfcf).
+Local validation passed 1,969 platform tests, 406 builder tests, 25 Worker runtime tests,
+80 MCP tests, build, typecheck, lint and isolated Worker bundling. Optional integration
+suites remained skipped; these counts are not a claim of physical-device/OAuth testing.
+Four artifact browser cases then passed across the two presets on desktop and mobile
+Chromium, including the actual declared favicon response. The artifact harness requires
+its feature preparation step; an initial local invocation omitted it and correctly
+failed looking for the fixture counter. Preparing disposable fixtures resolved that
+operator error without changing the application or weakening assertions.
+
+Both release mirrors match the same canonical renderer: standalone 24/24 files at
+[58e8e1f](https://github.com/freeappstore-online/template-standalone/commit/58e8e1f),
+connected 26/26 at [dcfdf75](https://github.com/freeappstore-online/template-connected/commit/dcfdf75).
+Their CI and compliance checks passed. Pitstop's favicon fix is deployed at
+[3f046f9](https://github.com/freeappstore-online/pitstop-log/commit/3f046f98fe9109d44892cb6e0d0b43a9aa54626f).
+The source revision passed [platform CI](https://github.com/freeappstore-online/platform/actions/runs/41936218175),
+and the updated builder, MCP and documentation deployed successfully.
+
+Unimplemented follow-ups are [creation evaluation #401](https://github.com/freeappstore-online/platform/issues/401),
+[PNG/touch icons #402](https://github.com/freeappstore-online/platform/issues/402), and
+[dependency reproducibility #403](https://github.com/freeappstore-online/platform/issues/403).
+Local MCP dependency installation also exposed audit findings; coordinated dependency
+triage is tracked separately in [#404](https://github.com/freeappstore-online/platform/issues/404).
+Those audit findings were not repaired by the template changes.
