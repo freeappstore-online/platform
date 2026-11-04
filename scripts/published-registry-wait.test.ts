@@ -69,14 +69,17 @@ describe('published scaffold registry propagation', () => {
     expect(result.stdout).toContain('CONTINUED');
   });
 
-  it.each(['missing', 'wrong'])('fails persistently %s versions within the wall-clock deadline', (mode) => {
-    const result = run(mode);
-    expect(result.status, result.stderr).toBe(1);
-    expect(result.stdout.match(/SLEEP 5/g)).toHaveLength(60);
-    expect(result.stdout).toContain('within five minutes');
-    expect(result.stdout).toContain('@freeappstore/cli@1.2.3');
-    expect(result.stdout).not.toContain('CONTINUED');
-  });
+  it.each(['missing', 'wrong'])(
+    'fails persistently %s versions within the wall-clock deadline',
+    (mode) => {
+      const result = run(mode);
+      expect(result.status, result.stderr).toBe(1);
+      expect(result.stdout.match(/SLEEP 5/g)).toHaveLength(60);
+      expect(result.stdout).toContain('within five minutes');
+      expect(result.stdout).toContain('@freeappstore/cli@1.2.3');
+      expect(result.stdout).not.toContain('CONTINUED');
+    },
+  );
 
   it('waits for both pinned versions before initializing the scaffold', () => {
     for (const pkg of ['cli', 'sdk']) {
