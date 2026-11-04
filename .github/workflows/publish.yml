@@ -200,8 +200,23 @@ jobs:
           SDK_VERSION="$(printf '%s\n' "$PUBLISHED_PACKAGES" | grep -oE '@freeappstore/sdk@[0-9]+\.[0-9]+\.[0-9]+' | cut -d@ -f3)"
           test -n "$CLI_VERSION"
           test -n "$SDK_VERSION"
-          test "$(npm view "@freeappstore/cli@$CLI_VERSION" version)" = "$CLI_VERSION"
-          test "$(npm view "@freeappstore/sdk@$SDK_VERSION" version)" = "$SDK_VERSION"
+          wait_for_published_version() {
+            package="$1"
+            expected="$2"
+            for attempt in $(seq 1 30); do
+              actual="$(npm --fetch-timeout=5000 --fetch-retries=0 view "$package@$expected" version 2>/dev/null || true)"
+              if [ "$actual" = "$expected" ]; then
+                echo "$package@$expected is visible on npm"
+                return 0
+              fi
+              echo "Waiting for $package@$expected to propagate to npm ($attempt/30)"
+              if [ "$attempt" -lt 30 ]; then sleep 5; fi
+            done
+            echo "::error::$package@$expected did not become available on npm within five minutes"
+            return 1
+          }
+          wait_for_published_version @freeappstore/cli "$CLI_VERSION"
+          wait_for_published_version @freeappstore/sdk "$SDK_VERSION"
           echo "CLI_VERSION=$CLI_VERSION" >> "$GITHUB_ENV"
           echo "SDK_VERSION=$SDK_VERSION" >> "$GITHUB_ENV"
           echo "Validating @freeappstore/cli@$CLI_VERSION against @freeappstore/sdk@$SDK_VERSION"
