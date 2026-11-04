@@ -93,6 +93,18 @@ async function pendingOf(store: Map<string, unknown>) {
   return store.get("pendingTurn") as PendingTurn | undefined;
 }
 
+function capabilitiesRequest(dryRun: boolean) {
+  return new Request("https://agent/capabilities", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer tok",
+      "X-Session-Id": "sess-1",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ capabilities: ["persistence", "backup"], dryRun }),
+  });
+}
+
 function latestTurnLog(store: Map<string, unknown>) {
   const turnId = store.get("latestTurnId") as string | undefined;
   return turnId ? (store.get(`turnEvents:${turnId}`) as any) : undefined;
@@ -133,6 +145,30 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 // ── Tests ──
+
+describe("fresh capability package preparation", () => {
+  it("stops preparing package manifests after a generated session is deployed", async () => {
+    const { state, store } = fakeState();
+    const { env } = fakeEnv();
+    const fresh = new AgentSession(state, env);
+    const freshPreview = await fresh.fetch(capabilitiesRequest(true));
+    expect(freshPreview.status).toBe(200);
+    expect(((await freshPreview.json()) as { changes: string[] }).changes.join("\n")).toContain("UPDATE package.json");
+
+    const persisted = store.get("session") as { appId: string | null; freshTemplate: boolean; files: Record<string, string> };
+    persisted.appId = "generated-app";
+    store.set("session", structuredClone(persisted));
+    const deployedPreview = await new AgentSession(state, env).fetch(capabilitiesRequest(true));
+    const previewBody = (await deployedPreview.json()) as { prerequisites: string[] };
+    expect(deployedPreview.status).toBe(200);
+    expect(previewBody.prerequisites.join("\n")).toContain("package.json requires @freeappstore/sdk");
+    expect((store.get("session") as typeof persisted).files["package.json"]).not.toContain("@freeappstore/sdk");
+
+    const deployedApply = await new AgentSession(state, env).fetch(capabilitiesRequest(false));
+    expect(deployedApply.status).toBe(400);
+    expect((store.get("session") as typeof persisted).files["package.json"]).not.toContain("@freeappstore/sdk");
+  });
+});
 
 describe("ALARM_LOOP=true: /chat", () => {
   it("persists the pending turn and arms an immediate alarm instead of running the model", async () => {

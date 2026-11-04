@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { emptyNoOutputError, readOnlyStallAction, runAgentStep } from "./agent";
 import { getConfig } from "./config";
 import type { ToolResult } from "./providers/types";
+import { getTemplateFiles } from "./template";
 import { executeTool } from "./tools";
 
 const config = getConfig("apps");
@@ -18,7 +19,7 @@ const existingApp = (version = "0.16.26") =>
 
 // Exercise provider -> advertised chat tool -> actual turn file map, rather
 // than calling the API/planner helper directly.
-async function chat(files: Map<string, string>, input: Record<string, unknown>) {
+async function chat(files: Map<string, string>, input: Record<string, unknown>, freshTemplate = false) {
   const events = [
     { type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "cap", name: "install_capabilities", input: {} } },
     { type: "content_block_delta", index: 0, delta: { type: "input_json_delta", partial_json: JSON.stringify(input) } },
@@ -39,6 +40,8 @@ async function chat(files: Map<string, string>, input: Record<string, unknown>) 
     files,
     config,
     async () => {},
+    {},
+    freshTemplate,
   );
   expect(step.kind).toBe("continue");
   if (step.kind !== "continue") throw new Error(step.kind);
@@ -46,6 +49,27 @@ async function chat(files: Map<string, string>, input: Record<string, unknown>) 
   expect(readOnlyStallAction(step.appended, true, undefined, false)).toBeUndefined();
   return step.appended.flatMap((message) => message.toolResults ?? [])[0] as ToolResult;
 }
+
+it.each(["standalone", "connected"] as const)(
+  "prepares root SDK dependencies through the advertised chat tool for a fresh %s template",
+  async (preset) => {
+    const files = new Map(Object.entries(getTemplateFiles(config, "generic", preset)));
+    files.set("web/src/user-data.json", '{"keep":true}\n');
+    const before = new Map(files);
+    const preview = await chat(files, { capabilities: ["persistence", "backup"], dryRun: true }, true);
+    expect(JSON.parse(preview.content).status).toBe("preview");
+    expect(JSON.parse(preview.content).changes.join("\n")).toContain("UPDATE package.json");
+    expect(files).toEqual(before);
+
+    const applied = await chat(files, { capabilities: ["persistence", "backup"], dryRun: false }, true);
+    expect(applied.isError).toBe(false);
+    expect(JSON.parse(applied.content).status).toBe("applied");
+    expect(JSON.parse(files.get("package.json")!).dependencies["@freeappstore/sdk"]).toBe("^0.16.21");
+    expect(files.has("fas-capabilities/persistence.ts")).toBe(true);
+    expect(files.has("fas-capabilities/backup.ts")).toBe(true);
+    expect(files.get("web/src/user-data.json")).toBe(before.get("web/src/user-data.json"));
+  },
+);
 
 it("previews, applies and repeats a compatible install through chat while preserving infrastructure", async () => {
   const files = existingApp();

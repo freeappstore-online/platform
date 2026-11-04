@@ -1,9 +1,10 @@
 /** Template files and system prompts — parameterized by store config. */
 
-import { minVersion, subset, validRange } from "semver";
+import { gt, minVersion, subset, validRange } from "semver";
 import {
   checkCapabilityPackagePrerequisites,
   planCapabilityChanges,
+  prepareFreshCapabilityPackageFiles,
   resolveCapabilities,
   type SemverRangeOperations,
 } from "../../../packages/cli/src/lib/capability-definitions";
@@ -24,8 +25,9 @@ export function applyCapabilitiesToTemplate(
   ids: string[],
   dryRun = false,
   update = false,
+  freshTemplate = false,
 ): Promise<{ files: Record<string, string>; changes: string[]; prerequisites: string[] }> {
-  return applyCapabilitiesToTemplateAsync(currentFiles, ids, dryRun, update);
+  return applyCapabilitiesToTemplateAsync(currentFiles, ids, dryRun, update, freshTemplate);
 }
 
 async function applyCapabilitiesToTemplateAsync(
@@ -33,12 +35,17 @@ async function applyCapabilitiesToTemplateAsync(
   ids: string[],
   dryRun: boolean,
   update: boolean,
+  freshTemplate: boolean,
 ): Promise<{ files: Record<string, string>; changes: string[]; prerequisites: string[] }> {
   const capabilities = resolveCapabilities(ids);
-  const rootPackageText = currentFiles["package.json"];
+  const packagePreparation = freshTemplate
+    ? prepareFreshCapabilityPackageFiles(currentFiles, ids, { validRange, minVersion, subset, gt })
+    : { files: currentFiles, changes: [] };
+  const plannedFiles = packagePreparation.files;
+  const rootPackageText = plannedFiles["package.json"];
   if (!rootPackageText) throw new Error("Builder app is missing package.json; no capability files changed.");
   const semver: SemverRangeOperations = { validRange, minVersion, subset };
-  const prerequisiteResult = checkCapabilityPackagePrerequisites(capabilities, rootPackageText, currentFiles["web/package.json"], semver);
+  const prerequisiteResult = checkCapabilityPackagePrerequisites(capabilities, rootPackageText, plannedFiles["web/package.json"], semver);
   if (prerequisiteResult.errors.length && !dryRun)
     throw new Error(`INCOMPLETE: package prerequisites unmet; no files changed.\n${prerequisiteResult.errors.join("\n")}`);
   if (prerequisiteResult.errors.length) {
@@ -54,7 +61,7 @@ async function applyCapabilitiesToTemplateAsync(
     capabilities: Record<string, { version: string; files: Record<string, string>; metadata?: Record<string, string> }>;
   };
   const manifestPath = ".fas-capabilities.json";
-  const manifestText = currentFiles[manifestPath];
+  const manifestText = plannedFiles[manifestPath];
   const manifest: CapabilityManifest = manifestText ? JSON.parse(manifestText) : { schemaVersion: 1, capabilities: {} };
   if (manifest.schemaVersion !== 1 || !manifest.capabilities || typeof manifest.capabilities !== "object")
     throw new Error("Unsupported capability manifest; no files changed.");
@@ -72,7 +79,7 @@ async function applyCapabilitiesToTemplateAsync(
     const expected = manifest.capabilities[owner]?.files[path];
     if (current !== undefined && expected !== undefined) digests.set(path, await digest(current));
   }
-  const plan = planCapabilityChanges(capabilities, currentFiles, owners, (path) => {
+  const plan = planCapabilityChanges(capabilities, plannedFiles, owners, (path) => {
     const owner = owners[path];
     return !!owner && digests.get(path) === manifest.capabilities[owner]?.files[path];
   });
@@ -90,10 +97,15 @@ async function applyCapabilitiesToTemplateAsync(
   }
   const nextManifest = `${JSON.stringify(manifest, null, 2)}\n`;
   const manifestChanged = nextManifest !== manifestText;
-  const files = dryRun ? currentFiles : { ...currentFiles, ...plan.writes, ...(manifestChanged ? { [manifestPath]: nextManifest } : {}) };
+  const files = dryRun ? currentFiles : { ...plannedFiles, ...plan.writes, ...(manifestChanged ? { [manifestPath]: nextManifest } : {}) };
   const changes = dryRun
-    ? [...prerequisiteResult.checked, ...plan.changes, ...(manifestChanged ? [`UPDATE ${manifestPath}`] : [])]
-    : [...plan.changes, ...(manifestChanged ? [`UPDATE ${manifestPath}`] : [])];
+    ? [
+        ...packagePreparation.changes,
+        ...prerequisiteResult.checked,
+        ...plan.changes,
+        ...(manifestChanged ? [`UPDATE ${manifestPath}`] : []),
+      ]
+    : [...packagePreparation.changes, ...plan.changes, ...(manifestChanged ? [`UPDATE ${manifestPath}`] : [])];
   return {
     files,
     changes: changes.length ? changes : ["No changes."],

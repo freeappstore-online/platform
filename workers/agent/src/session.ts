@@ -69,8 +69,14 @@ interface SessionState {
   tokenHash: string | null;
   tokenValidatedAt: number | null;
   sessionId: string | null;
+  /** Only a newly generated platform scaffold may receive bounded package preparation. */
+  freshTemplate?: boolean;
   preset?: AppPreset;
   archetype?: AppArchetype;
+}
+
+function canPrepareFreshCapabilityPackages(session: Pick<SessionState, "freshTemplate" | "appId">): boolean {
+  return session.freshTemplate === true && session.appId === null;
 }
 
 const TOKEN_REVALIDATE_MS = 30 * 60 * 1000; // Re-verify token every 30 min
@@ -229,6 +235,7 @@ export class AgentSession implements DurableObject {
       tokenHash: null,
       tokenValidatedAt: null,
       sessionId: null,
+      freshTemplate: true,
       archetype,
       preset,
       ...overrides,
@@ -748,6 +755,7 @@ export class AgentSession implements DurableObject {
       appName: session.appName,
       fileCount: files.size,
       fileList: [...files.keys()].sort().join(", "),
+      freshTemplate: canPrepareFreshCapabilityPackages(session),
     };
   }
 
@@ -789,7 +797,13 @@ export class AgentSession implements DurableObject {
 
   private sessionContext(session: SessionState): SessionContext {
     const names = Object.keys(session.files);
-    return { appId: session.appId, appName: session.appName, fileCount: names.length, fileList: names.sort().join(", ") };
+    return {
+      appId: session.appId,
+      appName: session.appName,
+      fileCount: names.length,
+      fileList: names.sort().join(", "),
+      freshTemplate: canPrepareFreshCapabilityPackages(session),
+    };
   }
 
   /** /chat under ALARM_LOOP: persist the turn, arm the alarm, relay events. */
@@ -1049,7 +1063,15 @@ export class AgentSession implements DurableObject {
 
     const files = new Map(Object.entries(session.files));
     const counted = collectUsage(emit);
-    const step = await runAgentStep(pending.aiConfig, pending.prepared, files, this.config, counted.emit, this.env);
+    const step = await runAgentStep(
+      pending.aiConfig,
+      pending.prepared,
+      files,
+      this.config,
+      counted.emit,
+      this.env,
+      canPrepareFreshCapabilityPackages(session),
+    );
     addUsage(session.tokenUsage, counted.usage);
 
     switch (step.kind) {
@@ -1424,7 +1446,13 @@ export class AgentSession implements DurableObject {
       return reply({ error: "Cannot apply capabilities while a build is in progress." }, 409);
     const session = await this.load();
     try {
-      const result = await applyCapabilitiesToTemplate(session.files, body.capabilities, body.dryRun === true, body.update === true);
+      const result = await applyCapabilitiesToTemplate(
+        session.files,
+        body.capabilities,
+        body.dryRun === true,
+        body.update === true,
+        canPrepareFreshCapabilityPackages(session),
+      );
       if (body.dryRun !== true) {
         session.files = result.files;
         await this.save();
@@ -1462,6 +1490,7 @@ export class AgentSession implements DurableObject {
     const appUrl = `https://${appId}.${this.config.domain}`;
     session.files = imported.files;
     session.baselineFiles = { ...imported.files };
+    session.freshTemplate = false;
     session.appId = appId;
     session.appName = owner?.display_name || appId;
     session.deployStatus = { phase: "live", appUrl };

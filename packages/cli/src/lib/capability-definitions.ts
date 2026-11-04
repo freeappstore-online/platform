@@ -4,6 +4,10 @@ export interface SemverRangeOperations {
   subset(sub: string, dom: string): boolean;
 }
 
+export interface FreshPackageSemverOperations extends SemverRangeOperations {
+  gt(a: string, b: string): boolean;
+}
+
 /** Worker-safe canonical capability definitions consumed by CLI and builder. */
 export type CapabilityPackage = {
   name: string;
@@ -407,6 +411,98 @@ export function resolveCapabilities(
   };
   for (const id of ids) visit(id);
   return result;
+}
+
+/** Prepare bounded package ranges in a newly generated template file map. */
+export function prepareFreshCapabilityPackageFiles(
+  currentFiles: Record<string, string>,
+  ids: string[],
+  semver: FreshPackageSemverOperations,
+): { files: Record<string, string>; changes: string[] } {
+  const capabilities = resolveCapabilities(ids);
+  const rootText = currentFiles['package.json'];
+  if (!rootText) throw new Error('Fresh template has no root package.json.');
+  const rootPackage = JSON.parse(rootText) as {
+    dependencies?: Record<string, string>;
+    devDependencies?: Record<string, string>;
+    [key: string]: unknown;
+  };
+  const webText = currentFiles['web/package.json'];
+  const webPackage = webText ? (JSON.parse(webText) as typeof rootPackage) : undefined;
+  let rootChanged = false;
+  let webChanged = false;
+
+  const byPackage = new Map<string, { requirement: CapabilityPackage; target: 'root' | 'web' }[]>();
+  for (const capability of capabilities) {
+    for (const requirement of capability.packages ?? []) {
+      const target = requirement.location === 'web' && webPackage ? 'web' : 'root';
+      const requirements = byPackage.get(requirement.name) ?? [];
+      requirements.push({ requirement, target });
+      byPackage.set(requirement.name, requirements);
+    }
+  }
+
+  for (const [name, requirements] of byPackage) {
+    const minima = requirements.map(({ requirement }) => semver.minVersion(requirement.range));
+    const validMinima = minima.filter(
+      (minimum): minimum is NonNullable<typeof minimum> => minimum !== null,
+    );
+    if (validMinima.length !== minima.length) continue;
+    const minimum = validMinima.reduce((floor, candidate) =>
+      semver.gt(candidate.version, floor.version) ? candidate : floor,
+    );
+    const bounded = `^${minimum.version}`;
+    if (!requirements.every(({ requirement }) => semver.subset(bounded, requirement.range)))
+      continue;
+
+    const targets = new Map<'root' | 'web', CapabilityPackage[]>();
+    for (const { requirement, target } of requirements) {
+      const atTarget = targets.get(target) ?? [];
+      atTarget.push(requirement);
+      targets.set(target, atTarget);
+    }
+
+    for (const [target, targetRequirements] of targets) {
+      const manifest = target === 'web' ? webPackage! : rootPackage;
+      const declared = manifest.dependencies?.[name] ?? manifest.devDependencies?.[name];
+      if (typeof declared === 'string') {
+        if (
+          !semver.validRange(declared) ||
+          requirements.every(({ requirement }) => semver.subset(declared, requirement.range))
+        ) {
+          continue;
+        }
+      }
+
+      const section =
+        manifest.dependencies?.[name] !== undefined
+          ? 'dependencies'
+          : manifest.devDependencies?.[name] !== undefined
+            ? 'devDependencies'
+            : (targetRequirements[0]?.section ?? 'dependencies');
+      if (section === 'dependencies') {
+        manifest.dependencies ??= {};
+        manifest.dependencies[name] = bounded;
+      } else {
+        manifest.devDependencies ??= {};
+        manifest.devDependencies[name] = bounded;
+      }
+      if (target === 'web') webChanged = true;
+      else rootChanged = true;
+    }
+  }
+
+  const files = { ...currentFiles };
+  const changes: string[] = [];
+  if (webChanged && webPackage) {
+    files['web/package.json'] = `${JSON.stringify(webPackage, null, 2)}\n`;
+    changes.push('UPDATE web/package.json with compatible capability dependencies');
+  }
+  if (rootChanged) {
+    files['package.json'] = `${JSON.stringify(rootPackage, null, 2)}\n`;
+    changes.push('UPDATE package.json with compatible capability dependencies');
+  }
+  return { files, changes };
 }
 
 /** Shared conflict/dry-run change plan for filesystem and in-memory generators. */

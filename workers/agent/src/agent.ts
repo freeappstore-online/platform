@@ -57,6 +57,7 @@ export interface SessionContext {
   appName: string | null;
   fileCount: number;
   fileList: string;
+  freshTemplate?: boolean;
 }
 
 /** Everything a turn needs before its first model call: the system prompt with
@@ -222,6 +223,7 @@ export async function runAgentStep(
   storeConfig: StoreConfig,
   emit: Emit,
   gatewayEnv: GatewayEnv = {},
+  freshTemplate = false,
 ): Promise<StepOutcome> {
   const adapter = createAdapter(config, gatewayEnv);
   const toolDefinitions = getToolDefinitions(storeConfig);
@@ -263,7 +265,7 @@ export async function runAgentStep(
   // Execute file tools
   const results: ToolResult[] = [];
   for (const tc of fileToolCalls) {
-    const toolOutput = await executeTool(tc, files, storeConfig);
+    const toolOutput = await executeTool(tc, files, storeConfig, freshTemplate);
     // Truncate large results in conversation history (e.g. read_file returning full file)
     // Capability plans are bounded by the bundled registry. Keep the complete
     // plan so prerequisites and configuration instructions cannot be cut off.
@@ -383,7 +385,7 @@ export async function runAgentTurn(
     if (loop > 0) await new Promise((r) => setTimeout(r, stepDelayMs(config)));
 
     const counted = collectUsage(send);
-    const step = await runAgentStep(config, prepared, files, storeConfig, counted.emit, gatewayEnv);
+    const step = await runAgentStep(config, prepared, files, storeConfig, counted.emit, gatewayEnv, ctx?.freshTemplate === true);
     addUsage(usage, counted.usage);
 
     if (step.kind === "threw") break;

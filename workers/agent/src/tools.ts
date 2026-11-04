@@ -238,7 +238,12 @@ const LOCKED_FILES = new Set([
 ]);
 
 /** Async because run_compliance_check runs the shared checks, which read through an async FileSource. */
-export async function executeTool(toolCall: ToolCall, files: Map<string, string>, config: StoreConfig): Promise<ToolResult> {
+export async function executeTool(
+  toolCall: ToolCall,
+  files: Map<string, string>,
+  config: StoreConfig,
+  freshTemplate = false,
+): Promise<ToolResult> {
   const { name, input, id } = toolCall;
 
   switch (name) {
@@ -262,7 +267,13 @@ export async function executeTool(toolCall: ToolCall, files: Map<string, string>
       // Operate on this turn's isolated map, just like write_file. The session
       // owns authorization, serialization and persistence; no nested HTTP call.
       try {
-        const result = await applyCapabilitiesToTemplate(Object.fromEntries(files), ids, input.dryRun, input.update === true);
+        const result = await applyCapabilitiesToTemplate(
+          Object.fromEntries(files),
+          ids,
+          input.dryRun,
+          input.update === true,
+          freshTemplate,
+        );
         if (!input.dryRun) for (const [path, content] of Object.entries(result.files)) files.set(path, content);
         const incomplete = result.prerequisites.length > 0;
         return {
