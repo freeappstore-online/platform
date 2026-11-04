@@ -119,19 +119,39 @@ export function prepareTurn(
     trimmedHistory.shift();
   }
 
-  // Fix orphaned tool_use/tool_result pairs:
-  // Every assistant message with toolCalls must be followed by a tool_result.
-  // Every tool_result must follow an assistant with toolCalls.
-  // Drop any that don't have their pair.
+  // Fix orphaned tool_use/tool_result pairs. Anthropic requires a result for
+  // every tool_use id in the immediately following user message; a grouped
+  // tool_result row with one missing id is still invalid history.
   const cleaned: Message[] = [];
   for (let i = 0; i < trimmedHistory.length; i++) {
     const m = trimmedHistory[i];
     if (m.role === "assistant" && m.toolCalls?.length) {
-      // Check if next message is tool_result
-      const next = trimmedHistory[i + 1];
-      if (next?.role === "tool_result") {
-        cleaned.push(m, next);
-        i++; // skip the tool_result
+      // A stray user row can be persisted between the call and its result.
+      // Recover the next result group before the next tool-call message, then
+      // put it adjacent to its assistant message as provider APIs require.
+      let resultIndex = i + 1;
+      while (resultIndex < trimmedHistory.length) {
+        const candidate = trimmedHistory[resultIndex];
+        if (candidate.role === "assistant" && candidate.toolCalls?.length) break;
+        if (candidate.role === "tool_result") break;
+        resultIndex++;
+      }
+      const resultMessage = trimmedHistory[resultIndex];
+      if (resultMessage?.role === "tool_result") {
+        const results = new Map((resultMessage.toolResults ?? []).map((result) => [result.id, result]));
+        const toolResults = m.toolCalls.map(
+          (call) =>
+            results.get(call.id) ?? {
+              id: call.id,
+              content: "The previous action result was not recorded. Recheck the current session state before retrying this action.",
+              isError: true,
+            },
+        );
+        cleaned.push(m, { ...resultMessage, toolResults });
+        for (let between = i + 1; between < resultIndex; between++) {
+          if (trimmedHistory[between].role !== "tool_result") cleaned.push(trimmedHistory[between]);
+        }
+        i = resultIndex;
       }
       // else: orphaned tool_use — drop both
     } else if (m.role === "tool_result") {

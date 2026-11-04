@@ -375,6 +375,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         let phases: string[] = [];
         let appId: string | null = null;
         let timedOut = false;
+        let engineError: string | null = null;
+        let transportError: string | null = null;
         try {
           const res = await fetch(`${this.env.AGENT_BASE}/session/${sid}/chat`, {
             method: "POST",
@@ -403,14 +405,21 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
                 if (ev.type === "deploy" && ev.data) {
                   try { const d = JSON.parse(ev.data); if (d.phase) phases.push(d.phase); if (d.appId) appId = d.appId; } catch { /* */ }
                 }
+                if (ev.type === "error" && typeof ev.data === "string") engineError = ev.data.slice(0, 1000);
                 if (ev.appId) appId = ev.appId;
               } catch { /* */ }
             }
           }
-        } catch {
-          timedOut = true; // aborted at the cap — the agent keeps building server-side
+        } catch (err) {
+          if (err instanceof Error && err.name === "AbortError") {
+            timedOut = true; // aborted at the cap — the agent keeps building server-side
+          } else {
+            transportError = err instanceof Error ? err.message : String(err);
+          }
         }
         clearTimeout(timer);
+        if (engineError) return toolError(`Agent turn failed (session \`${sid}\`): ${engineError}\nCheck agent_status before retrying; the session may contain partial work.`);
+        if (transportError) return toolError(`Could not confirm the agent turn result (session \`${sid}\`): ${transportError.slice(0, 500)}\nCheck agent_status before retrying.`);
         const last = phases[phases.length - 1];
         const liveLine = appId ? `Live (when built): https://${appId}.freeappstore.online` : "";
         return txt(

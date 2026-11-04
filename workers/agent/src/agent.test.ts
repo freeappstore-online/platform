@@ -4,11 +4,39 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { collectUsage, runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
+import { collectUsage, prepareTurn, runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
 import { getConfig } from "./config";
 import type { AIConfig, StreamEvent } from "./providers/types";
 
 const storeConfig = getConfig("apps");
+
+describe("prepareTurn tool history recovery", () => {
+  it("fills a missing result for each tool call id before continuing", () => {
+    const prepared = prepareTurn(
+      aiConfig,
+      [
+        { role: "user", content: "Build it" },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            { id: "toolu_012n2ra7bvJ4Xfk54r4Q8duX", name: "install_capabilities", input: {} },
+            { id: "tu_present", name: "fetch_url", input: {} },
+          ],
+        },
+        { role: "tool_result", content: "", toolResults: [{ id: "tu_present", content: "Fetched" }] },
+        { role: "user", content: "The action completed. Summarize the result briefly for the user." },
+      ],
+      "Continue building",
+      storeConfig,
+    );
+
+    const toolResult = prepared.messages.find((message) => message.role === "tool_result");
+    expect(toolResult?.toolResults?.map((result) => result.id)).toEqual(["toolu_012n2ra7bvJ4Xfk54r4Q8duX", "tu_present"]);
+    expect(toolResult?.toolResults?.[0]).toMatchObject({ isError: true });
+    expect(prepared.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool_result", "user", "user"]);
+  });
+});
 
 const aiConfig: AIConfig = {
   provider: "anthropic",
