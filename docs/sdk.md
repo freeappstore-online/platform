@@ -121,6 +121,17 @@ const envelope = await exportBackup({ appId: 'notes', data: { notes: ['hello'] }
 
 The default envelope limit is 4 MiB and the hard cap is 16 MiB.
 
+`exportBackup` takes a detached JSON snapshot before asynchronous checksum work.
+Its envelope data is typed as `JsonSerialized<T>`: valid Dates become ISO strings,
+custom `toJSON()` hooks supply the serialized shape, and nested objects and arrays
+are copied without prototypes or methods. Undefined, function, and symbol object
+properties are omitted; array entries with those values become null. Non-finite
+numbers become null. Cycles and unsupported values such as BigInt fail validation.
+The utility describes declared JSON shapes; TypeScript cannot identify whether an
+arbitrary property is enumerable or a Date is invalid. Validate untrusted data with
+an app-owned schema. The SDK does not automatically restore Dates or class instances;
+the app owns schema validation, version migrations, and restoration of domain types.
+
 ## Shared counters (`fas.counters`)
 
 App-wide atomic counters. Anyone can read; authenticated users can increment.

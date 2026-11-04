@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.backup-types.json",
+  "compilerOptions": {
+    "paths": { "@freeappstore/sdk/backup": ["./dist/backup/index.d.ts"] }
+  }
+}

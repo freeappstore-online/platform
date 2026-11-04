@@ -55,6 +55,47 @@ afterEach(() => {
 });
 
 describe('backup envelope', () => {
+  it('serializes custom toJSON shapes without class methods or live references', async () => {
+    class Entry {
+      labels = ['original'];
+      method() {
+        return 'domain';
+      }
+      toJSON() {
+        return { labels: this.labels, when: new Date('2026-01-01T00:00:00.000Z') };
+      }
+    }
+    const entry = new Entry();
+    const pending = exportBackup({ appId: 'notes', data: { entry }, exportedAt });
+    entry.labels.push('changed');
+    const exported = await pending;
+    if (!exported.ok) throw new Error('export failed');
+    const expected = { entry: { labels: ['original'], when: '2026-01-01T00:00:00.000Z' } };
+    expect(exported.value.data).toEqual(expected);
+    expect(exported.value.data.entry).not.toBeInstanceOf(Entry);
+    expect('method' in exported.value.data.entry).toBe(false);
+    const schema: BackupSchema<typeof expected> = {
+      supportedVersions: [1],
+      validate: (data): data is typeof expected =>
+        JSON.stringify(data) === JSON.stringify(expected),
+      counts: (data) => ({ labels: data.entry.labels.length }),
+    };
+    const preview = await previewBackup(JSON.stringify(exported.value), schema);
+    expect(preview).toMatchObject({ ok: true, value: { data: expected } });
+    const apply = vi.fn();
+    expect(
+      await importBackup({
+        raw: JSON.stringify(exported.value),
+        mode: 'replace',
+        schema,
+        snapshot: () => null,
+        apply,
+        restore: () => {},
+      }),
+    ).toMatchObject({ ok: true });
+    expect(apply).toHaveBeenCalledWith(expected, 'replace');
+  });
+
   it('does not retain caller-owned data when reading envelope fields directly', async () => {
     const exported = await exportBackup({
       appId: 'notes',

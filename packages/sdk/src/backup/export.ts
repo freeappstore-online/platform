@@ -59,6 +59,7 @@ function errorText(error: unknown): string {
   return 'Backup export failed.';
 }
 
+/** Export a detached JSON snapshot; returned data uses JsonSerialized<T>. */
 export async function exportBackup<T>(
   options: ExportBackupOptions<T>,
 ): Promise<BackupResult<BackupEnvelope<T>>> {

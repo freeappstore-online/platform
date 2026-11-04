@@ -40,14 +40,54 @@ export type BackupResult<T> =
   | { ok: true; value: T }
   | { ok: false; reason: BackupFailure; detail?: string };
 
+/** Values omitted in objects and converted to null in arrays by JSON.stringify. */
+type JsonOmitted = undefined | symbol | ((...args: never[]) => unknown);
+type JsonReplacement<T> = T extends { toJSON(key: string): infer R } ? R : T;
+type JsonArrayShape<T> = T extends JsonOmitted ? null : JsonShape<T>;
+type JsonArrayItem<T> = JsonArrayShape<JsonReplacement<T>>;
+
+/**
+ * Successful JSON serialization shape. Dates and custom toJSON hooks use their
+ * wire representation; prototypes and methods are not preserved. Unknown input
+ * remains unknown and needs an app-owned schema. Runtime serialization can fail.
+ */
+export type JsonSerialized<T> = JsonShape<JsonReplacement<T>>;
+
+// JSON.stringify calls toJSON once at each position, not again on its result.
+type JsonShape<T> = T extends string | boolean | null
+  ? T
+  : T extends number
+    ? T | null
+    : T extends JsonOmitted | bigint
+      ? never
+      : T extends readonly unknown[]
+        ? { -readonly [K in keyof T]: JsonArrayItem<T[K]> }
+        : T extends object
+          ? {
+              -readonly [K in keyof T as K extends symbol
+                ? never
+                : Extract<JsonReplacement<T[K]>, JsonOmitted> extends never
+                  ? K
+                  : never]: JsonSerialized<T[K]>;
+            } & {
+              -readonly [K in keyof T as K extends symbol
+                ? never
+                : JsonReplacement<T[K]> extends JsonOmitted
+                  ? never
+                  : Extract<JsonReplacement<T[K]>, JsonOmitted> extends never
+                    ? never
+                    : K]?: JsonSerialized<T[K]>;
+            }
+          : unknown;
+
 export interface BackupEnvelope<T> {
   format: typeof BACKUP_FORMAT;
   version: number;
   /** ISO-8601 timestamp from the exporting device. */
   exportedAt: string;
   appId: string;
-  /** App-owned payload. The SDK does not merge this value. */
-  data: T;
+  /** Detached JSON payload. Restore domain types through the app's schema/migration. */
+  data: JsonSerialized<T>;
   /** Lowercase SHA-256 of the canonical checksum subject. */
   checksum: string;
 }
@@ -102,13 +142,13 @@ export function canonicalJson(value: unknown): string | undefined {
  * shares no objects with the input. Cycles and values the engine cannot
  * serialize return a validation failure.
  */
-export function detachJson<T>(value: T): BackupResult<T> {
+export function detachJson<T>(value: T): BackupResult<JsonSerialized<T>> {
   try {
     const serialized = JSON.stringify(value);
     if (typeof serialized !== 'string') {
       return backupFailure('validation', 'Backup data is not JSON.');
     }
-    return { ok: true, value: JSON.parse(serialized) as T };
+    return { ok: true, value: JSON.parse(serialized) as JsonSerialized<T> };
   } catch (error) {
     if (error instanceof RangeError || error instanceof TypeError) {
       return backupFailure('validation', 'Backup data is not JSON.');

@@ -20,6 +20,7 @@ export {
   type BackupPreview,
   type BackupResult,
   DEFAULT_BACKUP_MAX_BYTES,
+  type JsonSerialized,
 } from './envelope.js';
 export {
   type BackupExampleHandlers,
