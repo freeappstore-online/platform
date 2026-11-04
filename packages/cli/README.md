@@ -34,7 +34,7 @@ After the first successful code push and deploy, live at `https://my-app.freeapp
 | `fas logout` | Clear the cached session. |
 | `fas whoami` | Print the currently signed-in GitHub login. |
 | `fas doctor` | Health check — Node version, git, pnpm, config, signed-in state, API reachability. |
-| `fas init <app-id>` | Scaffold an app from a platform template. Game templates remain available; games are published with the separate fgs CLI. Replaces `APPNAME` placeholders, runs `git init`, makes the first commit. |
+| `fas init <app-id>` | Generate standalone and connected apps from the canonical platform starter foundation; game templates remain available through their template repositories. Replaces app placeholders, runs `git init`, makes the first commit. |
 | `fas check` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
 | `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing, then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
 | `fas list` (alias `fas ls`) | List apps and games you have published. `--json` for scripting, `-v` for recent commits. |
@@ -82,7 +82,7 @@ fas doctor
 
 ### `fas init <app-id>`
 
-Scaffold an app from a platform template. Game templates remain available; games are published with the separate fgs CLI. Clones the template repo, substitutes all `APPNAME` placeholders with the given id, and creates the first git commit.
+Scaffold a standalone or connected app from the same canonical starter foundation used by the builder. The presets share their routing, PWA, styling, and capability files; connected adds a private draft example while leaving public screens reachable. Game templates remain available through their template repositories. The command substitutes app identity and creates the first git commit.
 
 ```bash
 fas init my-app                        # default: standalone template

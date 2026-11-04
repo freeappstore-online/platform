@@ -33,6 +33,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
+    "sync:templates": "node scripts/sync-templates.mjs",
+    "test:starters": "pnpm build && node scripts/test-fresh-starters.mjs",
     "dev": "tsc --watch"
   },
   "dependencies": {

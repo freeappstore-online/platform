@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { getConfig } from "./config";
 import type { DeployStatus } from "./deploy";
-import { applyPlaceholders, executeInfraTool } from "./infra-exec";
+import { applyPlaceholders, executeInfraTool, repairAppIdPlaceholders } from "./infra-exec";
+import { getTemplateFiles } from "./template";
 
 describe("applyPlaceholders", () => {
   it("APPID -> the slug everywhere (so the SDK proxy path matches the deployed id)", () => {
@@ -25,6 +26,25 @@ describe("applyPlaceholders", () => {
     applyPlaceholders(files, "id", "Name");
     expect(files.get("a.ts")).toBe("const x = 1;");
   });
+
+  it.each(["Notes [Beta", 'Notes "Draft"', "Budget $&", "Budget $$", "APPNAME APPID"])(
+    "uses the shared safe starter substitution for builder label %s and preserves it during SDK id repair",
+    (displayName) => {
+      const files = new Map(Object.entries(getTemplateFiles(appsConfig, "generic", "connected")));
+      applyPlaceholders(files, "review-notes", displayName);
+
+      const app = files.get("web/src/App.tsx")!;
+      expect(app).toContain(`appName={${JSON.stringify(displayName)}}`);
+      expect(app).toContain('appId: "review-notes"');
+      expect(JSON.parse(files.get("web/public/manifest.json")!).name).toBe(displayName);
+      expect(JSON.parse(files.get("package.json")!).name).toBe("review-notes");
+
+      files.set("web/src/App.tsx", app.replace('appId: "review-notes"', 'appId: "APPID"'));
+      repairAppIdPlaceholders(files, "review-notes");
+      expect(files.get("web/src/App.tsx")).toContain(`appName={${JSON.stringify(displayName)}}`);
+      expect(files.get("web/src/App.tsx")).toContain('appId: "review-notes"');
+    },
+  );
 });
 
 const appsConfig = getConfig("apps");

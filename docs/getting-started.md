@@ -93,9 +93,10 @@ function Settings() {
 ```
 
 The templates and VibeCode start you inside `Shell`. FreeAppStore is free, so there is
-no subscription or upgrade screen; the only gate is the optional sign-in gate
-(`requireAuth`), for apps where everything needs an account. Full reference, migration
-from older layouts, and caveats: [the Shell](ui.md#shell-the-standard-app-frame).
+no subscription or upgrade screen. In the connected starter, only the private draft
+feature asks users to sign in; public screens and Profile remain reachable. Use
+`requireAuth` only when the whole app needs an account. Full reference and migration
+guidance: [the Shell](ui.md#shell-the-standard-app-frame).
 
 ## Templates
 
@@ -110,13 +111,16 @@ fas init racing --template game-3d         # 3D game
 | Template | Use case |
 |----------|----------|
 | `standalone` | Device-local by default, with no sign-in gate. Add IndexedDB or optional account capabilities as needed. Starts inside `Shell` with Home and About screens. |
-| `connected` | Apps using platform account services through the SDK (auth, KV, collections, rooms, proxy). The generated connected example uses the race-safe private draft hook from #350. Keep app screens editable and gate only features that need sign-in where possible. The SDK profile page offers configured sign-in choices. |
+| `connected` | Apps using platform account services through the SDK (auth, KV, collections, rooms, proxy). The generated private draft uses the race-safe hook from #350 and gates only its own data. Public screens and Profile stay reachable while signed out. |
 
-Both names are presets over one foundation. They are still cloned from two
-repositories until [#352](https://github.com/freeappstore-online/platform/issues/352).
-See the [composable starter contract](composable-starter-contract.md). Both route
-screens by `location.pathname` with `onNavigate`, so adding a primary screen is
-one `nav` entry plus one branch in `App`. A detail route does not need a nav item.
+Both names are presets generated from one canonical platform foundation. The
+external template repositories are release mirrors updated from that source;
+`fas init` generates apps directly. See the [composable starter contract](composable-starter-contract.md)
+and [CLI reference](cli.md#fas-init-app-id). Both route screens by
+`location.pathname` with `onNavigate`, so adding a primary screen is one `nav`
+entry plus one branch in `App`. A detail route does not need a nav item. Fresh Shell
+starters use SDK `^0.16.32`; adding optional PWA to an existing app retains its
+separate `>=0.16.15` API minimum.
 
 Game templates are available for scaffolding, but publish games with the separate `fgs` CLI:
 

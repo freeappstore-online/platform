@@ -67,8 +67,8 @@ with `backend /v1/publish`). The storefront also lives in `sites/storefront` in 
 | Repo | Purpose |
 |------|---------|
 | `submissions/` | Legacy public intake; the current CLI uses self-service provisioning |
-| `template-connected/` | Clone-to-scaffold seed for `fas init` (must stay standalone) |
-| `template-standalone/` | Clone-to-scaffold seed for `fas init` (must stay standalone) |
+| `template-connected/` | External release mirror for the canonical connected starter foundation |
+| `template-standalone/` | External release mirror for the canonical standalone starter foundation |
 
 ## App hosting (Path B)
 

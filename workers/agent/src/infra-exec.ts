@@ -9,6 +9,7 @@ import type { DeployEnv, DeployStatus } from "./deploy";
 import { deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./deploy";
 import { checkDeployStatus, fetchUrl, getAuditResults, getBuildLogs, getCIResults, listDeployed } from "./infra";
 import type { ToolCall } from "./providers/types";
+import { substituteAppName } from "./template";
 
 // FreeAppStore's app-id rule, vendored from packages/backend/src/lib/apps.ts
 // APP_ID_RE (a root test keeps the copies equal, #279). The backend, the
@@ -521,19 +522,28 @@ function advanceBaseline(ctx: ExecContext): void {
 
 /** Replace APPNAME (display name; id in package.json) + APPID (the slug, everywhere). */
 export function applyPlaceholders(files: Map<string, string>, appId: string, appName: string): void {
+  const resolved = substituteAppName(Object.fromEntries(files), appId, appName);
+  for (const [path, content] of Object.entries(resolved)) files.set(path, content);
+}
+
+/** Repair SDK identity after edits without reinterpreting already-rendered app labels. */
+export function repairAppIdPlaceholders(files: Map<string, string>, appId: string): void {
   for (const [path, content] of files) {
-    if (!content.includes("APPNAME") && !content.includes("APPID")) continue;
-    let next = content.replace(/APPID/g, appId);
-    next = path.includes("package.json") ? next.replace(/APPNAME/g, appId) : next.replace(/APPNAME/g, appName);
-    files.set(path, next);
+    if (!content.includes("APPID")) continue;
+    // Repair only the SDK identity value. Display labels may legitimately contain
+    // the same literal token and must remain untouched on subsequent pushes.
+    files.set(
+      path,
+      content.replace(/(\bappId\s*:\s*)(["'])APPID\2/g, (_match, prefix: string, quote: string) => `${prefix}${quote}${appId}${quote}`),
+    );
   }
 }
 
 async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string> {
   // Post-deploy edits may reintroduce the APPID placeholder (e.g. the SDK
   // initApp call). Resolve it against the deployed id before pushing.
-  if (ctx.appId) applyPlaceholders(ctx.files, ctx.appId, ctx.appId);
-  if (ctx.appId && ctx.baselineFiles) applyPlaceholders(ctx.baselineFiles, ctx.appId, ctx.appId);
+  if (ctx.appId) repairAppIdPlaceholders(ctx.files, ctx.appId);
+  if (ctx.appId && ctx.baselineFiles) repairAppIdPlaceholders(ctx.baselineFiles, ctx.appId);
   await ctx.onDeployStatus({ phase: "pushing", progress: "Pushing update..." });
   const result = await pushUpdate(
     tc.input.id as string,

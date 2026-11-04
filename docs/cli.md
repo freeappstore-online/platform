@@ -88,14 +88,13 @@ fas init asteroids --template game-canvas
 |------|---------|
 | `-t, --template <name>` | `standalone`, `connected`, `game-canvas`, `game-grid`, `game-3d` |
 
-`standalone` and `connected` are generated from the same versioned capability
-registry used by `fas add`; the CLI currently uses the authorized standalone and
-connected template repos for its editable screen foundation. See the
-[composable starter contract](composable-starter-contract.md). Both start inside
-the SDK `Shell` with real `nav` items: `standalone` has Home and About and no
-sign-in; `connected` has Home behind the sign-in gate and an accessible Profile
-page for sign-in and account management (`requireAuth`). See
-[Templates](getting-started.md#templates).
+`standalone` and `connected` are generated from the same canonical foundation and
+capability registry used by the builder and `fas add`. Both start inside the SDK
+`Shell` with public Home and About navigation. `connected` adds a private draft
+example whose own data is gated by sign-in; the rest of the app and Profile stay
+available while signed out. `fas init --template standalone|connected` remains
+supported. See the [composable starter contract](composable-starter-contract.md)
+and [Templates](getting-started.md#templates).
 
 ## `fas check`
 
@@ -229,8 +228,10 @@ fas quality timer --json
 
 ## Optional first-party capabilities
 
-Both init and later-add validate package prerequisites before writing capability
-files or recording ownership. Persistence requires `@freeappstore/sdk >=0.16.18`
+Fresh Shell starters use SDK `^0.16.32` for the current compact header and Profile
+appearance controls. That baseline applies to generated starters; optional
+capabilities keep their own API minimums. Both init and later-add validate package
+prerequisites before writing capability files or recording ownership. Persistence requires `@freeappstore/sdk >=0.16.18`
 in the root `package.json`, because its generated module lives at the root.
 PWA requires SDK `>=0.16.15` and `vite-plugin-pwa ^1.0.0` in
 `web/package.json` when present, otherwise the root package. Development

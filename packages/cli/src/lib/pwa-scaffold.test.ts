@@ -13,7 +13,7 @@ it('wires a fresh template, retains custom caching/denylist, enables zoom and re
     await writeFile(
       join(root, 'web/package.json'),
       JSON.stringify({
-        dependencies: { '@freeappstore/sdk': '^0.16.19' },
+        dependencies: { '@freeappstore/sdk': '^0.16.32' },
         devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
       }),
     );

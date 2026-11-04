@@ -94,18 +94,19 @@ describe("getTemplateFiles", () => {
     expect(gamesFiles.LICENSE).toContain("FreeGameStore");
   });
 
-  it("shared files are identical between stores", () => {
-    const sharedPaths = [
-      "pnpm-workspace.yaml",
-      "package.json",
-      "web/tsconfig.json",
-      "web/tsconfig.app.json",
-      "web/tsconfig.node.json",
-      ".gitignore",
-    ];
+  it("shares foundation files and keeps valid store-specific test scripts", () => {
+    const sharedPaths = ["pnpm-workspace.yaml", "web/tsconfig.json", "web/tsconfig.app.json", "web/tsconfig.node.json", ".gitignore"];
     for (const p of sharedPaths) {
       expect(appsFiles[p]).toBe(gamesFiles[p]);
     }
+    const appPackage = JSON.parse(appsFiles["package.json"]!) as { scripts: Record<string, string> };
+    const gamePackage = JSON.parse(gamesFiles["package.json"]!) as { scripts: Record<string, string> };
+    expect({ ...appPackage, scripts: { ...appPackage.scripts, test: undefined } }).toEqual({
+      ...gamePackage,
+      scripts: { ...gamePackage.scripts, test: undefined },
+    });
+    expect(appPackage.scripts.test).toBe("pnpm --filter @APPNAME/web test");
+    expect(gamePackage.scripts.test).toBe("pnpm build");
   });
 
   it("both templates have a reasonable number of files", () => {
@@ -211,7 +212,7 @@ describe("getTemplateFiles", () => {
     const rootOnlyPwa = {
       ...scaffold,
       "package.json": JSON.stringify({
-        dependencies: { "@freeappstore/sdk": "^0.16.26" },
+        dependencies: { "@freeappstore/sdk": "^0.16.32" },
         devDependencies: { "vite-plugin-pwa": "^1.3.0" },
       }),
     };
@@ -309,7 +310,7 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
   it("App.tsx wraps the app in Shell from @freeappstore/sdk/ui, not a local component", () => {
     expect(app).toMatch(/import \{[^}]*\bShell\b[^}]*\} from "@freeappstore\/sdk\/ui"/);
     expect(app).toMatch(/const fas = initApp\(\{ appId: "APPID" \}\)/);
-    expect(app).toMatch(/<Shell app=\{fas\} appName="APPNAME" nav=\{NAV\} onNavigate=\{navigate\}>/);
+    expect(app).toMatch(/<Shell app=\{fas\} appName=\{"APPNAME_JS"\} nav=\{NAV\} onNavigate=\{navigate\}>/);
     expect(app).not.toMatch(/from "\.\/components\/Shell"/);
   });
 

@@ -1,9 +1,16 @@
+import { readFile } from "node:fs/promises";
 import { minVersion, subset, validRange } from "semver";
 import { expect, it } from "vitest";
 import { checkCapabilityPackagePrerequisites, resolveCapabilities } from "../../../packages/cli/src/lib/capability-definitions";
 import { applyCapabilitiesToTemplate } from "./template";
 
 const semver = { validRange, minVersion, subset };
+
+it("deploys the canonical starter generator when its platform source changes", async () => {
+  const workflow = await readFile(new URL("../../../.github/workflows/deploy-agent.yml", import.meta.url), "utf8");
+  expect(workflow).toContain("packages/cli/src/lib/starter-foundation.ts");
+});
+
 const pkg = (sdk?: string, pwa = false) =>
   JSON.stringify({
     dependencies: {
@@ -13,11 +20,11 @@ const pkg = (sdk?: string, pwa = false) =>
   });
 
 it.each([
-  [undefined, "0.16.26", ["persistence"], false],
-  ["0.16.26", "0.14.30", ["persistence"], true],
-  ["0.16.26", undefined, ["pwa"], true],
-  ["0.16.26", "0.16.26", ["persistence", "pwa"], true],
-  ["0.16.26", "0.14.30", ["persistence", "pwa"], false],
+  [undefined, "0.16.32", ["persistence"], false],
+  ["0.16.32", "0.16.32", ["persistence"], true],
+  ["0.16.32", undefined, ["pwa"], true],
+  ["0.16.32", "0.16.32", ["persistence", "pwa"], true],
+  ["0.16.32", "0.14.30", ["persistence", "pwa"], false],
   [undefined, undefined, ["persistence"], false],
 ])("resolves root %s and web %s for %s", async (root, web, ids, succeeds) => {
   const files: Record<string, string> = {

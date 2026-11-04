@@ -254,7 +254,7 @@ it('installs persistence at init and later without touching saved data or edited
   await writeFile(join(root, 'notes.json'), '{"keep":true}');
   await writeFile(
     join(root, 'package.json'),
-    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.19' } }),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.32' } }),
   );
   const plan = await installCapabilities(root, ['persistence']);
   expect(plan.join('\n')).toContain('CREATE');

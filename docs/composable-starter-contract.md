@@ -13,8 +13,8 @@ Reuse this machinery. Do not replace it with a plugin host.
 | App archetypes (#18) | `workers/agent/src/template.ts` (`dashboard`, `tracker`, `calculator`, `generic`) | Prompt seeds on the shared app scaffold. Not separate products. |
 | Build sanity (#10) | `workers/agent/src/build-sanity.ts` | Blocks duplicate top-level declarations and a second `export default` before deploy. |
 | Delta deploy (#13) | `workers/agent` deploy path | Pushes the agent delta over the provisioned scaffold so platform files survive. |
-| CLI scaffolds | `packages/cli/src/commands/init.ts` | `fas init` clones `template-standalone` or `template-connected`. Game templates belong to the FreeGameStore CLI. |
-| Builder scaffold | `workers/agent/src/template.ts` `getTemplateFiles` | Embedded copy of the app foundation plus archetype files. |
+| CLI scaffolds | `packages/cli/src/commands/init.ts`, `packages/cli/src/lib/starter-foundation.ts` | `fas init` generates standalone and connected apps from the shared foundation. External template repositories are release mirrors; game templates keep their separate clone path. |
+| Builder scaffold | `workers/agent/src/template.ts` `getTemplateFiles` | Consumes the same worker-safe generator as the CLI, then adds archetype files. |
 | Shell account (#337–#340) | `packages/sdk/src/ui/layout.tsx`, `profile.tsx` | Compact avatar opens `ProfilePage` in both auth states. `profileHref` is the app-owned route. Preferences and auth lifecycle are shared. |
 | Styling (#320, ADR-001) | [ADR-001](https://github.com/freeappstore-online/platform/blob/main/docs/adr/001-tailwind-on-fas-tokens.md) | React + Tailwind 4 on FAS tokens for every React surface, including apps, the SDK, console, and admin. |
 
@@ -22,7 +22,7 @@ Reuse this machinery. Do not replace it with a plugin host.
 
 ## Foundation, capabilities, and presets
 
-One foundation: the PWA toolchain, SDK runtime, design tokens, and the default `Shell`. Standalone and connected are presets, not two maintained implementations. [#352](https://github.com/freeappstore-online/platform/issues/352) generates both from the shared foundation; `fas init --template standalone|connected` selects the preset.
+One foundation: the PWA toolchain, SDK runtime, design tokens, and the default `Shell`. Standalone and connected are presets, not two maintained implementations. The CLI and builder use `packages/cli/src/lib/starter-foundation.ts`; `fas init --template standalone|connected` selects the preset, and the external template repositories are updated from that source with `sync:templates`.
 
 A capability is a versioned, first-party unit a preset can include at `fas init` or later with `fas add` ([#345](https://github.com/freeappstore-online/platform/issues/345)). It declares an id, a version, dependencies, the environment it supports, the files and config it owns, and how to validate it. Presets are lists of those ids. There is no plugin marketplace and no remote script execution.
 
@@ -31,7 +31,7 @@ Ship these presets:
 | Preset | Means | Today |
 | --- | --- | --- |
 | `standalone` | Device-local data. No sign-in gate. | Home and About inside `Shell`. |
-| `connected` | Platform account services (auth, KV, and the others the preset lists). | Home plus the SDK profile page. `requireAuth` only when the whole app needs an account. |
+| `connected` | Platform account services (auth, KV, and the others the preset lists). | Public Home/About plus an app-owned private draft that gates only its own data. Profile remains reachable signed out. |
 
 Game templates are not FAS presets.
 
@@ -41,7 +41,9 @@ Runtime and packages own versioned infrastructure:
 
 - SDK client, auth, KV, collections, rooms, proxy, and the default `Shell` / `ProfilePage`
 - compliance checks and the CLI resolver that will install capabilities
-- the future PWA update runtime ([#346](https://github.com/freeappstore-online/platform/issues/346))
+- the PWA update runtime and its app-owned busy guards ([#346](https://github.com/freeappstore-online/platform/issues/346))
+
+Fresh Shell starters use SDK `^0.16.32` for the verified compact header and Profile appearance controls. Optional capabilities retain their independent API minimums (for example, PWA remains `>=0.16.15`).
 
 The app owns generated product code after the author edits it:
 
@@ -127,7 +129,7 @@ Each child is a small addition to the files below. None of them introduces a gen
 | 7 | [#349](https://github.com/freeappstore-online/platform/issues/349) | Validated backup/import and a browser file export on the #348 helper. | No new backend. |
 | 8 | [#350](https://github.com/freeappstore-online/platform/issues/350) | Connected examples for the four data classes, including a race-safe KV update. | `docs/sdk.md` and `fas.kv` / `fas.collections` / `fas.rooms`. Do not add a private-room mode the API does not enforce. |
 | 9 | [#351](https://github.com/freeappstore-online/platform/issues/351) | Optional realtime and media recipes with close, permission, and busy-update checks. | `fas.rooms`. Custom signaling stays app-owned. |
-| 10 | [#352](https://github.com/freeappstore-online/platform/issues/352) | Generate the standalone and connected presets from one foundation. | `packages/cli/src/commands/init.ts`, `workers/agent/src/template.ts`, and the MCP `create_app` path. #18 archetypes stay seeds. External template repos change only in this child. |
+| 10 | [#352](https://github.com/freeappstore-online/platform/issues/352) | Generate standalone and connected presets from the shared foundation and keep external template mirrors current. | `packages/cli/src/lib/starter-foundation.ts`, `packages/cli/src/commands/init.ts`, `workers/agent/src/template.ts`, and builder capability entrypoint. #18 archetypes stay seeds. |
 | 11 | [#353](https://github.com/freeappstore-online/platform/issues/353) | Fresh-scaffold and published-package evidence, plus adoption notes. | No fleet rewrite and no sibling-store edits. |
 
 ## Out of scope

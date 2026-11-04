@@ -5,6 +5,7 @@ import {
   checkCapabilityPackagePrerequisites,
   planCapabilityChanges,
   resolveCapabilities,
+  type SemverRangeOperations,
 } from "../../../packages/cli/src/lib/capability-definitions";
 
 export type { AppArchetype, AppPreset } from "../../../packages/cli/src/lib/starter-foundation";
@@ -36,11 +37,8 @@ async function applyCapabilitiesToTemplateAsync(
   const capabilities = resolveCapabilities(ids);
   const rootPackageText = currentFiles["package.json"];
   if (!rootPackageText) throw new Error("Builder app is missing package.json; no capability files changed.");
-  const prerequisiteResult = checkCapabilityPackagePrerequisites(capabilities, rootPackageText, currentFiles["web/package.json"], {
-    validRange,
-    minVersion,
-    subset,
-  });
+  const semver: SemverRangeOperations = { validRange, minVersion, subset };
+  const prerequisiteResult = checkCapabilityPackagePrerequisites(capabilities, rootPackageText, currentFiles["web/package.json"], semver);
   if (prerequisiteResult.errors.length && !dryRun)
     throw new Error(`INCOMPLETE: package prerequisites unmet; no files changed.\n${prerequisiteResult.errors.join("\n")}`);
   if (prerequisiteResult.errors.length) {

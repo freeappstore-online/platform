@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { access, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { assertValidAppId } from '../lib/app-id.js';
@@ -9,29 +9,32 @@ import {
   presets,
   resolveCapabilities,
 } from '../lib/capabilities.js';
-import { configureFreshPwa } from '../lib/pwa-scaffold.js';
+import {
+  getTemplateFiles,
+  substituteAppName as substituteStarterAppName,
+} from '../lib/starter-foundation.js';
 import { resolveStarterPreset } from '../lib/starter-presets.js';
 
-const TEMPLATES = {
-  // FreeAppStore templates
-  standalone: 'freeappstore-online/template-standalone',
-  connected: 'freeappstore-online/template-connected',
-  // FreeGameStore templates
+const TEMPLATE_NAMES = ['standalone', 'connected', 'game-canvas', 'game-grid', 'game-3d'] as const;
+
+const GAME_TEMPLATE_REPOS = {
   'game-canvas': 'freegamestore-online/template-game-canvas',
   'game-grid': 'freegamestore-online/template-game-grid',
   'game-3d': 'freegamestore-online/template-game-3d',
 } as const;
 
-type TemplateName = keyof typeof TEMPLATES;
+type TemplateName = (typeof TEMPLATE_NAMES)[number];
 
 /**
  * Templates that target FreeGameStore (vs FreeAppStore). Used by the
  * publish flow to default --store correctly when the user scaffolds
  * from a game template.
  */
-export const GAME_TEMPLATES = new Set<TemplateName>(['game-canvas', 'game-grid', 'game-3d']);
+export const GAME_TEMPLATES = new Set<TemplateName>(
+  Object.keys(GAME_TEMPLATE_REPOS) as TemplateName[],
+);
 
-export const ALL_TEMPLATES = Object.keys(TEMPLATES) as TemplateName[];
+export const ALL_TEMPLATES = [...TEMPLATE_NAMES];
 
 // File extensions we'll text-substitute through. Anything else (images,
 // fonts, etc.) is left as-is. Conservative — better to miss a substitution
@@ -80,7 +83,7 @@ export async function runInit(opts: {
       ).map((capability) => capability.id);
   resolveCapabilities(capabilities);
   const template = opts.template ?? 'standalone';
-  if (!(template in TEMPLATES)) {
+  if (!ALL_TEMPLATES.includes(template)) {
     throw new Error(`Unknown template "${template}". Choose: ${ALL_TEMPLATES.join(', ')}.`);
   }
 
@@ -89,10 +92,25 @@ export async function runInit(opts: {
     throw new Error(`Directory "${opts.appId}" already exists.`);
   }
 
-  const repo = TEMPLATES[template];
-  process.stdout.write(`Cloning ${repo} → ${opts.appId}/\n`);
-  await run('git', ['clone', '--depth=1', `https://github.com/${repo}.git`, target]);
-  await rm(join(target, '.git'), { recursive: true, force: true });
+  if (GAME_TEMPLATES.has(template)) {
+    const repo = GAME_TEMPLATE_REPOS[template as keyof typeof GAME_TEMPLATE_REPOS];
+    process.stdout.write(`Cloning ${repo} → ${opts.appId}/\n`);
+    await run('git', ['clone', '--depth=1', `https://github.com/${repo}.git`, target]);
+    await rm(join(target, '.git'), { recursive: true, force: true });
+  } else {
+    process.stdout.write(`Generating canonical ${template} starter → ${opts.appId}/\n`);
+    const generated = getTemplateFiles(
+      { store: 'apps', nounPlural: 'apps', r2Bucket: 'fas-apps' },
+      'generic',
+      template === 'connected' ? 'connected' : 'standalone',
+    );
+    const files = substituteStarterAppName(generated, opts.appId, opts.appId);
+    for (const [file, content] of Object.entries(files)) {
+      const path = join(target, file);
+      await mkdir(join(path, '..'), { recursive: true });
+      await writeFile(path, content);
+    }
+  }
 
   // Replace APPNAME placeholder throughout. The template documents this
   // step in its README, but a CLI scaffold should never punt that on the
@@ -118,7 +136,6 @@ export async function runInit(opts: {
   );
   await normalizeFreshCapabilityPackages(target, capabilities);
   await installCapabilities(target, capabilities);
-  if (!GAME_TEMPLATES.has(template)) await configureFreshPwa(target);
   await run('git', ['init', '-q', '-b', 'main'], target);
 
   // Stage and commit the template so the new repo has a real first commit.
@@ -142,7 +159,7 @@ export const initCommand = new Command('init')
   )
   .action(
     async (appId: string, opts: { template: string; capabilities?: string; preset?: string }) => {
-      if (!(opts.template in TEMPLATES)) {
+      if (!ALL_TEMPLATES.includes(opts.template as TemplateName)) {
         process.stderr.write(
           `Unknown template "${opts.template}". Choose: ${ALL_TEMPLATES.join(', ')}.\n`,
         );

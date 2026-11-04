@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const isolated = mkdtempSync(path.join(tmpdir(), "fas-agent-isolation-"));
 try {
-  const tracked = spawnSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" });
+  const tracked = spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8" });
   if (tracked.status !== 0) throw new Error(tracked.stderr || "git ls-files failed");
   for (const file of tracked.stdout.split("\0").filter(Boolean)) {
     const target = path.join(isolated, file);

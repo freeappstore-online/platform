@@ -37,6 +37,19 @@ including by coding agents, is committed and pushed directly to `main`:
 A push to `main` deploys: each Worker's deploy workflow runs its tests first,
 so a failing test blocks that deploy.
 
+## Updating the external app starter repositories
+
+`template-standalone` and `template-connected` are generated mirrors of the
+canonical starter foundation in `packages/cli/src/lib/starter-foundation.ts`.
+To release a template change, check out both repositories at their `main`
+branches, then run `pnpm --filter @freeappstore/cli build` followed by
+`pnpm --filter @freeappstore/cli sync:templates <standalone-checkout> <connected-checkout>`.
+Review each diff, refresh its lockfile with `pnpm install --lockfile-only
+--no-frozen-lockfile`, and run that repository's build, test, and typecheck
+before committing directly to its `main`. The sync writes canonical files
+only; it preserves additional repo files such as contributor guidance and
+template-specific assets.
+
 On Windows, run agent integration tests with `pnpm --dir workers/agent test:runtime`.
 The launcher gives workerd an isolated directory under `%LOCALAPPDATA%/Temp`
 and removes it after the run. A deeply nested inherited `TEMP`/`TMP` (such as a

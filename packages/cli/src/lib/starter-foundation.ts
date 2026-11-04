@@ -40,7 +40,7 @@ const SHARED_FILES: Record<string, string> = {
     "build": "pnpm --filter @APPNAME/web build",
     "preview": "pnpm --filter @APPNAME/web preview",
     "typecheck": "pnpm --filter @APPNAME/web exec tsc -b",
-    "test": "pnpm --filter @APPNAME/web test"
+    "test": "pnpm build"
   }
 }`,
 
@@ -66,6 +66,9 @@ const SHARED_FILES: Record<string, string> = {
     "@vitejs/plugin-react": "^4.3",
     "tailwindcss": "^4.1",
     "typescript": "^5.7",
+    "@types/node": "^22.20.2",
+    "happy-dom": "^20.14.5",
+    "vitest": "^4.1.11",
     "vite": "^6"
   }
 }`,
@@ -143,6 +146,24 @@ createRoot(document.getElementById("root")!).render(
 // ── Apps-specific template files ──
 
 const APP_FILES: Record<string, string> = {
+  'web/src/starter.test.ts': `// @vitest-environment happy-dom
+import { afterEach, expect, it, vi } from 'vitest';
+
+afterEach(() => { localStorage.clear(); vi.unstubAllGlobals(); });
+
+it('uses this scaffold id for synthetic authenticated SDK requests', async () => {
+  localStorage.setItem('fas:session', JSON.stringify({ token: 'synthetic-token', user: { id: 'synthetic-user', login: 'synthetic' } }));
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+    requests.push(String(input));
+    return new Response('null', { status: 200 });
+  });
+  const { fas } = await import('./App');
+  await fas.kv.get('identity-probe');
+  expect(requests).toContain('https://api.freeappstore.online/v1/apps/APPID/roles/ensure-member');
+  expect(requests).toContain('https://api.freeappstore.online/v1/apps/APPID/kv/identity-probe');
+});
+`,
   'CLAUDE.md': `# Editable FreeAppStore starter
 
 This source is app-owned after scaffolding. Keep existing screens, layouts and data.
@@ -164,7 +185,7 @@ Keep one PWA controller and register busy guards for unsaved work and capture.
 
 Canonical source and guidance:
 https://github.com/freeappstore-online/platform/blob/main/docs/composable-starter-contract.md
-https://github.com/freeappstore-online/platform/blob/main/docs/starter-release.md
+https://github.com/freeappstore-online/platform/blob/main/CONTRIBUTING.md#updating-the-external-app-starter-repositories
 `,
   'web/src/vite-env.d.ts': `/// <reference types="vite/client" />\n`,
   'web/index.html': `<!DOCTYPE html>
@@ -339,15 +360,15 @@ h3 {
 import { initApp } from "@freeappstore/sdk";
 import { type NavItem, PageHeader, Shell } from "@freeappstore/sdk/ui";
 
-// "APPID" is replaced with this app's id when it deploys.
-const fas = initApp({ appId: "APPID" });
+// "APPID" is replaced by the CLI scaffold or deployment flow with this app's id.
+export const fas = initApp({ appId: "APPID" });
 
 // The app's screens. Shell renders them as the navbar: a <nav> in its topbar
 // with the current screen highlighted, collapsing to a menu on phones.
 // Add one entry per primary screen; \`title\` becomes the browser tab title.
 const NAV: NavItem[] = [
-  { label: "Home", href: "/", title: "APPNAME" },
-  { label: "About", href: "/about", title: "About — APPNAME" },
+  { label: "Home", href: "/", title: "APPNAME_JS" },
+  { label: "About", href: "/about", title: "About — APPNAME_JS" },
 ];
 
 export default function App() {
@@ -368,7 +389,7 @@ export default function App() {
   };
 
   return (
-    <Shell app={fas} appName="APPNAME" nav={NAV} onNavigate={navigate}>
+    <Shell app={fas} appName={"APPNAME_JS"} nav={NAV} onNavigate={navigate}>
       <div className="mx-auto w-full max-w-3xl p-4 sm:p-8">
         {path === "/about" ? <About /> : <Home />}
       </div>
@@ -377,7 +398,7 @@ export default function App() {
 }
 
 function Home() {
-  return <PageHeader title="Welcome to APPNAME" description="Edit web/src/App.tsx to get started." />;
+  return <PageHeader title={"Welcome to APPNAME_JS"} description="Edit web/src/App.tsx to get started." />;
 }
 
 function About() {
@@ -385,7 +406,7 @@ function About() {
     <>
       <PageHeader title="About" />
       <p style={{ color: "var(--muted)" }}>
-        APPNAME is a free app on <a href="https://freeappstore.online">FreeAppStore</a>.
+        APPNAME_TEXT is a free app on <a href="https://freeappstore.online">FreeAppStore</a>.
       </p>
     </>
   );
@@ -791,10 +812,10 @@ export function GameShell({ title, children }: GameShellProps) {
 
 export default function App() {
   return (
-    <GameShell title="APPNAME">
+    <GameShell title={"APPNAME_JS"}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", flexDirection: "column", gap: "1rem" }}>
         <h1 style={{ fontFamily: "Fraunces, serif", fontSize: "2rem", margin: 0 }}>
-          APPNAME
+          APPNAME_TEXT
         </h1>
         <p style={{ color: "var(--muted)" }}>
           Edit <code>src/App.tsx</code> to build your game.
@@ -1032,13 +1053,19 @@ img, video, canvas { max-width: 100%; }
     '.github/workflows/deploy.yml': deployWorkflow(config),
   };
 
+  if (config.store === 'apps') {
+    const appPackage = JSON.parse(files['package.json']!) as { scripts: Record<string, string> };
+    appPackage.scripts.test = 'pnpm --filter @APPNAME/web test';
+    files['package.json'] = JSON.stringify(appPackage, null, 2);
+  }
+
   if (config.store === 'apps' && preset === 'connected') {
     files['web/src/App.tsx'] = files['web/src/App.tsx']!.replace(
       'import { initApp }',
       'import { ConnectedDraft } from "./components/ConnectedDraft";\nimport { initApp }',
     ).replace(
-      '  return <PageHeader title="Welcome to APPNAME" description="Edit web/src/App.tsx to get started." />;',
-      '  return <><PageHeader title="Welcome to APPNAME" description="Editable app-owned starter screen." /><ConnectedDraft app={fas} /></>;',
+      '  return <PageHeader title={"Welcome to APPNAME_JS"} description="Edit web/src/App.tsx to get started." />;',
+      '  return <><PageHeader title={"Welcome to APPNAME_JS"} description="Editable app-owned starter screen." /><ConnectedDraft app={fas} /></>;',
     );
     files['web/src/components/ConnectedDraft.tsx'] = CONNECTED_DRAFT;
   }
@@ -1053,18 +1080,62 @@ export function substituteAppName(
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [path, content] of Object.entries(files)) {
-    out[path] = content.replace(
-      /APPNAME/g,
-      path.includes('package.json') || path.includes('pnpm-workspace') ? appId : displayName,
-    );
-    out[path] = out[path]!.replace(/APPID/g, appId);
-  }
-  // Fix package.json files to use the ID (lowercase, no spaces)
-  if (out['package.json']) {
-    out['package.json'] = out['package.json'].replace(new RegExp(displayName, 'g'), appId);
-  }
-  if (out['web/package.json']) {
-    out['web/package.json'] = out['web/package.json'].replace(new RegExp(displayName, 'g'), appId);
+    const packagePath = path === 'package.json' || path === 'web/package.json';
+    const replacementForPath = path.endsWith('.json')
+      ? escapeJsonString(displayName)
+      : path.endsWith('.html')
+        ? escapeHtml(displayName)
+        : displayName;
+    out[path] = content.replace(/APPNAME_JS|APPNAME_TEXT|APPNAME|APPID/g, (token) => {
+      if (token === 'APPID') return appId;
+      if (token === 'APPNAME_JS') return escapeJavaScriptString(displayName);
+      if (token === 'APPNAME_TEXT') return escapeJsxText(displayName);
+      if (packagePath || path === 'pnpm-workspace.yaml') return appId;
+      return replacementForPath;
+    });
   }
   return out;
+}
+
+function escapeJavaScriptString(value: string): string {
+  return [...value]
+    .map((char) => {
+      const escapes: Record<string, string> = {
+        '\\': '\\\\',
+        '"': '\\"',
+        '\n': '\\n',
+        '\r': '\\r',
+        '\t': '\\t',
+        '\b': '\\b',
+        '\f': '\\f',
+      };
+      if (escapes[char]) return escapes[char];
+      const codePoint = char.codePointAt(0)!;
+      if (codePoint < 0x20 || codePoint === 0x2028 || codePoint === 0x2029) {
+        return `\\u${codePoint.toString(16).padStart(4, '0')}`;
+      }
+      return char;
+    })
+    .join('');
+}
+
+function escapeJsonString(value: string): string {
+  return JSON.stringify(value).slice(1, -1);
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[char]!;
+  });
+}
+
+function escapeJsxText(value: string): string {
+  return escapeHtml(value).replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
 }
