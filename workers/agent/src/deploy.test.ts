@@ -261,6 +261,7 @@ describe("infra tool authorization", () => {
 describe("baseline/delta deploy protection", () => {
   function baseline() {
     return new Map<string, string>([
+      ["pnpm-workspace.yaml", "packages:\n  - web\n"],
       ["web/src/App.tsx", "export default function App() { return <main>Template</main>; }"],
       ["web/src/main.tsx", "platform main"],
       ["web/package.json", '{"dependencies":{"@freeappstore/sdk":"^0.14.25"}}'],
@@ -353,19 +354,29 @@ describe("baseline/delta deploy protection", () => {
     }
   });
 
-  it("first deploy seeds the platform scaffold, then pushes only the agent delta via base_tree", async () => {
+  it.each([
+    { name: "new repository", existing: false, bootstrapOnly: false, raced: false, emptyRefStatus: 404 },
+    { name: "new empty repository with GitHub ref 409", existing: false, bootstrapOnly: false, raced: false, emptyRefStatus: 409 },
+    { name: "existing empty repository", existing: true, bootstrapOnly: false, raced: false, emptyRefStatus: 404 },
+    { name: "retry after bootstrap commit", existing: true, bootstrapOnly: true, raced: false, emptyRefStatus: 404 },
+    { name: "concurrent empty-repository initialization", existing: true, bootstrapOnly: false, raced: true, emptyRefStatus: 404 },
+  ])("$name seeds the scaffold before pushing the agent delta", async ({ existing, bootstrapOnly, raced, emptyRefStatus }) => {
     vi.useFakeTimers();
     const originalFetch = globalThis.fetch;
     const treeBodies: any[] = [];
     const repoCreateBodies: any[] = [];
     let blobCount = 0;
     let commitCount = 0;
+    let initialized = bootstrapOnly;
+    let initContent = "";
+    const base = baseline();
+    const bootstrapPath = "pnpm-workspace.yaml";
     const routes: {
       method: string;
       suffix: string;
       json: (init?: RequestInit) => unknown;
     }[] = [
-      { method: "GET", suffix: "/repos/freeappstore-online/my-app", json: () => ({}) },
+      { method: "GET", suffix: "/repos/freeappstore-online/my-app", json: () => (existing ? { id: 123 } : {}) },
       {
         method: "POST",
         suffix: "/orgs/freeappstore-online/repos",
@@ -377,7 +388,42 @@ describe("baseline/delta deploy protection", () => {
       {
         method: "GET",
         suffix: "/git/ref/heads/main",
-        json: () => (commitCount > 0 ? { object: { sha: "scaffold-sha" } } : {}),
+        json: () =>
+          commitCount > 0
+            ? { object: { sha: "scaffold-sha" } }
+            : initialized
+              ? { object: { sha: "init-sha" } }
+              : emptyRefStatus === 409
+                ? { message: "Git Repository is empty." }
+                : {},
+      },
+      {
+        method: "PUT",
+        suffix: `/contents/${bootstrapPath}`,
+        json: (init) => {
+          initialized = true;
+          initContent = JSON.parse(String(init?.body)).content;
+          return raced ? { message: "Repository changed concurrently" } : { content: { sha: "init-blob" }, commit: { sha: "init-sha" } };
+        },
+      },
+      {
+        method: "GET",
+        suffix: "/git/commits/init-sha",
+        json: () => ({
+          message: `Initialize FreeAppStore scaffold: my-app`,
+          tree: { sha: "init-tree" },
+          parents: [],
+        }),
+      },
+      {
+        method: "GET",
+        suffix: "/git/trees/init-tree?recursive=1",
+        json: () => ({ tree: [{ path: bootstrapPath, type: "blob" }] }),
+      },
+      {
+        method: "GET",
+        suffix: `/contents/${bootstrapPath}?ref=main`,
+        json: () => ({ encoding: "base64", content: initContent || btoa(base.get(bootstrapPath)!) }),
       },
       {
         method: "POST",
@@ -415,11 +461,26 @@ describe("baseline/delta deploy protection", () => {
     globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method || "GET";
       const route = routes.find((candidate) => candidate.method === method && url.endsWith(candidate.suffix));
-      return { json: async () => (route ? route.json(init) : { message: `Unexpected request: ${method} ${url}` }) } as Response;
+      const status =
+        route?.method === "GET" && route.suffix === "/git/ref/heads/main"
+          ? initialized || commitCount > 0
+            ? 200
+            : emptyRefStatus
+          : route?.method === "GET" && route.suffix === "/repos/freeappstore-online/my-app"
+            ? existing
+              ? 200
+              : 404
+            : route?.method === "PUT"
+              ? raced
+                ? 409
+                : 201
+              : route
+                ? 200
+                : 404;
+      return { status, json: async () => (route ? route.json(init) : { message: `Unexpected request: ${method} ${url}` }) } as Response;
     }) as typeof fetch;
 
     try {
-      const base = baseline();
       const files = baseline();
       files.set("web/src/App.tsx", "changed");
       const status = vi.fn();
@@ -429,18 +490,20 @@ describe("baseline/delta deploy protection", () => {
         mockEnv,
         appsConfig,
         status,
-        false,
+        existing,
         base,
       );
       await vi.advanceTimersByTimeAsync(8000);
       await result;
 
-      expect(repoCreateBodies[0]).toMatchObject({ name: "my-app", auto_init: false });
+      expect(repoCreateBodies.length).toBe(existing ? 0 : 1);
+      if (!existing) expect(repoCreateBodies[0]).toMatchObject({ name: "my-app", auto_init: false });
+      if (!bootstrapOnly) expect(initContent).toBe(btoa(base.get(bootstrapPath)!));
       expect(treeBodies).toHaveLength(2);
-      expect(treeBodies[0].base_tree).toBeUndefined();
+      expect(treeBodies[0].base_tree).toBe("init-tree");
       expect(treeBodies[0].tree.map((entry: { path: string }) => entry.path).sort()).toEqual([...base.keys()].sort());
       expect(treeBodies[1].base_tree).toBe("scaffold-tree");
-      expect(treeBodies[1].tree).toEqual([{ path: "web/src/App.tsx", mode: "100644", type: "blob", sha: "blob-6" }]);
+      expect(treeBodies[1].tree).toEqual([{ path: "web/src/App.tsx", mode: "100644", type: "blob", sha: "blob-7" }]);
       expect(status).toHaveBeenCalledWith({ phase: "live", appUrl: "https://my-app.freeappstore.online" });
     } finally {
       globalThis.fetch = originalFetch;
@@ -460,6 +523,172 @@ describe("baseline/delta deploy protection", () => {
         message: "No agent-authored changes to push for freeappstore-online/my-app; platform scaffold and current app files are unchanged.",
       });
       expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not initialize or write into a populated existing repository", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ method: string; url: string }> = [];
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ method, url });
+      const path = new URL(url).pathname;
+      if (method === "GET" && path.endsWith("/repos/freeappstore-online/my-app")) return Response.json({ id: 123 });
+      if (method === "GET" && path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: "parent" } });
+      if (method === "GET" && path.endsWith("/git/commits/parent"))
+        return Response.json({ message: "Existing app history", tree: { sha: "existing-tree" }, parents: [{ sha: "older" }] });
+      return Response.json({ message: `Unexpected request: ${method} ${path}` }, { status: 404 });
+    });
+
+    try {
+      const base = baseline();
+      const status = vi.fn();
+      await deployApp(
+        { id: "my-app", name: "My App", category: "utilities", icon: "x", iconBg: "#fff", description: "test" },
+        baseline(),
+        mockEnv,
+        appsConfig,
+        status,
+        true,
+        base,
+      );
+
+      expect(calls.some((call) => call.method === "PUT" && call.url.includes("/contents/"))).toBe(false);
+      expect(calls.some((call) => call.url.endsWith("/git/blobs"))).toBe(false);
+      expect(status).toHaveBeenCalledWith({ phase: "live", appUrl: "https://my-app.freeappstore.online" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it.each([
+    [409, "Repository is locked"],
+    [403, "Resource not accessible by integration"],
+  ])("does not treat an unrelated ref HTTP %i as an empty repository", async (httpStatus, message) => {
+    const originalFetch = globalThis.fetch;
+    const calls: Array<{ method: string; url: string }> = [];
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      calls.push({ method, url });
+      if (url.endsWith("/repos/freeappstore-online/my-app")) return Response.json({ id: 123 });
+      if (url.endsWith("/git/ref/heads/main")) return Response.json({ message }, { status: httpStatus });
+      return Response.json({ message: `Unexpected request: ${method} ${url}` }, { status: 404 });
+    });
+
+    try {
+      await expect(
+        deployApp(
+          { id: "my-app", name: "My App", category: "utilities", icon: "x", iconBg: "#fff", description: "test" },
+          baseline(),
+          mockEnv,
+          appsConfig,
+          vi.fn(),
+          true,
+          baseline(),
+        ),
+      ).rejects.toThrow(`(${httpStatus})`);
+      expect(calls).toHaveLength(2);
+      expect(calls.some((call) => call.method === "PUT")).toBe(false);
+      expect(calls.some((call) => call.url.endsWith("/git/blobs"))).toBe(false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not mistake matching scaffold paths with different blob contents for the canonical scaffold", async () => {
+    const originalFetch = globalThis.fetch;
+    const base = baseline();
+    const writes: string[] = [];
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const path = new URL(url).pathname;
+      if (method === "GET" && path.endsWith("/repos/freeappstore-online/my-app")) return Response.json({ id: 123 });
+      if (method === "GET" && path.endsWith("/git/ref/heads/main")) {
+        return writes.length
+          ? Response.json({ object: { sha: "other-head" } })
+          : Response.json({ message: "Git Repository is empty." }, { status: 409 });
+      }
+      if (method === "PUT" && path.endsWith("/contents/pnpm-workspace.yaml")) {
+        writes.push("bootstrap");
+        return Response.json({ message: "Repository changed concurrently" }, { status: 409 });
+      }
+      if (method === "GET" && path.endsWith("/git/commits/other-head")) {
+        return Response.json({ message: "Someone else's commit", tree: { sha: "other-tree" }, parents: [{ sha: "older" }] });
+      }
+      if (method === "GET" && path.endsWith("/git/trees/other-tree")) {
+        return Response.json({ tree: [...base.keys()].map((filePath) => ({ path: filePath, type: "blob", sha: "different-content" })) });
+      }
+      return Response.json({ message: `Unexpected request: ${method} ${path}` }, { status: 404 });
+    });
+
+    try {
+      await expect(
+        deployApp(
+          { id: "my-app", name: "My App", category: "utilities", icon: "x", iconBg: "#fff", description: "test" },
+          base,
+          mockEnv,
+          appsConfig,
+          vi.fn(),
+          true,
+          base,
+        ),
+      ).rejects.toThrow(/changed while its initial scaffold was being created/);
+      expect(writes).toEqual(["bootstrap"]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("distinguishes repository authorization failures from a missing repository", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: string) => {
+      calls.push(url);
+      return Response.json({ message: "Resource not accessible by integration" }, { status: 403 });
+    });
+
+    try {
+      const status = vi.fn();
+      await deployApp(
+        { id: "my-app", name: "My App", category: "utilities", icon: "x", iconBg: "#fff", description: "test" },
+        baseline(),
+        mockEnv,
+        appsConfig,
+        status,
+        false,
+        baseline(),
+      );
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toContain("/repos/freeappstore-online/my-app");
+      expect(status).toHaveBeenCalledWith(expect.objectContaining({ phase: "error", error: expect.stringContaining("403") }));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not treat a repository with a non-main default branch as empty", async () => {
+    const originalFetch = globalThis.fetch;
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: string) => {
+      calls.push(url);
+      return Response.json({ id: 123, default_branch: "master" });
+    });
+
+    try {
+      const status = vi.fn();
+      await deployApp(
+        { id: "my-app", name: "My App", category: "utilities", icon: "x", iconBg: "#fff", description: "test" },
+        baseline(),
+        mockEnv,
+        appsConfig,
+        status,
+        true,
+        baseline(),
+      );
+      expect(calls).toHaveLength(1);
+      expect(status).toHaveBeenCalledWith(expect.objectContaining({ phase: "error", error: expect.stringContaining("not main") }));
     } finally {
       globalThis.fetch = originalFetch;
     }

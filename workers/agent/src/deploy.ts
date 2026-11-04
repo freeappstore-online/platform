@@ -35,12 +35,47 @@ export type DeployStatus =
 export type TerminalDeployStatus = Extract<DeployStatus, { phase: "live" | "error" }>;
 
 type TreeItem = { path: string; mode: string; type: string; sha: string | null };
+type GhResponse = { _httpStatus?: number; message?: string; [key: string]: any };
 export type FileDelta = Map<string, string | null>;
 export type PushUpdateResult =
   | { ok: true; message: string; commitSha: string; skipped?: false }
   | { ok: true; message: string; skipped: true; commitSha?: undefined }
   | { ok: false; message: string };
 type WorkflowRun = { id: number; status?: string; conclusion?: string | null; head_sha?: string };
+const INITIAL_COMMIT_PREFIX = "Initialize FreeAppStore scaffold: ";
+
+function apiStatus(response: GhResponse, fallback: number): number {
+  return response._httpStatus ?? fallback;
+}
+
+function encodeBase64Utf8(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(value: string): string {
+  const binary = atob(value.replace(/\s/g, ""));
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+async function gitBlobSha(content: string): Promise<string> {
+  const bytes = new TextEncoder().encode(content);
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+  const object = new Uint8Array(header.length + bytes.length);
+  object.set(header);
+  object.set(bytes, header.length);
+  const digest = await crypto.subtle.digest("SHA-1", object);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function contentsPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
 
 async function createTreeItems(ghApi: ReturnType<typeof makeGhApi>, repo: string, files: FileDelta): Promise<TreeItem[]> {
   const items: TreeItem[] = [];
@@ -97,8 +132,27 @@ export async function deployApp(
   await onStatus({ phase: "provisioning", steps: [] });
 
   // Step 1: Create GitHub repo
-  const repoCheck = await ghApi(`/repos/${config.org}/${deployConfig.id}`);
-  if (repoCheck.id) {
+  const repoPath = `/repos/${config.org}/${deployConfig.id}`;
+  const repoCheck = (await ghApi(repoPath)) as GhResponse;
+  const repoStatus = apiStatus(repoCheck, repoCheck.id ? 200 : 404);
+  if (repoStatus !== 200 && repoStatus !== 404) {
+    const detail = repoCheck.message || `GitHub returned HTTP ${repoStatus}`;
+    steps.push({ name: "GitHub repo", status: "fail", detail });
+    await onStatus({ phase: "error", error: `GitHub repo check failed (${repoStatus}): ${detail}` });
+    return;
+  }
+  if (repoStatus === 200 && !repoCheck.id) {
+    await onStatus({ phase: "error", error: `GitHub repository response for ${config.org}/${deployConfig.id} did not include an ID.` });
+    return;
+  }
+  if (repoStatus === 200 && repoCheck.default_branch && repoCheck.default_branch !== "main") {
+    await onStatus({
+      phase: "error",
+      error: `Refusing to deploy into ${config.org}/${deployConfig.id}: its default branch is ${repoCheck.default_branch}, not main.`,
+    });
+    return;
+  }
+  if (repoStatus === 200 && repoCheck.id) {
     if (!allowExistingRepo) {
       // Someone else's repo (or drift). Pushing here would land this session's
       // code on top of theirs and, once GH Actions runs, replace their live app
@@ -112,8 +166,8 @@ export async function deployApp(
       return;
     }
     steps.push({ name: "GitHub repo", status: "skip", detail: `${config.org}/${deployConfig.id} already exists` });
-  } else {
-    const createRepo = await ghApi(`/orgs/${config.org}/repos`, "POST", {
+  } else if (repoStatus === 404) {
+    const createRepo = (await ghApi(`/orgs/${config.org}/repos`, "POST", {
       name: deployConfig.id,
       private: false,
       description: (deployConfig.description || "").slice(0, 200),
@@ -121,12 +175,22 @@ export async function deployApp(
       has_issues: true,
       has_projects: false,
       has_wiki: false,
-    });
+    })) as GhResponse;
     if (createRepo.id) {
       steps.push({ name: "GitHub repo", status: "ok", detail: `Created ${config.org}/${deployConfig.id}` });
+    } else if ((apiStatus(createRepo, 0) === 409 || apiStatus(createRepo, 0) === 422) && allowExistingRepo) {
+      const racedRepo = (await ghApi(repoPath)) as GhResponse;
+      if (apiStatus(racedRepo, racedRepo.id ? 200 : 404) !== 200 || !racedRepo.id) {
+        const detail = racedRepo.message || createRepo.message || "Repository creation raced but the repository could not be verified";
+        await onStatus({ phase: "error", error: `GitHub repo creation failed: ${detail}` });
+        return;
+      }
+      steps.push({ name: "GitHub repo", status: "skip", detail: `${config.org}/${deployConfig.id} was created concurrently` });
     } else {
-      steps.push({ name: "GitHub repo", status: "fail", detail: createRepo.message || "Failed" });
-      await onStatus({ phase: "error", error: `GitHub repo creation failed: ${createRepo.message}` });
+      const status = apiStatus(createRepo, 0);
+      const detail = createRepo.message || `GitHub returned HTTP ${status || "unknown"}`;
+      steps.push({ name: "GitHub repo", status: "fail", detail });
+      await onStatus({ phase: "error", error: `GitHub repo creation failed (${status || "unknown status"}): ${detail}` });
       return;
     }
   }
@@ -135,9 +199,21 @@ export async function deployApp(
   // Step 2: ensure the platform scaffold exists, then push only the
   // agent-authored delta. This preserves workflow/lockfile/icon/analytics/SDK
   // files generated by provisioning while still deploying the app code.
-  const repoHasMain = await hasMainBranch(deployConfig.id, env.GITHUB_TOKEN, config);
+  let repoHasMain = await hasMainBranch(deployConfig.id, env.GITHUB_TOKEN, config);
   let buildCommitSha: string | undefined;
-  if (!repoHasMain && baselineFiles.size > 0) {
+  const repo = `${config.org}/${deployConfig.id}`;
+  const initialPath = baselineFiles.has("pnpm-workspace.yaml") ? "pnpm-workspace.yaml" : baselineFiles.keys().next().value;
+  const initialContent = initialPath ? baselineFiles.get(initialPath) : undefined;
+  let needsScaffold = !repoHasMain && baselineFiles.size > 0;
+
+  if (needsScaffold && initialPath && initialContent !== undefined) {
+    needsScaffold = await initializeEmptyRepo(repo, deployConfig.id, initialPath, initialContent, baselineFiles, ghApi);
+    repoHasMain = true;
+  } else if (repoHasMain && allowExistingRepo && initialPath && initialContent !== undefined) {
+    needsScaffold = await isBootstrapCommitOnly(repo, initialPath, initialContent, baselineFiles, ghApi);
+  }
+
+  if (needsScaffold && repoHasMain && baselineFiles.size > 0) {
     await onStatus({ phase: "pushing", progress: "Provisioning platform scaffold..." });
     buildCommitSha = await commitPatchToGitHub(
       deployConfig.id,
@@ -306,8 +382,99 @@ export function keyErrorLines(log: string, max = 5): string[] {
 async function hasMainBranch(repoId: string, token: string, config: StoreConfig): Promise<boolean> {
   const ghApi = makeGhApi(token, config.agentName);
   const repo = `${config.org}/${repoId}`;
-  const ref = await ghApi(`/repos/${repo}/git/ref/heads/main`);
-  return !!ref.object?.sha;
+  const ref = (await ghApi(`/repos/${repo}/git/ref/heads/main`)) as GhResponse;
+  const status = apiStatus(ref, ref.object?.sha ? 200 : 404);
+  if (status === 404) return false;
+  if (status === 409 && /^Git Repository is empty\.?$/i.test(ref.message?.trim() ?? "")) return false;
+  if (status !== 200) throw new Error(`GitHub could not check ${repo} main (${status}): ${ref.message || "unknown error"}`);
+  if (!ref.object?.sha) throw new Error(`GitHub returned an invalid main ref for ${repo}.`);
+  return true;
+}
+
+function initialCommitMessage(repoId: string): string {
+  return `${INITIAL_COMMIT_PREFIX}${repoId}`;
+}
+
+async function isBootstrapCommitOnly(
+  repo: string,
+  initialPath: string,
+  initialContent: string,
+  baselineFiles: Map<string, string>,
+  ghApi: ReturnType<typeof makeGhApi>,
+): Promise<boolean> {
+  const ref = (await ghApi(`/repos/${repo}/git/ref/heads/main`)) as GhResponse;
+  const refStatus = apiStatus(ref, ref.object?.sha ? 200 : 404);
+  if (refStatus === 404) return false;
+  if (refStatus !== 200) throw new Error(`GitHub could not inspect ${repo} main (${refStatus}): ${ref.message || "unknown error"}`);
+  const headSha = ref.object?.sha as string | undefined;
+  if (!headSha) throw new Error(`GitHub returned an invalid main ref for ${repo}.`);
+
+  const commit = (await ghApi(`/repos/${repo}/git/commits/${headSha}`)) as GhResponse;
+  if (apiStatus(commit, commit.tree?.sha ? 200 : 404) !== 200 || !commit.tree?.sha) return false;
+  const message = typeof commit.message === "string" ? commit.message.split("\n")[0] : "";
+  if (message !== initialCommitMessage(repo.split("/").at(-1) ?? "") || (commit.parents?.length ?? 0) !== 0) return false;
+
+  const tree = (await ghApi(`/repos/${repo}/git/trees/${commit.tree.sha}?recursive=1`)) as GhResponse;
+  if (apiStatus(tree, Array.isArray(tree.tree) ? 200 : 404) !== 200 || tree.truncated || !Array.isArray(tree.tree)) return false;
+  if (tree.tree.length !== 1 || tree.tree[0]?.path !== initialPath || tree.tree[0]?.type !== "blob") return false;
+  if (baselineFiles.get(initialPath) !== initialContent) return false;
+
+  const file = (await ghApi(`/repos/${repo}/contents/${contentsPath(initialPath)}?ref=main`)) as GhResponse;
+  if (apiStatus(file, typeof file.content === "string" ? 200 : 404) !== 200 || file.encoding !== "base64") return false;
+  try {
+    return decodeBase64Utf8(file.content) === initialContent;
+  } catch {
+    return false;
+  }
+}
+
+async function hasScaffoldTree(repo: string, baselineFiles: Map<string, string>, ghApi: ReturnType<typeof makeGhApi>): Promise<boolean> {
+  const ref = (await ghApi(`/repos/${repo}/git/ref/heads/main`)) as GhResponse;
+  const status = apiStatus(ref, ref.object?.sha ? 200 : 404);
+  if (status !== 200 || !ref.object?.sha) return false;
+  const commit = (await ghApi(`/repos/${repo}/git/commits/${ref.object.sha}`)) as GhResponse;
+  if (!commit.tree?.sha) return false;
+  const tree = (await ghApi(`/repos/${repo}/git/trees/${commit.tree.sha}?recursive=1`)) as GhResponse;
+  if (apiStatus(tree, Array.isArray(tree.tree) ? 200 : 404) !== 200 || tree.truncated || !Array.isArray(tree.tree)) return false;
+  const blobs = new Map(tree.tree.filter((item: TreeItem) => item.type === "blob").map((item: TreeItem) => [item.path, item.sha]));
+  for (const [path, content] of baselineFiles) {
+    if (blobs.get(path) !== (await gitBlobSha(content))) return false;
+  }
+  return true;
+}
+
+/** Initialize an empty repository with a real scaffold file using Contents API,
+ * then let Git Data API commit the full scaffold. A conflict is recoverable only
+ * when this exact initializer or the complete scaffold is present afterward. */
+async function initializeEmptyRepo(
+  repo: string,
+  repoId: string,
+  initialPath: string,
+  initialContent: string,
+  baselineFiles: Map<string, string>,
+  ghApi: ReturnType<typeof makeGhApi>,
+): Promise<boolean> {
+  const put = (await ghApi(`/repos/${repo}/contents/${contentsPath(initialPath)}`, "PUT", {
+    message: initialCommitMessage(repoId),
+    content: encodeBase64Utf8(initialContent),
+  })) as GhResponse;
+  const status = apiStatus(put, put.commit?.sha && put.content?.sha ? 201 : 0);
+  if ((status === 200 || status === 201) && put.commit?.sha && put.content?.sha) return true;
+
+  if (status === 409 || status === 422) {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      if (await isBootstrapCommitOnly(repo, initialPath, initialContent, baselineFiles, ghApi)) return true;
+      if (await hasScaffoldTree(repo, baselineFiles, ghApi)) return false;
+      await sleep(100);
+    }
+    throw new Error(
+      `Repository ${repo} changed while its initial scaffold was being created; no files were overwritten. Retry after checking main.`,
+    );
+  }
+
+  throw new Error(
+    `Failed to initialize empty repository ${repo} (${status || "unknown status"}): ${put.message || "GitHub did not create the first commit"}`,
+  );
 }
 
 /** Commit a file patch via the Git Data API. Existing repos always use

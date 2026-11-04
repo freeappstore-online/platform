@@ -11,6 +11,11 @@ export function makeGhApi(token: string, agentName: string) {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    return response.json();
+    const data = await response.json();
+    if (data && typeof data === "object") {
+      Object.defineProperty(data, "_httpStatus", { value: response.status, enumerable: false });
+      return data;
+    }
+    return { data, _httpStatus: response.status };
   };
 }

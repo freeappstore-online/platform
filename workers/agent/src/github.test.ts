@@ -40,4 +40,12 @@ describe("makeGhApi", () => {
     await ghApi("/path");
     expect((globalThis.fetch as any).mock.calls[0][1].method).toBe("GET");
   });
+
+  it("retains HTTP status separately from the GitHub error body", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(Response.json({ message: "Forbidden" }, { status: 403 }));
+    const result = await makeGhApi("t", "a")("/repos/org/repo");
+
+    expect(result).toEqual({ message: "Forbidden" });
+    expect(result._httpStatus).toBe(403);
+  });
 });
