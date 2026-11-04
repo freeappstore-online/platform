@@ -2727,6 +2727,22 @@
       "discoveryRequestedAt": "2026-11-03T21:43:54.565Z",
       "creatorGithub": "serge-ivo",
       "permissions": []
+    },
+    {
+      "id": "pitstop-log",
+      "name": "pitstop-log",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Track fuel fill-ups, consumption and running costs for all your vehicles — private, on-device storage.",
+      "appUrl": "https://pitstop-log.freeappstore.online",
+      "repo": "freeappstore-online/pitstop-log",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-04T21:35:13.239Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
