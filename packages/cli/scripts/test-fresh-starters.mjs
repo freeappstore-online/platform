@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runInit } from '../dist/commands/init.js';
 import {
   APP_STARTER_CONFIG,
@@ -17,6 +18,10 @@ const previousIdentity = Object.fromEntries(
   ),
 );
 const root = await mkdtemp(join(tmpdir(), 'fas-fresh-starter-'));
+const typecheckGuardrail = join(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../e2e/scaffold/typecheck-guardrail.mjs',
+);
 Object.assign(process.env, {
   GIT_AUTHOR_NAME: 'FAS starter test',
   GIT_AUTHOR_EMAIL: 'starter-test@example.invalid',
@@ -54,6 +59,7 @@ try {
     run('pnpm', ['install', '--no-frozen-lockfile'], app);
     run('pnpm', ['build'], app);
     run('pnpm', ['typecheck'], app);
+    run(process.execPath, [typecheckGuardrail, app], app);
     run('pnpm', ['test'], app);
   }
 

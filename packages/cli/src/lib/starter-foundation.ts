@@ -891,6 +891,8 @@ ${
     ? `      - name: Resolve build target
         id: target
         run: npx @freeappstore/cli build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
+      - name: Typecheck (when configured)
+        run: pnpm run --if-present typecheck
       - name: Build
         env:
           BUILD_COMMAND: \${{ steps.target.outputs.build-command }}

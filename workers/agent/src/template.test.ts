@@ -29,6 +29,9 @@ describe("getTemplateFiles", () => {
     expect(workflow).toContain('build-target --app-id "${GITHUB_REPOSITORY##*/}" --github-output');
     expect(workflow).toContain("build-target --artifact");
     expect(workflow).toContain('aws s3 sync "$OUTPUT_PATH"');
+    expect(JSON.parse(files["package.json"]).scripts.typecheck).toBe("pnpm --filter @weather-app/web exec tsc -b");
+    expect(workflow).toContain("run: pnpm run --if-present typecheck");
+    expect(workflow.indexOf("Typecheck (when configured)")).toBeLessThan(workflow.indexOf("- name: Build"));
   });
 
   it("apps template has no local shell component: it uses the SDK Shell (#90)", () => {

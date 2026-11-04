@@ -153,11 +153,16 @@ jobs:
           # template's pre-capability lock. This is a fresh disposable scaffold.
           pnpm install --no-frozen-lockfile
 
+      - name: Typecheck guardrail accepts custom layouts and rejects invalid SDK calls
+        working-directory: /tmp/scaffold-smoke
+        run: node "$GITHUB_WORKSPACE/packages/e2e/scaffold/typecheck-guardrail.mjs" "$APP_ID"
+
       - name: Build scaffold
         working-directory: /tmp/scaffold-smoke
         run: |
           cd "$APP_ID"
           node "$GITHUB_WORKSPACE/packages/e2e/scaffold/prepare-artifact.mjs" .
+          pnpm run --if-present typecheck
           pnpm build
 
       - name: Run CLI compliance check on the scaffold
