@@ -155,10 +155,18 @@ async function main() {
 }
 
 async function testWebSocket(token) {
-  const wsUrl = `${API.replace(/^http/, 'ws')}/v1/apps/${APP_ID}/rooms/lobby?token=${encodeURIComponent(token)}`;
+  // Each socket needs its own short-lived room ticket (#435).
+  const wsUrl = async () => {
+    const res = await fetch(`${API}/v1/apps/${APP_ID}/rooms/lobby/ticket`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const { ticket } = await res.json();
+    return `${API.replace(/^http/, 'ws')}/v1/apps/${APP_ID}/rooms/lobby?ticket=${encodeURIComponent(ticket)}`;
+  };
 
-  const a = new WebSocket(wsUrl);
-  const b = new WebSocket(wsUrl);
+  const a = new WebSocket(await wsUrl());
+  const b = new WebSocket(await wsUrl());
 
   const aMsgs = [];
   const bMsgs = [];

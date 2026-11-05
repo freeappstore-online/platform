@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
 import { requireUser } from '../lib/auth.js';
-import { signPayload, verifyPayload, verifySession } from '../lib/session.js';
+import { signPayload, verifyPayload } from '../lib/session.js';
 import type { Env } from '../types.js';
 
 export const roomRoutes = new Hono<{ Bindings: Env }>();
@@ -80,38 +80,16 @@ roomRoutes.get('/apps/:appId/rooms/:roomId', async (c) => {
   const { appId, roomId } = c.req.param();
   if (!ROOM_ID_RE.test(roomId)) return c.text('invalid room id', 400);
 
-  let uid: string;
-  let login: string;
-
+  // Only a short-lived room ticket is accepted; the account session token is
+  // never taken from the URL (#435). Verify signature, binding to this exact
+  // app+room, and expiry. The room was claimed when the ticket was issued.
   const ticketStr = c.req.query('ticket');
-  if (ticketStr) {
-    // Preferred path: a short-lived room ticket. Verify signature, binding to
-    // this exact app+room, and expiry.
-    const t = await verifyPayload<RoomTicket>(ticketStr, c.env.SESSION_SIGNING_KEY);
-    if (!t || t.typ !== 'room' || t.appId !== appId || t.roomId !== roomId) {
-      return c.text('invalid ticket', 401);
-    }
-    if (t.exp * 1000 < Date.now()) return c.text('ticket expired', 401);
-    uid = t.uid;
-    login = t.login;
-  } else {
-    // Deprecated fallback: session token in the URL (old SDKs). Kept so
-    // already-deployed apps keep working; new clients use tickets. Remove once
-    // the fleet has rebuilt against the ticket-based SDK.
-    const token = c.req.query('token');
-    if (!token) return c.text('missing ticket', 401);
-    const session = await verifySession(token, c.env.SESSION_SIGNING_KEY);
-    if (!session) return c.text('invalid session', 401);
-    if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
-    const user = await c.env.DB.prepare('SELECT github_login FROM users WHERE id = ?')
-      .bind(session.uid)
-      .first<{ github_login: string }>();
-    uid = session.uid;
-    login = user?.github_login ?? '';
+  if (!ticketStr) return c.text('missing ticket', 401);
+  const t = await verifyPayload<RoomTicket>(ticketStr, c.env.SESSION_SIGNING_KEY);
+  if (!t || t.typ !== 'room' || t.appId !== appId || t.roomId !== roomId) {
+    return c.text('invalid ticket', 401);
   }
-
-  // Checked here too: the deprecated token path above opens rooms without a ticket.
-  if (!(await claimRoom(c.env, appId, roomId))) return c.text(ROOM_LIMIT_MESSAGE, 429);
+  if (t.exp * 1000 < Date.now()) return c.text('ticket expired', 401);
 
   const id = c.env.ROOM.idFromName(`${appId}:${roomId}`);
   const stub = c.env.ROOM.get(id);
@@ -119,7 +97,7 @@ roomRoutes.get('/apps/:appId/rooms/:roomId', async (c) => {
   // Don't forward the credential to the DO; hand it the resolved identity.
   url.searchParams.delete('ticket');
   url.searchParams.delete('token');
-  url.searchParams.set('uid', uid);
-  url.searchParams.set('login', login);
+  url.searchParams.set('uid', t.uid);
+  url.searchParams.set('login', t.login);
   return stub.fetch(url.toString(), c.req.raw);
 });

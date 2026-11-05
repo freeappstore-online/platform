@@ -142,6 +142,29 @@ describe('rooms: websocket join', () => {
     // The ticket must NOT be forwarded to the DO.
     expect(captured.url).not.toContain('ticket=');
   });
+
+  it('rejects a valid session token in ?token= (deprecated path removed, #435)', async () => {
+    const token = await signSession('u1', SIGNING_KEY);
+    const captured: { url?: string } = {};
+    const res = await app.request(
+      `/v1/apps/timer/rooms/lobby?token=${token}`,
+      { headers: { upgrade: 'websocket' } },
+      env({ ROOM: fakeRoom(captured) }),
+    );
+    expect(res.status).toBe(401);
+    expect(await res.text()).toBe('missing ticket');
+    expect(captured.url).toBeUndefined();
+  });
+
+  it('rejects a session token passed as ?ticket=', async () => {
+    const token = await signSession('u1', SIGNING_KEY);
+    const res = await app.request(
+      `/v1/apps/timer/rooms/lobby?ticket=${token}`,
+      { headers: { upgrade: 'websocket' } },
+      env(),
+    );
+    expect(res.status).toBe(401);
+  });
 });
 
 // #278: room ids are bounded and an app has at most 64 live rooms.
@@ -156,7 +179,11 @@ describe('rooms: room id validation', () => {
         env(),
       );
       expect(ticket.status).toBe(400);
-      const ws = await app.request(`${path}?token=x`, { headers: { Upgrade: 'websocket' } }, env());
+      const ws = await app.request(
+        `${path}?ticket=x`,
+        { headers: { Upgrade: 'websocket' } },
+        env(),
+      );
       expect(ws.status).toBe(400);
     },
   );
@@ -198,28 +225,13 @@ describe.skipIf(!hasSqlite)('rooms: 64 live rooms per app', () => {
           e,
         )
       ).status;
-    const token = await signSession('u1', SIGNING_KEY);
-    const connect = async (roomId: string) =>
-      (
-        await app.request(
-          `/v1/apps/timer/rooms/${roomId}?token=${token}`,
-          { headers: { Upgrade: 'websocket' } },
-          e,
-        )
-      ).status;
-    return { db, ticket, connect };
+    return { db, ticket };
   }
 
   it('refuses a 65th room but keeps existing rooms working', async () => {
     const { ticket } = await setup(64);
     expect(await ticket('new-room')).toBe(429);
     expect(await ticket('r10')).toBe(200);
-  });
-
-  it('refuses a new room on connect too (the old token path skips tickets)', async () => {
-    const { connect } = await setup(64);
-    expect(await connect('new-room')).toBe(429);
-    expect(await connect('r3')).toBe(200); // reached the room DO
   });
 
   it('rooms idle for over 24h stop counting', async () => {

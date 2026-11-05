@@ -166,7 +166,10 @@ describe.skipIf(skip())('apps', () => {
 describe.skipIf(skip())('rooms', () => {
   it('WebSocket connects and closes', async () => {
     const { WebSocket } = await import('ws');
-    const url = `wss://api.freeappstore.online/v1/apps/${APP_ID}/rooms/test-${Date.now()}?token=${token()}`;
+    const roomId = `test-${Date.now()}`;
+    const res = await authed(`/v1/apps/${APP_ID}/rooms/${roomId}/ticket`, { method: 'POST' });
+    const { ticket } = (await res.json()) as { ticket: string };
+    const url = `wss://api.freeappstore.online/v1/apps/${APP_ID}/rooms/${roomId}?ticket=${ticket}`;
 
     const ok = await new Promise<boolean>((resolve) => {
       const ws = new WebSocket(url);
