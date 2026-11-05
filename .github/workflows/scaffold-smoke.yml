@@ -187,6 +187,8 @@ jobs:
           node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" check
 
       - name: Install browser
+        timeout-minutes: 10
+        # A stalled apt/CDN mirror must fail visibly; rerun this job on a fresh runner.
         run: pnpm --filter @freeappstore/e2e exec playwright install --with-deps chromium webkit
 
       - name: Validate deployment artifact and identity
