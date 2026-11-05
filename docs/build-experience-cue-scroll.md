@@ -115,3 +115,10 @@ A final ordinary development-server check exposed #421: the PWA recipe requested
 HTML MIME error. The shared recipe now disables PWA initialization in development
 and retains it for production build/preview. SDK 0.16.39 adds the explicit disabled
 controller; the versioned capability upgrade preserves existing app data.
+
+The 0.4.76 published-scaffold gate also caught the CLI equivalent of the SDK
+archive propagation failure: version metadata was readable while the selected
+CLI tarball returned 404. #422 extends the same bounded deadline to that exact
+CLI archive, only before a target exists. Partial initialization, unrelated
+archives and timed-out operations remain immediate failures. Local app checks
+continued with the checkout CLI while published acceptance remained gated.

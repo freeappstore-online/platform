@@ -28,12 +28,18 @@ timeout() {
   ATTEMPTS=$((ATTEMPTS + 1))
   echo "ATTEMPT $ATTEMPTS"
   case "$MODE" in
-    eventual) if [ "$ATTEMPTS" -ge 3 ]; then echo INITIALIZED; return 0; fi ;;
-    partial) mkdir fixture ;;
+    eventual|archive-eventual) if [ "$ATTEMPTS" -ge 3 ]; then echo INITIALIZED; return 0; fi ;;
+    partial|archive-partial) mkdir fixture ;;
+    otherarchive) echo 'npm error 404 Not Found - GET https://registry.npmjs.org/other/-/other-1.2.3.tgz - Not found'; return 1 ;;
+    wrongversion) echo 'npm error 404 Not Found - GET https://registry.npmjs.org/@freeappstore/cli/-/cli-1.2.2.tgz - Not found'; return 1 ;;
     other) echo "npm error EACCES"; return 1 ;;
     timeout) FAKE_NOW=$((FAKE_NOW + \${limit%s})); return 124 ;;
   esac
-  echo "npm error code ETARGET"
+  if [[ "$MODE" == archive* ]]; then
+    echo 'npm error 404 Not Found - GET https://registry.npmjs.org/@freeappstore/cli/-/cli-1.2.3.tgz - Not found'
+  else
+    echo "npm error code ETARGET"
+  fi
   return 1
 }
 ${helper}
@@ -48,28 +54,37 @@ echo CONTINUED
   }
 }
 
-it('retries false-ready metadata followed by ETARGET until exact CLI resolution succeeds', () => {
-  const result = run('eventual');
-  expect(result.status, result.stderr).toBe(0);
-  expect(result.stdout.match(/ATTEMPT/g)).toHaveLength(3);
-  expect(result.stdout.match(/SLEEP 5/g)).toHaveLength(2);
-  expect(result.stdout).toContain('INITIALIZED');
-});
+it.each(['eventual', 'archive-eventual'])(
+  'retries selected CLI propagation failures: %s',
+  (mode) => {
+    const result = run(mode);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout.match(/ATTEMPT/g)).toHaveLength(3);
+    expect(result.stdout.match(/SLEEP 5/g)).toHaveLength(2);
+    expect(result.stdout).toContain('INITIALIZED');
+  },
+);
 
-it.each(['partial', 'other'])('does not replay %s initialization failures', (mode) => {
-  const result = run(mode);
-  expect(result.status).toBe(1);
-  expect(result.stdout.match(/ATTEMPT/g)).toHaveLength(1);
-  expect(result.stdout).not.toContain('SLEEP');
-  expect(result.stdout).not.toContain('CONTINUED');
-});
+it.each(['partial', 'archive-partial', 'other', 'otherarchive', 'wrongversion'])(
+  'does not replay %s initialization failures',
+  (mode) => {
+    const result = run(mode);
+    expect(result.status).toBe(1);
+    expect(result.stdout.match(/ATTEMPT/g)).toHaveLength(1);
+    expect(result.stdout).not.toContain('SLEEP');
+    expect(result.stdout).not.toContain('CONTINUED');
+  },
+);
 
-it('bounds persistent install propagation failures by the original deadline', () => {
-  const result = run('missing');
-  expect(result.status).toBe(1);
-  expect(result.stdout.match(/SLEEP 5/g)).toHaveLength(60);
-  expect(result.stdout).toContain('shared five-minute deadline');
-});
+it.each(['missing', 'archive'])(
+  'bounds persistent propagation failures by the original deadline: %s',
+  (mode) => {
+    const result = run(mode);
+    expect(result.status).toBe(1);
+    expect(result.stdout.match(/SLEEP 5/g)).toHaveLength(60);
+    expect(result.stdout).toContain('shared five-minute deadline');
+  },
+);
 
 it('does not retry an init that times out', () => {
   const result = run('timeout');

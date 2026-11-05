@@ -26,7 +26,8 @@ wait_for_published_version() {
 }
 
 # Metadata can become visible before npm's install packument catches up (#398).
-# Retry only ETARGET before a target directory exists: never replay a partial init.
+# Retry only ETARGET or the selected CLI archive 404 before a target directory exists.
+# Never replay a partial init or an unrelated download failure.
 initialize_published_scaffold() {
   local target="$1"; shift
   local deadline="${PUBLISHED_REGISTRY_DEADLINE:-$(( $(date +%s) + 300 ))}"
@@ -44,15 +45,18 @@ initialize_published_scaffold() {
       status=$?
     fi
     cat "$output"
-    if [ -e "$target" ] || ! grep -q 'ETARGET' "$output"; then
-      echo "::error::Published scaffold initialization failed; not replaying a partial or non-ETARGET operation."
+    if [ -e "$target" ] || [ "$status" -eq 124 ] || [ "$status" -eq 137 ] || {
+      ! grep -q 'ETARGET' "$output" &&
+      ! grep -Fq "404 Not Found - GET https://registry.npmjs.org/@freeappstore/cli/-/cli-${CLI_VERSION}.tgz -" "$output"
+    }; then
+      echo "::error::Published scaffold initialization failed; not replaying a partial, timed-out or unrelated operation."
       rm "$output"
       return "$status"
     fi
     remaining=$(( deadline - $(date +%s) ))
     if [ "$remaining" -le 0 ]; then break; fi
     pause=$(( remaining < 5 ? remaining : 5 ))
-    echo "Registry metadata is visible but npm cannot resolve the release yet; retrying within the original deadline."
+    echo "Registry metadata is visible but the selected CLI release is not downloadable yet; retrying within the original deadline."
     sleep "$pause"
   done
   rm "$output"
