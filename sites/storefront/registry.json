@@ -2775,6 +2775,22 @@
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-05T04:39:50.497Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "scoreplay",
+      "name": "scoreplay",
+      "category": "Learning",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Open MIDI files, see every note, and practise at your own pace.",
+      "appUrl": "https://scoreplay.freeappstore.online",
+      "repo": "freeappstore-online/scoreplay",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-05T09:50:35.814Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
