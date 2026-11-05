@@ -50,15 +50,32 @@ const PLATFORM_SUBDOMAINS: Record<string, PlatformDispatch> = {
   api: { type: "service", binding: "API" },
   docs: { type: "service", binding: "KB" },
   kb: { type: "service", binding: "KB" },
-  compliance: { type: "proxy", target: "https://compliance.pages.dev" },
+  // `compliance` and `submissions` used to PROXY to compliance.pages.dev and
+  // submissions.pages.dev — Pages projects this account never owned, so the
+  // subdomains served strangers' sites (#459). `submissions` was a planned
+  // vanity host for github.com/freeappstore-online/submissions that was never
+  // wired up; `compliance` never had a target at all. Both are retired: 404,
+  // never proxied, never an app route.
+  compliance: {
+    type: "gone",
+    message: "compliance.freeappstore.online is retired. There is no compliance website; `fas check` runs locally and in CI.",
+  },
+  submissions: {
+    type: "gone",
+    message:
+      "submissions.freeappstore.online is retired. Apply or submit at https://github.com/freeappstore-online/submissions/issues/new/choose.",
+  },
+  // `agent.freeappstore.online` is the agent Worker (workers/agent), whose own
+  // route pattern beats `*.<zone>/*` — traffic never reaches this Worker. The
+  // old `agent → agent.pages.dev` proxy entry here was dead code (#459).
+  //
   // `publish.freeappstore.online` (freeappstore-publisher) was DECOMMISSIONED
   // 2026-06-30. Its provisioning now lives on the platform backend at
   // api.freeappstore.online/v1/publish (session-auth → admin Worker), which the
   // create site's /publish page calls. The old subdomain is inert; if a stray
   // bookmark needs catching, add a `publish` redirect entry here pointing at
   // https://create.freeappstore.online/publish.
-  submissions: { type: "proxy", target: "https://submissions.pages.dev" },
-  agent: { type: "proxy", target: "https://agent.pages.dev" },
+  //
   // `console` serves from R2 via a D1 routes row (apps/console) — it is NOT here,
   // it falls through to resolveRoute(). Its user-facing URL is freeappstore.online/app/.
   //
@@ -131,7 +148,7 @@ export default {
 
 /**
  * Dispatch a request whose hostname matches a known platform-infra subdomain
- * (api, compliance, publisher, etc.). The mapping decides whether to use a
+ * (api, docs, create, etc.). The mapping decides whether to use a
  * service binding (zero public hop), a fetch-proxy to an explicit URL, or
  * fail loudly because the subdomain is intentionally unmapped.
  */
@@ -150,13 +167,7 @@ async function dispatchPlatform(req: Request, env: Env, slug: string, host: stri
     return await target.fetch(req);
   }
   if (mapping.type === "proxy") {
-    const headers = new Headers(req.headers);
-    headers.delete("host");
-    return await fetch(`${mapping.target}${url.pathname}${url.search}`, {
-      method: req.method,
-      headers,
-      body: req.body,
-    });
+    return await proxyTo(req, mapping.target);
   }
   if (mapping.type === "redirect") {
     return Response.redirect(`${mapping.to}${url.pathname}${url.search}`, mapping.status ?? 301);
@@ -166,6 +177,24 @@ async function dispatchPlatform(req: Request, env: Env, slug: string, host: stri
   return new Response(`${mapping.message}\n`, {
     status: 404,
     headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
+/**
+ * Forward a request to an external origin, keeping the path and query. The
+ * origin is not us: credentials the client sent to `*.freeappstore.online`
+ * (session cookies, bearer tokens) must not travel with it (#459).
+ */
+export async function proxyTo(req: Request, target: string): Promise<Response> {
+  const url = new URL(req.url);
+  const headers = new Headers(req.headers);
+  headers.delete("host");
+  headers.delete("authorization");
+  headers.delete("cookie");
+  return await fetch(`${target}${url.pathname}${url.search}`, {
+    method: req.method,
+    headers,
+    body: req.body,
   });
 }
 

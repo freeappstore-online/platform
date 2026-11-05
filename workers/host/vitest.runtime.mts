@@ -21,10 +21,10 @@ export default defineConfig(async () => {
           bindings: { TEST_MIGRATIONS: migrations },
           // The real bindings point at other deployed Workers.
           serviceBindings: { API: echo("API"), KB: echo("KB") },
-          // Proxy targets (compliance.pages.dev, …) are the internet; answer locally.
+          // Outbound fetch() is the internet; answer locally, echoing what was sent.
           outboundService: async (req: Request) => req.url === "https://freeappstore.online/registry.json"
             ? Response.json({ apps: [{ id: "seo", name: "SEO App", description: 'Useful <app> & "safe"', appUrl: "https://seo.freeappstore.online" }, { id: "smoke-sandbox", name: "Canary", description: "Old cached fixture listing", appUrl: "https://smoke-sandbox.freeappstore.online" }, { id: "unbuilt", name: "Unbuilt", description: "Not deployed", appUrl: "https://unbuilt.freeappstore.online" }] })
-            : Response.json({ outbound: req.url, method: req.method }),
+            : Response.json({ outbound: req.url, method: req.method, headers: Object.fromEntries(req.headers) }),
         },
       }),
     ],

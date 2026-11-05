@@ -4,6 +4,7 @@
 
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
+import { proxyTo } from "../../src/index";
 
 const INDEX_HTML = "<!doctype html><title>Dict</title>";
 const APP_JS = "console.log('dict')";
@@ -233,9 +234,38 @@ describe("reserved platform subdomains", () => {
     expect(await (await get("https://kb.freeappstore.online/")).json()).toMatchObject({ binding: "KB" });
   });
 
-  it("proxies compliance.* to its Pages project, keeping the path", async () => {
-    const res = await get("https://compliance.freeappstore.online/report?app=dict");
-    expect(await res.json()).toEqual({ outbound: "https://compliance.pages.dev/report?app=dict", method: "GET" });
+  // compliance.* and submissions.* used to proxy to pages.dev projects this
+  // account never owned (#459). The outbound stub answers 200 JSON for any
+  // URL, so a 404 text body proves nothing was fetched.
+  it("answers the retired compliance.* and submissions.* with a 404 and never proxies them", async () => {
+    for (const host of ["compliance", "submissions"]) {
+      const res = await get(`https://${host}.freeappstore.online/report?app=dict`, { headers: { cookie: "fas_session=secret" } });
+      expect(res.status).toBe(404);
+      expect(res.headers.get("content-type")).toMatch(/^text\/plain/);
+      const body = await res.text();
+      expect(body).toContain("retired");
+      expect(body).not.toContain("outbound");
+    }
+  });
+
+  it("does not proxy agent.* (its own Worker route serves it) nor any unknown subdomain", async () => {
+    for (const host of ["agent", "nope"]) {
+      const res = await get(`https://${host}.freeappstore.online/health`);
+      expect(res.status).toBe(404);
+      expect(await res.text()).toContain("no app registered");
+    }
+  });
+
+  it("strips Authorization and Cookie before forwarding to a proxied origin", async () => {
+    const req = new Request("https://x.freeappstore.online/report?app=dict", {
+      headers: { authorization: "Bearer secret", cookie: "fas_session=secret", "x-custom": "kept" },
+    });
+    const res = await proxyTo(req, "https://example.pages.dev");
+    const echoed = await res.json<{ outbound: string; method: string; headers: Record<string, string> }>();
+    expect(echoed.outbound).toBe("https://example.pages.dev/report?app=dict");
+    expect(echoed.headers.authorization).toBeUndefined();
+    expect(echoed.headers.cookie).toBeUndefined();
+    expect(echoed.headers["x-custom"]).toBe("kept");
   });
 
   it("301s the retired create.* builder to the console, keeping the path", async () => {
