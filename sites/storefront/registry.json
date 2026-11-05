@@ -2808,7 +2808,7 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-05T13:57:40.910Z",
       "creatorGithub": "vuthanhvannguyen2006-commits",
       "permissions": [
@@ -2816,7 +2816,8 @@
           "name": "camera",
           "reason": "Optionally take a photo to attach to a diary entry."
         }
-      ]
+      ],
+      "discoveryDeliveryPending": "a9d2d69b-9e77-4ec1-b330-bedf55ae7d1d"
     }
   ]
 }
