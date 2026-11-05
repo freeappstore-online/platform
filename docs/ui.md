@@ -532,3 +532,90 @@ Banned aliases are resolved from the app's own CSS; conflicting light/dark defin
 The default `ProfilePage` also offers app installation when the shared PWA controller
 has a browser install offer (SDK >=0.16.37). It works in both auth states; see
 [PWA installation](pwa-lifecycle.md#installation-in-profile) for custom frame APIs.
+
+## Editable forms
+
+Compose the existing Modal with labelled native controls. This optional example uses
+an app-owned item and save callback; adapt the fields and validation to the product.
+Mount one editing session at a time so reopening uses current data. A pending save
+blocks duplicate submission and closing; a rejected write preserves the draft and
+returns focus to the input. Unread/initially loading data belongs in the parent screen's
+loading/error state before opening an editor.
+
+```tsx
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
+import { Modal } from '@freeappstore/sdk/ui';
+
+export type Item = { id: string; name: string };
+type EditorProps = { item: Item; onSave(item: Item): Promise<void> };
+
+export function EditItemButton({ item, onSave }: EditorProps) {
+  const [open, setOpen] = useState(false);
+  return <>
+    <button type="button" className="min-h-11 rounded border border-line px-3 py-2"
+      onClick={() => setOpen(true)}>Edit {item.name}</button>
+    {open && <ItemForm key={item.id} item={item} onSave={onSave} onClose={() => setOpen(false)} />}
+  </>;
+}
+
+// Mount per editing session: reopening starts with the current item, not a stale draft.
+function ItemForm({ item, onSave, onClose }: EditorProps & { onClose(): void }) {
+  const nameId = useId();
+  const errorId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  const saving = useRef(false);
+  const [name, setName] = useState(item.name);
+  const [invalid, setInvalid] = useState(false);
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  useEffect(() => { if (error && !pending) input.current?.focus(); }, [error, pending]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving.current) return;
+    const nextName = name.trim();
+    if (!nextName) { setInvalid(true); setError('Enter a name.'); return; }
+    setInvalid(false);
+    setError('');
+    saving.current = true;
+    setPending(true);
+    try {
+      // The app owns persistence. Throw on a failed SDK result; do not discard it.
+      await onSave({ ...item, name: nextName });
+      onClose();
+    } catch {
+      setError('Could not save. Your changes are still here.');
+    } finally {
+      saving.current = false;
+      setPending(false);
+    }
+  }
+
+  return <Modal open title="Edit item" onClose={() => { if (!saving.current) onClose(); }}>
+    <form noValidate onSubmit={submit} className="flex min-w-0 flex-col gap-3">
+      <label htmlFor={nameId} className="font-semibold">Name</label>
+      <input ref={input} id={nameId} data-autofocus value={name} disabled={pending}
+        aria-invalid={invalid} aria-describedby={error ? errorId : undefined}
+        onChange={event => { setName(event.target.value); setInvalid(false); setError(''); }}
+        className="min-h-11 w-full min-w-0 rounded border border-line bg-paper p-3 text-ink" />
+      {error && <p id={errorId} role="alert">{error}</p>}
+      {pending && <p role="status">Saving…</p>}
+      <div className="flex flex-wrap gap-3">
+        <button type="button" disabled={pending} onClick={onClose}
+          className="min-h-11 rounded border border-line px-3 py-2">Cancel</button>
+        <button type="submit" disabled={pending}
+          className="min-h-11 rounded bg-accent px-3 py-2 text-white">Save</button>
+      </div>
+    </form>
+  </Modal>;
+}
+```
+
+When adapting `onSave` to an SDK helper, check `result.ok` and throw on failure. A resolved
+promise containing a failed result is not a successful save. Validate the complete
+value: reject an all-whitespace name, and define numeric/date boundaries in the app.
+For example, `parseFloat('40junk')` silently accepts part of the input; it is insufficient
+validation. This example adds no form library, schema or persistence capability.
+Use app-owned navigation/PWA guards if the product needs to preserve unsaved drafts
+outside the dialog. Test actual sequential typing, Enter, Tab/Shift-Tab, Escape, failed
+writes and narrow screens with enlarged text.

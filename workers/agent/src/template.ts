@@ -183,6 +183,7 @@ subscription or upgrade screen. Only pass \`requireAuth\` to Shell if the whole 
 - Use maintained persistence helpers with validation and explicit failure handling (below); report saved only after a successful write.
 - Read the installed capability .md guide before wiring storage or backup; it contains typechecked examples. openStore takes an options object and returns a result wrapper, not a raw database. Never invent SDK signatures.
 - Test actual sequential typing, associated labels, save + reload and invalid input. Programmatic fill alone misses focus-loss bugs. A successful build/compliance check is not runtime acceptance; state checks you could not run.
+- For editable dialogs, reuse SDK Modal. Fetch the tested optional example with fetch_url at https://raw.githubusercontent.com/freeappstore-online/platform/main/docs/ui.md (Editable forms). Preserve typed values on rejected saves; never recreate focus effects around changing callbacks. Its model/validation remain app-owned.
 - Wire the app-owned icon in both the HTML favicon link and the PWA manifest.
 - Handle empty states gracefully
 - Make it responsive (mobile-first)

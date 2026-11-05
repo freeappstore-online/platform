@@ -1,4 +1,4 @@
-import { BACKUP_EXAMPLE, PERSISTENCE_EXAMPLE } from "../../../packages/cli/src/lib/developer-recipes";
+import { BACKUP_EXAMPLE, FORM_EXAMPLE, PERSISTENCE_EXAMPLE } from "../../../packages/cli/src/lib/developer-recipes";
 
 // The @freeappstore/sdk reference the MCP hands to connecting AIs (#91). Apps
 // built over the MCP only use the Shell, its navbar and the SDK components if
@@ -173,11 +173,19 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 **Hooks**
 - \`useDocumentTitle(title)\` — the tab title for the current screen.
 - \`useOnline()\` — whether the browser is online.
-- \`useStandalone()\` — whether the app runs installed (PWA standalone).`;
+- \`useStandalone()\` — whether the app runs installed (PWA standalone).
+
+For a complete editable dialog with labels, validation and rejected-save handling,
+request feature "forms". The example is optional and keeps its model app-owned.`;
 
 const SECTIONS = {
   shell: SHELL,
   components: COMPONENTS,
+  forms: `## Editable forms
+Use the existing Modal and labelled native controls. The app owns validation and persistence;
+an SDK result failure must cause onSave to throw. This is an editable example, not a required schema.
+\`\`\`tsx
+${FORM_EXAMPLE}\`\`\``,
   auth: `## Auth
 \`\`\`tsx
 import { initApp } from '@freeappstore/sdk'

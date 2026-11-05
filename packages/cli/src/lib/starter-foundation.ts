@@ -195,6 +195,8 @@ Check the browser favicon separately from the PWA manifest/install icon.
 Use available browser tooling; state explicitly when runtime checks were not run.
 Practical review guide:
 https://github.com/freeappstore-online/platform/blob/main/docs/app-verification.md
+Optional editable form/dialog example:
+https://github.com/freeappstore-online/platform/blob/main/docs/ui.md#editable-forms
 
 Canonical source and guidance:
 https://github.com/freeappstore-online/platform/blob/main/docs/composable-starter-contract.md

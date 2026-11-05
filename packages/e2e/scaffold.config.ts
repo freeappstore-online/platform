@@ -6,7 +6,9 @@ const artifact = process.env.SCAFFOLD_ARTIFACT === '1';
 if (!scaffold) throw new Error('Set SCAFFOLD_DIR to a freshly initialized app');
 export default defineConfig({
   testDir: './scaffold',
-  testMatch: artifact ? ['**/artifact.spec.ts', '**/pwa.spec.ts'] : '**/shell.spec.ts',
+  testMatch: artifact
+    ? ['**/artifact.spec.ts', '**/pwa.spec.ts', '**/forms.spec.ts']
+    : '**/shell.spec.ts',
   workers: 1,
   timeout: 60_000,
   retries: 0,

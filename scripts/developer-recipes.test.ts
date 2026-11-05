@@ -1,16 +1,17 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it, vi } from 'vitest';
 import { registry } from '../packages/cli/src/lib/capability-definitions.js';
+import { FORM_EXAMPLE } from '../packages/cli/src/lib/developer-recipes.js';
 import { getSdkReference } from '../workers/mcp/src/sdk-reference.js';
 
 const codeBlock = (text: string) => /```ts\n([\s\S]*?)```/.exec(text)?.[1] ?? '';
 
-function diagnostics(code: string) {
+function diagnostics(code: string, jsx = false) {
   const dir = mkdtempSync(join(tmpdir(), 'fas-sdk-example-'));
-  const file = join(dir, 'example.ts');
+  const file = join(dir, jsx ? 'example.tsx' : 'example.ts');
   writeFileSync(file, code);
   try {
     const program = ts.createProgram([file], {
@@ -21,8 +22,12 @@ function diagnostics(code: string) {
       module: ts.ModuleKind.ESNext,
       moduleResolution: ts.ModuleResolutionKind.Bundler,
       types: [],
+      jsx: ts.JsxEmit.ReactJSX,
       baseUrl: process.cwd(),
       paths: {
+        react: [resolve('packages/sdk/node_modules/@types/react/index.d.ts')],
+        'react/jsx-runtime': [resolve('packages/sdk/node_modules/@types/react/jsx-runtime.d.ts')],
+        '@freeappstore/sdk/ui': [resolve('packages/sdk/src/ui/index.ts')],
         '@freeappstore/sdk/persist': [resolve('packages/sdk/src/persist/index.ts')],
         '@freeappstore/sdk/backup': [resolve('packages/sdk/src/backup/index.ts')],
       },
@@ -36,6 +41,13 @@ function diagnostics(code: string) {
 }
 
 describe('examples handed to app authors', () => {
+  it('typechecks the actual form delivered in MCP and developer docs', () => {
+    const code = /```tsx\n([\s\S]*?)```/.exec(getSdkReference('forms'))?.[1];
+    expect(code).toBe(FORM_EXAMPLE);
+    const guide = readFileSync('docs/ui.md', 'utf8').split('## Editable forms')[1]!;
+    expect(/```tsx\n([\s\S]*?)```/.exec(guide)?.[1]).toBe(FORM_EXAMPLE);
+    expect(diagnostics(FORM_EXAMPLE, true)).toEqual([]);
+  }, 20_000);
   it.each(['persistence', 'backup'])(
     'typechecks the actual %s MCP and capability recipe',
     (feature) => {
