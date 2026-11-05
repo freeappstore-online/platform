@@ -85,10 +85,10 @@ a fixed database schema, or exact UI markup gates.
 
 ## Prioritized next work
 
-1. **P1: repeatable end-to-end creation evaluation (#401).** Start a new app from an idea, add a
-   small useful feature, and measure fresh-load, actual typing, save/reload, typecheck,
-   deploy and first useful outcome. Retain failed-stage evidence. One repaired sample
-   must not become the only golden path.
+1. **After the fixes: build a different app (#401).** Use a new storefront idea and
+   review whether creation feels more straightforward. Do not add timing dashboards,
+   baseline runs, scoring or measurement infrastructure. Keep ordinary regression
+   tests and actual browser verification as part of implementing the fixes.
 2. **P1: complete mobile identity assets (#402).** Favicon wiring is fixed, but SVG-only PWA
    icons and no PNG/touch-icon recipe leave older-browser/install coverage uncertain.
    Add an optional asset-generation pathway and test the declared assets; do not fake
@@ -120,9 +120,9 @@ coding; remote auto-pickup was disabled and the active remote run stopped. Local
 execution provides direct compiler/test output and removes that orchestration layer
 from this iteration.
 
-The next evaluation should compare the repaired platform against this baseline using
-the same observable user flows, and then another independently designed app. Success
-means less intervention and a useful verified feature, not just more generated files.
+After the platform improvements, build a new independently designed app and review
+the experience qualitatively. Use concrete failures to guide further fixes. The owner
+explicitly rejected a separate measurement framework or a baseline exercise.
 
 ## Local follow-up delivery
 
@@ -144,7 +144,7 @@ Their CI and compliance checks passed. Pitstop's favicon fix is deployed at
 The source revision passed [platform CI](https://github.com/freeappstore-online/platform/actions/runs/41936218175),
 and the updated builder, MCP and documentation deployed successfully.
 
-Unimplemented follow-ups are [creation evaluation #401](https://github.com/freeappstore-online/platform/issues/401),
+Unimplemented follow-ups are [new-app follow-up #401](https://github.com/freeappstore-online/platform/issues/401),
 [PNG/touch icons #402](https://github.com/freeappstore-online/platform/issues/402), and
 [dependency reproducibility #403](https://github.com/freeappstore-online/platform/issues/403).
 Local MCP dependency installation also exposed audit findings; coordinated dependency

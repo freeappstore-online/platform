@@ -98,3 +98,19 @@ reloads offline and opens an unvisited deep link. It also validates manifest
 icons, enabled zoom and 320px layout with enlarged text. CI runs it for both app
 presets against installed SDK packages. The release must pass these checks on
 the delivered SHA; a successful local build alone is not release acceptance.
+
+## Installation in Profile
+
+Requires SDK `0.16.37` or later. The shared runtime retains the browser installation offer without appending an install
+promotion footer. The default Profile page offers **Install app** when that offer is
+available, in either auth state. It consumes the offer once; opening the browser prompt
+does not prove installation succeeded. Installed/unsupported browsers do not get a
+nonfunctional button. Browser-specific manual installation remains available through
+the browser's own menu.
+
+Custom frames can subscribe to `subscribePwaInstall`, read `getPwaInstallState()` and
+invoke `requestPwaInstall()` from `@freeappstore/sdk/pwa` on a user click. These use the
+existing controller; do not call `startPwa` again from Profile or each screen.
+The runtime keeps actionable update/reload notices and busy guards. Default connectivity
+feedback remains in Shell's neutral offline banner (also available as `OfflineBanner`
+for custom frames); only explicit `offlineFeatures` create feature-specific PWA status.

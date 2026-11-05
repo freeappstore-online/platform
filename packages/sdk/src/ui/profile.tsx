@@ -4,9 +4,11 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
+import { getPwaInstallState, requestPwaInstall, subscribePwaInstall } from '../pwa.js';
 import { Modal } from './components.js';
 import { Avatar, SignInButton, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
@@ -267,6 +269,37 @@ export interface ProfilePageProps {
   children?: ReactNode;
 }
 
+function InstallAppSection() {
+  const state = useSyncExternalStore(subscribePwaInstall, getPwaInstallState, () => 'unavailable');
+  const [error, setError] = useState(false);
+  if (state === 'unavailable' && !error) return null;
+  return (
+    <ProfileSection title="Install">
+      {state !== 'unavailable' && (
+        <button
+          type="button"
+          disabled={state === 'prompting'}
+          className="w-full min-h-11 p-3 rounded border border-line bg-panel text-ink font-semibold"
+          onClick={() => {
+            setError(false);
+            void requestPwaInstall().then(
+              (opened) => setError(!opened),
+              () => setError(true),
+            );
+          }}
+        >
+          {state === 'prompting' ? 'Opening install…' : 'Install app'}
+        </button>
+      )}
+      {error && (
+        <p role="status" className="text-muted">
+          Couldn’t open installation. Try your browser’s install menu.
+        </p>
+      )}
+    </ProfileSection>
+  );
+}
+
 /** Full-page profile & preferences: avatar, theme, text size, friends, sign out, delete. */
 export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePageProps) {
   const { user, loading, signOut, deleteAccount } = useAuth(app);
@@ -351,6 +384,8 @@ export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePa
           ))}
         </div>
       </ProfileSection>
+
+      <InstallAppSection />
 
       {user && (
         <>

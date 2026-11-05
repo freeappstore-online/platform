@@ -528,3 +528,7 @@ with Escape, outside-click dismissal and focus return to the menu button.
 Run `fas migrate tailwind-tokens --dir <app-repo>` to preview a unified diff and per-file counts. Add `--write` to apply it. The command scans `web/src`, adds missing Tailwind theme mappings for defined FAS tokens, and rewrites class attributes and `cn`/`clsx`/`classnames` calls while preserving variants and opacity. Radius and shadow mappings use `rounded-fas`, `rounded-fas-sm`, and `shadow-fas`.
 
 Banned aliases are resolved from the app's own CSS; conflicting light/dark definitions, cycles, and unknown tokens are left in place and reported. Review the remaining CSS rules, hex colours, dark overrides, and inline-style counts in the report. Run the app build after applying the migration. Re-running the command is a no-op once migrated. This command does not convert static inline styles or add SDK `@source` directives.
+
+The default `ProfilePage` also offers app installation when the shared PWA controller
+has a browser install offer (SDK >=0.16.37). It works in both auth states; see
+[PWA installation](pwa-lifecycle.md#installation-in-profile) for custom frame APIs.

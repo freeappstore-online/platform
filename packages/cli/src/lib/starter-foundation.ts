@@ -1,5 +1,10 @@
 /** Canonical worker-safe editable starter foundation. */
 import { planCapabilityChanges } from './capability-definitions.js';
+import {
+  APP_DEPLOY_CLI_VERSION,
+  INSTALL_APP_DEPENDENCIES,
+  SAVE_APP_DEPENDENCY_LOCK,
+} from './starter-dependencies.js';
 import { resolveStarterPreset } from './starter-presets.js';
 
 export interface StoreConfig {
@@ -865,8 +870,9 @@ SOFTWARE.`,
 // (freeappstore-host / freegamestore-host) serves once the publish step writes
 // the D1 routes row. Mirrors the proven template-standalone deploy.yml.
 //
-// Uses plain `pnpm install` (NOT --frozen-lockfile): the agent scaffold ships
-// no lockfile. Org-level R2_* secrets (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY /
+// Fresh builder apps acquire a lock on their first successful build; later
+// builds retain it unless dependency manifests change. Org-level R2_* secrets
+// (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY /
 // R2_ACCOUNT_ID) are inherited from the store org — public repos get them
 // (console/notes already deploy this way). Contains no APPNAME placeholder.
 function deployWorkflow(config: StoreConfig): string {
@@ -886,7 +892,7 @@ jobs:
     if: \${{ !startsWith(github.event.repository.name, 'template-') }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: ${config.store === 'apps' ? 'write' : 'read'}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -894,12 +900,19 @@ jobs:
         with:
           node-version: 22
       - name: Install
-        run: pnpm install --no-frozen-lockfile
+${
+  config.store === 'apps'
+    ? `        run: |\n${INSTALL_APP_DEPENDENCIES.trimEnd()
+        .split('\n')
+        .map((line) => `          ${line}`)
+        .join('\n')}`
+    : '        run: pnpm install --no-frozen-lockfile'
+}
 ${
   config.store === 'apps'
     ? `      - name: Resolve build target
         id: target
-        run: npx @freeappstore/cli build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
+        run: npx --yes @freeappstore/cli@${APP_DEPLOY_CLI_VERSION} build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
       - name: Typecheck (when configured)
         run: pnpm run --if-present typecheck
       - name: Build
@@ -907,7 +920,13 @@ ${
           BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
         run: bash -e -c "$BUILD_COMMAND"
       - name: Verify build output
-        run: npx @freeappstore/cli build-target --artifact --app-id "\${GITHUB_REPOSITORY##*/}"
+        run: npx --yes @freeappstore/cli@${APP_DEPLOY_CLI_VERSION} build-target --artifact --app-id "\${GITHUB_REPOSITORY##*/}"
+      - name: Retain verified dependency lock
+        run: |
+${SAVE_APP_DEPENDENCY_LOCK.trimEnd()
+  .split('\n')
+  .map((line) => `          ${line}`)
+  .join('\n')}
 `
     : `\
       - name: Build
@@ -930,7 +949,7 @@ ${config.store === 'apps' ? `          OUTPUT_PATH: \${{ steps.target.outputs.ou
             --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
             --delete \\
             --no-progress
-          echo "Deployed ${config.nounPlural}/\${GITHUB_REPOSITORY##*/} from \${GITHUB_SHA::7} to R2"
+          echo "Deployed ${config.nounPlural}/\${GITHUB_REPOSITORY##*/} from $(git rev-parse --short HEAD) to R2"
 `;
 }
 

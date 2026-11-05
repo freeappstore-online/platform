@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, expect, it, vi } from 'vitest';
-import { offlineAssets, startPwa } from './pwa.js';
+import {
+  getPwaInstallState,
+  offlineAssets,
+  requestPwaInstall,
+  startPwa,
+  subscribePwaInstall,
+} from './pwa.js';
 import { pwaOptions } from './pwa-config.js';
 
 const cleanups: (() => void)[] = [];
@@ -120,13 +126,9 @@ it('allows retry after a worker rejects the activation message', async () => {
   expect(pwa.activate()).toBe(true);
 });
 
-it('renders honest offline status and install UI without claiming cloud availability', async () => {
+it('keeps default installation and offline promotion out of the app footer', async () => {
   await setup();
-  Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
-  window.dispatchEvent(new Event('offline'));
-  // A waiting update takes priority; use a registration without a waiting worker.
-  const register = vi.mocked(navigator.serviceWorker.register);
-  register.mockResolvedValue(
+  vi.mocked(navigator.serviceWorker.register).mockResolvedValue(
     Object.assign(new EventTarget(), {
       waiting: null,
       installing: null,
@@ -135,22 +137,107 @@ it('renders honest offline status and install UI without claiming cloud availabi
   const pwa = startPwa();
   cleanups.push(pwa.dispose);
   await pwa.ready;
-  expect(document.body.textContent).toContain('Only the downloaded app shell');
-  expect(document.body.textContent).toContain(
-    'Cloud, media and model features require a connection',
-  );
+  const panel = document.querySelector('aside:last-child') as HTMLElement;
+  expect(panel.hidden).toBe(true);
   const event = new Event('beforeinstallprompt', { cancelable: true });
   const prompt = vi.fn().mockResolvedValue(undefined);
   Object.assign(event, { prompt });
+  const changed = vi.fn();
+  const unsubscribe = subscribePwaInstall(changed);
   window.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(true);
-  const buttons = [...document.querySelectorAll('button')];
-  buttons
-    .filter((button) => button.textContent === 'Install app')
-    .at(-1)!
-    .click();
+  expect(getPwaInstallState()).toBe('available');
+  expect(panel.hidden).toBe(true);
+  expect(document.body.textContent).not.toContain('Install this app');
+  expect(await requestPwaInstall()).toBe(true);
+  expect(await requestPwaInstall()).toBe(false);
   expect(prompt).toHaveBeenCalledOnce();
+  expect(changed).toHaveBeenCalled();
+  expect(getPwaInstallState()).toBe('unavailable');
+  unsubscribe();
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+  window.dispatchEvent(new Event('offline'));
+  expect(panel.hidden).toBe(true); // Shell/custom frames own neutral connectivity feedback.
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+});
+
+it('shows only app-declared offline feature descriptions', async () => {
+  await setup();
+  vi.mocked(navigator.serviceWorker.register).mockResolvedValue(
+    Object.assign(new EventTarget(), {
+      waiting: null,
+      installing: null,
+    }) as unknown as ServiceWorkerRegistration,
+  );
+  const pwa = startPwa({ offlineFeatures: ['saved notes'] });
+  cleanups.push(pwa.dispose);
+  await pwa.ready;
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value: false });
+  window.dispatchEvent(new Event('offline'));
+  const panel = document.querySelector('aside:last-child') as HTMLElement;
+  expect(panel.hidden).toBe(false);
+  expect(panel.textContent).toContain('Available: saved notes.');
+  expect(panel.textContent).not.toContain('Cloud, media');
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+});
+
+it('clears a failed install prompt and notifies its owning controller', async () => {
+  await setup();
+  const onError = vi.fn();
+  const pwa = startPwa({ onError });
+  cleanups.push(pwa.dispose);
+  const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+    prompt: vi.fn().mockRejectedValue(new Error('prompt unavailable')),
+  });
+  window.dispatchEvent(event);
+  expect(await requestPwaInstall()).toBe(false);
+  expect(onError).toHaveBeenCalledOnce();
+  expect(getPwaInstallState()).toBe('unavailable');
+});
+
+it('does not offer installation in an already installed app', async () => {
+  await setup();
+  const media = vi.spyOn(window, 'matchMedia').mockReturnValue({ matches: true } as MediaQueryList);
+  try {
+    const event = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn(),
+    });
+    window.dispatchEvent(event);
+    expect(getPwaInstallState()).toBe('unavailable');
+    expect(await requestPwaInstall()).toBe(false);
+    expect(event.prompt).not.toHaveBeenCalled();
+  } finally {
+    media.mockRestore();
+  }
+});
+
+it('drops a disposed controller prompt without clearing a newer install offer', async () => {
+  const first = await setup();
+  let finish!: () => void;
+  window.dispatchEvent(
+    Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    }),
+  );
+  const pending = requestPwaInstall();
+  expect(getPwaInstallState()).toBe('prompting');
+  first.pwa.dispose();
+  expect(getPwaInstallState()).toBe('unavailable');
+  const second = await setup();
+  window.dispatchEvent(
+    Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn().mockResolvedValue(undefined),
+    }),
+  );
+  finish();
+  await pending;
+  expect(getPwaInstallState()).toBe('available');
+  window.dispatchEvent(new Event('appinstalled'));
+  expect(getPwaInstallState()).toBe('unavailable');
+  second.pwa.dispose();
 });
 
 it.each(['private', 'no-store', 'vary-cookie', 'vary-authorization', 'vary-*'])(

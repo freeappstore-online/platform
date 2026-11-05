@@ -13,6 +13,51 @@ interface InstallPrompt extends Event {
   prompt(): Promise<unknown>;
 }
 
+type InstallState = 'unavailable' | 'available' | 'prompting';
+let installOffer:
+  | { event: InstallPrompt; owner: symbol; onError?: PwaOptions['onError'] }
+  | undefined;
+let installState: InstallState = 'unavailable';
+let activeInstall: { owner: symbol; operation: symbol } | undefined;
+const installListeners = new Set<() => void>();
+function notifyInstall(state: InstallState) {
+  installState = state;
+  for (const listener of installListeners) listener();
+}
+
+/** Shared installation state; Profile and custom frames use the existing controller. */
+export function getPwaInstallState(): InstallState {
+  return installState;
+}
+export function subscribePwaInstall(listener: () => void): () => void {
+  installListeners.add(listener);
+  return () => {
+    installListeners.delete(listener);
+  };
+}
+
+/** True means the browser prompt opened, not that the user installed the app. */
+export async function requestPwaInstall(): Promise<boolean> {
+  const offer = installOffer;
+  if (!offer || installState !== 'available') return false;
+  installOffer = undefined;
+  const operation = Symbol('install prompt');
+  activeInstall = { owner: offer.owner, operation };
+  notifyInstall('prompting');
+  try {
+    await offer.event.prompt();
+    return true;
+  } catch (error) {
+    offer.onError?.(error);
+    return false;
+  } finally {
+    if (activeInstall?.operation === operation) {
+      activeInstall = undefined;
+      notifyInstall('unavailable');
+    }
+  }
+}
+
 export function startPwa(options: PwaOptions = {}) {
   const guards = new Set<() => boolean>();
   if (options.isBusy) guards.add(options.isBusy);
@@ -20,7 +65,7 @@ export function startPwa(options: PwaOptions = {}) {
   let disposed = false;
   let activated = false;
   let activating = false;
-  let installPrompt: InstallPrompt | undefined;
+  const installOwner = Symbol('PWA controller');
   let controller = navigator.serviceWorker?.controller;
   const panel = document.createElement('aside');
   panel.setAttribute('aria-label', 'App installation and updates');
@@ -31,17 +76,7 @@ export function startPwa(options: PwaOptions = {}) {
   const action = document.createElement('button');
   action.type = 'button';
   action.style.cssText = 'font:inherit;min-height:44px;max-width:100%;white-space:normal';
-  const install = document.createElement('button');
-  install.type = 'button';
-  install.textContent = 'Install app';
-  install.style.cssText = action.style.cssText;
-  install.onclick = () => {
-    const prompt = installPrompt;
-    installPrompt = undefined;
-    void prompt?.prompt().catch((error: unknown) => options.onError?.(error));
-    render();
-  };
-  panel.append(status, action, install);
+  panel.append(status, action);
   document.body.append(panel);
   const busy = () => {
     try {
@@ -53,15 +88,16 @@ export function startPwa(options: PwaOptions = {}) {
   function render() {
     if (disposed) return;
     const waiting = Boolean(registration?.waiting);
-    panel.hidden = !waiting && !activated && navigator.onLine && !installPrompt;
+    panel.hidden = !waiting && !activated && (navigator.onLine || !options.offlineFeatures?.length);
     status.textContent = activated
       ? 'Update activated. Reload when your work is saved.'
       : waiting
         ? 'An update is ready. Save edits and finish recordings before updating.'
         : navigator.onLine
-          ? 'Install this app for easier access. Installation does not make cloud features available offline.'
-          : `Offline. ${options.offlineFeatures?.length ? `Available: ${options.offlineFeatures.join(', ')}.` : 'Only the downloaded app shell is available.'} Cloud, media and model features require a connection unless explicitly downloaded and verified by this app.`;
-    install.hidden = !installPrompt;
+          ? ''
+          : options.offlineFeatures?.length
+            ? `Offline. Available: ${options.offlineFeatures.join(', ')}.`
+            : '';
     action.hidden = !waiting && !activated;
     action.textContent = activated
       ? 'Reload app'
@@ -115,13 +151,20 @@ export function startPwa(options: PwaOptions = {}) {
   window.addEventListener('online', render);
   window.addEventListener('offline', render);
   const beforeInstall = (event: Event) => {
+    if (
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      (navigator as Navigator & { standalone?: boolean }).standalone ||
+      installState === 'prompting'
+    )
+      return;
     event.preventDefault();
-    installPrompt = event as InstallPrompt;
-    render();
+    installOffer = { event: event as InstallPrompt, owner: installOwner, onError: options.onError };
+    notifyInstall('available');
   };
   const installed = () => {
-    installPrompt = undefined;
-    render();
+    installOffer = undefined;
+    activeInstall = undefined;
+    notifyInstall('unavailable');
   };
   window.addEventListener('beforeinstallprompt', beforeInstall);
   window.addEventListener('appinstalled', installed);
@@ -153,6 +196,11 @@ export function startPwa(options: PwaOptions = {}) {
     },
     dispose() {
       disposed = true;
+      if (installOffer?.owner === installOwner || activeInstall?.owner === installOwner) {
+        if (installOffer?.owner === installOwner) installOffer = undefined;
+        if (activeInstall?.owner === installOwner) activeInstall = undefined;
+        notifyInstall('unavailable');
+      }
       panel.remove();
       window.removeEventListener('online', render);
       window.removeEventListener('offline', render);

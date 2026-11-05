@@ -125,3 +125,17 @@ Existing installs must preview `fas add backup --dry-run --update` before applyi
 This does not migrate stored data or change app schemas. See
 [the build experience review](build-experience-pitstop.md) and
 [practical app verification](app-verification.md).
+
+## Reproducible generated deployments (#403)
+
+New app deployment workflows use `pnpm install --frozen-lockfile` for an existing matching
+lock. A missing lock or an explicit manifest mismatch resolves a new lock; network and
+lifecycle failures remain failures. After successful typecheck/build/artifact validation,
+the workflow commits only that lock directly to main before upload. Its normal push
+rejects concurrent app edits; it never force-pushes. The checkout token needs
+`contents: write` to retain a first or refreshed lock. Unchanged locks produce no commit.
+
+Both build-target checks use the deliberately pinned deployment CLI `0.4.67`; updating
+the generating CLI does not silently change an existing app's deployment toolchain.
+Local authors should commit the lock from their validated install. Existing apps adopt
+the workflow deliberately, preserving their build layout and app-owned configuration.

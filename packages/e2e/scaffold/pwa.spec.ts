@@ -81,9 +81,7 @@ test('PWA preserves work across activation, reloads offline deep links and suppo
     await context.setOffline(true);
     await page.reload();
     await expect(page.getByRole('main')).toBeVisible();
-    await expect(
-      page.getByRole('complementary', { name: 'App installation and updates' }),
-    ).toContainText('Only the downloaded app shell');
+    await expect(page.getByText("You're offline.", { exact: true })).toBeVisible();
     await page.goto('/never-visited/deep-link');
     await expect(page.getByRole('main')).toBeVisible();
     expect(new URL(page.url()).pathname).toBe('/never-visited/deep-link');

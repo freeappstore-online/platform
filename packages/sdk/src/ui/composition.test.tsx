@@ -5,6 +5,7 @@ import { act, type ReactNode, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FreeAppStore } from '../index.js';
+import { startPwa } from '../pwa.js';
 import { AccountSettingsFixture } from './fixtures/fixture-account-settings.js';
 import { BottomNavFixture } from './fixtures/fixture-bottom-nav.js';
 import { CanvasReaderFixture } from './fixtures/fixture-canvas-reader.js';
@@ -57,6 +58,44 @@ afterEach(async () => {
   container.remove();
   vi.restoreAllMocks();
 });
+
+it.each([false, true])(
+  'offers installation in Profile with signedIn=%s without starting OAuth',
+  async (signedIn) => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'serviceWorker');
+    const serviceWorker = Object.assign(new EventTarget(), {
+      register: vi
+        .fn()
+        .mockResolvedValue(Object.assign(new EventTarget(), { waiting: null, installing: null })),
+    });
+    Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: serviceWorker });
+    const pwa = startPwa();
+    const app = fakeApp(signedIn);
+    try {
+      await pwa.ready;
+      await mount(<ProfilePage app={app} />);
+      const button = () =>
+        [...container.querySelectorAll('button')].find((b) => b.textContent === 'Install app');
+      expect(button()).toBeUndefined();
+      const prompt = vi.fn().mockResolvedValue(undefined);
+      await act(async () => {
+        window.dispatchEvent(
+          Object.assign(new Event('beforeinstallprompt', { cancelable: true }), { prompt }),
+        );
+      });
+      expect(button()).toBeDefined();
+      await act(async () => button()?.click());
+      expect(prompt).toHaveBeenCalledOnce();
+      expect(button()).toBeUndefined();
+      expect(app.auth.signIn).not.toHaveBeenCalled();
+      expect(serviceWorker.register).toHaveBeenCalledOnce();
+    } finally {
+      await act(async () => pwa.dispose());
+      if (original) Object.defineProperty(navigator, 'serviceWorker', original);
+      else Reflect.deleteProperty(navigator, 'serviceWorker');
+    }
+  },
+);
 
 describe('header control slot (#347)', () => {
   it('places headerActions in the only header and keeps the profile link', async () => {
