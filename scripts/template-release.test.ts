@@ -68,3 +68,43 @@ it('bootstraps reviewed files and preserves an extra file through repeated appli
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it('builds a relocated pinned workspace from a mirror working directory', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const root = await mkdtemp(join(tmpdir(), 'fas-mirror-build-'));
+  try {
+    const platform = join(root, 'platform');
+    const mirror = join(root, 'mirror');
+    await mkdir(join(platform, 'packages/cli'), { recursive: true });
+    await mkdir(mirror);
+    await writeFile(
+      join(platform, 'package.json'),
+      JSON.stringify({ private: true, packageManager: 'pnpm@10.30.3' }),
+    );
+    await writeFile(join(platform, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
+    await writeFile(
+      join(platform, 'packages/cli/package.json'),
+      JSON.stringify({ name: '@freeappstore/cli', scripts: { build: 'node build.cjs' } }),
+    );
+    await writeFile(
+      join(platform, 'packages/cli/build.cjs'),
+      "require('fs').mkdirSync('dist/lib',{recursive:true});require('fs').writeFileSync('dist/lib/starter-foundation.js','export {}');",
+    );
+    const workflow = await readFile('scripts/mirror-sync-workflow.yml', 'utf8');
+    const build = workflow
+      .split('\n')
+      .find((line) => line.includes('pnpm -r --filter'))!
+      .trim();
+    const shell = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
+    execFileSync(shell, ['-ec', `platform="$FAS_TEST_PLATFORM"\n${build}`], {
+      cwd: mirror,
+      env: { ...process.env, FAS_TEST_PLATFORM: platform },
+      stdio: 'pipe',
+    });
+    expect(
+      await readFile(join(platform, 'packages/cli/dist/lib/starter-foundation.js'), 'utf8'),
+    ).toBe('export {}');
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}, 20_000);

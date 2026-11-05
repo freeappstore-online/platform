@@ -340,3 +340,9 @@ app's browser tests or follow the [practical review guide](app-verification.md).
 Doctor performs no fixes, installs, upgrades, sign-in, publishing or deployment.
 App script output is not included in reports; run the failed command locally for
 detailed compiler/test output.
+
+
+Generated app deployment workflows run configured typecheck and test scripts before
+building, validating output, retaining a dependency lock or uploading. Missing
+scripts are allowed; a configured failing test stops deployment. Browser-test
+frameworks remain app-owned and optional.

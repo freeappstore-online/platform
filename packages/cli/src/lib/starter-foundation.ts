@@ -926,6 +926,8 @@ ${
         run: npx --yes @freeappstore/cli@${APP_DEPLOY_CLI_VERSION} build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
       - name: Typecheck (when configured)
         run: pnpm run --if-present typecheck
+      - name: Tests (when configured)
+        run: pnpm run --if-present test
       - name: Build
         env:
           BUILD_COMMAND: \${{ steps.target.outputs.build-command }}

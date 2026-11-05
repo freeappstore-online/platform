@@ -52,7 +52,8 @@ jobs:
           mv "$platform" "$RUNNER_TEMP/platform"
           platform="$RUNNER_TEMP/platform"
           pnpm --dir "$platform" install --frozen-lockfile
-          pnpm --dir "$platform" -r --filter './packages/*' build
+          (cd "$platform" && pnpm -r --filter './packages/*' build)
+          test -f "$platform/packages/cli/dist/lib/starter-foundation.js"
           preset="${GITHUB_REPOSITORY##*template-}"
           (cd "$platform" && node scripts/template-release.mjs apply "$GITHUB_WORKSPACE" "$preset" "$RUNNER_TEMP/starter.json")
           lock_script=$(cd "$platform" && node scripts/template-release.mjs lock-script)

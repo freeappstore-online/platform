@@ -163,3 +163,45 @@ it('ships the tested scripts in build order and pins both validators', () => {
     workflow.indexOf('Upload to R2'),
   );
 });
+
+it.each(['missing', 'passing', 'failing'])(
+  'runs configured app tests before accepting a deployment: %s',
+  (mode) => {
+    const cwd = temporary();
+    const files = getTemplateFiles({ store: 'apps', r2Bucket: 'fas-apps', nounPlural: 'apps' });
+    const workflow = files['.github/workflows/deploy.yml']!;
+    const command = /- name: Tests \(when configured\)\n\s+run: ([^\n]+)/.exec(workflow)![1]!;
+    const stages = [
+      'Typecheck (when configured)',
+      'Tests (when configured)',
+      '- name: Build',
+      'Verify build output',
+      'Retain verified dependency lock',
+      'Upload to R2',
+    ].map((name) => workflow.indexOf(name));
+    expect(stages.every((position) => position >= 0)).toBe(true);
+    expect(stages).toEqual([...stages].sort((a, b) => a - b));
+    writeFileSync(
+      join(cwd, 'package.json'),
+      JSON.stringify({
+        private: true,
+        packageManager: 'pnpm@10.30.3',
+        ...(mode === 'missing'
+          ? {}
+          : {
+              scripts: {
+                test:
+                  mode === 'passing' ? 'node -e "process.exit(0)"' : 'node -e "process.exit(7)"',
+              },
+            }),
+      }),
+    );
+    const result = spawnSync(bash, ['-ec', `${command}\necho accepted > accepted-artifact`], {
+      cwd,
+      encoding: 'utf8',
+    });
+    expect(result.status === 0, result.stderr).toBe(mode !== 'failing');
+    expect(existsSync(join(cwd, 'accepted-artifact'))).toBe(mode !== 'failing');
+  },
+  20_000,
+);
