@@ -95,11 +95,31 @@ describe("getAuditResults", () => {
   it("formats audit summary", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ summary: { pass: 5, warn: 1, fail: 0 }, checks: [{ name: "License", status: "pass" }] }),
+      json: () =>
+        Promise.resolve({
+          summary: [{ appId: "timer", store: "apps", pass: 5, warn: 1, fail: 0, checkedAt: 1 }],
+          checks: [
+            { appId: "timer", store: "apps", checkName: "License", status: "pass", detail: null, checkedAt: 1 },
+            { appId: "timer", store: "apps", checkName: "Bundle size", status: "warn", detail: "big", checkedAt: 1 },
+          ],
+          total: 6,
+        }),
     }) as any;
     const result = await getAuditResults("timer", config);
-    expect(result).toContain("5 pass");
+    expect(result).toContain("Audit for timer: 5 pass, 1 warn, 0 fail");
     expect(result).toContain("PASS: License");
+    expect(result).toContain("WARN: Bundle size — big");
+    expect(result).toContain("showing 2 of 6 checks");
+    expect(result).not.toContain("undefined");
+  });
+
+  it("falls back to raw JSON when the app has no audit rows", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ summary: [], checks: [], total: 0 }),
+    }) as any;
+    const result = await getAuditResults("timer", config);
+    expect(result).toContain('"total": 0');
   });
 
   it("handles API errors", async () => {

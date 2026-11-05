@@ -103,18 +103,21 @@ export async function getAuditResults(appId: string, config: StoreConfig): Promi
     });
     if (!auditRes.ok) return `Audit API returned ${auditRes.status}. The ${config.noun} may not have been audited yet.`;
     const auditData = (await auditRes.json()) as {
-      summary?: { pass: number; warn: number; fail: number };
-      checks?: { name: string; status: string; detail?: string }[];
+      summary?: { appId: string; pass: number; warn: number; fail: number }[];
+      checks?: { checkName: string; status: string; detail?: string | null }[];
+      total?: number;
     };
 
-    if (auditData.summary) {
-      const s = auditData.summary;
+    const s = auditData.summary?.find((row) => row.appId === appId);
+    if (s) {
       const lines = [`Audit for ${appId}: ${s.pass} pass, ${s.warn} warn, ${s.fail} fail`];
-      if (auditData.checks) {
-        for (const c of auditData.checks) {
-          const icon = c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL";
-          lines.push(`  ${icon}: ${c.name}${c.detail ? ` — ${c.detail}` : ""}`);
-        }
+      const checks = auditData.checks ?? [];
+      for (const c of checks) {
+        const icon = c.status === "pass" ? "PASS" : c.status === "warn" ? "WARN" : "FAIL";
+        lines.push(`  ${icon}: ${c.checkName}${c.detail ? ` — ${c.detail}` : ""}`);
+      }
+      if (auditData.total && auditData.total > checks.length) {
+        lines.push(`  (showing ${checks.length} of ${auditData.total} checks)`);
       }
       return lines.join("\n");
     }
