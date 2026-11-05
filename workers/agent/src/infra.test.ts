@@ -127,4 +127,27 @@ describe("getAuditResults", () => {
     const result = await getAuditResults("timer", config);
     expect(result).toContain("500");
   });
+
+  it("queries the FAS audit API with the store filter for both stores", async () => {
+    // Games have no api.freegamestore.online — that host is the FGS host
+    // worker and 404s "no game registered". Both stores' audit rows live
+    // in the FAS backend (#450).
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          summary: [{ appId: "chess", store: "games", pass: 5, warn: 0, fail: 0, checkedAt: 1 }],
+          checks: [],
+          total: 0,
+        }),
+    });
+    globalThis.fetch = fetchMock as any;
+
+    const result = await getAuditResults("chess", getConfig("games"));
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.freeappstore.online/v1/audit?store=games&app=chess");
+    expect(result).toContain("Audit for chess: 5 pass, 0 warn, 0 fail");
+
+    await getAuditResults("timer", config);
+    expect(fetchMock.mock.calls[1][0]).toBe("https://api.freeappstore.online/v1/audit?store=apps&app=timer");
+  });
 });

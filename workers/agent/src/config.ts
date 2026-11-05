@@ -14,7 +14,6 @@ export interface StoreConfig {
   agentName: string;
   accentColor: string;
   categories: string;
-  auditParam: string;
   /** R2 bucket the host Worker serves from. The scaffold's deploy.yml
    *  syncs web/dist → r2://<r2Bucket>/<nounPlural>/<repo>/. */
   r2Bucket: string;
@@ -34,7 +33,6 @@ const CONFIGS: Record<string, StoreConfig> = {
     agentName: "freeappstore-agent",
     accentColor: "#2563eb",
     categories: "utilities, productivity, learning, lifestyle, finance, health, creative, social",
-    auditParam: "app",
     r2Bucket: "fas-apps",
   },
   games: {
@@ -50,7 +48,6 @@ const CONFIGS: Record<string, StoreConfig> = {
     agentName: "freegamestore-agent",
     accentColor: "#10b981",
     categories: "arcade, puzzle, strategy, racing, sports, cards, board, rpg, action, casual",
-    auditParam: "game",
     r2Bucket: "fgs-games",
   },
 };
