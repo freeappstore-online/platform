@@ -139,3 +139,15 @@ Both build-target checks use the deliberately pinned deployment CLI `0.4.67`; up
 the generating CLI does not silently change an existing app's deployment toolchain.
 Local authors should commit the lock from their validated install. Existing apps adopt
 the workflow deliberately, preserving their build layout and app-owned configuration.
+
+## Executable reference follow-up (#407)
+
+The connected-data reference now shares the actual connected starter component. The
+complete Shell example includes every referenced screen; its notification demo does
+not claim a save occurred. Optional PWA, realtime and media modules and the main API
+fragments are checked against SDK types alongside storage, backup and forms.
+
+Media guide `1.0.1` fixes the update guard when no recorder exists: absence is not busy.
+Existing tracked media installs preview `fas add media --dry-run --update` before
+applying `fas add media --update`; edited guides remain conflicts to review. No media
+permissions are requested by installing or reading this optional recipe.

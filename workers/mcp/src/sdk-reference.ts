@@ -1,4 +1,4 @@
-import { BACKUP_EXAMPLE, FORM_EXAMPLE, PERSISTENCE_EXAMPLE } from "../../../packages/cli/src/lib/developer-recipes";
+import { BACKUP_EXAMPLE, CONNECTED_DRAFT, FORM_EXAMPLE, PERSISTENCE_EXAMPLE } from "../../../packages/cli/src/lib/developer-recipes";
 
 // The @freeappstore/sdk reference the MCP hands to connecting AIs (#91). Apps
 // built over the MCP only use the Shell, its navbar and the SDK components if
@@ -30,7 +30,8 @@ import { useEffect, useState } from 'react'
 import { initApp } from '@freeappstore/sdk'
 import { type NavItem, PageHeader, Shell, useToast } from '@freeappstore/sdk/ui'
 
-const fas = initApp({ appId: 'my-app' })
+// Replace this example identity with the app id provisioned for your repository.
+const fas = initApp({ appId: 'your-app-id' })
 
 // One entry per primary screen. \`title\` becomes the browser tab title on that route.
 const NAV: NavItem[] = [
@@ -54,11 +55,15 @@ export default function App() {
   )
 }
 
+function Notes() {
+  return <PageHeader title="Notes" />
+}
+
 function Tags() {
   const toast = useToast()
   return (
     <>
-      <PageHeader title="Tags" actions={<button onClick={() => toast.show('Saved', { variant: 'success' })}>Save</button>} />
+      <PageHeader title="Tags" actions={<button onClick={() => toast.show('Example notification', { variant: 'info' })}>Show notice</button>} />
       {/* screen content, built from the SDK components */}
     </>
   )
@@ -186,6 +191,14 @@ Use the existing Modal and labelled native controls. The app owns validation and
 an SDK result failure must cause onSave to throw. This is an editable example, not a required schema.
 \`\`\`tsx
 ${FORM_EXAMPLE}\`\`\``,
+  "connected-data": `## Private account data in a public app
+This complete component is the connected starter's actual example. Place it at
+web/src/components/ConnectedDraft.tsx; it uses the starter's existing PWA controller.
+Custom frames can adapt that import to their own controller. Account state, stale loads,
+save failures and account changes are handled by useConnectedKvDraft. Device storage is
+not account synchronization, and filtering public collections does not make them private.
+\`\`\`tsx
+${CONNECTED_DRAFT}\`\`\``,
   auth: `## Auth
 \`\`\`tsx
 import { initApp } from '@freeappstore/sdk'
@@ -196,6 +209,9 @@ const fas = initApp({ appId: 'my-app' })
 // fas.auth.user      — current user ({ id, login, avatarUrl } | null)
 \`\`\``,
   kv: `## Per-user KV Storage
+The following are API call fragments: fas is an initialized app. Call them inside an
+authenticated feature handler and handle rejection; public screens stay reachable.
+For a complete account-switch-safe component, request feature "connected-data".
 \`\`\`tsx
 await fas.kv.set('key', { any: 'json' })
 const val = await fas.kv.get('key')
@@ -243,7 +259,9 @@ const mine = await posts.query({ owner: fas.auth.user?.id })
 await posts.update(doc.id, { title: 'Updated' })
 await posts.delete(doc.id)
 \`\`\`
-Firestore-style. Public queryable JSON documents with ownership.`,
+Public queryable JSON documents with ownership. public-read data is readable by other
+users: a client-side owner filter or hidden UI is not confidentiality. Private account
+data belongs in per-user KV; room access rules require a separately authorized backend.`,
   rooms: `## Real-time Rooms (WebSocket)
 \`\`\`tsx
 const room = fas.rooms.join('my-room')

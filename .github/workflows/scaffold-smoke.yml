@@ -27,6 +27,8 @@ on:
       - 'packages/sdk/**'
       - 'packages/e2e/scaffold/**'
       - 'packages/e2e/scaffold.config.ts'
+      - 'scripts/developer-recipes.test.ts'
+      - 'workers/mcp/src/sdk-reference.ts'
       - 'packages/e2e/package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/scaffold-smoke.yml'
@@ -40,6 +42,8 @@ on:
       - 'packages/sdk/**'
       - 'packages/e2e/scaffold/**'
       - 'packages/e2e/scaffold.config.ts'
+      - 'scripts/developer-recipes.test.ts'
+      - 'workers/mcp/src/sdk-reference.ts'
       - 'packages/e2e/package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/scaffold-smoke.yml'
@@ -163,6 +167,7 @@ jobs:
           cd "$APP_ID"
           node "$GITHUB_WORKSPACE/packages/e2e/scaffold/prepare-artifact.mjs" .
           pnpm run --if-present typecheck
+          FAS_EXAMPLE_APP="$PWD" pnpm --dir "$GITHUB_WORKSPACE" exec vitest run scripts/developer-recipes.test.ts
           pnpm build
 
       - name: Run CLI compliance check on the scaffold

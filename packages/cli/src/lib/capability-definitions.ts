@@ -322,7 +322,7 @@ This recipe creates no room until imported and used, and installs no service.
   },
   media: {
     id: 'media',
-    version: '1.0.0',
+    version: '1.0.1',
     dependencies: {},
     environment: 'browser',
     packages: [{ name: '@freeappstore/sdk', range: '>=0.16.26', location: 'root' }],
@@ -366,7 +366,7 @@ and unsaved media, then be removed when the feature unmounts:
 
     const removeUpdateGuard = registerMediaBusyGuard(
       pwa,
-      () => recorder?.state !== 'inactive' || hasUnsavedMedia,
+      () => (recorder != null && recorder.state !== 'inactive') || hasUnsavedMedia,
     );
     // On cleanup: await stopRecording(recorder, stream); removeUpdateGuard();
 

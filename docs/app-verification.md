@@ -69,3 +69,24 @@ Record the source revision, actual installed SDK version, checks run, runtime fl
 remaining limitations and data location. A pushed revision, successful deployment,
 reachable URL and working feature are distinct milestones. For an existing PWA, verify
 the update path as well as a clean browser load.
+
+## Maintained authoring examples
+
+Examples are optional starting points. Complete examples must compile; API fragments
+need their stated app/handler context and are not standalone programs.
+
+| Example | Source and coverage |
+| --- | --- |
+| Shell/Profile routing | Complete MCP Shell example; whole-program typecheck and query/hash navigation regression. Replace its example app identity. |
+| Editable forms | Shared form body in MCP `forms`, the UI guide and browser fixture; typing, validation, pending/rejected writes and focus tests. |
+| Private account data | MCP `connected-data` uses the connected starter's actual component; typed with its controller import. Generated connected/account-switch tests cover stale responses and private-feature boundaries. |
+| Persistence/backup | Shared complete examples, compiled against SDK types; SDK tests cover failed writes, validation and rollback failures. |
+| PWA | Actual installed controller module is compiled; SDK and artifact-browser tests cover activation, busy work, reload and offline routes. |
+| Realtime | Actual optional room wrapper is compiled; SDK lifecycle tests cover closed-room callbacks and reconnect cleanup. Room broadcasts are not private durable data. |
+| Media | Actual optional module is compiled and the delivered busy-guard expression is exercised with no recorder, inactive, paused, recording and unsaved states. Permission/cleanup behavior remains in SDK media tests. |
+| KV/counters/collections/rooms call shapes | MCP API fragments are typechecked in an explicitly initialized app context. Calls belong in authorized feature handlers; public-read filters do not establish confidentiality. |
+
+Scaffold release checks also typecheck the prepared example feature against the installed
+published SDK before building it. Keep this separate from checking SDK source: passing
+against an unpublished checkout does not establish that the installed package supports
+the imports. Do not require any example's model, layout or source text in consumer apps.
