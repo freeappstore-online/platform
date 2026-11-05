@@ -2759,6 +2759,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-05T02:05:10.654Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "card",
+      "name": "card",
+      "category": "Productivity",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "A contact card with vCard downloads and optional public sharing by link or QR code.",
+      "appUrl": "https://card.freeappstore.online",
+      "repo": "freeappstore-online/card",
+      "hostedOn": "r2",
+      "type": "connected",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-05T04:39:50.497Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
