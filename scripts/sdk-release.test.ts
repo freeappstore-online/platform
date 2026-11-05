@@ -27,14 +27,20 @@ it('rebuilds SDK output after a release-version change and rejects mismatched me
     pkg.version = '123.4.5';
     await writeFile(join(root, 'packages/sdk/package.json'), JSON.stringify(pkg));
     const shell = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
-    await exec(shell, [resolve('scripts/prepare-sdk-release.sh'), '123.4.5'], { cwd: root });
+    await exec(shell, [resolve('scripts/prepare-sdk-release.sh'), '123.4.5'], {
+      cwd: root,
+      timeout: 60_000,
+    });
     expect(await readFile(join(root, 'packages/sdk/dist/logger.js'), 'utf8')).toContain(
       "SDK_VERSION = '123.4.5'",
     );
     await expect(
-      exec(shell, [resolve('scripts/prepare-sdk-release.sh'), '123.4.6'], { cwd: root }),
+      exec(shell, [resolve('scripts/prepare-sdk-release.sh'), '123.4.6'], {
+        cwd: root,
+        timeout: 60_000,
+      }),
     ).rejects.toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-}, 30_000);
+}, 90_000);

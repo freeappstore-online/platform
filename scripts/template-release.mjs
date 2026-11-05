@@ -63,7 +63,14 @@ export function planSync(previous, actual, desired, cliVersion) {
     hashes: Object.fromEntries(Object.entries(desired).map(([path, body]) => [path, digest(body)])),
   };
 }
-export async function apply(root, platform, preset, release, bootstrap = false) {
+export async function apply(
+  root,
+  platform,
+  preset,
+  release,
+  bootstrap = false,
+  allowWorkflowChanges = false,
+) {
   if (!presets.includes(preset)) throw new Error('Unknown mirror preset');
   if (!/^[a-f0-9]{40}$/.test(release.sourceSha))
     throw new Error('Invalid accepted source revision');
@@ -99,6 +106,13 @@ export async function apply(root, platform, preset, release, bootstrap = false) 
       }
     : state;
   const plan = planSync(previous, actual, desired, release.cliVersion);
+  const workflowChanges = [...Object.keys(plan.writes), ...plan.deletes].filter((path) =>
+    path.startsWith('.github/workflows/'),
+  );
+  if (workflowChanges.length && !allowWorkflowChanges)
+    throw new Error(
+      `Accepted release changes workflow files (${workflowChanges.join(', ')}). The default GITHUB_TOKEN lacks Workflows write permission. Use an authorized maintainer with --allow-workflow-changes, or configure TEMPLATE_SYNC_TOKEN scoped to the two mirrors with Contents, Workflows and Actions write. No files were changed.`,
+    );
   for (const [p, body] of Object.entries(plan.writes)) {
     await mkdir(dirname(resolve(root, p)), { recursive: true });
     await writeFile(resolve(root, p), body);
@@ -147,7 +161,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() !== release.sourceSha
     )
       throw new Error('Platform checkout must match accepted source revision');
-    await apply(root, process.cwd(), preset, release, command === 'bootstrap');
+    await apply(
+      root,
+      process.cwd(),
+      preset,
+      release,
+      command === 'bootstrap',
+      args.includes('--allow-workflow-changes'),
+    );
   } else if (command === 'lock-script') {
     const { INSTALL_APP_DEPENDENCIES } = await import(
       '../packages/cli/dist/lib/starter-dependencies.js'

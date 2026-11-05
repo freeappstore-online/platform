@@ -108,3 +108,49 @@ it('builds a relocated pinned workspace from a mirror working directory', async 
     await rm(root, { recursive: true, force: true });
   }
 }, 20_000);
+
+it('preflights workflow permission before changing any canonical files', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fas-mirror-permission-'));
+  try {
+    const mirror = join(root, 'mirror');
+    await mkdir(join(mirror, '.github/workflows'), { recursive: true });
+    const oldFiles = { 'README.md': 'old', '.github/workflows/deploy.yml': 'old workflow' };
+    for (const [path, body] of Object.entries(oldFiles)) await writeFile(join(mirror, path), body);
+    async function platform(name: string, files: Record<string, string>) {
+      const dir = join(root, name);
+      await mkdir(join(dir, 'packages/cli/dist/lib'), { recursive: true });
+      await writeFile(join(dir, 'package.json'), '{"type":"module"}');
+      await writeFile(
+        join(dir, 'packages/cli/dist/lib/starter-foundation.js'),
+        `export const getTemplateFiles = () => (${JSON.stringify(files)});`,
+      );
+      return dir;
+    }
+    const oldSource = await platform('old', oldFiles);
+    const nextSource = await platform('next', {
+      'README.md': 'new',
+      '.github/workflows/deploy.yml': 'new workflow',
+    });
+    await apply(
+      mirror,
+      oldSource,
+      'standalone',
+      { cliVersion: '0.4.74', sdkVersion: '0.16.38', sourceSha: 'a'.repeat(40) },
+      true,
+    );
+    const release = { cliVersion: '0.4.75', sdkVersion: '0.16.38', sourceSha: 'b'.repeat(40) };
+    await expect(apply(mirror, nextSource, 'standalone', release)).rejects.toThrow(
+      'Workflows write permission',
+    );
+    expect(await readFile(join(mirror, 'README.md'), 'utf8')).toBe('old');
+    expect(
+      JSON.parse(await readFile(join(mirror, '.fas-template/state.json'), 'utf8')).cliVersion,
+    ).toBe('0.4.74');
+    await apply(mirror, nextSource, 'standalone', release, false, true);
+    expect(await readFile(join(mirror, '.github/workflows/deploy.yml'), 'utf8')).toBe(
+      'new workflow',
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

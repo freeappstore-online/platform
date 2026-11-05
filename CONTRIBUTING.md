@@ -90,3 +90,18 @@ closed with the reason and, if they'd recur, ignored in `.github/dependabot.yml`
 You can't push to `main`, so open an issue describing the change (and a patch
 or link to your fork if you have one). A maintainer lands it on `main`.
 Security issues go through a private advisory instead (see `SECURITY.md`).
+
+
+Mirror workflow-file changes need GitHub **Workflows write**, which the default
+GITHUB_TOKEN cannot receive. The sync preflights these changes before modifying
+canonical files and explains the requirement. For fully automatic workflow
+updates, configure `TEMPLATE_SYNC_TOKEN` on each mirror, scoped to only the two
+mirror repositories with Contents, Workflows and Actions write. Do not copy a
+human token into CI. Without it, ordinary file updates still run automatically.
+
+A maintainer with existing workflow-write access can adopt an accepted release
+locally: use the pinned source checkout, run `node scripts/template-release.mjs
+apply <mirror> <preset> <accepted-record> --allow-workflow-changes`, apply the
+standard lock policy, typecheck/test/build, stage through the release script and
+push directly to main. Verify CI/compliance for the resulting SHA, then rerun the
+mirror workflow to verify its accepted state. Record this as manual adoption.

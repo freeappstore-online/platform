@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: main
+          token: ${{ secrets.TEMPLATE_SYNC_TOKEN || github.token }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -44,7 +45,8 @@ jobs:
       - name: Apply, verify and commit canonical changes
         if: steps.release.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.TEMPLATE_SYNC_TOKEN || github.token }}
+          HAS_WORKFLOW_TOKEN: ${{ secrets.TEMPLATE_SYNC_TOKEN != '' }}
         run: |
           set -euo pipefail
           platform="$PWD/.platform-maintenance"
@@ -55,14 +57,16 @@ jobs:
           (cd "$platform" && pnpm -r --filter './packages/*' build)
           test -f "$platform/packages/cli/dist/lib/starter-foundation.js"
           preset="${GITHUB_REPOSITORY##*template-}"
-          (cd "$platform" && node scripts/template-release.mjs apply "$GITHUB_WORKSPACE" "$preset" "$RUNNER_TEMP/starter.json")
+          workflow_args=()
+          if [ "$HAS_WORKFLOW_TOKEN" = true ]; then workflow_args+=(--allow-workflow-changes); fi
+          (cd "$platform" && node scripts/template-release.mjs apply "$GITHUB_WORKSPACE" "$preset" "$RUNNER_TEMP/starter.json" "${workflow_args[@]}")
           lock_script=$(cd "$platform" && node scripts/template-release.mjs lock-script)
           bash -c "$lock_script"
           pnpm typecheck
           pnpm test
           pnpm build
           # Reapply verifies generated-file parity after all app-owned scripts ran.
-          (cd "$platform" && node scripts/template-release.mjs apply "$GITHUB_WORKSPACE" "$preset" "$RUNNER_TEMP/starter.json")
+          (cd "$platform" && node scripts/template-release.mjs apply "$GITHUB_WORKSPACE" "$preset" "$RUNNER_TEMP/starter.json" "${workflow_args[@]}")
           (cd "$platform" && node scripts/template-release.mjs stage "$GITHUB_WORKSPACE")
           git config user.name 'FreeAppStore template sync'
           git config user.email 'template-sync@freeappstore.online'
@@ -72,7 +76,7 @@ jobs:
           fi
       - name: Accept mirror CI for the exact source
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.TEMPLATE_SYNC_TOKEN || github.token }}
         run: |
           set -euo pipefail
           sha=$(git rev-parse HEAD)
