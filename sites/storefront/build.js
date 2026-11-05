@@ -494,16 +494,32 @@ const SETTINGS_BOOTSTRAP_SOURCE = "(function(){try{var p=localStorage.getItem('s
 const SETTINGS_BOOTSTRAP_TAG = `<script>${SETTINGS_BOOTSTRAP_SOURCE}</script>`;
 const inlineScriptHash = 'sha256-' + crypto.createHash('sha256').update(SETTINGS_BOOTSTRAP_SOURCE).digest('base64');
 
+// Anti-FOUC critical style (#426): body sets --paper but <html> sets no
+// background, so the first paint is the browser's white canvas before the
+// render-blocking style.css applies — a white flash, jarring in dark mode. Set
+// the root background inline, right after the bootstrap (which has already set
+// data-theme). The strict CSP (style-src 'self') blocks inline styles, so
+// criticalStyleHash is added to style-src — the same mechanism as the script
+// hash above. Values mirror --paper in style.css (light / dark).
+const CRITICAL_STYLE_CSS = 'html{background:#f8fafc}:root[data-theme="dark"]{background:#0f172a}';
+const CRITICAL_STYLE_TAG = `<style>${CRITICAL_STYLE_CSS}</style>`;
+const criticalStyleHash = 'sha256-' + crypto.createHash('sha256').update(CRITICAL_STYLE_CSS).digest('base64');
+// The pre-paint head block injected on every page: theme script + critical style.
+const HEAD_BOOTSTRAP = `${SETTINGS_BOOTSTRAP_TAG}\n  ${CRITICAL_STYLE_TAG}`;
+
 function injectSettingsBootstrap(html, file) {
+  // analytics.html is kept free of inline <style> by design (issue #122, and
+  // build.test), so it gets the theme script only — not the critical style.
+  const headBlock = /(^|\/)analytics\.html$/.test(file) ? SETTINGS_BOOTSTRAP_TAG : HEAD_BOOTSTRAP;
   const placeholders = html.match(/\{\{SETTINGS_BOOTSTRAP\}\}/g) || [];
   if (placeholders.length > 1) {
     throw new Error(`${file} has more than one settings bootstrap placeholder`);
   }
-  if (placeholders.length === 1) return html.replace('{{SETTINGS_BOOTSTRAP}}', SETTINGS_BOOTSTRAP_TAG);
+  if (placeholders.length === 1) return html.replace('{{SETTINGS_BOOTSTRAP}}', headBlock);
   if (!/<head\b[^>]*>/i.test(html)) throw new Error(`${file} has no <head> for the settings bootstrap`);
   // Pages which did not previously include the bootstrap (for example detail
   // and author pages) get the same parser-blocking script at the start of head.
-  return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${SETTINGS_BOOTSTRAP_TAG}`);
+  return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${headBlock}`);
 }
 
 // Subresource Integrity hashes for local script files. Each <script src="...">
@@ -1327,7 +1343,7 @@ const csp = [
   "default-src 'self'",
   "img-src 'self' https://*.freeappstore.online https://*.freegamestore.online https://avatars.githubusercontent.com data:",
   `script-src 'self' '${inlineScriptHash}' https://static.cloudflareinsights.com`,
-  "style-src 'self' https://fonts.googleapis.com",
+  `style-src 'self' '${criticalStyleHash}' https://fonts.googleapis.com`,
   "font-src 'self' https://fonts.gstatic.com",
   "connect-src 'self' https://*.freeappstore.online https://api.freeappstore.online https://cloudflareinsights.com",
   "frame-src https://*.freeappstore.online https://*.freegamestore.online https://*.proappstore.online",
