@@ -31,7 +31,8 @@ Vite development the production worker is absent, so the SDK skips registration,
 listeners and UI. Use a production build with preview to verify installation,
 updates and offline behavior. The `enabled` option requires SDK 0.16.39; omitted,
 it defaults to enabled. Disabling initialization does not unregister workers or
-clear previously saved data or caches.
+clear previously saved data or caches. Restart a running development server
+after upgrading dependencies so it uses the newly installed SDK.
 
 ## Update contract
 

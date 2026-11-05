@@ -850,6 +850,12 @@ test('preference changes synchronize across tabs (#340)', async ({ page, context
 
 test('development mode does not request the absent production service worker', async ({ page }) => {
   const requests: string[] = [];
+  const errors: string[] = [];
+  // Failed worker script fetches need not appear in page request events.
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  page.on('pageerror', (error) => errors.push(error.message));
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/sw.js') requests.push(request.url());
   });
@@ -857,6 +863,7 @@ test('development mode does not request the absent production service worker', a
   await expect(page.getByRole('main')).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(requests).toEqual([]);
+  expect(errors).toEqual([]);
   expect(
     await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
   ).toBe(0);

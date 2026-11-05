@@ -16,12 +16,14 @@ does not imply script synchronization.
 The starting point was published CLI 0.4.73, standalone plus the optional
 persistence capability. The app adopted SDK 0.16.38 and used published CLI 0.4.74
 for compliance and offline artifact diagnosis as findings were fixed. CLI 0.4.75
-subsequently delivered the generic configured-test deployment gate.
+subsequently delivered the generic configured-test deployment gate. Final adoption
+uses published SDK 0.16.39 and CLI 0.4.76 with PWA capability 1.0.1.
 
 App source: [freeappstore-online/cue-scroll](https://github.com/freeappstore-online/cue-scroll).
 The initial feature commit is `964a89de4792985f81185833c97bd27b86f7dfc7`;
 the final mobile-layout correction is `53ace47c94b88795c08172666b5f1035221ef6ab`.
 Both deployed successfully with app-owned unit and browser tests before upload.
+The shared PWA capability adoption is `4536bfba22fcecd48b6340cea3a207745a8ceb31`.
 
 ## What improved from the Pitstop experience
 
@@ -122,3 +124,12 @@ CLI tarball returned 404. #422 extends the same bounded deadline to that exact
 CLI archive, only before a target exists. Partial initialization, unrelated
 archives and timed-out operations remain immediate failures. Local app checks
 continued with the checkout CLI while published acceptance remained gated.
+
+The upgraded app passed five unit tests, typecheck, build and all six production
+browser scenarios. After restarting Vite to pick up upgraded dependencies, fresh
+mobile Chromium and WebKit development sessions produced no worker requests,
+registrations or runtime errors. The shared browser regression also checks
+console errors: failed worker fetches need not appear in page request events.
+A deliberate negative control reproduced the original MIME error, then restoring
+the capability passed both desktop and mobile regression cases. The published
+CLI's repeat upgrade reported no changes. No app data migration was needed.
