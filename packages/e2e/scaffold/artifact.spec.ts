@@ -1,5 +1,33 @@
 import { expect, test } from '@playwright/test';
 
+test('installation belongs to Profile without a promotion footer or OAuth', async ({ page }) => {
+  await page.route('https://api.freeappstore.online/**', (route) =>
+    route.fulfill({ json: { value: null, friends: [], requests: [] } }),
+  );
+  await page.goto('/');
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+        prompt: async () => {
+          document.documentElement.dataset.installRequested = 'yes';
+        },
+      }),
+    );
+  });
+  const install = page.getByRole('button', { name: 'Install app', exact: true });
+  await expect(install).toHaveCount(0);
+  await expect(
+    page.getByRole('complementary', { name: 'App installation and updates' }),
+  ).toBeHidden();
+  await page.locator('header a[aria-label="Profile"]').click();
+  await expect(install).toBeVisible();
+  await install.click();
+  await expect(page.locator('html')).toHaveAttribute('data-install-requested', 'yes');
+  await expect(install).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe('/profile');
+});
+
 test('produced artifact renders navigation and persists a real theme change', async ({ page }) => {
   const connected = process.env.SCAFFOLD_TEMPLATE === 'connected';
   await page.route('https://api.freeappstore.online/**', (route) =>

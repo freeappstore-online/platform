@@ -59,3 +59,35 @@ initialize_published_scaffold() {
   echo "::error::Published CLI initialization did not resolve within the shared five-minute deadline."
   return 1
 }
+
+# SDK metadata may be visible while its exact archive still returns 404 (#411).
+# Only the selected archive's propagation failure is retryable here.
+install_published_scaffold_dependencies() {
+  local deadline="${PUBLISHED_REGISTRY_DEADLINE:-$(( $(date +%s) + 300 ))}"
+  local remaining pause status output
+  output=$(mktemp)
+  while true; do
+    remaining=$(( deadline - $(date +%s) ))
+    if [ "$remaining" -le 0 ]; then break; fi
+    if timeout "${remaining}s" pnpm install --no-frozen-lockfile >"$output" 2>&1; then
+      cat "$output"
+      rm "$output"
+      return 0
+    else
+      status=$?
+    fi
+    cat "$output"
+    if [ "$status" -eq 124 ] || [ "$status" -eq 137 ] || ! grep -F 'ERR_PNPM_FETCH_404' "$output" | grep -Fq "GET https://registry.npmjs.org/@freeappstore/sdk/-/sdk-${SDK_VERSION}.tgz:"; then
+      rm "$output"
+      return "$status"
+    fi
+    remaining=$(( deadline - $(date +%s) ))
+    if [ "$remaining" -le 0 ]; then break; fi
+    pause=$(( remaining < 5 ? remaining : 5 ))
+    echo "Selected SDK archive is not available yet; retrying within the original deadline."
+    sleep "$pause"
+  done
+  rm "$output"
+  echo "::error::Published scaffold dependency installation exceeded the shared five-minute deadline."
+  return 1
+}

@@ -35,14 +35,14 @@ describe('fresh scaffold capability checks', () => {
     await expect(readFile(join(root, '.fas-capabilities.json'))).rejects.toThrow();
   });
 
-  it('uses SDK 0.16.35 as the fresh Shell baseline', () => {
+  it('uses SDK 0.16.37 as the fresh Shell baseline', () => {
     const files = getTemplateFiles(
       { store: 'apps', nounPlural: 'apps', r2Bucket: 'fas-apps' },
       'generic',
       'standalone',
     );
     expect(JSON.parse(files['web/package.json']!).dependencies['@freeappstore/sdk']).toBe(
-      '^0.16.35',
+      '^0.16.37',
     );
     expect(files['CLAUDE.md']).toContain('/docs/starter-release.md');
   });

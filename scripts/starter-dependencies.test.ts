@@ -11,6 +11,7 @@ import {
 import { getTemplateFiles } from '../packages/cli/src/lib/starter-foundation.js';
 
 const dirs: string[] = [];
+const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
 function temporary() {
   const dir = mkdtempSync(join(tmpdir(), 'fas-lock-'));
   dirs.push(dir);
@@ -26,7 +27,7 @@ it.each(['missing', 'current', 'changed', 'network', 'lifecycle'])(
     const cwd = temporary();
     if (mode !== 'missing') writeFileSync(join(cwd, 'pnpm-lock.yaml'), 'retained');
     const result = spawnSync(
-      'bash',
+      bash,
       [
         '-c',
         `
@@ -83,7 +84,7 @@ it('retains only the validated lock and rejects concurrent main changes', () => 
   writeFileSync(join(app, 'pnpm-lock.yaml'), 'accepted dependency graph');
   writeFileSync(join(app, 'unrelated.txt'), 'not part of this commit');
   const save = () =>
-    spawnSync('bash', ['-c', SAVE_APP_DEPENDENCY_LOCK], { cwd: app, encoding: 'utf8' });
+    spawnSync(bash, ['-c', SAVE_APP_DEPENDENCY_LOCK], { cwd: app, encoding: 'utf8' });
   expect(save().status).toBe(0);
   expect(git(remote, 'show', 'main:pnpm-lock.yaml')).toBe('accepted dependency graph');
   expect(git(app, 'diff', '--name-only', acceptedSource, 'HEAD')).toBe('pnpm-lock.yaml');
@@ -109,7 +110,7 @@ it('reproduces a fresh minimal workspace and deliberately updates changed manife
   const cwd = temporary();
   writeFileSync(join(cwd, 'package.json'), '{"private":true,"packageManager":"pnpm@10.30.3"}');
   const run = () =>
-    spawnSync('bash', ['-c', INSTALL_APP_DEPENDENCIES], { cwd, encoding: 'utf8', timeout: 30_000 });
+    spawnSync(bash, ['-c', INSTALL_APP_DEPENDENCIES], { cwd, encoding: 'utf8', timeout: 30_000 });
   expect(run().status).toBe(0);
   expect(existsSync(join(cwd, 'pnpm-lock.yaml'))).toBe(true);
   const lock = readFileSync(join(cwd, 'pnpm-lock.yaml'), 'utf8');

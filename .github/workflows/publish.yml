@@ -243,7 +243,8 @@ jobs:
               writeFileSync(path, `${JSON.stringify(pkg, null, 2)}\n`);
             }
           '
-          pnpm install --no-frozen-lockfile
+          source "$GITHUB_WORKSPACE/scripts/published-scaffold.sh"
+          install_published_scaffold_dependencies
 
       - name: Compile generated capability imports against the published SDK
         working-directory: /tmp/published-capability-scaffold
