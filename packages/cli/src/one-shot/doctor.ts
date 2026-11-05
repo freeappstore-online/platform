@@ -18,16 +18,16 @@ export interface CheckResult {
  * Returns the full result list. The CLI's `fas doctor` and the TUI's
  * Doctor screen both render this same data.
  */
-export async function runDoctor(): Promise<CheckResult[]> {
+export async function runDoctor(
+  options: { offline?: boolean; root?: string } = {},
+): Promise<CheckResult[]> {
   const checks = await Promise.all([
     checkNodeVersion(),
     checkBinary('git'),
     checkBinary('pnpm'),
-    checkPackageManager(),
-    checkConfigFile(),
-    checkSignedIn(),
-    checkApiReachable(),
-    validateBuildTarget(fsFileSource(process.cwd())),
+    checkPackageManager(options.root ?? process.cwd()),
+    ...(!options.offline ? [checkConfigFile(), checkSignedIn(), checkApiReachable()] : []),
+    validateBuildTarget(fsFileSource(options.root ?? process.cwd())),
   ]);
   return checks;
 }
@@ -55,8 +55,8 @@ async function checkBinary(name: string): Promise<CheckResult> {
     : { name: `${name} installed`, status: 'fail', detail: `${name} not on PATH` };
 }
 
-async function checkPackageManager(): Promise<CheckResult> {
-  const pkgPath = join(process.cwd(), 'package.json');
+async function checkPackageManager(root: string): Promise<CheckResult> {
+  const pkgPath = join(root, 'package.json');
   try {
     const raw = await readFile(pkgPath, 'utf8');
     const pkg = JSON.parse(raw);
@@ -67,7 +67,13 @@ async function checkPackageManager(): Promise<CheckResult> {
         detail: 'Missing in package.json — CI will fail. Add: "packageManager": "pnpm@10.30.3"',
       };
     }
-    return { name: 'packageManager field', status: 'pass', detail: pkg.packageManager };
+    return {
+      name: 'packageManager field',
+      status: /^pnpm@\d+\.\d+\.\d+$/.test(pkg.packageManager) ? 'pass' : 'fail',
+      detail: /^pnpm@\d+\.\d+\.\d+$/.test(pkg.packageManager)
+        ? pkg.packageManager
+        : 'Unrecognized packageManager value; use an exact pnpm version',
+    };
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
@@ -95,7 +101,7 @@ async function checkConfigFile(): Promise<CheckResult> {
     return {
       name: 'Config file',
       status: 'fail',
-      detail: `${path}: ${err instanceof Error ? err.message : String(err)}`,
+      detail: `${path}: could not read valid JSON; inspect locally`,
     };
   }
 }
@@ -113,12 +119,18 @@ async function checkSignedIn(): Promise<CheckResult> {
         detail: 'Session present but missing GitHub login — run `fas login` again.',
       };
     }
-    return { name: 'Signed in', status: 'pass', detail: `@${config.github.login}` };
-  } catch (err) {
+    return {
+      name: 'Signed in',
+      status: 'pass',
+      detail: /^[a-zA-Z0-9-]{1,39}$/.test(config.github.login)
+        ? `@${config.github.login}`
+        : 'Session present; account identity unavailable',
+    };
+  } catch {
     return {
       name: 'Signed in',
       status: 'fail',
-      detail: err instanceof Error ? err.message : String(err),
+      detail: 'Could not read account configuration',
     };
   }
 }
@@ -132,15 +144,22 @@ async function checkApiReachable(): Promise<CheckResult> {
     });
     const ms = Date.now() - started;
     if (res.ok) {
-      return { name: 'API reachable', status: 'pass', detail: `${config.apiBase} (${ms}ms)` };
+      return {
+        name: 'API reachable',
+        status: 'pass',
+        detail: `Platform health responded (${ms}ms)`,
+      };
     }
     return {
       name: 'API reachable',
       status: 'fail',
-      detail: `HTTP ${res.status} from ${config.apiBase}`,
+      detail: `Platform health returned HTTP ${res.status}`,
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg =
+      err instanceof Error && err.message.includes('ENOTFOUND')
+        ? 'ENOTFOUND: platform health host unavailable'
+        : 'Platform health unavailable; check connection/API configuration';
     return { name: 'API reachable', status: 'fail', detail: msg };
   }
 }

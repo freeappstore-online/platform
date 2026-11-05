@@ -33,7 +33,7 @@ After the first successful code push and deploy, live at `https://my-app.freeapp
 | `fas login` | Sign in with GitHub via the device-authorization flow. Token cached at `~/.fas/config.json` (`0600`). |
 | `fas logout` | Clear the cached session. |
 | `fas whoami` | Print the currently signed-in GitHub login. |
-| `fas doctor` | Health check — Node version, git, pnpm, config, signed-in state, API reachability. |
+| `fas doctor` | App health and stage report; `--offline`, `--json`, `--verify`, `--artifact`. |
 | `fas init <app-id>` | Generate standalone and connected apps from the canonical platform starter foundation; game templates remain available through their template repositories. Replaces app placeholders, runs `git init`, makes the first commit. |
 | `fas check` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
 | `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing, then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
@@ -77,7 +77,9 @@ fas whoami
 Run local health checks: Node version, git, pnpm, config file, signed-in state, and API reachability.
 
 ```bash
-fas doctor
+fas doctor --offline
+fas doctor --offline --verify --artifact
+fas doctor --offline --json
 ```
 
 ### `fas init <app-id>`

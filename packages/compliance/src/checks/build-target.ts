@@ -1,6 +1,7 @@
 import type { FileSource } from '../lib/file-source.js';
 import { stripCommentsOnly, stripHtmlComments } from '../lib/strip.js';
 import type { CheckResult } from '../types.js';
+import { checkArtifactIcons } from './artifact-icons.js';
 
 export interface BuildTarget {
   appId: string;
@@ -166,7 +167,7 @@ export async function validateBuildTarget(
           workspace.includes(`${applicationRoot.split('/')[0]}/*`)));
     if (!selected)
       throw new Error(
-        `Build '${build}' does not establish a path to ${applicationRoot}. Set buildCommand to an explicit filtered/root build and align deploy CI.`,
+        `Declared build does not establish a path to ${applicationRoot}. Set buildCommand to an explicit filtered/root build and align deploy CI.`,
       );
     for (const workflowName of ['.github/workflows/deploy.yml', '.github/workflows/deploy.yaml']) {
       const workflow = ((await source.read(workflowName)) ?? '').replace(/^\s*#.*$/gm, '');
@@ -197,6 +198,8 @@ export async function validateBuildTarget(
         );
     }
     if (options.artifact) {
+      const icons = await checkArtifactIcons(source, outputPath);
+      if (icons.status === 'fail') throw new Error(icons.detail);
       const artifactEntry = at(outputPath, 'index.html');
       const artifact = await reachable(source, artifactEntry, true);
       if (!artifact.has(artifactEntry) || artifact.size < 2)
@@ -218,9 +221,18 @@ export async function validateBuildTarget(
     return {
       name,
       status: 'pass',
-      detail: `${appId}: ${buildCommand} -> ${entry} -> ${outputPath}`,
+      detail: `${appId}: declared build -> ${entry} -> ${outputPath}`,
     };
   } catch (error) {
-    return { name, status: 'fail', detail: error instanceof Error ? error.message : String(error) };
+    return {
+      name,
+      status: 'fail',
+      detail:
+        error instanceof SyntaxError
+          ? 'Invalid JSON in app configuration; inspect fas.json/package.json locally'
+          : error instanceof Error
+            ? error.message
+            : 'Could not validate build/deploy target',
+    };
   }
 }
