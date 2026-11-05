@@ -180,7 +180,12 @@ analyticsRoutes.put('/internal/apps/:appId/analytics/cf-token', async (c) => {
 
 const STATS_DAYS_DEFAULT = 7;
 const STATS_DAYS_MAX = 90;
-const STATS_DATASET = 'fas_app_analytics';
+/**
+ * Analytics Engine dataset the stats queries read. Must equal the `dataset`
+ * of the ANALYTICS binding in wrangler.toml, which is where the ingest
+ * endpoint writes; nothing else ties the two names together.
+ */
+export const STATS_DATASET = 'fas_app_analytics';
 
 interface StatsRow {
   total_views: number;

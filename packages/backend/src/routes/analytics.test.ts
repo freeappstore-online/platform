@@ -6,6 +6,7 @@ import {
   type AdminUsageReport,
   buildAdminUsage,
   buildLoaderJs,
+  STATS_DATASET,
   usageDayKeys,
 } from './analytics.js';
 
@@ -57,6 +58,30 @@ function summaryEnv(owner = 'alice'): Env {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+// The backend compiles against workers-types only, so node:fs is loaded the
+// way sqlite-d1.testutil.ts does it rather than through a static import.
+const nodeModule = <T>(name: string) => import(/* @vite-ignore */ name) as Promise<T>;
+const fs = await nodeModule<{ readFileSync(file: URL, encoding: 'utf8'): string }>('node:fs');
+const WRANGLER_TOML = new URL(
+  '../../wrangler.toml',
+  (import.meta as unknown as { url: string }).url,
+);
+
+describe('wrangler.toml declares what the analytics routes read', () => {
+  const toml = fs.readFileSync(WRANGLER_TOML, 'utf8');
+
+  it('binds ANALYTICS to the dataset the stats queries read', () => {
+    const block = toml.match(/\[\[analytics_engine_datasets\]\]\n((?:[^\n[]+\n)+)/);
+    expect(block, 'no [[analytics_engine_datasets]] block').not.toBeNull();
+    expect(block![1]).toMatch(/^binding = "ANALYTICS"$/m);
+    expect(block![1]).toMatch(new RegExp(`^dataset = "${STATS_DATASET}"$`, 'm'));
+  });
+
+  it('sets CF_ACCOUNT_ID for the Analytics Engine SQL API', () => {
+    expect(toml).toMatch(/^CF_ACCOUNT_ID = "[0-9a-f]{32}"$/m);
+  });
+});
 
 const empty = {
   cf_beacon_token: null,
