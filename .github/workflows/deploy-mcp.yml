@@ -50,6 +50,9 @@ jobs:
       - name: Tests
         run: npm test
 
+      - name: Real Worker MCP runtime smoke
+        run: npm run test:runtime
+
       - name: Deploy
         run: npx wrangler deploy
         env:

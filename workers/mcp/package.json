@@ -7,7 +7,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:runtime": "node scripts/test-runtime.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261012.1",
@@ -18,10 +19,12 @@
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.8.1",
-    "@modelcontextprotocol/sdk": "1.26.0",
-    "agents": "^0.7.9",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@modelcontextprotocol/server": "2.4.0",
+    "agents": "0.33.0",
     "ai": "^6.0.0",
     "hono": "^4.13.7",
-    "zod": "^3.23.8"
+    "zod": "4.6.7"
   }
 }

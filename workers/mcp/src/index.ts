@@ -1,3 +1,4 @@
+import { MAX_TOOL_INPUT_ELEMENTS, withBoundedBody } from "./request-limits.js";
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
 import { McpAgent } from "agents/mcp";
@@ -94,7 +95,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
   server = new McpServer({
     name: "FreeAppStore",
     version: "0.2.0",
-  });
+  }, { maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS });
 
   // The OAuth provider only routes authenticated requests to this handler, so
   // props (set in completeAuthorization) are always present for tool calls.
@@ -552,4 +553,4 @@ const oauthProvider = new OAuthProvider({
 });
 
 // Every request is rate-limited per IP before the OAuth provider sees it (#68).
-export default { fetch: withRateLimit<Env>((request, env, ctx) => oauthProvider.fetch(request, env, ctx)) };
+export default { fetch: withRateLimit<Env>((request, env, ctx) => withBoundedBody(request, (bounded) => oauthProvider.fetch(bounded, env, ctx))) };

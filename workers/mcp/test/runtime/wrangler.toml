@@ -1,0 +1,13 @@
+name = "fas-mcp-runtime-test"
+main = "entry.ts"
+compatibility_date = "2025-04-01"
+compatibility_flags = ["nodejs_compat"]
+[vars]
+API_BASE = "http://127.0.0.1:1"
+GITHUB_ORG = "runtime-test"
+AGENT_BASE = "http://127.0.0.1:1"
+[durable_objects]
+bindings = [{ name = "MCP_OBJECT", class_name = "FasMcpAgent" }]
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FasMcpAgent"]
