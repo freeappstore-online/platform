@@ -1,6 +1,6 @@
 {
   "name": "@freeappstore/sdk",
-  "version": "0.16.40",
+  "version": "0.16.41",
   "description": "Browser SDK for FreeAppStore — auth, KV, collections, counters, rooms, proxy, encrypted user keys, roles, friends, email, push reminders, device-local persistence, validated backup and file export, React hooks, and UI components.",
   "license": "MIT",
   "type": "module",
