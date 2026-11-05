@@ -18,11 +18,17 @@ on:
       - 'packages/quality/**'
       - '.github/workflows/publish.yml'
       - 'scripts/published-scaffold.sh'
+      - 'scripts/template-release.mjs'
+      - 'scripts/accept-starter-release.sh'
   workflow_dispatch: # manual trigger — publishes all packages
 
 permissions:
   contents: write # push version bumps back to main
   id-token: write # OIDC token for npm trusted publishing + provenance
+
+concurrency:
+  group: npm-publication
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -259,3 +265,31 @@ jobs:
           pnpm --package=typescript@5.9.3 dlx tsc --noEmit --skipLibCheck \
             --target ES2022 --module NodeNext --moduleResolution NodeNext \
             "$ENTRYPOINT"
+
+  accept-starter:
+    needs: [publish, published-capability-scaffold]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --filter './packages/*' build
+      - name: Record accepted generator after exact-source gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED_PACKAGES: ${{ needs.publish.outputs.versions }}
+        run: |
+          CLI_VERSION=$(printf '%s\n' "$PUBLISHED_PACKAGES" | grep -oE '@freeappstore/cli@[0-9]+\.[0-9]+\.[0-9]+' | cut -d@ -f3)
+          SDK_VERSION=$(printf '%s\n' "$PUBLISHED_PACKAGES" | grep -oE '@freeappstore/sdk@[0-9]+\.[0-9]+\.[0-9]+' | cut -d@ -f3)
+          export CLI_VERSION SDK_VERSION
+          bash scripts/accept-starter-release.sh

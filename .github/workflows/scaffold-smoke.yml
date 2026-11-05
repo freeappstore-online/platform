@@ -32,6 +32,10 @@ on:
       - 'packages/e2e/package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/scaffold-smoke.yml'
+      - '.github/workflows/publish.yml'
+      - 'scripts/published-scaffold.sh'
+      - 'scripts/template-release.mjs'
+      - 'scripts/accept-starter-release.sh'
   pull_request:
     branches: [main]
     paths:
@@ -47,6 +51,10 @@ on:
       - 'packages/e2e/package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/scaffold-smoke.yml'
+      - '.github/workflows/publish.yml'
+      - 'scripts/published-scaffold.sh'
+      - 'scripts/template-release.mjs'
+      - 'scripts/accept-starter-release.sh'
   schedule:
     # 04:30 UTC daily — independent of CLI changes, so template-side drift
     # surfaces here on its own schedule.

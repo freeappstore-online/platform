@@ -1,0 +1,90 @@
+# Install only in template-standalone and template-connected, never consumer apps.
+name: Sync accepted starter
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: accepted-template-sync
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'freeappstore-online/template-standalone' || github.repository == 'freeappstore-online/template-connected'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read accepted release
+        id: release
+        run: |
+          curl --fail --silent --show-error https://raw.githubusercontent.com/freeappstore-online/platform/main/releases/starter.json -o "$RUNNER_TEMP/starter.json"
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const release = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/starter.json`));
+          if (!/^[a-f0-9]{40}$/.test(release.sourceSha) || !/^\d+\.\d+\.\d+$/.test(release.cliVersion)) throw new Error('Invalid acceptance record');
+          const state = JSON.parse(fs.readFileSync('.fas-template/state.json'));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `sha=${release.sourceSha}\nchanged=${state.sourceSha !== release.sourceSha}\n`);
+          JS
+      - uses: actions/checkout@v4
+        if: steps.release.outputs.changed == 'true'
+        with:
+          repository: freeappstore-online/platform
+          ref: ${{ steps.release.outputs.sha }}
+          path: .platform-maintenance
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        if: steps.release.outputs.changed == 'true'
+      - name: Apply, verify and commit canonical changes
+        if: steps.release.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          platform="$PWD/.platform-maintenance"
+          # Keep the maintenance checkout outside the mirror working tree.
+          mv "$platform" "$RUNNER_TEMP/platform"
+          platform="$RUNNER_TEMP/platform"
+          pnpm --dir "$platform" install --frozen-lockfile
+          pnpm --dir "$platform" -r --filter './packages/*' build
+          preset="${GITHUB_REPOSITORY##*template-}"
+          (cd "$platform" && node scripts/template-release.mjs apply "$GITHUB_WORKSPACE" "$preset" "$RUNNER_TEMP/starter.json")
+          lock_script=$(cd "$platform" && node scripts/template-release.mjs lock-script)
+          bash -c "$lock_script"
+          pnpm typecheck
+          pnpm test
+          pnpm build
+          # Reapply verifies generated-file parity after all app-owned scripts ran.
+          (cd "$platform" && node scripts/template-release.mjs apply "$GITHUB_WORKSPACE" "$preset" "$RUNNER_TEMP/starter.json")
+          (cd "$platform" && node scripts/template-release.mjs stage "$GITHUB_WORKSPACE")
+          git config user.name 'FreeAppStore template sync'
+          git config user.email 'template-sync@freeappstore.online'
+          if ! git diff --cached --quiet; then
+            git commit -m "build: adopt accepted starter $(node -p 'require(process.env.RUNNER_TEMP + "/starter.json").cliVersion')"
+            git push origin HEAD:main
+          fi
+      - name: Accept mirror CI for the exact source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          # GITHUB_TOKEN pushes do not trigger push workflows. Dispatch explicitly.
+          for workflow in ci.yml compliance.yml; do
+            gh workflow run "$workflow" --ref main
+            deadline=$(( $(date +%s) + 900 ))
+            while true; do
+              result=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$sha&event=workflow_dispatch&per_page=10" --jq '.workflow_runs[0] | if .status == "completed" then .conclusion else "pending" end')
+              if [ "$result" = success ]; then break; fi
+              if [ "$result" != pending ] && [ "$result" != null ] && [ -n "$result" ]; then echo "$workflow failed: $result"; exit 1; fi
+              if [ "$(date +%s)" -ge "$deadline" ]; then echo "No successful $workflow for $sha"; exit 1; fi
+              sleep 10
+            done
+          done
+          echo "Mirror accepted: $sha"

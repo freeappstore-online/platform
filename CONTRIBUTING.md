@@ -41,14 +41,31 @@ so a failing test blocks that deploy.
 
 `template-standalone` and `template-connected` are generated mirrors of the
 canonical starter foundation in `packages/cli/src/lib/starter-foundation.ts`.
-To release a template change, check out both repositories at their `main`
-branches, then run `pnpm --filter @freeappstore/cli build` followed by
-`pnpm --filter @freeappstore/cli sync:templates <standalone-checkout> <connected-checkout>`.
-Review each diff, refresh its lockfile with `pnpm install --lockfile-only
---no-frozen-lockfile`, and run that repository's build, test, and typecheck
-before committing directly to its `main`. The sync writes canonical files
-only; it preserves additional repo files such as contributor guidance and
-template-specific assets.
+Publication now records `releases/starter.json` only after the published-package
+matrix, exact-source CI and browser scaffold checks pass. The acceptance gate
+compares both published CLI generators against that source revision. Each mirror
+pulls this pinned source using its own scheduled `sync-template.yml` workflow;
+no cross-repository write credential or consumer app update is involved.
+
+Mirrors track reviewed canonical hashes in `.fas-template/state.json`. The sync
+aborts on manual edits, path conflicts, downgrades or a concurrent main push,
+preserves extra infrastructure, and applies the deployment dependency-lock policy.
+It typechecks, tests and builds before committing directly to main, then explicitly
+dispatches CI and compliance for the resulting SHA (token pushes do not trigger
+push workflows). Re-run a failed mirror workflow without re-publishing npm.
+An acceptance-job failure can similarly be re-run independently.
+
+For intentional manual reconciliation, check out both mirrors on main, build the
+accepted platform revision and run `pnpm --filter @freeappstore/cli sync:templates
+<standalone-checkout> <connected-checkout>`. Review all differences, refresh only
+an outdated lock, and run typecheck/test/build. Initialize a new mirror baseline
+with `node scripts/template-release.mjs bootstrap <mirror> <preset>
+<accepted-starter.json>` from the accepted platform checkout; this refuses files
+that differ from the canonical generator. Install the mirror-only workflow from
+`scripts/mirror-sync-workflow.yml` as `.github/workflows/sync-template.yml` and
+add `workflow_dispatch` to its existing CI/compliance workflows. These maintenance
+files are excluded from MCP-created consumer apps; CLI apps use the canonical
+generator directly.
 
 On Windows, run agent integration tests with `pnpm --dir workers/agent test:runtime`.
 The launcher gives workerd an isolated directory under `%LOCALAPPDATA%/Temp`

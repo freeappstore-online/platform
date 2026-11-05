@@ -81,6 +81,8 @@ export async function fetchTemplateFiles(
   const files = new Map<string, RepoFile>();
   for (const item of tree.tree) {
     if (item.type !== "blob" || item.path.startsWith(".git/")) continue;
+    // Mirror maintenance is never application code, including for custom templates.
+    if (item.path.startsWith(".fas-template/") || item.path === ".github/workflows/sync-template.yml") continue;
     const blob = await gh(token, `${base}/git/blobs/${item.sha}`);
     if (typeof blob?.content !== "string") throw new Error(`blob ${item.path} fetch failed`);
     if (TEXT_RE.test(item.path)) {
