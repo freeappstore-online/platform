@@ -124,11 +124,13 @@ export async function assertAppOwner(
   appId: string,
   opts: { allowAdmin?: boolean } = {},
 ): Promise<void> {
-  if (opts.allowAdmin && isAdmin(user, env)) return;
+  // Existence first, even for admins: otherwise an admin can mint app_roles
+  // rows for an app id that doesn't exist (#442).
   const row = await env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
     .bind(appId)
     .first<{ owner_login: string | null }>();
   if (!row) throw new HttpError(404, 'app not found');
+  if (opts.allowAdmin && isAdmin(user, env)) return;
   if (!isAppOwner(user, row.owner_login)) throw new HttpError(403, 'not the app owner');
 }
 

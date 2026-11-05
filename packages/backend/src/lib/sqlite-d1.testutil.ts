@@ -58,6 +58,9 @@ export function sqliteD1(): { db: SqliteDb; d1: D1Database } {
       };
       return stmt;
     },
+    async batch(stmts: Array<{ all(): Promise<unknown> }>) {
+      return Promise.all(stmts.map((s) => s.all()));
+    },
   } as unknown as D1Database;
   return { db, d1 };
 }

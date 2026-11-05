@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
 
 interface AppRow {
@@ -255,5 +256,48 @@ describe('GET /v1/apps/creators', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { creators: Record<string, string> };
     expect(body.creators).toEqual({ typeflow: 'abid8195', snowman: 'dawsonhuang0' });
+  });
+});
+
+describe.skipIf(!hasSqlite)('GET /v1/apps/:id/deploy-status', () => {
+  const setup = () => {
+    const { db, d1 } = sqliteD1();
+    const user = db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, 0)',
+    );
+    user.run('gh:1', 1, 'alice');
+    user.run('gh:2', 2, 'bob');
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, 0)').run(
+      'timer',
+      'Alice',
+    );
+    const admin = {
+      fetch: async () =>
+        new Response(JSON.stringify({ status: 'completed', conclusion: 'success' }), {
+          headers: { 'content-type': 'application/json' },
+        }),
+    } as unknown as Fetcher;
+    return {
+      DB: d1,
+      SESSION_SIGNING_KEY: SIGNING_KEY,
+      ADMIN: admin,
+      ADMIN_PROVISION_TOKEN: 't',
+    } as unknown as Env;
+  };
+  const get = async (uid: string, env: Env) =>
+    app.request(
+      '/v1/apps/timer/deploy-status',
+      { headers: { Authorization: `Bearer ${await signSession(uid, SIGNING_KEY)}` } },
+      env,
+    );
+
+  it('matches a mixed-case owner_login to the owner (#442)', async () => {
+    const res = await get('gh:1', setup());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: 'completed', conclusion: 'success' });
+  });
+
+  it('403s a non-owner', async () => {
+    expect((await get('gh:2', setup())).status).toBe(403);
   });
 });

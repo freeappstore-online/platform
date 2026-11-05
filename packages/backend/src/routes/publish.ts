@@ -140,7 +140,8 @@ publishRoutes.post('/publish', async (c) => {
     return c.text('publishing requires signing in with GitHub', 403);
   }
   let creatorGithub = user.githubLogin;
-  if (body.creatorGithub && body.creatorGithub !== user.githubLogin) {
+  // GitHub logins are case-insensitive (as in isAppOwner / isAdminLogin).
+  if (body.creatorGithub && body.creatorGithub.toLowerCase() !== user.githubLogin.toLowerCase()) {
     if (!isAdmin(user, c.env)) {
       return c.text('only admins may set creatorGithub for another user', 403);
     }

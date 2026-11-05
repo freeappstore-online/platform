@@ -338,6 +338,33 @@ describe('POST /v1/publish', () => {
     expect(res.status).toBe(403);
   });
 
+  it('treats creatorGithub as the caller when it only differs by case (#442)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const calls: AdminCall[] = [];
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+      capture: calls,
+    });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...validBody, creatorGithub: 'ME' }),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), {
+        ADMIN: admin,
+        ADMIN_GITHUB_LOGINS: '', // caller is not an admin
+      }),
+    );
+    expect(res.status).toBe(200);
+    const sentBody = JSON.parse(calls[0]!.init.body as string);
+    expect(sentBody.creatorGithub).toBe('me');
+  });
+
   it('returns 400 for an invalid creatorGithub (admin)', async () => {
     const token = await signSession('gh:1', SIGNING_KEY);
     const res = await app.request(
@@ -598,6 +625,30 @@ describe('POST /v1/unpublish', () => {
       baseEnv(unpublishDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, 'other-owner'), {
         ADMIN: admin,
         ADMIN_GITHUB_LOGINS: 'me',
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('lets an admin listed by ADMIN_USER_IDS unpublish an app they do not own (#442)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ ok: true, steps: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    });
+    const res = await app.request(
+      '/v1/unpublish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: 'someone-elses-app' }),
+      },
+      baseEnv(unpublishDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, 'other-owner'), {
+        ADMIN: admin,
+        ADMIN_GITHUB_LOGINS: '',
+        ADMIN_USER_IDS: 'gh:1',
       }),
     );
     expect(res.status).toBe(200);

@@ -66,9 +66,9 @@ auditRoutes.get('/audit', async (c) => {
       .all<AuditRow>(),
     // Per-app roll-up over every matching row, not just this page, so the
     // typical "show me apps with any failure" query doesn't have to page
-    // through checks and group client-side. One row per app.
+    // through checks and group client-side. One row per (app, store).
     c.env.DB.prepare(
-      `SELECT app_id, store, SUM(status = 'pass') AS pass, SUM(status = 'warn') AS warn, SUM(status = 'fail') AS fail, MAX(checked_at) AS checked_at, COUNT(*) AS n FROM audit_results${filter} GROUP BY app_id ORDER BY checked_at DESC, app_id ASC`,
+      `SELECT app_id, store, SUM(status = 'pass') AS pass, SUM(status = 'warn') AS warn, SUM(status = 'fail') AS fail, MAX(checked_at) AS checked_at, COUNT(*) AS n FROM audit_results${filter} GROUP BY app_id, store ORDER BY checked_at DESC, app_id ASC`,
     )
       .bind(...binds)
       .all<SummaryRow>(),
@@ -94,7 +94,9 @@ auditRoutes.get('/audit', async (c) => {
   }));
   const total = rows.reduce((n, r) => n + r.n, 0);
 
-  return c.json({ summary, checks, total });
+  // Rows change on the weekly cron (`0 6 * * SUN`, index.ts scheduled) or a
+  // rare manual /audit/run, so a short shared cache is safe.
+  return c.json({ summary, checks, total }, 200, { 'Cache-Control': 'public, max-age=300' });
 });
 
 /**

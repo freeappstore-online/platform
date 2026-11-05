@@ -192,4 +192,33 @@ describe.skipIf(!hasSqlite)('GET /v1/audit', () => {
     expect(body.checks).toHaveLength(1);
     expect(body.summary).toHaveLength(2);
   });
+
+  it('keeps the same app id in both stores as separate summary rows (#442)', async () => {
+    // PK is (app_id, check_name), so the same id in two stores only coexists
+    // under store-specific checks.
+    const twoStores: AuditRow[] = [
+      { ...sample[0]!, app_id: 'chess', store: 'apps', status: 'pass' },
+      { ...sample[4]!, app_id: 'chess', store: 'games', status: 'fail', checked_at: 300 },
+    ];
+    const res = await app.request('/v1/audit', {}, baseEnv(fakeDB(twoStores)));
+    const body = (await res.json()) as {
+      summary: Array<{ appId: string; store: string; pass: number; fail: number }>;
+    };
+    expect(body.summary).toHaveLength(2);
+    expect(body.summary.find((s) => s.store === 'apps')).toMatchObject({
+      appId: 'chess',
+      pass: 1,
+      fail: 0,
+    });
+    expect(body.summary.find((s) => s.store === 'games')).toMatchObject({
+      appId: 'chess',
+      pass: 0,
+      fail: 1,
+    });
+  });
+
+  it('is publicly cacheable for a few minutes (weekly cron data)', async () => {
+    const res = await app.request('/v1/audit', {}, baseEnv(fakeDB(sample)));
+    expect(res.headers.get('cache-control')).toBe('public, max-age=300');
+  });
 });

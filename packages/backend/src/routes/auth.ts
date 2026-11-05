@@ -674,36 +674,30 @@ export async function computeRoles(
   const isGithub = provider === 'github';
 
   try {
+    // One D1 round trip: per-app role assignments (keyed by user_id — safe for
+    // all providers) plus, for GitHub users, the apps they created. The owned
+    // list doubles as the 'creator' check (#442).
+    const stmts = [
+      env.DB.prepare('SELECT app_id, role_name FROM app_roles WHERE user_id = ?').bind(userId),
+    ];
     if (isGithub) {
-      // Check if the user has published any apps (creator role).
-      const appRow = await env.DB.prepare(
-        'SELECT 1 FROM apps WHERE owner_login = ? COLLATE NOCASE LIMIT 1',
-      )
-        .bind(login)
-        .first();
-      if (appRow) roles.push('creator');
+      stmts.push(
+        env.DB.prepare('SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE').bind(login),
+      );
     }
+    const [assigned, owned] = (await env.DB.batch(stmts)) as [
+      D1Result<{ app_id: string; role_name: string }>,
+      D1Result<{ id: string }> | undefined,
+    ];
+    const ownedApps = owned?.results ?? [];
+    if (ownedApps.length > 0) roles.push('creator');
 
-    // Load per-app role assignments (keyed by user_id — safe for all providers).
-    const { results } = await env.DB.prepare(
-      'SELECT app_id, role_name FROM app_roles WHERE user_id = ?',
-    )
-      .bind(userId)
-      .all<{ app_id: string; role_name: string }>();
-    for (const r of results ?? []) {
+    for (const r of assigned.results ?? []) {
       (appRoles[r.app_id] ??= []).push(r.role_name);
     }
-
-    if (isGithub) {
-      // Auto-assign 'owner' for apps this user created (not stored in DB).
-      const { results: ownedApps } = await env.DB.prepare(
-        'SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE',
-      )
-        .bind(login)
-        .all<{ id: string }>();
-      for (const a of ownedApps ?? []) {
-        (appRoles[a.id] ??= []).push('owner');
-      }
+    // Auto-assign 'owner' for apps this user created (not stored in DB).
+    for (const a of ownedApps) {
+      (appRoles[a.id] ??= []).push('owner');
     }
   } catch {
     // Tables don't exist yet (fresh DB or test env) — skip

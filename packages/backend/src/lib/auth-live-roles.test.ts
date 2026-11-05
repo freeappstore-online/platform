@@ -109,4 +109,31 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
     expect((await get('/v1/apps/timer/webhooks', await staleBob())).status).toBe(403);
     expect((await get('/v1/apps/ghost/webhooks', token)).status).toBe(404);
   });
+
+  it('404s an admin on an unknown app instead of minting app_roles rows (#442)', async () => {
+    const res = await app.request(
+      '/v1/apps/ghost/roles',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${await signSession('gh:2', KEY)}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: 'gh:1', role: 'editor' }),
+      },
+      env({ ADMIN_USER_IDS: 'gh:2' }),
+    );
+    expect(res.status).toBe(404);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM app_roles WHERE app_id = 'ghost'").get()).toEqual({
+      n: 0,
+    });
+    // Same admin on a real app they don't own still passes.
+    expect(
+      (
+        await get('/v1/apps/timer/roles', await signSession('gh:2', KEY), {
+          ADMIN_USER_IDS: 'gh:2',
+        })
+      ).status,
+    ).toBe(200);
+  });
 });
