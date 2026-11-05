@@ -1,5 +1,7 @@
 /** Update activation and page reload are deliberately separate user actions. */
 export interface PwaOptions {
+  /** Disable initialization in development or other non-PWA contexts. Defaults to true. */
+  enabled?: boolean;
   swUrl?: string;
   /** Describe only features which actually work without a server. */
   offlineFeatures?: string[];
@@ -59,6 +61,14 @@ export async function requestPwaInstall(): Promise<boolean> {
 }
 
 export function startPwa(options: PwaOptions = {}) {
+  if (options.enabled === false)
+    return {
+      ready: Promise.resolve(),
+      activate: () => false,
+      reload: () => false,
+      addBusyGuard: (_guard: () => boolean) => () => {},
+      dispose() {},
+    };
   const guards = new Set<() => boolean>();
   if (options.isBusy) guards.add(options.isBusy);
   let registration: ServiceWorkerRegistration | undefined;

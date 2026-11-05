@@ -1,4 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
@@ -103,6 +104,18 @@ for (const id of ['persistence', 'backup'])
 for (const id of ['kv', 'counters', 'collections', 'rooms'] as const)
   examples[examplePath(id)] =
     `import { initApp } from '@freeappstore/sdk';\nconst fas = initApp({ appId: 'example' });\n${tsxBlock(id)}`;
+// Use the framework's actual declarations, not a test-owned substitute for import.meta.env.
+const viteRequire = createRequire(
+  resolve(
+    process.env.FAS_EXAMPLE_APP ?? 'packages/sdk',
+    process.env.FAS_EXAMPLE_APP ? 'web/package.json' : 'package.json',
+  ),
+);
+const vitePackage = process.env.FAS_EXAMPLE_APP
+  ? viteRequire.resolve('vite/package.json')
+  : createRequire(viteRequire.resolve('vite-plugin-pwa')).resolve('vite/package.json');
+examples['web/src/vite-env.d.ts'] =
+  `/// <reference path="${resolve(dirname(vitePackage), 'client.d.ts').replaceAll('\\', '/')}" />`;
 examples['invalid-open-store.ts'] = examples[examplePath('persistence')]!.replace(
   "openStore({ namespace: 'notes', version: 1 })",
   "openStore('notes')",

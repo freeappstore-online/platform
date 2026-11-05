@@ -28,7 +28,8 @@ let requests: Array<{ url: string; method: string }>;
 // Compile and execute the generated modules themselves, with the real SDK,
 // React, Shell and profile. Only the network is synthetic.
 function compile(source: string, modules: Record<string, unknown>) {
-  const code = ts.transpileModule(source, {
+  // Match Vite's production constant when evaluating generated modules as CommonJS.
+  const code = ts.transpileModule(source.replaceAll('import.meta.env.PROD', 'true'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const exports = {};

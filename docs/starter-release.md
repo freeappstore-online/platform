@@ -52,11 +52,11 @@ In the builder, ask it to install the capability and use its `install_capabiliti
 
 ## Capability support and package prerequisites
 
-These are the registry's declared API minimums. Fresh Shell starters have a separate `@freeappstore/sdk ^0.16.38` baseline, which includes the built-in Profile close control from #397 Profile installation from #410, and the shell-cache defaults from #416. The CLI preflights package requirements at the package location listed below; it does not silently upgrade an existing app's dependencies. The standalone and connected template repositories are generated mirrors; after this platform release, sync their manifests from the canonical starter and refresh each mirror's lockfile before apps created from those mirrors receive the new floor. Existing app lockfiles keep their resolved SDK until the app owner deliberately refreshes them.
+These are the registry's declared API minimums. Fresh Shell starters have a separate `@freeappstore/sdk ^0.16.39` baseline, which includes the built-in Profile close control from #397 Profile installation from #410, and the shell-cache defaults from #416, and development-mode PWA initialization from #421. The CLI preflights package requirements at the package location listed below; it does not silently upgrade an existing app's dependencies. The standalone and connected template repositories are generated mirrors; after this platform release, sync their manifests from the canonical starter and refresh each mirror's lockfile before apps created from those mirrors receive the new floor. Existing app lockfiles keep their resolved SDK until the app owner deliberately refreshes them.
 
 | Capability | What it provides | Prerequisite |
 | --- | --- | --- |
-| `pwa` | Manifest/icons, PWA config helper, service-worker controller, shell-only offline behavior and prompted updates | `@freeappstore/sdk >=0.16.15` and `vite-plugin-pwa ^1.0.0` in `web` |
+| `pwa` | Manifest/icons, PWA config helper, service-worker controller, shell-only offline behavior and prompted updates | `@freeappstore/sdk >=0.16.39` and `vite-plugin-pwa ^1.0.0` in `web` |
 | `connectivity` | Browser online/offline hints with an unsubscribe function | Browser APIs; no SDK package |
 | `persistence` | Device-local preference, record, transaction and file helpers | `@freeappstore/sdk >=0.16.18` at the app root |
 | `backup` | Validated export and explicit merge/replace import; depends on `persistence` | `@freeappstore/sdk >=0.16.21` at the app root |

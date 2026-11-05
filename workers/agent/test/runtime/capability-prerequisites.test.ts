@@ -21,7 +21,7 @@ it.each([
 it.each([
   [undefined, "0.16.26", "persistence", false],
   ["0.16.26", "0.14.30", "persistence", true],
-  ["0.16.26", undefined, "pwa", true],
+  ["0.16.39", undefined, "pwa", true],
 ])("checks bundled package locations %s / %s for %s", (root, web, id, accepted) => {
   const pkg = (sdk?: string) => JSON.stringify({ dependencies: {
     ...(sdk ? { "@freeappstore/sdk": sdk } : {}), "vite-plugin-pwa": "1.3.0",

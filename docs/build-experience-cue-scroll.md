@@ -109,3 +109,9 @@ The original Pitstop **Load sample data** control is its optional demo-data acti
 not a template requirement. The generic installation/offline promotion footer came
 from the shared PWA runtime and has been removed; browser-supported installation
 is available through Profile.
+
+A final ordinary development-server check exposed #421: the PWA recipe requested
+`/sw.js` even though Vite development serves no production worker, producing an
+HTML MIME error. The shared recipe now disables PWA initialization in development
+and retains it for production build/preview. SDK 0.16.39 adds the explicit disabled
+controller; the versioned capability upgrade preserves existing app data.

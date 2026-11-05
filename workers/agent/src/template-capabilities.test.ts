@@ -23,8 +23,8 @@ const pkg = (sdk?: string, pwa = false) =>
 it.each([
   [undefined, "0.16.32", ["persistence"], false],
   ["0.16.32", "0.16.32", ["persistence"], true],
-  ["0.16.32", undefined, ["pwa"], true],
-  ["0.16.32", "0.16.32", ["persistence", "pwa"], true],
+  ["0.16.39", undefined, ["pwa"], true],
+  ["0.16.39", "0.16.39", ["persistence", "pwa"], true],
   ["0.16.32", "0.14.30", ["persistence", "pwa"], false],
   [undefined, undefined, ["persistence"], false],
 ])("resolves root %s and web %s for %s", async (root, web, ids, succeeds) => {

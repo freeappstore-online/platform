@@ -350,8 +350,8 @@ it('normalizes stale SDK ranges only in a fresh template for the selected capabi
 
   const web = JSON.parse(await readFile(join(root, 'web/package.json'), 'utf8'));
   const sdkRange = web.dependencies['@freeappstore/sdk'];
-  expect(sdkRange).toBe('^0.16.15');
-  expect(satisfies('0.16.21', sdkRange)).toBe(true);
+  expect(sdkRange).toBe('^0.16.39');
+  expect(satisfies('0.16.39', sdkRange)).toBe(true);
   expect(satisfies('1.0.0', sdkRange)).toBe(false);
   expect(web.dependencies.react).toBe('^19.0.0');
   expect(web.devDependencies['vite-plugin-pwa']).toBe('^1.3.0');
@@ -374,9 +374,9 @@ it('prepares root and web SDK dependencies for a fresh backup preset', async () 
 
   const rootManifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
   const webManifest = JSON.parse(await readFile(join(root, 'web/package.json'), 'utf8'));
-  expect(rootManifest.dependencies['@freeappstore/sdk']).toBe('^0.16.21');
-  expect(webManifest.dependencies['@freeappstore/sdk']).toBe('^0.16.21');
-  expect(satisfies('0.16.30', rootManifest.dependencies['@freeappstore/sdk'])).toBe(true);
+  expect(rootManifest.dependencies['@freeappstore/sdk']).toBe('^0.16.39');
+  expect(webManifest.dependencies['@freeappstore/sdk']).toBe('^0.16.39');
+  expect(satisfies('0.16.39', rootManifest.dependencies['@freeappstore/sdk'])).toBe(true);
   expect(satisfies('1.0.0', rootManifest.dependencies['@freeappstore/sdk'])).toBe(false);
   expect(plan.join('\n')).toContain('fas-capabilities/persistence.ts');
   expect(plan.join('\n')).toContain('fas-capabilities/backup.ts');
@@ -489,20 +489,20 @@ it.each(['1.3.x', '^1.2.3', '~1.0.0', '1.0.0 - 1.3.0'])(
 
 it('checks PWA prerequisites in web/package.json rather than accepting unrelated root dependencies', async () => {
   const root = await app();
-  const dependencies = { '@freeappstore/sdk': '^0.16.19', 'vite-plugin-pwa': '^1.3.0' };
+  const dependencies = { '@freeappstore/sdk': '^0.16.39', 'vite-plugin-pwa': '^1.3.0' };
   await writeFile(join(root, 'package.json'), JSON.stringify({ dependencies }));
   await mkdir(join(root, 'web'));
   await writeFile(join(root, 'web/package.json'), '{}');
   await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('web/package.json');
   await writeFile(
     join(root, 'web/package.json'),
-    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.19' } }),
+    JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.39' } }),
   );
   await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('vite-plugin-pwa');
   await writeFile(
     join(root, 'web/package.json'),
     JSON.stringify({
-      dependencies: { '@freeappstore/sdk': '^0.16.19' },
+      dependencies: { '@freeappstore/sdk': '^0.16.39' },
       devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
     }),
   );
@@ -551,7 +551,7 @@ it('uses root package prerequisites for web imports in root-only apps', async ()
   await writeFile(
     join(root, 'package.json'),
     JSON.stringify({
-      dependencies: { '@freeappstore/sdk': '^0.16.26' },
+      dependencies: { '@freeappstore/sdk': '^0.16.39' },
       devDependencies: { 'vite-plugin-pwa': '^1.3.0' },
     }),
   );
@@ -573,8 +573,8 @@ it('requires root SDK for a root persistence import even when web has SDK', asyn
 
 it.each([
   ['0.16.26', '0.14.30', ['persistence'], true],
-  ['0.16.26', undefined, ['pwa'], true],
-  ['0.16.26', '0.16.26', ['persistence', 'pwa'], true],
+  ['0.16.39', undefined, ['pwa'], true],
+  ['0.16.39', '0.16.39', ['persistence', 'pwa'], true],
   ['0.16.26', '0.14.30', ['persistence', 'pwa'], false],
 ])('resolves capability imports from root %s and web %s', async (sdk, web, ids, succeeds) => {
   const root = await app();

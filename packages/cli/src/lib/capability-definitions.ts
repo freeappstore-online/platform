@@ -36,7 +36,7 @@ export const registry: Record<string, Capability> = {
   pwa: {
     id: 'pwa',
     packages: [
-      { name: '@freeappstore/sdk', range: '>=0.16.15', location: 'web' },
+      { name: '@freeappstore/sdk', range: '>=0.16.39', location: 'web' },
       {
         name: 'vite-plugin-pwa',
         range: '^1.0.0',
@@ -44,14 +44,15 @@ export const registry: Record<string, Capability> = {
         section: 'devDependencies',
       },
     ],
-    version: '1.0.0',
+    version: '1.0.1',
     dependencies: {},
     environment: 'browser',
     metadata: { install: 'manifest', updates: 'prompt-with-busy-guards', offline: 'shell-only' },
     files: {
-      'web/src/fas-capabilities/pwa.ts': `// Import this module once from the browser entry point after installing SDK >=0.16.15.
+      'web/src/fas-capabilities/pwa.ts': `// Import this module once from the browser entry point after installing SDK >=0.16.39.
 import { startPwa } from '@freeappstore/sdk/pwa';
-export const pwa = startPwa();
+// The production worker is absent during Vite development. Use build + preview for PWA QA.
+export const pwa = startPwa({ enabled: import.meta.env.PROD });
 // pwa.addBusyGuard(() => dirtyForm || recorder.state === 'recording');
 `,
       'web/fas-pwa-config.ts': `// Wrap the existing VitePWA options; retain app-specific manifest and caching configuration.
@@ -59,10 +60,11 @@ export { pwaOptions } from '@freeappstore/sdk/pwa-config';
 `,
       'fas-capabilities/pwa.md': `# PWA integration
 
-Requires @freeappstore/sdk >=0.16.15 and vite-plugin-pwa ^1.0.0.
+Requires @freeappstore/sdk >=0.16.39 and vite-plugin-pwa ^1.0.0.
 In web/vite.config.ts import pwaOptions from ./fas-pwa-config
 and use VitePWA(pwaOptions({ /* your existing options */ })).
 Import ./fas-capabilities/pwa from web/src/main.tsx.
+The recipe disables PWA initialization in Vite development; use build + preview to verify installation/offline behavior.
 Register pwa.addBusyGuard callbacks for dirty forms, recordings and transfers.
 Keep the public manifest, icons and app-specific denylist. Review custom runtimeCaching:
 never cache authenticated responses; the shared defaults cache only build assets.

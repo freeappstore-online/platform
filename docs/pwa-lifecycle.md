@@ -7,7 +7,7 @@ and Vite configuration. No existing app repositories are migrated.
 For an existing app, run `fas add pwa --dry-run`, then `fas add pwa`. This adds
 integration modules and records install/update/offline metadata in
 `.fas-capabilities.json`. Existing application files are preserved. Finish the
-printed integration steps: install `@freeappstore/sdk >=0.16.15` and
+printed integration steps: install `@freeappstore/sdk >=0.16.39` and
 `vite-plugin-pwa`, import `./fas-capabilities/pwa` in `web/src/main.tsx`, and wrap
 your existing `VitePWA` options:
 
@@ -25,6 +25,13 @@ remain an app-owned decision: audit them for cookies, authorization and private
 data. There is no default API response cache. This helper supports `generateSW`;
 apps with a custom `injectManifest` worker must implement and review that worker's
 waiting/message protocol themselves.
+
+The current recipe calls `startPwa({ enabled: import.meta.env.PROD })`. During
+Vite development the production worker is absent, so the SDK skips registration,
+listeners and UI. Use a production build with preview to verify installation,
+updates and offline behavior. The `enabled` option requires SDK 0.16.39; omitted,
+it defaults to enabled. Disabling initialization does not unregister workers or
+clear previously saved data or caches.
 
 ## Update contract
 

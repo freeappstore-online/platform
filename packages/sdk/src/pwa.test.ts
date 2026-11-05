@@ -297,3 +297,21 @@ it('routes unvisited deep links to the shell while excluding API and custom path
   }
   expect(() => pwaOptions({ strategies: 'injectManifest' })).toThrow('generateSW');
 });
+
+it('can be disabled without DOM, registration or install listeners while preserving controller methods', async () => {
+  const register = vi.fn();
+  Object.defineProperty(navigator, 'serviceWorker', { configurable: true, value: { register } });
+  const pwa = startPwa({ enabled: false });
+  await pwa.ready;
+  expect(register).not.toHaveBeenCalled();
+  expect(document.body.children).toHaveLength(0);
+  const event = new Event('beforeinstallprompt', { cancelable: true });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  expect(pwa.activate()).toBe(false);
+  expect(pwa.reload()).toBe(false);
+  const guard = vi.fn();
+  pwa.addBusyGuard(guard)();
+  expect(guard).not.toHaveBeenCalled();
+  pwa.dispose();
+});

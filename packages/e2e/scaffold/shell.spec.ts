@@ -847,3 +847,17 @@ test('preference changes synchronize across tabs (#340)', async ({ page, context
     await other.close();
   }
 });
+
+test('development mode does not request the absent production service worker', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/sw.js') requests.push(request.url());
+  });
+  await page.goto('/');
+  await expect(page.getByRole('main')).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect(requests).toEqual([]);
+  expect(
+    await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
+  ).toBe(0);
+});

@@ -156,7 +156,7 @@ describe("getTemplateFiles", () => {
       const files = getTemplateFiles(appsConfig, archetype, "connected");
       const app = files["web/src/App.tsx"];
       const draft = files["web/src/components/ConnectedDraft.tsx"];
-      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.16.38"');
+      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.16.39"');
       expect(files["fas-capabilities/cloud-data.md"]).toContain("Room-restricted");
       expect(draft).toContain("useConnectedKvDraft");
       expect(draft).toContain("draft.retry");
@@ -226,7 +226,7 @@ describe("getTemplateFiles", () => {
     const rootOnlyPwa = {
       ...scaffold,
       "package.json": JSON.stringify({
-        dependencies: { "@freeappstore/sdk": "^0.16.32" },
+        dependencies: { "@freeappstore/sdk": "^0.16.39" },
         devDependencies: { "vite-plugin-pwa": "^1.3.0" },
       }),
     };
@@ -396,7 +396,7 @@ describe("connected preset (#368)", () => {
     expect(files["web/src/App.tsx"]).toContain("<ConnectedDraft app={fas} />");
     expect(files["web/src/App.tsx"]).not.toContain("requireAuth");
     expect(files["web/src/components/ConnectedDraft.tsx"]).toContain("if (!draft.user)");
-    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.16.38");
+    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.16.39");
   });
 
   it("does not change standalone or game templates", () => {

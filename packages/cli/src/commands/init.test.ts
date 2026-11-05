@@ -29,34 +29,34 @@ describe('fresh scaffold capability checks', () => {
   }
 
   it('previews capability writes without touching files', async () => {
-    const root = await scaffold('^0.16.32');
+    const root = await scaffold('^0.16.39');
     const preview = await installCapabilities(root, ['pwa'], { dryRun: true });
     expect(preview.join('\n')).toContain('CREATE web/src/fas-capabilities/pwa.ts');
     await expect(readFile(join(root, '.fas-capabilities.json'))).rejects.toThrow();
   });
 
-  it('uses SDK 0.16.38 as the fresh Shell baseline', () => {
+  it('uses SDK 0.16.39 as the fresh Shell baseline', () => {
     const files = getTemplateFiles(
       { store: 'apps', nounPlural: 'apps', r2Bucket: 'fas-apps' },
       'generic',
       'standalone',
     );
     expect(JSON.parse(files['web/package.json']!).dependencies['@freeappstore/sdk']).toBe(
-      '^0.16.38',
+      '^0.16.39',
     );
     expect(files['CLAUDE.md']).toContain('/docs/starter-release.md');
   });
 
-  it('keeps the optional PWA API minimum separate from the fresh Shell baseline', async () => {
+  it('requires the SDK API used by the current PWA recipe', async () => {
     const root = await scaffold('^0.16.19');
     const preview = await installCapabilities(root, ['pwa'], { dryRun: true });
-    expect(preview.join('\n')).toContain('@freeappstore/sdk >=0.16.15');
-    expect(preview.join('\n')).not.toContain('INCOMPLETE');
-    await installCapabilities(root, ['pwa']);
+    expect(preview.join('\n')).toContain('@freeappstore/sdk >=0.16.39');
+    expect(preview.join('\n')).toContain('INCOMPLETE');
+    await expect(installCapabilities(root, ['pwa'])).rejects.toThrow('>=0.16.39');
   });
 
   it('rejects an edited capability file as a conflict', async () => {
-    const root = await scaffold('^0.16.32');
+    const root = await scaffold('^0.16.39');
     await installCapabilities(root, ['pwa']);
     await writeFile(join(root, 'web/src/fas-capabilities/pwa.ts'), '// app edit');
     await expect(installCapabilities(root, ['pwa'], { dryRun: true })).rejects.toThrow('conflict');
