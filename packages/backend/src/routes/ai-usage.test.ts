@@ -95,7 +95,7 @@ async function request(
 ) {
   const token =
     init.as === 'admin'
-      ? await signSession('admin-1', SIGNING_KEY, { roles: ['admin'] })
+      ? await signSession('admin-1', SIGNING_KEY)
       : await signSession('gh:1', SIGNING_KEY);
   const { as: _as, ...rest } = init;
   return app.request(
@@ -111,6 +111,7 @@ async function request(
     {
       DB: db,
       SESSION_SIGNING_KEY: SIGNING_KEY,
+      ADMIN_USER_IDS: 'admin-1',
       APP_SECRET_KEK: KEK,
       COMP_KEY_ANTHROPIC: PLATFORM_KEY,
     },

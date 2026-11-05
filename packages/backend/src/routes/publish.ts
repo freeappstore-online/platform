@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { APP_ID_RE, isReservedAppId } from '../lib/apps.js';
-import { HttpError, isAdminLogin, requireUser } from '../lib/auth.js';
+import { HttpError, isAdmin, isAppOwner, requireUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -141,7 +141,7 @@ publishRoutes.post('/publish', async (c) => {
   }
   let creatorGithub = user.githubLogin;
   if (body.creatorGithub && body.creatorGithub !== user.githubLogin) {
-    if (!isAdminLogin(user.githubLogin, c.env)) {
+    if (!isAdmin(user, c.env)) {
       return c.text('only admins may set creatorGithub for another user', 403);
     }
     if (!GITHUB_LOGIN_RE.test(body.creatorGithub)) {
@@ -287,10 +287,9 @@ publishRoutes.post('/unpublish', async (c) => {
   // Ownership gate: only the app's owner or a platform admin may unpublish.
   const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ? AND store = ?')
     .bind(body.id, store)
-    .first<{ owner_login: string }>();
+    .first<{ owner_login: string | null }>();
   if (!row) return c.json({ error: 'not_found', appId: body.id }, 404);
-  const isOwner = row.owner_login?.toLowerCase() === user.githubLogin.toLowerCase();
-  if (!isOwner && !isAdminLogin(user.githubLogin, c.env)) {
+  if (!isAppOwner(user, row.owner_login) && !isAdmin(user, c.env)) {
     return c.text('only the app owner or an admin may unpublish', 403);
   }
 

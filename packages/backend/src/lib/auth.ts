@@ -11,9 +11,13 @@ export interface CurrentUser {
   avatarUrl: string | null;
   /** ISO 'YYYY-MM-DD'. Null until the user has set it through any app. */
   dateOfBirth: string | null;
-  /** Platform-level roles: 'user', 'creator', 'admin'. */
+  /**
+   * Platform roles ('user', 'creator', 'admin') as baked into the session token
+   * at sign-in — up to 30 days stale. Never authorize on these: use isAdmin /
+   * assertAppOwner / the app_roles table.
+   */
   roles: string[];
-  /** Per-app roles assigned by app creators: { appId: ['moderator', ...] }. */
+  /** Per-app roles from the token at sign-in: { appId: ['moderator', ...] }. Same caveat as `roles`. */
   appRoles: Record<string, string[]>;
 }
 
@@ -86,21 +90,56 @@ export async function requireUser<E extends { Bindings: Env }>(
 }
 
 /**
- * Require a platform admin. Checks the 'admin' role in the session
- * token claims. The role is computed at sign-in from the
- * ADMIN_GITHUB_LOGINS env var, so no env-var parsing happens per request.
+ * Platform admin, decided live from ADMIN_GITHUB_LOGINS / ADMIN_USER_IDS —
+ * never from the session token's `roles` claim, which is baked in at sign-in
+ * and outlives removal from the lists. Zero I/O.
  */
+export function isAdmin(user: Pick<CurrentUser, 'id' | 'githubLogin'>, env: Env): boolean {
+  return isAdminLogin(user.githubLogin, env) || isAdminUserId(user.id, env);
+}
+
+/**
+ * Whether `user` owns an app whose `apps.owner_login` is `ownerLogin`. GitHub
+ * logins are case-insensitive. An empty githubLogin (non-GitHub identity) never
+ * owns anything.
+ */
+export function isAppOwner(
+  user: Pick<CurrentUser, 'githubLogin'>,
+  ownerLogin: string | null,
+): boolean {
+  return (
+    !!user.githubLogin &&
+    !!ownerLogin &&
+    ownerLogin.toLowerCase() === user.githubLogin.toLowerCase()
+  );
+}
+
+/**
+ * 404 if `appId` doesn't exist, 403 unless `user` owns it (or, with
+ * `allowAdmin`, is a live platform admin).
+ */
+export async function assertAppOwner(
+  env: Env,
+  user: CurrentUser,
+  appId: string,
+  opts: { allowAdmin?: boolean } = {},
+): Promise<void> {
+  if (opts.allowAdmin && isAdmin(user, env)) return;
+  const row = await env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+    .bind(appId)
+    .first<{ owner_login: string | null }>();
+  if (!row) throw new HttpError(404, 'app not found');
+  if (!isAppOwner(user, row.owner_login)) throw new HttpError(403, 'not the app owner');
+}
+
+/** Require a platform admin (decided live — see isAdmin). */
 export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<CurrentUser> {
   const user = await requireUser(c);
-  const roleOk = user.roles.includes('admin');
-  const loginOk = isAdminLogin(user.githubLogin, c.env);
-  const userIdOk = isAdminUserId(user.id, c.env);
-  if (!roleOk && !loginOk && !userIdOk) {
+  if (!isAdmin(user, c.env)) {
     console.warn('admin_denied', {
       userId: user.id,
       login: user.login,
       githubLogin: user.githubLogin,
-      roles: user.roles,
       hasAdminGithubLogins: !!c.env.ADMIN_GITHUB_LOGINS,
       hasAdminUserIds: !!c.env.ADMIN_USER_IDS,
       path: c.req.path,
@@ -110,9 +149,6 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<Curre
   console.log('admin_allowed', {
     userId: user.id,
     githubLogin: user.githubLogin,
-    roleOk,
-    loginOk,
-    userIdOk,
     path: c.req.path,
   });
   return user;
@@ -124,11 +160,7 @@ export async function requireAppOwner(
   appId: string,
 ): Promise<CurrentUser> {
   const user = await requireUser(c);
-  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId)
-    .first<{ owner_login: string }>();
-  if (!row) throw new HttpError(404, 'app not found');
-  if (row.owner_login !== user.githubLogin) throw new HttpError(403, 'not the app owner');
+  await assertAppOwner(c.env, user, appId);
   return user;
 }
 
@@ -146,10 +178,7 @@ export function hasInternalToken(c: {
   return !!expected && !!provided && timingSafeEqual(provided, expected);
 }
 
-/**
- * Check if a user id is in the admin list (env var). Used at sign-in
- * to compute the 'admin' role for the session token.
- */
+/** Whether a GitHub login is in ADMIN_GITHUB_LOGINS. Empty never matches. */
 export function isAdminLogin(login: string, env: Env): boolean {
   const admins = (env.ADMIN_GITHUB_LOGINS ?? '')
     .split(',')

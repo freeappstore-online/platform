@@ -49,7 +49,7 @@ function fakeDB(opts: {
 }
 
 function env(db: D1Database, extraEnv?: Record<string, unknown>) {
-  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY, ...extraEnv };
+  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_USER_IDS: 'admin-1', ...extraEnv };
 }
 
 async function authHeader() {
@@ -58,7 +58,7 @@ async function authHeader() {
 }
 
 async function adminHeader() {
-  const token = await signSession('admin-1', SIGNING_KEY, { roles: ['admin'] });
+  const token = await signSession('admin-1', SIGNING_KEY);
   return `Bearer ${token}`;
 }
 
@@ -349,7 +349,8 @@ describe('keys routes', () => {
           provider: { id: 'anthropic', key_prefix: 'sk-ant-' },
           runs,
         }),
-        internalEnv,
+        // The fake DB resolves every session to gh:1, so that is the admin here.
+        { ...internalEnv, ADMIN_USER_IDS: 'gh:1' },
       ),
     );
     expect(res.status).toBe(200);

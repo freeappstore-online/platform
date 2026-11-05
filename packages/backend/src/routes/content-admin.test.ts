@@ -49,12 +49,15 @@ function fakeDB(opts: {
   } as unknown as D1Database;
 }
 
+// Admin is decided live from ADMIN_USER_IDS, not the token's roles claim.
+const ADMIN_IDS = 'admin-1,gh:99';
+
 function env(db: D1Database, overrides: Record<string, unknown> = {}) {
-  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY, ...overrides };
+  return { DB: db, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_USER_IDS: ADMIN_IDS, ...overrides };
 }
 
 async function adminHeader() {
-  const token = await signSession('admin-1', SIGNING_KEY, { roles: ['admin'] });
+  const token = await signSession('admin-1', SIGNING_KEY);
   return `Bearer ${token}`;
 }
 
@@ -677,11 +680,11 @@ describe.skipIf(!sqlite)('admin session debugging console (#15)', () => {
   }
 
   async function sessions(d1: D1Database, query = '') {
-    const token = await signSession('gh:99', SIGNING_KEY, { roles: ['admin'] });
+    const token = await signSession('gh:99', SIGNING_KEY);
     const res = await app.request(
       `https://backend/v1/admin/agent-sessions${query}`,
       { headers: { Authorization: `Bearer ${token}` } },
-      { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY },
+      { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_USER_IDS: ADMIN_IDS },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { sessions: Array<Record<string, any>>; total: number };
@@ -757,12 +760,12 @@ describe.skipIf(!sqlite)('admin session debugging console (#15)', () => {
 
   it('the detail view tolerates malformed debug JSON and links the repo', async () => {
     const d1 = seeded();
-    const token = await signSession('gh:99', SIGNING_KEY, { roles: ['admin'] });
+    const token = await signSession('gh:99', SIGNING_KEY);
     const get = (id: string) =>
       app.request(
         `https://backend/v1/admin/agent-sessions/${id}`,
         { headers: { Authorization: `Bearer ${token}` } },
-        { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY },
+        { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_USER_IDS: ADMIN_IDS },
       );
 
     const bad = await get('s-bad');
@@ -778,11 +781,11 @@ describe.skipIf(!sqlite)('admin session debugging console (#15)', () => {
   });
 
   it('the users list can show one user, for deep links', async () => {
-    const token = await signSession('gh:99', SIGNING_KEY, { roles: ['admin'] });
+    const token = await signSession('gh:99', SIGNING_KEY);
     const res = await app.request(
       'https://backend/v1/admin/users?user=gh%3A2',
       { headers: { Authorization: `Bearer ${token}` } },
-      { DB: seeded(), SESSION_SIGNING_KEY: SIGNING_KEY },
+      { DB: seeded(), SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_USER_IDS: ADMIN_IDS },
     );
     const body = (await res.json()) as { users: Array<{ id: string }>; total: number };
     expect(body.users.map((u) => u.id)).toEqual(['gh:2']);
@@ -791,12 +794,12 @@ describe.skipIf(!sqlite)('admin session debugging console (#15)', () => {
 
   it('deploy status treats _ and % as literal', async () => {
     const d1 = seeded();
-    const token = await signSession('gh:99', SIGNING_KEY, { roles: ['admin'] });
+    const token = await signSession('gh:99', SIGNING_KEY);
     const list = async (status: string) => {
       const res = await app.request(
         `https://backend/v1/admin/agent-deploys?status=${encodeURIComponent(status)}`,
         { headers: { Authorization: `Bearer ${token}` } },
-        { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY },
+        { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_USER_IDS: ADMIN_IDS },
       );
       expect(res.status).toBe(200);
       const body = (await res.json()) as { sessions: Array<{ sessionId: string }> };
@@ -828,10 +831,11 @@ describe.skipIf(!hasSqlite)('admin prefix filters are literal starts-with', () =
     counter.run('timer', 'score_a', 1, now);
     counter.run('timer', 'scoreXa', 2, now);
 
-    const token = await signSession('gh:99', SIGNING_KEY, { roles: ['admin'] });
+    const token = await signSession('gh:99', SIGNING_KEY);
     const adminEnv = {
       DB: d1,
       SESSION_SIGNING_KEY: SIGNING_KEY,
+      ADMIN_USER_IDS: ADMIN_IDS,
       ADMIN_PROVISION_TOKEN: 'tok',
     };
     const keys = async (res: Response) =>

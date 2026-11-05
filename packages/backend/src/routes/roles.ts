@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { assertAppOwner, isAppOwner, requireUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -22,7 +22,7 @@ export const rolesRoutes = new Hono<{ Bindings: Env }>();
 rolesRoutes.get('/apps/:appId/roles', async (c) => {
   const user = await requireUser(c);
   const appId = c.req.param('appId');
-  await assertAppOwnerOrAdmin(c, user, appId);
+  await assertAppOwner(c.env, user, appId, { allowAdmin: true });
 
   const { results } = await c.env.DB.prepare(
     'SELECT user_id, role_name, granted_by, granted_at FROM app_roles WHERE app_id = ? ORDER BY granted_at',
@@ -51,7 +51,7 @@ rolesRoutes.get('/apps/:appId/roles/:userId', async (c) => {
 
   // Users can check their own roles; owners/admins can check anyone's
   if (targetUserId !== user.id) {
-    await assertAppOwnerOrAdmin(c, user, appId);
+    await assertAppOwner(c.env, user, appId, { allowAdmin: true });
   }
 
   const { results } = await c.env.DB.prepare(
@@ -67,7 +67,7 @@ rolesRoutes.get('/apps/:appId/roles/:userId', async (c) => {
 rolesRoutes.post('/apps/:appId/roles', async (c) => {
   const user = await requireUser(c);
   const appId = c.req.param('appId');
-  await assertAppOwnerOrAdmin(c, user, appId);
+  await assertAppOwner(c.env, user, appId, { allowAdmin: true });
 
   const body = (await c.req.json().catch(() => null)) as {
     userId?: string;
@@ -107,7 +107,7 @@ rolesRoutes.post('/apps/:appId/roles', async (c) => {
 rolesRoutes.delete('/apps/:appId/roles', async (c) => {
   const user = await requireUser(c);
   const appId = c.req.param('appId');
-  await assertAppOwnerOrAdmin(c, user, appId);
+  await assertAppOwner(c.env, user, appId, { allowAdmin: true });
 
   const body = (await c.req.json().catch(() => null)) as {
     userId?: string;
@@ -136,13 +136,14 @@ rolesRoutes.get('/apps/:appId/roles/check/:role', async (c) => {
   const appId = c.req.param('appId');
   const role = c.req.param('role');
 
-  // Check token claims first (fast path)
-  const tokenRoles = user.appRoles?.[appId] ?? [];
-  if (tokenRoles.includes(role)) {
-    return c.json({ has: true, source: 'token' });
+  // DB is the truth: token appRoles are baked in at sign-in and go stale.
+  // 'owner' isn't stored in app_roles — it is apps.owner_login (as in computeRoles).
+  if (role === 'owner') {
+    const app = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+      .bind(appId)
+      .first<{ owner_login: string | null }>();
+    return c.json({ has: !!app && isAppOwner(user, app.owner_login), source: 'db' });
   }
-
-  // Fall back to DB (token might be stale)
   const row = await c.env.DB.prepare(
     'SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? AND role_name = ? LIMIT 1',
   )
@@ -235,23 +236,3 @@ rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
 
   return c.json({ ok: true });
 });
-
-/**
- * Assert the user is the app creator or a platform admin.
- * Checks owner_login (github username) in the apps table.
- */
-async function assertAppOwnerOrAdmin(
-  c: { env: Env },
-  user: { id: string; githubLogin: string; roles: string[] },
-  appId: string,
-): Promise<void> {
-  if (user.roles.includes('admin')) return;
-
-  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId)
-    .first<{ owner_login: string }>();
-  if (!row) throw new HttpError(404, 'app not found');
-  if (row.owner_login !== user.githubLogin) {
-    throw new HttpError(403, 'only the app owner or admin can manage roles');
-  }
-}

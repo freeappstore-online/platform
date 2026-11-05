@@ -557,7 +557,19 @@ authRoutes.post('/auth/session/exchange', async (c) => {
 authRoutes.get('/auth/me', async (c) => {
   try {
     const user = await requireUser(c);
-    return c.json(user);
+    // Report roles live, not the token's sign-in snapshot: the admin Worker and
+    // the agent gate on these. requireUser already blanks githubLogin for
+    // non-GitHub identities, so only real GitHub logins match owners/admins.
+    const live = await computeRoles(
+      user.id,
+      user.githubLogin,
+      c.env,
+      user.githubLogin ? 'github' : 'none',
+    );
+    const roles = [
+      ...new Set([...user.roles.filter((r) => r !== 'admin' && r !== 'creator'), ...live.roles]),
+    ];
+    return c.json({ ...user, roles, appRoles: live.appRoles });
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
@@ -664,7 +676,9 @@ export async function computeRoles(
   try {
     if (isGithub) {
       // Check if the user has published any apps (creator role).
-      const appRow = await env.DB.prepare('SELECT 1 FROM apps WHERE owner_login = ? LIMIT 1')
+      const appRow = await env.DB.prepare(
+        'SELECT 1 FROM apps WHERE owner_login = ? COLLATE NOCASE LIMIT 1',
+      )
         .bind(login)
         .first();
       if (appRow) roles.push('creator');
@@ -683,7 +697,7 @@ export async function computeRoles(
     if (isGithub) {
       // Auto-assign 'owner' for apps this user created (not stored in DB).
       const { results: ownedApps } = await env.DB.prepare(
-        'SELECT id FROM apps WHERE owner_login = ?',
+        'SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE',
       )
         .bind(login)
         .all<{ id: string }>();

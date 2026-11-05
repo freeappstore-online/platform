@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { assertAppOwner, HttpError, requireUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const appsRoutes = new Hono<{ Bindings: Env }>();
@@ -42,7 +42,7 @@ appsRoutes.get('/apps/mine', async (c) => {
     const result = await c.env.DB.prepare(
       `SELECT id, owner_login, created_at, category, type, oneliner, repo, demo, store
        FROM apps
-       WHERE owner_login = ?
+       WHERE owner_login = ? COLLATE NOCASE
        ORDER BY created_at DESC`,
     )
       .bind(user.githubLogin)
@@ -154,7 +154,7 @@ appsRoutes.get('/apps/deploy-status', async (c) => {
     throw err;
   }
 
-  const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_login = ?')
+  const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE')
     .bind(user.githubLogin)
     .all<{ id: string }>();
   const ids = new Set((owned.results ?? []).map((r) => r.id));
@@ -184,11 +184,12 @@ appsRoutes.get('/apps/:id/deploy-status', async (c) => {
   }
 
   const appId = c.req.param('id');
-  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
-    .bind(appId)
-    .first<{ owner_login: string }>();
-  if (!row) return c.json({ error: 'app not found' }, 404);
-  if (row.owner_login !== user.githubLogin) return c.json({ error: 'not your app' }, 403);
+  try {
+    await assertAppOwner(c.env, user, appId);
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 403);
+    throw err;
+  }
 
   const res = await adminFetch(c.env, `/api/apps/${encodeURIComponent(appId)}/deploy-status`);
   if (!res) return c.json({ error: 'deploy status is unavailable' }, 503);

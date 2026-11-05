@@ -38,7 +38,7 @@ function summaryEnv(owner = 'alice'): Env {
           return null as T | null;
         },
         async all<T>() {
-          if (compact === 'SELECT id FROM apps WHERE owner_login = ?') {
+          if (compact === 'SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE') {
             const ids = args[0] === owner ? [{ id: 'alpha' }, { id: 'bravo' }] : [];
             return { results: ids as T[] } as D1Result<T>;
           }
@@ -286,11 +286,12 @@ describe('admin cross-app usage (#271)', () => {
 
   it('lists every registered app for an admin, flagging apps with no views', async () => {
     const fetchMock = stubAnalytics();
-    const token = await signSession('gh:1', SIGNING_KEY, { roles: ['user', 'admin'] });
+    // Admin is decided by ADMIN_GITHUB_LOGINS, not a token claim.
+    const token = await signSession('gh:1', SIGNING_KEY);
     const res = await app.request(
       '/v1/analytics/admin/apps?days=30',
       { headers: { Authorization: `Bearer ${token}` } },
-      adminEnv(),
+      { ...adminEnv(), ADMIN_GITHUB_LOGINS: 'alice' },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as AdminUsageReport;
