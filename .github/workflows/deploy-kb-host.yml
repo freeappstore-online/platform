@@ -33,10 +33,10 @@ jobs:
       - name: Typecheck
         working-directory: packages/kb-host
         run: pnpm exec tsc --noEmit
-      # Runtime Worker secrets are managed from the private SOPS repo
-      # `serge-ivo/secrets` and pushed to Cloudflare on rotation/touch:
-      #   SECRETS_PROJECT=fas bash scripts/sync-worker-secrets.sh packages/kb-host
-      # Do not use Doppler here; it is no longer the source of truth.
+      # Runtime Worker secrets are not set here. They live SOPS-encrypted in
+      # ~/dev/ops (serge-ivo/ops); `ops put fas <KEY>` stores a value and pushes
+      # it to every consumer in inventory.yaml, including this Worker
+      # (freeappstore-kb-host). Re-place one: `ops push fas <KEY> wrangler freeappstore-kb-host`.
       - name: Deploy Worker
         working-directory: packages/kb-host
         run: pnpm exec wrangler deploy

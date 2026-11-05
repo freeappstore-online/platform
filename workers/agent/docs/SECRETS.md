@@ -14,8 +14,8 @@ VAPID_PRIVATE_KEY← wrangler secret shared with freeappstore-api; managed as fa
 ```
 
 **Note:** `CF_API_TOKEN` is no longer needed. Deploy creates a GitHub repo and
-pushes code — GitHub Actions handles the R2 upload via org-level secrets managed
-from `~/dev/secrets`.
+pushes code — GitHub Actions handles the R2 upload via org-level secrets stored
+SOPS-encrypted in `~/dev/ops` (`serge-ivo/ops`).
 
 ## Verify secrets are set
 
@@ -43,7 +43,7 @@ echo "$(gh auth token)" | npx wrangler secret put GITHUB_TOKEN
 ## Set secrets
 
 ```bash
-cd ~/dev/stores/fas/agent
+cd ~/dev/stores/fas/platform/workers/agent
 
 echo "$(gh auth token)" | npx wrangler secret put GITHUB_TOKEN
 
@@ -68,4 +68,4 @@ echo "new_token_value" | npx wrangler secret put GITHUB_TOKEN
 | Deploy fails "no GITHUB_TOKEN" | Secret is empty | Re-set with `echo "value" \| npx wrangler secret put GITHUB_TOKEN` |
 | Wrangler secret put hangs | No TTY input | Always pipe via `echo "value" \|` |
 | GitHub API 401 | Token expired or wrong scope | Regenerate PAT with correct scopes |
-| GH Actions deploy fails | Missing GitHub Actions secret or stale Worker runtime secret | Check `~/dev/secrets/inventory.yaml`, then sync the listed consumer |
+| GH Actions deploy fails | Missing GitHub Actions secret or stale Worker runtime secret | Check `~/dev/ops/bin/ops where <KEY>`, then `ops push fas <KEY> <consumer>` |

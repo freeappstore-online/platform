@@ -104,9 +104,9 @@ jobs:
         env:
           KB_INGEST_TOKEN: ${{ secrets.KB_INGEST_TOKEN }}
         run: |
-          # KB ingest auth is its own token (KB_INGEST_TOKEN), managed from
-          # the private SOPS repo `serge-ivo/secrets` and pushed to GitHub
-          # Actions as an org/repo secret on rotation/touch.
+          # KB ingest auth is its own token (KB_INGEST_TOKEN), stored
+          # SOPS-encrypted in ~/dev/ops (serge-ivo/ops); `ops put fas
+          # KB_INGEST_TOKEN` pushes it to this repo secret and the Workers.
           if [ -z "$KB_INGEST_TOKEN" ]; then echo "KB_INGEST_TOKEN GitHub Actions secret missing — cannot publish docs"; exit 1; fi
           out=site
           [ -d "$out" ] || out=public

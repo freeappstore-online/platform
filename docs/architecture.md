@@ -16,7 +16,7 @@
 | R2 app bucket | `fas-apps` |
 | R2 backups | `fas-backups` |
 | R2 docs | `fas-kb` |
-| Secrets source | Private SOPS repo `serge-ivo/secrets` (`fas` project key) |
+| Secrets source | SOPS-encrypted in `~/dev/ops` (`serge-ivo/ops`), `fas` project key; `ops put fas <KEY>` pushes to every consumer |
 
 ## Monorepo layout
 

@@ -58,12 +58,13 @@ The rule: **this worker owns provisioning and anything that needs its privileged
 
 Do **not** add a Cloudflare Access application in front of `admin.freeappstore.online`. It blocks the SPA before FAS auth can run and has broken before when the Zero Trust team domain changed.
 
-Secrets for GitHub + DNS + D1 calls are managed in the private SOPS repo
-`serge-ivo/secrets` (`~/dev/secrets`) and pushed to Cloudflare on rotation/touch:
+Secrets for GitHub + DNS + D1 calls live SOPS-encrypted in `~/dev/ops`
+(`serge-ivo/ops`, see its `AGENTS.md`). `ops put` stores a value and pushes it to
+every consumer listed in `inventory.yaml`, this Worker included:
 
 ```bash
-cd ~/dev/stores/fas/platform
-SECRETS_PROJECT=fas bash scripts/sync-worker-secrets.sh workers/admin
+~/dev/ops/bin/ops put fas <KEY>                               # store + push everywhere
+~/dev/ops/bin/ops push fas <KEY> wrangler freeappstore-admin  # re-place one key here
 ```
 
 ## Google SSO for admin

@@ -4,10 +4,9 @@ Last updated: 2026-07-12
 
 ## Master Credentials
 
-All infra secrets are managed in the private SOPS repo
-`serge-ivo/secrets` (`~/dev/secrets`). Doppler is retired. The canonical map is
-`~/dev/secrets/inventory.yaml`; encrypted values live in
-`~/dev/secrets/secrets.enc.yaml`.
+All infra secrets are SOPS-encrypted in `~/dev/ops` (`serge-ivo/ops`; read its
+`AGENTS.md` first). The canonical map is `~/dev/ops/inventory.yaml`; encrypted
+values live in `~/dev/ops/secrets.enc.yaml`.
 
 | # | Name | What it is | Where it lives | Used by |
 |---|------|-----------|----------------|---------|
@@ -31,20 +30,17 @@ CLOUDFLARE_API_TOKEN    (GH Actions — org-level, all repos)
 Notes:
 - Agent only needs GITHUB_TOKEN (creates repo + pushes; GH Actions does R2 deploy)
 - CF_API_TOKEN is **no longer used** by the agent (legacy from CF Pages era)
-- No auto-sync. When a value changes, update every consumer listed in
-  `~/dev/secrets/inventory.yaml`.
-- Worker runtime secrets are synced with `scripts/sync-worker-secrets.sh`.
+- `ops put fas <KEY>` stores a value and pushes it to every consumer listed in
+  `~/dev/ops/inventory.yaml` (Workers and GitHub secrets alike).
 
 ## How to set/rotate secrets
 
 ```bash
-# Edit encrypted values in the private secrets repo.
-cd ~/dev/secrets
-sops secrets.enc.yaml
+# Store/rotate one value: prompts hidden, verifies, pushes to every consumer, commits.
+~/dev/ops/bin/ops put fas <KEY>
 
-# Push worker secrets from the platform repo. Values are piped, never printed.
-cd ~/dev/stores/fas/platform
-SECRETS_PROJECT=fas bash scripts/sync-worker-secrets.sh packages/backend
+# Re-place one key on one Worker without changing it.
+~/dev/ops/bin/ops push fas <KEY> wrangler freeappstore-api
 ```
 
 ## Verify
