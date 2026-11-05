@@ -56,3 +56,38 @@ describe('signPayload / verifyPayload (used for OAuth state)', () => {
     expect(await verifyPayload(truncatedSig, KEY)).toBeNull();
   });
 });
+
+describe('verifySession accepts only sessions (#428)', () => {
+  const future = () => Math.floor(Date.now() / 1000) + 30;
+
+  it('rejects a room ticket signed with the session key', async () => {
+    const ticket = await signPayload(
+      { typ: 'room', appId: 'chat', roomId: 'r1', uid: 'gh:42', login: 'octo', exp: future() },
+      KEY,
+    );
+    expect(await verifySession(ticket, KEY)).toBeNull();
+  });
+
+  it('rejects OAuth and magic-link state (no uid)', async () => {
+    const state = await signPayload({ appId: 'chat', returnTo: '/', exp: future() }, KEY);
+    expect(await verifySession(state, KEY)).toBeNull();
+    const magic = await signPayload(
+      { email: 'a@b.co', appId: 'chat', returnTo: '/', exp: future() },
+      KEY,
+    );
+    expect(await verifySession(magic, KEY)).toBeNull();
+  });
+
+  it('rejects a payload with a non-numeric exp', async () => {
+    const odd = await signPayload({ uid: 'gh:42', exp: 'never' }, KEY);
+    expect(await verifySession(odd, KEY)).toBeNull();
+  });
+
+  it('still accepts a cross-store session shape (uid, login, roles, no typ)', async () => {
+    const pas = await signPayload(
+      { uid: 'cred:abc', login: 'octo', roles: ['user'], auth_time: 1, iat: 1, exp: future() },
+      KEY,
+    );
+    expect((await verifySession(pas, KEY))?.uid).toBe('cred:abc');
+  });
+});

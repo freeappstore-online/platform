@@ -35,7 +35,12 @@ export async function verifySession(
   } catch {
     return null;
   }
-  if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+  // Room tickets and OAuth/magic-link state share this key and format. Only a
+  // session has a string uid, a numeric exp and no typ (PAS sessions too), so
+  // a ticket or state blob is never accepted as a session (#428).
+  const claims = payload as SessionPayload & { typ?: unknown };
+  if (claims.typ !== undefined || typeof claims.uid !== 'string') return null;
+  if (typeof claims.exp !== 'number' || claims.exp < Math.floor(Date.now() / 1000)) return null;
   return payload;
 }
 
