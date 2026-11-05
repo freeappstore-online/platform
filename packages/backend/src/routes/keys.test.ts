@@ -495,4 +495,24 @@ describe('keys routes', () => {
     expect(data.model).toBe('claude-sonnet-4-6');
     expect(data.source).toBe('grant');
   });
+
+  it('key-resolve endpoints answer only on the service-binding host (#427)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY);
+    for (const host of [
+      'freeappstore-api.serge-the-dev.workers.dev',
+      'abc123-freeappstore-api.serge-the-dev.workers.dev',
+      'api.freeappstore.online',
+      'localhost:8787',
+      'backend.evil.example',
+    ]) {
+      for (const route of ['resolve', 'resolve-agent']) {
+        const res = await app.request(
+          `https://${host}/v1/keys/${route}/anthropic`,
+          { headers: { Authorization: `Bearer ${token}` } },
+          env(fakeDB({}), internalEnv),
+        );
+        expect(res.status, `${host} ${route}`).toBe(403);
+      }
+    }
+  });
 });

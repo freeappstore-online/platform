@@ -649,12 +649,16 @@ keysRoutes.delete('/keys/:provider', async (c) => {
 // Called by the agent worker via service binding. Not public-facing.
 // The agent sends the user's session token + provider, we decrypt and return.
 
+// The agent worker calls these over its service binding as https://backend/…;
+// no public hostname is ever `backend`. Allow exactly that host, not "anything
+// but the public domain": that deny-list let any other hostname the Worker
+// answers on (workers.dev, preview URLs) read decrypted keys (#427).
+function isServiceBindingCall(url: string): boolean {
+  return new URL(url).hostname === 'backend';
+}
+
 keysRoutes.get('/keys/resolve/:provider', async (c) => {
-  // Internal-only: only callable via service binding (agent worker).
-  // Service binding requests use a synthetic host (not the public domain),
-  // so checking the Host header distinguishes internal from external calls.
-  const host = c.req.header('host') ?? '';
-  if (host.includes('freeappstore.online') || host.includes('localhost')) {
+  if (!isServiceBindingCall(c.req.url)) {
     return c.json({ error: 'this endpoint is internal-only' }, 403);
   }
 
@@ -669,9 +673,7 @@ keysRoutes.get('/keys/resolve/:provider', async (c) => {
 });
 
 keysRoutes.get('/keys/resolve-agent/:provider', async (c) => {
-  // Internal-only: only callable via service binding (agent worker).
-  const host = c.req.header('host') ?? '';
-  if (host.includes('freeappstore.online') || host.includes('localhost')) {
+  if (!isServiceBindingCall(c.req.url)) {
     return c.json({ error: 'this endpoint is internal-only' }, 403);
   }
 

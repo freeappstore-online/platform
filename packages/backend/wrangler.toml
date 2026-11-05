@@ -2,6 +2,10 @@ name = "freeappstore-api"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat"]
+# Serve only on the custom domain below. The key-resolve endpoints trust the
+# service-binding host, so no other public hostname may reach this Worker (#427).
+workers_dev = false
+preview_urls = false
 
 # Attach api.freeappstore.online to this Worker. With custom_domain = true,
 # wrangler creates the DNS record and provisions TLS as part of deploy.
