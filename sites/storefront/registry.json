@@ -2743,6 +2743,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-04T21:35:13.239Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "cue-scroll",
+      "name": "cue-scroll",
+      "category": "Utilities",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Read your scripts at your pace with smooth scrolling and mirror mode.",
+      "appUrl": "https://cue-scroll.freeappstore.online",
+      "repo": "freeappstore-online/cue-scroll",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-05T02:05:10.654Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
