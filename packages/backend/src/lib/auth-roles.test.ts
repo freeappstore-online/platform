@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { computeRoles } from '../routes/auth.js';
-import {
-  hasInternalToken,
-  isAdmin,
-  isAdminLogin,
-  isLegacyEmailAdmin,
-  requireUser,
-} from './auth.js';
+import { hasInternalToken, isAdminLogin, requireUser } from './auth.js';
 import { signSession, verifySession } from './session.js';
 
 const KEY = 'a'.repeat(64);
@@ -138,18 +132,6 @@ describe('computeRoles admin (#22)', () => {
     const env = makeEnv({ ADMIN_USER_IDS: 'gh:1, google:1234567890' });
     const { roles } = await computeRoles('google:1234567890', 'serge', env, 'google');
     expect(roles).toContain('admin');
-  });
-
-  it('grants admin through the legacy email: alias only when asked to (#434 phase 1)', async () => {
-    const env = makeEnv({ ADMIN_USER_IDS: 'email:a@example.com' });
-    const id = `em:${'0'.repeat(32)}`;
-    expect((await computeRoles(id, 'user-0000', env, 'email', true)).roles).toContain('admin');
-    expect((await computeRoles(id, 'user-0000', env, 'email')).roles).not.toContain('admin');
-    expect(isLegacyEmailAdmin('a@example.com', env)).toBe(true);
-    expect(isLegacyEmailAdmin('b@example.com', env)).toBe(false);
-    expect(isLegacyEmailAdmin(null, env)).toBe(false);
-    expect(isAdmin({ id, githubLogin: '', legacyAdmin: true }, env)).toBe(true);
-    expect(isAdmin({ id, githubLogin: '' }, env)).toBe(false);
   });
 
   it('matches ADMIN_USER_IDS case-insensitively', async () => {

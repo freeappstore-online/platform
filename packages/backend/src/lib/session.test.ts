@@ -92,10 +92,10 @@ describe('verifySession accepts only sessions (#428)', () => {
   });
 });
 
-describe('verifySession and email user ids (#434 phase 1)', () => {
-  it('still accepts a session minted with the retired email: uid (dual-read window)', async () => {
+describe('verifySession rejects retired email: uids (#434)', () => {
+  it('rejects a session whose uid embeds an email address', async () => {
     const legacy = await signSession('email:alice@example.com', KEY);
-    expect((await verifySession(legacy, KEY))?.uid).toBe('email:alice@example.com');
+    expect(await verifySession(legacy, KEY)).toBeNull();
   });
 
   it('accepts the opaque id that replaced it', async () => {

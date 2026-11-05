@@ -41,6 +41,10 @@ export async function verifySession(
   const claims = payload as SessionPayload & { typ?: unknown };
   if (claims.typ !== undefined || typeof claims.uid !== 'string') return null;
   if (typeof claims.exp !== 'number' || claims.exp < Math.floor(Date.now() / 1000)) return null;
+  // `email:<address>` uids were retired by migration 0032 (#434): a session
+  // minted before it must sign in again rather than keep handing the address
+  // to apps and room peers.
+  if (claims.uid.startsWith('email:')) return null;
   return payload;
 }
 

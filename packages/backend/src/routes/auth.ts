@@ -1,12 +1,6 @@
 import { Apple, decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
-import {
-  HttpError,
-  isAdminLogin,
-  isAdminUserId,
-  isLegacyEmailAdmin,
-  requireUser,
-} from '../lib/auth.js';
+import { HttpError, isAdminLogin, isAdminUserId, requireUser } from '../lib/auth.js';
 import { deliverSession, exchangeAuthCode } from '../lib/deliver-session.js';
 import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
@@ -536,36 +530,42 @@ authRoutes.get('/auth/email/callback', async (c) => {
 
   // The user id, login and display name are shown to apps, room peers and
   // other stores, so none of them may be derived from the address (#434). The
-  // account is found by its address (provider_id), whichever id it has; a new
-  // one gets a random id and a neutral name.
-  const existing = await c.env.DB.prepare(
+  // account is found by its address (provider_id); a new one gets a random id
+  // and a neutral name.
+  const lookup = c.env.DB.prepare(
     "SELECT id, github_login FROM users WHERE provider = 'email' AND provider_id = ?",
-  )
-    .bind(state.email)
-    .first<{ id: string; github_login: string }>();
-  let userId: string;
-  let login: string;
-  if (existing) {
-    userId = existing.id;
-    login = existing.github_login;
-  } else {
-    userId = newEmailUserId();
-    login = neutralDisplayName();
-    await c.env.DB.prepare(
-      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-       VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?)`,
-    )
-      .bind(userId, login, Date.now(), state.email, state.email, login)
-      .run();
+  ).bind(state.email);
+  let existing = await lookup.first<{ id: string; github_login: string }>();
+  if (!existing) {
+    const userId = newEmailUserId();
+    const login = neutralDisplayName();
+    try {
+      await c.env.DB.prepare(
+        `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
+         VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?)`,
+      )
+        .bind(userId, login, Date.now(), state.email, state.email, login)
+        .run();
+      existing = { id: userId, github_login: login };
+    } catch {
+      // Two first sign-ins for one address at once: the unique index let only
+      // one row in, so the other request uses it.
+      existing = await lookup.first<{ id: string; github_login: string }>();
+      if (!existing) throw new Error('email sign-in: insert failed and no row found');
+    }
   }
+  // Migration 0032 retired `email:` ids and prod held none afterwards; a row
+  // that still has one would mint a session verifySession rejects. Refuse it.
+  if (existing.id.startsWith('email:')) {
+    console.error('email_signin_legacy_id', {
+      provider: 'email',
+      reason: 'row keeps a retired email: id',
+    });
+    return c.text('account needs migration — contact support', 401);
+  }
+  const { id: userId, github_login: login } = existing;
 
-  const { roles, appRoles } = await computeRoles(
-    userId,
-    login,
-    c.env,
-    'email',
-    isLegacyEmailAdmin(state.email, c.env),
-  );
+  const { roles, appRoles } = await computeRoles(userId, login, c.env, 'email');
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
   const delivery = await deliverSession(c.env, state, session);
   if (!delivery.ok) return c.text(delivery.error, 400);
@@ -605,7 +605,6 @@ authRoutes.get('/auth/me', async (c) => {
       user.githubLogin,
       c.env,
       user.githubLogin ? 'github' : 'none',
-      user.legacyAdmin === true,
     );
     const roles = [
       ...new Set([...user.roles.filter((r) => r !== 'admin' && r !== 'creator'), ...live.roles]),
@@ -701,7 +700,6 @@ export async function computeRoles(
   login: string,
   env: Env,
   provider = 'github',
-  legacyAdmin = false,
 ): Promise<{ roles: string[]; appRoles: Record<string, string[]> }> {
   const roles = ['user'];
   const appRoles: Record<string, string[]> = {};
@@ -747,11 +745,7 @@ export async function computeRoles(
 
   // Admin: login matches only for GitHub (see security note above); the user id
   // is provider-issued, so ADMIN_USER_IDS works for every provider (#22).
-  // `legacyAdmin`: #434 phase 1, the secret still names the account by its
-  // retired `email:` id (see isLegacyEmailAdmin).
-  if ((isGithub && isAdminLogin(login, env)) || isAdminUserId(userId, env) || legacyAdmin) {
-    roles.push('admin');
-  }
+  if ((isGithub && isAdminLogin(login, env)) || isAdminUserId(userId, env)) roles.push('admin');
 
   return { roles, appRoles };
 }

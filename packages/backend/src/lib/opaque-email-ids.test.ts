@@ -220,41 +220,33 @@ describe.skipIf(!hasSqlite)('migration 0032: opaque email user ids (#434)', () =
   });
 });
 
-describe.skipIf(!hasSqlite)('phase 1 dual read of email: and em: ids (#434)', () => {
-  async function me(d1: D1Database, uid: string, vars: Record<string, string> = {}) {
+describe.skipIf(!hasSqlite)('retired email: uids are refused (#434)', () => {
+  async function me(d1: D1Database, uid: string) {
     const token = await signSession(uid, SIGNING_KEY);
     const res = await app.request(
       '/v1/auth/me',
       { headers: { Authorization: `Bearer ${token}` } },
-      { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY, ...vars } as unknown as Record<string, unknown>,
+      { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY } as unknown as Record<string, unknown>,
     );
     return { status: res.status, body: (await res.json()) as Record<string, unknown> };
   }
 
-  it('a session minted with the retired email: uid resolves to the migrated account', async () => {
+  it('a session minted with the retired email: uid is 401 even though the account exists', async () => {
     const { db, d1 } = sqliteD1({ before: MIGRATION });
     seed(db);
     db.exec(migration(MIGRATION));
-    const alice = newId(db, 'alice@example.com');
     const r = await me(d1, ALICE);
-    expect(r.status).toBe(200);
-    expect(r.body.id).toBe(alice);
+    expect(r.status).toBe(401);
     expect(JSON.stringify(r.body)).not.toContain('alice');
   });
 
-  it('a retired email: uid with no account behind it is rejected, not synthesized', async () => {
-    const { d1 } = sqliteD1();
-    expect((await me(d1, 'email:nobody@example.com')).status).toBe(401);
-  });
-
-  it('ADMIN_USER_IDS still naming the account by its email: id grants admin', async () => {
+  it('the migrated account signs in with its em: id and the JSON carries no address', async () => {
     const { db, d1 } = sqliteD1({ before: MIGRATION });
     seed(db);
     db.exec(migration(MIGRATION));
-    const alice = newId(db, 'alice@example.com');
-    const admin = await me(d1, alice, { ADMIN_USER_IDS: `gh:1,${ALICE}` });
-    expect(admin.body.roles).toContain('admin');
-    const bob = await me(d1, newId(db, 'bob@example.org'), { ADMIN_USER_IDS: `gh:1,${ALICE}` });
-    expect(bob.body.roles).not.toContain('admin');
+    const r = await me(d1, newId(db, 'alice@example.com'));
+    expect(r.status).toBe(200);
+    expect(JSON.stringify(r.body)).not.toContain('alice');
+    expect(r.body).not.toHaveProperty('legacyAdmin');
   });
 });

@@ -1,7 +1,9 @@
 -- #434 verification, read-only: every D1 text column that still holds an
 -- `email:<address>` user id. Every statement should return no rows after
 -- 0032_opaque_email_user_ids. Prints counts only, never values.
--- Run: wrangler d1 execute fas --remote --file scripts/verify-434-no-email-ids.sql
+-- Run (from packages/backend; --file would print only a batch summary, and the
+-- leading comment lines must be stripped or wrangler reads them as flags):
+--   wrangler d1 execute fas --remote --json --command "$(grep -v '^--' scripts/verify-434-no-email-ids.sql)"
 -- Encrypted key columns are skipped; they cannot hold a plaintext id.
 -- D1 allows at most 5 terms per compound SELECT, hence the chunks.
 SELECT tbl, col, n FROM (

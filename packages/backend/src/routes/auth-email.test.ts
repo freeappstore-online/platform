@@ -280,13 +280,47 @@ describe.skipIf(!hasSqlite)('email sign-in user ids against real SQLite (#434)',
     });
   });
 
-  it('finds an account that still has its retired email: id (migration not yet applied)', async () => {
+  it('refuses an account that still has a retired email: id instead of minting it a session', async () => {
     const { db, d1 } = sqliteD1({ before: '0032_opaque_email_user_ids.sql' });
     db.prepare(
       `INSERT INTO users (id, github_id, github_login, created_at, provider, provider_id, email, display_name)
        VALUES ('email:alice@example.com', 0, 'alice', 1, 'email', 'alice@example.com', 'alice@example.com', 'alice')`,
     ).run();
-    expect(await signIn(d1, 'alice@example.com')).toBe('email:alice@example.com');
+    const token = await signPayload(
+      { email: 'alice@example.com', appId: 'demo', returnTo: VALID_RETURN_TO, exp: exp++ },
+      SIGNING_KEY,
+    );
+    const res = await app.request(
+      `/v1/auth/email/callback?token=${encodeURIComponent(token)}`,
+      { redirect: 'manual' },
+      makeEnv({}, d1),
+    );
+    expect(res.status).toBe(401);
+    expect(await res.text()).not.toContain('alice');
+    expect(db.prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 1 });
+  });
+
+  it('a second concurrent first sign-in for one address joins the row the first created', async () => {
+    const { db, d1 } = sqliteD1();
+    const first = await signIn(d1, 'carol@example.com');
+    // Simulate the race: the lookup missed, then the insert hit the unique index.
+    const raced = {
+      prepare(sql: string) {
+        const stmt = d1.prepare(sql);
+        if (!sql.startsWith("SELECT id, github_login FROM users WHERE provider = 'email'"))
+          return stmt;
+        let calls = 0;
+        return {
+          bind: (...args: unknown[]) => {
+            stmt.bind(...args);
+            return {
+              first: async () => (calls++ === 0 ? null : stmt.first()),
+            };
+          },
+        };
+      },
+    } as unknown as D1Database;
+    expect(await signIn(raced, 'carol@example.com')).toBe(first);
     expect(db.prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 1 });
   });
 
