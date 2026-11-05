@@ -50,7 +50,7 @@ export interface Env {
    * Provisioning control-plane token shared ONLY with the admin Worker
    * (freeappstore-admin). Authenticates both directions: backend→admin
    * (/api/provision) and admin→backend (/v1/internal analytics callbacks).
-   * Managed from the private SOPS secrets repo (`serge-ivo/secrets`) and synced
+   * Managed from the private SOPS secrets repo (`serge-ivo/ops`) and synced
    * to both Workers on rotation/touch. Internal routes 403 when unset.
    */
   ADMIN_PROVISION_TOKEN?: string;
