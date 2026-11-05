@@ -58,9 +58,9 @@ needs an HTML icon link; a manifest icon is a different relationship. Fetch the 
 declared asset and check it is an image rather than an HTML fallback or a 404.
 Use app-owned artwork; the starter icon is a placeholder.
 
-The starter SVG favicon covers browsers supporting SVG favicons. It does not establish
-older Safari or Apple touch-icon compatibility. If those browsers are in scope, supply
-and verify suitable PNG/touch-icon assets too. See [MDN's icon relationship](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel#icon)
+Fresh starters generate PNG install/touch icons and an ICO favicon fallback alongside
+the SVG. Verify the built files, not just the source declarations. Existing apps need
+to adopt or supply those assets explicitly; a manifest link alone does not provide them. See [MDN's icon relationship](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Attributes/rel#icon)
 and [Apple's web clip guidance](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html).
 
 ## Completion evidence

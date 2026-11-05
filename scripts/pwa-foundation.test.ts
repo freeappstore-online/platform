@@ -8,7 +8,9 @@ it('builder foundation provides installed navigation metadata, safe areas and lo
   expect(manifest.display).toBe('standalone');
   expect(manifest.scope).toBe('/');
   expect(manifest.start_url).toBe('/');
-  for (const icon of manifest.icons) expect(files[`web/public${icon.src}`]).toBeTruthy();
+  // Raster assets are derived from app-owned SVG during dev/build, not fake text PNGs.
+  expect(files['web/public/icon.svg']).toContain('<svg');
+  expect(manifest.icons.some((icon: { type: string }) => icon.type === 'image/png')).toBe(true);
   expect(files['web/index.html']).toContain('viewport-fit=cover');
   expect(files['web/index.html']).not.toMatch(/maximum-scale|user-scalable/);
   const css = files['web/src/index.css']!;

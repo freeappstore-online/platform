@@ -194,6 +194,8 @@ Before reporting completion, typecheck and build; exercise a real user flow,
 including sequential keyboard typing (not only programmatic fill), associated
 labels, save + reload, validation failures, and avatar/Profile return navigation.
 Check the browser favicon separately from the PWA manifest/install icon.
+Dev/build generates raster icons from the app-owned SVG using web/pwa-assets.config.ts.
+Keep custom artwork, HTML and manifest paths consistent; prebuilt custom icons are supported.
 Use available browser tooling; state explicitly when runtime checks were not run.
 Practical review guide:
 https://github.com/freeappstore-online/platform/blob/main/docs/app-verification.md
@@ -214,7 +216,9 @@ https://github.com/freeappstore-online/platform/blob/main/CONTRIBUTING.md#updati
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&display=swap" rel="stylesheet" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png" sizes="180x180" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#2563eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -994,6 +998,15 @@ export { pwa } from './fas-capabilities/pwa';
 `,
           'web/src/main.tsx': `import './fas-capabilities/pwa';\n${SHARED_FILES['web/src/main.tsx']}`,
           'web/public/icon.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="64" fill="#2563eb"/><path d="M160 160h192v48H208v48h120v48H208v48h-48z" fill="white"/></svg>`,
+          'web/pwa-assets.config.ts': `import { defineConfig, minimal2023Preset } from '@vite-pwa/assets-generator/config';
+
+// App-owned artwork and padding/background options. Keep manifest/HTML paths in sync.
+export default defineConfig({
+  preset: minimal2023Preset,
+  headLinkOptions: { preset: '2023' },
+  images: ['public/icon.svg'],
+});
+`,
           'web/public/manifest.json': JSON.stringify(
             {
               ...JSON.parse(APP_FILES['web/public/manifest.json']!),
@@ -1001,7 +1014,14 @@ export { pwa } from './fas-capabilities/pwa';
               scope: '/',
               min_viewport_width: 320,
               icons: [
-                { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any maskable' },
+                { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+                { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+                {
+                  src: '/maskable-icon-512x512.png',
+                  sizes: '512x512',
+                  type: 'image/png',
+                  purpose: 'maskable',
+                },
               ],
             },
             null,
@@ -1034,9 +1054,25 @@ img, video, canvas { max-width: 100%; }
   };
 
   if (config.store === 'apps') {
-    const appPackage = JSON.parse(files['package.json']!) as { scripts: Record<string, string> };
+    const appPackage = JSON.parse(files['package.json']!) as {
+      scripts: Record<string, string>;
+      pnpm: { onlyBuiltDependencies: string[] };
+    };
     appPackage.scripts.test = 'pnpm --filter @APPNAME/web test';
+    appPackage.pnpm.onlyBuiltDependencies.push('sharp');
     files['package.json'] = JSON.stringify(appPackage, null, 2);
+    const webPackage = JSON.parse(files['web/package.json']!) as {
+      scripts: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    webPackage.devDependencies['@vite-pwa/assets-generator'] = '1.0.4';
+    webPackage.scripts['generate:icons'] = 'pwa-assets-generator --manifest=false';
+    webPackage.scripts.dev = 'pnpm generate:icons && vite';
+    webPackage.scripts.build = 'pnpm generate:icons && vite build';
+    files['web/package.json'] = JSON.stringify(webPackage, null, 2);
+    const nodeConfig = JSON.parse(files['web/tsconfig.node.json']!) as { include: string[] };
+    nodeConfig.include.push('pwa-assets.config.ts');
+    files['web/tsconfig.node.json'] = JSON.stringify(nodeConfig, null, 2);
   }
 
   if (config.store === 'apps' && preset === 'connected') {

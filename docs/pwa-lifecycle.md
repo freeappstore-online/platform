@@ -114,3 +114,36 @@ existing controller; do not call `startPwa` again from Profile or each screen.
 The runtime keeps actionable update/reload notices and busy guards. Default connectivity
 feedback remains in Shell's neutral offline banner (also available as `OfflineBanner`
 for custom frames); only explicit `offlineFeatures` create feature-specific PWA status.
+
+## App identity assets
+
+Fresh app starters keep editable artwork in `web/public/icon.svg` and an app-owned
+`web/pwa-assets.config.ts`. Their dev/build scripts run the maintained
+[PWA Assets Generator](https://vite-pwa-org.netlify.app/assets-generator/cli) first,
+using version 1.0.4 (compatible with vite-plugin-pwa 1.x). It generates real PNG install
+icons, a separate maskable icon, an Apple touch icon and an ICO fallback. PNG files are
+derived build assets, not SVG text renamed to .png; no binary transport through the
+builder's text-file map is needed.
+
+The HTML links SVG/ICO favicons and the 180px Apple touch icon. The manifest separately
+links 192px/512px PNG icons and a 512px maskable icon. Keep padding/background choices
+in the editable preset. Review custom artwork inside the maskable safe area; do not
+assume a logo's corners are preserved by every OS mask. The source image and preset
+remain app-owned. No store mark, mandatory logo or product layout is required.
+
+Run `pnpm --filter ./web generate:icons` after editing artwork during an existing dev
+session. Starting dev or building also regenerates it. To use supplied PNG artwork,
+change `images` in the config and update the HTML favicon to that chosen source.
+Ready-made icons/custom build pipelines are supported: remove the generation hook and
+keep the HTML/manifest declarations consistent with the files the app actually serves.
+
+Existing apps adopt deliberately: add `@vite-pwa/assets-generator@1.0.4` as a web dev
+dependency, preserve their pnpm build allowlist while adding `sharp`, copy/adapt the
+config, and add generation to their existing dev/build scripts,
+and review HTML/manifest changes. Preserve names, theme colors, routes and custom icons.
+See [Apple's web clip guidance](https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html).
+
+Release browser checks fetch and decode declared icons, check dimensions and opaque
+maskable/touch backgrounds in Chromium and WebKit. They do not claim a physical iOS
+Add to Home Screen installation. Browser/OS installation UI remains a separate manual
+check when physical-device coverage is required.

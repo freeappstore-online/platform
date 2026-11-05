@@ -39,6 +39,31 @@ test('produced artifact renders navigation and persists a real theme change', as
   const icon = await page.request.get(new URL(iconHref!, page.url()).href);
   expect(icon.ok()).toBe(true);
   expect(icon.headers()['content-type']).toMatch(/^image\//);
+  const touchHref = await page.locator('link[rel="apple-touch-icon"]').getAttribute('href');
+  expect(touchHref).toBeTruthy();
+  const manifest = await (await page.request.get('/manifest.json')).json();
+  for (const asset of [...manifest.icons, { src: touchHref, sizes: '180x180' }]) {
+    const response = await page.request.get(asset.src);
+    expect(response.ok(), asset.src).toBe(true);
+    expect(response.headers()['content-type'], asset.src).toMatch(/^image\/png/);
+    const decoded = await page.evaluate(async (src) => {
+      const image = new Image();
+      image.src = src;
+      await image.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(image, 0, 0);
+      return {
+        size: `${image.naturalWidth}x${image.naturalHeight}`,
+        cornerAlpha: context.getImageData(0, 0, 1, 1).data[3],
+      };
+    }, asset.src);
+    expect(decoded.size, asset.src).toBe(asset.sizes);
+    if (asset.purpose === 'maskable' || asset.src === touchHref)
+      expect(decoded.cornerAlpha).toBe(255);
+  }
 
   await expect(page.getByRole('main')).toBeVisible();
   await expect(page.getByRole('status', { name: 'Task count' })).toHaveText('0');

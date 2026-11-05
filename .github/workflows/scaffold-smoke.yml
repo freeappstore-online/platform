@@ -179,7 +179,7 @@ jobs:
           node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" check
 
       - name: Install browser
-        run: pnpm --filter @freeappstore/e2e exec playwright install --with-deps chromium
+        run: pnpm --filter @freeappstore/e2e exec playwright install --with-deps chromium webkit
 
       - name: Validate deployment artifact and identity
         working-directory: /tmp/scaffold-smoke

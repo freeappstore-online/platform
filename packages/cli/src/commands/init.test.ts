@@ -69,7 +69,9 @@ it.each(['standalone', 'connected'] as const)('declares a real favicon asset for
     'generic',
     preset,
   );
-  const href = /<link[^>]*rel="icon"[^>]*href="([^"]+)"/.exec(files['web/index.html']!)?.[1];
+  const href = /<link[^>]*rel="icon"[^>]*type="image\/svg\+xml"[^>]*href="([^"]+)"/.exec(
+    files['web/index.html']!,
+  )?.[1];
   expect(href).toBeTruthy();
   expect(files[`web/public${href}`]).toMatch(/<svg\s/);
 });

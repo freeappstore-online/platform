@@ -21,6 +21,15 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['iPhone 14'], defaultBrowserType: 'chromium' } },
+    ...(artifact
+      ? [
+          {
+            name: 'webkit-icons',
+            testMatch: '**/artifact.spec.ts',
+            use: { ...devices['iPhone 14'], defaultBrowserType: 'webkit' as const },
+          },
+        ]
+      : []),
   ],
   webServer: {
     command: artifact

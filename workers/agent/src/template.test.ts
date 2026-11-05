@@ -98,16 +98,25 @@ describe("getTemplateFiles", () => {
   });
 
   it("shares foundation files and keeps valid store-specific test scripts", () => {
-    const sharedPaths = ["pnpm-workspace.yaml", "web/tsconfig.json", "web/tsconfig.app.json", "web/tsconfig.node.json", ".gitignore"];
+    const sharedPaths = ["pnpm-workspace.yaml", "web/tsconfig.json", "web/tsconfig.app.json", ".gitignore"];
     for (const p of sharedPaths) {
       expect(appsFiles[p]).toBe(gamesFiles[p]);
     }
-    const appPackage = JSON.parse(appsFiles["package.json"]!) as { scripts: Record<string, string> };
-    const gamePackage = JSON.parse(gamesFiles["package.json"]!) as { scripts: Record<string, string> };
-    expect({ ...appPackage, scripts: { ...appPackage.scripts, test: undefined } }).toEqual({
+    expect(JSON.parse(appsFiles["web/tsconfig.node.json"]!).include).toContain("pwa-assets.config.ts");
+    const appPackage = JSON.parse(appsFiles["package.json"]!) as {
+      scripts: Record<string, string>;
+      pnpm: { onlyBuiltDependencies: string[] };
+    };
+    const gamePackage = JSON.parse(gamesFiles["package.json"]!) as {
+      scripts: Record<string, string>;
+      pnpm: { onlyBuiltDependencies: string[] };
+    };
+    expect({ ...appPackage, pnpm: undefined, scripts: { ...appPackage.scripts, test: undefined } }).toEqual({
       ...gamePackage,
+      pnpm: undefined,
       scripts: { ...gamePackage.scripts, test: undefined },
     });
+    expect(appPackage.pnpm.onlyBuiltDependencies).toEqual([...gamePackage.pnpm.onlyBuiltDependencies, "sharp"]);
     expect(appPackage.scripts.test).toBe("pnpm --filter @APPNAME/web test");
     expect(gamePackage.scripts.test).toBe("pnpm build");
   });
@@ -353,7 +362,12 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
     expect(files["web/src/index.css"]).toContain('@source "../../node_modules/@freeappstore/sdk/dist";');
     expect(files["web/src/index.css"]).toContain("@theme inline");
     expect(files["web/src/index.css"]).toContain("--color-popover: var(--popover");
-    expect(JSON.parse(files["web/public/manifest.json"]!).icons[0].purpose).toContain("maskable");
+    expect(JSON.parse(files["web/public/manifest.json"]!).icons).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "image/png", purpose: "any", sizes: "192x192" }),
+        expect.objectContaining({ type: "image/png", purpose: "maskable", sizes: "512x512" }),
+      ]),
+    );
     expect(files["web/public/icon.svg"]).toContain("viewBox");
     expect(files["web/index.html"]).not.toMatch(/user-scalable|maximum-scale/);
   });

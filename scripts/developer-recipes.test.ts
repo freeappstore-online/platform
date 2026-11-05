@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { registry } from '../packages/cli/src/lib/capability-definitions.js';
 import { FORM_EXAMPLE } from '../packages/cli/src/lib/developer-recipes.js';
 import { getTemplateFiles } from '../packages/cli/src/lib/starter-foundation.js';
@@ -28,50 +28,91 @@ function publishedPaths(): Record<string, string[]> {
   return paths;
 }
 
-function diagnostics(code: string, jsx = false, extra: Record<string, string> = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'fas-sdk-example-'));
-  const file = join(dir, jsx ? 'web/src/components/example.tsx' : 'example.ts');
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, code);
-  for (const [path, body] of Object.entries(extra)) {
+function diagnostics(files: Record<string, string>) {
+  const dir = mkdtempSync(join(tmpdir(), 'fas-sdk-examples-'));
+  for (const [path, body] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true });
     writeFileSync(join(dir, path), body);
   }
   try {
-    const program = ts.createProgram([file], {
-      strict: true,
-      noEmit: true,
-      skipLibCheck: true,
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      types: [],
-      jsx: ts.JsxEmit.ReactJSX,
-      baseUrl: process.cwd(),
-      paths: process.env.FAS_EXAMPLE_APP
-        ? publishedPaths()
-        : {
-            '@freeappstore/sdk': [resolve('packages/sdk/src/index.ts')],
-            '@freeappstore/sdk/hooks': [resolve('packages/sdk/src/hooks.ts')],
-            '@freeappstore/sdk/pwa': [resolve('packages/sdk/src/pwa.ts')],
-            '@freeappstore/sdk/pwa-config': [resolve('packages/sdk/src/pwa-config.ts')],
-            '@freeappstore/sdk/media': [resolve('packages/sdk/src/media.ts')],
-            react: [resolve('packages/sdk/node_modules/@types/react/index.d.ts')],
-            'react/jsx-runtime': [
-              resolve('packages/sdk/node_modules/@types/react/jsx-runtime.d.ts'),
-            ],
-            '@freeappstore/sdk/ui': [resolve('packages/sdk/src/ui/index.ts')],
-            '@freeappstore/sdk/persist': [resolve('packages/sdk/src/persist/index.ts')],
-            '@freeappstore/sdk/backup': [resolve('packages/sdk/src/backup/index.ts')],
-          },
-    });
-    return ts
-      .getPreEmitDiagnostics(program)
-      .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'));
+    const program = ts.createProgram(
+      Object.keys(files).map((path) => join(dir, path)),
+      {
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        types: [],
+        jsx: ts.JsxEmit.ReactJSX,
+        baseUrl: process.cwd(),
+        paths: process.env.FAS_EXAMPLE_APP
+          ? publishedPaths()
+          : {
+              '@freeappstore/sdk': [resolve('packages/sdk/src/index.ts')],
+              '@freeappstore/sdk/hooks': [resolve('packages/sdk/src/hooks.ts')],
+              '@freeappstore/sdk/pwa': [resolve('packages/sdk/src/pwa.ts')],
+              '@freeappstore/sdk/pwa-config': [resolve('packages/sdk/src/pwa-config.ts')],
+              '@freeappstore/sdk/media': [resolve('packages/sdk/src/media.ts')],
+              react: [resolve('packages/sdk/node_modules/@types/react/index.d.ts')],
+              'react/jsx-runtime': [
+                resolve('packages/sdk/node_modules/@types/react/jsx-runtime.d.ts'),
+              ],
+              '@freeappstore/sdk/ui': [resolve('packages/sdk/src/ui/index.ts')],
+              '@freeappstore/sdk/persist': [resolve('packages/sdk/src/persist/index.ts')],
+              '@freeappstore/sdk/backup': [resolve('packages/sdk/src/backup/index.ts')],
+            },
+      },
+    );
+    const result = new Map(Object.keys(files).map((path) => [path, [] as string[]]));
+    for (const diagnostic of ts.getPreEmitDiagnostics(program)) {
+      const key = diagnostic.file
+        ? relative(dir, diagnostic.file.fileName).replaceAll('\\', '/')
+        : '';
+      const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+      const target = result.get(key);
+      if (target) target.push(message);
+      else for (const errors of result.values()) errors.push(message);
+    }
+    return result;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+const tsxBlock = (feature: Parameters<typeof getSdkReference>[0]) =>
+  /```tsx\n([\s\S]*?)```/.exec(getSdkReference(feature))?.[1] ?? '';
+const examplePath = (id: string) =>
+  id === 'pwa'
+    ? 'web/src/fas-capabilities/pwa.ts'
+    : id === 'connected-data'
+      ? 'web/src/components/connected-data.tsx'
+      : `${id}.tsx`;
+const examples: Record<string, string> = {
+  [examplePath('shell')]: tsxBlock('shell'),
+  [examplePath('forms')]: tsxBlock('forms'),
+  [examplePath('connected-data')]: tsxBlock('connected-data'),
+};
+for (const id of ['pwa', 'realtime', 'media'])
+  examples[examplePath(id)] = Object.entries(registry[id]!.files).find(([path]) =>
+    path.endsWith('.ts'),
+  )![1];
+for (const id of ['persistence', 'backup'])
+  examples[examplePath(id)] = codeBlock(getSdkReference(id));
+for (const id of ['kv', 'counters', 'collections', 'rooms'] as const)
+  examples[examplePath(id)] =
+    `import { initApp } from '@freeappstore/sdk';\nconst fas = initApp({ appId: 'example' });\n${tsxBlock(id)}`;
+examples['invalid-open-store.ts'] = examples[examplePath('persistence')]!.replace(
+  "openStore({ namespace: 'notes', version: 1 })",
+  "openStore('notes')",
+);
+let checked: Map<string, string[]>;
+beforeAll(() => {
+  for (const [name, body] of Object.entries(examples))
+    expect(body.length, name).toBeGreaterThan(10);
+  checked = diagnostics(examples);
+}, 90_000);
 
 describe('examples handed to app authors', () => {
   it('does not fall back to unpublished source when a released subpath is missing', () => {
@@ -86,13 +127,15 @@ describe('examples handed to app authors', () => {
     vi.stubEnv('FAS_EXAMPLE_APP', app);
     try {
       expect(
-        diagnostics("import { openStore } from '@freeappstore/sdk/persist';").join('\n'),
+        diagnostics({ 'missing.ts': "import { openStore } from '@freeappstore/sdk/persist';" })
+          .get('missing.ts')!
+          .join('\n'),
       ).toContain("Cannot find module '@freeappstore/sdk/persist'");
     } finally {
       vi.unstubAllEnvs();
       rmSync(app, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
   it('actual room recipe stops delivering events after abort and closes once', () => {
     const subscribers = new Map<string, Set<(value: unknown) => void>>();
     const subscribe = (kind: string) => (listener: (value: unknown) => void) => {
@@ -130,7 +173,8 @@ describe('examples handed to app authors', () => {
   });
   it('typechecks the whole Shell example, including every referenced screen', () => {
     const code = /```tsx\n([\s\S]*?)```/.exec(getSdkReference('shell'))?.[1] ?? '';
-    expect(diagnostics(code, true)).toEqual([]);
+    expect(code).toBe(examples[examplePath('shell')]);
+    expect(checked.get(examplePath('shell'))).toEqual([]);
   }, 20_000);
 
   it('delivers and typechecks the real connected component and its controller import', () => {
@@ -141,18 +185,16 @@ describe('examples handed to app authors', () => {
     );
     const code = /```tsx\n([\s\S]*?)```/.exec(getSdkReference('connected-data'))?.[1] ?? '';
     expect(code).toBe(files['web/src/components/ConnectedDraft.tsx']);
-    expect(
-      diagnostics(code, true, {
-        'web/src/fas-capabilities/pwa.ts': files['web/src/fas-capabilities/pwa.ts']!,
-      }),
-    ).toEqual([]);
+    expect(checked.get(examplePath('connected-data'))).toEqual([]);
+    expect(examples[examplePath('pwa')]).toBe(files['web/src/fas-capabilities/pwa.ts']);
   }, 20_000);
 
   it.each(['pwa', 'realtime', 'media'])(
     'typechecks the actual optional %s module',
     (id) => {
       const module = Object.entries(registry[id]!.files).find(([path]) => path.endsWith('.ts'))![1];
-      expect(diagnostics(module)).toEqual([]);
+      expect(module).toBe(examples[examplePath(id)]);
+      expect(checked.get(examplePath(id))).toEqual([]);
     },
     20_000,
   );
@@ -161,12 +203,8 @@ describe('examples handed to app authors', () => {
     'typechecks %s API fragments in their declared app context',
     (feature) => {
       const fragment = /```tsx\n([\s\S]*?)```/.exec(getSdkReference(feature))?.[1] ?? '';
-      expect(
-        diagnostics(
-          `import { initApp } from '@freeappstore/sdk';\nconst fas = initApp({ appId: 'example' });\n${fragment}`,
-          true,
-        ),
-      ).toEqual([]);
+      expect(fragment.length).toBeGreaterThan(10);
+      expect(checked.get(examplePath(feature))).toEqual([]);
     },
     20_000,
   );
@@ -192,7 +230,7 @@ describe('examples handed to app authors', () => {
     expect(code).toBe(FORM_EXAMPLE);
     const guide = readFileSync('docs/ui.md', 'utf8').split('## Editable forms')[1]!;
     expect(/```tsx\n([\s\S]*?)```/.exec(guide)?.[1]).toBe(FORM_EXAMPLE);
-    expect(diagnostics(FORM_EXAMPLE, true)).toEqual([]);
+    expect(checked.get(examplePath('forms'))).toEqual([]);
   }, 20_000);
   it.each(['persistence', 'backup'])(
     'typechecks the actual %s MCP and capability recipe',
@@ -200,17 +238,13 @@ describe('examples handed to app authors', () => {
       const code = codeBlock(getSdkReference(feature));
       expect(code.length).toBeGreaterThan(100);
       expect(codeBlock(registry[feature]!.files[`fas-capabilities/${feature}.md`]!)).toBe(code);
-      expect(diagnostics(code)).toEqual([]);
+      expect(checked.get(examplePath(feature))).toEqual([]);
     },
     20_000,
   );
 
   it('detects the exact invalid openStore call that broke Pitstop', () => {
-    const code = codeBlock(getSdkReference('persistence')).replace(
-      "openStore({ namespace: 'notes', version: 1 })",
-      "openStore('notes')",
-    );
-    expect(diagnostics(code).join('\n')).toMatch(/string.*OpenStoreOptions/);
+    expect(checked.get('invalid-open-store.ts')!.join('\n')).toMatch(/string.*OpenStoreOptions/);
   }, 20_000);
 
   it('the published Shell example routes a query/hash destination by pathname', () => {
