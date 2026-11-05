@@ -13,6 +13,9 @@ for workflow in ci.yml scaffold-smoke.yml; do
     sleep 10
   done
 done
+# The fresh main clone does not inherit actions/checkout's local extraheader.
+# gh reads the existing job token without embedding it in remotes or output.
+gh auth setup-git --hostname github.com
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
 # npm pack verifies registry integrity; the accepted generator must match the published package.
@@ -32,5 +35,5 @@ for attempt in 1 2 3; do
   git -C "$target" -c user.name='FreeAppStore release' -c user.email='release@freeappstore.online' commit -m 'build: record accepted starter release [skip ci]'
   if git -C "$target" push origin HEAD:main; then echo 'Published-package and source acceptance recorded; mirror adoption is separate.'; exit 0; fi
 done
-echo 'Concurrent main updates prevented acceptance record; rerun this job (do not republish).'
+echo 'Acceptance record push failed; inspect Git authentication/permissions or concurrent main updates. Rerun this job, do not republish.'
 exit 1
