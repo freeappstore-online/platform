@@ -71,6 +71,16 @@ function seed(db: SqliteDb) {
   ).run();
 }
 
+/** Runs every statement of the verify script and flattens the rows. */
+function verify(db: SqliteDb): { tbl: string; col: string; n: number }[] {
+  const sql = migration('../scripts/verify-434-no-email-ids.sql');
+  return sql
+    .split(';\n')
+    .map((s) => s.trim())
+    .filter((s) => s.startsWith('SELECT'))
+    .flatMap((s) => db.prepare(s).all() as { tbl: string; col: string; n: number }[]);
+}
+
 function newId(db: SqliteDb, email: string): string {
   const row = db
     .prepare("SELECT id FROM users WHERE provider = 'email' AND provider_id = ?")
@@ -147,7 +157,9 @@ describe.skipIf(!hasSqlite)('migration 0032: opaque email user ids (#434)', () =
   it('drops the mapping and pending auth codes, and enforces one account per address', () => {
     const { db } = migrated();
     expect(
-      db.prepare("SELECT name FROM sqlite_master WHERE name = '_uid_map_434'").get(),
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE name LIKE '\\_uid\\_%\\_434' ESCAPE '\\'")
+        .get(),
     ).toBeUndefined();
     expect(db.prepare('SELECT count(*) AS n FROM auth_codes').get()).toEqual({ n: 0 });
     expect(() =>
@@ -186,16 +198,13 @@ describe.skipIf(!hasSqlite)('migration 0032: opaque email user ids (#434)', () =
 
   it('verification finds only what was deliberately left: a binary kv value', () => {
     const { db } = migrated();
-    const verify = migration('../scripts/verify-434-no-email-ids.sql');
-    expect(db.prepare(verify).all()).toEqual([{ tbl: 'kv', col: 'value', n: 1 }]);
+    expect(verify(db)).toEqual([{ tbl: 'kv', col: 'value', n: 1 }]);
   });
 
   it('verification reports every legacy id before the migration', () => {
     const { db } = sqliteD1({ before: MIGRATION });
     seed(db);
-    const verify = migration('../scripts/verify-434-no-email-ids.sql');
-    const found = db.prepare(verify).all() as { tbl: string; col: string }[];
-    expect(found.map((r) => `${r.tbl}.${r.col}`)).toEqual(
+    expect(verify(db).map((r) => `${r.tbl}.${r.col}`)).toEqual(
       expect.arrayContaining([
         'users.id',
         'kv.user_id',

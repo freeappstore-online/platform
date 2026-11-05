@@ -19,36 +19,38 @@ CREATE TABLE _uid_map_434 (
   new_id TEXT NOT NULL UNIQUE
 );
 
--- Every legacy id anywhere, including orphans of deleted accounts. Longest
--- first, so replacing `email:a@x.com` never corrupts `email:a@x.community` in
--- the free-text passes below.
+-- Every legacy id anywhere, including orphans of deleted accounts. One
+-- statement per column: D1 allows at most 5 terms in a compound SELECT.
+CREATE TABLE _uid_src_434 (old_id TEXT PRIMARY KEY);
+INSERT OR IGNORE INTO _uid_src_434 SELECT id FROM users WHERE id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM kv WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM app_logs WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM user_api_keys WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT provisioned_by FROM user_api_keys WHERE provisioned_by LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM agent_sessions WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT owner_id FROM documents WHERE owner_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM app_roles WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT granted_by FROM app_roles WHERE granted_by LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_a FROM friendships WHERE user_a LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_b FROM friendships WHERE user_b LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT initiator FROM friendships WHERE initiator LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT blocker FROM friendships WHERE blocker LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM app_votes WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM complimentary_grants WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT granted_by FROM complimentary_grants WHERE granted_by LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM push_subscriptions WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM push_schedules WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM idea_builders WHERE user_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT owner_id FROM data_rooms WHERE owner_id LIKE 'email:%';
+INSERT OR IGNORE INTO _uid_src_434 SELECT user_id FROM data_room_members WHERE user_id LIKE 'email:%';
+
+-- Longest first, so replacing `email:a@x.com` never corrupts
+-- `email:a@x.community` in the free-text passes below.
 INSERT INTO _uid_map_434 (old_id, new_id)
 SELECT old_id, 'em:' || lower(hex(randomblob(16)))
-FROM (
-  SELECT id AS old_id FROM users
-  UNION SELECT user_id FROM kv
-  UNION SELECT user_id FROM app_logs
-  UNION SELECT user_id FROM user_api_keys
-  UNION SELECT provisioned_by FROM user_api_keys
-  UNION SELECT user_id FROM agent_sessions
-  UNION SELECT owner_id FROM documents
-  UNION SELECT user_id FROM app_roles
-  UNION SELECT granted_by FROM app_roles
-  UNION SELECT user_a FROM friendships
-  UNION SELECT user_b FROM friendships
-  UNION SELECT initiator FROM friendships
-  UNION SELECT blocker FROM friendships
-  UNION SELECT user_id FROM app_votes
-  UNION SELECT user_id FROM complimentary_grants
-  UNION SELECT granted_by FROM complimentary_grants
-  UNION SELECT user_id FROM push_subscriptions
-  UNION SELECT user_id FROM push_schedules
-  UNION SELECT user_id FROM idea_builders
-  UNION SELECT owner_id FROM data_rooms
-  UNION SELECT user_id FROM data_room_members
-)
-WHERE old_id LIKE 'email:%'
+FROM _uid_src_434
 ORDER BY length(old_id) DESC, old_id;
+DROP TABLE _uid_src_434;
 
 -- Columns that hold exactly one user id.
 UPDATE users SET id = (SELECT new_id FROM _uid_map_434 WHERE old_id = users.id) WHERE id IN (SELECT old_id FROM _uid_map_434);
