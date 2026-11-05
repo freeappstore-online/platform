@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { runAudit } from '../lib/audit.js';
 import { HttpError, requireUser } from '../lib/auth.js';
+import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
 export const auditRoutes = new Hono<{ Bindings: Env }>();
@@ -14,11 +15,25 @@ interface AuditRow {
   checked_at: number;
 }
 
+interface SummaryRow {
+  app_id: string;
+  store: string;
+  pass: number;
+  warn: number;
+  fail: number;
+  checked_at: number;
+  n: number;
+}
+
 /**
  * Reads the latest audit results. Public — anyone (creators, the
  * storefront, dashboards) can see drift over time. Filterable by
  * store + status so the storefront can show "this app last failed
  * on date X" without scanning the whole table.
+ *
+ * `checks` is paged with ?limit= (default 100, max 500) and ?offset=;
+ * `total` is the number of matching checks. `summary` always covers
+ * every matching app.
  */
 auditRoutes.get('/audit', async (c) => {
   const store = c.req.query('store');
@@ -39,13 +54,25 @@ auditRoutes.get('/audit', async (c) => {
     where.push('app_id = ?');
     binds.push(appId);
   }
-  const sql =
-    'SELECT app_id, store, check_name, status, detail, checked_at FROM audit_results' +
-    (where.length ? ` WHERE ${where.join(' AND ')}` : '') +
-    ' ORDER BY checked_at DESC, app_id ASC, check_name ASC';
-  const result = await c.env.DB.prepare(sql)
-    .bind(...binds)
-    .all<AuditRow>();
+  const filter = where.length ? ` WHERE ${where.join(' AND ')}` : '';
+  const limit = queryLimit(c.req.query('limit'), 100, 500);
+  const offset = queryOffset(c.req.query('offset'));
+
+  const [result, rollup] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT app_id, store, check_name, status, detail, checked_at FROM audit_results${filter} ORDER BY checked_at DESC, app_id ASC, check_name ASC LIMIT ? OFFSET ?`,
+    )
+      .bind(...binds, limit, offset)
+      .all<AuditRow>(),
+    // Per-app roll-up over every matching row, not just this page, so the
+    // typical "show me apps with any failure" query doesn't have to page
+    // through checks and group client-side. One row per app.
+    c.env.DB.prepare(
+      `SELECT app_id, store, SUM(status = 'pass') AS pass, SUM(status = 'warn') AS warn, SUM(status = 'fail') AS fail, MAX(checked_at) AS checked_at, COUNT(*) AS n FROM audit_results${filter} GROUP BY app_id ORDER BY checked_at DESC, app_id ASC`,
+    )
+      .bind(...binds)
+      .all<SummaryRow>(),
+  ]);
 
   // camelCase output to match the rest of the v1 API.
   const checks = (result.results ?? []).map((r) => ({
@@ -56,31 +83,18 @@ auditRoutes.get('/audit', async (c) => {
     detail: r.detail,
     checkedAt: r.checked_at,
   }));
+  const rows = rollup.results ?? [];
+  const summary = rows.map((r) => ({
+    appId: r.app_id,
+    store: r.store,
+    pass: r.pass,
+    warn: r.warn,
+    fail: r.fail,
+    checkedAt: r.checked_at,
+  }));
+  const total = rows.reduce((n, r) => n + r.n, 0);
 
-  // Roll up to per-app summaries so the typical "show me apps with
-  // any failure" query doesn't have to client-side group.
-  const byApp = new Map<
-    string,
-    { appId: string; store: string; pass: number; warn: number; fail: number; checkedAt: number }
-  >();
-  for (const c of checks) {
-    const key = c.appId;
-    const cur = byApp.get(key) ?? {
-      appId: c.appId,
-      store: c.store,
-      pass: 0,
-      warn: 0,
-      fail: 0,
-      checkedAt: 0,
-    };
-    if (c.status === 'pass') cur.pass++;
-    else if (c.status === 'warn') cur.warn++;
-    else if (c.status === 'fail') cur.fail++;
-    cur.checkedAt = Math.max(cur.checkedAt, c.checkedAt);
-    byApp.set(key, cur);
-  }
-
-  return c.json({ summary: Array.from(byApp.values()), checks });
+  return c.json({ summary, checks, total });
 });
 
 /**

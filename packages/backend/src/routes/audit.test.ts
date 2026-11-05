@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
 
 interface AuditRow {
@@ -12,41 +13,13 @@ interface AuditRow {
 }
 
 function fakeDB(rows: AuditRow[]): D1Database {
-  return {
-    prepare: (sql: string) => {
-      const trimmed = sql.replace(/\s+/g, ' ').trim();
-      let bound: unknown[] = [];
-      const stmt: Partial<D1PreparedStatement> = {
-        bind: (...args: unknown[]) => {
-          bound = args;
-          return stmt as D1PreparedStatement;
-        },
-        all: async <T>() => {
-          // Apply WHERE filters in JS so each test can pre-seed rows
-          // without writing matching SQL.
-          let filtered = rows.slice();
-          if (trimmed.includes('store = ?')) {
-            const want = bound.shift();
-            filtered = filtered.filter((r) => r.store === want);
-          }
-          if (trimmed.includes('status = ?')) {
-            const want = bound.shift();
-            filtered = filtered.filter((r) => r.status === want);
-          }
-          if (trimmed.includes('app_id = ?')) {
-            const want = bound.shift();
-            filtered = filtered.filter((r) => r.app_id === want);
-          }
-          return {
-            results: filtered as unknown as T[],
-            success: true,
-            meta: {},
-          } as unknown as D1Result<T>;
-        },
-      };
-      return stmt as D1PreparedStatement;
-    },
-  } as unknown as D1Database;
+  const { db, d1 } = sqliteD1();
+  const insert = db.prepare(
+    'INSERT INTO audit_results (app_id, store, check_name, status, detail, checked_at) VALUES (?, ?, ?, ?, ?, ?)',
+  );
+  for (const r of rows)
+    insert.run(r.app_id, r.store, r.check_name, r.status, r.detail, r.checked_at);
+  return d1;
 }
 
 const baseEnv = (db: D1Database): Env =>
@@ -101,7 +74,7 @@ const sample: AuditRow[] = [
   },
 ];
 
-describe('GET /v1/audit', () => {
+describe.skipIf(!hasSqlite)('GET /v1/audit', () => {
   it('returns empty arrays when there are no rows', async () => {
     const res = await app.request('/v1/audit', {}, baseEnv(fakeDB([])));
     expect(res.status).toBe(200);
@@ -173,5 +146,50 @@ describe('GET /v1/audit', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { checks: unknown[] };
     expect(body.checks).toHaveLength(sample.length);
+  });
+
+  it('pages checks with ?limit=&offset= and reports the total (#429)', async () => {
+    const db = fakeDB(sample);
+    const key = (c: { appId: string; checkName: string }) => `${c.appId}/${c.checkName}`;
+    const p1 = (await (await app.request('/v1/audit?limit=2', {}, baseEnv(db))).json()) as {
+      checks: Array<{ appId: string; checkName: string }>;
+      total: number;
+    };
+    expect(p1.checks).toHaveLength(2);
+    expect(p1.total).toBe(sample.length);
+    const p2 = (await (
+      await app.request('/v1/audit?limit=2&offset=2', {}, baseEnv(db))
+    ).json()) as { checks: Array<{ appId: string; checkName: string }> };
+    expect(p2.checks).toHaveLength(2);
+    expect(p2.checks.map(key)).not.toContain(key(p1.checks[0]!));
+  });
+
+  it('defaults the page to 100 checks and caps it at 500', async () => {
+    const many: AuditRow[] = Array.from({ length: 600 }, (_, i) => ({
+      app_id: `app${i}`,
+      store: 'apps',
+      check_name: 'Reachable',
+      status: 'pass',
+      detail: null,
+      checked_at: i,
+    }));
+    const db = fakeDB(many);
+    const def = (await (await app.request('/v1/audit', {}, baseEnv(db))).json()) as {
+      checks: unknown[];
+      total: number;
+    };
+    expect(def.checks).toHaveLength(100);
+    expect(def.total).toBe(600);
+    const big = (await (await app.request('/v1/audit?limit=10000', {}, baseEnv(db))).json()) as {
+      checks: unknown[];
+    };
+    expect(big.checks).toHaveLength(500);
+  });
+
+  it('summary covers every matching app, not just the current page', async () => {
+    const res = await app.request('/v1/audit?limit=1', {}, baseEnv(fakeDB(sample)));
+    const body = (await res.json()) as { summary: unknown[]; checks: unknown[] };
+    expect(body.checks).toHaveLength(1);
+    expect(body.summary).toHaveLength(2);
   });
 });
