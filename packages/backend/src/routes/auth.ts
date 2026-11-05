@@ -1,6 +1,12 @@
 import { Apple, decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
 import { Hono } from 'hono';
-import { HttpError, isAdminLogin, isAdminUserId, requireUser } from '../lib/auth.js';
+import {
+  HttpError,
+  isAdminLogin,
+  isAdminUserId,
+  isLegacyEmailAdmin,
+  requireUser,
+} from '../lib/auth.js';
 import { deliverSession, exchangeAuthCode } from '../lib/deliver-session.js';
 import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
@@ -227,16 +233,19 @@ authRoutes.get('/auth/google/callback', async (c) => {
     };
 
     const userId = `google:${claims.sub}`;
-    const login = claims.email ? (claims.email.split('@')[0] ?? claims.sub) : claims.sub;
-    const displayName = claims.name ?? login;
+    // Never the email local part (#434): the login and display name reach
+    // every app and room peer. A new account gets a neutral name; the name
+    // Google supplies wins when present, and an existing name is kept.
+    const login = neutralDisplayName();
+    const providerName = claims.name ?? null;
 
     await c.env.DB.prepare(
       `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-       VALUES (?, 0, ?, ?, ?, 'google', ?, ?, ?)
+       VALUES (?, 0, ?, ?, ?, 'google', ?, ?, COALESCE(?, ?))
        ON CONFLICT(id) DO UPDATE SET
          avatar_url = excluded.avatar_url,
          email = excluded.email,
-         display_name = excluded.display_name`,
+         display_name = COALESCE(?, users.display_name)`,
     )
       .bind(
         userId,
@@ -245,7 +254,9 @@ authRoutes.get('/auth/google/callback', async (c) => {
         Date.now(),
         claims.sub,
         claims.email ?? null,
-        displayName,
+        providerName,
+        login,
+        providerName,
       )
       .run();
 
@@ -373,16 +384,27 @@ authRoutes.post('/auth/apple/callback', async (c) => {
     }
 
     const userId = `apple:${claims.sub}`;
-    const login = claims.email ? (claims.email.split('@')[0] ?? claims.sub) : claims.sub;
+    // Never the email local part (#434); see the Google callback. Apple sends
+    // the name only on the first sign-in, so a later one keeps what is stored.
+    const login = neutralDisplayName();
 
     await c.env.DB.prepare(
       `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-       VALUES (?, 0, ?, NULL, ?, 'apple', ?, ?, ?)
+       VALUES (?, 0, ?, NULL, ?, 'apple', ?, ?, COALESCE(?, ?))
        ON CONFLICT(id) DO UPDATE SET
          email = COALESCE(excluded.email, users.email),
-         display_name = COALESCE(excluded.display_name, users.display_name)`,
+         display_name = COALESCE(?, users.display_name)`,
     )
-      .bind(userId, login, Date.now(), claims.sub, claims.email ?? null, displayName ?? login)
+      .bind(
+        userId,
+        login,
+        Date.now(),
+        claims.sub,
+        claims.email ?? null,
+        displayName,
+        login,
+        displayName,
+      )
       .run();
 
     const { roles, appRoles } = await computeRoles(userId, login, c.env, 'apple');
@@ -512,20 +534,38 @@ authRoutes.get('/auth/email/callback', async (c) => {
     return c.text('link already used — request a new sign-in email', 400);
   }
 
-  const userId = `email:${state.email}`;
-  const login = state.email.split('@')[0] ?? state.email;
-
-  await c.env.DB.prepare(
-    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-     VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       email = excluded.email,
-       display_name = excluded.display_name`,
+  // The user id, login and display name are shown to apps, room peers and
+  // other stores, so none of them may be derived from the address (#434). The
+  // account is found by its address (provider_id), whichever id it has; a new
+  // one gets a random id and a neutral name.
+  const existing = await c.env.DB.prepare(
+    "SELECT id, github_login FROM users WHERE provider = 'email' AND provider_id = ?",
   )
-    .bind(userId, login, Date.now(), state.email, state.email, login)
-    .run();
+    .bind(state.email)
+    .first<{ id: string; github_login: string }>();
+  let userId: string;
+  let login: string;
+  if (existing) {
+    userId = existing.id;
+    login = existing.github_login;
+  } else {
+    userId = newEmailUserId();
+    login = neutralDisplayName();
+    await c.env.DB.prepare(
+      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
+       VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?)`,
+    )
+      .bind(userId, login, Date.now(), state.email, state.email, login)
+      .run();
+  }
 
-  const { roles, appRoles } = await computeRoles(userId, login, c.env, 'email');
+  const { roles, appRoles } = await computeRoles(
+    userId,
+    login,
+    c.env,
+    'email',
+    isLegacyEmailAdmin(state.email, c.env),
+  );
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
   const delivery = await deliverSession(c.env, state, session);
   if (!delivery.ok) return c.text(delivery.error, 400);
@@ -565,6 +605,7 @@ authRoutes.get('/auth/me', async (c) => {
       user.githubLogin,
       c.env,
       user.githubLogin ? 'github' : 'none',
+      user.legacyAdmin === true,
     );
     const roles = [
       ...new Set([...user.roles.filter((r) => r !== 'admin' && r !== 'creator'), ...live.roles]),
@@ -660,6 +701,7 @@ export async function computeRoles(
   login: string,
   env: Env,
   provider = 'github',
+  legacyAdmin = false,
 ): Promise<{ roles: string[]; appRoles: Record<string, string[]> }> {
   const roles = ['user'];
   const appRoles: Record<string, string[]> = {};
@@ -705,9 +747,32 @@ export async function computeRoles(
 
   // Admin: login matches only for GitHub (see security note above); the user id
   // is provider-issued, so ADMIN_USER_IDS works for every provider (#22).
-  if ((isGithub && isAdminLogin(login, env)) || isAdminUserId(userId, env)) roles.push('admin');
+  // `legacyAdmin`: #434 phase 1, the secret still names the account by its
+  // retired `email:` id (see isLegacyEmailAdmin).
+  if ((isGithub && isAdminLogin(login, env)) || isAdminUserId(userId, env) || legacyAdmin) {
+    roles.push('admin');
+  }
 
   return { roles, appRoles };
+}
+
+/** `em:` + 128 random bits as hex. Unrelated to the address it signs in with. */
+function newEmailUserId(): string {
+  return `em:${randomHex(16)}`;
+}
+
+/**
+ * Default login / display name for a non-GitHub account: `user-` + 4 hex
+ * chars (#434). Migration 0032 gives existing accounts the same shape.
+ */
+function neutralDisplayName(): string {
+  return `user-${randomHex(2)}`;
+}
+
+function randomHex(bytes: number): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
 }
 
 async function hashForReplay(token: string): Promise<string> {

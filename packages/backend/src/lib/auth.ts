@@ -19,6 +19,24 @@ export interface CurrentUser {
   roles: string[];
   /** Per-app roles from the token at sign-in: { appId: ['moderator', ...] }. Same caveat as `roles`. */
   appRoles: Record<string, string[]>;
+  /**
+   * #434 phase 1: ADMIN_USER_IDS may still list this email account by its
+   * retired `email:<address>` id. Set only when that legacy id matches; goes
+   * away in phase 2 once the secret holds the `em:` id.
+   */
+  legacyAdmin?: true;
+}
+
+const USER_COLUMNS =
+  'SELECT id, github_login, avatar_url, display_name, email, date_of_birth FROM users';
+
+interface UserRow {
+  id: string;
+  github_login: string;
+  avatar_url: string | null;
+  display_name: string | null;
+  email: string | null;
+  date_of_birth: string | null;
 }
 
 export async function requireUser<E extends { Bindings: Env }>(
@@ -32,18 +50,16 @@ export async function requireUser<E extends { Bindings: Env }>(
   const payload = await verifySession(token, c.env.SESSION_SIGNING_KEY);
   if (!payload) throw new HttpError(401, 'invalid or expired session');
 
-  const row = await c.env.DB.prepare(
-    'SELECT id, github_login, avatar_url, display_name, email, date_of_birth FROM users WHERE id = ?',
-  )
+  let row = await c.env.DB.prepare(`${USER_COLUMNS} WHERE id = ?`)
     .bind(payload.uid)
-    .first<{
-      id: string;
-      github_login: string;
-      avatar_url: string | null;
-      display_name: string | null;
-      email: string | null;
-      date_of_birth: string | null;
-    }>();
+    .first<UserRow>();
+  // #434 phase 1: a session minted before the account's `email:<address>` id
+  // was replaced by an opaque one still names the account by its address.
+  if (!row && payload.uid.startsWith('email:')) {
+    row = await c.env.DB.prepare(`${USER_COLUMNS} WHERE provider = 'email' AND provider_id = ?`)
+      .bind(payload.uid.slice('email:'.length))
+      .first<UserRow>();
+  }
 
   // Cross-store identities (e.g. PAS `cred:*`) legitimately have no FAS user
   // row — the token signature is verified, so synthesize a user to let
@@ -58,7 +74,7 @@ export async function requireUser<E extends { Bindings: Env }>(
   // FAS-computed, so a token minted by another store (shared signing key) can't
   // vote itself into FAS privilege.
   if (!row) {
-    if (/^(gh|google|apple|email):/.test(payload.uid)) {
+    if (/^(gh|google|apple|email|em):/.test(payload.uid)) {
       throw new HttpError(401, 'account not found');
     }
     const crossStoreRoles = (payload.roles ?? ['user']).filter(
@@ -81,11 +97,14 @@ export async function requireUser<E extends { Bindings: Env }>(
     // Non-GitHub providers store the email local-part in github_login. It is
     // attacker-chosen, so it must never match an app owner or admin login
     // (same rule as computeRoles).
-    githubLogin: /^(google|apple|email):/.test(row.id) ? '' : row.github_login,
+    githubLogin: /^(google|apple|email|em):/.test(row.id) ? '' : row.github_login,
     avatarUrl: row.avatar_url,
     dateOfBirth: row.date_of_birth,
     roles: payload.roles ?? ['user'],
     appRoles: payload.appRoles ?? {},
+    ...(row.id?.startsWith('em:') && isLegacyEmailAdmin(row.email, c.env)
+      ? { legacyAdmin: true as const }
+      : {}),
   };
 }
 
@@ -94,8 +113,21 @@ export async function requireUser<E extends { Bindings: Env }>(
  * never from the session token's `roles` claim, which is baked in at sign-in
  * and outlives removal from the lists. Zero I/O.
  */
-export function isAdmin(user: Pick<CurrentUser, 'id' | 'githubLogin'>, env: Env): boolean {
-  return isAdminLogin(user.githubLogin, env) || isAdminUserId(user.id, env);
+export function isAdmin(
+  user: Pick<CurrentUser, 'id' | 'githubLogin' | 'legacyAdmin'>,
+  env: Env,
+): boolean {
+  return (
+    isAdminLogin(user.githubLogin, env) || isAdminUserId(user.id, env) || user.legacyAdmin === true
+  );
+}
+
+/**
+ * #434 phase 1: whether ADMIN_USER_IDS lists an email account by its retired
+ * `email:<address>` id. Remove in phase 2, after the secret is rewritten.
+ */
+export function isLegacyEmailAdmin(email: string | null | undefined, env: Env): boolean {
+  return !!email && isAdminUserId(`email:${email}`, env);
 }
 
 /**

@@ -91,3 +91,15 @@ describe('verifySession accepts only sessions (#428)', () => {
     expect((await verifySession(pas, KEY))?.uid).toBe('cred:abc');
   });
 });
+
+describe('verifySession and email user ids (#434 phase 1)', () => {
+  it('still accepts a session minted with the retired email: uid (dual-read window)', async () => {
+    const legacy = await signSession('email:alice@example.com', KEY);
+    expect((await verifySession(legacy, KEY))?.uid).toBe('email:alice@example.com');
+  });
+
+  it('accepts the opaque id that replaced it', async () => {
+    const id = `em:${'0'.repeat(32)}`;
+    expect((await verifySession(await signSession(id, KEY), KEY))?.uid).toBe(id);
+  });
+});

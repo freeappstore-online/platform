@@ -299,7 +299,8 @@ describe('POST /v1/publish', () => {
   it('refuses a non-GitHub account whose login matches an admin (no provisioning)', async () => {
     // Email sign-in stores the email local-part in github_login, so
     // serge-ivo@attacker.example lands with github_login 'serge-ivo'.
-    const token = await signSession('email:serge-ivo@attacker.example', SIGNING_KEY);
+    const emailUserId = `em:${'0'.repeat(32)}`;
+    const token = await signSession(emailUserId, SIGNING_KEY);
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({ response: new Response('{}', { status: 200 }), capture: calls });
     const res = await app.request(
@@ -311,7 +312,7 @@ describe('POST /v1/publish', () => {
       },
       baseEnv(
         userLookupDB({
-          id: 'email:serge-ivo@attacker.example',
+          id: emailUserId,
           github_login: 'serge-ivo',
           avatar_url: null,
         }),

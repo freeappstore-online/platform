@@ -27,14 +27,20 @@ const MIGRATIONS = new URL('../../migrations/', (import.meta as unknown as { url
 export const hasSqlite = sqlite !== null;
 export type SqliteDb = { exec(sql: string): void; prepare(sql: string): SqliteStatement };
 
-export function sqliteD1(): { db: SqliteDb; d1: D1Database } {
+/** The SQL of one migration file, e.g. `migration('0031_opaque_email_user_ids.sql')`. */
+export function migration(name: string): string {
+  return fs.readFileSync(new URL(name, MIGRATIONS), 'utf8');
+}
+
+/** `before` stops at that migration, so a test can seed data and then apply it. */
+export function sqliteD1(opts: { before?: string } = {}): { db: SqliteDb; d1: D1Database } {
   if (!sqlite) throw new Error('node:sqlite unavailable');
   const db = new sqlite.DatabaseSync(':memory:');
   for (const f of fs
     .readdirSync(MIGRATIONS)
-    .filter((name) => name.endsWith('.sql'))
+    .filter((name) => name.endsWith('.sql') && (!opts.before || name < opts.before))
     .sort()) {
-    db.exec(fs.readFileSync(new URL(f, MIGRATIONS), 'utf8'));
+    db.exec(migration(f));
   }
   const d1 = {
     prepare(sql: string) {

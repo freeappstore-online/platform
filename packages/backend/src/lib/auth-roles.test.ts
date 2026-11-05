@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { computeRoles } from '../routes/auth.js';
-import { hasInternalToken, isAdminLogin, requireUser } from './auth.js';
+import {
+  hasInternalToken,
+  isAdmin,
+  isAdminLogin,
+  isLegacyEmailAdmin,
+  requireUser,
+} from './auth.js';
 import { signSession, verifySession } from './session.js';
 
 const KEY = 'a'.repeat(64);
@@ -134,6 +140,18 @@ describe('computeRoles admin (#22)', () => {
     expect(roles).toContain('admin');
   });
 
+  it('grants admin through the legacy email: alias only when asked to (#434 phase 1)', async () => {
+    const env = makeEnv({ ADMIN_USER_IDS: 'email:a@example.com' });
+    const id = `em:${'0'.repeat(32)}`;
+    expect((await computeRoles(id, 'user-0000', env, 'email', true)).roles).toContain('admin');
+    expect((await computeRoles(id, 'user-0000', env, 'email')).roles).not.toContain('admin');
+    expect(isLegacyEmailAdmin('a@example.com', env)).toBe(true);
+    expect(isLegacyEmailAdmin('b@example.com', env)).toBe(false);
+    expect(isLegacyEmailAdmin(null, env)).toBe(false);
+    expect(isAdmin({ id, githubLogin: '', legacyAdmin: true }, env)).toBe(true);
+    expect(isAdmin({ id, githubLogin: '' }, env)).toBe(false);
+  });
+
   it('matches ADMIN_USER_IDS case-insensitively', async () => {
     const env = makeEnv({ ADMIN_USER_IDS: 'Google:ABC' });
     const { roles } = await computeRoles('google:abc', 'x', env, 'google');
@@ -197,7 +215,7 @@ describe('requireUser githubLogin', () => {
     expect((await userFor('gh:42', 'octocat')).githubLogin).toBe('octocat');
   });
 
-  it.each(['email:serge-ivo@attacker.example', 'google:123', 'apple:456'])(
+  it.each([`em:${'0'.repeat(32)}`, 'google:123', 'apple:456'])(
     'is empty for %s, whose github_login is an email local-part',
     async (id) => {
       const user = await userFor(id, 'serge-ivo');

@@ -17,15 +17,16 @@ const SIGNING_KEY = 'a'.repeat(64);
 const VALID_RETURN_TO = 'https://demo.freeappstore.online/';
 const VERIFIER = 'v'.repeat(43);
 
-/** Permissive D1 stand-in — every write succeeds. Delivery behaviour is what
- *  these tests assert on; the storage layer has its own tests. */
+/** Permissive D1 stand-in — every write succeeds, and the email callback's
+ *  user upsert RETURNING an id. Delivery behaviour is what these tests assert
+ *  on; the storage layer has its own tests. */
 function fakeDB(): D1Database {
   const prepare = (): D1PreparedStatement => {
     const stmt: Partial<D1PreparedStatement> = {
       bind: () => stmt as D1PreparedStatement,
       run: async <T = Record<string, unknown>>() =>
         ({ meta: { changes: 1 } }) as unknown as D1Result<T>,
-      first: async <T = Record<string, unknown>>() => null as T | null,
+      first: async <T = Record<string, unknown>>() => ({ id: `em:${'0'.repeat(32)}` }) as T,
     };
     return stmt as D1PreparedStatement;
   };

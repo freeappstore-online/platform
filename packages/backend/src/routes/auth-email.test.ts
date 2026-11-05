@@ -1,32 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
-import { signPayload } from '../lib/session.js';
+import { signPayload, verifySession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 const VALID_RETURN_TO = 'https://demo.freeappstore.online/';
 let emailSend: ReturnType<typeof vi.fn>;
 
-interface UpsertCapture {
-  sql: string;
-  args: unknown[];
-}
-
-function fakeDB(opts: { onUserUpsert?: (row: UpsertCapture) => void } = {}): D1Database {
-  const prepare = (sql: string): D1PreparedStatement => {
-    const trimmed = sql.replace(/\s+/g, ' ').trim();
-    let bound: unknown[] = [];
+function fakeDB(): D1Database {
+  const prepare = (): D1PreparedStatement => {
     const stmt: Partial<D1PreparedStatement> = {
-      bind: (...args: unknown[]) => {
-        bound = args;
-        return stmt as D1PreparedStatement;
-      },
-      run: async <T = Record<string, unknown>>() => {
-        if (trimmed.startsWith('INSERT INTO users')) {
-          opts.onUserUpsert?.({ sql: trimmed, args: bound });
-        }
-        return { meta: { changes: 1 } } as unknown as D1Result<T>;
-      },
+      bind: () => stmt as D1PreparedStatement,
+      run: async <T = Record<string, unknown>>() =>
+        ({ meta: { changes: 1 } }) as unknown as D1Result<T>,
     };
     return stmt as D1PreparedStatement;
   };
@@ -241,31 +228,74 @@ describe('GET /v1/auth/email/callback', () => {
     );
     expect(res.status).toBe(400);
   });
+});
 
-  it('upserts user with provider=email and redirects with session in hash', async () => {
-    const captured: UpsertCapture[] = [];
-    const db = fakeDB({ onUserUpsert: (r) => captured.push(r) });
-    const token = await makeToken({ email: 'alice@example.com' });
+describe.skipIf(!hasSqlite)('email sign-in user ids against real SQLite (#434)', () => {
+  // Each link must differ, or the second is rejected as a replay.
+  let exp = Math.floor(Date.now() / 1000) + 60;
 
+  async function signIn(d1: D1Database, email: string): Promise<string> {
+    const token = await signPayload(
+      { email, appId: 'demo', returnTo: VALID_RETURN_TO, exp: exp++ },
+      SIGNING_KEY,
+    );
     const res = await app.request(
       `/v1/auth/email/callback?token=${encodeURIComponent(token)}`,
       { redirect: 'manual' },
-      makeEnv({}, db),
+      makeEnv({}, d1),
     );
-
     expect(res.status).toBe(302);
     const location = res.headers.get('location') ?? '';
     expect(location.startsWith(VALID_RETURN_TO)).toBe(true);
-    expect(location).toContain('#fas_session=');
+    const session = decodeURIComponent(location.split('#fas_session=')[1] ?? '');
+    const payload = await verifySession(session, SIGNING_KEY);
+    expect(payload).not.toBeNull();
+    return payload!.uid;
+  }
 
-    expect(captured).toHaveLength(1);
-    const upsert = captured[0]!;
-    expect(upsert.sql).toContain('INSERT INTO users');
-    // Binding order: userId, login, created_at, provider_id, email, display_name
-    expect(upsert.args[0]).toBe('email:alice@example.com');
-    expect(upsert.args[1]).toBe('alice'); // login = local part
-    expect(upsert.args[3]).toBe('alice@example.com'); // provider_id
-    expect(upsert.args[4]).toBe('alice@example.com'); // email
-    expect(upsert.args[5]).toBe('alice'); // display_name
+  it('mints an opaque id and a neutral name, neither derived from the address', async () => {
+    const { db, d1 } = sqliteD1();
+    const uid = await signIn(d1, 'alice@example.com');
+    expect(uid).toMatch(/^em:[0-9a-f]{32}$/);
+    const rows = db.prepare('SELECT * FROM users').all() as Record<string, unknown>[];
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: uid,
+        provider: 'email',
+        provider_id: 'alice@example.com',
+        email: 'alice@example.com',
+        github_login: expect.stringMatching(/^user-[0-9a-f]{4}$/),
+      }),
+    ]);
+    expect(rows[0]!.display_name).toBe(rows[0]!.github_login);
+  });
+
+  it('keeps the name an existing account already has', async () => {
+    const { db, d1 } = sqliteD1();
+    const uid = await signIn(d1, 'alice@example.com');
+    db.prepare("UPDATE users SET display_name = 'Alice' WHERE id = ?").run(uid);
+    await signIn(d1, 'alice@example.com');
+    expect(db.prepare('SELECT display_name FROM users WHERE id = ?').get(uid)).toEqual({
+      display_name: 'Alice',
+    });
+  });
+
+  it('finds an account that still has its retired email: id (migration not yet applied)', async () => {
+    const { db, d1 } = sqliteD1({ before: '0032_opaque_email_user_ids.sql' });
+    db.prepare(
+      `INSERT INTO users (id, github_id, github_login, created_at, provider, provider_id, email, display_name)
+       VALUES ('email:alice@example.com', 0, 'alice', 1, 'email', 'alice@example.com', 'alice@example.com', 'alice')`,
+    ).run();
+    expect(await signIn(d1, 'alice@example.com')).toBe('email:alice@example.com');
+    expect(db.prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 1 });
+  });
+
+  it('finds the same account on the next sign-in, and a new one for another address', async () => {
+    const { db, d1 } = sqliteD1();
+    const first = await signIn(d1, 'alice@example.com');
+    expect(await signIn(d1, 'alice@example.com')).toBe(first);
+    const other = await signIn(d1, 'bob@example.com');
+    expect(other).not.toBe(first);
+    expect(db.prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 2 });
   });
 });

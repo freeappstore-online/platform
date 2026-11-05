@@ -93,8 +93,9 @@ A Google account only gets the `admin` role once its stable user id is listed:
 
 `ADMIN_GITHUB_LOGINS` only applies to GitHub sign-ins: for Google, Apple and email
 users the backend's `login` is the email local part, which anyone can choose, so it
-is never matched against admin logins. `ADMIN_USER_IDS` is keyed by the
-provider-issued id and works for every provider.
+is never matched against admin logins. `ADMIN_USER_IDS` is keyed by the stable
+user id and works for every provider. Email sign-ins have a random id `em:<32 hex>`
+(never the address, #434); find it with `provider = 'email' AND provider_id = '<address>'`.
 
 No Cloudflare Access configuration is needed. Access is deliberately not in front of
 `admin.freeappstore.online` since ef71a81 (see Auth above); the Zero Trust plan in
