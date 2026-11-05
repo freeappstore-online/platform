@@ -2791,6 +2791,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-05T09:50:35.814Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "symptom-map",
+      "name": "symptom-map",
+      "category": "Health & Fitness",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "A private, device-based symptom diary with body mapping, photos and history charts.",
+      "appUrl": "https://symptom-map.freeappstore.online",
+      "repo": "freeappstore-online/symptom-map",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-05T13:57:40.910Z",
+      "creatorGithub": "vuthanhvannguyen2006-commits"
     }
   ]
 }
