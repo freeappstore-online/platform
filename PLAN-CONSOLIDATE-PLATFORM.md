@@ -1,5 +1,19 @@
 # Plan: Consolidate platform tooling into one `platform` monorepo
 
+> **Status: DONE — historical.** Kept as the record of the 2026-06-30 consolidation;
+> the text below is unchanged except for this note. Changes after the plan closed:
+> - `sites/create` was deleted on 2026-07-20 (`c9593df`) — the VibeCode builder was
+>   folded into the console at `freeappstore.online/app/build`, and
+>   `create.freeappstore.online` now 301s there. `deploy-create.yml` no longer exists.
+> - The "open decision" was taken: the `freeappstore` storefront was folded in as
+>   `sites/storefront/` on 2026-10-05 (`9b1f656`), and `freeappstore-online/freeappstore`
+>   is archived. Non-app repos are now `platform`, `submissions`, and the two templates.
+> - The console moved to `freeappstore.online/app/` (served via the storefront's
+>   `functions/app/[[path]].ts` proxy); `console.freeappstore.online` is its internal origin.
+>
+> Current layout: [`workers/README.md`](workers/README.md), [`sites/console/CLAUDE.md`](sites/console/CLAUDE.md),
+> and the per-deployable `.github/workflows/deploy-*.yml`.
+
 > **Goal:** collapse the FAS platform-tooling repos (currently spread across many
 > `freeappstore-online/*` repos) into a single `platform` monorepo. Published apps
 > (`apps/*`), public-intake, and clone-to-scaffold repos stay standalone — see
