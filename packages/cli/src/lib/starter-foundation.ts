@@ -64,7 +64,7 @@ const SHARED_FILES: Record<string, string> = {
   "dependencies": {
     "react": "^19",
     "react-dom": "^19",
-    "@freeappstore/sdk": "^0.16.37"
+    "@freeappstore/sdk": "^0.16.38"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1",
@@ -196,6 +196,9 @@ labels, save + reload, validation failures, and avatar/Profile return navigation
 Check the browser favicon separately from the PWA manifest/install icon.
 Dev/build generates raster icons from the app-owned SVG using web/pwa-assets.config.ts.
 Keep custom artwork, HTML and manifest paths consistent; prebuilt custom icons are supported.
+Remove the generated-asset .gitignore entries if adopting prebuilt icons at those paths.
+Profile is a separate route: keep drafts/reading position in app-owned route state and
+pause playback or capture in effect cleanup. A PWA busy guard only guards updates.
 Use available browser tooling; state explicitly when runtime checks were not run.
 Practical review guide:
 https://github.com/freeappstore-online/platform/blob/main/docs/app-verification.md
@@ -1054,6 +1057,10 @@ img, video, canvas { max-width: 100%; }
   };
 
   if (config.store === 'apps') {
+    files['web/src/index.css'] =
+      `${files['web/src/index.css']!.replace('\n:root {', '\n@layer base {\n:root {')}\n}\n`;
+    files['.gitignore'] +=
+      `\n*.tsbuildinfo\n# Derived from icon.svg; remove these entries when using prebuilt custom icons.\n/web/public/favicon.ico\n/web/public/apple-touch-icon-180x180.png\n/web/public/pwa-64x64.png\n/web/public/pwa-192x192.png\n/web/public/pwa-512x512.png\n/web/public/maskable-icon-512x512.png\n`;
     const appPackage = JSON.parse(files['package.json']!) as {
       scripts: Record<string, string>;
       pnpm: { onlyBuiltDependencies: string[] };

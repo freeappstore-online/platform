@@ -90,3 +90,10 @@ Scaffold release checks also typecheck the prepared example feature against the 
 published SDK before building it. Keep this separate from checking SDK source: passing
 against an unpublished checkout does not establish that the installed package supports
 the imports. Do not require any example's model, layout or source text in consumer apps.
+
+
+Include a feature → Profile → Close profile round trip while a meaningful feature
+state exists (a draft, reading position or selected record). Verify that app-owned
+state survives as intended, ongoing work pauses safely, and returning does not
+silently resume capture/playback. A return URL alone does not preserve component
+state.

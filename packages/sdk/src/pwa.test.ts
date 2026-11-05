@@ -289,6 +289,11 @@ it('routes unvisited deep links to the shell while excluding API and custom path
   expect(denied('/never-visited/deep-link')).toBe(false);
   for (const path of ['/api', '/api/private', '/v1/account', '/oauth/callback'])
     expect(denied(path)).toBe(true);
-  expect(config.workbox!.runtimeCaching).toBeUndefined();
+  expect(config.workbox!.runtimeCaching).toHaveLength(2);
+  for (const rule of config.workbox!.runtimeCaching!) {
+    expect((rule.urlPattern as RegExp).test('https://api.freeappstore.online/v1/private')).toBe(
+      false,
+    );
+  }
   expect(() => pwaOptions({ strategies: 'injectManifest' })).toThrow('generateSW');
 });

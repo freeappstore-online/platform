@@ -36,6 +36,7 @@ on:
       - 'scripts/published-scaffold.sh'
       - 'scripts/template-release.mjs'
       - 'scripts/accept-starter-release.sh'
+      - 'scripts/prepare-sdk-release.sh'
   pull_request:
     branches: [main]
     paths:
@@ -55,6 +56,7 @@ on:
       - 'scripts/published-scaffold.sh'
       - 'scripts/template-release.mjs'
       - 'scripts/accept-starter-release.sh'
+      - 'scripts/prepare-sdk-release.sh'
   schedule:
     # 04:30 UTC daily — independent of CLI changes, so template-side drift
     # surfaces here on its own schedule.
@@ -163,7 +165,11 @@ jobs:
           # fas init adds the PWA capability and updates the SDK requirement.
           # Resolve those generated manifest changes instead of freezing the
           # template's pre-capability lock. This is a fresh disposable scaffold.
-          pnpm install --no-frozen-lockfile
+          source "$GITHUB_WORKSPACE/scripts/published-scaffold.sh"
+          SDK_VERSION=$(node -e 'const fs=require("fs"); const value=JSON.parse(fs.readFileSync("web/package.json")).dependencies["@freeappstore/sdk"]; if (!/^\^[0-9]+\.[0-9]+\.[0-9]+$/.test(value)) throw new Error("Expected canonical SDK floor"); console.log(value.slice(1));')
+          PUBLISHED_REGISTRY_DEADLINE=$(( $(date +%s) + 300 ))
+          wait_for_published_version "@freeappstore/sdk" "$SDK_VERSION"
+          install_published_scaffold_dependencies
 
       - name: Typecheck guardrail accepts custom layouts and rejects invalid SDK calls
         working-directory: /tmp/scaffold-smoke

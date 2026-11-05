@@ -22,6 +22,15 @@ trap 'rm -rf "$scratch"' EXIT
 npm pack "@freeappstore/cli@$CLI_VERSION" --pack-destination "$scratch" --json > "$scratch/pack.json"
 archive=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1]))[0].filename)' "$scratch/pack.json")
 tar -xzf "$scratch/$archive" -C "$scratch"
+mkdir -p "$scratch/sdk"
+npm pack "@freeappstore/sdk@$SDK_VERSION" --pack-destination "$scratch/sdk" --json > "$scratch/sdk/pack.json"
+sdk_archive=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1]))[0].filename)' "$scratch/sdk/pack.json")
+tar -xzf "$scratch/sdk/$sdk_archive" -C "$scratch/sdk"
+node --input-type=module - "$scratch/sdk/package/dist/logger.js" "$SDK_VERSION" <<'JS'
+import { pathToFileURL } from 'node:url';
+const { SDK_VERSION } = await import(pathToFileURL(process.argv[2]));
+if (SDK_VERSION !== process.argv[3]) throw new Error('Published SDK runtime version differs from package metadata');
+JS
 # Re-read main immediately before each normal push so concurrent work is preserved.
 for attempt in 1 2 3; do
   target="$scratch/target-$attempt"

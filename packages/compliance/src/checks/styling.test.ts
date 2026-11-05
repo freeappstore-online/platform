@@ -24,11 +24,6 @@ describe('CSS discipline passing/failing fixtures', () => {
       ':root[data-theme="dark"] { --paper: #000 }',
       '@layer components { [data-theme="dark"] .card { color: var(--ink) } }',
     ],
-    [
-      'feature-classes',
-      `@layer components { ${Array.from({ length: 15 }, (_, i) => `.c${i}{color:var(--ink)}`).join('')} }`,
-      `@layer components { ${Array.from({ length: 16 }, (_, i) => `.c${i}{color:var(--ink)}`).join('')} }`,
-    ],
   ])('%s has a passing and failing fixture', async (rule, passing, failing) => {
     expect((await checkCssDiscipline(cssSource(passing))).status).toBe('pass');
     const result = await checkCssDiscipline(cssSource(failing));
@@ -36,13 +31,24 @@ describe('CSS discipline passing/failing fixtures', () => {
     expect(result.detail).toContain(rule);
   });
 
+  it('supports app-owned layered classes without an arbitrary class-count limit', async () => {
+    expect(
+      (
+        await checkCssDiscipline(
+          cssSource(
+            `@layer components { ${Array.from({ length: 40 }, (_, i) => `.c${i}{color:var(--ink)}`).join('')} }`,
+          ),
+        )
+      ).status,
+    ).toBe('pass');
+  });
   it('parses nested CSS, print, keyframes, @theme and comments', async () => {
     expect(
       (
         await checkCssDiscipline(
           cssSource(`
       /* .dark .bad { color: #fff; --bg: red } */
-      @theme inline { --color-paper: var(--paper); }
+      @theme inline { --color-paper: var(--paper, #fff); }
       @layer components { .card { &:hover { color: var(--accent) } } }
       @media print { body { display: block } }
       @keyframes fade { from { opacity: 0 } to { opacity: 1 } }

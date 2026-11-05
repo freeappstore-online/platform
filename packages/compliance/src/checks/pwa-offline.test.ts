@@ -553,3 +553,42 @@ describe('checkPwaOffline', () => {
     expect(r.status).toBe('pass');
   });
 });
+
+describe('maintained SDK PWA defaults', () => {
+  const helper = `import { VitePWA as Pwa } from 'vite-plugin-pwa'; import { pwaOptions as options } from '@freeappstore/sdk/pwa-config'; export default { plugins: [Pwa(options())] };`;
+  const source = (config = helper, version = '^0.16.38') =>
+    mapFileSource(
+      new Map([
+        [VITE_CONFIG, config],
+        [INDEX_HTML, HTML_WITH_FONTS],
+        ['web/package.json', JSON.stringify({ dependencies: { '@freeappstore/sdk': version } })],
+        // Business data/media are deliberately opt-in; shell caching isn't a full offline claim.
+        ['web/public/catalog.json', '{}'],
+        ['web/public/video.mp4', 'optional'],
+      ]),
+    );
+  it('recognizes the supported imported helper and preserves optional offline boundaries', async () => {
+    expect(await checkPwaOffline(source())).toMatchObject({
+      status: 'pass',
+      detail: expect.stringContaining('opt-in'),
+    });
+  });
+  it('does not approve an old installed SDK or an ambiguous source range', async () => {
+    expect((await checkPwaOffline(source(helper, '^0.16.37'))).status).toBe('warn');
+    expect((await checkPwaOffline(source(helper, '*'))).status).toBe('warn');
+    const files = new Map([
+      [VITE_CONFIG, helper],
+      [INDEX_HTML, HTML_WITH_FONTS],
+      ['web/package.json', JSON.stringify({ dependencies: { '@freeappstore/sdk': '^0.16.38' } })],
+      ['web/node_modules/@freeappstore/sdk/package.json', JSON.stringify({ version: '0.16.37' })],
+    ]);
+    expect((await checkPwaOffline(mapFileSource(files))).status).toBe('warn');
+  });
+  it('keeps custom overrides, fake imports and shadow helpers unrecognized', async () => {
+    expect((await checkPwaOffline(source(helper.replace('options()', 'options({})')))).status).toBe(
+      'warn',
+    );
+    const fake = `import { VitePWA } from 'vite-plugin-pwa'; const text = "import { pwaOptions } from '@freeappstore/sdk/pwa-config'"; function pwaOptions() { return {} } export default { plugins: [VitePWA(pwaOptions())] };`;
+    expect((await checkPwaOffline(source(fake))).status).toBe('warn');
+  });
+});

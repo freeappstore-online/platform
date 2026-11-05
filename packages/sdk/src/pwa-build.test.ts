@@ -16,6 +16,8 @@ it('generates a real precached worker with offline deep-link fallback and guarde
     await writeFile(join(root, 'index.html'), '<main>Offline shell</main>');
     await writeFile(join(root, 'app.js'), 'console.log("app")');
     await writeFile(join(root, 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"/>');
+    await writeFile(join(root, 'large.js'), `/*${'x'.repeat(3 * 1024 * 1024)}*/`);
+    await writeFile(join(root, 'manifest.json'), '{}');
     const config = pwaOptions({ workbox: { navigateFallbackDenylist: [/^\/oauth/] } });
     const result = await generateSW({
       ...config.workbox,
@@ -23,11 +25,15 @@ it('generates a real precached worker with offline deep-link fallback and guarde
       swDest: join(root, 'sw.js'),
       mode: 'development',
     });
-    expect(result.count).toBe(3);
+    expect(result.count).toBe(4);
     expect(result.warnings).toEqual([]);
     const worker = await readFile(join(root, 'sw.js'), 'utf8');
     expect(worker).toContain('index.html');
     expect(worker).toContain('icon.svg');
+    expect(worker).toContain('large.js');
+    expect(worker).not.toContain('manifest.json');
+    expect(worker).toContain('fas-font-styles-v1');
+    expect(worker).toContain('fas-font-files-v1');
     expect(worker).toContain('NavigationRoute');
     expect(worker).toContain('createHandlerBoundToURL("/index.html")');
     expect(worker).toContain('SKIP_WAITING');
@@ -45,6 +51,9 @@ it('generates a real precached worker with offline deep-link fallback and guarde
       define: (_deps: string[], factory: (workbox: unknown) => void) =>
         factory({
           clientsClaim: vi.fn(),
+          CacheFirst: class {},
+          CacheableResponsePlugin: class {},
+          ExpirationPlugin: class {},
           precacheAndRoute: vi.fn(),
           registerRoute: vi.fn(),
           createHandlerBoundToURL: vi.fn(),

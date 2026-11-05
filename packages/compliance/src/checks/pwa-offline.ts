@@ -6,6 +6,49 @@ const VITE_CONFIG = 'web/vite.config.ts';
 const INDEX_HTML = 'web/index.html';
 const PUBLIC_DIR = 'web/public';
 
+function importedBinding(
+  config: string,
+  code: string,
+  module: string,
+  name: string,
+): string | null {
+  for (const match of config.matchAll(/import\s*\{([^}]+)\}\s*from\s*(["'])([^"']+)\2/g)) {
+    if (!code.slice(match.index, match.index + 6).startsWith('import') || match[3] !== module)
+      continue;
+    for (const entry of match[1]!.split(',')) {
+      const binding = new RegExp(`^${name}(?:\\s+as\\s+([a-zA-Z_$][\\w$]*))?$`).exec(entry.trim());
+      if (binding) return binding[1] ?? name;
+    }
+  }
+  return null;
+}
+async function hasSafeSdkDefaults(source: FileSource): Promise<boolean> {
+  for (const path of [
+    'web/node_modules/@freeappstore/sdk/package.json',
+    'node_modules/@freeappstore/sdk/package.json',
+    'web/package.json',
+    'package.json',
+  ]) {
+    const raw = await source.read(path);
+    if (!raw) continue;
+    try {
+      const pkg = JSON.parse(raw);
+      const value = path.includes('node_modules')
+        ? pkg.version
+        : pkg.dependencies?.['@freeappstore/sdk'];
+      if (typeof value !== 'string') continue;
+      // Deliberately recognize only unambiguous stable floors, not arbitrary semver expressions.
+      const match = /^(?:\^|~|>=)?(\d+)\.(\d+)\.(\d+)$/.exec(value);
+      if (!match) return false;
+      const [major, minor, patch] = match.slice(1).map(Number) as [number, number, number];
+      return major > 0 || minor > 16 || (minor === 16 && patch >= 38);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 /**
  * Two things this check enforces:
  *
@@ -57,7 +100,11 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
   // against the config text — otherwise `VitePWA(` in a comment or
   // `"workbox: {"` in a string is treated as real code (false positive).
   const configCode = config === null ? null : stripCommentsAndStrings(config);
-  const hasVitePwa = configCode !== null && /\bVitePWA\s*\(/.test(configCode);
+  const pluginBinding =
+    config && configCode ? importedBinding(config, configCode, 'vite-plugin-pwa', 'VitePWA') : null;
+  const escapeBinding = (name: string) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pluginPattern = new RegExp(`\\b${escapeBinding(pluginBinding ?? 'VitePWA')}\\s*\\(`, 'g');
+  const hasVitePwa = configCode !== null && pluginPattern.test(configCode);
   // `injectManifest` strategy means the developer writes their own SW
   // file (typically web/src/sw.ts). The `workbox` field doesn't apply
   // — `injectManifest` config does — so the rest of our checks are
@@ -145,6 +192,44 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
       status: 'pass',
       detail: 'VitePWA with injectManifest strategy — SW managed in src',
     };
+  }
+
+  const optionsBinding = importedBinding(
+    config,
+    configCode!,
+    '@freeappstore/sdk/pwa-config',
+    'pwaOptions',
+  );
+  if (pluginBinding && optionsBinding) {
+    const calls = [
+      ...configCode!.matchAll(new RegExp(`\\b${escapeBinding(pluginBinding)}\\s*\\(`, 'g')),
+    ];
+    const defaults = [
+      ...configCode!.matchAll(
+        new RegExp(
+          `\\b${escapeBinding(pluginBinding)}\\s*\\(\\s*${escapeBinding(optionsBinding)}\\s*\\(\\s*\\)\\s*\\)`,
+          'g',
+        ),
+      ),
+    ];
+    if (calls.length > 0 && calls.length === defaults.length) {
+      if (!(await hasSafeSdkDefaults(source)))
+        return {
+          name: 'PWA offline correctness',
+          status: 'warn',
+          detail:
+            'SDK pwaOptions defaults need SDK >=0.16.38; installed or declared SDK floor is older/unrecognized',
+          suggestions: [
+            'Update SDK deliberately, or configure and verify explicit app-owned Workbox options.',
+          ],
+        };
+      return {
+        name: 'PWA offline correctness',
+        status: 'pass',
+        detail:
+          'SDK pwaOptions caches the app shell and fonts with an explicit bundle cap; business data/media remain opt-in and need browser verification',
+      };
+    }
   }
 
   // Extract the workbox block. Match `workbox: { ... }` allowing nested

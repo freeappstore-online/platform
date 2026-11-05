@@ -93,7 +93,7 @@ describe('checkClaudeMdSlim', () => {
     await writeFile(join(dir, 'CLAUDE.md'), `# myapp\n\nA free app.\n\n- Dev: pnpm dev\n`);
     const r = await checkClaudeMdSlim(fsFileSource(dir));
     expect(r.status).toBe('warn');
-    expect(r.detail).toMatch(/missing SKILLS\.md pointer/);
+    expect(r.detail).toMatch(/missing shared platform guide pointer/);
   });
 
   it('does not warn on an allowed custom section like "## Architecture"', async () => {

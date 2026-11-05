@@ -18,6 +18,8 @@ import type { CheckResult } from '../types.js';
 const NAME = 'CLAUDE.md is slim (no platform boilerplate)';
 
 const SKILLS_URL =
+  'https://github.com/freeappstore-online/platform/blob/main/docs/composable-starter-contract.md';
+const LEGACY_SKILLS_URL =
   'https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/SKILLS.md';
 
 // Section headers that should NOT appear in a per-repo CLAUDE.md — they
@@ -65,7 +67,12 @@ export async function checkClaudeMdSlim(source: FileSource): Promise<CheckResult
   }
 
   const nonBlankLines = body.split('\n').filter((l) => l.trim().length > 0).length;
-  const hasSkillsUrl = body.includes(SKILLS_URL);
+  const hasSkillsUrl =
+    body.includes(SKILLS_URL) ||
+    body.includes(LEGACY_SKILLS_URL) ||
+    body.includes(
+      'https://raw.githubusercontent.com/freeappstore-online/platform/main/docs/composable-starter-contract.md',
+    );
 
   const issues: string[] = [];
   if (offendingHeaders.length > 0) {
@@ -75,14 +82,14 @@ export async function checkClaudeMdSlim(source: FileSource): Promise<CheckResult
     issues.push(`${nonBlankLines} non-blank lines (soft limit ${SOFT_LINE_LIMIT})`);
   }
   if (!hasSkillsUrl) {
-    issues.push('missing SKILLS.md pointer');
+    issues.push('missing shared platform guide pointer');
   }
 
   if (issues.length === 0) {
     return {
       name: NAME,
       status: 'pass',
-      detail: `${nonBlankLines} non-blank lines, SKILLS.md referenced, no banned sections`,
+      detail: `${nonBlankLines} non-blank lines, shared platform guide referenced, no banned sections`,
     };
   }
 
@@ -92,8 +99,8 @@ export async function checkClaudeMdSlim(source: FileSource): Promise<CheckResult
     detail: issues.join('; '),
     suggestions: [
       'Per-repo CLAUDE.md should hold only what is unique to this repo (description, dev/build/deploy, repo-specific setup).',
-      'Anything platform-wide (tech stack, brand, mobile rules, deploy flow) belongs in SKILLS.md instead.',
-      `See the "Per-repo CLAUDE.md convention" section of SKILLS.md: ${SKILLS_URL}`,
+      'Link shared platform guidance instead of duplicating platform conventions.',
+      `See the current starter contract: ${SKILLS_URL}`,
     ],
   };
 }

@@ -98,10 +98,12 @@ describe("getTemplateFiles", () => {
   });
 
   it("shares foundation files and keeps valid store-specific test scripts", () => {
-    const sharedPaths = ["pnpm-workspace.yaml", "web/tsconfig.json", "web/tsconfig.app.json", ".gitignore"];
+    const sharedPaths = ["pnpm-workspace.yaml", "web/tsconfig.json", "web/tsconfig.app.json"];
     for (const p of sharedPaths) {
       expect(appsFiles[p]).toBe(gamesFiles[p]);
     }
+    expect(appsFiles[".gitignore"]).toContain("/web/public/favicon.ico");
+    expect(gamesFiles[".gitignore"]).not.toContain("/web/public/favicon.ico");
     expect(JSON.parse(appsFiles["web/tsconfig.node.json"]!).include).toContain("pwa-assets.config.ts");
     const appPackage = JSON.parse(appsFiles["package.json"]!) as {
       scripts: Record<string, string>;
@@ -154,7 +156,7 @@ describe("getTemplateFiles", () => {
       const files = getTemplateFiles(appsConfig, archetype, "connected");
       const app = files["web/src/App.tsx"];
       const draft = files["web/src/components/ConnectedDraft.tsx"];
-      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.16.37"');
+      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.16.38"');
       expect(files["fas-capabilities/cloud-data.md"]).toContain("Room-restricted");
       expect(draft).toContain("useConnectedKvDraft");
       expect(draft).toContain("draft.retry");
@@ -394,7 +396,7 @@ describe("connected preset (#368)", () => {
     expect(files["web/src/App.tsx"]).toContain("<ConnectedDraft app={fas} />");
     expect(files["web/src/App.tsx"]).not.toContain("requireAuth");
     expect(files["web/src/components/ConnectedDraft.tsx"]).toContain("if (!draft.user)");
-    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.16.37");
+    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.16.38");
   });
 
   it("does not change standalone or game templates", () => {

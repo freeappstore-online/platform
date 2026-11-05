@@ -147,3 +147,21 @@ Release browser checks fetch and decode declared icons, check dimensions and opa
 maskable/touch backgrounds in Chromium and WebKit. They do not claim a physical iOS
 Add to Home Screen installation. Browser/OS installation UI remains a separate manual
 check when physical-device coverage is required.
+
+
+### Default caches and app-owned assets
+
+SDK 0.16.38 keeps the default precache limited to shell assets (JS, CSS, HTML,
+images and WOFF2), raises its per-asset limit to 10 MiB, and adds bounded Google
+Fonts stylesheet/font caches. Font caching starts when the worker controls a
+request; an initial network load is still needed. Existing custom runtimeCaching
+and globPatterns remain app-owned overrides.
+
+Business JSON, WASM, media and private API responses are not automatically cached.
+Use the optional offline asset APIs or explicit app-owned Workbox patterns when
+these are needed. A passing static shell check does not mean an app's cloud
+features work offline. Exercise that feature with networking disabled.
+
+Generated icon files and TypeScript build info are ignored by fresh starters.
+When adopting prebuilt icons at those exact paths, remove the matching generated
+asset ignore entries and commit your assets; custom asset names remain available.

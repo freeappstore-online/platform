@@ -619,3 +619,18 @@ validation. This example adds no form library, schema or persistence capability.
 Use app-owned navigation/PWA guards if the product needs to preserve unsaved drafts
 outside the dialog. Test actual sequential typing, Enter, Tab/Shift-Tab, Escape, failed
 writes and narrow screens with enlarged text.
+
+
+### Feature state across Profile navigation
+
+The built-in Profile is a separate route and unmounts Shell's feature children.
+Its return URL restores the location, not component-local drafts or reading
+position. Keep state that should survive in the app's parent/router/store, and
+restore the feature from it. A modal that must survive feature-route changes can
+be owned alongside Shell instead of inside its children. Account-bound state must
+still reset when the account changes.
+
+Pause playback/capture and unsubscribe in effect cleanup. Returning from Profile
+should preserve the user's place without automatically resuming ongoing work.
+The PWA busy guard protects against update activation; it is not a navigation or
+browser-close guard. Choose those behaviors explicitly for the app.

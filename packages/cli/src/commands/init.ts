@@ -178,7 +178,9 @@ export const initCommand = new Command('init')
         : 'https://freeappstore.online/contribute.html';
       process.stdout.write(`\n✓ Scaffolded ${appId}/ from ${opts.template} template.\n`);
       process.stdout.write(
-        `  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`,
+        isGame
+          ? `  Replaced APPNAME → ${appId} in ${result.substitutionCount} file(s).\n\n`
+          : `  App identity configured as ${appId}.\n\n`,
       );
       process.stdout.write('Next steps:\n');
       process.stdout.write(`  cd ${appId}\n`);

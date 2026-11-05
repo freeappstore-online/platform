@@ -12,6 +12,27 @@ export function pwaOptions(overrides: Partial<VitePWAOptions> = {}): Partial<Vit
     injectRegister: false as const,
     workbox: {
       globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
+      maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+      runtimeCaching: [
+        {
+          urlPattern: /^https:\/\/fonts\.googleapis\.com\//i,
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'fas-font-styles-v1',
+            cacheableResponse: { statuses: [0, 200] },
+            expiration: { maxEntries: 20, maxAgeSeconds: 7 * 24 * 60 * 60 },
+          },
+        },
+        {
+          urlPattern: /^https:\/\/fonts\.gstatic\.com\//i,
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'fas-font-files-v1',
+            cacheableResponse: { statuses: [0, 200] },
+            expiration: { maxEntries: 30, maxAgeSeconds: 365 * 24 * 60 * 60 },
+          },
+        },
+      ],
       navigateFallback: '/index.html',
       ...overrides.workbox,
       navigateFallbackDenylist: [

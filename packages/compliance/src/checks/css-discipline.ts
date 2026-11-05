@@ -11,7 +11,6 @@ export async function checkCssDiscipline(source: FileSource): Promise<CheckResul
       findings.push(`${path}: css-parse: ${error}`);
       continue;
     }
-    const classes = new Set<string>();
     root.walkRules((rule) => {
       const token = isTokenRule(rule);
       let print = false;
@@ -34,9 +33,6 @@ export async function checkCssDiscipline(source: FileSource): Promise<CheckResul
       if (!token && (darkMedia || /(?:data-theme\s*=\s*["']?dark|\.dark\b)/.test(rule.selector))) {
         findings.push(`${location}: per-screen-dark-override: ${rule.selector}`);
       }
-      if (!token && !keyframes) {
-        for (const match of rule.selector.matchAll(/\.([\w-]+)/g)) classes.add(match[1]!);
-      }
     });
     root.walkDecls((decl) => {
       const location = `${path}:${decl.source?.start?.line ?? 1}`;
@@ -46,13 +42,13 @@ export async function checkCssDiscipline(source: FileSource): Promise<CheckResul
       ) {
         findings.push(`${location}: banned-alias: ${decl.prop}: ${decl.value}`);
       }
-      const token = decl.parent?.type === 'rule' && isTokenRule(decl.parent);
+      const token =
+        (decl.parent?.type === 'rule' && isTokenRule(decl.parent)) ||
+        (within(decl, 'theme') && decl.prop.startsWith('--') && /^var\(/.test(decl.value));
       if (!token && /#[\da-f]{3,8}\b/i.test(decl.value)) {
         findings.push(`${location}: hex-outside-tokens: ${decl.prop}`);
       }
     });
-    if (classes.size > 15)
-      findings.push(`${path}: feature-classes: ${classes.size} (threshold: 15)`);
   }
   return {
     name: 'CSS discipline',
