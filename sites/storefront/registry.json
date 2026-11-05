@@ -2775,22 +2775,6 @@
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-05T04:39:50.497Z",
       "creatorGithub": "serge-ivo"
-    },
-    {
-      "id": "e2e-canary-mw376uuemwx3",
-      "name": "e2e-canary-mw376uuemwx3",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mw376uuemwx3.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mw376uuemwx3",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
-      "discoveryRequestedAt": "2026-11-05T07:02:07.580Z",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
