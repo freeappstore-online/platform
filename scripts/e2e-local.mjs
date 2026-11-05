@@ -10,7 +10,7 @@
 // WebSocket upgrade flow through the Worker → Durable Object boundary,
 // and quota math against actual stored bytes.
 
-import { setTimeout as sleep } from 'node:timers/promises';
+import { waitForSmoke } from './wait-for-smoke.mjs';
 
 const API = process.env.API ?? 'http://localhost:8787';
 const KEY =
@@ -165,61 +165,62 @@ async function testWebSocket(token) {
   a.addEventListener('message', (ev) => aMsgs.push(JSON.parse(ev.data)));
   b.addEventListener('message', (ev) => bMsgs.push(JSON.parse(ev.data)));
 
-  await Promise.all([
-    new Promise((r, j) => {
-      a.addEventListener('open', r);
-      a.addEventListener('error', j);
-    }),
-    new Promise((r, j) => {
-      b.addEventListener('open', r);
-      b.addEventListener('error', j);
-    }),
-  ]);
-  pass('two WebSocket clients connected');
-
-  // After both connect, both should have received a peers broadcast.
-  await sleep(200);
-  const aSawPeers = aMsgs.some((m) => m.kind === 'peers');
-  const bSawPeers = bMsgs.some((m) => m.kind === 'peers');
-  assert(aSawPeers && bSawPeers, 'both clients received a peers message');
-
-  // a sends — b should receive (a should NOT, since broadcast skips sender)
-  a.send(JSON.stringify({ kind: 'msg', data: { tag: 'from-a' } }));
-  await sleep(200);
-
-  const bGotMsg = bMsgs.find((m) => m.kind === 'msg' && m.data?.tag === 'from-a');
-  assert(!!bGotMsg, "client b received a's message", `bMsgs=${JSON.stringify(bMsgs)}`);
-  if (bGotMsg) {
-    assert(
-      typeof bGotMsg.from === 'object' &&
-        typeof bGotMsg.from.uid === 'string' &&
-        typeof bGotMsg.from.login === 'string',
-      'msg.from is { uid, login }',
-      `from=${JSON.stringify(bGotMsg.from)}`,
+  try {
+    await waitForSmoke(
+      () => [a, b].every((socket) => socket.readyState === WebSocket.OPEN),
+      'both WebSocket upgrades',
     );
+    pass('two WebSocket clients connected');
+
+    // After both connect, both should have received a peers broadcast.
+    await waitForSmoke(
+      () => aMsgs.some((m) => m.kind === 'peers') && bMsgs.some((m) => m.kind === 'peers'),
+      'peer broadcasts',
+    );
+    const aSawPeers = aMsgs.some((m) => m.kind === 'peers');
+    const bSawPeers = bMsgs.some((m) => m.kind === 'peers');
+    assert(aSawPeers && bSawPeers, 'both clients received a peers message');
+
+    // a sends — b should receive (a should NOT, since broadcast skips sender)
+    a.send(JSON.stringify({ kind: 'msg', data: { tag: 'from-a' } }));
+    await waitForSmoke(
+      () => bMsgs.some((m) => m.kind === 'msg' && m.data?.tag === 'from-a'),
+      'room broadcast',
+    );
+
+    const bGotMsg = bMsgs.find((m) => m.kind === 'msg' && m.data?.tag === 'from-a');
+    assert(!!bGotMsg, "client b received a's message", `bMsgs=${JSON.stringify(bMsgs)}`);
+    if (bGotMsg) {
+      assert(
+        typeof bGotMsg.from === 'object' &&
+          typeof bGotMsg.from.uid === 'string' &&
+          typeof bGotMsg.from.login === 'string',
+        'msg.from is { uid, login }',
+        `from=${JSON.stringify(bGotMsg.from)}`,
+      );
+    }
+
+    // Oversize message — should be dropped + warned (not crash the connection).
+    const huge = 'x'.repeat(5000);
+    a.send(JSON.stringify({ kind: 'msg', data: { huge } }));
+    await waitForSmoke(
+      () => aMsgs.some((m) => m.kind === 'error' && m.error === 'message_too_large'),
+      'oversize error response',
+    );
+    const aGotError = aMsgs.find((m) => m.kind === 'error' && m.error === 'message_too_large');
+    assert(!!aGotError, 'oversize message → "message_too_large" error to sender');
+
+    // The later error frame acknowledges processing on a's ordered socket stream.
+    // Any incorrectly echoed earlier broadcast would now have arrived before it.
+    assert(
+      !aMsgs.some((m) => m.kind === 'msg'),
+      'sender does not receive their own broadcast',
+      `aMsgs=${JSON.stringify(aMsgs)}`,
+    );
+  } finally {
+    a.close();
+    b.close();
   }
-
-  const _aGotOwnMsg = aMsgs.find(
-    (m) => m.kind === 'msg' && m.data?.from === 'a' && !aMsgs.indexOf(m) === false,
-  );
-  // Sender should NOT receive their own broadcast (that's by design in room.ts).
-  // We assert the count of msg-kind frames received by `a` is 0.
-  const aMsgCount = aMsgs.filter((m) => m.kind === 'msg').length;
-  assert(
-    aMsgCount === 0,
-    'sender does not receive their own broadcast',
-    `aMsgs=${JSON.stringify(aMsgs)}`,
-  );
-
-  // Oversize message — should be dropped + warned (not crash the connection).
-  const huge = 'x'.repeat(5000);
-  a.send(JSON.stringify({ kind: 'msg', data: { huge } }));
-  await sleep(200);
-  const aGotError = aMsgs.find((m) => m.kind === 'error' && m.error === 'message_too_large');
-  assert(!!aGotError, 'oversize message → "message_too_large" error to sender');
-
-  a.close();
-  b.close();
 }
 
 main().catch((err) => {
