@@ -2742,7 +2742,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-04T21:35:13.239Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "cue-scroll",
@@ -2758,7 +2759,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-05T02:05:10.654Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "card",
@@ -2774,7 +2776,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-05T04:39:50.497Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "scoreplay",
@@ -2790,7 +2793,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-05T09:50:35.814Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "symptom-map",
@@ -2806,7 +2810,13 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-05T13:57:40.910Z",
-      "creatorGithub": "vuthanhvannguyen2006-commits"
+      "creatorGithub": "vuthanhvannguyen2006-commits",
+      "permissions": [
+        {
+          "name": "camera",
+          "reason": "Optionally take a photo to attach to a diary entry."
+        }
+      ]
     }
   ]
 }
