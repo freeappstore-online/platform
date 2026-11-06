@@ -21,6 +21,15 @@ export const DEPLOY_AUDIENCE = 'https://api.freeappstore.online';
 export const APP_ORG_ID = '281292751';
 const DEPLOY_REF = 'refs/heads/main';
 const DEPLOY_EVENTS = new Set(['push', 'workflow_dispatch']);
+/**
+ * First-party sites built in the platform monorepo rather than an app repo,
+ * keyed by the workflow that deploys them. Only that workflow on main of that
+ * repo may deploy that app id; the monorepo has no other deployable apps.
+ */
+const PLATFORM_REPO = 'freeappstore-online/platform';
+const PLATFORM_SITES: Record<string, string> = {
+  [`${PLATFORM_REPO}/.github/workflows/deploy-console.yml@${DEPLOY_REF}`]: 'console',
+};
 const SESSION_TTL_MS = 15 * 60 * 1000;
 const DEPLOYS_PER_HOUR = 20;
 const OPEN_DEPLOYS = 3;
@@ -226,6 +235,15 @@ export async function resolveDeployApp(db: D1Database, claims: OidcClaims): Prom
     throw new HttpError(403, `event ${claims.event_name ?? '(none)'} may not deploy`);
   if (!claims.repository_id || !claims.jti)
     throw new HttpError(401, 'token lacks repository_id or jti');
+  if (claims.repository === PLATFORM_REPO) {
+    const site = PLATFORM_SITES[claims.job_workflow_ref ?? ''];
+    if (!site)
+      throw new HttpError(
+        403,
+        `workflow ${claims.job_workflow_ref ?? '(none)'} may not deploy from ${PLATFORM_REPO}`,
+      );
+    return site;
+  }
   // Only the repo's own deploy.yml on main may deploy; another workflow added
   // to the repo cannot (it would skip the generated build job's validators).
   if (claims.job_workflow_ref !== `${claims.repository}/.github/workflows/deploy.yml@${DEPLOY_REF}`)

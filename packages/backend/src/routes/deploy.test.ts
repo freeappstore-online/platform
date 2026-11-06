@@ -301,6 +301,36 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     expect((await open(await oidc('beta', '202'), { 'index.html': 1 })).status).toBe(403);
   });
 
+  describe('platform monorepo sites', () => {
+    const wf = (name: string) =>
+      `freeappstore-online/platform/.github/workflows/${name}@refs/heads/main`;
+    beforeEach(() => {
+      db.prepare(
+        "INSERT INTO routes (slug, zone, r2_prefix, store, created_at, updated_at) VALUES ('console', 'freeappstore.online', 'apps/console', 'apps', 1, 1)",
+      ).run();
+    });
+
+    it('deploys the console from deploy-console.yml only', async () => {
+      const ok = await oidc('platform', '900', { job_workflow_ref: wf('deploy-console.yml') });
+      const res = await open(ok, { 'index.html': 1 });
+      expect(res.status).toBe(201);
+      expect(((await res.json()) as { app_id: string }).app_id).toBe('console');
+    });
+
+    it.each([
+      ['deploy.yml', 'deploy.yml'],
+      ['another platform workflow', 'deploy-admin.yml'],
+    ])('refuses %s in the platform repo', async (_n, name) => {
+      const token = await oidc('platform', '900', { job_workflow_ref: wf(name) });
+      expect((await open(token, { 'index.html': 1 })).status).toBe(403);
+    });
+
+    it('refuses another repo claiming the console workflow', async () => {
+      const token = await oidc('alpha', '101', { job_workflow_ref: wf('deploy-console.yml') });
+      expect((await open(token, { 'index.html': 1 })).status).toBe(403);
+    });
+  });
+
   it('refuses an unregistered repository', async () => {
     expect((await open(await oidc('gamma', '303'), { 'index.html': 1 })).status).toBe(403);
   });
