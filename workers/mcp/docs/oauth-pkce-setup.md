@@ -102,7 +102,7 @@ tag = "v1"
 new_sqlite_classes = ["YourMcpAgent"]
 ```
 
-**4. Secrets.** `SESSION_SIGNING_KEY` must be the same HMAC key the backend signs sessions with. Without it every callback fails with `invalid session`. Store it per the secrets process (SOPS inventory), not in the repo.
+**4. Secrets.** None for sessions. The worker does not verify tokens itself: it calls `GET /v1/auth/me` on `API_BASE` with the redeemed session and requires `aud === "console"`. Only the backend holds the signing key.
 
 **5. Backend side.** The auth backend must:
 - support `response_mode=code` with S256 on `/v1/auth/<provider>/start`, and `POST /v1/auth/session/exchange` (see `packages/backend/src/routes/auth.ts`);

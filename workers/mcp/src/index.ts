@@ -8,6 +8,7 @@ import { fetchTemplateFiles, listRepoFiles, pushFiles, readRepoFile, type RepoFi
 import { AuthHandler } from "./auth-handler.js";
 import { sessionPrefix, auditLog } from "./lib.js";
 import { ownsApp, ownershipGateText } from "./ownership.js";
+import { withOriginCheck } from "./origin.js";
 import { type RateLimiter, withRateLimit } from "./ratelimit.js";
 import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
 import { BUILD_HANDOFF_BLOCK, getSdkReference, SDK_REFERENCE_FEATURES, withBuildHandoff } from "./sdk-reference.js";
@@ -19,7 +20,6 @@ interface Env {
   AGENT_BASE: string;
   MCP_OBJECT: DurableObjectNamespace;
   GITHUB_TOKEN?: string;
-  SESSION_SIGNING_KEY?: string;
   OAUTH_KV?: KVNamespace;
   /** When "1", all non-read tools are disabled server-wide. */
   MCP_READ_ONLY?: string;
@@ -553,4 +553,9 @@ const oauthProvider = new OAuthProvider({
 });
 
 // Every request is rate-limited per IP before the OAuth provider sees it (#68).
-export default { fetch: withRateLimit<Env>((request, env, ctx) => withBoundedBody(request, (bounded) => oauthProvider.fetch(bounded, env, ctx))) };
+// Origin is checked outside the provider, which reflects any Origin itself (#524).
+export default {
+  fetch: withOriginCheck<Env>(
+    withRateLimit<Env>((request, env, ctx) => withBoundedBody(request, (bounded) => oauthProvider.fetch(bounded, env, ctx))),
+  ),
+};

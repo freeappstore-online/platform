@@ -28,17 +28,18 @@ import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provid
 import { Hono } from "hono";
 import { generateVerifier, randomToken, s256Challenge, sha256Hex, timingSafeEqual } from "./pkce.js";
 import { parseScopes } from "./safety.js";
-import { CONSOLE_AUD, verifySession } from "./session.js";
 
 type Bindings = {
   OAUTH_KV: KVNamespace;
   API_BASE: string;
-  SESSION_SIGNING_KEY?: string;
   OAUTH_PROVIDER: OAuthHelpers;
 };
 
 /** How long the user has to finish the GitHub round-trip. */
 const FLOW_TTL_SECONDS = 600;
+
+/** The audience this worker needs: it calls console-only routes (/v1/publish, /v1/apps/mine). */
+const CONSOLE_AUD = "console";
 
 const COOKIE_BASE = "fas_mcp_flow";
 
@@ -146,32 +147,41 @@ app.get("/callback", async (c) => {
   const fasSession = await exchangeCode(c.env.API_BASE, code, pending.codeVerifier);
   if (!fasSession) return c.text("could not redeem the sign-in code — start again", 400);
 
-  const payload = c.env.SESSION_SIGNING_KEY
-    ? await verifySession(fasSession, c.env.SESSION_SIGNING_KEY)
-    : null;
-  if (!payload) return c.text("invalid session", 400);
-  // The backend mints `aud: console` for app_id=mcp on this worker's own
-  // origin (#495); anything else could not drive the tools below.
-  if (payload.aud !== CONSOLE_AUD) return c.text("invalid session", 400);
+  // The backend is the only verifier: it checks signature, expiry and
+  // revocation. The backend mints `aud: console` for app_id=mcp on this
+  // worker's own origin (#495); anything else could not drive the tools below.
+  const me = await fetchMe(c.env.API_BASE, fasSession);
+  if (!me || me.aud !== CONSOLE_AUD) return c.text("invalid session", 400);
 
   const scopes = parseScopes(pending.req.scope);
   // The provider's tokens/codes are `userId:grantId:secret`, so the userId must
   // not contain a colon. FAS uids are `gh:123` / `google:<sub>` — pass a
   // colon-free id to the library and keep the real uid in props (used for
   // scoping + audit).
-  const libUserId = payload.uid.replace(/:/g, "_");
+  const libUserId = me.id.replace(/:/g, "_");
   const { redirectTo } = await c.env.OAUTH_PROVIDER.completeAuthorization({
     request: pending.req,
     userId: libUserId,
     scope: scopes,
-    metadata: { label: payload.uid },
-    props: { userId: payload.uid, token: fasSession, scopes },
+    metadata: { label: me.id },
+    props: { userId: me.id, token: fasSession, scopes },
   });
   return new Response(null, {
     status: 302,
     headers: { Location: redirectTo, "Set-Cookie": clearFlowCookie(c.req.url, nonce) },
   });
 });
+
+/** Ask the backend who a session belongs to. Null when it refuses the token. */
+async function fetchMe(apiBase: string, session: string): Promise<{ id: string; aud: string } | null> {
+  const res = await fetch(`${apiBase}/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${session}`, "User-Agent": "freeappstore-mcp" },
+  });
+  if (!res.ok) return null;
+  const data = (await res.json().catch(() => null)) as { id?: unknown; aud?: unknown } | null;
+  if (typeof data?.id !== "string" || typeof data.aud !== "string") return null;
+  return { id: data.id, aud: data.aud };
+}
 
 /** Trade the one-time code for the session, server to server. The verifier is
  *  the credential here — the code alone is not redeemable. */

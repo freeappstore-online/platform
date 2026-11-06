@@ -3,8 +3,7 @@
  * nonce, the state and the browser-bound flow cookie all line up, and the
  * session is redeemed server-to-server with the PKCE verifier. These tests drive
  * the real Hono app with fake bindings: a Map-backed KV, a recording
- * OAUTH_PROVIDER, a stubbed FAS exchange, and a genuinely signed session so
- * verifySession runs for real.
+ * OAUTH_PROVIDER, a stubbed FAS backend (code exchange and /v1/auth/me).
  */
 
 import type { AuthRequest, CompleteAuthorizationOptions } from "@cloudflare/workers-oauth-provider";
@@ -14,7 +13,7 @@ import { s256Challenge, sha256Hex } from "./pkce.js";
 
 const HTTPS = "https://mcp.test";
 const API_BASE = "https://api.test";
-const SIGNING_KEY = "test-signing-key";
+const SESSION = "fas-session-token";
 const CLIENT_REDIRECT = "https://client.example/callback?code=provider-code";
 
 const AUTH_REQUEST: AuthRequest = {
@@ -47,7 +46,7 @@ function fakeKv() {
   return { kv: kv as unknown as KVNamespace, store, ttls };
 }
 
-function makeEnv(overrides: { signingKey?: string | undefined; parseThrows?: boolean } = {}) {
+function makeEnv(overrides: { parseThrows?: boolean } = {}) {
   const { kv, store, ttls } = fakeKv();
   const completeAuthorization = vi.fn(async (_opts: CompleteAuthorizationOptions) => ({
     redirectTo: CLIENT_REDIRECT,
@@ -59,46 +58,31 @@ function makeEnv(overrides: { signingKey?: string | undefined; parseThrows?: boo
   const env = {
     OAUTH_KV: kv,
     API_BASE,
-    SESSION_SIGNING_KEY: "signingKey" in overrides ? overrides.signingKey : SIGNING_KEY,
     OAUTH_PROVIDER: { parseAuthRequest, completeAuthorization },
   };
   return { env, store, ttls, completeAuthorization, parseAuthRequest };
 }
 
-function b64url(bytes: Uint8Array): string {
-  let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+const ME_OK = () => Response.json({ id: "gh:2824906", aud: "console", login: "serge" });
 
-/** A FAS session token in the backend's format: base64url(payload).base64url(hmac). */
-async function signSession(payload: Record<string, unknown>, key = SIGNING_KEY): Promise<string> {
-  const body = b64url(new TextEncoder().encode(JSON.stringify(payload)));
-  const hmacKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(key),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", hmacKey, new TextEncoder().encode(body));
-  return `${body}.${b64url(new Uint8Array(sig))}`;
-}
-
-function validPayload() {
-  const now = Math.floor(Date.now() / 1000);
-  return { uid: "gh:2824906", aud: "console", iat: now, exp: now + 3600 };
-}
-
-/** Stub the FAS code exchange. Records every call so tests can inspect the body. */
-function stubExchange(respond: () => Response | Promise<Response>) {
+/** Stub the FAS backend: the code exchange and /v1/auth/me. Records every call. */
+function stubExchange(
+  respond: () => Response | Promise<Response>,
+  me: () => Response | Promise<Response> = ME_OK,
+) {
   const calls: { url: string; body: { code?: string; code_verifier?: string } }[] = [];
+  const meCalls: { url: string; authorization: string | null }[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push({ url: String(input), body: JSON.parse(String(init?.body ?? "{}")) });
+    const url = String(input);
+    if (url.endsWith("/v1/auth/me")) {
+      meCalls.push({ url, authorization: new Headers(init?.headers).get("Authorization") });
+      return me();
+    }
+    calls.push({ url, body: JSON.parse(String(init?.body ?? "{}")) });
     return respond();
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { calls, fetchMock };
+  return { calls, meCalls, fetchMock };
 }
 
 // ── flow helpers ────────────────────────────────────────────────
@@ -151,11 +135,7 @@ afterEach(() => {
 // ── /callback ───────────────────────────────────────────────────
 
 describe("GET /callback", () => {
-  let token: string;
-
-  beforeEach(async () => {
-    token = await signSession(validPayload());
-  });
+  const token = SESSION;
 
   it("accepts a matching nonce, state and cookie, redeems with the PKCE verifier, and completes authorization", async () => {
     const { env, completeAuthorization } = makeEnv();
@@ -343,10 +323,12 @@ describe("GET /callback", () => {
       expect(completeAuthorization).not.toHaveBeenCalled();
     });
 
-    it("rejects a session signed with the wrong key", async () => {
+    it("rejects a session the backend refuses (bad signature, expired, revoked)", async () => {
       const { env, completeAuthorization } = makeEnv();
-      const forged = await signSession(validPayload(), "not-the-signing-key");
-      stubExchange(() => Response.json({ fas_session: forged }));
+      stubExchange(
+        () => Response.json({ fas_session: token }),
+        () => Response.json({ error: "invalid or expired session" }, { status: 401 }),
+      );
       const flow = await startFlow(env);
 
       const res = await callback(env, callbackUrl(flow), flow.cookie);
@@ -358,11 +340,14 @@ describe("GET /callback", () => {
 
     it.each([
       ["an app-scoped session", { aud: "chess" }],
+      ["a cross-store session", { aud: "cross-store" }],
       ["a pre-#495 session with no audience", { aud: undefined }],
     ])("rejects %s: this worker needs aud=console (#495)", async (_label, claims) => {
       const { env, completeAuthorization } = makeEnv();
-      const wrongAud = await signSession({ ...validPayload(), ...claims });
-      stubExchange(() => Response.json({ fas_session: wrongAud }));
+      stubExchange(
+        () => Response.json({ fas_session: token }),
+        () => Response.json({ id: "gh:2824906", ...claims }),
+      );
       const flow = await startFlow(env);
 
       const res = await callback(env, callbackUrl(flow), flow.cookie);
@@ -372,30 +357,14 @@ describe("GET /callback", () => {
       expect(completeAuthorization).not.toHaveBeenCalled();
     });
 
-    it("rejects an expired session", async () => {
-      const { env, completeAuthorization } = makeEnv();
-      const now = Math.floor(Date.now() / 1000);
-      const expired = await signSession({ uid: "gh:2824906", aud: "console", iat: now - 7200, exp: now - 3600 });
-      stubExchange(() => Response.json({ fas_session: expired }));
+    it("verifies through GET /v1/auth/me with the redeemed session", async () => {
+      const { env } = makeEnv();
+      const backend = stubExchange(() => Response.json({ fas_session: token }));
       const flow = await startFlow(env);
 
-      const res = await callback(env, callbackUrl(flow), flow.cookie);
+      await callback(env, callbackUrl(flow), flow.cookie);
 
-      expect(res.status).toBe(400);
-      expect(await res.text()).toBe("invalid session");
-      expect(completeAuthorization).not.toHaveBeenCalled();
-    });
-
-    it("rejects every session when SESSION_SIGNING_KEY is not configured", async () => {
-      const { env, completeAuthorization } = makeEnv({ signingKey: undefined });
-      stubExchange(() => Response.json({ fas_session: token }));
-      const flow = await startFlow(env);
-
-      const res = await callback(env, callbackUrl(flow), flow.cookie);
-
-      expect(res.status).toBe(400);
-      expect(await res.text()).toBe("invalid session");
-      expect(completeAuthorization).not.toHaveBeenCalled();
+      expect(backend.meCalls).toEqual([{ url: `${API_BASE}/v1/auth/me`, authorization: `Bearer ${token}` }]);
     });
   });
 
