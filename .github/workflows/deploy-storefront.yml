@@ -24,15 +24,21 @@ jobs:
         working-directory: sites/storefront
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # The storefront has no runtime deps; the lockfile exists to pin wrangler
+      # (exact devDependency) so the deploy step never runs an unpinned npx
+      # package with CLOUDFLARE_API_TOKEN in its env (#501). --ignore-workspace:
+      # sites/storefront is not a root workspace member.
+      - run: pnpm install --frozen-lockfile --ignore-workspace
       - run: npm test
       - run: node build.js
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: node scripts/verify-seo.cjs dist
-      - run: npx wrangler pages deploy dist --project-name=freeappstore
+      - run: pnpm exec wrangler pages deploy dist --project-name=freeappstore
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: c1089bfcc43c1c6c2aa89e584e86f0bc
