@@ -1,6 +1,10 @@
 name: Deploy console
 
-# Deploys the creator console SPA to R2 (prefix apps/console).
+# Deploys the creator console SPA (route apps/console) through the store API
+# with a GitHub OIDC token: no R2 key anywhere in this workflow (#460). The API
+# accepts only this workflow on main of this repo for the console app
+# (packages/backend/src/routes/deploy.ts, PLATFORM_SITES), writes the files under
+# an immutable release prefix and switches the route to it once complete.
 #
 # User-facing URL is https://freeappstore.online/app/ — the storefront Pages
 # Function sites/storefront/functions/app/[[path]].ts strips the /app prefix and
@@ -12,10 +16,10 @@ name: Deploy console
 # PLAN-CONSOLIDATE-PLATFORM.md).
 #
 # Two things differ from the per-repo original:
-#  - R2 prefix is HARDCODED to apps/console/ (G2). The old workflow derived it
-#    from ${GITHUB_REPOSITORY##*/}, which resolves to "platform" in the monorepo
-#    and would write to the wrong key. The host Worker's `routes` table maps
-#    console.freeappstore.online -> apps/console, so this prefix must not drift.
+#  - The app id is fixed server-side to `console` (G2). The old workflow derived
+#    its prefix from ${GITHUB_REPOSITORY##*/}, which resolves to "platform" in
+#    the monorepo. The host Worker's `routes` table maps
+#    console.freeappstore.online -> apps/console.
 #  - console is a nested pnpm workspace; `working-directory: sites/console` makes
 #    pnpm root at the nearest pnpm-workspace.yaml (G3).
 #
@@ -38,7 +42,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,15 +65,57 @@ jobs:
           test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
           test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
 
-      - name: Upload to R2 (prefix apps/console — must match the host routes table)
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      - name: Upload build artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: app
+          path: sites/console/web/dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # Runs no project code: no checkout, install or npx. Its only credential is
+  # the job's OIDC token.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_API: https://api.freeappstore.online
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: app
+          path: site
+      - name: Upload keylessly
         run: |
-          aws s3 sync ./web/dist "s3://fas-apps/apps/console/" \
-            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \
-            --delete \
-            --no-progress
-          echo "Deployed apps/console from ${GITHUB_SHA::7}"
+          set -euo pipefail
+          cd site
+          test -n "$(ls -A .)" || { echo "::error::build artifact is empty"; exit 1; }
+          find . -type f -printf '%P\t%s\n' \
+            | jq -Rn '{files: [inputs | split("\t") | {key: .[0], value: (.[1] | tonumber)}] | from_entries}' \
+            > "$RUNNER_TEMP/manifest.json"
+          oidc=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$DEPLOY_API" | jq -r .value)
+          echo "::add-mask::$oidc"
+          session=$(curl -sS --fail-with-body -X POST "$DEPLOY_API/v1/deploys" \
+            -H "Authorization: Bearer $oidc" -H 'Content-Type: application/json' \
+            --data-binary @"$RUNNER_TEMP/manifest.json") \
+            || { echo "::error::deploy refused: $session"; exit 1; }
+          DEPLOY_TOKEN=$(jq -r .token <<<"$session")
+          echo "::add-mask::$DEPLOY_TOKEN"
+          DEPLOY_URL="$DEPLOY_API/v1/deploys/$(jq -r .id <<<"$session")"
+          export DEPLOY_TOKEN DEPLOY_URL
+          upload() {
+            curl -sS --fail-with-body --retry 3 --retry-all-errors -T "./$1" \
+              -H "Authorization: Bearer $DEPLOY_TOKEN" -H 'Content-Type: application/octet-stream' \
+              "$DEPLOY_URL/files/$(jq -rn --arg p "$1" '$p | split("/") | map(@uri) | join("/")')"
+          }
+          export -f upload
+          find . -type f -printf '%P\0' | xargs -0 -P 8 -n 1 bash -c 'upload "$1"' _
+          curl -sS --fail-with-body -X POST -H "Authorization: Bearer $DEPLOY_TOKEN" "$DEPLOY_URL/commit"
+          echo
+          echo "Deployed console from ${GITHUB_SHA::7}"
