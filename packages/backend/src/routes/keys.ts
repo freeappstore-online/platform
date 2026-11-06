@@ -13,7 +13,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAdmin, requireConsoleUser, requireUser } from '../lib/auth.js';
+import { requireConsoleUser, requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
 import { isInternalCall, isServiceBindingCall } from '../lib/internal.js';
 import type { Env } from '../types.js';
@@ -178,7 +178,7 @@ keysRoutes.get('/internal/keys/users', async (c) => {
 });
 
 /**
- * Users with their vault keys and grant, for the admin Grants tab. Keys carry
+ * Users with their vault keys and grant, for the admin worker's AI Keys page. Keys carry
  * `provisionedBy` (null = the user's own) but never a key value (#16).
  */
 async function listGrantUsers(env: Env) {
@@ -253,9 +253,9 @@ keysRoutes.get('/internal/keys/grants', async (c) => {
   return c.json({ grants, funded });
 });
 
-// Shared grant upsert/revoke. Both the internal (service-binding, token-auth)
-// and the session-admin (requireAdmin) routes funnel through these so the
-// validation + SQL live in one place; only auth + `grantedBy` differ per route.
+// Grant upsert/revoke for the internal routes. The admin worker
+// (admin.freeappstore.online, AI Keys) is the one grant/key admin surface; it
+// reaches these over the service binding (#528).
 type GrantResult = { status: 200 | 400 | 404; body: Record<string, unknown> };
 type GrantInput = {
   userId?: string;
@@ -329,123 +329,6 @@ keysRoutes.post('/internal/keys/grants/delete', async (c) => {
   const body = await c.req.json<{ userId?: string }>().catch(() => null);
   const r = await revokeGrant(c.env, String(body?.userId ?? ''));
   return c.json(r.body, r.status);
-});
-
-// ── Product-session admin grant management ────────────────────────────
-// These routes power create.freeappstore.online/admin using the normal FAS
-// session token. They avoid the separate Cloudflare Access login on the admin
-// Worker, while still requiring the platform admin role.
-
-keysRoutes.get('/admin/ai-grants/users', async (c) => {
-  await requireAdmin(c);
-  return c.json({ users: await listGrantUsers(c.env) });
-});
-
-keysRoutes.get('/admin/ai-grants', async (c) => {
-  await requireAdmin(c);
-  const funded = [...COMP_PROVIDERS].filter((provider) => !!compKeyFor(c.env, provider));
-  const grants = await listCompGrants(c.env);
-  return c.json({ grants, funded });
-});
-
-keysRoutes.post('/admin/ai-grants', async (c) => {
-  const admin = await requireAdmin(c);
-  const body = await c.req.json<GrantInput>().catch(() => null);
-  const r = await applyGrant(c.env, body ?? {}, admin.githubLogin || admin.login);
-  return c.json(r.body, r.status);
-});
-
-keysRoutes.post('/admin/ai-grants/delete', async (c) => {
-  await requireAdmin(c);
-  const body = await c.req.json<{ userId?: string }>().catch(() => null);
-  const r = await revokeGrant(c.env, String(body?.userId ?? ''));
-  return c.json(r.body, r.status);
-});
-
-keysRoutes.post('/admin/ai-keys', async (c) => {
-  const admin = await requireAdmin(c);
-  if (!c.env.APP_SECRET_KEK) {
-    return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
-  }
-
-  const body = await c.req
-    .json<{ userId?: string; provider?: string; key?: string; label?: string }>()
-    .catch(() => null);
-  const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '')
-    .trim()
-    .toLowerCase();
-  const key = String(body?.key ?? '').trim();
-  const label = body?.label ? String(body.label).trim().slice(0, 80) : 'Admin provisioned';
-
-  if (!USER_ID_RE.test(userId))
-    return c.json({ ok: false, error: 'valid userId is required' }, 400);
-  if (!key || key.length > 500)
-    return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
-
-  const user = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
-    .bind(userId)
-    .first<{ id: string }>();
-  if (!user) return c.json({ ok: false, error: 'user not found' }, 404);
-
-  const prov = await c.env.DB.prepare('SELECT id, key_prefix FROM key_providers WHERE id = ?')
-    .bind(provider)
-    .first<{ id: string; key_prefix: string | null }>();
-  if (!prov) return c.json({ ok: false, error: `Unknown provider: ${provider}` }, 400);
-  if (prov.key_prefix && !key.startsWith(prov.key_prefix)) {
-    return c.json(
-      {
-        ok: false,
-        error: `Key should start with "${prov.key_prefix}". Check you copied the full key.`,
-      },
-      400,
-    );
-  }
-
-  const sealed = await sealSecret(key, c.env.APP_SECRET_KEK);
-  await c.env.DB.prepare(
-    `INSERT INTO user_api_keys (user_id, provider, label, key_ciphertext, dek_wrapped, iv, created_at, provisioned_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (user_id, provider) DO UPDATE SET
-       label = excluded.label,
-       key_ciphertext = excluded.key_ciphertext,
-       dek_wrapped = excluded.dek_wrapped,
-       iv = excluded.iv,
-       created_at = excluded.created_at,
-       provisioned_by = excluded.provisioned_by`,
-  )
-    .bind(
-      userId,
-      provider,
-      label,
-      sealed.keyCiphertext,
-      sealed.dekWrapped,
-      sealed.iv,
-      Date.now(),
-      admin.githubLogin || admin.login,
-    )
-    .run();
-
-  return c.json({ ok: true, userId, provider });
-});
-
-keysRoutes.post('/admin/ai-keys/delete', async (c) => {
-  await requireAdmin(c);
-  const body = await c.req.json<{ userId?: string; provider?: string }>().catch(() => null);
-  const userId = String(body?.userId ?? '').trim();
-  const provider = String(body?.provider ?? '')
-    .trim()
-    .toLowerCase();
-  if (!USER_ID_RE.test(userId) || !provider) {
-    return c.json({ ok: false, error: 'userId and provider are required' }, 400);
-  }
-
-  const result = await c.env.DB.prepare(
-    'DELETE FROM user_api_keys WHERE user_id = ? AND provider = ?',
-  )
-    .bind(userId, provider)
-    .run();
-  return c.json({ ok: true, removed: (result.meta?.changes ?? 0) > 0 });
 });
 
 keysRoutes.post('/internal/keys/userkey', async (c) => {

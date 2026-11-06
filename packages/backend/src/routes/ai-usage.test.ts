@@ -114,9 +114,14 @@ async function request(
       ADMIN_USER_IDS: 'admin-1',
       APP_SECRET_KEK: KEK,
       COMP_KEY_ANTHROPIC: PLATFORM_KEY,
+      ADMIN_PROVISION_TOKEN: INTERNAL_TOKEN,
     },
   );
 }
+
+/** The admin worker's AI Keys UI reaches these over the service binding (#528). */
+const INTERNAL_TOKEN = 'internal-token';
+const internal = { 'X-Internal-Token': INTERNAL_TOKEN };
 
 const resolveAgent = (db: D1Database) =>
   request('/v1/keys/resolve-agent/anthropic', { as: 'alice' }, db);
@@ -187,21 +192,22 @@ describe('provisioned_by records who put a key in the vault (#16)', () => {
   const upsertOf = (stmts: Stmt[]) =>
     stmts.find((s) => s.sql.startsWith('INSERT INTO user_api_keys'));
 
-  it('an admin-provisioned key records the admin', async () => {
+  it('an admin-provisioned key records the admin worker', async () => {
     const stmts: Stmt[] = [];
     const db = fakeDB({ user: OPS, provider: { id: 'anthropic', key_prefix: 'sk-ant-' } }, stmts);
     const res = await request(
-      '/v1/admin/ai-keys',
+      '/v1/internal/keys/userkey',
       {
         as: 'admin',
         method: 'POST',
+        headers: internal,
         body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic', key: USER_KEY }),
       },
       db,
     );
 
     expect(res.status).toBe(200);
-    expect(upsertOf(stmts)?.binds.at(-1)).toBe('ops');
+    expect(upsertOf(stmts)?.binds.at(-1)).toBe('admin-worker');
     expect(upsertOf(stmts)?.sql).toContain('provisioned_by = excluded.provisioned_by');
   });
 
@@ -263,7 +269,7 @@ describe('admin usage views (#16)', () => {
       },
       stmts,
     );
-    const res = await request('/v1/admin/ai-grants/users', { as: 'admin' }, db);
+    const res = await request('/v1/internal/keys/users', { as: 'admin', headers: internal }, db);
     const text = await res.text();
     const { users } = JSON.parse(text);
 

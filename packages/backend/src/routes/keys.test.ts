@@ -62,6 +62,29 @@ async function adminHeader() {
   return `Bearer ${token}`;
 }
 
+// #528: the admin worker's AI Keys UI (over /v1/internal/keys/*) is the one
+// grant/key admin surface; the console's session-admin copy is gone.
+describe('removed session-admin AI routes', () => {
+  it.each([
+    ['GET', '/v1/admin/ai-grants'],
+    ['GET', '/v1/admin/ai-grants/users'],
+    ['POST', '/v1/admin/ai-grants'],
+    ['POST', '/v1/admin/ai-grants/delete'],
+    ['POST', '/v1/admin/ai-keys'],
+    ['POST', '/v1/admin/ai-keys/delete'],
+  ])('%s %s is 404 even for an admin', async (method, path) => {
+    const res = await app.request(
+      path,
+      {
+        method,
+        headers: { Authorization: await adminHeader(), 'Content-Type': 'application/json' },
+      },
+      env(fakeDB({ user: { id: 'admin-1', github_login: 'admin' } })),
+    );
+    expect(res.status).toBe(404);
+  });
+});
+
 describe('keys routes', () => {
   const user = { id: 'u1', github_login: 'test', avatar_url: null, date_of_birth: null };
   const providers = [
@@ -385,56 +408,6 @@ describe('keys routes', () => {
     expect(res.status).toBe(200);
     expect(runs[0]!.sql).toContain('DELETE FROM user_api_keys');
     expect(runs[0]!.binds).toEqual(['gh:1', 'openai']);
-  });
-
-  it('POST /v1/admin/ai-keys stores an encrypted user key as product admin', async () => {
-    const runs: Array<{ sql: string; binds: unknown[] }> = [];
-    const res = await app.request(
-      '/v1/admin/ai-keys',
-      {
-        method: 'POST',
-        headers: { Authorization: await adminHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: 'gh:1',
-          provider: 'anthropic',
-          key: 'sk-ant-test-key',
-          label: 'Admin provisioned',
-        }),
-      },
-      env(
-        fakeDB({
-          user: { id: 'gh:1', github_login: 'alice', avatar_url: null, date_of_birth: null },
-          provider: { id: 'anthropic', key_prefix: 'sk-ant-' },
-          runs,
-        }),
-        // The fake DB resolves every session to gh:1, so that is the admin here.
-        { ...internalEnv, ADMIN_USER_IDS: 'gh:1' },
-      ),
-    );
-    expect(res.status).toBe(200);
-    expect(runs.some((r) => r.sql.includes('INSERT INTO user_api_keys'))).toBe(true);
-  });
-
-  it('POST /v1/admin/ai-keys/delete removes a user key as product admin', async () => {
-    const runs: Array<{ sql: string; binds: unknown[] }> = [];
-    const res = await app.request(
-      '/v1/admin/ai-keys/delete',
-      {
-        method: 'POST',
-        headers: { Authorization: await adminHeader(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: 'gh:1', provider: 'anthropic' }),
-      },
-      env(
-        fakeDB({
-          user: { id: 'admin-1', github_login: 'admin', avatar_url: null, date_of_birth: null },
-          runs,
-        }),
-        internalEnv,
-      ),
-    );
-    expect(res.status).toBe(200);
-    expect(runs[0]!.sql).toContain('DELETE FROM user_api_keys');
-    expect(runs[0]!.binds).toEqual(['gh:1', 'anthropic']);
   });
 
   it('GET /v1/internal/keys/grants lists grants and funded providers', async () => {

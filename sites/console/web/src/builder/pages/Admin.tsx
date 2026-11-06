@@ -34,7 +34,7 @@ async function adminFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-type Tab = "overview" | "usage" | "apps" | "users" | "sessions" | "grants" | "creators";
+type Tab = "overview" | "usage" | "apps" | "users" | "sessions" | "creators";
 
 interface Stats {
   apps: number;
@@ -209,33 +209,15 @@ interface AgentDeployFailure extends Pick<AgentSession, "sessionId" | "userId" |
   deployLog?: AgentDeployLogEntry[];
 }
 
-interface GrantUser {
-  id: string;
-  githubLogin: string;
-  displayName: string | null;
-  keys: { provider: string; label?: string | null; lastUsedAt?: number | null; provisionedBy?: string | null }[];
-  grant: {
-    provider: string;
-    model: string;
-    expiresAt: string | null;
-    lastUsedAt?: number | null;
-    usage?: { sessions: number; inputTokens: number; outputTokens: number };
-  } | null;
-}
-
 export function Admin() {
   const { user, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("overview");
-  // Deep links from the session inspector (#15): which user the Users or
-  // Grants tab should open on.
+  // Deep link from the session inspector (#15): which user the Users tab
+  // should open on.
   const [focusUserId, setFocusUserId] = useState<string | null>(null);
   const openUser = (userId: string) => {
     setFocusUserId(userId);
     setTab("users");
-  };
-  const openGrant = (userId: string) => {
-    setFocusUserId(userId);
-    setTab("grants");
   };
 
   if (loading)
@@ -265,7 +247,7 @@ export function Admin() {
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h1 className="text-2xl font-extrabold">Admin Dashboard</h1>
           <div className="flex gap-1 p-1 rounded-xl bg-panel border border-line">
-            {(["overview", "usage", "apps", "users", "sessions", "grants", "creators"] as Tab[]).map((t) => (
+            {(["overview", "usage", "apps", "users", "sessions", "creators"] as Tab[]).map((t) => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
@@ -282,8 +264,7 @@ export function Admin() {
         {tab === "usage" && <UsageTab />}
         {tab === "apps" && <AppsTab />}
         {tab === "users" && <UsersTab focusUserId={focusUserId} onClearFocus={() => setFocusUserId(null)} />}
-        {tab === "sessions" && <SessionsTab onOpenUser={openUser} onOpenGrant={openGrant} />}
-        {tab === "grants" && <GrantsTab focusUserId={focusUserId} />}
+        {tab === "sessions" && <SessionsTab onOpenUser={openUser} />}
         {tab === "creators" && <CreatorsTab />}
       </main>
     </>
@@ -292,7 +273,7 @@ export function Admin() {
 
 // ── VibeCode Sessions Tab ──
 
-function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string) => void; onOpenGrant: (userId: string) => void }) {
+function SessionsTab({ onOpenUser }: { onOpenUser: (userId: string) => void }) {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
@@ -465,10 +446,6 @@ function SessionsTab({ onOpenUser, onOpenGrant }: { onOpenUser: (userId: string)
             setSelected(null);
             onOpenUser(userId);
           }}
-          onOpenGrant={(userId) => {
-            setSelected(null);
-            onOpenGrant(userId);
-          }}
         />
       )}
     </>
@@ -479,12 +456,10 @@ function SessionInspectModal({
   summary,
   onClose,
   onOpenUser,
-  onOpenGrant,
 }: {
   summary: AgentSession;
   onClose: () => void;
   onOpenUser: (userId: string) => void;
-  onOpenGrant: (userId: string) => void;
 }) {
   const [detail, setDetail] = useState<AgentSessionDetail | null>(null);
   const [view, setView] = useState<"transcript" | "tools" | "errors" | "deploy">("transcript");
@@ -606,9 +581,10 @@ function SessionInspectModal({
                 <>
                   {" "}
                   ·{" "}
-                  <button type="button" onClick={() => onOpenGrant(userId)} className={linkButton}>
+                  {/* AI grants and keys are managed in the admin worker's AI Keys page (#528). */}
+                  <a href={`${ADMIN_WORKER_URL}/#/ai-keys`} target="_blank" rel="noreferrer" className={linkButton}>
                     View grant
-                  </button>
+                  </a>
                 </>
               ) : null}
             </div>
@@ -804,344 +780,6 @@ function LogBlock({ title, time, body, tone }: { title: string; time?: string | 
         {body}
       </pre>
     </div>
-  );
-}
-
-// ── AI Grants Tab ──
-
-function GrantsTab({ focusUserId }: { focusUserId: string | null }) {
-  const [users, setUsers] = useState<GrantUser[]>([]);
-  const [funded, setFunded] = useState<string[]>([]);
-  const [selectedUser, setSelectedUser] = useState("");
-  const [provider, setProvider] = useState("anthropic");
-  const [model, setModel] = useState("claude-sonnet-4-6");
-  const [keyUser, setKeyUser] = useState<GrantUser | null>(null);
-  const [keyProvider, setKeyProvider] = useState("anthropic");
-  const [keyValue, setKeyValue] = useState("");
-  const [keyMessage, setKeyMessage] = useState("");
-  const [keySaving, setKeySaving] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const load = () => {
-    setLoading(true);
-    setError("");
-    Promise.all([
-      adminFetchJson<{ users?: GrantUser[] }>(`${API_URL}/v1/admin/ai-grants/users`),
-      adminFetchJson<{ funded?: string[] }>(`${API_URL}/v1/admin/ai-grants`),
-    ])
-      .then(([userData, grantData]) => {
-        setUsers(userData.users || []);
-        setFunded(grantData.funded || []);
-        // A deep link from the session inspector preselects that user in the grant editor.
-        setSelectedUser((current) => focusUserId || current || userData.users?.[0]?.id || "");
-      })
-      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(load, []);
-
-  // Bring the deep-linked user's row into view once the list is loaded (#15).
-  useEffect(() => {
-    if (!loading && focusUserId) document.getElementById(`grant-row-${focusUserId}`)?.scrollIntoView({ block: "center" });
-  }, [loading, focusUserId]);
-
-  async function saveGrant() {
-    const isFunded = funded.includes(provider);
-    const data = await adminFetchJson<{ error?: string; funded?: boolean }>(`${API_URL}/v1/admin/ai-grants`, {
-      method: "POST",
-      body: JSON.stringify({ userId: selectedUser, provider, model, note: null }),
-    });
-    if (data.error) alert(data.error);
-    if (!isFunded || data.funded === false) {
-      alert(`Grant saved, but ${provider} is not funded yet. Set COMP_KEY_${provider.toUpperCase()} on freeappstore-api for it to work.`);
-    }
-    load();
-  }
-
-  async function revoke(userId: string) {
-    if (!confirm(`Revoke grant for ${userId}?`)) return;
-    await adminFetchJson(`${API_URL}/v1/admin/ai-grants/delete`, {
-      method: "POST",
-      body: JSON.stringify({ userId }),
-    });
-    load();
-  }
-
-  function openKeyModal(user: GrantUser) {
-    setKeyUser(user);
-    setKeyProvider("anthropic");
-    setKeyValue("");
-    setKeyMessage("");
-  }
-
-  function closeKeyModal() {
-    setKeyUser(null);
-    setKeyValue("");
-    setKeyMessage("");
-    setKeySaving(false);
-  }
-
-  async function saveUserKey() {
-    if (!keyUser) return;
-    if (!keyValue.trim()) {
-      setKeyMessage("Paste an API key first.");
-      return;
-    }
-    setKeySaving(true);
-    setKeyMessage("Saving...");
-    try {
-      await adminFetchJson(`${API_URL}/v1/admin/ai-keys`, {
-        method: "POST",
-        body: JSON.stringify({
-          userId: keyUser.id,
-          provider: keyProvider,
-          key: keyValue.trim(),
-          label: "Admin provisioned",
-        }),
-      });
-      setKeyMessage(`Saved ${keyProvider} key.`);
-      load();
-      setTimeout(closeKeyModal, 700);
-    } catch (e) {
-      setKeyMessage(e instanceof Error ? e.message : String(e));
-      setKeySaving(false);
-    }
-  }
-
-  async function removeUserKey(userId: string, providerId: string) {
-    if (!confirm(`Remove the ${providerId} key for ${userId}?`)) return;
-    await adminFetchJson(`${API_URL}/v1/admin/ai-keys/delete`, {
-      method: "POST",
-      body: JSON.stringify({ userId, provider: providerId }),
-    });
-    load();
-  }
-
-  if (loading) return <p className="text-muted">Loading grants...</p>;
-  if (error) return <AdminAccessError message={error} />;
-
-  return (
-    <>
-      <div className="p-4 rounded-xl border mb-5 bg-panel border-line">
-        <p className="text-sm mb-3 text-muted">
-          Funded providers: {funded.length ? funded.join(", ") : "none configured"}.
-          {!funded.length && " Grants can be saved now, but they only run after the matching COMP_KEY secret is set."}
-        </p>
-        <div className="grid md:grid-cols-4 gap-2">
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="p-2 rounded-lg border text-sm bg-paper border-line"
-          >
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.githubLogin || u.id}
-              </option>
-            ))}
-          </select>
-          <select
-            value={provider}
-            onChange={(e) => {
-              setProvider(e.target.value);
-              setModel(defaultGrantModel(e.target.value));
-            }}
-            className="p-2 rounded-lg border text-sm bg-paper border-line"
-          >
-            {["anthropic", "openai", "google"].map((p) => (
-              <option key={p} value={p}>
-                {p}
-                {funded.includes(p) ? "" : " (unfunded)"}
-              </option>
-            ))}
-          </select>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="p-2 rounded-lg border text-sm bg-paper border-line"
-          >
-            {grantModelOptions(provider).map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={saveGrant}
-            disabled={!selectedUser || !provider || !model}
-            className={`px-3 py-2 rounded-lg text-sm font-semibold bg-accent text-white ${(selectedUser && provider && model ? "opacity-[1]" : "opacity-[0.5]")}`}
-
-          >
-            Save Grant
-          </button>
-        </div>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm [border-collapse:collapse]">
-          <thead>
-            <tr className="border-b border-line">
-              <th className="text-left p-2 font-semibold text-muted">
-                User
-              </th>
-              <th className="text-left p-2 font-semibold text-muted">
-                Grant
-              </th>
-              <th className="text-left p-2 font-semibold text-muted">
-                Vault Keys
-              </th>
-              <th className="text-left p-2 font-semibold text-muted">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr
-                key={u.id}
-                id={`grant-row-${u.id}`}
-                className={`[border-bottom:1px_solid_var(--line)] ${(u.id === focusUserId ? "bg-[color-mix(in_srgb,_var(--accent)_12%,_var(--panel))]" : "")}`}
-              >
-                <td className="p-2">
-                  <strong>{u.displayName || u.githubLogin || u.id}</strong>
-                  <div className="text-xs text-muted">
-                    {u.id}
-                  </div>
-                </td>
-                <td className="p-2 text-xs">
-                  {u.grant ? (
-                    <>
-                      {u.grant.provider} / {u.grant.model}
-                      <div className="text-muted">
-                        {u.grant.lastUsedAt ? `last used ${timeAgo(u.grant.lastUsedAt)}` : "never used"}
-                        {u.grant.usage?.sessions
-                          ? ` · ~${formatTokens(u.grant.usage.inputTokens)} in / ${formatTokens(u.grant.usage.outputTokens)} out over ${u.grant.usage.sessions} session${u.grant.usage.sessions === 1 ? "" : "s"}`
-                          : ""}
-                      </div>
-                    </>
-                  ) : (
-                    "none"
-                  )}
-                </td>
-                <td className="p-2 text-xs">
-                  {u.keys.length ? (
-                    <div className="flex flex-wrap gap-1">
-                      {u.keys.map((k) => (
-                        <span
-                          key={k.provider}
-                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md border text-success border-[color-mix(in_srgb,_var(--success)_35%,_var(--line))] bg-[color-mix(in_srgb,_var(--success)_10%,_var(--panel))]"
-                        >
-                          <span title={k.lastUsedAt ? `last used ${timeAgo(k.lastUsedAt)}` : "never used"}>
-                            {k.provider}
-                            {k.provisionedBy ? " (admin)" : ""}
-                          </span>
-                          <button
-                            onClick={() => removeUserKey(u.id, k.provider)}
-                            title={`Remove ${k.provider} key`}
-                            className="text-success bg-transparent border-0 cursor-pointer p-[0px] leading-[1]"
-                          >
-                            x
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-muted">none</span>
-                  )}
-                </td>
-                <td className="p-2">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => openKeyModal(u)}
-                      className="text-xs font-semibold px-2 py-1 rounded-md border text-success border-[color-mix(in_srgb,_var(--success)_35%,_var(--line))] bg-[color-mix(in_srgb,_var(--success)_10%,_var(--panel))] cursor-pointer"
-                    >
-                      Add Key
-                    </button>
-                    {u.grant && (
-                      <button
-                        onClick={() => revoke(u.id)}
-                        className="text-xs font-semibold text-danger bg-transparent border-0 cursor-pointer"
-                      >
-                        Revoke Grant
-                      </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {keyUser && (
-        <div
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeKeyModal();
-          }}
-          className="fixed inset-[0px] bg-[rgba(0,0,0,0.45)] z-[50] flex items-center justify-center p-[16px]"
-        >
-          <div
-            className="rounded-xl border p-5 w-[min(520px,_100%)] bg-panel border-line shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
-          >
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div>
-                <h3 className="font-bold text-lg">Add AI Key</h3>
-                <p className="text-xs text-muted">
-                  {keyUser.displayName || keyUser.githubLogin || keyUser.id} - {keyUser.id}
-                </p>
-              </div>
-              <button
-                onClick={closeKeyModal}
-                className="text-xl leading-none text-muted bg-transparent border-0 cursor-pointer"
-              >
-                x
-              </button>
-            </div>
-            <div className="grid gap-3">
-              <select
-                value={keyProvider}
-                onChange={(e) => setKeyProvider(e.target.value)}
-                className="p-2 rounded-lg border text-sm bg-paper border-line"
-              >
-                {keyProviderOptions().map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={keyValue}
-                onChange={(e) => setKeyValue(e.target.value)}
-                type="password"
-                autoComplete="off"
-                placeholder="Paste API key"
-                className="p-2 rounded-lg border text-sm bg-paper border-line"
-              />
-              {keyMessage && (
-                <p className={`text-sm ${(keyMessage.includes("Saved") ? "text-success" : "text-muted")}`} >
-                  {keyMessage}
-                </p>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={closeKeyModal}
-                  className="px-3 py-2 rounded-lg text-sm font-semibold border border-line text-ink bg-paper"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={saveUserKey}
-                  disabled={keySaving || !keyValue.trim()}
-                  className={`px-3 py-2 rounded-lg text-sm font-semibold bg-accent text-white ${(keySaving || !keyValue.trim() ? "opacity-[0.5]" : "opacity-[1]")}`}
-
-                >
-                  Save Key
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
   );
 }
 
@@ -2053,43 +1691,4 @@ function formatNum(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return n.toLocaleString();
-}
-
-function defaultGrantModel(provider: string): string {
-  if (provider === "anthropic") return "claude-sonnet-4-6";
-  if (provider === "openai") return "gpt-4o";
-  if (provider === "google") return "gemini-2.5-flash";
-  return "claude-sonnet-4-6";
-}
-
-function grantModelOptions(provider: string): Array<{ value: string; label: string }> {
-  if (provider === "anthropic")
-    return [
-      { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
-      { value: "claude-opus-4-8", label: "Claude Opus 4.8" },
-      { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-      { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" },
-    ];
-  if (provider === "openai")
-    return [
-      { value: "gpt-4o", label: "GPT-4o" },
-      { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-      { value: "o4-mini", label: "o4 Mini" },
-      { value: "o3", label: "o3" },
-    ];
-  if (provider === "google")
-    return [
-      { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-      { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-    ];
-  return [{ value: defaultGrantModel(provider), label: defaultGrantModel(provider) }];
-}
-
-function keyProviderOptions(): Array<{ value: string; label: string }> {
-  return [
-    { value: "anthropic", label: "Anthropic" },
-    { value: "openrouter", label: "OpenRouter" },
-    { value: "openai", label: "OpenAI" },
-    { value: "google-ai", label: "Google AI" },
-  ];
 }
