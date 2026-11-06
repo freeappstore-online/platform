@@ -213,11 +213,12 @@ describe("securityHeaders", () => {
     expect(csp).toMatch(/base-uri 'self'/);
   });
 
-  it("frame-ancestors allows storefront preview iframes only", () => {
+  it("frame-ancestors allows storefront and console preview iframes only, not sibling apps (#499)", () => {
     const csp = html.get("content-security-policy") ?? "";
-    expect(csp).toContain("frame-ancestors 'self' https://freeappstore.online");
+    const directive = csp.split("; ").find((d) => d.startsWith("frame-ancestors "));
+    expect(directive).toBe("frame-ancestors 'self' https://freeappstore.online https://console.freeappstore.online");
     expect(csp).not.toContain("pages.dev");
-    expect(csp).toContain("https://*.freeappstore.online");
+    expect(csp).not.toContain("https://*.freeappstore.online");
   });
 
   it("upgrades insecure requests + sets HSTS", () => {

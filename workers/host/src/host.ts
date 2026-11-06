@@ -273,7 +273,10 @@ const APP_CSP = [
   // emscripten pthreads) work (#284).
   "worker-src 'self' blob: https:",
   "frame-src 'self' https:",
-  "frame-ancestors 'self' https://freeappstore.online https://*.freeappstore.online",
+  // Only the storefront (app detail preview, quality page) and the console
+  // (preview dialog, builder preview; its R2 origin) embed apps. A wildcard
+  // let any sibling app frame any other for clickjacking (#499).
+  "frame-ancestors 'self' https://freeappstore.online https://console.freeappstore.online",
   "base-uri 'self'",
   "object-src 'none'",
   "upgrade-insecure-requests",
