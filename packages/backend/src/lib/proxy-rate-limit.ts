@@ -86,6 +86,11 @@ export interface CheckOptions {
   rng?: () => number;
   /** Override the denominator (default 10). Tests pass 1 to force every-call writes. */
   denominator?: number;
+  /**
+   * Units this call consumes (default 1), for exact caps on batched writes
+   * such as log rows. Only honoured with denominator 1.
+   */
+  cost?: number;
 }
 
 export interface CheckResult {
@@ -110,25 +115,27 @@ export async function checkAndBump(
   const denom = opts.denominator ?? PROBABILISTIC_WRITE_DENOMINATOR;
   const rng = opts.rng ?? Math.random;
   const day = dayKey(opts.nowMs);
+  const cost = denom === 1 ? (opts.cost ?? 1) : 1;
   const current = await store.read(opts.appId, day);
 
-  if (current >= opts.dailyLimit) {
+  if (current + cost > opts.dailyLimit) {
     return { allowed: false, count: current, wrote: false };
   }
 
   // Exact counting (denominator 1) is a hard cap, e.g. email: the bump itself
   // re-checks the limit so concurrent calls can't all pass the read above.
   if (denom === 1 && store.bumpIfBelow) {
-    const bumped = await store.bumpIfBelow(opts.appId, day, 1, opts.dailyLimit);
+    const bumped = await store.bumpIfBelow(opts.appId, day, cost, opts.dailyLimit);
     return bumped
-      ? { allowed: true, count: current + 1, wrote: true }
+      ? { allowed: true, count: current + cost, wrote: true }
       : { allowed: false, count: opts.dailyLimit, wrote: false };
   }
 
   // Roll the die. denom=1 means always write; denom=10 means 10% chance.
   if (rng() < 1 / denom) {
-    await store.bump(opts.appId, day, denom);
-    return { allowed: true, count: current + denom, wrote: true };
+    const by = denom === 1 ? cost : denom;
+    await store.bump(opts.appId, day, by);
+    return { allowed: true, count: current + by, wrote: true };
   }
   return { allowed: true, count: current, wrote: false };
 }

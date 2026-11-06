@@ -127,4 +127,25 @@ describe('checkAndBump', () => {
     expect(store.data[`${APP}|${DAY}`]).toBe(1000);
     expect(store.bumps).toBe(100);
   });
+
+  it('charges `cost` units under an exact cap and refuses a batch that would cross it', async () => {
+    const store = fakeStore({ [`${APP}|${DAY}`]: 95 });
+    const r = await checkAndBump(store, {
+      appId: APP,
+      dailyLimit: 100,
+      nowMs: NOW,
+      denominator: 1,
+      cost: 6,
+    });
+    expect(r).toEqual({ allowed: false, count: 95, wrote: false });
+    const ok = await checkAndBump(store, {
+      appId: APP,
+      dailyLimit: 100,
+      nowMs: NOW,
+      denominator: 1,
+      cost: 5,
+    });
+    expect(ok).toEqual({ allowed: true, count: 100, wrote: true });
+    expect(store.data[`${APP}|${DAY}`]).toBe(100);
+  });
 });

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
+import { dayKey } from '../lib/proxy-rate-limit.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
+import { DAILY_LOG_ROWS_PER_USER } from './logs.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -26,7 +29,7 @@ function fakeDB(
             return null;
           },
           all: async () => ({ results: opts.logs ?? [] }),
-          run: async () => ({ meta: { changes: 0 } }),
+          run: async () => ({ meta: { changes: 1 } }),
         };
       },
     }),
@@ -184,5 +187,75 @@ describe('logs routes', () => {
     const data = (await res.json()) as { build: unknown; ts: number };
     expect(data.build).toBeNull();
     expect(data.ts).toBe(1000);
+  });
+});
+
+describe.skipIf(!hasSqlite)('log ingest bounds against real SQLite (#490)', () => {
+  function setup() {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    ).run('u1', 1, 'alice', now);
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+      'timer',
+      'owner',
+      now,
+    );
+    const e = { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY };
+    const post = async (appId: string, entries: unknown[]) =>
+      app.request(
+        `/v1/apps/${appId}/logs`,
+        {
+          method: 'POST',
+          headers: { Authorization: await authHeader('u1'), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries }),
+        },
+        e,
+      );
+    const rows = () => (db.prepare('SELECT COUNT(*) AS n FROM app_logs').get() as { n: number }).n;
+    return { db, post, rows };
+  }
+  const ok = (i = 0) => ({ ts: 1000 + i, level: 'info', category: 'app', message: `m${i}` });
+
+  it('404s for an app that does not exist and stores nothing', async () => {
+    const { post, rows } = setup();
+    const res = await post('nope', [ok()]);
+    expect(res.status).toBe(404);
+    expect(rows()).toBe(0);
+  });
+
+  it('drops entries with a non-numeric ts, unknown level, non-string category or oversized build', async () => {
+    const { db, post, rows } = setup();
+    const res = await post('timer', [
+      ok(),
+      { ...ok(1), ts: '1000' },
+      { ...ok(2), level: 'verbose' },
+      { ...ok(3), category: { x: 1 } },
+      { ...ok(4), build: { blob: 'x'.repeat(5000) } },
+      { ...ok(5), build: { sdkVersion: '1.0.0' } },
+    ]);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, ingested: 2 });
+    expect(rows()).toBe(2);
+    const stored = db.prepare('SELECT message FROM app_logs ORDER BY ts').all() as Array<{
+      message: string;
+    }>;
+    expect(stored.map((r) => r.message)).toEqual(['m0', 'm5']);
+  });
+
+  it('caps rows per user per day, charging each row', async () => {
+    const { db, post, rows } = setup();
+    db.prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)').run(
+      'logs-user:u1',
+      dayKey(Date.now()),
+      DAILY_LOG_ROWS_PER_USER - 1,
+    );
+    expect((await post('timer', [ok(0), ok(1)])).status).toBe(429);
+    expect(rows()).toBe(0);
+    expect((await post('timer', [ok(0)])).status).toBe(200);
+    expect(rows()).toBe(1);
+    expect((await post('timer', [ok(1)])).status).toBe(429);
+    expect(rows()).toBe(1);
   });
 });
