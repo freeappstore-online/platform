@@ -13,8 +13,9 @@
  */
 
 import { Hono } from 'hono';
-import { hasInternalToken, requireAdmin, requireUser } from '../lib/auth.js';
+import { requireAdmin, requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
+import { isInternalCall, isServiceBindingCall } from '../lib/internal.js';
 import type { Env } from '../types.js';
 
 type AppEnv = { Bindings: Env };
@@ -164,7 +165,7 @@ keysRoutes.get('/keys/providers', async (c) => {
 // ── Internal admin key provisioning ───────────────────────────────────
 
 keysRoutes.get('/internal/keys/providers', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   const rows = await c.env.DB.prepare(
     'SELECT id, name, docs_url, key_prefix FROM key_providers ORDER BY name',
   ).all<{ id: string; name: string; docs_url: string | null; key_prefix: string | null }>();
@@ -172,7 +173,7 @@ keysRoutes.get('/internal/keys/providers', async (c) => {
 });
 
 keysRoutes.get('/internal/keys/users', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   return c.json({ users: await listGrantUsers(c.env) });
 });
 
@@ -246,7 +247,7 @@ async function listGrantUsers(env: Env) {
 }
 
 keysRoutes.get('/internal/keys/grants', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   const funded = [...COMP_PROVIDERS].filter((provider) => !!compKeyFor(c.env, provider));
   const grants = await listCompGrants(c.env);
   return c.json({ grants, funded });
@@ -316,7 +317,7 @@ async function revokeGrant(env: Env, rawUserId: string): Promise<GrantResult> {
 }
 
 keysRoutes.post('/internal/keys/grants', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json<GrantInput & { grantedBy?: string }>().catch(() => null);
   const grantedBy = body?.grantedBy ? String(body.grantedBy).trim().slice(0, 120) : 'admin';
   const r = await applyGrant(c.env, body ?? {}, grantedBy);
@@ -324,7 +325,7 @@ keysRoutes.post('/internal/keys/grants', async (c) => {
 });
 
 keysRoutes.post('/internal/keys/grants/delete', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json<{ userId?: string }>().catch(() => null);
   const r = await revokeGrant(c.env, String(body?.userId ?? ''));
   return c.json(r.body, r.status);
@@ -448,7 +449,7 @@ keysRoutes.post('/admin/ai-keys/delete', async (c) => {
 });
 
 keysRoutes.post('/internal/keys/userkey', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   if (!c.env.APP_SECRET_KEK) {
     return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
   }
@@ -515,7 +516,7 @@ keysRoutes.post('/internal/keys/userkey', async (c) => {
 });
 
 keysRoutes.post('/internal/keys/userkey/delete', async (c) => {
-  if (!hasInternalToken(c)) return c.json({ error: 'forbidden' }, 403);
+  if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json<{ userId?: string; provider?: string }>().catch(() => null);
   const userId = String(body?.userId ?? '').trim();
   const provider = String(body?.provider ?? '')
@@ -648,14 +649,6 @@ keysRoutes.delete('/keys/:provider', async (c) => {
 // ── Internal key resolve (for agent service binding) ──────────────────
 // Called by the agent worker via service binding. Not public-facing.
 // The agent sends the user's session token + provider, we decrypt and return.
-
-// The agent worker calls these over its service binding as https://backend/…;
-// no public hostname is ever `backend`. Allow exactly that host, not "anything
-// but the public domain": that deny-list let any other hostname the Worker
-// answers on (workers.dev, preview URLs) read decrypted keys (#427).
-function isServiceBindingCall(url: string): boolean {
-  return new URL(url).hostname === 'backend';
-}
 
 keysRoutes.get('/keys/resolve/:provider', async (c) => {
   if (!isServiceBindingCall(c.req.url)) {

@@ -444,3 +444,33 @@ describe('GET /v1/apps/:appId/analytics/stats ?path= (#488)', () => {
     }
   });
 });
+
+describe.skipIf(!hasSqlite)('PUT /v1/internal/apps/:appId/analytics/cf-token (#489)', () => {
+  const token = 'a'.repeat(32);
+  const put = (base: string, d1: D1Database) =>
+    app.request(
+      `${base}/v1/internal/apps/alpha/analytics/cf-token`,
+      {
+        method: 'PUT',
+        headers: { 'X-Internal-Token': 'tok', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cf_beacon_token: token }),
+      },
+      { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_PROVISION_TOKEN: 'tok' },
+    );
+  const stored = (db: ReturnType<typeof sqliteD1>['db']) =>
+    db.prepare('SELECT COUNT(*) AS n FROM app_analytics').get() as { n: number };
+
+  it('refuses a valid token from the public host', async () => {
+    const { db, d1 } = sqliteD1();
+    const res = await put('https://api.freeappstore.online', d1);
+    expect(res.status).toBe(403);
+    expect(stored(db).n).toBe(0);
+  });
+
+  it('accepts the same token over the service binding', async () => {
+    const { db, d1 } = sqliteD1();
+    const res = await put('https://backend', d1);
+    expect(res.status).toBe(200);
+    expect(stored(db).n).toBe(1);
+  });
+});

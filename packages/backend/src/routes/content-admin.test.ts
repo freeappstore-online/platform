@@ -881,3 +881,47 @@ describe.skipIf(!hasSqlite)('admin prefix filters are literal starts-with', () =
     ).toEqual(['score_a']);
   });
 });
+
+describe.skipIf(!hasSqlite)('/v1/internal/admin/* is service-binding only (#489)', () => {
+  it('refuses a valid token from the public host and leaves the data alone', async () => {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    db.prepare(
+      'INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('timer', 'gh:1', 'k', '"v"', 3, now);
+    db.prepare('INSERT INTO counters (app_id, key, value, updated_at) VALUES (?, ?, ?, ?)').run(
+      'timer',
+      'c',
+      1,
+      now,
+    );
+    const env = { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_PROVISION_TOKEN: 'tok' };
+    const headers = { 'X-Internal-Token': 'tok' };
+    const calls: Array<[string, string]> = [
+      ['GET', '/v1/internal/admin/kv?app=timer'],
+      ['GET', '/v1/internal/admin/kv/value?app=timer&user=gh:1&key=k'],
+      ['DELETE', '/v1/internal/admin/kv?app=timer&user=gh:1&key=k'],
+      ['GET', '/v1/internal/admin/collections?app=timer'],
+      ['DELETE', '/v1/internal/admin/collections?app=timer&collection=x&id=1'],
+      ['GET', '/v1/internal/admin/counters?app=timer'],
+      ['DELETE', '/v1/internal/admin/counters?app=timer&name=c'],
+    ];
+    for (const [method, path] of calls) {
+      const res = await app.request(
+        `https://api.freeappstore.online${path}`,
+        { method, headers },
+        env,
+      );
+      expect(res.status, `${method} ${path}`).toBe(403);
+    }
+    expect((db.prepare('SELECT COUNT(*) AS n FROM kv').get() as { n: number }).n).toBe(1);
+    expect((db.prepare('SELECT COUNT(*) AS n FROM counters').get() as { n: number }).n).toBe(1);
+    // Same token over the service binding still works.
+    const ok = await app.request(
+      'https://backend/v1/internal/admin/kv?app=timer',
+      { headers },
+      env,
+    );
+    expect(ok.status).toBe(200);
+  });
+});

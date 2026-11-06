@@ -225,13 +225,50 @@ describe('keys routes', () => {
   });
 
   it('GET /v1/internal/keys/users requires the internal token', async () => {
-    const res = await app.request('/v1/internal/keys/users', {}, env(fakeDB({})));
+    const res = await app.request('https://backend/v1/internal/keys/users', {}, env(fakeDB({})));
     expect(res.status).toBe(403);
+  });
+
+  it('/v1/internal/keys/* refuses a valid token from any host but the service binding (#489)', async () => {
+    for (const path of [
+      '/v1/internal/keys/users',
+      '/v1/internal/keys/providers',
+      '/v1/internal/keys/grants',
+    ]) {
+      const res = await app.request(
+        `https://api.freeappstore.online${path}`,
+        { headers: { 'X-Internal-Token': 'internal-token' } },
+        env(fakeDB({ users: [], keys: [] }), internalEnv),
+      );
+      expect(res.status, path).toBe(403);
+    }
+    for (const path of [
+      '/v1/internal/keys/grants',
+      '/v1/internal/keys/grants/delete',
+      '/v1/internal/keys/userkey',
+      '/v1/internal/keys/userkey/delete',
+    ]) {
+      const runs: Array<{ sql: string; binds: unknown[] }> = [];
+      const res = await app.request(
+        `https://api.freeappstore.online${path}`,
+        {
+          method: 'POST',
+          headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: 'gh:1', provider: 'openai', key: 'sk-test-key' }),
+        },
+        env(
+          fakeDB({ user: { id: 'gh:1' }, provider: { id: 'openai', key_prefix: 'sk-' }, runs }),
+          internalEnv,
+        ),
+      );
+      expect(res.status, path).toBe(403);
+      expect(runs, path).toEqual([]);
+    }
   });
 
   it('GET /v1/internal/keys/users lists users with configured providers', async () => {
     const res = await app.request(
-      '/v1/internal/keys/users',
+      'https://backend/v1/internal/keys/users',
       { headers: { 'X-Internal-Token': 'internal-token' } },
       env(
         fakeDB({
@@ -267,7 +304,7 @@ describe('keys routes', () => {
 
   it('POST /v1/internal/keys/userkey validates provider prefixes', async () => {
     const res = await app.request(
-      '/v1/internal/keys/userkey',
+      'https://backend/v1/internal/keys/userkey',
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
@@ -287,7 +324,7 @@ describe('keys routes', () => {
   it('POST /v1/internal/keys/userkey stores an encrypted user key', async () => {
     const runs: Array<{ sql: string; binds: unknown[] }> = [];
     const res = await app.request(
-      '/v1/internal/keys/userkey',
+      'https://backend/v1/internal/keys/userkey',
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
@@ -316,7 +353,7 @@ describe('keys routes', () => {
   it('POST /v1/internal/keys/userkey/delete removes a user key', async () => {
     const runs: Array<{ sql: string; binds: unknown[] }> = [];
     const res = await app.request(
-      '/v1/internal/keys/userkey/delete',
+      'https://backend/v1/internal/keys/userkey/delete',
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
@@ -381,7 +418,7 @@ describe('keys routes', () => {
 
   it('GET /v1/internal/keys/grants lists grants and funded providers', async () => {
     const res = await app.request(
-      '/v1/internal/keys/grants',
+      'https://backend/v1/internal/keys/grants',
       { headers: { 'X-Internal-Token': 'internal-token' } },
       env(
         fakeDB({
@@ -409,7 +446,7 @@ describe('keys routes', () => {
   it('POST /v1/internal/keys/grants stores a complimentary grant', async () => {
     const runs: Array<{ sql: string; binds: unknown[] }> = [];
     const res = await app.request(
-      '/v1/internal/keys/grants',
+      'https://backend/v1/internal/keys/grants',
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
@@ -429,7 +466,7 @@ describe('keys routes', () => {
   it('POST /v1/internal/keys/grants stores an unfunded complimentary grant', async () => {
     const runs: Array<{ sql: string; binds: unknown[] }> = [];
     const res = await app.request(
-      '/v1/internal/keys/grants',
+      'https://backend/v1/internal/keys/grants',
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
@@ -449,7 +486,7 @@ describe('keys routes', () => {
   it('POST /v1/internal/keys/grants/delete revokes a complimentary grant', async () => {
     const runs: Array<{ sql: string; binds: unknown[] }> = [];
     const res = await app.request(
-      '/v1/internal/keys/grants/delete',
+      'https://backend/v1/internal/keys/grants/delete',
       {
         method: 'POST',
         headers: { 'X-Internal-Token': 'internal-token', 'Content-Type': 'application/json' },
