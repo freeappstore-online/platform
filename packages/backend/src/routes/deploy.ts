@@ -34,7 +34,7 @@ const SESSION_TTL_MS = 15 * 60 * 1000;
 const DEPLOYS_PER_HOUR = 20;
 const OPEN_DEPLOYS = 3;
 const PRUNE_GRACE_MS = 10 * 60 * 1000;
-export const MAX_FILES = 5000;
+export const MAX_FILES = 15000;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_TOTAL_BYTES = 250 * 1024 * 1024;
 /** Code-health files live beside the app, not in a release (routes/quality.ts reads them). */
@@ -86,6 +86,7 @@ const CONTENT_TYPES: Record<string, string> = {
   webm: 'video/webm',
   ogv: 'video/ogg',
   pdf: 'application/pdf',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   glb: 'model/gltf-binary',
   gltf: 'model/gltf+json',
   obj: 'text/plain; charset=utf-8',
