@@ -274,7 +274,7 @@ const matches = await fas.friends.search('alice');
 
 ## Email (`fas.email`)
 
-Send transactional email via Cloudflare Email Service. 100/day per app and 50/day per sender; requires sign-in and a configured sending service.
+Send transactional email via Cloudflare Email Service. 100/day per app, 50/day per sender and a platform-wide daily cap; requires sign-in and a configured sending service. The app owner can send to any recipient; any other signed-in user must have a role in the app and can only send to their own verified address (so an app can mail its users, but a user can't relay through it).
 
 ```ts
 await fas.email.send('user@example.com', 'Welcome', {

@@ -529,7 +529,7 @@ await fas.email.send('user@example.com', 'Welcome!', {
 })
 ```
 
-Subject is auto-prefixed with `[appId]`. Limits: 100 emails/day per app and 50/day per sender. Requires auth (user must be signed in).
+Subject is auto-prefixed with `[appId]`. Limits: 100 emails/day per app, 50/day per sender, plus a platform-wide daily cap. Requires auth (user must be signed in). The app owner can send to any recipient; any other signed-in user must have a role in the app and can only send to their own verified address.
 
 ### Push Reminders
 

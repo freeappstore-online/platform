@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
+import { dayKey } from '../lib/proxy-rate-limit.js';
 import { signSession } from '../lib/session.js';
 import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
+import { DAILY_EMAIL_LIMIT_PLATFORM } from './email.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -95,23 +97,29 @@ describe.skipIf(!hasSqlite)('email daily quota against real SQLite', () => {
   function setup() {
     const { db, d1 } = sqliteD1();
     const now = Date.now();
+    // alice (u1) owns timer; bob (u2) is a member with a verified address;
+    // carol (u3) is signed in but has nothing to do with timer.
     db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
       'timer',
-      'owner',
+      'alice',
       now,
     );
     const user = db.prepare(
-      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+      'INSERT INTO users (id, github_id, github_login, avatar_url, email, created_at) VALUES (?, ?, ?, NULL, ?, ?)',
     );
-    user.run('u1', 1, 'alice', now);
-    user.run('u2', 2, 'bob', now);
+    user.run('u1', 1, 'alice', 'alice@example.com', now);
+    user.run('u2', 2, 'bob', 'Bob@Example.com', now);
+    user.run('u3', 3, 'carol', 'carol@example.com', now);
+    db.prepare(
+      "INSERT INTO app_roles (app_id, user_id, role_name, granted_by) VALUES ('timer', 'u2', 'member', NULL)",
+    ).run();
     let sent = 0;
     const send = async () => {
       sent += 1;
       return { messageId: 'm' };
     };
     const e = env(d1, { EMAIL: { send } });
-    const request = async (userId: string) =>
+    const request = async (userId: string, to = 'a@b.com') =>
       (
         await app.request(
           '/v1/apps/timer/email/send',
@@ -121,12 +129,12 @@ describe.skipIf(!hasSqlite)('email daily quota against real SQLite', () => {
               Authorization: await authHeader(userId),
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ to: 'a@b.com', subject: 'hi', text: 'hello' }),
+            body: JSON.stringify({ to, subject: 'hi', text: 'hello' }),
           },
           e,
         )
       ).status;
-    return { send: request, sent: () => sent };
+    return { db, send: request, sent: () => sent };
   }
 
   it('sends exactly 50 per user per day, then 429', async () => {
@@ -140,6 +148,48 @@ describe.skipIf(!hasSqlite)('email daily quota against real SQLite', () => {
     const { send } = setup();
     for (let i = 0; i < 50; i++) await send('u1');
     for (let i = 0; i < 20; i++) expect(await send('u1')).toBe(429);
-    for (let i = 0; i < 50; i++) expect(await send('u2')).toBe(200);
+    for (let i = 0; i < 50; i++) expect(await send('u2', 'bob@example.com')).toBe(200);
+  });
+
+  it('the owner may send to any recipient', async () => {
+    const { send, sent } = setup();
+    expect(await send('u1', 'anyone@elsewhere.test')).toBe(200);
+    expect(sent()).toBe(1);
+  });
+
+  it('a signed-in user with no role in the app cannot send at all (#487)', async () => {
+    const { send, sent } = setup();
+    expect(await send('u3', 'carol@example.com')).toBe(403);
+    expect(await send('u3', 'victim@elsewhere.test')).toBe(403);
+    expect(sent()).toBe(0);
+  });
+
+  it('a member may only send to their own verified address (#487)', async () => {
+    const { send, sent } = setup();
+    expect(await send('u2', 'victim@elsewhere.test')).toBe(403);
+    expect(await send('u2', 'alice@example.com')).toBe(403);
+    expect(sent()).toBe(0);
+    // Case-insensitive: the stored address is Bob@Example.com.
+    expect(await send('u2', 'bob@example.com')).toBe(200);
+    expect(sent()).toBe(1);
+  });
+
+  it('a 403 does not consume the sender or app quota', async () => {
+    const { db, send } = setup();
+    await send('u2', 'victim@elsewhere.test');
+    const rows = db.prepare('SELECT COUNT(*) AS n FROM app_proxy_usage').get() as { n: number };
+    expect(rows.n).toBe(0);
+  });
+
+  it('stops at the platform-wide daily cap (#487)', async () => {
+    const { db, send, sent } = setup();
+    db.prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)').run(
+      'email-platform',
+      dayKey(Date.now()),
+      DAILY_EMAIL_LIMIT_PLATFORM - 1,
+    );
+    expect(await send('u1')).toBe(200);
+    expect(await send('u1')).toBe(429);
+    expect(sent()).toBe(1);
   });
 });

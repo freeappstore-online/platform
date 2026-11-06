@@ -6,7 +6,9 @@ import type { Auth } from './auth.js';
  * Apps don't need their own email provider. The platform sends on behalf
  * of the app using the platform's managed sending domain.
  *
- * Rate limit: 100 emails/day per app (free tier).
+ * Rate limit: 100 emails/day per app (free tier), 50/day per sender.
+ * The app owner may send to any recipient; any other signed-in user must
+ * hold a role in the app and may only send to their own verified address.
  */
 export class Email {
   constructor(
