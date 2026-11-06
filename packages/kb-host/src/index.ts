@@ -50,6 +50,18 @@ function contentType(key: string): string {
   return CONTENT_TYPES[ext] ?? 'application/octet-stream';
 }
 
+/**
+ * Constant-time string compare for the ingest token (#494). Same helper as
+ * the backend's lib/session.ts; this Worker is a standalone package, so it
+ * is copied rather than imported.
+ */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 const DOCS_HOSTS = new Set(['docs.freeappstore.online']);
 
 function isDocsHost(hostname: string): boolean {
@@ -79,7 +91,8 @@ export default {
     //    binding (no R2 API token needed → no token-scope 403). Authed by the
     //    dedicated KB_INGEST_TOKEN. PUT /_ingest/<app>/<path> with the file as body.
     if (request.method === 'PUT' && url.pathname.startsWith('/_ingest/')) {
-      if (!env.KB_INGEST_TOKEN || request.headers.get('x-internal-token') !== env.KB_INGEST_TOKEN) {
+      const provided = request.headers.get('x-internal-token');
+      if (!env.KB_INGEST_TOKEN || !provided || !timingSafeEqual(provided, env.KB_INGEST_TOKEN)) {
         return new Response('forbidden', { status: 403 });
       }
       const key = decodeURIComponent(url.pathname.slice('/_ingest/'.length));
