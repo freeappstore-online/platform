@@ -12,6 +12,7 @@ function fakeDB(): D1Database {
   const prepare = (): D1PreparedStatement => {
     const stmt: Partial<D1PreparedStatement> = {
       bind: () => stmt as D1PreparedStatement,
+      first: async <T = Record<string, unknown>>() => null as T | null,
       run: async <T = Record<string, unknown>>() =>
         ({ meta: { changes: 1 } }) as unknown as D1Result<T>,
     };
@@ -35,6 +36,66 @@ function makeEnv(overrides: Record<string, unknown> = {}, db?: D1Database): Env 
   }
   return base as unknown as Env;
 }
+
+describe('POST /v1/auth/email/start daily caps (#472)', () => {
+  beforeEach(() => {
+    emailSend = vi.fn().mockResolvedValue({ messageId: 'm' });
+  });
+
+  /** A D1 whose usage counter is real, so the cap is observable. */
+  function countingDB(counts: Map<string, number>): D1Database {
+    return {
+      prepare: () => {
+        let args: unknown[] = [];
+        const stmt = {
+          bind: (...a: unknown[]) => {
+            args = a;
+            return stmt;
+          },
+          first: async () => {
+            const n = counts.get(String(args[0]));
+            return n === undefined ? null : { count: n };
+          },
+          run: async () => {
+            const [id, , by, limit] = args as [string, string, number, number];
+            const cur = counts.get(id) ?? 0;
+            if (limit !== undefined && cur + by > limit) return { meta: { changes: 0 } };
+            counts.set(id, cur + by);
+            return { meta: { changes: 1 } };
+          },
+        };
+        return stmt;
+      },
+    } as unknown as D1Database;
+  }
+
+  it('sends at most 10 links a day to one address, however many isolates it comes from', async () => {
+    const counts = new Map<string, number>();
+    const env = makeEnv({}, countingDB(counts));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    for (let i = 0; i < 12; i++) {
+      // Step past the 60 s per-isolate cooldown, as a request on another isolate would.
+      vi.setSystemTime(new Date(Date.UTC(2026, 10, 7, 12, 0, 0) + i * 61_000));
+      const res = await app.request(
+        '/v1/auth/email/start',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': `1.1.1.${i}` },
+          body: JSON.stringify({
+            email: 'victim@example.com',
+            appId: 'demo',
+            returnTo: VALID_RETURN_TO,
+          }),
+        },
+        env,
+      );
+      expect(res.status).toBe(200);
+    }
+    vi.useRealTimers();
+    expect(emailSend).toHaveBeenCalledTimes(10);
+    expect([...counts.keys()].every((k) => !k.includes('victim'))).toBe(true);
+  });
+});
 
 describe('POST /v1/auth/email/start', () => {
   beforeEach(() => {

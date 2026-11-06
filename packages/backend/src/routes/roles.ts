@@ -16,6 +16,11 @@ import type { Env } from '../types.js';
  *
  * Custom roles: devs can assign any string as a role name.
  */
+/** Same shape as the other user-id checks (keys.ts, friends). */
+const USER_ID_RE = /^[a-z][a-z0-9:_-]{1,127}$/i;
+/** Role rows one app may hold. */
+const MAX_ROLE_ROWS_PER_APP = 5000;
+
 export const rolesRoutes = new Hono<{ Bindings: Env }>();
 
 /** List all role assignments for an app. Caller must be app owner or admin. */
@@ -77,6 +82,11 @@ rolesRoutes.post('/apps/:appId/roles', async (c) => {
   if (!body?.userId || !body?.role) {
     return c.json({ error: 'userId and role are required' }, 400);
   }
+  // A real-looking user id, and a bounded table per app: an owner cannot
+  // fill app_roles with arbitrary strings (#469).
+  if (typeof body.userId !== 'string' || !USER_ID_RE.test(body.userId)) {
+    return c.json({ error: 'userId is not a valid user id' }, 400);
+  }
 
   const { userId: targetUserId, role } = body;
 
@@ -90,6 +100,13 @@ rolesRoutes.post('/apps/:appId/roles', async (c) => {
   // Cannot assign 'owner' — it's auto-managed
   if (role === 'owner') {
     return c.json({ error: "cannot assign 'owner' role — it is managed by the platform" }, 400);
+  }
+
+  const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM app_roles WHERE app_id = ?')
+    .bind(appId)
+    .first<{ n: number }>();
+  if ((count?.n ?? 0) >= MAX_ROLE_ROWS_PER_APP) {
+    return c.json({ error: 'role assignment limit reached for this app' }, 429);
   }
 
   await c.env.DB.prepare(

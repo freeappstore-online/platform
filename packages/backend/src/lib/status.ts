@@ -106,3 +106,31 @@ export async function runStatusChecks(env: Env): Promise<StatusReport> {
     time: new Date().toISOString(),
   };
 }
+
+/** How long the public /status answer is reused, so a flood of hits does not become a flood of admin calls. */
+const PUBLIC_STATUS_TTL_MS = 30_000;
+let publicStatus: { at: number; report: StatusReport } | null = null;
+
+/** Test hook. */
+export function resetPublicStatusCache(): void {
+  publicStatus = null;
+}
+
+/**
+ * The /status body for an unauthenticated caller (#470): each check keeps its
+ * name, status and criticality but loses its `detail`, which says which
+ * secrets and bindings are (not) configured. The report is cached for 30 s.
+ * A caller holding the internal token gets the full, live report.
+ */
+export async function publicStatusReport(env: Env): Promise<StatusReport> {
+  if (publicStatus && Date.now() - publicStatus.at < PUBLIC_STATUS_TTL_MS) {
+    return publicStatus.report;
+  }
+  const full = await runStatusChecks(env);
+  const report: StatusReport = {
+    ...full,
+    checks: full.checks.map(({ detail: _detail, ...rest }) => ({ ...rest, detail: '' })),
+  };
+  publicStatus = { at: Date.now(), report };
+  return report;
+}

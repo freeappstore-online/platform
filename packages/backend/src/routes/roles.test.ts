@@ -116,6 +116,22 @@ describe('roles routes', () => {
     expect(data.role).toBe('editor');
   });
 
+  it.each(['has space', 'x'.repeat(200), '<script>', ':leading'])(
+    'POST /v1/apps/:appId/roles rejects the malformed user id %j (#469)',
+    async (userId) => {
+      const res = await app.request(
+        '/v1/apps/timer/roles',
+        {
+          method: 'POST',
+          headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, role: 'editor' }),
+        },
+        env(fakeDB({ user: owner, appCreator: 'owner' })),
+      );
+      expect(res.status).toBe(400);
+    },
+  );
+
   it('POST /v1/apps/:appId/roles rejects owner role assignment', async () => {
     const res = await app.request(
       '/v1/apps/timer/roles',

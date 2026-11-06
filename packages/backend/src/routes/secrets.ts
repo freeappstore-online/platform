@@ -16,6 +16,7 @@ import {
 } from '../lib/proxy-allowlist.js';
 import { getOAuth2Token } from '../lib/proxy-oauth2.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
+import { privateUrlReason } from '../lib/public-host.js';
 import { CONSOLE_AUD } from '../lib/session.js';
 import type { Env } from '../types.js';
 import { resolveUserKey } from './keys.js';
@@ -30,6 +31,8 @@ const MAX_SECRETS_PER_APP = 5;
 const MAX_ALLOWLIST_PER_APP = 5;
 const DAILY_PROXY_REQUESTS = 10_000;
 const DAILY_USER_KEY_REQUESTS = 1_000;
+/** One caller's share of every app's proxy quota, so one account cannot burn an app's day (#466). */
+const DAILY_PROXY_REQUESTS_PER_USER = 5_000;
 const MAX_REQUEST_BODY_BYTES = 100 * 1024;
 const MAX_RESPONSE_BODY_BYTES = 100 * 1024;
 const SECRET_NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/; // uppercase + underscore convention
@@ -354,7 +357,11 @@ const PROXY_FORWARD_SKIP_HEADERS = new Set([
   'cf-visitor',
   'cf-worker',
   'x-forwarded-for',
+  'x-forwarded-host',
+  'x-forwarded-proto',
   'x-real-ip',
+  'true-client-ip',
+  'forwarded',
 ]);
 
 const PROXY_RESPONSE_SKIP_HEADERS = new Set([
@@ -416,6 +423,11 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       return c.json({ error: 'invalid upstream host' }, 400);
     }
     if (parsedUpstream.host.toLowerCase() !== host.toLowerCase()) {
+      return c.json({ error: 'invalid proxy host' }, 400);
+    }
+    // Public HTTPS on the default port only: no IP literals, no private or
+    // internal names, no ports (#466).
+    if (privateUrlReason(upstreamUrl)) {
       return c.json({ error: 'invalid proxy host' }, 400);
     }
 
@@ -500,6 +512,18 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       injectedUrl = upstreamUrl;
       injectedHeaders = forwardHeaders;
     } else {
+      const perUser = await checkAndBump(d1UsageStore(c.env.DB), {
+        appId: `proxyuser:${user.id}`,
+        dailyLimit: DAILY_PROXY_REQUESTS_PER_USER,
+        nowMs: Date.now(),
+      });
+      if (!perUser.allowed) {
+        return c.json(
+          { error: `daily proxy limit reached (${DAILY_PROXY_REQUESTS_PER_USER} requests/day)` },
+          429,
+        );
+      }
+
       // Daily cap (only for app-level secrets, not user keys).
       const usage = await checkAndBump(d1UsageStore(c.env.DB), {
         appId,

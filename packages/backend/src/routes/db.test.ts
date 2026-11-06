@@ -67,6 +67,8 @@ describe('db (collections) routes', () => {
     const data = (await res.json()) as { id: string; title: string };
     expect(data.title).toBe('Hello');
     expect(typeof data.id).toBe('string');
+    // Time prefix + 80 random bits from crypto, not Math.random (#467).
+    expect(data.id).toMatch(/^[0-9a-z]{6,9}[0-9a-f]{20}$/);
   });
 
   it('POST returns 404 for an unknown app (quota-reset guard)', async () => {

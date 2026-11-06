@@ -24,14 +24,21 @@ const access = `EXISTS (SELECT 1 FROM data_rooms r WHERE r.app_id = ? AND r.id =
 const owner =
   'EXISTS (SELECT 1 FROM data_rooms r WHERE r.app_id = ? AND r.id = ? AND r.owner_id = ?)';
 
+/** Rooms one user may own in one app (#469). */
+const MAX_ROOMS_PER_USER = 100;
+
 dataRoomRoutes.post(base, async (c) => {
   const user = await requireAppUser(c, c.req.param('appId'));
+  const appId = c.req.param('appId');
   const id = crypto.randomUUID();
   const result = await c.env.DB.prepare(`INSERT INTO data_rooms (app_id, id, owner_id)
-    SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM apps WHERE id = ?)`)
-    .bind(c.req.param('appId'), id, user.id, c.req.param('appId'))
+    SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM apps WHERE id = ?)
+    AND (SELECT COUNT(*) FROM data_rooms WHERE app_id = ? AND owner_id = ?) < ?`)
+    .bind(appId, id, user.id, appId, appId, user.id, MAX_ROOMS_PER_USER)
     .run();
-  return result.meta.changes ? c.json({ id }, 201) : c.text('unknown app', 404);
+  if (result.meta.changes) return c.json({ id }, 201);
+  const known = await c.env.DB.prepare('SELECT 1 FROM apps WHERE id = ?').bind(appId).first();
+  return known ? c.text('room limit reached', 429) : c.text('unknown app', 404);
 });
 
 dataRoomRoutes.put(`${room}/members/:userId`, async (c) => {

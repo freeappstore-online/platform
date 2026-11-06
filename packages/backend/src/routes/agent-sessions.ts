@@ -68,7 +68,7 @@ agentSessionRoutes.get('/agent/sessions', async (c) => {
         .bind(
           Date.now(),
           user?.githubLogin ?? null,
-          JSON.stringify({ path: c.req.path, query: c.req.query() }),
+          JSON.stringify({ path: c.req.path }),
           msg,
           stack ? stack.slice(0, 4000) : null,
         )

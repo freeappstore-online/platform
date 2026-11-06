@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { app } from '../index.js';
 import type { Env } from '../types.js';
 import { hasSqlite, sqliteD1 } from './sqlite-d1.testutil.js';
-import { runStatusChecks, type StatusReport } from './status.js';
+import { resetPublicStatusCache, runStatusChecks, type StatusReport } from './status.js';
 
 /** Minimal env mock: a D1 that returns {ok:1} and an ADMIN binding that 200s. */
 function mockEnv(overrides: Partial<Record<string, unknown>> = {}): Env {
@@ -117,5 +118,37 @@ describe.skipIf(!hasSqlite)('app_ownership probe (#512)', () => {
 
     db.exec(`INSERT INTO apps (id, owner_login, created_at) VALUES ('orphan', 'alice', 0);`);
     expect(find(await runStatusChecks(mockEnv({ DB: d1 })), 'app_ownership').status).toBe('ok');
+  });
+});
+
+describe('GET /status (#470)', () => {
+  beforeEach(resetPublicStatusCache);
+
+  it('gives the public no per-check detail, and the internal token the live detail', async () => {
+    const env = mockEnv({ CROSS_STORE_REGISTER_TOKEN: undefined });
+    const pub = await app.request('/status', {}, env);
+    const body = (await pub.json()) as StatusReport;
+    expect(body.checks.map((c) => c.name)).toContain('db');
+    expect(body.checks.every((c) => c.detail === '')).toBe(true);
+    expect(JSON.stringify(body)).not.toContain('CROSS_STORE_REGISTER_TOKEN');
+
+    const full = (await (
+      await app.request('/status', { headers: { 'X-Internal-Token': 'token-x' } }, env)
+    ).json()) as StatusReport;
+    expect(find(full, 'cross_store_register_token').detail).toContain('CROSS_STORE_REGISTER_TOKEN');
+  });
+
+  it('answers repeated public hits from a short cache, one admin call', async () => {
+    let adminCalls = 0;
+    const env = mockEnv({
+      ADMIN: {
+        fetch: async () => {
+          adminCalls++;
+          return new Response('{}', { status: 200 });
+        },
+      },
+    });
+    for (let i = 0; i < 5; i++) await app.request('/status', {}, env);
+    expect(adminCalls).toBe(1);
   });
 });

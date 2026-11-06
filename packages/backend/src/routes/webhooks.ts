@@ -9,6 +9,7 @@
 
 import { Hono } from 'hono';
 import { requireAppOwner, requireConsoleAppOwner } from '../lib/auth.js';
+import { nonPublicResolution, privateUrlReason } from '../lib/public-host.js';
 import type { Env } from '../types.js';
 
 export const webhookRoutes = new Hono<{ Bindings: Env }>();
@@ -61,33 +62,13 @@ webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
     );
   }
 
-  // Validate URL
-  let parsed: URL;
-  try {
-    parsed = new URL(body.url);
-  } catch {
-    return c.json({ ok: false, error: 'Invalid URL' }, 400);
-  }
-  if (parsed.protocol !== 'https:')
+  // Validate URL. Parsed, not pattern-matched (#465); the host is resolved
+  // again at delivery time.
+  const reason = privateUrlReason(body.url);
+  if (reason === 'invalid URL') return c.json({ ok: false, error: 'Invalid URL' }, 400);
+  if (reason === 'must use HTTPS')
     return c.json({ ok: false, error: 'Webhook URL must use HTTPS' }, 400);
-  // Strip IPv6 brackets so the fc00::/7 (fc/fd) ULA checks below actually fire —
-  // `new URL('https://[fc00::1]/').hostname` is `[fc00::1]`, not `fc00::1`.
-  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host === '::1' ||
-    host === '[::1]' ||
-    host === '0.0.0.0' ||
-    host.endsWith('.local') ||
-    host.endsWith('.internal') ||
-    host.startsWith('10.') ||
-    host.startsWith('192.168.') ||
-    host.startsWith('172.') ||
-    host.startsWith('169.254.') ||
-    host.startsWith('fc') ||
-    host.startsWith('fd')
-  ) {
+  if (reason) {
     return c.json(
       { ok: false, error: 'Webhook URL must not point to private/internal addresses' },
       400,
@@ -149,7 +130,9 @@ webhookRoutes.post('/apps/:appId/webhooks/:id/test', async (c) => {
 
   const payload = { test: true, event: hook.event, appId, timestamp: Date.now() };
   const result = await deliverWebhook(hook.url, hook.secret, hook.event, payload);
-  return c.json(result);
+  // Only the status: the receiver's response body is not handed back, so this
+  // cannot be used to read an arbitrary URL (#465).
+  return c.json({ status: result.status });
 });
 
 // ── Dispatcher (called by other routes) ─────────────────────────
@@ -257,21 +240,36 @@ async function deliverWebhook(
     false,
     ['sign'],
   );
-  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
-  const signature = Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+  const hmacHex = async (data: string) =>
+    Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(data))))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+  // X-FAS-Signature signs the body alone (unchanged, for existing receivers).
+  // X-FAS-Signature-V2 also covers the timestamp and delivery id, so a
+  // receiver can reject a replay: check the timestamp is within 5 minutes and
+  // that it has not seen the delivery id before.
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const deliveryId = crypto.randomUUID();
+
+  // Re-checked on every delivery: the name may resolve somewhere new since the hook was saved.
+  const blocked = await nonPublicResolution(url);
+  if (blocked) return { status: 0, body: `blocked: ${blocked}` };
 
   try {
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-FAS-Signature': signature,
+        'X-FAS-Signature': await hmacHex(body),
+        'X-FAS-Signature-V2': await hmacHex(`${timestamp}.${deliveryId}.${body}`),
+        'X-FAS-Timestamp': timestamp,
+        'X-FAS-Delivery-Id': deliveryId,
         'X-FAS-Event': event,
       },
       body,
       // Bound delivery so a tar-pit endpoint can't hang the triggering request.
+      // Redirects are not followed: the target was checked, its Location was not.
+      redirect: 'manual',
       signal: AbortSignal.timeout(5000),
     });
     const text = await res.text().catch(() => '');

@@ -340,6 +340,11 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
   }
 
   if (body.action === 'block') {
+    // Only real accounts can be blocked; otherwise any id string mints a row (#469).
+    const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?')
+      .bind(targetId)
+      .first<{ id: string }>();
+    if (!target) throw new HttpError(404, 'user not found');
     // If already blocked by either party, don't overwrite the blocker —
     // prevents the blocked user from hijacking unblock control.
     const existing = await c.env.DB.prepare(

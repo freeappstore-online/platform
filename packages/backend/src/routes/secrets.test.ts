@@ -961,6 +961,34 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a non-default port', 'api.example.com:8443'],
+    ['an IPv4 literal', '10.0.0.5'],
+    ['a short IPv4 form', '127.1'],
+    ['an internal name', 'metadata.internal'],
+    ['a single-label host', 'intranet'],
+  ])('400s on %s even when a rule matches it (#466)', async (_label, host) => {
+    const data = freshData();
+    await realSeed(data, 'X', 'sekret', {
+      pattern: `https://${host}/`,
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'X',
+      secret_name_2: null,
+      token_url: null,
+      methods: 'GET',
+    });
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    globalThis.fetch = fetchSpy as typeof fetch;
+    const res = await app.request(
+      `/v1/apps/weather/proxy/${host}/x`,
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('injects a query secret and forwards the request', async () => {
     const data = freshData();
     await realSeed(data, 'OPENWEATHER_KEY', 'sk-real', {

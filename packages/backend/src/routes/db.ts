@@ -23,7 +23,10 @@ const COLLECTION_RE = /^[a-zA-Z0-9_-]+$/;
 
 function generateId(): string {
   const ts = Date.now().toString(36);
-  const rand = Math.random().toString(36).slice(2, 8);
+  // Unguessable suffix (#467): 80 random bits, not Math.random.
+  const rand = Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
   return `${ts}${rand}`;
 }
 

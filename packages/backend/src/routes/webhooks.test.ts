@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
 
@@ -152,5 +152,81 @@ describe('webhook routes', () => {
       env(fakeDB({ user })),
     );
     expect(res.status).toBe(200);
+  });
+
+  describe('hardening (#465)', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    it.each([
+      'https://127.1/hook',
+      'https://0x7f000001/hook',
+      'https://2130706433/hook',
+      'https://[::ffff:127.0.0.1]/hook',
+      'https://[fd00::1]/hook',
+      'https://example.com:8443/hook',
+      'https://user:pw@example.com/hook',
+      'https://intranet/hook',
+      'https://100.64.0.1/hook',
+    ])('refuses to register %s', async (url) => {
+      const res = await app.request(
+        '/v1/apps/timer/webhooks',
+        {
+          method: 'POST',
+          headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'kv.changed', url }),
+        },
+        env(fakeDB({ user })),
+      );
+      expect(res.status).toBe(400);
+    });
+
+    const hook = { url: 'https://hooks.example.com/in', secret: 's3cret', event: 'kv.changed' };
+    const test = async () =>
+      app.request(
+        '/v1/apps/timer/webhooks/w1/test',
+        { method: 'POST', headers: { Authorization: await authHeader() } },
+        env(fakeDB({ user, webhooks: [hook] })),
+      );
+
+    it('test delivery returns only the status, signs with timestamp and delivery id, refuses redirects', async () => {
+      const sent: { headers: Headers; redirect?: string | undefined }[] = [];
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (u: string, init?: RequestInit) => {
+          if (String(u).startsWith('https://cloudflare-dns.com/')) {
+            return Response.json({ Answer: [{ type: 1, data: '93.184.216.34' }] });
+          }
+          sent.push({ headers: new Headers(init?.headers), redirect: init?.redirect });
+          return new Response('SECRET INTERNAL BODY', { status: 200 });
+        }),
+      );
+      const res = await test();
+      expect(await res.json()).toEqual({ status: 200 });
+      expect(sent).toHaveLength(1);
+      const h = sent[0]!.headers;
+      expect(h.get('X-FAS-Signature')).toMatch(/^[0-9a-f]{64}$/);
+      expect(h.get('X-FAS-Signature-V2')).toMatch(/^[0-9a-f]{64}$/);
+      expect(h.get('X-FAS-Signature-V2')).not.toBe(h.get('X-FAS-Signature'));
+      expect(Number(h.get('X-FAS-Timestamp'))).toBeGreaterThan(1_700_000_000);
+      expect(h.get('X-FAS-Delivery-Id')).toMatch(/^[0-9a-f-]{36}$/);
+      expect(sent[0]!.redirect).toBe('manual');
+    });
+
+    it('does not deliver to a name that resolves to a private address', async () => {
+      const upstream = vi.fn();
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (u: string) => {
+          if (String(u).startsWith('https://cloudflare-dns.com/')) {
+            return Response.json({ Answer: [{ type: 1, data: '10.0.0.5' }] });
+          }
+          upstream();
+          return new Response('', { status: 200 });
+        }),
+      );
+      const res = await test();
+      expect(await res.json()).toEqual({ status: 0 });
+      expect(upstream).not.toHaveBeenCalled();
+    });
   });
 });

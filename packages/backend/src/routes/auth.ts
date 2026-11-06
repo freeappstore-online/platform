@@ -11,6 +11,7 @@ import {
 import { deliverSession, exchangeAuthCode, isResponseMode } from '../lib/deliver-session.js';
 import { escapeHtml, isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo, sessionAudience } from '../lib/origins.js';
+import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import {
   b64urlBytes,
   scopeRolesToAudience,
@@ -80,10 +81,13 @@ const STATE_TTL_SECONDS = 10 * 60;
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
 const MAX_PENDING_LINK_COOKIES = 5;
 
-// Best-effort per-recipient throttle for magic-link sends (per-isolate, same
-// pattern as friends.ts rate limits). Stops an unauthenticated caller from
-// email-bombing a victim address / burning the transactional-email quota.
+// Per-recipient throttle for magic-link sends. The 60 s cooldown is a
+// per-isolate fast path; the daily caps below are the real control, counted in
+// D1 so they hold across isolates and colos (#472). Stops an unauthenticated
+// caller from email-bombing a victim address / burning the email quota.
 const EMAIL_SEND_COOLDOWN_MS = 60_000;
+const MAGIC_LINKS_PER_ADDRESS_PER_DAY = 10;
+const MAGIC_LINKS_PER_IP_PER_DAY = 100;
 const emailSendMap = new Map<string, number>();
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
@@ -420,10 +424,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
     return await finishFlow(c, state, userId, roles, 'Lax');
   } catch (err) {
     console.error('Google OAuth callback error:', err);
-    return c.text(
-      `Google sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`,
-      500,
-    );
+    return c.text('Google sign-in failed. Please try again.', 500);
   }
 });
 
@@ -546,10 +547,7 @@ authRoutes.post('/auth/apple/callback', async (c) => {
     return await finishFlow(c, state, userId, roles, 'None');
   } catch (err) {
     console.error('Apple OAuth callback error:', err);
-    return c.text(
-      `Apple sign-in failed: ${err instanceof Error ? err.message : 'unknown error'}`,
-      500,
-    );
+    return c.text('Apple sign-in failed. Please try again.', 500);
   }
 });
 
@@ -604,6 +602,16 @@ authRoutes.post('/auth/email/start', async (c) => {
   const lastSend = emailSendMap.get(email) ?? 0;
   if (nowMs - lastSend < EMAIL_SEND_COOLDOWN_MS) {
     return c.json({ ok: true });
+  }
+  // Keyed by hash, so no address or IP is stored. Silent on refusal, like the cooldown.
+  const usage = d1UsageStore(c.env.DB);
+  const ip = c.req.header('cf-connecting-ip') ?? 'unknown';
+  for (const [key, limit] of [
+    [`magic:${await sha256Hex(email)}`, MAGIC_LINKS_PER_ADDRESS_PER_DAY],
+    [`magicip:${await sha256Hex(ip)}`, MAGIC_LINKS_PER_IP_PER_DAY],
+  ] as const) {
+    const r = await checkAndBump(usage, { appId: key, dailyLimit: limit, nowMs, denominator: 1 });
+    if (!r.allowed) return c.json({ ok: true });
   }
 
   let cookie: string | undefined;

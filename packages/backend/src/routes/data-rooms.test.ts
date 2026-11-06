@@ -39,6 +39,18 @@ async function setup() {
 }
 
 describe.skipIf(!hasSqlite)('durable data room permissions (synthetic identities only)', () => {
+  it('caps the rooms one user may own in an app (#469)', async () => {
+    const { request } = await setup(); // alice already owns 1
+    for (let i = 1; i < 100; i++) {
+      expect((await request('alice', 'demo/data-rooms', 'POST')).status).toBe(201);
+    }
+    expect((await request('alice', 'demo/data-rooms', 'POST')).status).toBe(429);
+    // Another user, and another app, are unaffected.
+    expect((await request('bob', 'demo/data-rooms', 'POST')).status).toBe(201);
+    expect((await request('alice', 'other/data-rooms', 'POST')).status).toBe(201);
+    expect((await request('alice', 'missing/data-rooms', 'POST')).status).toBe(404);
+  });
+
   it('keeps private records unreachable through public collections', async () => {
     const { request, room } = await setup();
     const created = await request('alice', `${room}/db/votes`, 'POST', '{"secret":42}');

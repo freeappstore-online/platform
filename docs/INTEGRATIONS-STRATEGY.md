@@ -58,7 +58,7 @@ Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier,
 - D1 table: `app_webhooks (app_id, event, url, secret, active, created_at)`
 - Backend: `/v1/apps/:appId/webhooks` CRUD endpoints
 - Dispatcher: fire-and-forget via `waitUntil()`, retry on 5xx (max 3), dead-letter log
-- HMAC-SHA256 signature in `X-FAS-Signature` header for verification
+- HMAC-SHA256 signature in `X-FAS-Signature` header (body only). `X-FAS-Signature-V2` also covers `X-FAS-Timestamp` and `X-FAS-Delivery-Id` (`HMAC(secret, "<timestamp>.<delivery-id>.<body>")`): reject deliveries older than 5 minutes or with a delivery id already seen
 - SDK: `fas.webhooks.list()`, `fas.webhooks.create(event, url)`, `fas.webhooks.delete(id)`
 - Console UI: webhook management per app
 - Free tier cap: 5 webhook subscriptions per app, 1000 events/day

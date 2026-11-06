@@ -22,7 +22,7 @@ export function WebhooksManager({ appId, getToken }: Props) {
   const [error, setError] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [testing, setTesting] = useState<string | null>(null)
-  const [testResult, setTestResult] = useState<{ id: string; status: number; body: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ id: string; status: number } | null>(null)
 
   const headers = useCallback((): Record<string, string> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json' }
@@ -67,11 +67,11 @@ export function WebhooksManager({ appId, getToken }: Props) {
         method: 'POST', headers: headers(),
       })
       if (res.ok) {
-        const data = await res.json() as { status: number; body: string }
+        const data = await res.json() as { status: number }
         setTestResult({ id, ...data })
       }
     } catch {
-      setTestResult({ id, status: 0, body: 'Network error' })
+      setTestResult({ id, status: 0 })
     } finally {
       setTesting(null)
     }
@@ -149,7 +149,7 @@ export function WebhooksManager({ appId, getToken }: Props) {
                 ? 'border-[var(--success)] bg-[color-mix(in_srgb,var(--success)_10%,transparent)] text-[var(--success)]'
                 : 'border-[var(--danger)] bg-[color-mix(in_srgb,var(--danger)_10%,transparent)] text-[var(--danger)]'
             }`}>
-              HTTP {testResult.status} {testResult.body.slice(0, 200)}
+              {testResult.status ? `HTTP ${testResult.status}` : 'No response (unreachable or blocked)'}
             </div>
           )}
         </div>

@@ -630,6 +630,35 @@ describe('friends routes', () => {
     expect(data.status).toBe('blocked');
   });
 
+  it('PATCH /v1/friends/:userId block refuses an id that is not an account (#469)', async () => {
+    const writes: string[] = [];
+    const db = {
+      prepare: (sql: string) => {
+        const trimmed = sql.replace(/\s+/g, ' ').trim();
+        return {
+          bind: (...args: unknown[]) => ({
+            first: async () => (trimmed.includes('FROM users') && args[0] === 'u1' ? user1 : null),
+            run: async () => {
+              writes.push(trimmed);
+              return { meta: { changes: 1 } };
+            },
+          }),
+        };
+      },
+    } as unknown as D1Database;
+    const res = await app.request(
+      '/v1/friends/ghost-id',
+      {
+        method: 'PATCH',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'block' }),
+      },
+      env(db),
+    );
+    expect(res.status).toBe(404);
+    expect(writes).toEqual([]);
+  });
+
   it('PATCH /v1/friends/:userId block does not overwrite existing blocker', async () => {
     const db = {
       prepare: (sql: string) => {
