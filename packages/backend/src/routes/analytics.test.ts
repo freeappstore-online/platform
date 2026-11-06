@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
 import {
   type AdminUsageReport,
@@ -376,5 +377,70 @@ describe('buildAdminUsage (#271)', () => {
     const report = buildAdminUsage([], [{ appId: 'gone', views: 0, unique_paths: 0 }], [], 7, NOW);
     expect(report.unregistered).toEqual([]);
     expect(report.totals).toMatchObject({ views: 0, apps: 0 });
+  });
+});
+
+describe('GET /v1/apps/:appId/analytics/stats ?path= (#488)', () => {
+  function statsEnv(): Env {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    ).run('gh:1', 1, 'alice', now);
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+      'alpha',
+      'alice',
+      now,
+    );
+    return {
+      DB: d1,
+      SESSION_SIGNING_KEY: SIGNING_KEY,
+      CF_ACCOUNT_ID: 'account',
+      CF_ANALYTICS_API_TOKEN: 'token',
+    } as Env;
+  }
+
+  async function stats(path: string) {
+    const fetchMock = vi.fn(
+      async (_url: string, _init: RequestInit) =>
+        new Response(JSON.stringify({ data: [] }), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const token = await signSession('gh:1', SIGNING_KEY);
+    const res = await app.request(
+      `/v1/apps/alpha/analytics/stats?days=7&path=${encodeURIComponent(path)}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+      statsEnv(),
+    );
+    return { res, fetchMock };
+  }
+
+  it.skipIf(!hasSqlite)(
+    'rejects a path that escapes the SQL literal, before any query',
+    async () => {
+      const { res, fetchMock } = await stats("x\\' OR 1=1 --");
+      expect(res.status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.skipIf(!hasSqlite)(
+    'rejects quotes, backslashes, control chars and over-long paths',
+    async () => {
+      for (const bad of ["/a'b", '/a\\b', '/a\nb', '/aé', `/${'x'.repeat(256)}`]) {
+        const { res, fetchMock } = await stats(bad);
+        expect(res.status, bad).toBe(400);
+        expect(fetchMock).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.skipIf(!hasSqlite)('embeds a well-formed path verbatim', async () => {
+    const { res, fetchMock } = await stats('/docs/getting-started?x=1');
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalled();
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(String(init.body)).toContain("blob3 = '/docs/getting-started?x=1'");
+    }
   });
 });

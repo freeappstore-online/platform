@@ -180,6 +180,12 @@ analyticsRoutes.put('/internal/apps/:appId/analytics/cf-token', async (c) => {
 
 const STATS_DAYS_DEFAULT = 7;
 const STATS_DAYS_MAX = 90;
+const STATS_PATH_RE = /^[\x20-\x7e]{1,256}$/;
+
+/** A `?path=` that can sit inside a single-quoted SQL literal verbatim. */
+export function isSafeStatsPath(path: string): boolean {
+  return STATS_PATH_RE.test(path) && !path.includes("'") && !path.includes('\\');
+}
 /**
  * Analytics Engine dataset the stats queries read. Must equal the `dataset`
  * of the ANALYTICS binding in wrangler.toml, which is where the ingest
@@ -311,12 +317,14 @@ analyticsRoutes.get(
     const kindParam = (c.req.query('kind') ?? 'pageview').trim().toLowerCase();
     if (!EVENT_KIND_RE.test(kindParam)) throw new HttpError(400, 'invalid kind');
     // `?path=` narrows the whole stats response to a single page path —
-    // powers the path-drill-down view. Length-capped at 256 (same as the
-    // ingest endpoint's PATH_MAX); single-quote-escaped before embedding
-    // in SQL. Empty / omitted = no path filter, dashboard shows aggregate.
-    const pathParamRaw = c.req.query('path');
-    const pathParam = pathParamRaw ? pathParamRaw.slice(0, 256) : '';
-    const pathClause = pathParam ? ` AND blob3 = '${pathParam.replace(/'/g, "''")}'` : '';
+    // powers the path-drill-down view. It is embedded in the SQL literal, so
+    // it is allowlisted rather than escaped: printable ASCII, 1-256 chars
+    // (the ingest endpoint's PATH_MAX), and never a quote or backslash —
+    // doubling quotes alone let `x\' OR 1=1 --` close the literal (#488).
+    // Empty / omitted = no path filter, dashboard shows aggregate.
+    const pathParam = c.req.query('path') ?? '';
+    if (pathParam && !isSafeStatsPath(pathParam)) throw new HttpError(400, 'invalid path');
+    const pathClause = pathParam ? ` AND blob3 = '${pathParam}'` : '';
     // `?bucket=hour|day` controls the series granularity. When omitted, we
     // auto-pick: days=1 → hour (24 points, useful for spike investigation),
     // days≥2 → day (saner for week / month / quarter views). Forcing hour
