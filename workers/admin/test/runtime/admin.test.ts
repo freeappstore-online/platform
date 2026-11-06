@@ -87,6 +87,8 @@ describe("admin sessions over the BACKEND_FAS service binding", () => {
   it("forbids a signed-in non-admin and rejects an unknown session", async () => {
     expect((await call("/api/ping", { headers: { Authorization: "Bearer user-session" } })).status).toBe(403);
     expect((await call("/api/ping", { headers: { Authorization: "Bearer forged" } })).status).toBe(401);
+    // An admin's token that an app received is scoped to that app (#495).
+    expect((await call("/api/ping", { headers: { Authorization: "Bearer admin-app-session" } })).status).toBe(401);
     expect((await call("/api/ping")).status).toBe(401);
   });
 

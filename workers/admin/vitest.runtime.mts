@@ -16,9 +16,11 @@ const GITHUB_TOKEN = "gh-test-token";
 const CF_API_TOKEN = "cf-test-token";
 
 /** Sessions the backend's /v1/auth/me knows. */
-const SESSIONS: Record<string, { id: string; login: string; githubLogin: string; roles: string[] }> = {
-  "Bearer admin-session": { id: "gh:99", login: "ops", githubLogin: "ops", roles: ["user", "admin"] },
-  "Bearer user-session": { id: "gh:1", login: "alice", githubLogin: "alice", roles: ["user"] },
+const SESSIONS: Record<string, { id: string; login: string; githubLogin: string; roles: string[]; aud?: string }> = {
+  "Bearer admin-session": { id: "gh:99", login: "ops", githubLogin: "ops", roles: ["user", "admin"], aud: "console" },
+  "Bearer user-session": { id: "gh:1", login: "alice", githubLogin: "alice", roles: ["user"], aud: "console" },
+  // An app-scoped session for an admin (#495): admin must refuse it.
+  "Bearer admin-app-session": { id: "gh:99", login: "ops", githubLogin: "ops", roles: ["user", "admin"], aud: "chess" },
 };
 
 /** The FAS backend over the BACKEND_FAS service binding. */

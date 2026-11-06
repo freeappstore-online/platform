@@ -12,11 +12,11 @@ import { defineConfig } from "vitest/config";
 /** Sessions the platform backend knows, and what its key vault resolves for each. */
 const USERS: Record<string, { user: Record<string, unknown>; resolved: Record<string, unknown> }> = {
   "Bearer alice-session": {
-    user: { id: "gh:1", login: "alice", githubLogin: "alice", roles: ["user"] },
+    user: { id: "gh:1", login: "alice", githubLogin: "alice", roles: ["user"], aud: "console" },
     resolved: { key: null, source: "none" },
   },
   "Bearer bob-session": {
-    user: { id: "gh:2", login: "bob", githubLogin: "bob", roles: ["user"] },
+    user: { id: "gh:2", login: "bob", githubLogin: "bob", roles: ["user"], aud: "console" },
     resolved: { key: null, source: "grant_unfunded", provider: "anthropic", model: "claude-sonnet-4-6" },
   },
 };
