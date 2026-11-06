@@ -181,6 +181,16 @@ export function parseManifest(body: unknown): { files: Record<string, number>; t
   return { files: files as Record<string, number>, total };
 }
 
+/** `owner/name` from a stored repo reference, which may be a GitHub URL. */
+export function repoName(ref: string): string {
+  return ref
+    .trim()
+    .replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -238,7 +248,7 @@ export async function resolveDeployApp(db: D1Database, claims: OidcClaims): Prom
     .first<{ id: string; repo: string | null; pinned_to: string | null }>();
   if (!app) throw new HttpError(403, `repository ${claims.repository} is not a registered app`);
   if (app.pinned_to) throw new HttpError(403, `app ${appId} deploys from another repository`);
-  if (app.repo && app.repo.toLowerCase() !== claims.repository.toLowerCase())
+  if (app.repo && repoName(app.repo) !== repoName(claims.repository))
     throw new HttpError(403, `app ${appId} is registered to ${app.repo}`);
   // Two first deploys can race (a push and a dispatch): the first pin wins.
   await db

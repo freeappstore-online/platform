@@ -290,6 +290,17 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     );
   });
 
+  it('accepts an apps.repo recorded as a GitHub URL, and refuses another repo', async () => {
+    db.prepare(
+      "UPDATE apps SET repo = 'https://github.com/freeappstore-online/alpha' WHERE id = 'alpha'",
+    ).run();
+    expect((await open(await oidc('alpha', '101'), { 'index.html': 1 })).status).toBe(201);
+    db.prepare(
+      "UPDATE apps SET repo = 'https://github.com/someone/beta.git' WHERE id = 'beta'",
+    ).run();
+    expect((await open(await oidc('beta', '202'), { 'index.html': 1 })).status).toBe(403);
+  });
+
   it('refuses an unregistered repository', async () => {
     expect((await open(await oidc('gamma', '303'), { 'index.html': 1 })).status).toBe(403);
   });
