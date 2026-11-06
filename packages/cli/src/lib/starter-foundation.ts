@@ -900,8 +900,6 @@ SOFTWARE.`,
 // builds retain it unless dependency manifests change (that push needs
 // `contents: write` on the build job — the repo-scoped GITHUB_TOKEN, not an
 // org credential).
-const DEPLOY_STAGE = '.fas-deploy';
-
 function indent(script: string, spaces: number): string {
   const pad = ' '.repeat(spaces);
   return script
@@ -910,6 +908,11 @@ function indent(script: string, spaces: number): string {
     .map((line) => `${pad}${line}`)
     .join('\n');
 }
+
+const R2_SECRETS_ENV = `          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}`;
 
 export function deployWorkflow(config: StoreConfig): string {
   const apps = config.store === 'apps';
@@ -944,17 +947,24 @@ ${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
       # app so the console and store listings can show them. Never blocks.
       - name: Code health scan
         run: npx --yes @vibecodeqa/cli@${CODE_HEALTH_CLI_VERSION} --json --badge > /dev/null 2>&1 || true
-      - name: Stage deploy artifact
-        env:
-          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}
-        run: |
-          rm -rf ${DEPLOY_STAGE}
-          mkdir -p ${DEPLOY_STAGE}/app ${DEPLOY_STAGE}/code-health
-          cp -R "$OUTPUT_PATH"/. ${DEPLOY_STAGE}/app/
-          test -n "$(ls -A ${DEPLOY_STAGE}/app)" || { echo "::error::$OUTPUT_PATH is empty"; exit 1; }
-          for f in report.json badge.svg; do
-            if [ -f ".vibe-check/$f" ]; then cp ".vibe-check/$f" ${DEPLOY_STAGE}/code-health/; fi
-          done
+      - name: Upload build artifact
+        uses: ${DEPLOY_ACTIONS.uploadArtifact}
+        with:
+          name: app
+          path: \${{ steps.target.outputs.output-path }}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload code health report
+        uses: ${DEPLOY_ACTIONS.uploadArtifact}
+        with:
+          name: code-health
+          path: |
+            .vibe-check/report.json
+            .vibe-check/badge.svg
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 1
 `
     : `      - name: Install
         run: pnpm install --no-frozen-lockfile
@@ -964,29 +974,35 @@ ${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
         run: |
           test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
           test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
-      - name: Stage deploy artifact
-        run: |
-          rm -rf ${DEPLOY_STAGE}
-          mkdir -p ${DEPLOY_STAGE}
-          cp -R ./web/dist ${DEPLOY_STAGE}/app
+      - name: Upload build artifact
+        uses: ${DEPLOY_ACTIONS.uploadArtifact}
+        with:
+          name: app
+          path: web/dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
 `;
-  const codeHealthUpload = apps
+  const deploySteps = apps
     ? `
+      - name: Download code health report
+        continue-on-error: true
+        uses: ${DEPLOY_ACTIONS.downloadArtifact}
+        with:
+          name: code-health
+          path: .vibe-check
       - name: Upload code health
         env:
-          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+${R2_SECRETS_ENV}
         run: |
           EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
           PREFIX="s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/.vcqa"
-          if [ -f ${DEPLOY_STAGE}/code-health/report.json ]; then
-            aws s3 cp ${DEPLOY_STAGE}/code-health/report.json "$PREFIX/report.json" \\
+          if [ -f .vibe-check/report.json ]; then
+            aws s3 cp .vibe-check/report.json "$PREFIX/report.json" \\
               --endpoint-url "$EP" --content-type application/json --no-progress
           fi
-          if [ -f ${DEPLOY_STAGE}/code-health/badge.svg ]; then
-            aws s3 cp ${DEPLOY_STAGE}/code-health/badge.svg "$PREFIX/badge.svg" \\
+          if [ -f .vibe-check/badge.svg ]; then
+            aws s3 cp .vibe-check/badge.svg "$PREFIX/badge.svg" \\
               --endpoint-url "$EP" --content-type image/svg+xml --no-progress
           fi
 `
@@ -1015,46 +1031,43 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: ${apps ? 'write' : 'read'}
-    steps:
+${
+  apps
+    ? `    outputs:
+      output-path: \${{ steps.target.outputs.output-path }}
+`
+    : ''
+}    steps:
       - uses: ${DEPLOY_ACTIONS.checkout}
       - uses: ${DEPLOY_ACTIONS.pnpm}
       - uses: ${DEPLOY_ACTIONS.setupNode}
         with:
           node-version: 22
-${buildSteps}      - name: Upload deploy artifact
-        uses: ${DEPLOY_ACTIONS.uploadArtifact}
-        with:
-          name: deploy
-          path: ${DEPLOY_STAGE}
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
-
+${buildSteps}
   deploy:
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      OUTPUT_PATH: ${apps ? `\${{ needs.build.outputs.output-path }}` : 'web/dist'}
     steps:
-      - name: Download deploy artifact
+      - name: Download build artifact
         uses: ${DEPLOY_ACTIONS.downloadArtifact}
         with:
-          name: deploy
-          path: ${DEPLOY_STAGE}
+          name: app
+          path: \${{ env.OUTPUT_PATH }}
       - name: Upload to R2
         env:
-          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+${R2_SECRETS_ENV}
         run: |
-          test -n "$(ls -A ${DEPLOY_STAGE}/app)" || { echo "::error::deploy artifact is empty"; exit 1; }
-          aws s3 sync ${DEPLOY_STAGE}/app "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/" \\
+          test -n "$(ls -A "$OUTPUT_PATH")" || { echo "::error::build artifact is empty"; exit 1; }
+          aws s3 sync "$OUTPUT_PATH" "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/" \\
             --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
             --delete \\
             --no-progress
           echo "Deployed ${config.nounPlural}/\${GITHUB_REPOSITORY##*/} from \${GITHUB_SHA::7} to R2"
-${codeHealthUpload}`;
+${deploySteps}`;
 }
 
 // ── Public API ──

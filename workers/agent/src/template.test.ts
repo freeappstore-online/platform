@@ -28,8 +28,7 @@ describe("getTemplateFiles", () => {
     const workflow = files[".github/workflows/deploy.yml"];
     expect(workflow).toContain('build-target --app-id "${GITHUB_REPOSITORY##*/}" --github-output');
     expect(workflow).toContain("build-target --artifact");
-    expect(workflow).toContain('cp -R "$OUTPUT_PATH"/. .fas-deploy/app/');
-    expect(workflow).toContain("aws s3 sync .fas-deploy/app");
+    expect(workflow).toContain('aws s3 sync "$OUTPUT_PATH"');
     expect(JSON.parse(files["package.json"]).scripts.typecheck).toBe("pnpm --filter @weather-app/web exec tsc -b");
     expect(workflow).toContain("run: pnpm run --if-present typecheck");
     expect(workflow.indexOf("Typecheck (when configured)")).toBeLessThan(workflow.indexOf("- name: Build"));

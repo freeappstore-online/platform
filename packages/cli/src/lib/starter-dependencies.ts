@@ -1,5 +1,5 @@
 /** Worker-safe deployment recipes. Keep dependency resolution in the app repository. */
-export const APP_DEPLOY_CLI_VERSION = '0.4.78';
+export const APP_DEPLOY_CLI_VERSION = '0.4.79';
 
 /** Exact @vibecodeqa/cli release the generated code-health scan runs (third-party scope: never floating). */
 export const CODE_HEALTH_CLI_VERSION = '0.57.0';

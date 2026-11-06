@@ -85,17 +85,27 @@ describe.each([
     expect([...secrets].sort()).toEqual([...R2_SECRETS].sort());
     const text = JSON.stringify(deploy.steps);
     expect(text).not.toMatch(/npx|pnpm|npm |checkout/);
-    expect(deploy.steps[0]!.uses).toBe(DEPLOY_ACTIONS.downloadArtifact.split(' ')[0]);
-    for (const step of deploy.steps.slice(1)) {
-      expect(step.uses).toBeUndefined();
-      expect(step.run).toMatch(/aws s3 (sync|cp)/);
+    const download = DEPLOY_ACTIONS.downloadArtifact.split(' ')[0];
+    expect(deploy.steps[0]!.uses).toBe(download);
+    for (const step of deploy.steps) {
+      if (step.uses) expect(step.uses).toBe(download);
+      else expect(step.run).toMatch(/aws s3 (sync|cp)/);
     }
   });
 
-  it('syncs the downloaded artifact to the store bucket prefix', () => {
-    const upload = workflow.jobs.deploy!.steps.find((s) => s.name === 'Upload to R2')!;
+  it('downloads the artifact to the declared output path and syncs it to the bucket prefix', () => {
+    const deploy = workflow.jobs.deploy! as Job & { env: Record<string, string> };
+    expect(deploy.env.OUTPUT_PATH).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+      config.store === 'apps' ? '${{ needs.build.outputs.output-path }}' : 'web/dist',
+    );
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+    expect(deploy.steps[0]!.with).toEqual({ name: 'app', path: '${{ env.OUTPUT_PATH }}' });
+    const upload = deploy.steps.find((s) => s.name === 'Upload to R2')!;
+    // The pinned build-target validator only accepts a non-literal upload path
+    // or one equal to fas.json's outputPath; "$OUTPUT_PATH" keeps both true.
     expect(upload.run).toContain(
-      `aws s3 sync .fas-deploy/app "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/"`,
+      `aws s3 sync "$OUTPUT_PATH" "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/"`,
     );
     expect(upload.run).toContain('--delete');
   });
@@ -114,13 +124,18 @@ describe('deployWorkflow (apps specifics)', () => {
     ).toHaveLength(1);
   });
 
-  it('stages the resolved build output and ships the code-health report through the artifact', () => {
-    const stage = workflow.jobs.build!.steps.find((s) => s.name === 'Stage deploy artifact')!;
+  it('uploads the resolved build output and ships the code-health report as a second artifact', () => {
+    const build = workflow.jobs.build! as Job & { outputs: Record<string, string> };
     // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
-    expect(stage.env).toEqual({ OUTPUT_PATH: '${{ steps.target.outputs.output-path }}' });
-    expect(stage.run).toContain('cp -R "$OUTPUT_PATH"/. .fas-deploy/app/');
+    expect(build.outputs).toEqual({ 'output-path': '${{ steps.target.outputs.output-path }}' });
+    const app = build.steps.find((s) => s.name === 'Upload build artifact')!;
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+    expect(app.with?.path).toBe('${{ steps.target.outputs.output-path }}');
+    expect(app.with?.['if-no-files-found']).toBe('error');
+    const report = build.steps.find((s) => s.name === 'Upload code health report')!;
+    expect(report.with?.['if-no-files-found']).toBe('ignore');
     const health = workflow.jobs.deploy!.steps.find((s) => s.name === 'Upload code health')!;
-    expect(health.run).toContain('.fas-deploy/code-health/report.json');
+    expect(health.run).toContain('.vibe-check/report.json');
     expect(health.run).toContain('/.vcqa"');
   });
 

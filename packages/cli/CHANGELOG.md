@@ -1,8 +1,12 @@
 # @freeappstore/cli
 
-## 0.4.78
+## 0.4.80
 
-- **Security:** one generator (`deployWorkflow` in `starter-foundation.ts`) now produces the `deploy.yml` written by `fas init`, the builder and `fas publish`. The workflow is split into a `build` job (install, typecheck, tests, build, `@freeappstore/cli` validation and the code-health scan — no secrets) and a `deploy` job that only downloads the built artifact and syncs it to R2. `npx` packages are pinned to exact versions (`@freeappstore/cli@0.4.78`, `@vibecodeqa/cli@0.57.0`) and every action to a commit SHA, so a compromised npm release or moved tag can no longer reach the org R2 credentials.
+- Fix: the deploy job downloads the build artifact to the declared output path and syncs `"$OUTPUT_PATH"`, so the pinned `build-target --artifact` validator accepts the generated workflow (0.4.79 staged it under `.fas-deploy/`, which the validator rejected). The generated workflow pins `@freeappstore/cli@0.4.79`.
+
+## 0.4.79
+
+- **Security:** one generator (`deployWorkflow` in `starter-foundation.ts`) now produces the `deploy.yml` written by `fas init`, the builder and `fas publish`. The workflow is split into a `build` job (install, typecheck, tests, build, `@freeappstore/cli` validation and the code-health scan — no secrets) and a `deploy` job that only downloads the built artifact and syncs it to R2. `npx` packages are pinned to exact versions (`@freeappstore/cli@<current release>`, `@vibecodeqa/cli@0.57.0`) and every action to a commit SHA, so a compromised npm release or moved tag can no longer reach the org R2 credentials.
 - `fas publish` no longer overwrites an existing `deploy.yml`. A differing file is left untouched and the drift is summarised; pass `--update-workflow` to replace it.
 
 ## 0.4.54

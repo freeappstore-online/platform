@@ -179,7 +179,7 @@ describe('DEPLOY_YML', () => {
     expect(DEPLOY_YML).toContain('Verify build output');
     expect(DEPLOY_YML).toContain('build-target --artifact');
     expect(DEPLOY_YML).toContain('steps.target.outputs.output-path');
-    expect(DEPLOY_YML).toContain('aws s3 sync .fas-deploy/app');
+    expect(DEPLOY_YML).toContain('aws s3 sync "$OUTPUT_PATH"');
   });
 
   it('is the same workflow fas init and the builder generate', () => {
