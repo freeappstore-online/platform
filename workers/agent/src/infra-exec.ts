@@ -8,9 +8,9 @@ import { formatSharedFailure, runSharedChecks } from "./compliance";
 import type { StoreConfig } from "./config";
 import type { DeployEnv, DeployStatus } from "./deploy";
 import { deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./deploy";
-import { fetchUrlDenied } from "./ssrf";
 import { checkDeployStatus, fetchUrl, getAuditResults, getBuildLogs, getCIResults, listDeployed } from "./infra";
 import type { ToolCall } from "./providers/types";
+import { fetchUrlDenied } from "./ssrf";
 import { substituteAppName } from "./template";
 
 // FreeAppStore's app-id rule, vendored from packages/backend/src/lib/apps.ts

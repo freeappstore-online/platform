@@ -55,7 +55,9 @@ function makeCtx(overrides: { appId?: string | null; deployStatus?: DeployStatus
   const { db, ran } = makeDb(apps);
   const published: string[] = [];
   const PLATFORM = {
-    fetch: vi.fn(async (_url: string, init: RequestInit) => {
+    fetch: vi.fn(async (url: string, init: RequestInit) => {
+      // The session re-check before deploy (#518) is not a publish.
+      if (url.endsWith("/v1/auth/me")) return Response.json({ id: "gh:1", aud: "console" });
       published.push(String(init.body));
       return new Response("{}", { status: 200 });
     }),
