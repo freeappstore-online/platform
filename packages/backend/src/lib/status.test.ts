@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../types.js';
+import { hasSqlite, sqliteD1 } from './sqlite-d1.testutil.js';
 import { runStatusChecks, type StatusReport } from './status.js';
 
 /** Minimal env mock: a D1 that returns {ok:1} and an ADMIN binding that 200s. */
 function mockEnv(overrides: Partial<Record<string, unknown>> = {}): Env {
   const base = {
     DB: {
-      prepare: () => ({ first: async () => ({ ok: 1 }) }),
+      prepare: () => ({ first: async () => ({ ok: 1 }), all: async () => ({ results: [] }) }),
     },
     ADMIN: {
       fetch: async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
@@ -98,5 +99,23 @@ describe('runStatusChecks', () => {
     expect(typeof report.time).toBe('string');
     expect(Number.isNaN(Date.parse(report.time))).toBe(false);
     expect(find(report, 'db').latencyMs).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe.skipIf(!hasSqlite)('app_ownership probe (#512)', () => {
+  it('reports FAS routes with no apps row, ignoring reserved ids and other zones', async () => {
+    const { db, d1 } = sqliteD1();
+    db.exec(`CREATE TABLE routes (slug TEXT NOT NULL, zone TEXT NOT NULL, PRIMARY KEY (slug, zone));
+      INSERT INTO routes VALUES ('owned', 'freeappstore.online'), ('orphan', 'freeappstore.online'),
+        ('hanzi', 'freeappstore.online'), ('console', 'freeappstore.online'), ('agame', 'freegamestore.online');
+      INSERT INTO apps (id, owner_login, created_at) VALUES ('owned', 'alice', 0);`);
+    const report = await runStatusChecks(mockEnv({ DB: d1 }));
+    const check = find(report, 'app_ownership');
+    expect(check.status).toBe('fail');
+    expect(check.detail).toBe('routes without an apps row: orphan');
+    expect(report.status).toBe('ok');
+
+    db.exec(`INSERT INTO apps (id, owner_login, created_at) VALUES ('orphan', 'alice', 0);`);
+    expect(find(await runStatusChecks(mockEnv({ DB: d1 })), 'app_ownership').status).toBe('ok');
   });
 });

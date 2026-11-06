@@ -39,7 +39,9 @@ jobs:
             echo "$JSON" | jq -r '.checks[] | select(.status=="fail") | "::error::status probe failed: \(.name) — \(.detail)"'
             exit 1
           fi
-          echo "✓ all backend status probes green"
+          # Non-critical probes (e.g. app_ownership, #512) don't fail the run; annotate them.
+          echo "$JSON" | jq -r '.checks[] | select(.status=="fail") | "::warning::status probe failed: \(.name) — \(.detail)"'
+          echo "✓ all critical backend status probes green"
 
       - name: KB host docs site
         run: |

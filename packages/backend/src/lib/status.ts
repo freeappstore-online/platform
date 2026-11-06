@@ -1,4 +1,5 @@
 import type { Env } from '../types.js';
+import { isReservedAppId } from './apps.js';
 
 /**
  * Live dependency probes behind GET /status. Unlike /health (which only proves
@@ -82,6 +83,19 @@ export async function runStatusChecks(env: Env): Promise<StatusReport> {
     probe('cross_store_register_token', false, async () => {
       if (!env.CROSS_STORE_REGISTER_TOKEN) throw new Error('CROSS_STORE_REGISTER_TOKEN is not set');
       return 'configured';
+    }),
+
+    // Ownership drift (#512): a live FAS route whose id has no `apps` row makes
+    // appExists() false, so every per-app feature for it answers 404. Reserved
+    // hosts and aliases (console, hanzi, …) are expected to have no row.
+    probe('app_ownership', false, async () => {
+      const { results } = await env.DB.prepare(
+        `SELECT r.slug FROM routes r LEFT JOIN apps a ON a.id = r.slug
+         WHERE r.zone = 'freeappstore.online' AND a.id IS NULL ORDER BY r.slug`,
+      ).all<{ slug: string }>();
+      const orphans = results.map((r) => r.slug).filter((id) => !isReservedAppId(id));
+      if (orphans.length) throw new Error(`routes without an apps row: ${orphans.join(', ')}`);
+      return 'every route has an owner';
     }),
   ]);
 
