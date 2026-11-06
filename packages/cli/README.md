@@ -57,7 +57,7 @@ fas login
 
 ### `fas logout`
 
-Clear the cached GitHub access token and platform session token.
+Clear the cached platform session token.
 
 ```bash
 fas logout

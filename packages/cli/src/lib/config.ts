@@ -7,10 +7,9 @@ const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 export interface FasConfig {
   apiBase: string;
+  /** Only the login is kept: the GitHub token is used once, to mint the fas session, and dropped. */
   github?: {
-    accessToken: string;
     login: string;
-    obtainedAt: number;
   };
   /**
    * fas session token, minted by /v1/auth/exchange. Used as a Bearer for
@@ -23,9 +22,7 @@ export interface FasConfig {
   };
 }
 
-const DEFAULT_CONFIG: FasConfig = {
-  apiBase: process.env.FAS_API_BASE ?? 'https://api.freeappstore.online',
-};
+const DEFAULT_API_BASE = 'https://api.freeappstore.online';
 
 /**
  * Strips trailing slashes so callers can do `${apiBase}/v1/foo` without
@@ -61,19 +58,48 @@ export function sessionDaysRemaining(config: FasConfig): number | null {
   return Math.ceil(msLeft / (24 * 60 * 60 * 1000));
 }
 
-export async function readConfig(): Promise<FasConfig> {
+/**
+ * The API host every command (and the login token exchange) talks to: the
+ * default, or `FAS_API_BASE` for this run only (#520). It is never read from or
+ * written to the config file, so one run with the variable set cannot redirect
+ * later logins. Must be https, except for localhost development.
+ */
+export function resolveApiBase(override = process.env.FAS_API_BASE): string {
+  if (!override) return DEFAULT_API_BASE;
+  let url: URL;
   try {
-    const raw = await readFile(CONFIG_FILE, 'utf8');
-    const parsed = JSON.parse(raw) as Partial<FasConfig>;
-    const merged = { ...DEFAULT_CONFIG, ...parsed };
-    return { ...merged, apiBase: normalizeApiBase(merged.apiBase) };
+    url = new URL(override);
   } catch {
-    return { ...DEFAULT_CONFIG, apiBase: normalizeApiBase(DEFAULT_CONFIG.apiBase) };
+    throw new Error(`FAS_API_BASE is not a valid URL: ${override}`);
   }
+  const local = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && local)) {
+    throw new Error(
+      'FAS_API_BASE must be an https:// URL (http:// is allowed only for localhost).',
+    );
+  }
+  return normalizeApiBase(override);
+}
+
+export async function readConfig(): Promise<FasConfig> {
+  let parsed: Partial<FasConfig> = {};
+  try {
+    parsed = JSON.parse(await readFile(CONFIG_FILE, 'utf8')) as Partial<FasConfig>;
+  } catch {
+    // missing, corrupt or unreadable — start from the defaults
+  }
+  // A stored apiBase (written by older versions, possibly from an env override)
+  // is ignored.
+  return { ...parsed, apiBase: resolveApiBase() };
 }
 
 export async function writeConfig(config: FasConfig): Promise<void> {
+  // apiBase is never persisted (#520), and a GitHub access token left in an
+  // older config is dropped on the next write (#481).
+  const { apiBase: _apiBase, github, ...rest } = config;
+  const persisted = { ...rest, ...(github ? { github: { login: github.login } } : {}) };
   await mkdir(CONFIG_DIR, { recursive: true, mode: 0o700 });
-  await writeFile(CONFIG_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+  await chmod(CONFIG_DIR, 0o700);
+  await writeFile(CONFIG_FILE, JSON.stringify(persisted, null, 2), { mode: 0o600 });
   await chmod(CONFIG_FILE, 0o600);
 }

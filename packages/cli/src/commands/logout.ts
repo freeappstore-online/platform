@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Command } from 'commander';
 
 export const logoutCommand = new Command('logout')
-  .description('Clear the local fas session and GitHub access token.')
+  .description('Clear the local fas session.')
   .action(async () => {
     const path = join(homedir(), '.fas', 'config.json');
     await rm(path, { force: true });

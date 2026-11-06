@@ -10,8 +10,8 @@ const DEFAULT_CLIENT_ID = process.env.FAS_GITHUB_CLIENT_ID ?? 'Ov23liuUpYPXc1ikE
 
 /**
  * Runs the full login flow: GitHub device-authorization, then exchanges the
- * GitHub access token for a fas session token. Persists both to the config
- * file. Exported so other commands (e.g. `fas start`) can call it inline.
+ * GitHub access token for a fas session token. Persists the session and the
+ * login to the config file; the GitHub token is not kept. Exported so other commands (e.g. `fas start`) can call it inline.
  */
 export async function runLogin(): Promise<{ login: string }> {
   if (!DEFAULT_CLIENT_ID) {
@@ -39,18 +39,17 @@ export async function runLogin(): Promise<{ login: string }> {
   if (!exchangeRes.ok) {
     // Include the URL we tried so misconfigured-apiBase failures are
     // self-diagnosing. The default apiBase is https://api.freeappstore.online;
-    // a 404 from anywhere else almost always means a stale value in
-    // ~/.fas/config.json or the FAS_API_BASE env var.
+    // a 404 from anywhere else almost always means a FAS_API_BASE env var.
     throw new Error(
       `Auth exchange failed (${exchangeRes.status} from ${exchangeUrl}): ${await exchangeRes.text()}\n` +
-        `If the URL above isn't https://api.freeappstore.online/v1/auth/exchange, check ~/.fas/config.json's apiBase and any FAS_API_BASE env var.`,
+        `If the URL above isn't https://api.freeappstore.online/v1/auth/exchange, check the FAS_API_BASE env var.`,
     );
   }
   const { sessionToken } = (await exchangeRes.json()) as { sessionToken: string };
 
   await writeConfig({
     ...config,
-    github: { accessToken, login, obtainedAt: Date.now() },
+    github: { login },
     session: { token: sessionToken, obtainedAt: Date.now() },
   });
   process.stdout.write(

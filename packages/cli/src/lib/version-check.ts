@@ -67,7 +67,7 @@ async function readCache(): Promise<CachedCheck | null> {
 
 async function writeCache(entry: CachedCheck): Promise<void> {
   try {
-    await mkdir(CACHE_DIR, { recursive: true });
+    await mkdir(CACHE_DIR, { recursive: true, mode: 0o700 });
     await writeFile(CACHE_FILE, JSON.stringify(entry));
   } catch {
     // best-effort — don't let a write failure break anything
