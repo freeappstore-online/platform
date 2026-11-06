@@ -98,6 +98,16 @@ export function fasJsonFor(repo) {
   return `${JSON.stringify({ appId: repo, applicationRoot: 'web', outputPath: 'web/dist', buildCommand: 'pnpm build' }, null, 2)}\n`;
 }
 
+/**
+ * The generated build job runs `pnpm run --if-present test`. A package whose
+ * test script calls vitest without depending on it fails there ("vitest: not
+ * found"); the dry run cannot see that, so flag it for the owner to fix first.
+ */
+export function missingTestRunner(packages) {
+  const has = (name) => packages.some((p) => name in { ...p?.dependencies, ...p?.devDependencies });
+  return packages.some((p) => /\bvitest\b/.test(p?.scripts?.test ?? '')) && !has('vitest');
+}
+
 const uncommented = (text) => text.replace(/^\s*#.*$/gm, '');
 
 /**
@@ -206,6 +216,15 @@ async function inspect(repo, generated, workdir) {
     { cwd: dir },
   );
   if (!preflight.ok) review.push(`build-target: ${preflight.out.split('\n').at(-1)}`);
+  const manifests = ['package.json', 'web/package.json'].map((f) => {
+    try {
+      return JSON.parse(readFileSync(join(dir, f), 'utf8'));
+    } catch {
+      return null;
+    }
+  });
+  if (missingTestRunner(manifests))
+    review.push('test script runs vitest but vitest is not a dependency');
   const live = await status(`https://${repo}.freeappstore.online/`);
   if (live !== 200) review.push(`site returns ${live}`);
   const action = variant === 'current' ? 'skip' : review.length ? 'review' : 'update';

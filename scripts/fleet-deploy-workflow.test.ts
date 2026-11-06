@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { APP_STARTER_CONFIG, deployWorkflow } from '../packages/cli/src/lib/starter-foundation.js';
 // @ts-expect-error -- plain .mjs script without declarations
-import { COMMIT_MESSAGE, classify, fasJsonFor } from './fleet-deploy-workflow.mjs';
+import {
+  COMMIT_MESSAGE,
+  classify,
+  fasJsonFor,
+  missingTestRunner,
+} from './fleet-deploy-workflow.mjs';
 
 const generated = deployWorkflow(APP_STARTER_CONFIG);
 
@@ -125,5 +130,23 @@ describe('fleet deploy workflow classification', () => {
     expect(COMMIT_MESSAGE.trim().split('\n').at(-1)).toBe(
       'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>',
     );
+  });
+});
+
+describe('missingTestRunner', () => {
+  const root = { scripts: { test: 'pnpm --filter @x/web test' } };
+  it('flags a vitest test script without a vitest dependency', () => {
+    expect(missingTestRunner([root, { scripts: { test: 'vitest run' } }])).toBe(true);
+  });
+  it('accepts vitest declared anywhere in the checked manifests', () => {
+    expect(
+      missingTestRunner([
+        root,
+        { scripts: { test: 'vitest run' }, devDependencies: { vitest: '^2' } },
+      ]),
+    ).toBe(false);
+  });
+  it('ignores repos without a vitest script or manifest', () => {
+    expect(missingTestRunner([null, { scripts: { test: 'node --test' } }])).toBe(false);
   });
 });
