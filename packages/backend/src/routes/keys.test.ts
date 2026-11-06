@@ -123,6 +123,18 @@ describe('keys routes', () => {
     expect(data.keys[0]!.provider).toBe('openai');
   });
 
+  it('GET /v1/keys/status gives an app-audience session only the provider (#517)', async () => {
+    const keys = [{ provider: 'openai', label: 'work', created_at: 1000, last_used_at: 5 }];
+    const token = await signSession('u1', SIGNING_KEY, { aud: 'chess' });
+    const res = await app.request(
+      '/v1/keys/status',
+      { headers: { Authorization: `Bearer ${token}` } },
+      env(fakeDB({ user, keys })),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ keys: [{ provider: 'openai' }] });
+  });
+
   it('PUT /v1/keys/:provider returns 503 without APP_SECRET_KEK', async () => {
     const res = await app.request(
       '/v1/keys/openai',
@@ -266,6 +278,20 @@ describe('keys routes', () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).not.toContain('javascript:alert(1)');
+  });
+
+  it("GET /v1/keys links back only to the calling app's own origin (#519)", async () => {
+    const get = async (qs: string) =>
+      (await app.request(`/v1/keys?${qs}`, {}, env(fakeDB({})))).text();
+    const ok = encodeURIComponent('https://demo.freeappstore.online/x');
+    expect(await get(`app=demo&return=${ok}`)).toContain(
+      'href="https://demo.freeappstore.online/x"',
+    );
+    const evil = encodeURIComponent('https://evil.example/phish');
+    expect(await get(`app=demo&return=${evil}`)).not.toContain('evil.example');
+    // Another app's origin, or a missing app id, gets no link either.
+    expect(await get(`app=other&return=${ok}`)).not.toContain('demo.freeappstore.online/x');
+    expect(await get(`return=${ok}`)).not.toContain('demo.freeappstore.online/x');
   });
 
   it('GET /v1/internal/keys/users requires the internal token', async () => {

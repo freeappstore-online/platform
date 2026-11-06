@@ -16,6 +16,8 @@ import { Hono } from 'hono';
 import { requireConsoleUser, requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
 import { isInternalCall, isServiceBindingCall } from '../lib/internal.js';
+import { isAllowedReturnTo } from '../lib/origins.js';
+import { isAppAudience } from '../lib/session.js';
 import type { Env } from '../types.js';
 
 type AppEnv = { Bindings: Env };
@@ -431,6 +433,10 @@ keysRoutes.get('/keys/status', async (c) => {
       created_at: number;
       last_used_at: number | null;
     }>();
+  // An app only learns which providers are set up, not the user's labels or
+  // timestamps (#517).
+  if (isAppAudience(user.aud))
+    return c.json({ keys: rows.results.map((r) => ({ provider: r.provider })) });
   return c.json({
     keys: rows.results.map((r) => ({
       provider: r.provider,
@@ -672,17 +678,19 @@ keysRoutes.get('/keys', async (c) => {
         created_at: number;
         last_used_at: number | null;
       }>();
+    if (isAppAudience(user.aud))
+      return c.json({ keys: rows.results.map((r) => ({ provider: r.provider })) });
     return c.json({ keys: rows.results });
   }
 
   // HTML mode: render the key management page.
-  // returnUrl is attacker-supplied — only allow http(s) or same-origin relative
-  // paths, so a `javascript:`/`data:` scheme can't become a clickable XSS link.
+  // The back link is attacker-supplied. It is shown only when it is a place
+  // this app could have signed in at (the same rule as sign-in `return_to`),
+  // so the API origin cannot be used to hand out an arbitrary link (#519).
   const returnUrlRaw = c.req.query('return') ?? '';
-  const returnUrl =
-    /^https?:\/\//i.test(returnUrlRaw) || returnUrlRaw.startsWith('/') ? returnUrlRaw : '';
-  const provider = c.req.query('provider') ?? '';
   const appId = c.req.query('app') ?? '';
+  const returnUrl = isAllowedReturnTo(returnUrlRaw, appId) ? returnUrlRaw : '';
+  const provider = c.req.query('provider') ?? '';
   // This page holds the session for the key vault: only its own script runs (#495).
   const nonce = crypto.randomUUID().replace(/-/g, '');
   c.header(

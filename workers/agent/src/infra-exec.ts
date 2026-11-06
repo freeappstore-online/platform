@@ -65,6 +65,19 @@ function formatRuleBlock(fails: CheckResult[], config: StoreConfig): string {
   );
 }
 
+/** Re-check the caller's bearer with the backend. Skipped only where there is no binding or token to check with. */
+async function sessionStillValid(ctx: ExecContext): Promise<boolean> {
+  if (!ctx.env.PLATFORM || !ctx.authHeader) return true;
+  try {
+    const res = await ctx.env.PLATFORM.fetch("https://backend/v1/auth/me", {
+      headers: { Authorization: ctx.authHeader },
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Execute a single infra tool. Returns the result string. */
 export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<string> {
   const { config } = ctx;
@@ -85,6 +98,15 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
     }
     if (ctx.appId && ctx.appId !== id) {
       return `Error: this session already deployed "${ctx.appId}". Create a new project for a different ${config.noun}.`;
+    }
+  }
+
+  // The session was validated up to 30 minutes ago (session.ts). deploy and
+  // push_update write to GitHub with the platform token, so ask the backend
+  // again: a sign-out-everywhere takes effect here at once (#518).
+  if (tc.name === "deploy" || tc.name === "push_update") {
+    if (!(await sessionStillValid(ctx))) {
+      return `Error: your session is no longer valid, so ${tc.name} is refused. Sign in again.`;
     }
   }
 

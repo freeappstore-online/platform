@@ -11,7 +11,13 @@ import {
 import { deliverSession, exchangeAuthCode, isResponseMode } from '../lib/deliver-session.js';
 import { escapeHtml, isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo, sessionAudience } from '../lib/origins.js';
-import { b64urlBytes, signPayload, signSession, verifyPayload } from '../lib/session.js';
+import {
+  b64urlBytes,
+  scopeRolesToAudience,
+  signPayload,
+  signSession,
+  verifyPayload,
+} from '../lib/session.js';
 import type { Env } from '../types.js';
 
 /**
@@ -869,7 +875,7 @@ authRoutes.get('/auth/me', async (c) => {
     const roles = [
       ...new Set([...user.roles.filter((r) => r !== 'admin' && r !== 'creator'), ...live.roles]),
     ];
-    return c.json({ ...user, roles, appRoles: live.appRoles });
+    return c.json({ ...user, ...scopeRolesToAudience(user.aud, roles, live.appRoles) });
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
@@ -944,7 +950,8 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
  * refuses a FAS-native uid with no row.
  *
  * Deliberately NOT deleted: apps the user owns (provisioned resources with their
- * own deprovision flow) and app-shared counters.
+ * own deprovision flow, including their app_secrets, which are keyed by app) and
+ * app-shared counters.
  */
 authRoutes.delete('/auth/me', async (c) => {
   try {
@@ -959,6 +966,10 @@ authRoutes.delete('/auth/me', async (c) => {
       db.prepare('DELETE FROM app_logs WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM push_schedules WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM app_votes WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM idea_builders WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM agent_sessions WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
     ]);
     return c.json({ ok: true });

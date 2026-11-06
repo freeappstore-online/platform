@@ -76,6 +76,10 @@ describe('DELETE /v1/auth/me', () => {
       'DELETE FROM app_logs',
       'DELETE FROM push_subscriptions',
       'DELETE FROM push_schedules',
+      'DELETE FROM app_votes',
+      'DELETE FROM idea_builders',
+      'DELETE FROM agent_sessions',
+      'DELETE FROM complimentary_grants',
       'DELETE FROM users',
     ]) {
       expect(joined).toContain(t);

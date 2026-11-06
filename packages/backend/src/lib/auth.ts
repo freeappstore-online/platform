@@ -75,7 +75,7 @@ export async function requireUser<E extends { Bindings: Env }>(
   // Revocation (#495): `POST /v1/auth/logout` moves sessions_valid_after to
   // now, so every session issued before it is dead on the next request. Same
   // row the lookup above already fetched — no extra I/O.
-  if (row?.sessions_valid_after && payload.iat < row.sessions_valid_after) {
+  if (row?.sessions_valid_after && payload.iat <= row.sessions_valid_after) {
     throw new HttpError(401, 'session revoked');
   }
 

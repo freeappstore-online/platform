@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { signPayload, signSession, verifyPayload, verifySession } from './session.js';
+import {
+  scopeRolesToAudience,
+  signPayload,
+  signSession,
+  verifyPayload,
+  verifySession,
+} from './session.js';
 
 const KEY = 'a'.repeat(64);
 
@@ -22,6 +28,39 @@ describe('session HMAC roundtrip', () => {
     expect(await verifySession(foreign, KEY)).toBeNull();
     const noIss = await signPayload({ uid: 'gh:42', aud: 'chess', iat: now, exp: now + 60 }, KEY);
     expect((await verifySession(noIss, KEY))?.uid).toBe('gh:42');
+  });
+
+  it("an app-audience session carries no admin/creator and only that app's roles (#517)", async () => {
+    const opts = {
+      roles: ['user', 'creator', 'admin'],
+      appRoles: { chess: ['owner'], notes: ['moderator'] },
+    };
+    const app = await verifySession(
+      await signSession('gh:42', KEY, { aud: 'chess', ...opts }),
+      KEY,
+    );
+    expect(app?.roles).toEqual(['user']);
+    expect(app?.appRoles).toEqual({ chess: ['owner'] });
+    const console_ = await verifySession(
+      await signSession('gh:42', KEY, { aud: 'console', ...opts }),
+      KEY,
+    );
+    expect(console_?.roles).toEqual(['user', 'creator', 'admin']);
+    expect(console_?.appRoles).toEqual(opts.appRoles);
+  });
+
+  it('scopeRolesToAudience leaves console and legacy sessions whole', () => {
+    const appRoles = { a: ['owner'] };
+    for (const aud of ['console', '#legacy']) {
+      expect(scopeRolesToAudience(aud, ['user', 'admin'], appRoles)).toEqual({
+        roles: ['user', 'admin'],
+        appRoles,
+      });
+    }
+    expect(scopeRolesToAudience('b', ['user', 'admin'], appRoles)).toEqual({
+      roles: ['user'],
+      appRoles: {},
+    });
   });
 
   it('carries the audience and a random session id (#495)', async () => {

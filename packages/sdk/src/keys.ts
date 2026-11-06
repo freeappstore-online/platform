@@ -37,7 +37,12 @@ export class Keys {
    * Useful for showing "configure your API key" prompts in the app.
    */
   async status(): Promise<
-    Array<{ provider: string; label: string | null; createdAt: number; lastUsedAt: number | null }>
+    Array<{
+      provider: string;
+      label?: string | null;
+      createdAt?: number;
+      lastUsedAt?: number | null;
+    }>
   > {
     if (!this.auth.token) return [];
     const res = await fetch(`${this.apiBase}/v1/keys/status`, {
@@ -47,9 +52,9 @@ export class Keys {
     const data = (await res.json()) as {
       keys: Array<{
         provider: string;
-        label: string | null;
-        createdAt: number;
-        lastUsedAt: number | null;
+        label?: string | null;
+        createdAt?: number;
+        lastUsedAt?: number | null;
       }>;
     };
     return data.keys;

@@ -15,6 +15,28 @@ export const CROSS_STORE_AUD = '#cross-store';
 /** The `iss` of every session this backend mints. */
 export const SESSION_ISSUER = 'fas';
 
+/** True for a session delivered to a third-party app (not console, not a pre-#495 token). */
+export function isAppAudience(aud: string): boolean {
+  return aud !== CONSOLE_AUD && aud !== LEGACY_AUD;
+}
+
+/**
+ * What an app-audience session may learn about the account (#517): no
+ * platform `admin`/`creator` flags and only the roles held in that app. A
+ * first-party or legacy session keeps everything.
+ */
+export function scopeRolesToAudience(
+  aud: string,
+  roles: string[],
+  appRoles: Record<string, string[]>,
+): { roles: string[]; appRoles: Record<string, string[]> } {
+  if (!isAppAudience(aud)) return { roles, appRoles };
+  return {
+    roles: roles.filter((r) => r !== 'admin' && r !== 'creator'),
+    appRoles: appRoles[aud] ? { [aud]: appRoles[aud] } : {},
+  };
+}
+
 export async function signSession(
   uid: string,
   signingKey: string,
@@ -22,10 +44,11 @@ export async function signSession(
 ): Promise<string> {
   const sid = new Uint8Array(16);
   crypto.getRandomValues(sid);
+  const scoped = scopeRolesToAudience(opts.aud, opts.roles ?? ['user'], opts.appRoles ?? {});
   const payload: SessionPayload = {
     uid,
-    roles: opts.roles ?? ['user'],
-    appRoles: opts.appRoles ?? {},
+    roles: scoped.roles,
+    appRoles: scoped.appRoles,
     aud: opts.aud,
     iss: SESSION_ISSUER,
     sid: b64urlBytes(sid),

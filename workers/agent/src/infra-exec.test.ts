@@ -116,6 +116,20 @@ function makeCtx(
   };
 }
 
+describe("executeInfraTool — revoked session (#518)", () => {
+  it.each(["deploy", "push_update"])("refuses %s when the backend no longer accepts the bearer", async (name) => {
+    const fetchMe = vi.fn(async () => new Response("{}", { status: 401 }));
+    const ctx = {
+      ...makeCtx({ appId: "my-app" }),
+      authHeader: "Bearer revoked",
+    };
+    ctx.env = { ...ctx.env, PLATFORM: { fetch: fetchMe } } as never;
+    const result = await executeInfraTool({ id: "1", name, input: { id: "my-app" } }, ctx);
+    expect(result).toContain("session is no longer valid");
+    expect(fetchMe).toHaveBeenCalledWith("https://backend/v1/auth/me", { headers: { Authorization: "Bearer revoked" } });
+  });
+});
+
 describe("executeInfraTool — ID validation", () => {
   it("rejects invalid ID format", async () => {
     const ctx = makeCtx();
