@@ -200,19 +200,15 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
     '@freeappstore/sdk/pwa-config',
     'pwaOptions',
   );
+  let helperWorkbox: string | null = null;
   if (pluginBinding && optionsBinding) {
     const calls = [
       ...configCode!.matchAll(new RegExp(`\\b${escapeBinding(pluginBinding)}\\s*\\(`, 'g')),
     ];
-    const defaults = [
-      ...configCode!.matchAll(
-        new RegExp(
-          `\\b${escapeBinding(pluginBinding)}\\s*\\(\\s*${escapeBinding(optionsBinding)}\\s*\\(\\s*\\)\\s*\\)`,
-          'g',
-        ),
-      ),
+    const helperCalls = [
+      ...configCode!.matchAll(new RegExp(`\\b${escapeBinding(optionsBinding)}\\s*\\(`, 'g')),
     ];
-    if (calls.length > 0 && calls.length === defaults.length) {
+    if (calls.length > 0 && calls.length === helperCalls.length) {
       if (!(await hasSafeSdkDefaults(source)))
         return {
           name: 'PWA offline correctness',
@@ -223,12 +219,32 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
             'Update SDK deliberately, or configure and verify explicit app-owned Workbox options.',
           ],
         };
-      return {
-        name: 'PWA offline correctness',
-        status: 'pass',
-        detail:
-          'SDK pwaOptions caches the app shell and fonts with an explicit bundle cap; business data/media remain opt-in and need browser verification',
-      };
+      const resolved = helperCalls.map((call) =>
+        resolvePwaHelperWorkbox(config, configCode!, call.index!),
+      );
+      if (resolved.every((value) => value !== null)) {
+        helperWorkbox = resolved.length === 1 ? resolved[0]! : null;
+        if (helperWorkbox !== null) {
+          // Continue through the ordinary checks so destructive literal overrides
+          // (for example runtimeCaching: []) remain visible as warnings.
+        } else {
+          return {
+            name: 'PWA offline correctness',
+            status: 'warn',
+            detail: 'Multiple SDK pwaOptions calls need explicit offline review',
+          };
+        }
+      } else {
+        return {
+          name: 'PWA offline correctness',
+          status: 'warn',
+          detail:
+            'SDK pwaOptions arguments are dynamic or unsupported; offline defaults cannot be verified',
+          suggestions: [
+            'Use object-literal pwaOptions overrides or configure and verify explicit app-owned Workbox options.',
+          ],
+        };
+      }
     }
   }
 
@@ -238,7 +254,7 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
   // we slice out of `config` so the returned substring still has its
   // real string contents — otherwise downstream `globPatterns:
   // ["..."]` regex would fail.
-  const workbox = extractBalancedBlock(config, configCode, /workbox\s*:\s*\{/);
+  const workbox = helperWorkbox ?? extractBalancedBlock(config, configCode, /workbox\s*:\s*\{/);
   if (workbox === null) {
     return {
       name: 'PWA offline correctness',
@@ -339,7 +355,9 @@ export async function checkPwaOffline(source: FileSource): Promise<CheckResult> 
       name: 'PWA offline correctness',
       status: 'pass',
       detail:
-        'workbox precaches everything, fonts cached, bundle cap raised, navigate fallback set',
+        helperWorkbox !== null
+          ? 'SDK pwaOptions caches the app shell and fonts with an explicit bundle cap; business data/media remain opt-in and need browser verification'
+          : 'workbox precaches everything, fonts cached, bundle cap raised, navigate fallback set',
     };
   }
 
@@ -399,6 +417,117 @@ function extractBalancedBlock(src: string, code: string, opener: RegExp): string
     i++;
   }
   return null;
+}
+
+/** Resolve the Workbox fields supplied by the SDK helper plus literal overrides. */
+function resolvePwaHelperWorkbox(src: string, code: string, callStart: number): string | null {
+  const open = code.indexOf('(', callStart);
+  if (open < 0) return null;
+  const close = matchingDelimiter(code, open, '(', ')');
+  if (close < 0) return null;
+  const args = splitTopLevel(code, src, open + 1, close);
+  let override: { code: string; src: string } | null = null;
+  if (args.length > 1) return null;
+  if (args.length === 1) {
+    const argCode = args[0]!.code.trim();
+    const argSrc = args[0]!.src.trim();
+    if (!argCode.startsWith('{') || !argCode.endsWith('}')) return null;
+    if (/\.\.\./.test(argCode)) return null;
+    override = { code: argCode.slice(1, -1), src: argSrc.slice(1, -1) };
+  }
+
+  let workboxOverride: { code: string; src: string } | null = null;
+  if (override) {
+    const properties = splitTopLevel(override.code, override.src, 0, override.code.length);
+    for (const property of properties) {
+      if (/^\s*\.\.\./.test(property.code)) return null;
+      const key = /^\s*workbox\s*:/.exec(property.code);
+      if (!key) continue;
+      const brace = property.code.indexOf('{');
+      const end = matchingDelimiter(property.code, brace, '{', '}');
+      if (
+        brace < 0 ||
+        !/^\s*workbox\s*:\s*\{/.test(property.code) ||
+        end < 0 ||
+        property.code
+          .slice(end + 1)
+          .trim()
+          .replace(/,$/, '')
+          .trim()
+      )
+        return null;
+      workboxOverride = {
+        code: property.code.slice(brace + 1, end),
+        src: property.src.slice(brace + 1, end),
+      };
+      break;
+    }
+  }
+
+  const defaults: Record<string, string> = {
+    maximumFileSizeToCacheInBytes: '10 * 1024 * 1024',
+    runtimeCaching:
+      '[{ urlPattern: /^https:\\/\\/fonts\\.googleapis\\.com\\//i }, { urlPattern: /^https:\\/\\/fonts\\.gstatic\\.com\\//i }] ',
+    navigateFallback: "'/index.html'",
+  };
+  const fields: Record<string, string> = { ...defaults };
+  if (workboxOverride) {
+    for (const property of splitTopLevel(
+      workboxOverride.code,
+      workboxOverride.src,
+      0,
+      workboxOverride.code.length,
+    )) {
+      if (/^\s*\.\.\./.test(property.code)) return null;
+      const entry =
+        /^\s*(globPatterns|maximumFileSizeToCacheInBytes|runtimeCaching|navigateFallback)\s*:\s*/.exec(
+          property.code,
+        );
+      if (!entry) continue;
+      const value = property.src.slice(entry[0].length).trim().replace(/,$/, '').trim();
+      if (/^(?:undefined|null|false|['"]{2})$/.test(value)) delete fields[entry[1]!];
+      else if (entry[1] === 'navigateFallback' && !/^(['"]).+\1$/.test(value))
+        delete fields[entry[1]!];
+      else fields[entry[1]!] = value;
+    }
+  }
+  return Object.entries(fields)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(',\n');
+}
+
+function matchingDelimiter(code: string, start: number, opening: string, closing: string): number {
+  let depth = 0;
+  for (let i = start; i < code.length; i++) {
+    if (code[i] === opening) depth++;
+    else if (code[i] === closing && --depth === 0) return i;
+  }
+  return -1;
+}
+
+function splitTopLevel(
+  code: string,
+  src: string,
+  start: number,
+  end: number,
+): { code: string; src: string }[] {
+  const parts: { code: string; src: string }[] = [];
+  let from = start;
+  const stack: string[] = [];
+  const pairs: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+  for (let i = start; i < end; i++) {
+    const c = code[i]!;
+    if (pairs[c]) stack.push(pairs[c]!);
+    else if (stack.at(-1) === c) stack.pop();
+    else if (c === ',' && stack.length === 0) {
+      if (code.slice(from, i).trim())
+        parts.push({ code: code.slice(from, i), src: src.slice(from, i) });
+      from = i + 1;
+    }
+  }
+  if (code.slice(from, end).trim())
+    parts.push({ code: code.slice(from, end), src: src.slice(from, end) });
+  return parts;
 }
 
 /**

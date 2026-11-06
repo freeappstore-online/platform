@@ -573,6 +573,39 @@ describe('maintained SDK PWA defaults', () => {
       detail: expect.stringContaining('opt-in'),
     });
   });
+  it('accepts safe object-literal manifest and denylist overrides using merged SDK defaults', async () => {
+    const config = helper.replace(
+      'options()',
+      `options({ manifest: { name: 'Fixture' }, workbox: { navigateFallbackDenylist: [/^\\/music(?:\\/|$)/] } })`,
+    );
+    expect(await checkPwaOffline(source(config))).toMatchObject({ status: 'pass' });
+  });
+  it('warns when literal helper overrides remove required offline defaults', async () => {
+    const runtimeCaching = helper.replace(
+      'options()',
+      'options({ workbox: { runtimeCaching: [] } })',
+    );
+    expect(await checkPwaOffline(source(runtimeCaching))).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('Google Fonts'),
+    });
+    const fallback = helper.replace(
+      'options()',
+      'options({ workbox: { navigateFallback: undefined } })',
+    );
+    expect(await checkPwaOffline(source(fallback))).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('navigateFallback'),
+    });
+  });
+  it('does not infer SDK defaults from dynamic helper overrides', async () => {
+    expect(
+      await checkPwaOffline(source(helper.replace('options()', 'options(configOverrides)'))),
+    ).toMatchObject({
+      status: 'warn',
+      detail: expect.stringContaining('dynamic or unsupported'),
+    });
+  });
   it('does not approve an old installed SDK or an ambiguous source range', async () => {
     expect((await checkPwaOffline(source(helper, '^0.16.37'))).status).toBe('warn');
     expect((await checkPwaOffline(source(helper, '*'))).status).toBe('warn');
@@ -584,10 +617,10 @@ describe('maintained SDK PWA defaults', () => {
     ]);
     expect((await checkPwaOffline(mapFileSource(files))).status).toBe('warn');
   });
-  it('keeps custom overrides, fake imports and shadow helpers unrecognized', async () => {
-    expect((await checkPwaOffline(source(helper.replace('options()', 'options({})')))).status).toBe(
-      'warn',
-    );
+  it('keeps dynamic overrides, fake imports and shadow helpers unrecognized', async () => {
+    expect(
+      (await checkPwaOffline(source(helper.replace('options()', 'options(custom)')))).status,
+    ).toBe('warn');
     const fake = `import { VitePWA } from 'vite-plugin-pwa'; const text = "import { pwaOptions } from '@freeappstore/sdk/pwa-config'"; function pwaOptions() { return {} } export default { plugins: [VitePWA(pwaOptions())] };`;
     expect((await checkPwaOffline(source(fake))).status).toBe('warn');
   });
