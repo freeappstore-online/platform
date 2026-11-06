@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { runAudit } from '../lib/audit.js';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { type CurrentUser, HttpError, isAdmin, requireUser } from '../lib/auth.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
+import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
 
 export const auditRoutes = new Hono<{ Bindings: Env }>();
@@ -99,21 +100,41 @@ auditRoutes.get('/audit', async (c) => {
   return c.json({ summary, checks, total }, 200, { 'Cache-Control': 'public, max-age=300' });
 });
 
+/** Manual audit runs allowed per day, platform-wide (#493). */
+export const DAILY_AUDIT_RUNS = 24;
+
 /**
- * Manually trigger an audit run. Authenticated — any signed-in user
- * can fire this, since the audit is a public read anyway. Mirrors the
- * weekly cron (`0 6 * * SUN` in wrangler.toml) but lets us populate
- * the table immediately on first deploy or after a registry change
- * without waiting up to a week.
+ * Manually trigger an audit run. Mirrors the weekly cron (`0 6 * * SUN`
+ * in wrangler.toml) but lets us populate the table immediately on first
+ * deploy or after a registry change without waiting up to a week.
  *
- * Use sparingly — each invocation makes ~50 outgoing fetches.
+ * Each invocation makes ~50 outgoing fetches, so it is for platform admins
+ * and app owners (creators) only, and capped platform-wide per day (#493).
  */
 auditRoutes.post('/audit/run', async (c) => {
+  let user: CurrentUser;
   try {
-    await requireUser(c);
+    user = await requireUser(c);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
+  }
+  if (!isAdmin(user, c.env)) {
+    const owns = user.githubLogin
+      ? await c.env.DB.prepare('SELECT 1 FROM apps WHERE owner_login = ? COLLATE NOCASE LIMIT 1')
+          .bind(user.githubLogin)
+          .first()
+      : null;
+    if (!owns) return c.json({ error: 'app owners and admins only' }, 403);
+  }
+  const usage = await checkAndBump(d1UsageStore(c.env.DB), {
+    appId: 'audit-run',
+    dailyLimit: DAILY_AUDIT_RUNS,
+    nowMs: Date.now(),
+    denominator: 1,
+  });
+  if (!usage.allowed) {
+    return c.json({ error: `Audit run limit reached (${DAILY_AUDIT_RUNS}/day).` }, 429);
   }
   const r = await runAudit(c.env.DB);
   return c.json({ scanned: r.scanned, failed: r.failed });

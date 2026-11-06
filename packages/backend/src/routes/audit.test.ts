@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
+import { dayKey } from '../lib/proxy-rate-limit.js';
+import { signSession } from '../lib/session.js';
 import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import type { Env } from '../types.js';
+import { DAILY_AUDIT_RUNS } from './audit.js';
 
 interface AuditRow {
   app_id: string;
@@ -220,5 +223,72 @@ describe.skipIf(!hasSqlite)('GET /v1/audit', () => {
   it('is publicly cacheable for a few minutes (weekly cron data)', async () => {
     const res = await app.request('/v1/audit', {}, baseEnv(fakeDB(sample)));
     expect(res.headers.get('cache-control')).toBe('public, max-age=300');
+  });
+});
+
+describe.skipIf(!hasSqlite)('POST /v1/audit/run is gated and capped (#493)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function setup() {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    const users = db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    );
+    users.run('gh:1', 1, 'alice', now); // owns an app
+    users.run('gh:2', 2, 'bob', now); // owns nothing
+    users.run('gh:9', 9, 'root', now); // admin
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+      'timer',
+      'Alice',
+      now,
+    );
+    // Empty registries: the run itself makes no per-app fetches.
+    const fetchMock = vi.fn(async () => new Response('[]', { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const env = { ...baseEnv(d1), ADMIN_GITHUB_LOGINS: 'root' };
+    const run = async (userId: string) =>
+      (
+        await app.request(
+          '/v1/audit/run',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${await signSession(userId, env.SESSION_SIGNING_KEY)}`,
+            },
+          },
+          env,
+        )
+      ).status;
+    return { db, run, fetchMock };
+  }
+
+  it('refuses anonymous callers and users who own no app, without running', async () => {
+    const { run, fetchMock } = setup();
+    expect(
+      (await app.request('/v1/audit/run', { method: 'POST' }, baseEnv(sqliteD1().d1))).status,
+    ).toBe(401);
+    expect(await run('gh:2')).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('lets an app owner and an admin run it', async () => {
+    const { run, fetchMock } = setup();
+    expect(await run('gh:1')).toBe(200);
+    expect(await run('gh:9')).toBe(200);
+    expect(fetchMock).toHaveBeenCalled();
+  });
+
+  it('stops at the platform-wide daily cap', async () => {
+    const { db, run, fetchMock } = setup();
+    db.prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)').run(
+      'audit-run',
+      dayKey(Date.now()),
+      DAILY_AUDIT_RUNS - 1,
+    );
+    expect(await run('gh:9')).toBe(200);
+    const calls = fetchMock.mock.calls.length;
+    expect(await run('gh:9')).toBe(429);
+    expect(fetchMock.mock.calls.length).toBe(calls);
   });
 });
