@@ -230,6 +230,19 @@ describe('GET /v1/auth/email/callback', () => {
   });
 });
 
+/** The confirmation page's same-origin POST, which signs in without the flow cookie (#514). */
+function confirmRequest(token: string): RequestInit {
+  return {
+    method: 'POST',
+    redirect: 'manual',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Sec-Fetch-Site': 'same-origin',
+    },
+    body: new URLSearchParams({ token }).toString(),
+  };
+}
+
 describe.skipIf(!hasSqlite)('email sign-in user ids against real SQLite (#434)', () => {
   // Each link must differ, or the second is rejected as a replay.
   let exp = Math.floor(Date.now() / 1000) + 60;
@@ -240,8 +253,8 @@ describe.skipIf(!hasSqlite)('email sign-in user ids against real SQLite (#434)',
       SIGNING_KEY,
     );
     const res = await app.request(
-      `/v1/auth/email/callback?token=${encodeURIComponent(token)}`,
-      { redirect: 'manual' },
+      '/v1/auth/email/callback',
+      confirmRequest(token),
       makeEnv({}, d1),
     );
     expect(res.status).toBe(302);
@@ -291,8 +304,8 @@ describe.skipIf(!hasSqlite)('email sign-in user ids against real SQLite (#434)',
       SIGNING_KEY,
     );
     const res = await app.request(
-      `/v1/auth/email/callback?token=${encodeURIComponent(token)}`,
-      { redirect: 'manual' },
+      '/v1/auth/email/callback',
+      confirmRequest(token),
       makeEnv({}, d1),
     );
     expect(res.status).toBe(401);

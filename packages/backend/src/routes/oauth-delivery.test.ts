@@ -70,10 +70,16 @@ function makeToken(overrides: Record<string, unknown> = {}): Promise<string> {
   );
 }
 
-async function emailCallback(token: string, env = makeEnv()) {
+/** Sign in with a link through the confirmation page's same-origin POST (#514). */
+async function emailCallback(token: string, env = makeEnv(), site = 'same-origin') {
   return app.request(
-    `${API}/v1/auth/email/callback?token=${encodeURIComponent(token)}`,
-    { redirect: 'manual' },
+    `${API}/v1/auth/email/callback`,
+    {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Sec-Fetch-Site': site },
+      body: new URLSearchParams({ token }).toString(),
+    },
     env,
   );
 }
@@ -120,6 +126,139 @@ describe('session delivery from the email callback', () => {
     );
     expect(res.status).toBe(302);
     expect((await verifySession(fragmentSession(res), SIGNING_KEY))?.aud).toBe('console');
+  });
+});
+
+describe('magic link bound to the requesting browser (#514)', () => {
+  /** POST /email/start from `origin`; returns the emailed token and any flow cookie. */
+  async function startEmail(env: Env, origin = 'https://demo.freeappstore.online') {
+    const send = vi.fn().mockResolvedValue({ messageId: 'm' });
+    const res = await app.request(
+      `${API}/v1/auth/email/start`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify({
+          email: `bind-${crypto.randomUUID()}@example.com`,
+          appId: 'demo',
+          returnTo: VALID_RETURN_TO,
+        }),
+      },
+      { ...env, EMAIL: { send } } as Env,
+    );
+    expect(res.status).toBe(200);
+    const link = new URL(/https:\/\/\S+callback\?token=\S+/.exec(send.mock.calls[0]![0].text)![0]);
+    const setCookie = res.headers.get('set-cookie') ?? '';
+    return {
+      token: link.searchParams.get('token') ?? '',
+      setCookie,
+      cookie: setCookie.split(';')[0]!,
+    };
+  }
+
+  const openLink = (env: Env, token: string, cookie?: string) =>
+    app.request(
+      `${API}/v1/auth/email/callback?token=${encodeURIComponent(token)}`,
+      { redirect: 'manual', headers: cookie ? { cookie } : {} },
+      env,
+    );
+
+  it('sets a __Host- flow cookie when the app itself asks, and credentialed CORS allows it', async () => {
+    const { setCookie } = await startEmail(makeEnv());
+    expect(setCookie).toMatch(
+      /^__Host-fas_oauth_[^=]+=[^;]+; Path=\/; HttpOnly; SameSite=Lax; Secure/,
+    );
+
+    const preflight = await app.request(
+      `${API}/v1/auth/email/start`,
+      {
+        method: 'OPTIONS',
+        headers: {
+          Origin: 'https://demo.freeappstore.online',
+          'Access-Control-Request-Method': 'POST',
+        },
+      },
+      makeEnv(),
+    );
+    expect(preflight.headers.get('access-control-allow-credentials')).toBe('true');
+    expect(preflight.headers.get('access-control-allow-origin')).toBe(
+      'https://demo.freeappstore.online',
+    );
+  });
+
+  it('sets no cookie when another origin asks for the link', async () => {
+    const { setCookie } = await startEmail(makeEnv(), 'https://evil.freeappstore.online');
+    expect(setCookie).toBe('');
+  });
+
+  it('same browser: signs in directly and clears the cookie', async () => {
+    const env = makeEnv();
+    const { token, cookie } = await startEmail(env);
+    const res = await openLink(env, token, cookie);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location') ?? '').toContain('#fas_session=');
+    expect(res.headers.get('set-cookie') ?? '').toMatch(/^__Host-fas_oauth_[^=]+=; .*Max-Age=0/);
+  });
+
+  it('other browser: shows a confirmation page, unframeable, that consumes nothing', async () => {
+    const env = makeEnv();
+    const { token, cookie } = await startEmail(env);
+    const page = await openLink(env, token);
+    expect(page.status).toBe(200);
+    expect(page.headers.get('content-type')).toContain('text/html');
+    expect(page.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+    expect(page.headers.get('x-frame-options')).toBe('DENY');
+    expect(page.headers.get('cache-control')).toBe('no-store');
+    const html = await page.text();
+    expect(html).toMatch(
+      /Continue signing in as <strong>b\*\*\*@example\.com<\/strong> to <strong>demo<\/strong>/,
+    );
+    expect(html).toContain('<form method="post" action="/v1/auth/email/callback">');
+    expect(html).not.toContain('bind-');
+
+    // A wrong cookie for the same nonce is no better than none.
+    const wrong = await openLink(env, token, `${cookie.split('=')[0]}=not-the-secret`);
+    expect(wrong.status).toBe(200);
+
+    // The page consumed nothing: the button still signs in.
+    const confirmed = await emailCallback(token, env);
+    expect(confirmed.status).toBe(302);
+    expect(confirmed.headers.get('location') ?? '').toContain('#fas_session=');
+  });
+
+  it('replay: a used link is refused, through either path', async () => {
+    const env = makeEnv();
+    const { token, cookie } = await startEmail(env);
+    expect((await openLink(env, token, cookie)).status).toBe(302);
+    const again = await openLink(env, token, cookie);
+    expect(again.status).toBe(400);
+    expect(await again.text()).toContain('already used');
+    expect((await emailCallback(token, env)).status).toBe(400);
+  });
+
+  it('cross-site POST: refused without consuming the link', async () => {
+    const env = makeEnv();
+    const { token } = await startEmail(env);
+    for (const site of ['cross-site', 'same-site', 'none']) {
+      const res = await emailCallback(token, env, site);
+      expect(res.status).toBe(403);
+    }
+    // No Sec-Fetch-Site (an older browser): the Origin must be the API's own.
+    const noOrigin = await app.request(
+      `${API}/v1/auth/email/callback`,
+      {
+        method: 'POST',
+        redirect: 'manual',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Origin: 'https://evil.example',
+        },
+        body: new URLSearchParams({ token }).toString(),
+      },
+      env,
+    );
+    expect(noOrigin.status).toBe(403);
+    expect((await emailCallback(token, env)).status).toBe(302);
   });
 });
 

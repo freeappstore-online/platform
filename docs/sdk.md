@@ -36,6 +36,8 @@ await fas.auth.init();                  // capture callback, must be called once
 
 Providers: `'github' | 'google' | 'apple' | 'email'`.
 
+A magic link opened in the browser that asked for it signs in directly. Opened anywhere else (another browser or device, or an app on a domain outside `freeappstore.online`, where the binding cookie can't be set), it first shows a "Continue signing in as a***@example.com to this app?" page on the API origin; the link stays single-use and expires after 15 minutes.
+
 ## Per-user KV (`fas.kv`)
 
 Per-user, per-app key-value store. Scoped to `(appId, userId)` server-side.

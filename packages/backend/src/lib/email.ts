@@ -37,3 +37,8 @@ export function isLikelyEmail(email: string): boolean {
   if (email.length > 254) return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
+
+/** Escape text for an HTML body or a quoted attribute. */
+export function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}

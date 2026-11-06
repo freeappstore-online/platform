@@ -82,7 +82,7 @@ Apps deploy to R2 via GitHub Actions, not CF Pages:
 
 ## Auth flow
 
-**Browser:** OAuth web flow (GitHub, Google, Apple) or email magic link -> platform API exchanges code for session token -> HMAC-signed, stored in localStorage. The OAuth state is bound to a `__Host-` cookie set at `/start` and is single-use; `return_to` must be the app's own origin, and the token only works for that app (`aud`). App settings, publish, the key vault, account deletion and admin need a first-party (`console`) session.
+**Browser:** OAuth web flow (GitHub, Google, Apple) or email magic link -> platform API exchanges code for session token -> HMAC-signed, stored in localStorage. The OAuth state is bound to a `__Host-` cookie set at `/start` and is single-use; a magic link is single-use and bound the same way when the app's own page requested it, and opened in any other browser it shows a "Continue signing in as …?" confirmation (a same-origin POST) instead of signing in; `return_to` must be the app's own origin, and the token only works for that app (`aud`). App settings, publish, the key vault, account deletion and admin need a first-party (`console`) session.
 
 **CLI:** GitHub device-authorization flow -> user approves in browser -> CLI polls for token -> exchanges for platform session -> cached at `~/.fas/config.json`.
 

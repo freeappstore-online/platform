@@ -43,6 +43,19 @@ export const app = new Hono<{ Bindings: Env }>();
 // the preflight from a non-API origin. WebSockets are exempt from CORS so
 // rooms aren't affected, but the SDK calls /v1/auth/me first during init()
 // and a CORS failure there breaks the rest of the SDK.
+// The magic-link start sets a browser-binding cookie (#514), so it alone
+// accepts credentialed requests. It answers its own preflight before the
+// global middleware below would. Nothing else on the API reads cookies.
+app.use(
+  '/v1/auth/email/start',
+  cors({
+    origin: (origin) => (isAllowedOrigin(origin) ? origin : null),
+    allowMethods: ['POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type'],
+    credentials: true,
+    maxAge: 600,
+  }),
+);
 app.use(
   '*',
   cors({

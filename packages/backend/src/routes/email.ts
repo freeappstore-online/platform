@@ -15,7 +15,7 @@
 import { Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
 import { isAppOwner, requireAppUser } from '../lib/auth.js';
-import { isLikelyEmail, sendEmail } from '../lib/email.js';
+import { escapeHtml, isLikelyEmail, sendEmail } from '../lib/email.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
 
@@ -172,10 +172,6 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
 
   return c.json({ ok: true });
 });
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-}
 
 function stripHtml(s: string): string {
   return s

@@ -91,6 +91,9 @@ export class Auth {
     here.hash = '';
     const res = await fetch(new URL('/v1/auth/email/start', this.apiBase), {
       method: 'POST',
+      // Lets the API set the cookie that binds the link to this browser: opened
+      // here it signs in directly, elsewhere it asks the user to confirm.
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, appId: this.appId, returnTo: here.toString() }),
     });

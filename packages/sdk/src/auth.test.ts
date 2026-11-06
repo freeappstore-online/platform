@@ -111,6 +111,7 @@ describe('Auth.signInWithEmail', () => {
     const [url, init] = mockFetch.mock.calls[0];
     expect(url.toString()).toBe('https://api.freeappstore.online/v1/auth/email/start');
     expect(init.method).toBe('POST');
+    expect(init.credentials).toBe('include');
     const body = JSON.parse(init.body);
     expect(body.email).toBe('alice@example.com');
     expect(body.appId).toBe('demo');
