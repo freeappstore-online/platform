@@ -29,6 +29,10 @@ describe("admin UI security headers (#516)", () => {
     expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
   });
 
+  it("reaches only the platform API and the analytics beacon", () => {
+    expect(directive("connect-src")).toBe("connect-src 'self' https://api.freeappstore.online https://cloudflareinsights.com");
+  });
+
   it("allows no inline or eval script beyond the hashed theme script", () => {
     expect(csp).not.toContain("'unsafe-inline'");
     expect(csp).not.toContain("'unsafe-eval'");
@@ -43,6 +47,7 @@ describe("admin UI security headers (#516)", () => {
     const inline = [...read("../../web/index.html").matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(
       (m) => `'sha256-${createHash("sha256").update(m[1]).digest("base64")}'`,
     );
-    expect(directive("script-src")).toBe(`script-src 'self' ${inline.join(" ")}`);
+    // static.cloudflareinsights.com: the edge injects the Web Analytics beacon.
+    expect(directive("script-src")).toBe(`script-src 'self' ${inline.join(" ")} https://static.cloudflareinsights.com`);
   });
 });
