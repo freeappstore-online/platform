@@ -134,6 +134,7 @@ fas publish --yes              # non-interactive (CI)
 | `--demo <url>` | Demo URL |
 | `--yes` | Non-interactive mode |
 | `--skip-checks` | Skip compliance checks (not recommended) |
+| `--update-workflow` | Replace an existing `.github/workflows/deploy.yml` with the current canonical workflow; without it a differing file is left untouched and the drift is listed |
 
 ## `fas admin transfer-owner <app>`
 

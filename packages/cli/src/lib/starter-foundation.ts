@@ -4,6 +4,8 @@ import { planCapabilityChanges } from './capability-definitions.js';
 import { CONNECTED_DRAFT } from './developer-recipes.js';
 import {
   APP_DEPLOY_CLI_VERSION,
+  CODE_HEALTH_CLI_VERSION,
+  DEPLOY_ACTIONS,
   INSTALL_APP_DEPENDENCIES,
   SAVE_APP_DEPENDENCY_LOCK,
 } from './starter-dependencies.js';
@@ -876,18 +878,127 @@ SOFTWARE.`,
 
 // ── Deploy workflow (R2) ──
 //
-// Every agent-pushed repo carries this so GitHub Actions builds web/dist and
-// syncs it to r2://<bucket>/<nounPlural>/<repo>/ — the prefix the host Worker
+// The single source of truth for every generated `.github/workflows/deploy.yml`:
+// `fas init`, the VibeCode builder and `fas publish` all emit this function's
+// output. GitHub Actions builds the app and syncs it to
+// r2://<bucket>/<nounPlural>/<repo>/ — the prefix the host Worker
 // (freeappstore-host / freegamestore-host) serves once the publish step writes
-// the D1 routes row. Mirrors the proven template-standalone deploy.yml.
+// the D1 routes row. Contains no APPNAME placeholder.
+//
+// Two jobs on purpose (mirrors freegamestore-online/ci-workflows game-ci.yml):
+//   build  — installs, tests and builds the app, runs the pinned
+//            @freeappstore/cli validator and the pinned code-health scan, then
+//            uploads the built output as a workflow artifact. It has NO R2
+//            secrets: a compromised npm release can fail the build, but it
+//            cannot read the bucket credentials.
+//   deploy — downloads that artifact and syncs it to R2. Runs no project code:
+//            no checkout, no install, no npx. Only this job sees the org-level
+//            R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ACCOUNT_ID secrets.
+// Every `uses:` is commit-pinned and every `npx` names an exact version.
 //
 // Fresh builder apps acquire a lock on their first successful build; later
-// builds retain it unless dependency manifests change. Org-level R2_* secrets
-// (R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY /
-// R2_ACCOUNT_ID) are inherited from the store org — public repos get them
-// (console/notes already deploy this way). Contains no APPNAME placeholder.
-function deployWorkflow(config: StoreConfig): string {
+// builds retain it unless dependency manifests change (that push needs
+// `contents: write` on the build job — the repo-scoped GITHUB_TOKEN, not an
+// org credential).
+const DEPLOY_STAGE = '.fas-deploy';
+
+function indent(script: string, spaces: number): string {
+  const pad = ' '.repeat(spaces);
+  return script
+    .trimEnd()
+    .split('\n')
+    .map((line) => `${pad}${line}`)
+    .join('\n');
+}
+
+export function deployWorkflow(config: StoreConfig): string {
+  const apps = config.store === 'apps';
+  const cli = `npx --yes @freeappstore/cli@${APP_DEPLOY_CLI_VERSION}`;
+  const buildSteps = apps
+    ? `      - name: Install
+        run: |
+${indent(INSTALL_APP_DEPENDENCIES, 10)}
+      # If your app uses VITE_* public config (OAuth client IDs, Firebase
+      # config, etc.), add them as GitHub repo Variables and pass them to the
+      # Build step. See https://freeappstore.online/skills.md "App Config & Secrets".
+      # Example:
+      #   env:
+      #     VITE_GOOGLE_CLIENT_ID: \${{ vars.VITE_GOOGLE_CLIENT_ID }}
+      - name: Resolve build target
+        id: target
+        run: ${cli} build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
+      - name: Typecheck (when configured)
+        run: pnpm run --if-present typecheck
+      - name: Tests (when configured)
+        run: pnpm run --if-present test
+      - name: Build
+        env:
+          BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
+        run: bash -e -c "$BUILD_COMMAND"
+      - name: Verify build output
+        run: ${cli} build-target --artifact --app-id "\${GITHUB_REPOSITORY##*/}"
+      - name: Retain verified dependency lock
+        run: |
+${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
+      # Code health scan — the JSON report + badge are published next to the
+      # app so the console and store listings can show them. Never blocks.
+      - name: Code health scan
+        run: npx --yes @vibecodeqa/cli@${CODE_HEALTH_CLI_VERSION} --json --badge > /dev/null 2>&1 || true
+      - name: Stage deploy artifact
+        env:
+          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}
+        run: |
+          rm -rf ${DEPLOY_STAGE}
+          mkdir -p ${DEPLOY_STAGE}/app ${DEPLOY_STAGE}/code-health
+          cp -R "$OUTPUT_PATH"/. ${DEPLOY_STAGE}/app/
+          test -n "$(ls -A ${DEPLOY_STAGE}/app)" || { echo "::error::$OUTPUT_PATH is empty"; exit 1; }
+          for f in report.json badge.svg; do
+            if [ -f ".vibe-check/$f" ]; then cp ".vibe-check/$f" ${DEPLOY_STAGE}/code-health/; fi
+          done
+`
+    : `      - name: Install
+        run: pnpm install --no-frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Verify build output
+        run: |
+          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
+          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
+      - name: Stage deploy artifact
+        run: |
+          rm -rf ${DEPLOY_STAGE}
+          mkdir -p ${DEPLOY_STAGE}
+          cp -R ./web/dist ${DEPLOY_STAGE}/app
+`;
+  const codeHealthUpload = apps
+    ? `
+      - name: Upload code health
+        env:
+          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
+        run: |
+          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+          PREFIX="s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/.vcqa"
+          if [ -f ${DEPLOY_STAGE}/code-health/report.json ]; then
+            aws s3 cp ${DEPLOY_STAGE}/code-health/report.json "$PREFIX/report.json" \\
+              --endpoint-url "$EP" --content-type application/json --no-progress
+          fi
+          if [ -f ${DEPLOY_STAGE}/code-health/badge.svg ]; then
+            aws s3 cp ${DEPLOY_STAGE}/code-health/badge.svg "$PREFIX/badge.svg" \\
+              --endpoint-url "$EP" --content-type image/svg+xml --no-progress
+          fi
+`
+    : '';
   return `name: Deploy to R2
+
+# Generated by @freeappstore/cli. Two jobs on purpose:
+#   build  — runs the app's install/test/build plus the pinned validators.
+#            No secrets here: a compromised npm package can only fail the build.
+#   deploy — syncs the uploaded artifact to R2. Runs no project code (no
+#            checkout, no install, no npx); only this job sees the R2 secrets.
+# Regenerate with \`fas publish --update-workflow\`; do not add secrets to build.
 
 on:
   push:
@@ -899,71 +1010,51 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     if: \${{ !startsWith(github.event.repository.name, 'template-') }}
     runs-on: ubuntu-latest
     permissions:
-      contents: ${config.store === 'apps' ? 'write' : 'read'}
+      contents: ${apps ? 'write' : 'read'}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: ${DEPLOY_ACTIONS.checkout}
+      - uses: ${DEPLOY_ACTIONS.pnpm}
+      - uses: ${DEPLOY_ACTIONS.setupNode}
         with:
           node-version: 22
-      - name: Install
-${
-  config.store === 'apps'
-    ? `        run: |\n${INSTALL_APP_DEPENDENCIES.trimEnd()
-        .split('\n')
-        .map((line) => `          ${line}`)
-        .join('\n')}`
-    : '        run: pnpm install --no-frozen-lockfile'
-}
-${
-  config.store === 'apps'
-    ? `      - name: Resolve build target
-        id: target
-        run: npx --yes @freeappstore/cli@${APP_DEPLOY_CLI_VERSION} build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
-      - name: Typecheck (when configured)
-        run: pnpm run --if-present typecheck
-      - name: Tests (when configured)
-        run: pnpm run --if-present test
-      - name: Build
-        env:
-          BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
-        run: bash -e -c "$BUILD_COMMAND"
-      - name: Verify build output
-        run: npx --yes @freeappstore/cli@${APP_DEPLOY_CLI_VERSION} build-target --artifact --app-id "\${GITHUB_REPOSITORY##*/}"
-      - name: Retain verified dependency lock
-        run: |
-${SAVE_APP_DEPENDENCY_LOCK.trimEnd()
-  .split('\n')
-  .map((line) => `          ${line}`)
-  .join('\n')}
-`
-    : `\
-      - name: Build
-        run: pnpm build
-      - name: Verify build output
-        run: |
-          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
-          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
-`
-}\
+${buildSteps}      - name: Upload deploy artifact
+        uses: ${DEPLOY_ACTIONS.uploadArtifact}
+        with:
+          name: deploy
+          path: ${DEPLOY_STAGE}
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download deploy artifact
+        uses: ${DEPLOY_ACTIONS.downloadArtifact}
+        with:
+          name: deploy
+          path: ${DEPLOY_STAGE}
       - name: Upload to R2
         env:
-${config.store === 'apps' ? `          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}\n` : ''}\
           AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
         run: |
-          aws s3 sync ${config.store === 'apps' ? '"$OUTPUT_PATH"' : './web/dist'} "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/" \\
+          test -n "$(ls -A ${DEPLOY_STAGE}/app)" || { echo "::error::deploy artifact is empty"; exit 1; }
+          aws s3 sync ${DEPLOY_STAGE}/app "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/" \\
             --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
             --delete \\
             --no-progress
-          echo "Deployed ${config.nounPlural}/\${GITHUB_REPOSITORY##*/} from $(git rev-parse --short HEAD) to R2"
-`;
+          echo "Deployed ${config.nounPlural}/\${GITHUB_REPOSITORY##*/} from \${GITHUB_SHA::7} to R2"
+${codeHealthUpload}`;
 }
 
 // ── Public API ──

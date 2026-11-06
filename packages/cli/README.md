@@ -36,7 +36,7 @@ After the first successful code push and deploy, live at `https://my-app.freeapp
 | `fas doctor` | App health and stage report; `--offline`, `--json`, `--verify`, `--artifact`. |
 | `fas init <app-id>` | Generate standalone and connected apps from the canonical platform starter foundation; game templates remain available through their template repositories. Replaces app placeholders, runs `git init`, makes the first commit. |
 | `fas check` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
-| `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing, then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
+| `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing (never overwrites an existing one unless `--update-workflow`), then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
 | `fas list` (alias `fas ls`) | List apps and games you have published. `--json` for scripting, `-v` for recent commits. |
 | `fas logs <app-id>` | Show recent deployment runs and links for an app (GitHub Actions). |
 | `fas secret set\|list\|rm` | Manage server-side encrypted API keys for an app. |
@@ -136,6 +136,9 @@ fas publish \
 | `--demo <url>` | Optional demo URL. Pass `""` to clear. |
 | `--yes` | Non-interactive: missing required fields abort instead of prompting. |
 | `--skip-checks` | Skip `fas check` before publish (not recommended). |
+| `--update-workflow` | Replace an existing `.github/workflows/deploy.yml` with the current canonical workflow. Without it a differing file is left untouched and the drift is listed. |
+
+The generated `deploy.yml` is the same one `fas init` writes. It has two jobs: `build` (install, typecheck, tests, build, pinned `@freeappstore/cli` validation, pinned code-health scan — no secrets) and `deploy` (`needs: build`; downloads the build artifact and syncs it to R2 — runs no project code). Every action is pinned to a commit SHA and every `npx` to an exact version.
 
 ### `fas list` (alias `fas ls`)
 
@@ -293,7 +296,7 @@ Every app and game on the platform shares the same visual language — colors, f
 1. **Compliance gate**: runs the same checks as `fas check`. Hard failures abort.
 2. **Auth check**: confirms a valid session token (re-login if expired).
 3. **Provision**: POSTs to the platform API, which calls the admin Worker via service binding. Admin creates an empty GitHub repo, inserts a D1 hosting route (subdomain → R2 prefix), and appends the app to the storefront registry.
-4. **Deploy workflow**: injects `.github/workflows/deploy.yml` locally if missing, so the first `git push` triggers an R2 deploy.
+4. **Deploy workflow**: injects `.github/workflows/deploy.yml` locally if missing, so the first `git push` triggers an R2 deploy. An existing file that differs is reported, not replaced — pass `--update-workflow` to regenerate it.
 5. **Ownership**: records the app in the platform DB so `fas list` returns it.
 6. **Output**: prints the live URL, repo URL, storefront listing URL, and the `git remote add` + `git push` commands to populate the new repo.
 

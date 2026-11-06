@@ -1,5 +1,10 @@
 # @freeappstore/cli
 
+## 0.4.78
+
+- **Security:** one generator (`deployWorkflow` in `starter-foundation.ts`) now produces the `deploy.yml` written by `fas init`, the builder and `fas publish`. The workflow is split into a `build` job (install, typecheck, tests, build, `@freeappstore/cli` validation and the code-health scan — no secrets) and a `deploy` job that only downloads the built artifact and syncs it to R2. `npx` packages are pinned to exact versions (`@freeappstore/cli@0.4.78`, `@vibecodeqa/cli@0.57.0`) and every action to a commit SHA, so a compromised npm release or moved tag can no longer reach the org R2 credentials.
+- `fas publish` no longer overwrites an existing `deploy.yml`. A differing file is left untouched and the drift is summarised; pass `--update-workflow` to replace it.
+
 ## 0.4.54
 
 - Add optional realtime and media capability recipes with lifecycle guidance, plus package preflight for the SDK media entry point.

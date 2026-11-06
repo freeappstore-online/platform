@@ -1,5 +1,21 @@
 /** Worker-safe deployment recipes. Keep dependency resolution in the app repository. */
-export const APP_DEPLOY_CLI_VERSION = '0.4.67';
+export const APP_DEPLOY_CLI_VERSION = '0.4.78';
+
+/** Exact @vibecodeqa/cli release the generated code-health scan runs (third-party scope: never floating). */
+export const CODE_HEALTH_CLI_VERSION = '0.57.0';
+
+/**
+ * Every `uses:` in the generated deploy workflow is pinned to a commit SHA so a
+ * moved tag cannot change what runs next to the R2 credentials. Resolve a new
+ * pin with `gh api repos/<owner>/<repo>/tags` and keep the version comment.
+ */
+export const DEPLOY_ACTIONS = {
+  checkout: 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0',
+  pnpm: 'pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0',
+  setupNode: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0',
+  uploadArtifact: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2',
+  downloadArtifact: 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0',
+} as const;
 
 export const INSTALL_APP_DEPENDENCIES = `set -euo pipefail
 if [ ! -f pnpm-lock.yaml ]; then

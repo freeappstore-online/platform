@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_STARTER_CONFIG, deployWorkflow } from '../lib/starter-foundation.js';
 import {
   buildPromptList,
   DEPLOY_YML,
@@ -11,6 +12,7 @@ import {
   resolveCategory,
   resolveFromFlags,
   resolveType,
+  summarizeWorkflowDrift,
 } from './publish.js';
 
 describe('parseGitHubRepo', () => {
@@ -177,7 +179,11 @@ describe('DEPLOY_YML', () => {
     expect(DEPLOY_YML).toContain('Verify build output');
     expect(DEPLOY_YML).toContain('build-target --artifact');
     expect(DEPLOY_YML).toContain('steps.target.outputs.output-path');
-    expect(DEPLOY_YML).toContain('aws s3 sync "$OUTPUT_PATH"');
+    expect(DEPLOY_YML).toContain('aws s3 sync .fas-deploy/app');
+  });
+
+  it('is the same workflow fas init and the builder generate', () => {
+    expect(DEPLOY_YML).toBe(deployWorkflow(APP_STARTER_CONFIG));
   });
 });
 
@@ -211,28 +217,78 @@ describe('ensureDeployWorkflow', () => {
     expect(existsSync(join(tmpDir, '.github', 'workflows'))).toBe(true);
   });
 
-  it('returns "ok" and does not overwrite when deploy.yml already has R2 content', async () => {
+  it('returns "ok" when deploy.yml already matches the canonical workflow', async () => {
     const dir = join(tmpDir, '.github', 'workflows');
     mkdirSync(dir, { recursive: true });
-    const existing = 'name: Deploy to R2\n';
+    writeFileSync(join(dir, 'deploy.yml'), DEPLOY_YML);
+
+    expect(await ensureDeployWorkflow()).toBe('ok');
+  });
+
+  it('never overwrites a differing deploy.yml without --update-workflow; reports the drift', async () => {
+    const dir = join(tmpDir, '.github', 'workflows');
+    mkdirSync(dir, { recursive: true });
+    const existing = 'name: Deploy to R2\njobs:\n  deploy:\n    steps:\n      - run: echo custom\n';
     writeFileSync(join(dir, 'deploy.yml'), existing);
 
     const result = await ensureDeployWorkflow();
-    expect(result).toBe('ok');
-    const content = readFileSync(join(dir, 'deploy.yml'), 'utf8');
-    expect(content).toBe(existing);
+    expect(result).toEqual({ drift: expect.arrayContaining([expect.stringMatching(/line\(s\)/)]) });
+    expect(readFileSync(join(dir, 'deploy.yml'), 'utf8')).toBe(existing);
   });
 
-  it('returns "upgraded" and overwrites legacy CF Pages workflow', async () => {
+  it('leaves a legacy CF Pages workflow alone too, naming the reason', async () => {
     const dir = join(tmpDir, '.github', 'workflows');
     mkdirSync(dir, { recursive: true });
     const legacy = 'name: Deploy to Cloudflare Pages\non: push\n';
     writeFileSync(join(dir, 'deploy.yml'), legacy);
 
     const result = await ensureDeployWorkflow();
-    expect(result).toBe('upgraded');
-    const content = readFileSync(join(dir, 'deploy.yml'), 'utf8');
-    expect(content).toBe(DEPLOY_YML);
+    expect(result).toEqual({
+      drift: expect.arrayContaining([expect.stringContaining('Cloudflare Pages')]),
+    });
+    expect(readFileSync(join(dir, 'deploy.yml'), 'utf8')).toBe(legacy);
+  });
+
+  it('returns "updated" and replaces the file when --update-workflow is set', async () => {
+    const dir = join(tmpDir, '.github', 'workflows');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'deploy.yml'), 'name: Deploy to Cloudflare Pages\non: push\n');
+
+    expect(await ensureDeployWorkflow({ update: true })).toBe('updated');
+    expect(readFileSync(join(dir, 'deploy.yml'), 'utf8')).toBe(DEPLOY_YML);
+  });
+});
+
+describe('summarizeWorkflowDrift', () => {
+  const legacyPublishTemplate = [
+    'jobs:',
+    '  deploy:',
+    '    steps:',
+    '      - uses: actions/checkout@v4',
+    '      - run: npx @freeappstore/cli build-target --github-output',
+    '      - run: npx @vibecodeqa/cli@0.31 --json --badge',
+    '      - env:',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+    '          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}',
+    '        run: aws s3 sync web/dist s3://fas-apps/apps/x/',
+    '',
+  ].join('\n');
+
+  it('names the security-relevant drift of the pre-0.4.78 publish template', () => {
+    const reasons = summarizeWorkflowDrift(legacyPublishTemplate, DEPLOY_YML);
+    expect(reasons).toEqual([
+      'runs npx packages without an exact version (@freeappstore/cli, @vibecodeqa/cli@0.31)',
+      'uses tag-pinned actions instead of commit SHAs (1)',
+      'exposes the R2 secrets in the same job that installs and builds the app',
+      expect.stringMatching(/^\d+ line\(s\) would be removed, \d+ added$/),
+    ]);
+  });
+
+  it('reports only the line count for a customised copy of the canonical workflow', () => {
+    const customised = DEPLOY_YML.replace('node-version: 22', 'node-version: 24');
+    expect(summarizeWorkflowDrift(customised, DEPLOY_YML)).toEqual([
+      '1 line(s) would be removed, 1 added',
+    ]);
   });
 });
 

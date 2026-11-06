@@ -6,6 +6,7 @@ import { Command } from 'commander';
 import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
 import { readConfig, sessionDaysRemaining } from '../lib/config.js';
+import { APP_STARTER_CONFIG, deployWorkflow } from '../lib/starter-foundation.js';
 import { yellow } from '../lib/style.js';
 import { renderCheckResults } from './check.js';
 
@@ -85,6 +86,10 @@ export const publishCommand = new Command('publish')
     '-y, --yes',
     'Non-interactive: fail rather than prompt for any missing fields. Pair with --name/--category/--type/--oneliner.',
   )
+  .option(
+    '--update-workflow',
+    'Replace an existing .github/workflows/deploy.yml with the current canonical workflow. Without it, a differing file is left untouched and the drift is reported.',
+  )
   .action(
     async (opts: {
       store?: string;
@@ -95,6 +100,7 @@ export const publishCommand = new Command('publish')
       oneliner?: string;
       demo?: string;
       yes?: boolean;
+      updateWorkflow?: boolean;
     }) => {
       const store: Store = opts.store === 'games' ? 'games' : 'apps';
       if (opts.store && opts.store !== 'apps' && opts.store !== 'games') {
@@ -223,9 +229,9 @@ export const publishCommand = new Command('publish')
         const listingPath = store === 'games' ? 'games' : 'apps';
 
         // Ensure the deploy workflow exists locally so the first push
-        // triggers an R2 deploy. Also upgrades legacy CF Pages workflows
-        // to the current R2 template.
-        const workflowResult = await ensureDeployWorkflow();
+        // triggers an R2 deploy. An existing file is only replaced with
+        // --update-workflow; otherwise the drift is reported below.
+        const workflowResult = await ensureDeployWorkflow({ update: opts.updateWorkflow === true });
 
         process.stdout.write(`\n✓ Provisioned!\n`);
         process.stdout.write(`  Launch URL: ${autoResult.appUrl}\n`);
@@ -237,8 +243,16 @@ export const publishCommand = new Command('publish')
           );
         if (workflowResult === 'created') {
           process.stdout.write(`  Added .github/workflows/deploy.yml (R2 deploy workflow)\n\n`);
-        } else if (workflowResult === 'upgraded') {
-          process.stdout.write(`  Upgraded .github/workflows/deploy.yml from CF Pages to R2\n\n`);
+        } else if (workflowResult === 'updated') {
+          process.stdout.write(
+            `  Replaced .github/workflows/deploy.yml with the current workflow\n\n`,
+          );
+        } else if (typeof workflowResult === 'object') {
+          process.stdout.write(
+            yellow('  ⚠ .github/workflows/deploy.yml differs from the current workflow:\n') +
+              workflowResult.drift.map((reason) => `    - ${reason}\n`).join('') +
+              '    Left untouched. Re-run with --update-workflow to replace it.\n\n',
+          );
         }
         process.stdout.write(`Push your code so the live URL serves it:\n\n`);
         process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
@@ -576,125 +590,73 @@ export function parseGitHubRepo(url: string): string | null {
   return `${m[1]}/${m[2]}`;
 }
 
-const DEPLOY_YML = `name: Deploy to R2
+/** The canonical FreeAppStore deploy workflow — same generator as `fas init` and the builder. */
+export const DEPLOY_YML = deployWorkflow(APP_STARTER_CONFIG);
 
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: deploy-\${{ github.repository }}
-  cancel-in-progress: true
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      # If your app uses VITE_* public config (OAuth client IDs, Firebase
-      # config, etc.), add them as GitHub repo Variables and pass them here.
-      # See https://freeappstore.online/skills.md "App Config & Secrets".
-      # Example:
-      #   env:
-      #     VITE_GOOGLE_CLIENT_ID: \${{ vars.VITE_GOOGLE_CLIENT_ID }}
-      - name: Resolve build target
-        id: target
-        run: npx @freeappstore/cli build-target --app-id "$\{GITHUB_REPOSITORY##*/}" --github-output
-
-      - name: Build
-        env:
-          BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
-        run: bash -e -c "$BUILD_COMMAND"
-
-      - name: Verify build output
-        run: npx @freeappstore/cli build-target --artifact --app-id "$\{GITHUB_REPOSITORY##*/}"
-
-      - name: Upload to R2
-        env:
-          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}
-          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
-        run: |
-          aws s3 sync "$OUTPUT_PATH" "s3://fas-apps/apps/$\{GITHUB_REPOSITORY##*/}/" \\
-            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
-            --delete \\
-            --no-progress
-          echo "Deployed apps/$\{GITHUB_REPOSITORY##*/} from $\{GITHUB_SHA::7}"
-
-      - name: Code health scan
-        run: npx @vibecodeqa/cli@0.31 --json --badge > /dev/null 2>&1 || true
-      - name: Upload code health
-        if: always()
-        env:
-          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}
-        run: |
-          APP_ID="$\{GITHUB_REPOSITORY##*/}"
-          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-          if [ -f .vibe-check/report.json ]; then
-            aws s3 cp .vibe-check/report.json "s3://fas-apps/apps/$APP_ID/.vcqa/report.json" \\
-              --endpoint-url "$EP" --content-type application/json --no-progress
-          fi
-          if [ -f .vibe-check/badge.svg ]; then
-            aws s3 cp .vibe-check/badge.svg "s3://fas-apps/apps/$APP_ID/.vcqa/badge.svg" \\
-              --endpoint-url "$EP" --content-type image/svg+xml --no-progress
-          fi
-`;
+export type DeployWorkflowResult = 'created' | 'ok' | 'updated' | { drift: string[] };
 
 /**
- * Ensure `.github/workflows/deploy.yml` exists and uses the current R2
- * template. If the file is missing it's created. If it already exists but
- * references legacy Cloudflare Pages hosting, it's overwritten and a
- * warning is printed so the user knows.
+ * Human-readable reasons an existing deploy.yml differs from the canonical
+ * one. Security-relevant drift is named explicitly; anything else is counted.
+ */
+export function summarizeWorkflowDrift(existing: string, canonical: string): string[] {
+  const reasons: string[] = [];
+  if (/Cloudflare Pages|wrangler pages|pages deploy/.test(existing)) {
+    reasons.push('targets legacy Cloudflare Pages hosting (decommissioned) instead of R2');
+  }
+  const unpinnedNpx = [...existing.matchAll(/\bnpx\s+(?:--yes\s+|-y\s+)?(\S+)/g)]
+    .map((m) => m[1]!.replace(/^["']|["']$/g, ''))
+    .filter((pkg) => !/^@?[\w.-]+(?:\/[\w.-]+)?@\d+\.\d+\.\d+$/.test(pkg));
+  if (unpinnedNpx.length > 0) {
+    reasons.push(`runs npx packages without an exact version (${unpinnedNpx.join(', ')})`);
+  }
+  const unpinnedActions = existing.match(/uses:\s*[\w.-]+\/[\w.-]+@(?![0-9a-f]{40}\b)\S+/g) ?? [];
+  if (unpinnedActions.length > 0) {
+    reasons.push(`uses tag-pinned actions instead of commit SHAs (${unpinnedActions.length})`);
+  }
+  if (/secrets\.R2_/.test(existing) && !/needs:\s*build/.test(existing)) {
+    reasons.push('exposes the R2 secrets in the same job that installs and builds the app');
+  }
+  const existingLines = new Set(existing.split('\n'));
+  const canonicalLines = new Set(canonical.split('\n'));
+  let added = 0;
+  let removed = 0;
+  for (const line of canonicalLines) if (!existingLines.has(line)) added++;
+  for (const line of existingLines) if (!canonicalLines.has(line)) removed++;
+  reasons.push(`${removed} line(s) would be removed, ${added} added`);
+  return reasons;
+}
+
+/**
+ * Ensure `.github/workflows/deploy.yml` exists and matches the canonical
+ * template. A missing file is created. An existing file is never overwritten
+ * unless `update` is set — the creator may have customised it — so the
+ * command reports what drifted and how to regenerate instead.
  *
  * Returns:
- *   'created'  — file was missing, now created
- *   'upgraded' — file existed with legacy CF Pages content, replaced with R2
- *   'ok'       — file already existed with R2 (or unknown) content, untouched
+ *   'created'   — file was missing, now created
+ *   'ok'        — file already matches the canonical workflow
+ *   'updated'   — file differed and `update` replaced it
+ *   { drift }   — file differs and was left untouched; `drift` lists why
  */
-export { DEPLOY_YML };
-export type DeployWorkflowResult = 'created' | 'upgraded' | 'ok';
-export async function ensureDeployWorkflow(): Promise<DeployWorkflowResult> {
-  const target = join(process.cwd(), '.github', 'workflows', 'deploy.yml');
+export async function ensureDeployWorkflow(
+  opts: { update?: boolean } = {},
+  cwd = process.cwd(),
+): Promise<DeployWorkflowResult> {
+  const dir = join(cwd, '.github', 'workflows');
+  const target = join(dir, 'deploy.yml');
+  let existing: string;
   try {
-    const existing = await readFile(target, 'utf8');
-    // Detect legacy CF Pages workflows — if the file references
-    // "Cloudflare Pages" or "wrangler pages" it was generated by an
-    // older CLI version and should be replaced with the R2 template.
-    if (
-      existing.includes('Cloudflare Pages') ||
-      existing.includes('wrangler pages') ||
-      existing.includes('pages deploy')
-    ) {
-      process.stderr.write(
-        yellow('⚠ Your deploy workflow uses legacy CF Pages hosting. Upgrading to R2...\n'),
-      );
-      await writeFile(target, DEPLOY_YML);
-      return 'upgraded';
-    }
-    return 'ok';
+    existing = await readFile(target, 'utf8');
   } catch {
-    // File doesn't exist — create it.
-    await mkdir(join(process.cwd(), '.github', 'workflows'), { recursive: true });
+    await mkdir(dir, { recursive: true });
     await writeFile(target, DEPLOY_YML);
     return 'created';
   }
+  if (existing === DEPLOY_YML) return 'ok';
+  if (opts.update) {
+    await writeFile(target, DEPLOY_YML);
+    return 'updated';
+  }
+  return { drift: summarizeWorkflowDrift(existing, DEPLOY_YML) };
 }
