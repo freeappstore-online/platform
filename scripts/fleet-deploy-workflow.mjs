@@ -306,10 +306,22 @@ async function apply(plan, generated, wait) {
   // deploy job that failed may have switched the route already (a lost commit
   // response), and the legacy sync's --delete would then remove the release
   // the route serves, so that, and any keyless repo, is left for a person.
+  // A deploy refused by the API (403 before any session opened, e.g. the app is
+  // registered to another repository) changed nothing either: revert it too.
+  const refused =
+    run.deployJob === 'failure' &&
+    tryRun('gh', [
+      'run',
+      'view',
+      String(run.databaseId),
+      '--repo',
+      `${ORG}/${repo}`,
+      '--log-failed',
+    ]).out.includes('##[error]deploy refused:');
   if (
     plan.variant.startsWith('keyless') ||
     run.conclusion !== 'failure' ||
-    run.deployJob !== 'skipped'
+    (run.deployJob !== 'skipped' && !refused)
   )
     return {
       ...plan,
