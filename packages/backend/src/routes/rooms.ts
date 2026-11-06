@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { requireUser } from '../lib/auth.js';
+import { requireAppUser } from '../lib/auth.js';
 import { signPayload, verifyPayload } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -55,7 +55,7 @@ const ROOM_LIMIT_MESSAGE = `room limit reached: an app can have ${MAX_ROOMS_PER_
  * after 30s and only grants this one room.
  */
 roomRoutes.post('/apps/:appId/rooms/:roomId/ticket', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const { appId, roomId } = c.req.param();
   if (!ROOM_ID_RE.test(roomId)) return c.text('invalid room id', 400);
   if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);

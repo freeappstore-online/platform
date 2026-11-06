@@ -23,7 +23,9 @@ async function setup() {
     'alice',
     now,
   );
-  const auth = { Authorization: `Bearer ${await signSession('gh:1', SIGNING_KEY)}` };
+  const auth = {
+    Authorization: `Bearer ${await signSession('gh:1', SIGNING_KEY, { aud: 'console' })}`,
+  };
   return { db, d1, auth, now };
 }
 

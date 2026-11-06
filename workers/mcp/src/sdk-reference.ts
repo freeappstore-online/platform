@@ -204,7 +204,7 @@ ${CONNECTED_DRAFT}\`\`\``,
 import { initApp } from '@freeappstore/sdk'
 const fas = initApp({ appId: 'my-app' })
 // fas.auth.signIn()  — GitHub by default; google, apple, email when configured
-// fas.auth.signOut()
+// fas.auth.signOut()        — revokes every session of the account, then clears the local one
 // fas.auth.token     — current session token (string | null)
 // fas.auth.user      — current user ({ id, login, avatarUrl } | null)
 \`\`\``,
@@ -290,7 +290,7 @@ fas.keys.manage('openai')
 const keys = await fas.keys.status()
 // [{ provider: 'openai', label: '...', createdAt: ..., lastUsedAt: ... }]
 \`\`\`
-Users store their API keys on the platform (encrypted AES-256-GCM). Apps never see plaintext keys. Use \`<KeyPrompt>\` component to prompt users when a key is missing. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.`,
+Users store their API keys on the platform (encrypted AES-256-GCM). Apps never see plaintext keys. Use \`<KeyPrompt>\` component to prompt users when a key is missing. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs. A user's key is spent only from a first-party session or by the app's owner inside their own app (per-app grants for other users: platform#504).`,
   push: `## Push Reminders (fas.push)
 \`\`\`tsx
 const { supported, reason } = fas.push.isSupported()

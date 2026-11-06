@@ -31,6 +31,12 @@ export const RESERVED_APP_IDS: ReadonlySet<string> = new Set([
   'create',
   'publisher',
   'freeappstore',
+  // First-party `app_id`s at /v1/auth/*/start (#495): a session minted for
+  // one of these gets `aud: console`, so no creator may own the name.
+  'store',
+  'fas-admin',
+  'cli',
+  'keys',
   // Existing app address aliases; provisioning these would replace their routes.
   'hanzi',
   'yi',

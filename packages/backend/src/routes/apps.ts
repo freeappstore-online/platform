@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { assertAppOwner, HttpError, requireUser } from '../lib/auth.js';
+import { assertAppOwner, HttpError, requireConsoleUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const appsRoutes = new Hono<{ Bindings: Env }>();
@@ -30,9 +30,9 @@ const STORE_DOMAIN: Record<string, { domain: string; org: string }> = {
  * build them.
  */
 appsRoutes.get('/apps/mine', async (c) => {
-  let user: Awaited<ReturnType<typeof requireUser>> | null = null;
+  let user: Awaited<ReturnType<typeof requireConsoleUser>> | null = null;
   try {
-    user = await requireUser(c);
+    user = await requireConsoleUser(c);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
@@ -146,9 +146,9 @@ async function adminFetch(env: Env, path: string): Promise<Response | null> {
  * into a public map of every app's CI health.
  */
 appsRoutes.get('/apps/deploy-status', async (c) => {
-  let user: Awaited<ReturnType<typeof requireUser>>;
+  let user: Awaited<ReturnType<typeof requireConsoleUser>>;
   try {
-    user = await requireUser(c);
+    user = await requireConsoleUser(c);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
@@ -175,9 +175,9 @@ appsRoutes.get('/apps/deploy-status', async (c) => {
 
 /** Latest deploy plus recent runs for one app the caller owns. */
 appsRoutes.get('/apps/:id/deploy-status', async (c) => {
-  let user: Awaited<ReturnType<typeof requireUser>>;
+  let user: Awaited<ReturnType<typeof requireConsoleUser>>;
   try {
-    user = await requireUser(c);
+    user = await requireConsoleUser(c);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;

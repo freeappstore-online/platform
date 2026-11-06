@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { runAudit } from '../lib/audit.js';
-import { type CurrentUser, HttpError, isAdmin, requireUser } from '../lib/auth.js';
+import { type CurrentUser, HttpError, isAdmin, requireConsoleUser } from '../lib/auth.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
@@ -114,7 +114,7 @@ export const DAILY_AUDIT_RUNS = 24;
 auditRoutes.post('/audit/run', async (c) => {
   let user: CurrentUser;
   try {
-    user = await requireUser(c);
+    user = await requireConsoleUser(c);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;

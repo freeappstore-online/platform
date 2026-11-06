@@ -103,20 +103,20 @@ describe('deliverSession', () => {
     expect(url.searchParams.get('nonce')).toBe('n1');
   });
 
-  it('puts the session in the query string for response_mode=query', async () => {
+  it('never puts the session in the query string, even for a stale "query" mode (#495)', async () => {
     const { env } = fakeCodeDB();
     const result = await deliverSession(
       env,
-      { appId: 'demo', returnTo: RETURN_TO, responseMode: 'query' },
+      // A state signed before query mode was removed.
+      { appId: 'demo', returnTo: RETURN_TO, responseMode: 'query' as unknown as 'code' },
       SESSION,
     );
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     const url = new URL(result.url);
-    expect(url.searchParams.get('fas_session')).toBe(SESSION);
-    expect(url.hash).toBe('');
-    expect(url.searchParams.get('nonce')).toBe('n1');
+    expect(url.searchParams.get('fas_session')).toBeNull();
+    expect(url.hash).toBe(`#fas_session=${encodeURIComponent(SESSION)}`);
   });
 
   it('returns only a one-time code for response_mode=code, never the session', async () => {

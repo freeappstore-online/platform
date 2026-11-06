@@ -11,7 +11,7 @@
 
 import { Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { assertAppOwner, requireUser } from '../lib/auth.js';
+import { assertAppOwner, requireConsoleUser } from '../lib/auth.js';
 import { parseJsonArray, parseJsonObject } from '../lib/json.js';
 import { queryLimit } from '../lib/paging.js';
 import type { Env } from '../types.js';
@@ -27,9 +27,9 @@ const MAX_URL_LENGTH = 2048;
 // ── List sessions ───────────────────────────────────────────────
 
 agentSessionRoutes.get('/agent/sessions', async (c) => {
-  let user: Awaited<ReturnType<typeof requireUser>> | null = null;
+  let user: Awaited<ReturnType<typeof requireConsoleUser>> | null = null;
   try {
-    user = await requireUser(c);
+    user = await requireConsoleUser(c);
     const limit = queryLimit(c.req.query('limit'), 50, 200);
 
     const result = await c.env.DB.prepare(
@@ -83,7 +83,7 @@ agentSessionRoutes.get('/agent/sessions', async (c) => {
 // ── Get session with messages ───────────────────────────────────
 
 agentSessionRoutes.get('/agent/sessions/:id', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   const sessionId = c.req.param('id')!;
 
   const row = await c.env.DB.prepare(
@@ -114,7 +114,7 @@ agentSessionRoutes.get('/agent/sessions/:id', async (c) => {
 // ── Create or update session ────────────────────────────────────
 
 agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   const sessionId = c.req.param('id')!;
   // Same ceiling as /messages below; this route used to take any size (#491).
   const raw = await c.req.text();
@@ -210,7 +210,7 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
 // ── Update messages only (called frequently during chat) ────────
 
 agentSessionRoutes.put('/agent/sessions/:id/messages', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   const sessionId = c.req.param('id')!;
   const body = await c.req.json<{ messages: unknown[] }>().catch(() => null);
 
@@ -232,7 +232,7 @@ agentSessionRoutes.put('/agent/sessions/:id/messages', async (c) => {
 // ── Delete session ──────────────────────────────────────────────
 
 agentSessionRoutes.delete('/agent/sessions/:id', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   const sessionId = c.req.param('id')!;
 
   await c.env.DB.prepare('DELETE FROM agent_sessions WHERE session_id = ? AND user_id = ?')

@@ -391,12 +391,72 @@ cd my-app && pnpm install && pnpm dev`}
   )
 }
 
+/**
+ * Account actions need a first-party (console) session (#495): the SDK sends
+ * apps here (`?delete-account=1`) instead of deleting from inside the app.
+ */
+function AccountSettings() {
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  const fromApp = new URLSearchParams(location.search).get('delete-account') === '1'
+
+  const signOutEverywhere = () => {
+    // signOut() revokes every session of this account on the platform, then clears the local one.
+    fas.auth.signOut()
+  }
+
+  const deleteAccount = async () => {
+    if (!confirm('Delete your account? This permanently removes ALL your data across ALL apps. This cannot be undone.')) return
+    if (!confirm('Are you absolutely sure? Last chance.')) return
+    setPending(true)
+    setError('')
+    try {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${fas.auth.token ?? ''}` },
+      })
+      if (!res.ok) throw new Error(String(res.status))
+      fas.auth.signOut()
+    } catch {
+      setError('Unable to delete your account. Please try again.')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-line bg-panel p-6 space-y-4">
+      <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Account</h3>
+      {fromApp && (
+        <p className="text-sm text-muted">An app sent you here to delete your account. Account deletion happens only from the console.</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={signOutEverywhere}
+          className="rounded-lg border border-[var(--line-strong)] px-4 py-2 text-sm font-medium text-muted hover:text-ink"
+        >
+          Sign out everywhere
+        </button>
+        <button
+          onClick={deleteAccount}
+          disabled={pending}
+          className="rounded-lg border border-[var(--danger)] px-4 py-2 text-sm font-medium text-[var(--danger)] disabled:opacity-50"
+        >
+          {pending ? 'Deleting…' : 'Delete account'}
+        </button>
+      </div>
+      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+    </div>
+  )
+}
+
 function Settings() {
   const { preference, setPreference } = useTheme()
   const { size, setSize } = useTextSize()
   return (
     <div className="space-y-8">
       <h2 className="display-font text-2xl font-bold text-ink">Settings</h2>
+      <AccountSettings />
       <div className="rounded-2xl border border-line bg-panel p-6 space-y-6">
         <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Appearance</h3>
         <div>

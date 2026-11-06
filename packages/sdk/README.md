@@ -55,7 +55,7 @@ GitHub OAuth via redirect. Session persists in `localStorage`.
 fas.auth.user;             // User | null
 fas.auth.token;            // string | null
 fas.auth.signIn();         // redirects to GitHub
-fas.auth.signOut();        // clears local session
+fas.auth.signOut();        // revokes every session of the account, then clears the local one
 fas.auth.onChange(cb);     // fires immediately + on change, returns Unsubscribe
 await fas.auth.init();     // capture callback, must be called once
 ```
@@ -185,7 +185,7 @@ fas.keys.manage('openai');
 const keys = await fas.keys.status();
 ```
 
-Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.
+Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs.
 
 ### Push reminders (`fas.push`)
 

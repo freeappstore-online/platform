@@ -86,7 +86,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 400 for invalid app name', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -111,7 +111,7 @@ describe('POST /v1/publish', () => {
     'template-standalone',
     'template-x',
   ])('rejects the reserved platform repo name %s without calling admin (#9)', async (name) => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({ response: new Response('{}', { status: 200 }), capture: calls });
     const res = await app.request(
@@ -129,7 +129,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 400 for invalid type', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -143,7 +143,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 503 with a setup hint when ADMIN binding is missing', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -160,7 +160,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('proxies to admin via service binding with the requester github login', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({
       response: new Response(JSON.stringify({ steps: [], success: true }), {
@@ -200,7 +200,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('forwards the full ownership payload to admin (which writes the apps row atomically)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const inserts: InsertCapture[] = [];
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({
@@ -239,7 +239,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('forwards crossOriginIsolated to admin when the client opts in', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({
       response: new Response(JSON.stringify({ steps: [], success: true }), {
@@ -264,7 +264,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('lets an admin attribute the app to a different creator (contributor onboarding)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const calls: AdminCall[] = [];
     const inserts: InsertCapture[] = [];
     const admin = fakeAdmin({
@@ -300,7 +300,7 @@ describe('POST /v1/publish', () => {
     // Email sign-in stores the email local-part in github_login, so
     // serge-ivo@attacker.example lands with github_login 'serge-ivo'.
     const emailUserId = `em:${'0'.repeat(32)}`;
-    const token = await signSession(emailUserId, SIGNING_KEY);
+    const token = await signSession(emailUserId, SIGNING_KEY, { aud: 'console' });
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({ response: new Response('{}', { status: 200 }), capture: calls });
     const res = await app.request(
@@ -324,7 +324,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('forbids a non-admin from attributing the app to someone else', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -340,7 +340,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('treats creatorGithub as the caller when it only differs by case (#442)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({
       response: new Response(JSON.stringify({ steps: [], success: true }), {
@@ -367,7 +367,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 400 for an invalid creatorGithub (admin)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -383,7 +383,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 502 when admin returns 5xx', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const admin = fakeAdmin({ response: new Response('upstream boom', { status: 500 }) });
     const res = await app.request(
       '/v1/publish',
@@ -400,7 +400,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 502 when admin returns 200 but a step failed (partial failure)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const partialResult = {
       steps: [
         { name: 'GitHub repo', status: 'ok', detail: 'created' },
@@ -432,7 +432,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 400 for missing required fields', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -446,7 +446,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 400 for invalid store value', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -460,7 +460,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 410 with redirect hint for store=games (FGS moved to its own admin)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -477,7 +477,7 @@ describe('POST /v1/publish', () => {
   });
 
   it('returns 410 for store=apps_pro (PAS has its own admin)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/publish',
       {
@@ -530,7 +530,7 @@ describe('POST /v1/unpublish', () => {
   });
 
   it('returns 400 for an invalid app id', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/unpublish',
       {
@@ -544,7 +544,7 @@ describe('POST /v1/unpublish', () => {
   });
 
   it('returns 404 when the app does not exist', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/unpublish',
       {
@@ -558,7 +558,7 @@ describe('POST /v1/unpublish', () => {
   });
 
   it('returns 403 when the caller is neither owner nor admin', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/unpublish',
       {
@@ -574,7 +574,7 @@ describe('POST /v1/unpublish', () => {
   });
 
   it('forwards owner unpublish to admin /api/deprovision with deleteRepo', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const calls: AdminCall[] = [];
     const admin = fakeAdmin({
       response: new Response(JSON.stringify({ ok: true, steps: [] }), {
@@ -609,7 +609,7 @@ describe('POST /v1/unpublish', () => {
   });
 
   it('lets a platform admin unpublish an app they do not own', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const admin = fakeAdmin({
       response: new Response(JSON.stringify({ ok: true, steps: [] }), {
         status: 200,
@@ -632,7 +632,7 @@ describe('POST /v1/unpublish', () => {
   });
 
   it('lets an admin listed by ADMIN_USER_IDS unpublish an app they do not own (#442)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const admin = fakeAdmin({
       response: new Response(JSON.stringify({ ok: true, steps: [] }), {
         status: 200,

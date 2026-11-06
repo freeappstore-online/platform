@@ -63,7 +63,7 @@ async function call(
 ) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json', ...opts.headers };
   if (opts.uid !== null)
-    headers.Authorization = `Bearer ${await signSession(opts.uid ?? 'gh:1', SIGNING_KEY)}`;
+    headers.Authorization = `Bearer ${await signSession(opts.uid ?? 'gh:1', SIGNING_KEY, { aud: 'console' })}`;
   const body =
     method === 'GET'
       ? undefined
@@ -126,7 +126,7 @@ describe.skipIf(!hasSqlite)('push subscriptions (#145)', () => {
 
     it('returns 401 for a token signed with the wrong key', async () => {
       const { d1 } = seeded();
-      const token = await signSession('gh:1', `wrong-key-${'x'.repeat(50)}`);
+      const token = await signSession('gh:1', `wrong-key-${'x'.repeat(50)}`, { aud: 'console' });
       const res = await call(env(d1), 'GET', path(), {
         uid: null,
         headers: { Authorization: `Bearer ${token}` },

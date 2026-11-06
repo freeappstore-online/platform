@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { type CurrentUser, HttpError, isAppOwner, requireUser } from '../lib/auth.js';
+import { type CurrentUser, HttpError, isAppOwner, requireAppUser } from '../lib/auth.js';
 import { likePrefix } from '../lib/like.js';
 import type { Env } from '../types.js';
 
@@ -79,8 +79,8 @@ async function mayDecrement(
 /** Increment (or decrement) a counter. Requires auth. */
 counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
   try {
-    const user = await requireUser(c);
     const { appId, key } = c.req.param();
+    const user = await requireAppUser(c, appId);
     // Require a real app — otherwise rotating the id resets the per-app cap.
     const appRow = APP_ID_RE.test(appId)
       ? await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')

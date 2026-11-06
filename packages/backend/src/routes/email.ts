@@ -14,7 +14,7 @@
 
 import { Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { isAppOwner, requireUser } from '../lib/auth.js';
+import { isAppOwner, requireAppUser } from '../lib/auth.js';
 import { isLikelyEmail, sendEmail } from '../lib/email.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
@@ -29,7 +29,7 @@ const MAX_SUBJECT_LENGTH = 200;
 const MAX_BODY_LENGTH = 50_000; // 50KB
 
 emailRoutes.post('/apps/:appId/email/send', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
 
   if (!c.env.EMAIL) return c.json({ ok: false, error: 'Email not configured.' }, 503);
 

@@ -153,7 +153,7 @@ Expected tool flow:
 The MCP server supports two auth methods:
 
 1. **OAuth 2.1** (automatic via `mcp-remote`) — recommended. The OAuth flow redirects to GitHub sign-in and provisions a scoped access token.
-2. **Bearer token** — pass a FAS session token directly via `Authorization: Bearer <token>`.
+2. **Bearer token** — pass a FAS session token directly via `Authorization: Bearer <token>`. It must be a first-party session (`aud: console`: CLI `fas login`, console or storefront sign-in); a token an app received is scoped to that app and is refused by the tools' routes.
 
 Write tools (`create_app`, `update_files`) additionally verify app ownership via the backend `/v1/apps/mine` endpoint. Agent tools (`agent_build`) require a usable AI key in your vault or a supported platform-configured provider connection. The selected provider controls availability and charges.
 

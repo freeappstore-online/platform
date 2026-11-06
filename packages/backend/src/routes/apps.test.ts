@@ -85,7 +85,7 @@ function baseEnv(db: D1Database): Env {
 }
 
 async function makeAuthHeader(uid = 'gh:1'): Promise<string> {
-  const token = await signSession(uid, SIGNING_KEY);
+  const token = await signSession(uid, SIGNING_KEY, { aud: 'console' });
   return `Bearer ${token}`;
 }
 
@@ -287,7 +287,11 @@ describe.skipIf(!hasSqlite)('GET /v1/apps/:id/deploy-status', () => {
   const get = async (uid: string, env: Env) =>
     app.request(
       '/v1/apps/timer/deploy-status',
-      { headers: { Authorization: `Bearer ${await signSession(uid, SIGNING_KEY)}` } },
+      {
+        headers: {
+          Authorization: `Bearer ${await signSession(uid, SIGNING_KEY, { aud: 'console' })}`,
+        },
+      },
       env,
     );
 

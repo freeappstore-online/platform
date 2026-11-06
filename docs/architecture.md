@@ -4,7 +4,7 @@
 
 - **TypeScript** (versions are declared per package), Node 22, pnpm workspaces
 - **Backend:** Cloudflare Workers + D1 + Durable Objects + R2
-- **Auth:** GitHub, Google, Apple, Email (magic link) OAuth. HMAC-signed sessions, 30-day TTL
+- **Auth:** GitHub, Google, Apple, Email (magic link) OAuth. HMAC-signed sessions, 30-day TTL, scoped by an `aud` claim to the app they were delivered to (`console` for storefront/console/admin/MCP/CLI); revocable per account via `POST /v1/auth/logout` (`users.sessions_valid_after`)
 - **Realtime:** one Durable Object per room with WebSocket fan-out
 - **Apps:** Vite + React + Tailwind PWA. The supported default frame is the SDK `Shell` (topbar, navigation, error boundary, toasts). Custom frames are allowed under the [composable starter contract](composable-starter-contract.md). Deployed to R2 via GitHub Actions, served by host Worker
 
@@ -82,7 +82,7 @@ Apps deploy to R2 via GitHub Actions, not CF Pages:
 
 ## Auth flow
 
-**Browser:** OAuth web flow (GitHub, Google, Apple) or email magic link -> platform API exchanges code for session token -> HMAC-signed, stored in localStorage.
+**Browser:** OAuth web flow (GitHub, Google, Apple) or email magic link -> platform API exchanges code for session token -> HMAC-signed, stored in localStorage. The OAuth state is bound to a `__Host-` cookie set at `/start` and is single-use; `return_to` must be the app's own origin, and the token only works for that app (`aud`). App settings, publish, the key vault, account deletion and admin need a first-party (`console`) session.
 
 **CLI:** GitHub device-authorization flow -> user approves in browser -> CLI polls for token -> exchanges for platform session -> cached at `~/.fas/config.json`.
 

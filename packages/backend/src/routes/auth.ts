@@ -1,43 +1,44 @@
 import { Apple, decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
+import type { Context } from 'hono';
 import { Hono } from 'hono';
-import { HttpError, isAdminLogin, isAdminUserId, requireUser } from '../lib/auth.js';
-import { deliverSession, exchangeAuthCode } from '../lib/deliver-session.js';
+import {
+  HttpError,
+  isAdminLogin,
+  isAdminUserId,
+  requireConsoleUser,
+  requireUser,
+} from '../lib/auth.js';
+import { deliverSession, exchangeAuthCode, isResponseMode } from '../lib/deliver-session.js';
 import { isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
-import { isAllowedReturnTo } from '../lib/origins.js';
-import { signPayload, signSession, verifyPayload } from '../lib/session.js';
+import { isAllowedReturnTo, sessionAudience } from '../lib/origins.js';
+import { b64urlBytes, signPayload, signSession, verifyPayload } from '../lib/session.js';
 import type { Env } from '../types.js';
 
+/**
+ * The signed state every provider round-trip carries. `nonce` names the flow
+ * cookie and `bh` is the SHA-256 of that cookie's secret (#495): the callback
+ * is accepted only from the browser that started the flow, so a captured
+ * callback URL cannot log a victim into an attacker's account (login CSRF).
+ * The state is also single-use (consumed_tokens).
+ */
 interface OAuthState {
   appId: string;
   returnTo: string;
-  responseMode?: string;
+  responseMode?: 'code';
   codeChallenge?: string;
+  nonce: string;
+  bh: string;
   exp: number;
 }
 
-interface GoogleOAuthState {
-  appId: string;
-  returnTo: string;
+interface GoogleOAuthState extends OAuthState {
   codeVerifier: string;
-  responseMode?: string;
-  codeChallenge?: string;
-  exp: number;
-}
-
-interface AppleOAuthState {
-  appId: string;
-  returnTo: string;
-  responseMode?: string;
-  codeChallenge?: string;
-  exp: number;
 }
 
 interface EmailMagicState {
   email: string;
   appId: string;
   returnTo: string;
-  responseMode?: string;
-  codeChallenge?: string;
   exp: number;
 }
 
@@ -72,35 +73,185 @@ const emailSendMap = new Map<string, number>();
 
 export const authRoutes = new Hono<{ Bindings: Env }>();
 
-authRoutes.get('/auth/github/start', async (c) => {
+type Ctx = Context<{ Bindings: Env }>;
+
+// ── flow cookie ─────────────────────────────────────────────────
+// Same scheme as workers/mcp/src/auth-handler.ts: `__Host-` (which requires
+// Secure) in production; the bare name over http so `wrangler dev` works.
+// One cookie per pending flow, named by its nonce, so two sign-ins started in
+// the same browser (two tabs) do not overwrite each other's secret.
+
+const COOKIE_BASE = 'fas_oauth';
+
+function isSecure(url: string): boolean {
+  return new URL(url).protocol === 'https:';
+}
+
+function cookieName(url: string, nonce: string): string {
+  const name = `${COOKIE_BASE}_${nonce}`;
+  return isSecure(url) ? `__Host-${name}` : name;
+}
+
+/**
+ * `sameSite: 'none'` is for Apple only: its callback is a cross-site POST
+ * (form_post), which a Lax cookie would not accompany.
+ */
+function flowCookie(
+  url: string,
+  nonce: string,
+  value: string,
+  sameSite: 'Lax' | 'None',
+  maxAge: number,
+): string {
+  const secure = isSecure(url) || sameSite === 'None';
+  return [
+    `${cookieName(url, nonce)}=${value}`,
+    'Path=/',
+    'HttpOnly',
+    `SameSite=${sameSite}`,
+    ...(secure ? ['Secure'] : []),
+    `Max-Age=${maxAge}`,
+  ].join('; ');
+}
+
+function readFlowCookie(c: Ctx, nonce: string): string | null {
+  const header = c.req.header('cookie');
+  if (!header) return null;
+  const name = cookieName(c.req.url, nonce);
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() !== name) continue;
+    return part.slice(eq + 1).trim() || null;
+  }
+  return null;
+}
+
+function randomToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return b64urlBytes(bytes);
+}
+
+/**
+ * The part of every provider /start that is the same: validate app_id /
+ * return_to / response_mode / PKCE, mint the flow nonce + browser secret, and
+ * sign the state. The caller adds provider specifics (Google's PKCE verifier)
+ * before signing, so this returns the unsigned claims.
+ */
+async function beginFlow(
+  c: Ctx,
+  sameSite: 'Lax' | 'None',
+): Promise<{ ok: true; claims: OAuthState; cookie: string } | { ok: false; res: Response }> {
   const appId = c.req.query('app_id') ?? '';
   const returnTo = c.req.query('return_to') ?? '';
   const responseMode = c.req.query('response_mode');
-  if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
-  if (!isAllowedReturnTo(returnTo, appId)) return c.text('return_to not allowed', 400);
+  if (!appId || !returnTo) return { ok: false, res: c.text('missing app_id or return_to', 400) };
+  if (!isAllowedReturnTo(returnTo, appId)) {
+    return { ok: false, res: c.text('return_to not allowed', 400) };
+  }
+  if (!isResponseMode(responseMode)) {
+    return { ok: false, res: c.text('response_mode must be omitted or "code"', 400) };
+  }
   const pkce = readCodeChallenge(
     responseMode,
     c.req.query('code_challenge'),
     c.req.query('code_challenge_method'),
   );
-  if (!pkce.ok) return c.text(pkce.error, 400);
+  if (!pkce.ok) return { ok: false, res: c.text(pkce.error, 400) };
 
-  const state = await signPayload<OAuthState>(
-    {
-      appId,
-      returnTo,
-      ...(responseMode ? { responseMode } : {}),
-      ...(pkce.codeChallenge ? { codeChallenge: pkce.codeChallenge } : {}),
-      exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
+  const nonce = randomToken();
+  const secret = randomToken();
+  const claims: OAuthState = {
+    appId,
+    returnTo,
+    ...(responseMode ? { responseMode } : {}),
+    ...(pkce.codeChallenge ? { codeChallenge: pkce.codeChallenge } : {}),
+    nonce,
+    bh: await sha256Hex(secret),
+    exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
+  };
+  return {
+    ok: true,
+    claims,
+    cookie: flowCookie(c.req.url, nonce, secret, sameSite, STATE_TTL_SECONDS),
+  };
+}
+
+/** Redirect to the provider with the flow cookie riding along. */
+function redirectWithCookie(location: string, cookie: string): Response {
+  return new Response(null, { status: 302, headers: { Location: location, 'Set-Cookie': cookie } });
+}
+
+/**
+ * The part of every provider callback that is the same: the state must
+ * verify, be unexpired, name an allowed return_to, match this browser's flow
+ * cookie, and never have been seen before.
+ */
+async function verifyFlow<T extends OAuthState>(
+  c: Ctx,
+  stateRaw: string,
+): Promise<{ ok: true; state: T } | { ok: false; res: Response }> {
+  const state = await verifyPayload<T>(stateRaw, c.env.SESSION_SIGNING_KEY);
+  if (!state) return { ok: false, res: c.text('invalid state', 400) };
+  if (typeof state.exp !== 'number' || state.exp < Math.floor(Date.now() / 1000)) {
+    return { ok: false, res: c.text('state expired', 400) };
+  }
+  if (!isAllowedReturnTo(state.returnTo, state.appId)) {
+    return { ok: false, res: c.text('return_to not allowed', 400) };
+  }
+  // Browser binding: a state signed before #495 has no nonce and is refused.
+  const secret = typeof state.nonce === 'string' ? readFlowCookie(c, state.nonce) : null;
+  if (!secret || typeof state.bh !== 'string' || (await sha256Hex(secret)) !== state.bh) {
+    return {
+      ok: false,
+      res: c.text('this sign-in was started in a different browser — start again', 400),
+    };
+  }
+  // Single-use: same table and pattern as the magic link below.
+  try {
+    await c.env.DB.prepare('INSERT INTO consumed_tokens (hash, expires_at) VALUES (?, ?)')
+      .bind(await sha256Hex(stateRaw), state.exp)
+      .run();
+  } catch {
+    return { ok: false, res: c.text('state already used — start again', 400) };
+  }
+  return { ok: true, state };
+}
+
+/** Mint the session for `userId` and hand it back per the state, clearing the flow cookie. */
+async function finishFlow(
+  c: Ctx,
+  state: OAuthState,
+  userId: string,
+  roles: { roles: string[]; appRoles: Record<string, string[]> },
+  sameSite: 'Lax' | 'None',
+): Promise<Response> {
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, {
+    ...roles,
+    aud: sessionAudience(state.appId, state.returnTo),
+  });
+  const delivery = await deliverSession(c.env, state, session);
+  if (!delivery.ok) return c.text(delivery.error, 400);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: delivery.url,
+      'Set-Cookie': flowCookie(c.req.url, state.nonce, '', sameSite, 0),
     },
-    c.env.SESSION_SIGNING_KEY,
-  );
+  });
+}
+
+authRoutes.get('/auth/github/start', async (c) => {
+  const flow = await beginFlow(c, 'Lax');
+  if (!flow.ok) return flow.res;
+  const state = await signPayload<OAuthState>(flow.claims, c.env.SESSION_SIGNING_KEY);
   const url = new URL('https://github.com/login/oauth/authorize');
   url.searchParams.set('client_id', c.env.GITHUB_CLIENT_ID);
   url.searchParams.set('scope', 'read:user');
   url.searchParams.set('state', state);
   url.searchParams.set('redirect_uri', new URL('/v1/auth/github/callback', c.req.url).toString());
-  return c.redirect(url.toString());
+  return redirectWithCookie(url.toString(), flow.cookie);
 });
 
 authRoutes.get('/auth/github/callback', async (c) => {
@@ -108,10 +259,9 @@ authRoutes.get('/auth/github/callback', async (c) => {
   const stateRaw = c.req.query('state');
   if (!code || !stateRaw) return c.text('missing code or state', 400);
 
-  const state = await verifyPayload<OAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
-  if (!state) return c.text('invalid state', 400);
-  if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
-  if (!isAllowedReturnTo(state.returnTo, state.appId)) return c.text('return_to not allowed', 400);
+  const flow = await verifyFlow<OAuthState>(c, stateRaw);
+  if (!flow.ok) return flow.res;
+  const { state } = flow;
 
   const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
     method: 'POST',
@@ -150,25 +300,13 @@ authRoutes.get('/auth/github/callback', async (c) => {
     .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url, Date.now())
     .run();
 
-  const { roles, appRoles } = await computeRoles(userId, ghUser.login, c.env);
-  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
-  const delivery = await deliverSession(c.env, state, session);
-  if (!delivery.ok) return c.text(delivery.error, 400);
-  return c.redirect(delivery.url);
+  const roles = await computeRoles(userId, ghUser.login, c.env);
+  return finishFlow(c, state, userId, roles, 'Lax');
 });
 
 authRoutes.get('/auth/google/start', async (c) => {
-  const appId = c.req.query('app_id') ?? '';
-  const returnTo = c.req.query('return_to') ?? '';
-  const responseMode = c.req.query('response_mode');
-  if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
-  if (!isAllowedReturnTo(returnTo, appId)) return c.text('return_to not allowed', 400);
-  const pkce = readCodeChallenge(
-    responseMode,
-    c.req.query('code_challenge'),
-    c.req.query('code_challenge_method'),
-  );
-  if (!pkce.ok) return c.text(pkce.error, 400);
+  const flow = await beginFlow(c, 'Lax');
+  if (!flow.ok) return flow.res;
 
   if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.text('Google OAuth not configured', 503);
@@ -181,14 +319,7 @@ authRoutes.get('/auth/google/start', async (c) => {
   const codeVerifier = generateCodeVerifier();
 
   const signedState = await signPayload<GoogleOAuthState>(
-    {
-      appId,
-      returnTo,
-      codeVerifier,
-      ...(responseMode ? { responseMode } : {}),
-      ...(pkce.codeChallenge ? { codeChallenge: pkce.codeChallenge } : {}),
-      exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
-    },
+    { ...flow.claims, codeVerifier },
     c.env.SESSION_SIGNING_KEY,
   );
 
@@ -197,7 +328,7 @@ authRoutes.get('/auth/google/start', async (c) => {
     'profile',
     'email',
   ]);
-  return c.redirect(url.toString());
+  return redirectWithCookie(url.toString(), flow.cookie);
 });
 
 authRoutes.get('/auth/google/callback', async (c) => {
@@ -205,10 +336,9 @@ authRoutes.get('/auth/google/callback', async (c) => {
   const stateRaw = c.req.query('state');
   if (!code || !stateRaw) return c.text('missing code or state', 400);
 
-  const state = await verifyPayload<GoogleOAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
-  if (!state) return c.text('invalid state', 400);
-  if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
-  if (!isAllowedReturnTo(state.returnTo, state.appId)) return c.text('return_to not allowed', 400);
+  const flow = await verifyFlow<GoogleOAuthState>(c, stateRaw);
+  if (!flow.ok) return flow.res;
+  const { state } = flow;
 
   if (!c.env.GOOGLE_CLIENT_ID || !c.env.GOOGLE_CLIENT_SECRET) {
     return c.text('Google OAuth not configured', 503);
@@ -254,11 +384,8 @@ authRoutes.get('/auth/google/callback', async (c) => {
       )
       .run();
 
-    const { roles, appRoles } = await computeRoles(userId, login, c.env, 'google');
-    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
-    const delivery = await deliverSession(c.env, state, session);
-    if (!delivery.ok) return c.text(delivery.error, 400);
-    return c.redirect(delivery.url);
+    const roles = await computeRoles(userId, login, c.env, 'google');
+    return await finishFlow(c, state, userId, roles, 'Lax');
   } catch (err) {
     console.error('Google OAuth callback error:', err);
     return c.text(
@@ -273,17 +400,8 @@ authRoutes.get('/auth/google/callback', async (c) => {
 // ---------------------------------------------------------------------------
 
 authRoutes.get('/auth/apple/start', async (c) => {
-  const appId = c.req.query('app_id') ?? '';
-  const returnTo = c.req.query('return_to') ?? '';
-  const responseMode = c.req.query('response_mode');
-  if (!appId || !returnTo) return c.text('missing app_id or return_to', 400);
-  if (!isAllowedReturnTo(returnTo, appId)) return c.text('return_to not allowed', 400);
-  const pkce = readCodeChallenge(
-    responseMode,
-    c.req.query('code_challenge'),
-    c.req.query('code_challenge_method'),
-  );
-  if (!pkce.ok) return c.text(pkce.error, 400);
+  const flow = await beginFlow(c, 'None');
+  if (!flow.ok) return flow.res;
 
   if (
     !c.env.APPLE_CLIENT_ID ||
@@ -304,19 +422,10 @@ authRoutes.get('/auth/apple/start', async (c) => {
     redirectUri,
   );
 
-  const signedState = await signPayload<AppleOAuthState>(
-    {
-      appId,
-      returnTo,
-      ...(responseMode ? { responseMode } : {}),
-      ...(pkce.codeChallenge ? { codeChallenge: pkce.codeChallenge } : {}),
-      exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
-    },
-    c.env.SESSION_SIGNING_KEY,
-  );
+  const signedState = await signPayload<OAuthState>(flow.claims, c.env.SESSION_SIGNING_KEY);
 
   const url = apple.createAuthorizationURL(signedState, ['name', 'email']);
-  return c.redirect(url.toString());
+  return redirectWithCookie(url.toString(), flow.cookie);
 });
 
 /**
@@ -331,10 +440,9 @@ authRoutes.post('/auth/apple/callback', async (c) => {
 
   if (!code || !stateRaw) return c.text('missing code or state', 400);
 
-  const state = await verifyPayload<AppleOAuthState>(stateRaw, c.env.SESSION_SIGNING_KEY);
-  if (!state) return c.text('invalid state', 400);
-  if (state.exp < Math.floor(Date.now() / 1000)) return c.text('state expired', 400);
-  if (!isAllowedReturnTo(state.returnTo, state.appId)) return c.text('return_to not allowed', 400);
+  const flow = await verifyFlow<OAuthState>(c, stateRaw);
+  if (!flow.ok) return flow.res;
+  const { state } = flow;
 
   if (
     !c.env.APPLE_CLIENT_ID ||
@@ -401,11 +509,8 @@ authRoutes.post('/auth/apple/callback', async (c) => {
       )
       .run();
 
-    const { roles, appRoles } = await computeRoles(userId, login, c.env, 'apple');
-    const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
-    const delivery = await deliverSession(c.env, state, session);
-    if (!delivery.ok) return c.text(delivery.error, 400);
-    return c.redirect(delivery.url);
+    const roles = await computeRoles(userId, login, c.env, 'apple');
+    return await finishFlow(c, state, userId, roles, 'None');
   } catch (err) {
     console.error('Apple OAuth callback error:', err);
     return c.text(
@@ -415,6 +520,12 @@ authRoutes.post('/auth/apple/callback', async (c) => {
   }
 });
 
+/**
+ * Magic links always deliver in the fragment (#495). The link may be opened in
+ * another browser than the one that asked for it, so there is no cookie
+ * binding; instead `returnTo` is bound to `appId` (isAllowedReturnTo), the
+ * link is single-use and lives 15 minutes.
+ */
 authRoutes.post('/auth/email/start', async (c) => {
   if (!c.env.EMAIL) return c.text('Email auth not configured', 503);
 
@@ -424,25 +535,17 @@ authRoutes.post('/auth/email/start', async (c) => {
       appId?: string;
       returnTo?: string;
       responseMode?: string;
-      codeChallenge?: string;
-      codeChallengeMethod?: string;
     } | null>()
     .catch(() => null);
   if (!body) return c.text('invalid JSON body', 400);
-  const {
-    email: rawEmail,
-    appId,
-    returnTo,
-    responseMode,
-    codeChallenge: rawCodeChallenge,
-    codeChallengeMethod,
-  } = body;
+  const { email: rawEmail, appId, returnTo, responseMode } = body;
 
   if (!rawEmail || !appId || !returnTo) {
     return c.text('missing email, appId, or returnTo', 400);
   }
-  const pkce = readCodeChallenge(responseMode, rawCodeChallenge, codeChallengeMethod);
-  if (!pkce.ok) return c.text(pkce.error, 400);
+  if (responseMode !== undefined) {
+    return c.text('responseMode is not supported for magic links', 400);
+  }
   // Normalize first (trim + lowercase) so UI-side whitespace doesn't reject
   // valid addresses; then validate the canonical form.
   const email = normalizeEmail(rawEmail);
@@ -467,8 +570,6 @@ authRoutes.post('/auth/email/start', async (c) => {
       email,
       appId,
       returnTo,
-      ...(responseMode ? { responseMode } : {}),
-      ...(pkce.codeChallenge ? { codeChallenge: pkce.codeChallenge } : {}),
       exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS,
     },
     c.env.SESSION_SIGNING_KEY,
@@ -518,7 +619,7 @@ authRoutes.get('/auth/email/callback', async (c) => {
 
   // One-time-use: hash the token and reject if already consumed. Prevents
   // replay from server logs, Referer headers, or shared browser history.
-  const tokenHash = await hashForReplay(tokenRaw);
+  const tokenHash = await sha256Hex(tokenRaw);
   try {
     await c.env.DB.prepare('INSERT INTO consumed_tokens (hash, expires_at) VALUES (?, ?)')
       .bind(tokenHash, state.exp)
@@ -566,8 +667,18 @@ authRoutes.get('/auth/email/callback', async (c) => {
   const { id: userId, github_login: login } = existing;
 
   const { roles, appRoles } = await computeRoles(userId, login, c.env, 'email');
-  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
-  const delivery = await deliverSession(c.env, state, session);
+  const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, {
+    aud: sessionAudience(state.appId, state.returnTo),
+    roles,
+    appRoles,
+  });
+  // Only these two fields: a link always delivers in the fragment, whatever
+  // else its (signed, but possibly pre-#495) state carries.
+  const delivery = await deliverSession(
+    c.env,
+    { appId: state.appId, returnTo: state.returnTo },
+    session,
+  );
   if (!delivery.ok) return c.text(delivery.error, 400);
   return c.redirect(delivery.url);
 });
@@ -617,6 +728,24 @@ authRoutes.get('/auth/me', async (c) => {
 });
 
 /**
+ * Sign out everywhere (#495): every session of this account issued before now
+ * — in every app, on every device — is refused from the next request. The
+ * SDK's signOut() calls this best-effort before clearing its own copy.
+ */
+authRoutes.post('/auth/logout', async (c) => {
+  try {
+    const user = await requireUser(c);
+    await c.env.DB.prepare('UPDATE users SET sessions_valid_after = ? WHERE id = ?')
+      .bind(Math.floor(Date.now() / 1000), user.id)
+      .run();
+    return c.json({ ok: true });
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+});
+
+/**
  * Set the user's date of birth — once, irrevocably. Apps prompt for this when
  * they need an age check; once set, every other app on the platform reads it
  * from `GET /v1/auth/me`. 13+ is the platform floor (apps with stricter age
@@ -658,15 +787,17 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
  * API keys, KV, friendships, app roles, owned documents, logs, push
  * subscriptions and reminder schedules, then the user row itself. Runs as one D1 batch (transactional).
  *
+ * First-party sessions only (#495): an app's page must not be able to erase
+ * the account. The SDK sends apps to the console's account settings for this.
+ * Deleting the row is also what revokes every outstanding session — requireUser
+ * refuses a FAS-native uid with no row.
+ *
  * Deliberately NOT deleted: apps the user owns (provisioned resources with their
- * own deprovision flow) and app-shared counters. NOTE: sessions are stateless
- * HMAC tokens, so the caller's current token remains valid until it expires
- * (≤30d) — there is no server-side revocation list yet. Full revocation needs a
- * stateful-session change; tracked separately.
+ * own deprovision flow) and app-shared counters.
  */
 authRoutes.delete('/auth/me', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     const db = c.env.DB;
     await db.batch([
       db.prepare('DELETE FROM user_api_keys WHERE user_id = ?').bind(user.id),
@@ -769,8 +900,8 @@ function randomHex(bytes: number): string {
   ).join('');
 }
 
-async function hashForReplay(token: string): Promise<string> {
-  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
+async function sha256Hex(value: string): Promise<string> {
+  const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');

@@ -3,7 +3,7 @@
  *
  * Every provider callback ends the same way: it has a freshly signed session
  * and a validated `return_to`, and has to hand the session back to whoever
- * started the flow. There are three ways to do that, chosen by `response_mode`
+ * started the flow. There are two ways to do that, chosen by `response_mode`
  * on the /start call:
  *
  *  - `code`     — a one-time code in the query string; the caller exchanges it
@@ -11,11 +11,12 @@
  *                 session itself never appears in a URL. This is the mode
  *                 server-side callers (MCP workers) must use, since a redirect
  *                 they receive is recorded in their request logs.
- *  - `query`    — session in `?fas_session=`. Legacy; kept for existing
- *                 callers, but it puts a reusable bearer token in a URL.
  *  - (default)  — session in the URL fragment, which browsers never send to a
  *                 server. Correct for SPAs using the SDK, useless for a
  *                 server-side callback.
+ *
+ * `query` (session in `?fas_session=`) was removed in #495: it put a reusable
+ * bearer token in a URL and had no callers left.
  *
  * `code` mode requires PKCE (RFC 7636, S256): the initiator registers a
  * `code_challenge` at /start and presents the matching `code_verifier` at the
@@ -33,8 +34,13 @@ export const AUTH_CODE_TTL_SECONDS = 60;
 export interface SessionDelivery {
   appId: string;
   returnTo: string;
-  responseMode?: string;
+  responseMode?: 'code';
   codeChallenge?: string;
+}
+
+/** The `response_mode` values a /start call may ask for. */
+export function isResponseMode(value: string | undefined): value is 'code' | undefined {
+  return value === undefined || value === 'code';
 }
 
 export type DeliveryResult = { ok: true; url: string } | { ok: false; error: string };
@@ -70,8 +76,6 @@ export async function deliverSession(
       )
       .run();
     redirect.searchParams.set('code', code);
-  } else if (delivery.responseMode === 'query') {
-    redirect.searchParams.set('fas_session', session);
   } else {
     redirect.hash = `fas_session=${encodeURIComponent(session)}`;
   }

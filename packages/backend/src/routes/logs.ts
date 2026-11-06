@@ -8,7 +8,7 @@
 
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { requireAppOwner, requireUser } from '../lib/auth.js';
+import { requireAppUser, requireConsoleAppOwner } from '../lib/auth.js';
 import { parseJsonObject } from '../lib/json.js';
 import { queryLimit } from '../lib/paging.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
@@ -56,9 +56,8 @@ function isLogEntry(e: unknown): e is LogEntry {
 // ── Ingest (any authenticated user) ──────────────────────────────
 
 logsRoutes.post('/apps/:appId/logs', async (c) => {
-  const user = await requireUser(c);
-
   const appId = c.req.param('appId')!;
+  const user = await requireAppUser(c, appId);
   // Only real apps: otherwise any string is a bucket to fill.
   if (!(await appExists(c.env, appId))) return c.json({ ok: false, error: 'unknown app' }, 404);
   const body = await c.req.json<{ entries?: unknown[] }>().catch(() => null);
@@ -133,7 +132,7 @@ logsRoutes.post('/apps/:appId/logs', async (c) => {
 
 logsRoutes.get('/apps/:appId/logs', async (c) => {
   const appId = c.req.param('appId')!;
-  await requireAppOwner(c, appId);
+  await requireConsoleAppOwner(c, appId);
 
   const level = c.req.query('level');
   const category = c.req.query('category');
@@ -189,7 +188,7 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
 
 logsRoutes.get('/apps/:appId/logs/build', async (c) => {
   const appId = c.req.param('appId')!;
-  await requireAppOwner(c, appId);
+  await requireConsoleAppOwner(c, appId);
 
   const row = await c.env.DB.prepare(
     `SELECT build_meta, ts FROM app_logs

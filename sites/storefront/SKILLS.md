@@ -285,7 +285,7 @@ The `appId` must match the subdomain (e.g. `'timer'` for `timer.freeappstore.onl
 fas.auth.signIn()           // redirects to GitHub OAuth
 fas.auth.signIn('google')   // redirects to Google OAuth
 fas.auth.signIn('apple')    // redirects to Apple OAuth (optional)
-fas.auth.signOut()          // clears session
+fas.auth.signOut()          // revokes every session of the account (all apps, all devices), then clears the local one
 fas.auth.user               // { id, login, avatarUrl } | null
 fas.auth.token              // session token string | null
 fas.auth.onChange(listener)  // subscribe to auth state changes
@@ -502,7 +502,7 @@ If the user has no key, the proxy returns `{ error: "no_key", provider: "openai"
 
 ### User API Key Vault
 
-Users store their own API keys (OpenAI, Anthropic, etc.) on the platform. Apps never see the plaintext keys. Keys are encrypted at rest (AES-256-GCM envelope encryption) and injected server-side when apps call `fas.proxy.fetch()`. One key works across apps; user-key proxy calls are capped at 1,000/day per user across all apps.
+Users store their own API keys (OpenAI, Anthropic, etc.) on the platform. Apps never see the plaintext keys. Keys are encrypted at rest (AES-256-GCM envelope encryption) and injected server-side when apps call `fas.proxy.fetch()`. The key is stored once; today the proxy spends it only when the caller is the app's owner using their own app (or signed in on the console) — per-app consent for other users is tracked in platform#504. User-key proxy calls are capped at 1,000/day per user across all apps.
 
 ```tsx
 // Check if user has a key configured
@@ -555,7 +555,7 @@ Apps need three kinds of external values. Each has a different storage path:
 |------|----------|--------------|-----------------|
 | **Public identifiers** | OAuth client IDs, Firebase config, Stripe publishable keys, Google Maps browser key | **R2 deploy env vars** (`VITE_*` prefix) set in GitHub repo Settings > Secrets & Variables > Variables | Yes (build-time injection, origin-restricted server-side) |
 | **Quota-bearing API keys** | OpenWeather, Last.fm, CoinGecko, any key where abuse = $ | **App-secret proxy** via `fas secret set NAME value` + allowlist rule | No (injected server-side by proxy) |
-| **User-owned secrets** | OpenAI key, Anthropic key, Stripe secret key | **User key vault** via `fas.keys.manage()` | No (encrypted at rest, injected by proxy) |
+| **User-owned secrets** | OpenAI key, Anthropic key | **User key vault** via `fas.keys.manage()` | No (encrypted at rest, injected by proxy) |
 | **Actual secrets** | OAuth client secrets, signing keys, admin tokens | **Platform-level wrangler secrets** (managed by admin, never in app code) | No |
 
 **Rules:**

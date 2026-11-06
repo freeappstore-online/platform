@@ -1,5 +1,12 @@
 # @freeappstore/sdk
 
+## Unreleased
+
+- Sessions are scoped to the app that received them (platform#495). The token an app stores works for that app's data and the user-level routes only; publish, app settings, the key vault and account deletion need a console sign-in.
+- `auth.signOut()` now also revokes every session of the account on the platform (best-effort `POST /v1/auth/logout`) before clearing the local one.
+- `auth.deleteAccount()` opens the console's account settings instead of deleting from inside the app.
+- `proxy.fetch()` to a vault provider answers 403 `no_grant` unless the caller owns the app (or is on the console); `api.stripe.com` is no longer a vault provider.
+
 ## 0.16.26
 
 - Add optional media lifecycle helpers under `@freeappstore/sdk/media` for permission-aware capture, recorder/track cleanup, busy update guards, MIME negotiation, and share/download export.

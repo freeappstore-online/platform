@@ -35,7 +35,7 @@ Dev or user brings their own API key. Platform stores it encrypted (AES-256-GCM 
 
 1. **App secrets** (developer-managed): Developer stores a key for their app. All users of the app share the same key. Capped at 5 secrets, 5 allowlist rules, 10k requests/day per app. AI provider hosts are blocked at this level (use user keys instead).
 
-2. **User keys** (user-managed): Each user stores their own key for a provider (e.g., OpenAI). The proxy falls back to user keys when no app-level allowlist matches. No daily cap on user-key proxied requests. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.
+2. **User keys** (user-managed): Each user stores their own key for a provider (e.g., OpenAI). The proxy falls back to user keys when no app-level allowlist matches. No daily cap on user-key proxied requests. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs (Stripe was removed in #495: a secret key relayed by a browser app is unbounded).
 
 ### Tier 3: Webhooks (events out)
 

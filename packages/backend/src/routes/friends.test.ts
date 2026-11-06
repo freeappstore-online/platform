@@ -85,7 +85,7 @@ function env(db: D1Database) {
 }
 
 async function authHeader(userId = 'u1') {
-  const token = await signSession(userId, SIGNING_KEY);
+  const token = await signSession(userId, SIGNING_KEY, { aud: 'console' });
   return `Bearer ${token}`;
 }
 

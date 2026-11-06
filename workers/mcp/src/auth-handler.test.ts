@@ -87,7 +87,7 @@ async function signSession(payload: Record<string, unknown>, key = SIGNING_KEY):
 
 function validPayload() {
   const now = Math.floor(Date.now() / 1000);
-  return { uid: "gh:2824906", iat: now, exp: now + 3600 };
+  return { uid: "gh:2824906", aud: "console", iat: now, exp: now + 3600 };
 }
 
 /** Stub the FAS code exchange. Records every call so tests can inspect the body. */
@@ -356,10 +356,26 @@ describe("GET /callback", () => {
       expect(completeAuthorization).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ["an app-scoped session", { aud: "chess" }],
+      ["a pre-#495 session with no audience", { aud: undefined }],
+    ])("rejects %s: this worker needs aud=console (#495)", async (_label, claims) => {
+      const { env, completeAuthorization } = makeEnv();
+      const wrongAud = await signSession({ ...validPayload(), ...claims });
+      stubExchange(() => Response.json({ fas_session: wrongAud }));
+      const flow = await startFlow(env);
+
+      const res = await callback(env, callbackUrl(flow), flow.cookie);
+
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe("invalid session");
+      expect(completeAuthorization).not.toHaveBeenCalled();
+    });
+
     it("rejects an expired session", async () => {
       const { env, completeAuthorization } = makeEnv();
       const now = Math.floor(Date.now() / 1000);
-      const expired = await signSession({ uid: "gh:2824906", iat: now - 7200, exp: now - 3600 });
+      const expired = await signSession({ uid: "gh:2824906", aud: "console", iat: now - 7200, exp: now - 3600 });
       stubExchange(() => Response.json({ fas_session: expired }));
       const flow = await startFlow(env);
 

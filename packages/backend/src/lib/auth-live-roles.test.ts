@@ -36,6 +36,7 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
   /** A token minted while bob was an admin, moderator and (claimed) owner of timer. */
   const staleBob = () =>
     signSession('gh:2', KEY, {
+      aud: 'console',
       roles: ['user', 'creator', 'admin'],
       appRoles: { timer: ['owner', 'moderator'] },
     });
@@ -52,7 +53,7 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
   });
 
   it('still allows an admin who is on the list, whatever the token says', async () => {
-    const plain = await signSession('gh:2', KEY);
+    const plain = await signSession('gh:2', KEY, { aud: 'console' });
     expect((await get('/v1/admin/stats', plain, { ADMIN_USER_IDS: 'gh:2' })).status).toBe(200);
     expect((await get('/v1/admin/stats', plain, { ADMIN_GITHUB_LOGINS: 'BOB' })).status).toBe(200);
   });
@@ -71,7 +72,9 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
   });
 
   it('/auth/me reports owner and creator from apps.owner_login, case-insensitively', async () => {
-    const me = (await (await get('/v1/auth/me', await signSession('gh:1', KEY))).json()) as {
+    const me = (await (
+      await get('/v1/auth/me', await signSession('gh:1', KEY, { aud: 'console' }))
+    ).json()) as {
       roles: string[];
       appRoles: Record<string, string[]>;
     };
@@ -93,7 +96,10 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
   });
 
   it('roles/check owner comes from apps.owner_login, case-insensitively', async () => {
-    const res = await get('/v1/apps/timer/roles/check/owner', await signSession('gh:1', KEY));
+    const res = await get(
+      '/v1/apps/timer/roles/check/owner',
+      await signSession('gh:1', KEY, { aud: 'console' }),
+    );
     expect(await res.json()).toMatchObject({ has: true });
   });
 
@@ -103,7 +109,7 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
   });
 
   it('owner checks accept a mixed-case owner_login', async () => {
-    const token = await signSession('gh:1', KEY);
+    const token = await signSession('gh:1', KEY, { aud: 'console' });
     expect((await get('/v1/apps/timer/roles', token)).status).toBe(200);
     expect((await get('/v1/apps/timer/webhooks', token)).status).toBe(200);
     expect((await get('/v1/apps/timer/webhooks', await staleBob())).status).toBe(403);
@@ -116,7 +122,7 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
       {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${await signSession('gh:2', KEY)}`,
+          Authorization: `Bearer ${await signSession('gh:2', KEY, { aud: 'console' })}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ userId: 'gh:1', role: 'editor' }),
@@ -130,7 +136,7 @@ describe.skipIf(!hasSqlite)('authorization ignores stale session-token claims', 
     // Same admin on a real app they don't own still passes.
     expect(
       (
-        await get('/v1/apps/timer/roles', await signSession('gh:2', KEY), {
+        await get('/v1/apps/timer/roles', await signSession('gh:2', KEY, { aud: 'console' }), {
           ADMIN_USER_IDS: 'gh:2',
         })
       ).status,

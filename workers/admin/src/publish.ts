@@ -168,6 +168,11 @@ const RESERVED_IDS = new Set([
   "create",
   "publisher",
   "freeappstore",
+  // First-party sign-in ids (backend lib/apps.ts, #495).
+  "store",
+  "fas-admin",
+  "cli",
+  "keys",
   "hanzi",
   "yi",
 ]);

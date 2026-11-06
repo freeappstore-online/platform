@@ -7,9 +7,15 @@ export interface SessionPayload {
   uid: string;
   roles?: string[];
   appRoles?: Record<string, string[]>;
+  /** Audience (#495): `console` for first-party sessions, else the app id; absent before #495. */
+  aud?: string;
+  sid?: string;
   iat: number;
   exp: number;
 }
+
+/** The audience this worker needs: it calls console-only routes (/v1/publish, /v1/apps/mine). */
+export const CONSOLE_AUD = "console";
 
 export async function verifySession(
   token: string,

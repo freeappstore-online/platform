@@ -107,6 +107,15 @@ export interface SessionPayload {
   roles?: string[];
   /** Per-app roles assigned by app creators: { appId: ['moderator', ...] }. */
   appRoles?: Record<string, string[]>;
+  /**
+   * Audience (#495): the app id the session was delivered to, or `console`
+   * for the first-party surfaces (storefront, console, admin, MCP, CLI).
+   * Absent on sessions minted before #495 — `requireUser` treats those as
+   * `legacy` (see lib/auth.ts).
+   */
+  aud?: string;
+  /** Random per-session id, for audit logs and future per-session revocation. */
+  sid?: string;
   iat: number;
   exp: number;
 }

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { APP_ID_RE, isReservedAppId } from '../lib/apps.js';
-import { HttpError, isAdmin, isAppOwner, requireUser } from '../lib/auth.js';
+import { HttpError, isAdmin, isAppOwner, requireConsoleUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -67,7 +67,7 @@ const STORE_DOMAIN = {
 publishRoutes.post('/publish', async (c) => {
   let user;
   try {
-    user = await requireUser(c);
+    user = await requireConsoleUser(c);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;
@@ -172,7 +172,7 @@ publishRoutes.post('/publish', async (c) => {
       // Authenticate this service-to-service call. Admin's CF Access gate can't
       // see a JWT on a service-binding request, so present the shared
       // ADMIN_PROVISION_TOKEN. The end user is already authenticated above
-      // (requireUser); this only proves the call originates from the backend.
+      // (requireConsoleUser); this only proves the call originates from the backend.
       'X-Internal-Token': c.env.ADMIN_PROVISION_TOKEN ?? '',
     },
     body: JSON.stringify({
@@ -266,7 +266,7 @@ interface UnpublishBody {
 publishRoutes.post('/unpublish', async (c) => {
   let user;
   try {
-    user = await requireUser(c);
+    user = await requireConsoleUser(c);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
     throw err;

@@ -2,15 +2,24 @@ import type { SessionPayload } from '../types.js';
 
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
+/** The audience of every first-party session (storefront, console, admin, MCP, CLI). */
+export const CONSOLE_AUD = 'console';
+/** The audience `requireUser` assigns to a session minted before #495 (no `aud`). */
+export const LEGACY_AUD = 'legacy';
+
 export async function signSession(
   uid: string,
   signingKey: string,
-  opts?: { roles?: string[]; appRoles?: Record<string, string[]> },
+  opts: { aud: string; roles?: string[]; appRoles?: Record<string, string[]> },
 ): Promise<string> {
+  const sid = new Uint8Array(16);
+  crypto.getRandomValues(sid);
   const payload: SessionPayload = {
     uid,
-    roles: opts?.roles ?? ['user'],
-    appRoles: opts?.appRoles ?? {},
+    roles: opts.roles ?? ['user'],
+    appRoles: opts.appRoles ?? {},
+    aud: opts.aud,
+    sid: b64urlBytes(sid),
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
   };

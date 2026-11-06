@@ -60,6 +60,23 @@ function summaryEnv(owner = 'alice'): Env {
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe('analytics config is a console action (#495)', () => {
+  it("refuses the owner's own app-scoped session for custom_head", async () => {
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'alpha' });
+    const res = await app.request(
+      '/v1/apps/alpha/analytics',
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_head: '<script>alert(1)</script>' }),
+      },
+      summaryEnv(),
+    );
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toBe('console_session_required');
+  });
+});
+
 // The backend compiles against workers-types only, so node:fs is loaded the
 // way sqlite-d1.testutil.ts does it rather than through a static import.
 const nodeModule = <T>(name: string) => import(/* @vite-ignore */ name) as Promise<T>;
@@ -222,7 +239,7 @@ describe('GET /v1/analytics/summary', () => {
         return new Response(JSON.stringify({ data }), { status: 200 });
       }),
     );
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/analytics/summary?days=7',
       { headers: { Authorization: `Bearer ${token}` } },
@@ -300,7 +317,7 @@ describe('admin cross-app usage (#271)', () => {
 
   it('rejects signed-in non-admins with 403 before querying analytics', async () => {
     const fetchMock = stubAnalytics();
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/analytics/admin/apps?days=7',
       { headers: { Authorization: `Bearer ${token}` } },
@@ -313,7 +330,7 @@ describe('admin cross-app usage (#271)', () => {
   it('lists every registered app for an admin, flagging apps with no views', async () => {
     const fetchMock = stubAnalytics();
     // Admin is decided by ADMIN_GITHUB_LOGINS, not a token claim.
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/analytics/admin/apps?days=30',
       { headers: { Authorization: `Bearer ${token}` } },
@@ -406,7 +423,7 @@ describe('GET /v1/apps/:appId/analytics/stats ?path= (#488)', () => {
         new Response(JSON.stringify({ data: [] }), { status: 200 }),
     );
     vi.stubGlobal('fetch', fetchMock);
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       `/v1/apps/alpha/analytics/stats?days=7&path=${encodeURIComponent(path)}`,
       { headers: { Authorization: `Bearer ${token}` } },

@@ -49,7 +49,7 @@ function env(overrides: Record<string, unknown> = {}) {
 }
 
 async function bearer(uid = 'u1') {
-  return `Bearer ${await signSession(uid, SIGNING_KEY)}`;
+  return `Bearer ${await signSession(uid, SIGNING_KEY, { aud: 'console' })}`;
 }
 
 describe('rooms: ticket issuance', () => {
@@ -144,7 +144,7 @@ describe('rooms: websocket join', () => {
   });
 
   it('rejects a valid session token in ?token= (deprecated path removed, #435)', async () => {
-    const token = await signSession('u1', SIGNING_KEY);
+    const token = await signSession('u1', SIGNING_KEY, { aud: 'console' });
     const captured: { url?: string } = {};
     const res = await app.request(
       `/v1/apps/timer/rooms/lobby?token=${token}`,
@@ -157,7 +157,7 @@ describe('rooms: websocket join', () => {
   });
 
   it('rejects a session token passed as ?ticket=', async () => {
-    const token = await signSession('u1', SIGNING_KEY);
+    const token = await signSession('u1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       `/v1/apps/timer/rooms/lobby?ticket=${token}`,
       { headers: { upgrade: 'websocket' } },

@@ -16,7 +16,12 @@
 
 import { type Context, Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { HttpError, requireAdmin, requireAppOwner, requireUser } from '../lib/auth.js';
+import {
+  HttpError,
+  requireAdmin,
+  requireConsoleAppOwner,
+  requireConsoleUser,
+} from '../lib/auth.js';
 import { isInternalCall } from '../lib/internal.js';
 import type { Env } from '../types.js';
 
@@ -81,7 +86,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     const row = await loadRow(c, appId);
     return c.json(rowToJson(row));
   }),
@@ -91,7 +96,7 @@ analyticsRoutes.put(
   '/apps/:appId/analytics',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     let body: AnalyticsBody;
     try {
       body = (await c.req.json()) as AnalyticsBody;
@@ -246,7 +251,7 @@ async function cfAnalyticsSql<T = Record<string, unknown>>(
 analyticsRoutes.get(
   '/analytics/summary',
   wrap(async (c) => {
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     const days = Math.min(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
@@ -301,7 +306,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/stats',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     const days = Math.min(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
@@ -386,7 +391,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/events',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     const days = Math.min(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
@@ -423,7 +428,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/live',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     // Use server-write timestamp here (not the effectiveTime two-stage
     // expression) — offline-replayed events legitimately *are* recent
     // network arrivals even if their client-side `t` is older. The whole
@@ -666,7 +671,7 @@ analyticsRoutes.get(
   '/apps/:appId/analytics/diagnostics',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
 
     const env = c.env as Env & {
       ANALYTICS?: AnalyticsEngineDataset;

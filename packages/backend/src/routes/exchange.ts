@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { signSession } from '../lib/session.js';
+import { CONSOLE_AUD, signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
 import { computeRoles } from './auth.js';
 
@@ -92,7 +92,12 @@ exchangeRoutes.post('/auth/exchange', async (c) => {
     .first<{ date_of_birth: string | null }>();
 
   const { roles, appRoles } = await computeRoles(userId, ghUser.login, c.env);
-  const sessionToken = await signSession(userId, c.env.SESSION_SIGNING_KEY, { roles, appRoles });
+  // The CLI is a first-party surface (#495): publish, secrets, logs.
+  const sessionToken = await signSession(userId, c.env.SESSION_SIGNING_KEY, {
+    aud: CONSOLE_AUD,
+    roles,
+    appRoles,
+  });
 
   return c.json({
     sessionToken,

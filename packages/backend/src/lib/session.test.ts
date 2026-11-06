@@ -5,20 +5,36 @@ const KEY = 'a'.repeat(64);
 
 describe('session HMAC roundtrip', () => {
   it('signs and verifies a valid session', async () => {
-    const token = await signSession('gh:42', KEY);
+    const token = await signSession('gh:42', KEY, { aud: 'console' });
     const payload = await verifySession(token, KEY);
     expect(payload?.uid).toBe('gh:42');
     expect(payload?.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
+  it('carries the audience and a random session id (#495)', async () => {
+    const a = await verifySession(await signSession('gh:42', KEY, { aud: 'chess' }), KEY);
+    const b = await verifySession(await signSession('gh:42', KEY, { aud: 'chess' }), KEY);
+    expect(a?.aud).toBe('chess');
+    expect(a?.sid).toMatch(/^[A-Za-z0-9_-]{22}$/);
+    expect(a?.sid).not.toBe(b?.sid);
+  });
+
+  it('still verifies a pre-#495 session with no aud (the legacy rule lives in requireUser)', async () => {
+    const future = Math.floor(Date.now() / 1000) + 30;
+    const legacy = await signPayload({ uid: 'gh:42', roles: ['user'], iat: 1, exp: future }, KEY);
+    const payload = await verifySession(legacy, KEY);
+    expect(payload?.uid).toBe('gh:42');
+    expect(payload?.aud).toBeUndefined();
+  });
+
   it('rejects a session signed with a different key', async () => {
-    const token = await signSession('gh:42', KEY);
+    const token = await signSession('gh:42', KEY, { aud: 'console' });
     const payload = await verifySession(token, 'b'.repeat(64));
     expect(payload).toBeNull();
   });
 
   it('rejects a tampered payload', async () => {
-    const token = await signSession('gh:42', KEY);
+    const token = await signSession('gh:42', KEY, { aud: 'console' });
     // Flip one byte of the body half (before the dot).
     const dot = token.lastIndexOf('.');
     const tampered = `X${token.slice(1, dot)}${token.slice(dot)}`;
@@ -94,12 +110,14 @@ describe('verifySession accepts only sessions (#428)', () => {
 
 describe('verifySession rejects retired email: uids (#434)', () => {
   it('rejects a session whose uid embeds an email address', async () => {
-    const legacy = await signSession('email:alice@example.com', KEY);
+    const legacy = await signSession('email:alice@example.com', KEY, { aud: 'console' });
     expect(await verifySession(legacy, KEY)).toBeNull();
   });
 
   it('accepts the opaque id that replaced it', async () => {
     const id = `em:${'0'.repeat(32)}`;
-    expect((await verifySession(await signSession(id, KEY), KEY))?.uid).toBe(id);
+    expect((await verifySession(await signSession(id, KEY, { aud: 'console' }), KEY))?.uid).toBe(
+      id,
+    );
   });
 });

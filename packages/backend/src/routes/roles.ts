@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { assertAppOwner, isAppOwner, requireUser } from '../lib/auth.js';
+import { assertAppOwner, isAppOwner, requireAppUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -20,7 +20,7 @@ export const rolesRoutes = new Hono<{ Bindings: Env }>();
 
 /** List all role assignments for an app. Caller must be app owner or admin. */
 rolesRoutes.get('/apps/:appId/roles', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
   await assertAppOwner(c.env, user, appId, { allowAdmin: true });
 
@@ -45,7 +45,7 @@ rolesRoutes.get('/apps/:appId/roles', async (c) => {
 
 /** List roles for a specific user in an app. Any authenticated user can check their own roles. */
 rolesRoutes.get('/apps/:appId/roles/:userId', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
   const targetUserId = c.req.param('userId');
 
@@ -65,7 +65,7 @@ rolesRoutes.get('/apps/:appId/roles/:userId', async (c) => {
 
 /** Assign a role to a user. Caller must be app owner or admin. */
 rolesRoutes.post('/apps/:appId/roles', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
   await assertAppOwner(c.env, user, appId, { allowAdmin: true });
 
@@ -105,7 +105,7 @@ rolesRoutes.post('/apps/:appId/roles', async (c) => {
 
 /** Revoke a role from a user. Caller must be app owner or admin. */
 rolesRoutes.delete('/apps/:appId/roles', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
   await assertAppOwner(c.env, user, appId, { allowAdmin: true });
 
@@ -132,7 +132,7 @@ rolesRoutes.delete('/apps/:appId/roles', async (c) => {
 
 /** Check if the caller has a specific role in an app. Returns { has: boolean }. */
 rolesRoutes.get('/apps/:appId/roles/check/:role', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
   const role = c.req.param('role');
 
@@ -159,7 +159,7 @@ rolesRoutes.get('/apps/:appId/roles/check/:role', async (c) => {
  * No owner/admin gate: any authenticated user can become a member.
  */
 rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
   // Otherwise any string mints an app_roles row, and computeRoles copies every
   // row into the user's session token.

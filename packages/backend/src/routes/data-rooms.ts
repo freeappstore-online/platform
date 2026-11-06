@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { requireUser } from '../lib/auth.js';
+import { requireAppUser } from '../lib/auth.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
@@ -9,7 +9,7 @@ const room = `${base}/:roomId`;
 const docs = `${room}/db/:collection`;
 
 dataRoomRoutes.use(`${base}/*`, async (c, next) => {
-  c.set('uid', (await requireUser(c)).id);
+  c.set('uid', (await requireAppUser(c, c.req.param('appId'))).id);
   c.header('Cache-Control', 'no-store');
   for (const value of Object.values(c.req.param())) {
     if (!/^[a-zA-Z0-9:_-]{1,128}$/.test(value)) return c.text('invalid identifier', 400);
@@ -25,7 +25,7 @@ const owner =
   'EXISTS (SELECT 1 FROM data_rooms r WHERE r.app_id = ? AND r.id = ? AND r.owner_id = ?)';
 
 dataRoomRoutes.post(base, async (c) => {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, c.req.param('appId'));
   const id = crypto.randomUUID();
   const result = await c.env.DB.prepare(`INSERT INTO data_rooms (app_id, id, owner_id)
     SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM apps WHERE id = ?)`)

@@ -13,7 +13,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAdmin, requireUser } from '../lib/auth.js';
+import { requireAdmin, requireConsoleUser, requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
 import { isInternalCall, isServiceBindingCall } from '../lib/internal.js';
 import type { Env } from '../types.js';
@@ -561,7 +561,7 @@ keysRoutes.get('/keys/status', async (c) => {
 // ── Usage (daily proxy calls via user keys) ──────────────────────────
 
 keysRoutes.get('/keys/usage', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   const today = new Date().toISOString().slice(0, 10);
   const row = await c.env.DB.prepare(
     'SELECT count FROM app_proxy_usage WHERE app_id = ? AND day = ?',
@@ -574,7 +574,7 @@ keysRoutes.get('/keys/usage', async (c) => {
 // ── Store / update a key ──────────────────────────────────────────────
 
 keysRoutes.put('/keys/:provider', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   if (!c.env.APP_SECRET_KEK) {
     return c.json({ ok: false, error: 'Key vault not configured (APP_SECRET_KEK missing).' }, 503);
   }
@@ -634,7 +634,7 @@ keysRoutes.put('/keys/:provider', async (c) => {
 // ── Delete a key ──────────────────────────────────────────────────────
 
 keysRoutes.delete('/keys/:provider', async (c) => {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
 
   const provider = c.req.param('provider');
   const result = await c.env.DB.prepare(
@@ -655,7 +655,7 @@ keysRoutes.get('/keys/resolve/:provider', async (c) => {
     return c.json({ error: 'this endpoint is internal-only' }, 403);
   }
 
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   if (!c.env.APP_SECRET_KEK) {
     return c.json({ key: null, error: 'vault not configured' }, 503);
   }
@@ -670,7 +670,7 @@ keysRoutes.get('/keys/resolve-agent/:provider', async (c) => {
     return c.json({ error: 'this endpoint is internal-only' }, 403);
   }
 
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   if (!c.env.APP_SECRET_KEK) {
     return c.json({ key: null, source: 'none', error: 'vault not configured' }, 503);
   }
@@ -861,13 +861,43 @@ function renderKeysPage(opts: { returnUrl: string; provider: string; appId: stri
   var token = null;
   var highlightProvider = ${JSON.stringify(provider).replace(/</g, '\\u003c')};
 
-  // Get session token from cookie or localStorage
+  // This page lives on the API origin, so it has its own first-party sign-in
+  // (app_id=keys → aud: console, #495) and its own copy of the session under
+  // the SDK's storage key.
+  var STORAGE_KEY = 'fas:session';
   function getToken() {
     try {
-      var stored = localStorage.getItem('fas_session');
+      var stored = localStorage.getItem(STORAGE_KEY);
       if (stored) { var p = JSON.parse(stored); if (p && p.token) return p.token; }
     } catch (_) {}
     return null;
+  }
+
+  function consumeCallback() {
+    var hash = window.location.hash;
+    if (hash.indexOf('#fas_session=') !== 0) return;
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+    var t = '';
+    try { t = decodeURIComponent(hash.slice('#fas_session='.length)); } catch (_) {}
+    if (t) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: t })); } catch (_) {} }
+  }
+
+  function signInUrl() {
+    var here = new URL(window.location.href);
+    here.hash = '';
+    var u = new URL(API + '/auth/github/start', window.location.origin);
+    u.searchParams.set('app_id', 'keys');
+    u.searchParams.set('return_to', here.toString());
+    return u.toString();
+  }
+
+  function showSignIn() {
+    var gate = document.getElementById('auth-gate');
+    gate.textContent = '';
+    var a = document.createElement('a');
+    a.href = signInUrl();
+    a.textContent = 'Sign in with GitHub to manage your API keys';
+    gate.appendChild(a);
   }
 
   function headers() {
@@ -877,8 +907,16 @@ function renderKeysPage(opts: { returnUrl: string; provider: string; appId: stri
   function setStatus(msg) { document.getElementById('status').textContent = msg; }
 
   async function load() {
+    consumeCallback();
     token = getToken();
-    if (!token) return;
+    if (!token) { showSignIn(); return; }
+    var me = await fetch(API + '/auth/me', { headers: headers() });
+    if (!me.ok) {
+      try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+      token = null;
+      showSignIn();
+      return;
+    }
     document.getElementById('auth-gate').classList.add('hidden');
     document.getElementById('keys-list').classList.remove('hidden');
 

@@ -254,7 +254,7 @@ describe.skipIf(!hasSqlite)('POST /v1/audit/run is gated and capped (#493)', () 
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${await signSession(userId, env.SESSION_SIGNING_KEY)}`,
+              Authorization: `Bearer ${await signSession(userId, env.SESSION_SIGNING_KEY, { aud: 'console' })}`,
             },
           },
           env,

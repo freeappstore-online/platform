@@ -116,6 +116,8 @@ function first(sql: string, bound: unknown[], d: FakeData): unknown | null {
     const row = d.usage.find((u) => u.app_id === bound[0] && u.day === bound[1]);
     return row ? { count: row.count } : null;
   }
+  // No user has a vault key in these tests: the user-key path ends in `no_key`.
+  if (sql.includes('FROM user_api_keys')) return null;
   throw new Error(`fakeDB.first unmatched: ${sql}`);
 }
 
@@ -259,11 +261,11 @@ function freshData(): FakeData {
   };
 }
 
-async function ownerAuth() {
-  return `Bearer ${await signSession(owner.id, SIGNING_KEY)}`;
+async function ownerAuth(aud = 'console') {
+  return `Bearer ${await signSession(owner.id, SIGNING_KEY, { aud })}`;
 }
-async function strangerAuth() {
-  return `Bearer ${await signSession(stranger.id, SIGNING_KEY)}`;
+async function strangerAuth(aud = 'console') {
+  return `Bearer ${await signSession(stranger.id, SIGNING_KEY, { aud })}`;
 }
 
 describe('PUT /v1/apps/:appId/secrets/:name', () => {
@@ -1064,7 +1066,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect(res.status).toBe(413);
   });
 
-  it('allows non-owner sessions to use the proxy', async () => {
+  it("allows non-owner sessions delivered to this app to use the app's rules", async () => {
     const data = freshData();
     await realSeed(data, 'K', 'v', {
       pattern: 'https://api.example.com/',
@@ -1078,10 +1080,78 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     globalThis.fetch = vi.fn(async () => new Response('ok')) as typeof fetch;
     const res = await app.request(
       '/v1/apps/weather/proxy/api.example.com/v1/x',
-      { headers: { Authorization: await strangerAuth() } },
+      { headers: { Authorization: await strangerAuth('weather') } },
       baseEnv(fakeDB(data)),
     );
     expect(res.status).toBe(200);
+  });
+
+  it('refuses a session delivered to another app (#495)', async () => {
+    const data = freshData();
+    await realSeed(data, 'K', 'v', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'K',
+      secret_name_2: null,
+      token_url: null,
+      methods: 'GET',
+    });
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com/v1/x',
+      { headers: { Authorization: await strangerAuth('notes') } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toBe('wrong_audience');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  describe('user-key path (#495)', () => {
+    const openai = '/v1/apps/weather/proxy/api.openai.com/v1/chat/completions';
+    const errorOf = async (res: Response) => ((await res.json()) as { error: string }).error;
+
+    it("spends the owner's own key inside their own app", async () => {
+      const res = await app.request(
+        openai,
+        { headers: { Authorization: await ownerAuth('weather') } },
+        baseEnv(fakeDB(freshData())),
+      );
+      // Past the grant check; the vault has no key in these tests.
+      expect(res.status).toBe(403);
+      expect(await errorOf(res)).toBe('no_key');
+    });
+
+    it('spends a key from a first-party session', async () => {
+      const res = await app.request(
+        openai,
+        { headers: { Authorization: await strangerAuth('console') } },
+        baseEnv(fakeDB(freshData())),
+      );
+      expect(await errorOf(res)).toBe('no_key');
+    });
+
+    it("refuses a non-owner's key for an app session: no_grant (per-app grants are #504)", async () => {
+      const res = await app.request(
+        openai,
+        { headers: { Authorization: await strangerAuth('weather') } },
+        baseEnv(fakeDB(freshData())),
+      );
+      expect(res.status).toBe(403);
+      expect(await errorOf(res)).toBe('no_grant');
+    });
+
+    it('no longer maps api.stripe.com to a user key', async () => {
+      const res = await app.request(
+        '/v1/apps/weather/proxy/api.stripe.com/v1/charges',
+        { headers: { Authorization: await ownerAuth('weather') } },
+        baseEnv(fakeDB(freshData())),
+      );
+      expect(res.status).toBe(403);
+      expect(await errorOf(res)).toContain('no allowlist match');
+    });
   });
 
   it('strips content-encoding/length and preserves multi-value headers', async () => {

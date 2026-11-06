@@ -1,5 +1,11 @@
 import { type Context, Hono } from 'hono';
-import { type CurrentUser, HttpError, requireAppOwner, requireUser } from '../lib/auth.js';
+import {
+  type CurrentUser,
+  HttpError,
+  isAppOwner,
+  requireAppUser,
+  requireConsoleAppOwner,
+} from '../lib/auth.js';
 import { openSecret, type SealedSecret, sealSecret } from '../lib/encryption.js';
 import {
   AllowlistError,
@@ -10,6 +16,7 @@ import {
 } from '../lib/proxy-allowlist.js';
 import { getOAuth2Token } from '../lib/proxy-oauth2.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
+import { CONSOLE_AUD } from '../lib/session.js';
 import type { Env } from '../types.js';
 import { resolveUserKey } from './keys.js';
 
@@ -64,7 +71,7 @@ interface SecretListRow {
 secretsRoutes.get(
   '/apps/:appId/secrets',
   wrap(async (c) => {
-    await requireAppOwner(c, c.req.param('appId')!);
+    await requireConsoleAppOwner(c, c.req.param('appId')!);
     const result = await c.env.DB.prepare(
       `SELECT name, created_at, last_used_at FROM app_secrets
        WHERE app_id = ? ORDER BY name`,
@@ -89,7 +96,7 @@ secretsRoutes.put(
     if (!SECRET_NAME_RE.test(name)) {
       throw new HttpError(400, 'name must be uppercase + underscores (e.g. OPENWEATHER_KEY)');
     }
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     const kek = requireKek(c);
 
     const body = await c.req.json<{ value?: unknown }>().catch(() => ({}) as { value?: unknown });
@@ -141,7 +148,7 @@ secretsRoutes.delete(
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
     const name = c.req.param('name')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     const result = await c.env.DB.prepare('DELETE FROM app_secrets WHERE app_id = ? AND name = ?')
       .bind(appId, name)
       .run();
@@ -180,7 +187,7 @@ function rowToRule(r: AllowlistRow): AllowlistRule {
 secretsRoutes.get(
   '/apps/:appId/allowlist',
   wrap(async (c) => {
-    await requireAppOwner(c, c.req.param('appId')!);
+    await requireConsoleAppOwner(c, c.req.param('appId')!);
     const result = await c.env.DB.prepare(
       `SELECT pattern, inject_kind, inject_name, secret_name, secret_name_2, token_url, methods, created_at
        FROM app_proxy_allowlist WHERE app_id = ? ORDER BY pattern`,
@@ -216,7 +223,7 @@ secretsRoutes.put(
   '/apps/:appId/allowlist',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     const body = await c.req.json<PutAllowlistBody>().catch(() => ({}) as PutAllowlistBody);
     const rule = validateRule({
       pattern: String(body.pattern ?? ''),
@@ -302,7 +309,7 @@ secretsRoutes.delete(
   '/apps/:appId/allowlist',
   wrap(async (c) => {
     const appId = c.req.param('appId')!;
-    await requireAppOwner(c, appId);
+    await requireConsoleAppOwner(c, appId);
     const body = await c.req
       .json<{ pattern?: unknown }>()
       .catch(() => ({}) as { pattern?: unknown });
@@ -375,16 +382,18 @@ const HOST_TO_PROVIDER: Record<string, string> = {
   'api.replicate.com': 'replicate',
   'api.stability.ai': 'stability',
   'api.elevenlabs.io': 'elevenlabs',
-  'api.stripe.com': 'stripe',
+  // api.stripe.com was removed in #495: a user's Stripe *secret* key relayed
+  // by any browser app is unbounded, and payments are a compliance violation
+  // on FAS anyway. A developer's own Stripe key still works via an app rule.
 };
 
 secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
   try {
-    // Auth: any valid platform session can call the proxy. The app's owner
-    // pays the quota, not the caller. (See spec: free tier, per-app quota.)
-    const user = await requireUser(c);
-    const kek = requireKek(c);
+    // Auth: a session delivered to THIS app (or a first-party one) — #495.
+    // The app's owner pays the quota, not the caller.
     const appId = c.req.param('appId')!;
+    const user = await requireAppUser(c, appId);
+    const kek = requireKek(c);
     const host = c.req.param('host')!;
 
     // Reconstruct upstream URL: /v1/apps/:appId/proxy/<host>/<rest...>
@@ -431,6 +440,25 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       const provider = HOST_TO_PROVIDER[host.toLowerCase()];
       if (!provider) {
         return c.json({ error: `no allowlist match for ${c.req.method} ${upstreamUrl}` }, 403);
+      }
+
+      // The user's own vault key may be spent only from a first-party session
+      // or by the app's owner inside their own app (#495). Per-app grants for
+      // other users' keys: #504.
+      if (user.aud !== CONSOLE_AUD) {
+        const owner = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+          .bind(appId)
+          .first<{ owner_login: string | null }>();
+        if (!owner || !isAppOwner(user, owner.owner_login)) {
+          return c.json(
+            {
+              error: 'no_grant',
+              provider,
+              message: `This app is not allowed to use your ${provider} key.`,
+            },
+            403,
+          );
+        }
       }
 
       // Rate-limit user-key proxy calls (1k/day per user, across all apps)

@@ -3,10 +3,14 @@ import type { Unsubscribe, User } from './types.js';
 export type AuthProvider = 'github' | 'google' | 'apple' | 'email';
 
 /**
- * Shared across all FAS apps on the same origin — this is intentional SSO.
- * A user signed in on one FAS app is signed in on all of them.
+ * Shared by everything on this app's origin. The token inside is scoped to
+ * this app (its `aud` claim): it works for this app's data and the user-level
+ * routes, not for other apps or the console.
  */
 const STORAGE_KEY = 'fas:session';
+
+/** Where account-level actions that need a first-party session live. */
+const CONSOLE_ACCOUNT_URL = 'https://freeappstore.online/app/settings';
 
 interface Session {
   token: string;
@@ -96,8 +100,38 @@ export class Auth {
     }
   }
 
-  /** Clear the session and notify listeners. */
+  /**
+   * Sign out everywhere: ask the platform to revoke every session of this
+   * account (best-effort, fire-and-forget), then clear the local copy and
+   * notify listeners.
+   */
   signOut(): void {
+    const token = this.session?.token;
+    this.sessionRevision++;
+    this.session = null;
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(STORAGE_KEY);
+      } catch {}
+    }
+    if (token && typeof fetch !== 'undefined') {
+      fetch(new URL('/v1/auth/logout', this.apiBase), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+      }).catch(() => {});
+    }
+    this.emit();
+  }
+
+  /**
+   * @internal Called by Kv and ApiProxy on 401 responses.
+   * Clears the stale session so the UI reacts immediately. Local only: the
+   * server already refused this token, so there is nothing to revoke.
+   * Do not call directly — use `signOut()` instead.
+   */
+  handleUnauthorized(requestToken?: string): void {
+    if (!this.session || (requestToken && this.session.token !== requestToken)) return;
     this.sessionRevision++;
     this.session = null;
     if (typeof window !== 'undefined') {
@@ -109,40 +143,16 @@ export class Auth {
   }
 
   /**
-   * @internal Called by Kv and ApiProxy on 401 responses.
-   * Clears the stale session so the UI reacts immediately.
-   * Do not call directly — use `signOut()` instead.
-   */
-  handleUnauthorized(requestToken?: string): void {
-    if (this.session && (!requestToken || this.session.token === requestToken)) this.signOut();
-  }
-
-  /**
-   * Permanently delete the signed-in account and its personal data on the
-   * server (API keys, KV, friendships, roles, owned documents, logs), then
-   * sign out locally. Throws if the server call fails, so a "delete account"
-   * button can surface the error instead of falsely reporting success.
+   * Delete the account. Deletion (API keys, KV, friendships, roles, owned
+   * documents, logs, then the account itself) needs a first-party session, so
+   * this sends the user to the console's account settings, where the delete
+   * button lives. An app-scoped session is not accepted for it.
    *
-   * Not deleted: apps you own (deprovision those separately). Note: the current
-   * session token stays valid until it expires; there is no server-side token
-   * revocation yet.
+   * Not deleted: apps you own (deprovision those separately).
    */
   async deleteAccount(): Promise<void> {
-    const session = this.session;
-    if (!session) {
-      this.signOut();
-      return;
-    }
-    const { token } = session;
-    const revision = this.sessionRevision;
-    const res = await fetch(new URL('/v1/auth/me', this.apiBase), {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) {
-      throw new Error(`account deletion failed (${res.status})`);
-    }
-    if (revision === this.sessionRevision && this.session?.token === token) this.signOut();
+    if (typeof window === 'undefined') return;
+    window.location.assign(`${CONSOLE_ACCOUNT_URL}?delete-account=1`);
   }
 
   /**

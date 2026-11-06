@@ -53,12 +53,12 @@ function env(db: D1Database, extraEnv?: Record<string, unknown>) {
 }
 
 async function authHeader() {
-  const token = await signSession('u1', SIGNING_KEY);
+  const token = await signSession('u1', SIGNING_KEY, { aud: 'console' });
   return `Bearer ${token}`;
 }
 
 async function adminHeader() {
-  const token = await signSession('admin-1', SIGNING_KEY);
+  const token = await signSession('admin-1', SIGNING_KEY, { aud: 'console' });
   return `Bearer ${token}`;
 }
 
@@ -499,7 +499,7 @@ describe('keys routes', () => {
   });
 
   it('GET /v1/keys/resolve-agent falls back to active complimentary grant', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       'https://backend/v1/keys/resolve-agent/anthropic',
       {
@@ -535,7 +535,7 @@ describe('keys routes', () => {
   });
 
   it('key-resolve endpoints answer only on the service-binding host (#427)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     for (const host of [
       'freeappstore-api.serge-the-dev.workers.dev',
       'abc123-freeappstore-api.serge-the-dev.workers.dev',

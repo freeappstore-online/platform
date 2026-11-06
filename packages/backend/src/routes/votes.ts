@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { HttpError, requireConsoleUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 /**
@@ -45,7 +45,7 @@ votesRoutes.get('/store/votes', async (c) => {
   // An Authorization header makes this a caller-specific response. Validate it
   // rather than silently treating a bad credential as anonymous, and prevent a
   // shared cache from ever serving one caller's vote map to another.
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   const { results: callerVoteRows } = await c.env.DB.prepare(
     'SELECT app_id FROM app_votes WHERE user_id = ?',
   )
@@ -66,7 +66,7 @@ votesRoutes.get('/store/votes', async (c) => {
  */
 votesRoutes.post('/store/apps/:appId/vote', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     const { appId } = c.req.param();
 
     if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
@@ -121,7 +121,7 @@ votesRoutes.post('/store/apps/:appId/vote', async (c) => {
  */
 votesRoutes.delete('/store/apps/:appId/vote', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     const { appId } = c.req.param();
 
     if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);

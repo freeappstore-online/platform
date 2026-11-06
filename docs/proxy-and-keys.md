@@ -63,13 +63,14 @@ const keys = await fas.keys.status(); // all configured providers
 
 ### Supported providers
 
-OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.
+OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs.
 
 ### Security
 
 - Keys encrypted with AES-256-GCM
 - Per-user, per-provider isolation
 - Apps never see plaintext keys
+- A key is spent only from a first-party (console) session or by the app's owner inside their own app; for everyone else the proxy answers 403 `no_grant` until per-app consent lands (#504)
 - Users can revoke keys at any time
 - Provider usage and charges belong to the user's upstream account
 

@@ -222,7 +222,7 @@ describe.skipIf(!hasSqlite)('migration 0032: opaque email user ids (#434)', () =
 
 describe.skipIf(!hasSqlite)('retired email: uids are refused (#434)', () => {
   async function me(d1: D1Database, uid: string) {
-    const token = await signSession(uid, SIGNING_KEY);
+    const token = await signSession(uid, SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/auth/me',
       { headers: { Authorization: `Bearer ${token}` } },
@@ -235,6 +235,8 @@ describe.skipIf(!hasSqlite)('retired email: uids are refused (#434)', () => {
     const { db, d1 } = sqliteD1({ before: MIGRATION });
     seed(db);
     db.exec(migration(MIGRATION));
+    // requireUser reads the #495 revocation column; the fixture stops at 0032.
+    db.exec(migration('0033_sessions_valid_after.sql'));
     const r = await me(d1, ALICE);
     expect(r.status).toBe(401);
     expect(JSON.stringify(r.body)).not.toContain('alice');
@@ -244,6 +246,8 @@ describe.skipIf(!hasSqlite)('retired email: uids are refused (#434)', () => {
     const { db, d1 } = sqliteD1({ before: MIGRATION });
     seed(db);
     db.exec(migration(MIGRATION));
+    // requireUser reads the #495 revocation column; the fixture stops at 0032.
+    db.exec(migration('0033_sessions_valid_after.sql'));
     const r = await me(d1, newId(db, 'alice@example.com'));
     expect(r.status).toBe(200);
     expect(JSON.stringify(r.body)).not.toContain('alice');

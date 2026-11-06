@@ -52,7 +52,9 @@ function fakeDB(opts: {
 }
 
 const env = (db: D1Database) => ({ DB: db, SESSION_SIGNING_KEY: SIGNING_KEY });
-const auth = async () => ({ Authorization: `Bearer ${await signSession('u1', SIGNING_KEY)}` });
+const auth = async () => ({
+  Authorization: `Bearer ${await signSession('u1', SIGNING_KEY, { aud: 'console' })}`,
+});
 
 describe('idea builder claims', () => {
   it('GET is public, aggregate-only and cacheable without auth', async () => {

@@ -241,6 +241,67 @@ describe('Auth — storage round-trip', () => {
     expect(seen).toEqual([{ id: 'gh:7', login: 'u', avatarUrl: null, dateOfBirth: null }, null]);
   });
 
+  it('signOut asks the platform to revoke every session, with the token it is dropping (#495)', () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    window.localStorage.store.set(
+      'fas:session',
+      JSON.stringify({
+        token: 'cached',
+        user: { id: 'gh:7', login: 'u', avatarUrl: null, dateOfBirth: null },
+      }),
+    );
+    (globalThis as Record<string, unknown>).window = window;
+    const fetch = vi.fn(() => Promise.resolve(new Response('{"ok":true}')));
+    globalThis.fetch = fetch;
+
+    new Auth('demo', 'https://api.example').signOut();
+
+    // The constructor's ensure-member call is the other one.
+    const logout = fetch.mock.calls.find(
+      (call) => String((call as unknown as [URL])[0]) === 'https://api.example/v1/auth/logout',
+    ) as unknown as [URL, RequestInit] | undefined;
+    if (!logout) throw new Error('expected a /v1/auth/logout call');
+    expect(logout[1].method).toBe('POST');
+    expect((logout[1].headers as Record<string, string>).Authorization).toBe('Bearer cached');
+  });
+
+  it('signOut does not call the platform when there is no session', () => {
+    const { window } = makeWindow({ href: 'https://app.example/' });
+    (globalThis as Record<string, unknown>).window = window;
+    const fetch = vi.fn();
+    globalThis.fetch = fetch;
+
+    new Auth('demo', 'https://api.example').signOut();
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('deleteAccount sends the user to the console account settings (#495)', async () => {
+    const { window, assigns } = makeWindow({ href: 'https://app.example/' });
+    window.localStorage.store.set(
+      'fas:session',
+      JSON.stringify({
+        token: 'cached',
+        user: { id: 'gh:7', login: 'u', avatarUrl: null, dateOfBirth: null },
+      }),
+    );
+    (globalThis as Record<string, unknown>).window = window;
+    const fetch = vi.fn(() => Promise.resolve(new Response('{}')));
+    globalThis.fetch = fetch;
+
+    const auth = new Auth('demo', 'https://api.example');
+    await auth.deleteAccount();
+
+    expect(assigns).toEqual(['https://freeappstore.online/app/settings?delete-account=1']);
+    expect(
+      fetch.mock.calls.some(
+        (call) => (call as unknown as [URL, RequestInit])[1]?.method === 'DELETE',
+      ),
+    ).toBe(false);
+    // The local session is untouched: the console does the deleting.
+    expect(auth.token).toBe('cached');
+  });
+
   it('returns null when localStorage has corrupt JSON (does not crash)', () => {
     const { window } = makeWindow({ href: 'https://app.example/' });
     window.localStorage.store.set('fas:session', '{ not: json');
@@ -434,11 +495,13 @@ describe('Auth protects the active session from stale requests (#350/#361)', () 
     storedSession(window, 'token-a', 'alice');
     const auth = new Auth('demo', 'https://api.example');
     let rejectRequest!: (response: Response) => void;
-    globalThis.fetch = vi.fn(
-      () =>
-        new Promise<Response>((resolve) => {
-          rejectRequest = resolve;
-        }),
+    globalThis.fetch = vi.fn((input: RequestInfo | URL) =>
+      // signOut()'s own logout call must not take the resolver meant for the KV request.
+      String(input).endsWith('/v1/auth/logout')
+        ? Promise.resolve(new Response('{"ok":true}'))
+        : new Promise<Response>((resolve) => {
+            rejectRequest = resolve;
+          }),
     );
     const request = new (await import('./kv.js')).Kv('demo', 'https://api.example', auth).get(
       'draft',
@@ -486,34 +549,6 @@ describe('Auth protects the active session from stale requests (#350/#361)', () 
     expect(auth.user?.login).toBe('bob');
     expect(auth.token).toBe('token-b');
     expect(window.localStorage.getItem('fas:session')).toContain('token-b');
-  });
-
-  it('does not let a delayed account deletion sign out a replacement account', async () => {
-    const { window } = makeWindow({ href: 'https://app.example/' });
-    (globalThis as Record<string, unknown>).window = window;
-    (globalThis as Record<string, unknown>).history = window.history;
-    storedSession(window, 'token-a', 'alice');
-    const auth = new Auth('demo', 'https://api.example');
-    let finishDelete!: (response: Response) => void;
-    globalThis.fetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith('/v1/auth/me') && init?.method === 'DELETE')
-        return new Promise<Response>((resolve) => {
-          finishDelete = resolve;
-        });
-      return Promise.resolve(
-        new Response(
-          JSON.stringify({ id: 'id:bob', login: 'bob', avatarUrl: null, dateOfBirth: null }),
-        ),
-      );
-    });
-    const deletion = auth.deleteAccount();
-    auth.signOut();
-    window.location.hash = '#fas_session=token-b';
-    await auth.init();
-    finishDelete(new Response(null, { status: 204 }));
-    await deletion;
-    expect(auth.user?.login).toBe('bob');
-    expect(auth.token).toBe('token-b');
   });
 });
 

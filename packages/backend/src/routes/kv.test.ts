@@ -72,7 +72,7 @@ describe('PUT /v1/apps/:appId/kv/:key', () => {
   });
 
   it('returns 401 with a valid-shape but wrong-signature token', async () => {
-    const token = await signSession('gh:42', `wrong-key-${'x'.repeat(50)}`);
+    const token = await signSession('gh:42', `wrong-key-${'x'.repeat(50)}`, { aud: 'console' });
     const res = await app.request(
       '/v1/apps/myapp/kv/foo',
       { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: '"hi"' },
@@ -82,7 +82,7 @@ describe('PUT /v1/apps/:appId/kv/:key', () => {
   });
 
   it('returns 400 for an empty body', async () => {
-    const token = await signSession('gh:42', SIGNING_KEY);
+    const token = await signSession('gh:42', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/apps/myapp/kv/foo',
       { method: 'PUT', headers: { Authorization: `Bearer ${token}` }, body: '' },
@@ -93,7 +93,7 @@ describe('PUT /v1/apps/:appId/kv/:key', () => {
   });
 
   it('returns 204 on a happy-path PUT and writes the expected row', async () => {
-    const token = await signSession('gh:42', SIGNING_KEY);
+    const token = await signSession('gh:42', SIGNING_KEY, { aud: 'console' });
     const writes: FakeRow[] = [];
     const res = await app.request(
       '/v1/apps/myapp/kv/foo',
@@ -118,7 +118,7 @@ describe('PUT /v1/apps/:appId/kv/:key', () => {
   });
 
   it('returns 413 when the value exceeds maxValueBytes', async () => {
-    const token = await signSession('gh:42', SIGNING_KEY);
+    const token = await signSession('gh:42', SIGNING_KEY, { aud: 'console' });
     const big = JSON.stringify('x'.repeat(64 * 1024)); // 64KB+ once quoted
     const res = await app.request(
       '/v1/apps/myapp/kv/foo',
@@ -152,7 +152,7 @@ describe.skipIf(!hasSqlite)('GET /v1/apps/:appId/kv prefix', () => {
     for (const key of ['score_a', 'scoreXa', 'score%a', 'other']) {
       kv.run('timer', 'gh:1', key, 'x', 1, now);
     }
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
 
     const list = async (prefix: string) => {
       const res = await app.request(
@@ -189,7 +189,7 @@ describe.skipIf(!hasSqlite)('PUT /v1/apps/:appId/kv/:key under concurrency', () 
       'INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
     );
     for (let i = 0; i < existingKeys; i++) kv.run('timer', 'gh:1', `k${i}`, 'x', valueBytes, now);
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const env = baseEnv(withBarrier(d1, /AS total, COUNT\(\*\) AS keys/, parallel));
     const put = async (key: string, bytes: number) =>
       app.request(

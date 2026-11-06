@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { HttpError, requireConsoleUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 /**
@@ -50,7 +50,7 @@ ideaBuildersRoutes.get('/store/idea-builders', async (c) => {
       c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
       return c.json({ builders });
     }
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     const { results: mineRows } = await c.env.DB.prepare(
       'SELECT idea_id FROM idea_builders WHERE user_id = ? AND created_at > ?',
     )
@@ -73,7 +73,7 @@ ideaBuildersRoutes.get('/store/idea-builders', async (c) => {
  */
 ideaBuildersRoutes.post('/store/ideas/:ideaId/builder', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     const { ideaId } = c.req.param();
     if (!IDEA_ID_RE.test(ideaId)) return c.json({ error: 'bad idea id' }, 400);
     const now = Math.floor(Date.now() / 1000);
@@ -117,7 +117,7 @@ ideaBuildersRoutes.post('/store/ideas/:ideaId/builder', async (c) => {
 /** DELETE /v1/store/ideas/:ideaId/builder — drop a claim (idempotent). */
 ideaBuildersRoutes.delete('/store/ideas/:ideaId/builder', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     const { ideaId } = c.req.param();
     if (!IDEA_ID_RE.test(ideaId)) return c.json({ error: 'bad idea id' }, 400);
     await c.env.DB.prepare('DELETE FROM idea_builders WHERE idea_id = ? AND user_id = ?')

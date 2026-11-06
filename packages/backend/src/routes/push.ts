@@ -1,6 +1,6 @@
 import { type Context, Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { HttpError, requireAppUser as requireAppAudience } from '../lib/auth.js';
 import {
   firstOccurrence,
   formatTime,
@@ -101,8 +101,8 @@ async function readJsonBody(c: Context<{ Bindings: Env }>): Promise<Record<strin
 
 /** Signed-in user plus a known app id, or an HttpError (401 / 404). */
 async function requireAppUser(c: Context<{ Bindings: Env }>) {
-  const user = await requireUser(c);
   const { appId } = c.req.param() as { appId: string };
+  const user = await requireAppAudience(c, appId);
   if (!(await appExists(c.env, appId))) throw new HttpError(404, 'unknown app');
   return { user, appId };
 }

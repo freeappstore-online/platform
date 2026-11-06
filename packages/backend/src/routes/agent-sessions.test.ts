@@ -59,7 +59,7 @@ function env(db: D1Database): Record<string, unknown> {
 }
 
 async function authHeader(userId = 'user-1') {
-  const token = await signSession(userId, SIGNING_KEY);
+  const token = await signSession(userId, SIGNING_KEY, { aud: 'console' });
   return `Bearer ${token}`;
 }
 

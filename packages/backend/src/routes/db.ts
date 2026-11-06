@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { HttpError, requireAppUser } from '../lib/auth.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
@@ -67,7 +67,7 @@ export const dbRoutes = new Hono<{ Bindings: Env }>();
 /** Create a document. Auth required. */
 dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireAppUser(c, c.req.param('appId'));
     const { appId, collection } = c.req.param();
 
     const colErr = validateCollection(collection);
@@ -235,7 +235,7 @@ dbRoutes.get('/apps/:appId/db/:collection/:id', async (c) => {
 /** Update a document. Auth required, owner only. */
 dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireAppUser(c, c.req.param('appId'));
     const { appId, collection, id } = c.req.param();
 
     const colErr = validateCollection(collection);
@@ -306,7 +306,7 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
 /** Delete a document. Auth required, owner only. */
 dbRoutes.delete('/apps/:appId/db/:collection/:id', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireAppUser(c, c.req.param('appId'));
     const { appId, collection, id } = c.req.param();
 
     const colErr = validateCollection(collection);

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { HttpError, requireAppUser } from '../lib/auth.js';
 import { likePrefix } from '../lib/like.js';
 import { checkKvWrite, KV_LIMITS } from '../lib/quota.js';
 import type { Env } from '../types.js';
@@ -10,7 +10,7 @@ export const kvRoutes = new Hono<{ Bindings: Env }>();
 /** List all keys for the current user in this app. Optional ?prefix= filter. */
 kvRoutes.get('/apps/:appId/kv', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireAppUser(c, c.req.param('appId'));
     const { appId } = c.req.param();
     const prefix = c.req.query('prefix');
 
@@ -38,7 +38,7 @@ kvRoutes.get('/apps/:appId/kv', async (c) => {
 
 kvRoutes.get('/apps/:appId/kv/:key', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireAppUser(c, c.req.param('appId'));
     const { appId, key } = c.req.param();
     const row = await c.env.DB.prepare(
       'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
@@ -70,7 +70,7 @@ export function toBytes(value: unknown): Uint8Array {
 
 kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireAppUser(c, c.req.param('appId'));
     const { appId, key } = c.req.param();
     if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
     // Cap key length: keys are stored but not metered against the value quota,
@@ -155,7 +155,7 @@ kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
 
 kvRoutes.delete('/apps/:appId/kv/:key', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireAppUser(c, c.req.param('appId'));
     const { appId, key } = c.req.param();
     const result = await c.env.DB.prepare(
       'DELETE FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',

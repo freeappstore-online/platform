@@ -28,7 +28,7 @@ import type { AuthRequest, OAuthHelpers } from "@cloudflare/workers-oauth-provid
 import { Hono } from "hono";
 import { generateVerifier, randomToken, s256Challenge, sha256Hex, timingSafeEqual } from "./pkce.js";
 import { parseScopes } from "./safety.js";
-import { verifySession } from "./session.js";
+import { CONSOLE_AUD, verifySession } from "./session.js";
 
 type Bindings = {
   OAUTH_KV: KVNamespace;
@@ -150,6 +150,9 @@ app.get("/callback", async (c) => {
     ? await verifySession(fasSession, c.env.SESSION_SIGNING_KEY)
     : null;
   if (!payload) return c.text("invalid session", 400);
+  // The backend mints `aud: console` for app_id=mcp on this worker's own
+  // origin (#495); anything else could not drive the tools below.
+  if (payload.aud !== CONSOLE_AUD) return c.text("invalid session", 400);
 
   const scopes = parseScopes(pending.req.scope);
   // The provider's tokens/codes are `userId:grantId:secret`, so the userId must

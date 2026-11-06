@@ -49,7 +49,7 @@ function env(db: D1Database) {
 }
 
 async function authHeader() {
-  const token = await signSession('u1', SIGNING_KEY);
+  const token = await signSession('u1', SIGNING_KEY, { aud: 'console' });
   return `Bearer ${token}`;
 }
 
@@ -218,7 +218,7 @@ describe.skipIf(!hasSqlite)('decrements are owner / privileged-role only (#492)'
           {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${await signSession(userId, SIGNING_KEY)}`,
+              Authorization: `Bearer ${await signSession(userId, SIGNING_KEY, { aud: 'timer' })}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({ increment }),

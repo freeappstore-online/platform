@@ -99,7 +99,7 @@ User stores their own API key on the platform. Each user pays their own provider
 4. Zero key management code in the app
 
 **Supported providers (platform pre-configured):**
-OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe
+OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs
 
 **Adding new providers:** Platform admin inserts a row into `key_providers` table. No code change needed.
 

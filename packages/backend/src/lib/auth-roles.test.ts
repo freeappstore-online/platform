@@ -7,33 +7,33 @@ const KEY = 'a'.repeat(64);
 
 describe('session token roles', () => {
   it('includes roles in the token payload', async () => {
-    const token = await signSession('gh:42', KEY, { roles: ['user', 'creator'] });
+    const token = await signSession('gh:42', KEY, { aud: 'console', roles: ['user', 'creator'] });
     const payload = await verifySession(token, KEY);
     expect(payload?.roles).toEqual(['user', 'creator']);
   });
 
   it('includes appRoles in the token payload', async () => {
     const appRoles = { meetup: ['moderator'], studio: ['owner', 'editor'] };
-    const token = await signSession('gh:42', KEY, { roles: ['user'], appRoles });
+    const token = await signSession('gh:42', KEY, { aud: 'console', roles: ['user'], appRoles });
     const payload = await verifySession(token, KEY);
     expect(payload?.appRoles).toEqual(appRoles);
   });
 
   it('defaults roles to ["user"] when no opts provided', async () => {
-    const token = await signSession('gh:42', KEY);
+    const token = await signSession('gh:42', KEY, { aud: 'console' });
     const payload = await verifySession(token, KEY);
     expect(payload?.roles).toEqual(['user']);
   });
 
   it('defaults appRoles to {} when no opts provided', async () => {
-    const token = await signSession('gh:42', KEY);
+    const token = await signSession('gh:42', KEY, { aud: 'console' });
     const payload = await verifySession(token, KEY);
     expect(payload?.appRoles).toEqual({});
   });
 
   it('preserves all roles through sign/verify roundtrip', async () => {
     const roles = ['user', 'creator', 'admin'];
-    const token = await signSession('gh:42', KEY, { roles });
+    const token = await signSession('gh:42', KEY, { aud: 'console', roles });
     const payload = await verifySession(token, KEY);
     expect(payload?.uid).toBe('gh:42');
     expect(payload?.roles).toEqual(roles);
@@ -41,7 +41,7 @@ describe('session token roles', () => {
   });
 
   it('roles cannot be tampered with (HMAC protects entire payload)', async () => {
-    const token = await signSession('gh:42', KEY, { roles: ['user'] });
+    const token = await signSession('gh:42', KEY, { aud: 'console', roles: ['user'] });
     // Decode payload, change roles, re-encode (without re-signing)
     const dot = token.lastIndexOf('.');
     const body = token.slice(0, dot);
@@ -171,7 +171,7 @@ describe('computeRoles admin (#22)', () => {
 
 describe('requireUser githubLogin', () => {
   async function userFor(id: string, githubLogin: string) {
-    const token = await signSession(id, KEY);
+    const token = await signSession(id, KEY, { aud: 'console' });
     const db = {
       prepare: () => ({
         bind: () => ({

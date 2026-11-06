@@ -20,6 +20,7 @@ function fakeDB(capture: { batched?: string[] } = {}) {
                 display_name: null,
                 email: null,
                 date_of_birth: null,
+                sessions_valid_after: 0,
               }
             : null,
         run: async () => ({ meta: { changes: 1 } }),
@@ -43,9 +44,21 @@ describe('DELETE /v1/auth/me', () => {
     expect(res.status).toBe(401);
   });
 
+  it('403s an app-scoped session: deletion is a console action (#495)', async () => {
+    const capture: { batched?: string[] } = {};
+    const token = await signSession('u1', SIGNING_KEY, { aud: 'chess' });
+    const res = await app.request(
+      '/v1/auth/me',
+      { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
+      env(fakeDB(capture)),
+    );
+    expect(res.status).toBe(403);
+    expect(capture.batched).toBeUndefined();
+  });
+
   it('deletes the user + personal data across the expected tables', async () => {
     const capture: { batched?: string[] } = {};
-    const token = await signSession('u1', SIGNING_KEY);
+    const token = await signSession('u1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/auth/me',
       { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } },
@@ -86,7 +99,7 @@ describe('deletion is not undone by the synthetic-user fallback', () => {
   } as unknown as D1Database;
 
   it('rejects a FAS-native token whose account row is gone (no resurrection)', async () => {
-    const token = await signSession('gh:1', SIGNING_KEY);
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const res = await app.request(
       '/v1/apps/mine',
       { headers: { Authorization: `Bearer ${token}` } },
@@ -95,13 +108,15 @@ describe('deletion is not undone by the synthetic-user fallback', () => {
     expect(res.status).toBe(401);
   });
 
-  it('still synthesizes a cross-store (cred:*) user with no FAS row', async () => {
-    const token = await signSession('cred:pas-user', SIGNING_KEY);
+  it('still synthesizes a cross-store (cred:*) user with no FAS row on an app route', async () => {
+    const token = await signSession('cred:pas-user', SIGNING_KEY, { aud: 'chess' });
     const res = await app.request(
-      '/v1/apps/mine',
+      '/v1/apps/chess/kv',
       { headers: { Authorization: `Bearer ${token}` } },
       env(emptyDB),
     );
-    expect(res.status).toBe(200);
+    // Authenticated; the empty DB then has no such app.
+    expect(res.status).not.toBe(401);
+    expect(res.status).not.toBe(403);
   });
 });

@@ -1,9 +1,24 @@
 import type { Context } from 'hono';
 import type { Env } from '../types.js';
-import { timingSafeEqual, verifySession } from './session.js';
+import { CONSOLE_AUD, LEGACY_AUD, timingSafeEqual, verifySession } from './session.js';
+
+/**
+ * Sessions minted before #495 carry no `aud`. They keep working on the
+ * app-data routes (`requireAppUser`) until this instant and are refused by the
+ * console-only routes (`requireConsoleUser`) from the first deploy. Every such
+ * token expires ≤30 days after the deploy anyway; the cutoff only shortens the
+ * window. Delete the `legacy` branches once it has passed.
+ */
+export const LEGACY_AUD_CUTOFF = Date.UTC(2026, 10, 20); // 2026-11-20T00:00:00Z
 
 export interface CurrentUser {
   id: string;
+  /**
+   * Which surface this session was delivered to (#495): an app id, `console`
+   * for the first-party surfaces, or `legacy` for a pre-#495 token. Decides
+   * what the session may call — see requireAppUser / requireConsoleUser.
+   */
+  aud: string;
   /** Display-oriented name: display_name if set, otherwise github_login. */
   login: string;
   /** Always the GitHub username — use this for ownership checks, collaborator APIs, admin login matching. */
@@ -22,7 +37,7 @@ export interface CurrentUser {
 }
 
 const USER_COLUMNS =
-  'SELECT id, github_login, avatar_url, display_name, email, date_of_birth FROM users';
+  'SELECT id, github_login, avatar_url, display_name, email, date_of_birth, sessions_valid_after FROM users';
 
 interface UserRow {
   id: string;
@@ -31,6 +46,7 @@ interface UserRow {
   display_name: string | null;
   email: string | null;
   date_of_birth: string | null;
+  sessions_valid_after: number | null;
 }
 
 export async function requireUser<E extends { Bindings: Env }>(
@@ -43,10 +59,18 @@ export async function requireUser<E extends { Bindings: Env }>(
   const token = auth.slice('Bearer '.length);
   const payload = await verifySession(token, c.env.SESSION_SIGNING_KEY);
   if (!payload) throw new HttpError(401, 'invalid or expired session');
+  const aud = payload.aud ?? LEGACY_AUD;
 
   const row = await c.env.DB.prepare(`${USER_COLUMNS} WHERE id = ?`)
     .bind(payload.uid)
     .first<UserRow>();
+
+  // Revocation (#495): `POST /v1/auth/logout` moves sessions_valid_after to
+  // now, so every session issued before it is dead on the next request. Same
+  // row the lookup above already fetched — no extra I/O.
+  if (row?.sessions_valid_after && payload.iat < row.sessions_valid_after) {
+    throw new HttpError(401, 'session revoked');
+  }
 
   // Cross-store identities (e.g. PAS `cred:*`) legitimately have no FAS user
   // row — the token signature is verified, so synthesize a user to let
@@ -69,6 +93,8 @@ export async function requireUser<E extends { Bindings: Env }>(
     );
     return {
       id: payload.uid,
+      // A cross-store token is never first-party here, whatever it claims.
+      aud: aud === CONSOLE_AUD ? LEGACY_AUD : aud,
       login: payload.login ?? payload.uid,
       githubLogin: '',
       avatarUrl: null,
@@ -80,6 +106,7 @@ export async function requireUser<E extends { Bindings: Env }>(
 
   return {
     id: row.id,
+    aud,
     login: row.display_name || row.github_login,
     // Non-GitHub providers store the email local-part in github_login. It is
     // attacker-chosen, so it must never match an app owner or admin login
@@ -90,6 +117,40 @@ export async function requireUser<E extends { Bindings: Env }>(
     roles: payload.roles ?? ['user'],
     appRoles: payload.appRoles ?? {},
   };
+}
+
+/**
+ * A session that may touch `appId`'s data (#495): one delivered to that app,
+ * or a first-party (`console`) one. A session delivered to another app is
+ * refused, so an XSS in — or a malicious — app A cannot read app B's kv.
+ * Legacy tokens pass until LEGACY_AUD_CUTOFF.
+ */
+export async function requireAppUser<E extends { Bindings: Env }>(
+  c: Context<E>,
+  appId: string,
+): Promise<CurrentUser> {
+  const user = await requireUser(c);
+  if (user.aud === appId || user.aud === CONSOLE_AUD) return user;
+  if (user.aud === LEGACY_AUD) {
+    if (Date.now() < LEGACY_AUD_CUTOFF) return user;
+    throw new HttpError(401, 'session_reissue_required');
+  }
+  throw new HttpError(403, 'wrong_audience');
+}
+
+/**
+ * A first-party session (#495): signed in on the storefront, console, admin,
+ * MCP or CLI. Required for everything that reaches beyond one app — publish,
+ * app settings, the key vault, account deletion, admin. A legacy token is
+ * 401 (not 403) so the stored copy is cleared and the user signs in again.
+ */
+export async function requireConsoleUser<E extends { Bindings: Env }>(
+  c: Context<E>,
+): Promise<CurrentUser> {
+  const user = await requireUser(c);
+  if (user.aud === CONSOLE_AUD) return user;
+  if (user.aud === LEGACY_AUD) throw new HttpError(401, 'session_reissue_required');
+  throw new HttpError(403, 'console_session_required');
 }
 
 /**
@@ -137,9 +198,9 @@ export async function assertAppOwner(
   if (!isAppOwner(user, row.owner_login)) throw new HttpError(403, 'not the app owner');
 }
 
-/** Require a platform admin (decided live — see isAdmin). */
+/** Require a platform admin (decided live — see isAdmin) on a first-party session. */
 export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<CurrentUser> {
-  const user = await requireUser(c);
+  const user = await requireConsoleUser(c);
   if (!isAdmin(user, c.env)) {
     console.warn('admin_denied', {
       userId: user.id,
@@ -159,12 +220,30 @@ export async function requireAdmin(c: Context<{ Bindings: Env }>): Promise<Curre
   return user;
 }
 
-/** Require the signed-in user to own `appId`: 404 if no such app, 403 if not theirs. */
+/**
+ * Require the signed-in user to own `appId`: 404 if no such app, 403 if not
+ * theirs. The session may be the app's own or first-party — for owner actions
+ * the SDK exposes inside the app (webhooks, roles).
+ */
 export async function requireAppOwner(
   c: Context<{ Bindings: Env }>,
   appId: string,
 ): Promise<CurrentUser> {
-  const user = await requireUser(c);
+  const user = await requireAppUser(c, appId);
+  await assertAppOwner(c.env, user, appId);
+  return user;
+}
+
+/**
+ * Owner of `appId` on a first-party session: app settings that an app's own
+ * (possibly compromised) page must never reach — secrets, allowlist, analytics
+ * config (`custom_head`), log reads.
+ */
+export async function requireConsoleAppOwner(
+  c: Context<{ Bindings: Env }>,
+  appId: string,
+): Promise<CurrentUser> {
+  const user = await requireConsoleUser(c);
   await assertAppOwner(c.env, user, appId);
   return user;
 }

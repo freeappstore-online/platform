@@ -27,8 +27,8 @@ fas.auth.signIn('google');              // Google OAuth
 fas.auth.signIn('apple');               // Apple Sign In
 fas.auth.signIn('email');               // prompts for email, sends magic link
 fas.auth.signInWithEmail('user@x.com'); // send magic link directly
-fas.auth.signOut();                     // clears local session
-await fas.auth.deleteAccount();         // deletes the signed-in account and associated active data
+fas.auth.signOut();                     // revokes every session of the account (all apps, all devices), then clears the local one
+await fas.auth.deleteAccount();         // opens the console's account settings — deletion needs a first-party session
 fas.auth.onChange(cb);                  // fires immediately + on change, returns Unsubscribe
 fas.auth.setDateOfBirth('2000-01-15'); // set user date of birth
 await fas.auth.init();                  // capture callback, must be called once
@@ -235,7 +235,7 @@ fas.keys.manage('openai');          // redirect to key management page
 const keys = await fas.keys.status(); // check all configured providers
 ```
 
-Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe.
+Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs.
 
 ## RBAC roles (`fas.roles`)
 

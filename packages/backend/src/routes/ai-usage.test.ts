@@ -95,8 +95,8 @@ async function request(
 ) {
   const token =
     init.as === 'admin'
-      ? await signSession('admin-1', SIGNING_KEY)
-      : await signSession('gh:1', SIGNING_KEY);
+      ? await signSession('admin-1', SIGNING_KEY, { aud: 'console' })
+      : await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
   const { as: _as, ...rest } = init;
   return app.request(
     `https://backend${path}`,

@@ -20,7 +20,9 @@ async function setup() {
       `/v1/apps/${path}`,
       {
         method,
-        headers: user ? { Authorization: `Bearer ${await signSession(user, key)}` } : {},
+        headers: user
+          ? { Authorization: `Bearer ${await signSession(user, key, { aud: 'console' })}` }
+          : {},
         ...(body === undefined ? {} : { body }),
       },
       { DB: database, SESSION_SIGNING_KEY: key },
