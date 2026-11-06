@@ -9,7 +9,7 @@ export function corsHeaders(request: Request, domain: string): Record<string, st
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Last-Event-ID",
     "Access-Control-Expose-Headers": "Last-Event-ID",
-    "Access-Control-Allow-Credentials": "true",
+    // Bearer-only API: no cookies are read or set, so no Allow-Credentials (#498).
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
   };

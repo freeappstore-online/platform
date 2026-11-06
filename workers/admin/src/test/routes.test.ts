@@ -512,6 +512,23 @@ describe("router", () => {
     );
     expect(res.status).toBe(204);
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://console.freeappstore.online");
+    expect(res.headers.get("Access-Control-Allow-Credentials")).toBeNull();
+  });
+
+  it("does not reflect a hosted app's origin, and never allows credentials (#498)", async () => {
+    for (const origin of [
+      "https://evil-app.freeappstore.online",
+      "https://freeappstore.online.attacker.example",
+      "https://free-app.pages.dev",
+    ]) {
+      const res = await worker.fetch(req("/api/ping", { method: "OPTIONS", headers: { Origin: origin } }), env());
+      expect(res.headers.get("Access-Control-Allow-Origin"), origin).toBe("https://freeappstore.online");
+      expect(res.headers.get("Access-Control-Allow-Credentials"), origin).toBeNull();
+    }
+    const apex = await worker.fetch(req("/api/ping", { method: "OPTIONS", headers: { Origin: "https://freeappstore.online" } }), env());
+    expect(apex.headers.get("Access-Control-Allow-Origin")).toBe("https://freeappstore.online");
+    const dev = await worker.fetch(req("/api/ping", { method: "OPTIONS", headers: { Origin: "http://localhost:5173" } }), env());
+    expect(dev.headers.get("Access-Control-Allow-Origin")).toBe("http://localhost:5173");
   });
 
   it("falls back to JSON 404 under /api and a bare 404 elsewhere", async () => {

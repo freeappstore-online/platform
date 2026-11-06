@@ -1,16 +1,21 @@
 /** Response helpers shared by the router and every route module. */
 
+/**
+ * Browser callers of this API: the creator console at freeappstore.online/app/
+ * (its R2 origin console.freeappstore.online) and local dev. The admin UI is
+ * same-origin, the backend arrives over a service binding and the CLI has no
+ * Origin. Hosted apps (*.freeappstore.online) are untrusted and never allowed,
+ * and the API is bearer-only, so no Allow-Credentials either (#498).
+ */
+export const CORS_ORIGINS = new Set(["https://freeappstore.online", "https://console.freeappstore.online"]);
+
 export function corsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin");
-  const allowed =
-    origin && (origin.endsWith(".freeappstore.online") || origin === "https://freeappstore.online" || origin.startsWith("http://localhost"))
-      ? origin
-      : "https://freeappstore.online";
+  const allowed = origin && (CORS_ORIGINS.has(origin) || origin.startsWith("http://localhost")) ? origin : "https://freeappstore.online";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
-    "Access-Control-Allow-Credentials": "true",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "X-Frame-Options": "DENY",

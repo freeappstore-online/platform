@@ -38,6 +38,11 @@ describe("corsHeaders", () => {
     expect(h["X-Content-Type-Options"]).toBe("nosniff");
     expect(h["Referrer-Policy"]).toBe("strict-origin-when-cross-origin");
   });
+
+  it("never allows credentials: the API is bearer-only (#498)", () => {
+    const h = corsHeaders(req("https://console.freeappstore.online"), "freeappstore.online");
+    expect(h["Access-Control-Allow-Credentials"]).toBeUndefined();
+  });
 });
 
 describe("json helper", () => {

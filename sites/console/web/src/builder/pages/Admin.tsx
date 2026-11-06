@@ -1203,9 +1203,7 @@ function FailingDeploysPanel() {
     try {
       const [agentDeploys, ghStatuses, appsData] = await Promise.all([
         adminFetchJson<{ sessions?: AgentDeployFailure[] }>(`${API_URL}/v1/admin/agent-deploys?status=error&limit=200`),
-        adminFetchJson<Record<string, AdminGithubDeployStatus>>(`${ADMIN_WORKER_URL}/api/apps/deploy-status`, {
-          credentials: "include",
-        }),
+        adminFetchJson<Record<string, AdminGithubDeployStatus>>(`${ADMIN_WORKER_URL}/api/apps/deploy-status`),
         adminFetchJson<{ apps?: AdminApp[] }>(`${API_URL}/v1/admin/apps`),
       ]);
       setRows(
@@ -1639,9 +1637,7 @@ function AppsTab() {
     setError(null);
     Promise.all([
       adminFetchJson<{ apps?: AdminApp[] }>(`${API_URL}/v1/admin/apps`),
-      adminFetchJson<Record<string, AdminGithubDeployStatus>>(`${ADMIN_WORKER_URL}/api/apps/deploy-status`, {
-        credentials: "include",
-      }).catch(() => ({})),
+      adminFetchJson<Record<string, AdminGithubDeployStatus>>(`${ADMIN_WORKER_URL}/api/apps/deploy-status`).catch(() => ({})),
     ])
       .then(([data, statuses]) => {
         setApps((data.apps || []).filter(isFreeAppStoreApp));
