@@ -37,6 +37,9 @@ export const RESERVED_APP_IDS: ReadonlySet<string> = new Set([
   'fas-admin',
   'cli',
   'keys',
+  // The audience marker for pre-#495 tokens is not an app id either way, but
+  // keep the word out of reach (#495).
+  'legacy',
   // Existing app address aliases; provisioning these would replace their routes.
   'hanzi',
   'yi',

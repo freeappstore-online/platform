@@ -400,8 +400,12 @@ function AccountSettings() {
   const [error, setError] = useState('')
   const fromApp = new URLSearchParams(location.search).get('delete-account') === '1'
 
-  const signOutEverywhere = () => {
-    // signOut() revokes every session of this account on the platform, then clears the local one.
+  const signOutEverywhere = async () => {
+    // Revokes every session of this account (all apps, all devices); then drop ours.
+    await fetch(`${API_BASE}/auth/logout`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${fas.auth.token ?? ''}` },
+    }).catch(() => {})
     fas.auth.signOut()
   }
 

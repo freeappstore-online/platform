@@ -800,11 +800,22 @@ keysRoutes.get('/keys', async (c) => {
     /^https?:\/\//i.test(returnUrlRaw) || returnUrlRaw.startsWith('/') ? returnUrlRaw : '';
   const provider = c.req.query('provider') ?? '';
   const appId = c.req.query('app') ?? '';
-  return c.html(renderKeysPage({ returnUrl, provider, appId }));
+  // This page holds the session for the key vault: only its own script runs (#495).
+  const nonce = crypto.randomUUID().replace(/-/g, '');
+  c.header(
+    'Content-Security-Policy',
+    `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  );
+  return c.html(renderKeysPage({ returnUrl, provider, appId, nonce }));
 });
 
-function renderKeysPage(opts: { returnUrl: string; provider: string; appId: string }): string {
-  const { returnUrl, provider, appId } = opts;
+function renderKeysPage(opts: {
+  returnUrl: string;
+  provider: string;
+  appId: string;
+  nonce: string;
+}): string {
+  const { returnUrl, provider, appId, nonce } = opts;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -855,7 +866,7 @@ function renderKeysPage(opts: { returnUrl: string; provider: string; appId: stri
 
   ${returnUrl ? `<a class="back" href="${escapeAttr(returnUrl)}">Back to ${escapeAttr(appId || 'app')}</a>` : ''}
 </div>
-<script>
+<script nonce="${nonce}">
 (function() {
   var API = '/v1';
   var token = null;
@@ -943,17 +954,17 @@ function renderKeysPage(opts: { returnUrl: string; provider: string; appId: stri
       if (has) {
         html += '<p class="meta">Added ' + new Date(existingMap[p.id].created_at).toLocaleDateString() + '</p>';
         html += '<div class="actions">';
-        html += '<button class="btn btn-ghost" onclick="editKey(\\''+p.id+'\\')">Update</button>';
-        html += '<button class="btn btn-danger" onclick="deleteKey(\\''+p.id+'\\')">Remove</button>';
+        html += '<button class="btn btn-ghost" data-action="editKey" data-id="'+p.id+'">Update</button>';
+        html += '<button class="btn btn-danger" data-action="deleteKey" data-id="'+p.id+'">Remove</button>';
         html += '</div>';
       } else {
-        html += '<div class="actions"><button class="btn btn-primary" onclick="editKey(\\''+p.id+'\\')">Add key</button></div>';
+        html += '<div class="actions"><button class="btn btn-primary" data-action="editKey" data-id="'+p.id+'">Add key</button></div>';
       }
       html += '<div id="form-' + p.id + '" class="hidden" style="margin-top:0.75rem">';
       html += '<input type="password" id="input-' + p.id + '" placeholder="Paste your ' + esc(p.name) + ' API key">';
       html += '<div class="actions">';
-      html += '<button class="btn btn-primary" onclick="saveKey(\\''+p.id+'\\')">Save</button>';
-      html += '<button class="btn btn-ghost" onclick="cancelEdit(\\''+p.id+'\\')">Cancel</button>';
+      html += '<button class="btn btn-primary" data-action="saveKey" data-id="'+p.id+'">Save</button>';
+      html += '<button class="btn btn-ghost" data-action="cancelEdit" data-id="'+p.id+'">Cancel</button>';
       html += '</div></div>';
       html += '</div>';
     });
@@ -992,6 +1003,14 @@ function renderKeysPage(opts: { returnUrl: string; provider: string; appId: stri
     if (data.ok) { setStatus('Removed.'); load(); }
     else { setStatus('Error: ' + (data.error || 'unknown')); }
   };
+
+  // One delegated listener instead of inline onclick handlers, which the
+  // page's CSP does not allow.
+  var actions = { editKey: window.editKey, cancelEdit: window.cancelEdit, saveKey: window.saveKey, deleteKey: window.deleteKey };
+  document.getElementById('keys-list').addEventListener('click', function(e) {
+    var b = e.target.closest('[data-action]');
+    if (b && actions[b.getAttribute('data-action')]) actions[b.getAttribute('data-action')](b.getAttribute('data-id'));
+  });
 
   load();
 })();

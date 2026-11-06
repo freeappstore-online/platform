@@ -1,6 +1,12 @@
 import type { Context } from 'hono';
 import type { Env } from '../types.js';
-import { CONSOLE_AUD, LEGACY_AUD, timingSafeEqual, verifySession } from './session.js';
+import {
+  CONSOLE_AUD,
+  CROSS_STORE_AUD,
+  LEGACY_AUD,
+  timingSafeEqual,
+  verifySession,
+} from './session.js';
 
 /**
  * Sessions minted before #495 carry no `aud`. They keep working on the
@@ -17,6 +23,7 @@ export interface CurrentUser {
    * Which surface this session was delivered to (#495): an app id, `console`
    * for the first-party surfaces, or `legacy` for a pre-#495 token. Decides
    * what the session may call — see requireAppUser / requireConsoleUser.
+   * (`legacy` here is LEGACY_AUD, `#legacy`: outside the app-id alphabet.)
    */
   aud: string;
   /** Display-oriented name: display_name if set, otherwise github_login. */
@@ -94,7 +101,7 @@ export async function requireUser<E extends { Bindings: Env }>(
     return {
       id: payload.uid,
       // A cross-store token is never first-party here, whatever it claims.
-      aud: aud === CONSOLE_AUD ? LEGACY_AUD : aud,
+      aud: aud === CONSOLE_AUD ? CROSS_STORE_AUD : aud,
       login: payload.login ?? payload.uid,
       githubLogin: '',
       avatarUrl: null,

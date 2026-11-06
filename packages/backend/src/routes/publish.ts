@@ -80,7 +80,7 @@ publishRoutes.post('/publish', async (c) => {
     return c.text('invalid json', 400);
   }
 
-  if (!APP_ID_RE.test(body.name)) {
+  if (typeof body.name !== 'string' || !APP_ID_RE.test(body.name)) {
     return c.text('app name must be lowercase letters, digits, or hyphens (2-31 chars)', 400);
   }
   // Before anything reaches the admin Worker, which would otherwise grant the

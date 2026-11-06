@@ -49,5 +49,8 @@ qualityRoutes.get('/apps/:id/quality/badge', async (c) => {
   return c.body(svg, 200, {
     'Content-Type': 'image/svg+xml',
     'Cache-Control': 'public, max-age=300',
+    // The SVG is build output from the app's repo: opened directly, it must
+    // not be able to run script on the API origin (#495).
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
   });
 });

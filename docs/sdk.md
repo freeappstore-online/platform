@@ -27,7 +27,7 @@ fas.auth.signIn('google');              // Google OAuth
 fas.auth.signIn('apple');               // Apple Sign In
 fas.auth.signIn('email');               // prompts for email, sends magic link
 fas.auth.signInWithEmail('user@x.com'); // send magic link directly
-fas.auth.signOut();                     // revokes every session of the account (all apps, all devices), then clears the local one
+fas.auth.signOut();                     // signs out of this app ("sign out everywhere" lives in the console)
 await fas.auth.deleteAccount();         // opens the console's account settings — deletion needs a first-party session
 fas.auth.onChange(cb);                  // fires immediately + on change, returns Unsubscribe
 fas.auth.setDateOfBirth('2000-01-15'); // set user date of birth

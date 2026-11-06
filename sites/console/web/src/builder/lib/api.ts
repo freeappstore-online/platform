@@ -67,7 +67,9 @@ export async function handleAuthCallback(): Promise<Session | null> {
 
 export function getSignInUrl(redirect: string): string {
   const url = new URL("/v1/auth/github/start", API_URL);
-  url.searchParams.set("app_id", "create");
+  // The builder is part of the console (same origin, same session): it signs
+  // in as the console so its token can publish (#495). "create" is reserved.
+  url.searchParams.set("app_id", "console");
   url.searchParams.set("return_to", redirect);
   return url.toString();
 }

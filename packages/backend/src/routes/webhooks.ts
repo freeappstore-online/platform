@@ -8,7 +8,7 @@
  */
 
 import { Hono } from 'hono';
-import { requireAppOwner } from '../lib/auth.js';
+import { requireAppOwner, requireConsoleAppOwner } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const webhookRoutes = new Hono<{ Bindings: Env }>();
@@ -47,7 +47,8 @@ webhookRoutes.get('/apps/:appId/webhooks', async (c) => {
 
 webhookRoutes.post('/apps/:appId/webhooks', async (c) => {
   const appId = c.req.param('appId')!;
-  await requireAppOwner(c, appId);
+  // Pointing an app's events at a URL is an app setting: console only (#495).
+  await requireConsoleAppOwner(c, appId);
 
   const body = await c.req.json<{ event: string; url: string }>().catch(() => null);
   if (!body?.event || !body?.url) {

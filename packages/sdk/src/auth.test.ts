@@ -241,7 +241,7 @@ describe('Auth — storage round-trip', () => {
     expect(seen).toEqual([{ id: 'gh:7', login: 'u', avatarUrl: null, dateOfBirth: null }, null]);
   });
 
-  it('signOut asks the platform to revoke every session, with the token it is dropping (#495)', () => {
+  it('signOut is local: it never asks the platform to revoke sessions (#495)', () => {
     const { window } = makeWindow({ href: 'https://app.example/' });
     window.localStorage.store.set(
       'fas:session',
@@ -251,29 +251,14 @@ describe('Auth — storage round-trip', () => {
       }),
     );
     (globalThis as Record<string, unknown>).window = window;
-    const fetch = vi.fn(() => Promise.resolve(new Response('{"ok":true}')));
+    const fetch = vi.fn(() => Promise.resolve(new Response('{}')));
     globalThis.fetch = fetch;
 
     new Auth('demo', 'https://api.example').signOut();
 
-    // The constructor's ensure-member call is the other one.
-    const logout = fetch.mock.calls.find(
-      (call) => String((call as unknown as [URL])[0]) === 'https://api.example/v1/auth/logout',
-    ) as unknown as [URL, RequestInit] | undefined;
-    if (!logout) throw new Error('expected a /v1/auth/logout call');
-    expect(logout[1].method).toBe('POST');
-    expect((logout[1].headers as Record<string, string>).Authorization).toBe('Bearer cached');
-  });
-
-  it('signOut does not call the platform when there is no session', () => {
-    const { window } = makeWindow({ href: 'https://app.example/' });
-    (globalThis as Record<string, unknown>).window = window;
-    const fetch = vi.fn();
-    globalThis.fetch = fetch;
-
-    new Auth('demo', 'https://api.example').signOut();
-
-    expect(fetch).not.toHaveBeenCalled();
+    expect(
+      fetch.mock.calls.some((call) => String((call as unknown[])[0]).includes('/logout')),
+    ).toBe(false);
   });
 
   it('deleteAccount sends the user to the console account settings (#495)', async () => {
@@ -495,13 +480,11 @@ describe('Auth protects the active session from stale requests (#350/#361)', () 
     storedSession(window, 'token-a', 'alice');
     const auth = new Auth('demo', 'https://api.example');
     let rejectRequest!: (response: Response) => void;
-    globalThis.fetch = vi.fn((input: RequestInfo | URL) =>
-      // signOut()'s own logout call must not take the resolver meant for the KV request.
-      String(input).endsWith('/v1/auth/logout')
-        ? Promise.resolve(new Response('{"ok":true}'))
-        : new Promise<Response>((resolve) => {
-            rejectRequest = resolve;
-          }),
+    globalThis.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          rejectRequest = resolve;
+        }),
     );
     const request = new (await import('./kv.js')).Kv('demo', 'https://api.example', auth).get(
       'draft',

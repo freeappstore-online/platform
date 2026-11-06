@@ -5,12 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IMPORT_MAX_FILE_BYTES, IMPORT_MAX_FILES, IMPORT_MAX_TOTAL_BYTES } from "./repo-import";
 import { AgentSession } from "./session";
 
-type User = { id: string; login: string; githubLogin: string; roles: string[] };
-const ALICE: User = { id: "gh:1", login: "alice", githubLogin: "alice", roles: ["user", "creator"] };
-const MALLORY: User = { id: "gh:2", login: "mallory", githubLogin: "mallory", roles: ["user"] };
-const ADMIN: User = { id: "gh:3", login: "ops", githubLogin: "ops", roles: ["user", "admin"] };
+type User = { id: string; login: string; githubLogin: string; roles: string[]; aud?: string };
+const ALICE: User = { id: "gh:1", login: "alice", githubLogin: "alice", roles: ["user", "creator"], aud: "console" };
+const MALLORY: User = { id: "gh:2", login: "mallory", githubLogin: "mallory", roles: ["user"], aud: "console" };
+const ADMIN: User = { id: "gh:3", login: "ops", githubLogin: "ops", roles: ["user", "admin"], aud: "console" };
 /** A Google user whose chosen display name is alice's GitHub login. */
-const IMPOSTOR: User = { id: "google:9", login: "alice", githubLogin: "mallory9", roles: ["user"] };
+const IMPOSTOR: User = { id: "google:9", login: "alice", githubLogin: "mallory9", roles: ["user"], aud: "console" };
 
 /** GitHub repo: path -> content. */
 type Repo = Record<string, string>;
@@ -169,6 +169,36 @@ describe("POST /import — who may open an app (#12)", () => {
     expect(status).toBe(409);
     expect(body.error).toMatch(/different app/);
     expect((store.get("session") as any).appId).toBe("dict");
+  });
+});
+
+describe("POST /import — only a console session (#495)", () => {
+  it.each([
+    ["the owner's token for one of their apps", { ...ALICE, aud: "dict" }],
+    ["a pre-#495 token with no audience", { ...ALICE, aud: undefined }],
+  ])("refuses %s with 401, leaving the session unbound", async (_label, user) => {
+    const { state, store } = fakeState();
+    const session = new AgentSession(state, fakeEnv(user, { dict: ["alice", null] }));
+
+    const { status } = await importApp(session, "dict");
+
+    expect(status).toBe(401);
+    expect((store.get("session") as any)?.ownerId ?? null).toBeNull();
+  });
+
+  it("re-validates a token cached before #495 instead of trusting the cache", async () => {
+    const { state, store } = fakeState();
+    let me: User = ALICE;
+    const env = fakeEnv(ALICE, { dict: ["alice", null] });
+    env.PLATFORM = { fetch: async () => Response.json(me) };
+    expect((await importApp(new AgentSession(state, env), "dict")).status).toBe(200);
+
+    // As a DO bound before the deploy holds it: same token hash, still fresh, no tokenAud.
+    const saved = store.get("session") as Record<string, unknown>;
+    delete saved.tokenAud;
+    me = { ...ALICE, aud: undefined };
+
+    expect((await importApp(new AgentSession(state, env), "dict")).status).toBe(401);
   });
 });
 

@@ -15,10 +15,16 @@ describe('isAllowedReturnTo binds return_to to the app id (#495)', () => {
     expect(isAllowedReturnTo('http://chess.freeappstore.online/', 'chess')).toBe(false);
   });
 
-  it('allows localhost for dev (http and https, any port)', () => {
+  it('allows localhost for an app in dev (http and https, any port)', () => {
     expect(isAllowedReturnTo('http://localhost:5173/', 'chess')).toBe(true);
-    expect(isAllowedReturnTo('https://localhost:8443/x', 'console')).toBe(true);
-    expect(isAllowedReturnTo('http://127.0.0.1:8787/cb', 'store')).toBe(true);
+    expect(isAllowedReturnTo('https://localhost:8443/x', 'chess')).toBe(true);
+    expect(isAllowedReturnTo('http://127.0.0.1:8787/cb', 'chess')).toBe(true);
+  });
+
+  it('never delivers a first-party session to localhost', () => {
+    for (const id of ['console', 'store', 'fas-admin', 'keys', 'mcp']) {
+      expect(isAllowedReturnTo('http://localhost:5173/', id)).toBe(false);
+    }
   });
 
   it('allows the first-party ids only on their own origins', () => {
@@ -26,19 +32,51 @@ describe('isAllowedReturnTo binds return_to to the app id (#495)', () => {
     expect(isAllowedReturnTo('https://console.freeappstore.online/', 'console')).toBe(true);
     expect(isAllowedReturnTo('https://freeappstore.online/apps/chess', 'store')).toBe(true);
     expect(isAllowedReturnTo('https://admin.freeappstore.online/', 'fas-admin')).toBe(true);
-    expect(isAllowedReturnTo('https://api.freeappstore.online/v1/keys', 'keys')).toBe(true);
     expect(isAllowedReturnTo('https://mcp.freeappstore.online/callback?nonce=n', 'mcp')).toBe(true);
-    // A first-party id on an app subdomain is exactly the token-theft shape.
+    // A first-party id anywhere else is exactly the token-theft shape.
     expect(isAllowedReturnTo('https://chess.freeappstore.online/', 'console')).toBe(false);
+    expect(isAllowedReturnTo('https://console.freegamestore.online/', 'console')).toBe(false);
+    expect(isAllowedReturnTo('https://console.proappstore.online/', 'console')).toBe(false);
     expect(isAllowedReturnTo('https://chess.freeappstore.online/', 'store')).toBe(false);
     expect(isAllowedReturnTo('https://evil.freeappstore.online/', 'fas-admin')).toBe(false);
     expect(isAllowedReturnTo('https://freeappstore.online/', 'fas-admin')).toBe(false);
+    expect(isAllowedReturnTo('https://mcp.freegamestore.online/', 'mcp')).toBe(false);
+  });
+
+  it('pins keys to the key-management page itself', () => {
+    expect(isAllowedReturnTo('https://api.freeappstore.online/v1/keys', 'keys')).toBe(true);
+    expect(
+      isAllowedReturnTo('https://api.freeappstore.online/v1/keys?provider=openai&app=x', 'keys'),
+    ).toBe(true);
+    expect(isAllowedReturnTo('https://api.freeappstore.online/v1/apps/x/kv', 'keys')).toBe(false);
+    expect(isAllowedReturnTo('https://api.freeappstore.online/', 'keys')).toBe(false);
+    expect(isAllowedReturnTo('https://api.freeappstore.online/v1/keys/x', 'keys')).toBe(false);
+  });
+
+  it('refuses reserved and malformed app ids, so an aud can never read as a platform value', () => {
+    for (const id of ['legacy', 'cli', 'admin', 'platform', 'template-x']) {
+      expect(isAllowedReturnTo(`https://${id}.freeappstore.online/`, id)).toBe(false);
+      expect(isAllowedReturnTo('http://localhost:5173/', id)).toBe(false);
+    }
+    expect(isAllowedReturnTo('https://x.freeappstore.online/', '#legacy')).toBe(false);
+    expect(isAllowedReturnTo('https://Chess.freeappstore.online/', 'Chess')).toBe(false);
+  });
+
+  it('rejects userinfo and non-default ports', () => {
+    expect(isAllowedReturnTo('https://u:p@chess.freeappstore.online/', 'chess')).toBe(false);
+    expect(isAllowedReturnTo('https://evil.com@chess.freeappstore.online/', 'chess')).toBe(false);
+    expect(isAllowedReturnTo('https://chess.freeappstore.online:8443/', 'chess')).toBe(false);
+    expect(isAllowedReturnTo('https://freeappstore.online:444/app/', 'console')).toBe(false);
+    expect(isAllowedReturnTo('https://chess.freeappstore.online:443/', 'chess')).toBe(true);
   });
 
   it('allows the explicit alias and custom-domain exceptions', () => {
     expect(isAllowedReturnTo('https://hanzi.freeappstore.online/', 'hanzi-practice')).toBe(true);
     expect(isAllowedReturnTo('https://yi.freeappstore.online/', 'hanzi-associations')).toBe(true);
     expect(isAllowedReturnTo('https://hanzi.freeappstore.online/', 'chess')).toBe(false);
+    expect(isAllowedReturnTo('https://agentcoder.space/', 'agentcoder')).toBe(true);
+    expect(isAllowedReturnTo('https://www.agentcoder.space/x', 'agentcoder')).toBe(true);
+    expect(isAllowedReturnTo('https://agentcoder.space/', 'chess')).toBe(false);
     expect(isAllowedReturnTo('https://freeagentstore.online/console/', 'fags-console')).toBe(true);
     expect(isAllowedReturnTo('https://freeagentstore.online/console/', 'chess')).toBe(false);
   });
@@ -47,6 +85,7 @@ describe('isAllowedReturnTo binds return_to to the app id (#495)', () => {
     const redirect = 'https://abcdefghijklmnopabcdefghijklmnop.chromiumapp.org/ofo-copilot';
     expect(isAllowedReturnTo(redirect, 'ofo-copilot-extension')).toBe(true);
     expect(isAllowedReturnTo(redirect, 'store')).toBe(false);
+    expect(isAllowedReturnTo(redirect, 'chess')).toBe(false);
     expect(isAllowedReturnTo(redirect, '')).toBe(false);
   });
 
@@ -71,10 +110,9 @@ describe('isAllowedReturnTo binds return_to to the app id (#495)', () => {
     ).toBe(false);
   });
 
-  it('allows the FreeIdeaStore MCP workers.dev callback for app_id=mcp only', () => {
+  it('no longer allows the retired FreeIdeaStore MCP workers.dev callback', () => {
     const callback = 'https://freeideastore-mcp.serge-the-dev.workers.dev/oauth/callback';
-    expect(isAllowedReturnTo(callback, 'mcp')).toBe(true);
-    expect(isAllowedReturnTo(callback, 'freeideastore')).toBe(false);
+    expect(isAllowedReturnTo(callback, 'mcp')).toBe(false);
   });
 
   it('rejects unrelated origins', () => {
@@ -97,26 +135,13 @@ describe('isAllowedReturnTo binds return_to to the app id (#495)', () => {
 });
 
 describe('sessionAudience', () => {
-  it('is the app id for an app', () => {
-    expect(sessionAudience('chess', 'https://chess.freeappstore.online/')).toBe('chess');
-    expect(sessionAudience('fags-console', 'https://freeagentstore.online/console/')).toBe(
-      'fags-console',
-    );
-  });
-
-  it('is console for a first-party id on its own origin or localhost', () => {
-    expect(sessionAudience('store', 'https://freeappstore.online/')).toBe('console');
-    expect(sessionAudience('console', 'https://freeappstore.online/app/')).toBe('console');
-    expect(sessionAudience('console', 'https://console.freeappstore.online/')).toBe('console');
-    expect(sessionAudience('fas-admin', 'https://admin.freeappstore.online/')).toBe('console');
-    expect(sessionAudience('mcp', 'https://mcp.freeappstore.online/callback')).toBe('console');
-    expect(sessionAudience('console', 'http://localhost:5173/')).toBe('console');
-  });
-
-  it('is the app id for a first-party id delivered elsewhere (the FreeIdeaStore MCP worker)', () => {
-    expect(
-      sessionAudience('mcp', 'https://freeideastore-mcp.serge-the-dev.workers.dev/oauth/callback'),
-    ).toBe('mcp');
+  it('is console for every first-party id and the app id otherwise', () => {
+    for (const id of ['console', 'store', 'fas-admin', 'keys', 'mcp']) {
+      expect(sessionAudience(id)).toBe('console');
+    }
+    expect(sessionAudience('chess')).toBe('chess');
+    expect(sessionAudience('fags-console')).toBe('fags-console');
+    expect(sessionAudience('ofo-copilot-extension')).toBe('ofo-copilot-extension');
   });
 });
 

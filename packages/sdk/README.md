@@ -55,7 +55,7 @@ GitHub OAuth via redirect. Session persists in `localStorage`.
 fas.auth.user;             // User | null
 fas.auth.token;            // string | null
 fas.auth.signIn();         // redirects to GitHub
-fas.auth.signOut();        // revokes every session of the account, then clears the local one
+fas.auth.signOut();        // signs out of this app
 fas.auth.onChange(cb);     // fires immediately + on change, returns Unsubscribe
 await fas.auth.init();     // capture callback, must be called once
 ```

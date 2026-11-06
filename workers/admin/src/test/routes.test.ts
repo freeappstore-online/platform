@@ -488,7 +488,7 @@ describe("router", () => {
   });
 
   it("verifies a browser session through BACKEND_FAS and requires the admin role", async () => {
-    const nonAdmin = fakeBackend({ id: "u", login: "u", roles: ["user"] });
+    const nonAdmin = fakeBackend({ id: "u", login: "u", roles: ["user"], aud: "console" });
     const res = await worker.fetch(
       req("/api/ping", { headers: { Authorization: "Bearer s" } }),
       env({ ADMIN_PROVISION_TOKEN: "tok", BACKEND_FAS: nonAdmin }),

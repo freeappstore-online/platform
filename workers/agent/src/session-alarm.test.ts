@@ -64,7 +64,7 @@ function fakeEnv(alarmLoop = "true") {
       }),
     }),
   };
-  const PLATFORM = { fetch: async () => new Response(JSON.stringify({ id: "u1", login: "alice" })) };
+  const PLATFORM = { fetch: async () => new Response(JSON.stringify({ id: "u1", login: "alice", aud: "console" })) };
   return { env: { STORE: "apps", ALARM_LOOP: alarmLoop, GITHUB_TOKEN: "gh", DB, PLATFORM } as any, d1Writes };
 }
 

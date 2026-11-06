@@ -21,7 +21,11 @@ async function setup() {
       {
         method,
         headers: user
-          ? { Authorization: `Bearer ${await signSession(user, key, { aud: 'console' })}` }
+          ? {
+              // The app the request is for; synthetic users have no users row,
+              // so a `console` claim would read as cross-store (#495).
+              Authorization: `Bearer ${await signSession(user, key, { aud: path.split('/')[0] as string })}`,
+            }
           : {},
         ...(body === undefined ? {} : { body }),
       },

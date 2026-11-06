@@ -101,45 +101,28 @@ export class Auth {
   }
 
   /**
-   * Sign out everywhere: ask the platform to revoke every session of this
-   * account (best-effort, fire-and-forget), then clear the local copy and
-   * notify listeners.
+   * Sign out of this app: clear this app's session and notify listeners. The
+   * token is scoped to this app, so this ends its access here. Ending every
+   * session of the account ("sign out everywhere") is a console action.
    */
   signOut(): void {
-    const token = this.session?.token;
     this.sessionRevision++;
     this.session = null;
     if (typeof window !== 'undefined') {
       try {
         window.localStorage.removeItem(STORAGE_KEY);
       } catch {}
-    }
-    if (token && typeof fetch !== 'undefined') {
-      fetch(new URL('/v1/auth/logout', this.apiBase), {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        keepalive: true,
-      }).catch(() => {});
     }
     this.emit();
   }
 
   /**
    * @internal Called by Kv and ApiProxy on 401 responses.
-   * Clears the stale session so the UI reacts immediately. Local only: the
-   * server already refused this token, so there is nothing to revoke.
+   * Clears the stale session so the UI reacts immediately.
    * Do not call directly — use `signOut()` instead.
    */
   handleUnauthorized(requestToken?: string): void {
-    if (!this.session || (requestToken && this.session.token !== requestToken)) return;
-    this.sessionRevision++;
-    this.session = null;
-    if (typeof window !== 'undefined') {
-      try {
-        window.localStorage.removeItem(STORAGE_KEY);
-      } catch {}
-    }
-    this.emit();
+    if (this.session && (!requestToken || this.session.token === requestToken)) this.signOut();
   }
 
   /**

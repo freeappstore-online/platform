@@ -60,6 +60,12 @@ app.use('*', async (c, next) => {
   c.header('X-Frame-Options', 'DENY');
   c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
   c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  // The API serves data, not documents: a response opened as a page can run
+  // nothing and be framed by nothing (#495). The two documents it does serve —
+  // the /v1/keys page and quality badge SVGs — set their own policy.
+  if (!c.res.headers.has('Content-Security-Policy')) {
+    c.header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+  }
 });
 
 // Global error handler: convert HttpError to proper HTTP responses

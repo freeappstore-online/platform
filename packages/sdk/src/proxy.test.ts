@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiProxy, normalizeTarget } from './proxy.js';
+import { ApiProxy, normalizeTarget, ProxyNoGrantError } from './proxy.js';
 
 describe('normalizeTarget', () => {
   it('passes through bare host/path form', () => {
@@ -35,6 +35,37 @@ interface FakeAuth {
 }
 
 describe('Proxy.fetch', () => {
+  it("throws ProxyNoGrantError when the user's vault key may not be used here (#495)", async () => {
+    const proxy = new ApiProxy('weather', 'https://api.example.com', { token: 't' } as never);
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () =>
+      Response.json({ error: 'no_grant', provider: 'openai' }, { status: 403 }),
+    ) as typeof fetch;
+    try {
+      const err = await proxy.fetch('api.openai.com/v1/models').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ProxyNoGrantError);
+      expect((err as ProxyNoGrantError).provider).toBe('openai');
+      expect((err as Error).message).toContain('openai');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
+  it('passes any other 403 through as a response', async () => {
+    const proxy = new ApiProxy('weather', 'https://api.example.com', { token: 't' } as never);
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async () =>
+      Response.json({ error: 'no allowlist match' }, { status: 403 }),
+    ) as typeof fetch;
+    try {
+      const res = await proxy.fetch('api.example.org/x');
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { error: string }).error).toBe('no allowlist match');
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+
   it('throws when not signed in', async () => {
     const auth: FakeAuth = { token: null };
     const proxy = new ApiProxy('weather', 'https://api.example.com', auth as never);

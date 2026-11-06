@@ -323,7 +323,7 @@ describe("transfer route through the worker auth gate", () => {
   }
 
   it("rejects a signed-in non-admin before the transfer runs", async () => {
-    const res = await fetchAs({ Authorization: "Bearer user" }, { id: "u", login: "alice", roles: ["user"] });
+    const res = await fetchAs({ Authorization: "Bearer user" }, { id: "u", login: "alice", roles: ["user"], aud: "console" });
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: "admin only" });
   });

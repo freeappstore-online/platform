@@ -16,6 +16,34 @@ describe("shared-secret checks", () => {
     expect(await authenticateApiRequest(req("tox"), env)).toMatchObject({ ok: false, status: 401 });
   });
 
+  describe("session callers (#495)", () => {
+    const envFor = (me: Record<string, unknown>) =>
+      ({
+        ADMIN_PROVISION_TOKEN: "tok",
+        BACKEND_FAS: { fetch: async () => Response.json(me) },
+      }) as unknown as Env;
+    const req = new Request("https://admin/api/apps", { headers: { Authorization: "Bearer t" } });
+    const admin = { id: "gh:1", login: "ops", githubLogin: "ops", roles: ["user", "admin"] };
+
+    it("accepts an admin on a console session", async () => {
+      expect(await authenticateApiRequest(req, envFor({ ...admin, aud: "console" }))).toMatchObject({ ok: true, kind: "admin" });
+    });
+
+    it.each([
+      ["an app-scoped session", { ...admin, aud: "chess" }],
+      ["a pre-#495 session with no audience", admin],
+    ])("refuses an admin on %s with 401", async (_label, me) => {
+      expect(await authenticateApiRequest(req, envFor(me))).toMatchObject({ ok: false, status: 401 });
+    });
+
+    it("still refuses a non-admin console session with 403", async () => {
+      expect(await authenticateApiRequest(req, envFor({ ...admin, roles: ["user"], aud: "console" }))).toMatchObject({
+        ok: false,
+        status: 403,
+      });
+    });
+  });
+
   it("lets the CI report through only with the CI token", () => {
     const env = { CI_TOKEN: "ci" } as unknown as Env;
     const url = new URL("https://admin/api/test-report");

@@ -50,6 +50,7 @@ export {
 export type { Collection, CollectionOptions, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
+export { ProxyNoGrantError } from './proxy.js';
 export type {
   PushIsSupported,
   PushReminder,

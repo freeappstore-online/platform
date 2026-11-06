@@ -185,6 +185,27 @@ describe('keys routes', () => {
     expect(text).toContain('API Keys');
   });
 
+  it('GET /v1/keys runs only its own nonce-tagged script and no inline handlers (#495)', async () => {
+    const res = await app.request('/v1/keys', {}, env(fakeDB({})));
+    const csp = res.headers.get('content-security-policy') ?? '';
+    const nonce = csp.match(/script-src 'nonce-([a-f0-9]{32})'/)?.[1];
+    expect(nonce).toBeTruthy();
+    expect(csp).toContain("frame-ancestors 'none'");
+    const html = await res.text();
+    expect(html).toContain(`<script nonce="${nonce}">`);
+    expect(html).not.toMatch(/\son[a-z]+="/);
+    // A second render gets a fresh nonce.
+    const again = await app.request('/v1/keys', {}, env(fakeDB({})));
+    expect(again.headers.get('content-security-policy')).not.toContain(nonce as string);
+  });
+
+  it('every other API response forbids running or framing anything (#495)', async () => {
+    const res = await app.request('/v1/keys/providers', {}, env(fakeDB({})));
+    expect(res.headers.get('content-security-policy')).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+  });
+
   it('GET /v1/keys returns JSON when Accept: application/json', async () => {
     const keys = [{ provider: 'openai', label: null, created_at: 1000, last_used_at: null }];
     const res = await app.request(

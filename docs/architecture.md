@@ -4,7 +4,7 @@
 
 - **TypeScript** (versions are declared per package), Node 22, pnpm workspaces
 - **Backend:** Cloudflare Workers + D1 + Durable Objects + R2
-- **Auth:** GitHub, Google, Apple, Email (magic link) OAuth. HMAC-signed sessions, 30-day TTL, scoped by an `aud` claim to the app they were delivered to (`console` for storefront/console/admin/MCP/CLI); revocable per account via `POST /v1/auth/logout` (`users.sessions_valid_after`)
+- **Auth:** GitHub, Google, Apple, Email (magic link) OAuth. HMAC-signed sessions, 30-day TTL, scoped by an `aud` claim to the app they were delivered to (`console` for storefront/console/admin/MCP/CLI); revocable per account from the console via `POST /v1/auth/logout` (`users.sessions_valid_after`)
 - **Realtime:** one Durable Object per room with WebSocket fan-out
 - **Apps:** Vite + React + Tailwind PWA. The supported default frame is the SDK `Shell` (topbar, navigation, error boundary, toasts). Custom frames are allowed under the [composable starter contract](composable-starter-contract.md). Deployed to R2 via GitHub Actions, served by host Worker
 

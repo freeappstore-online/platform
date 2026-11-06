@@ -5,6 +5,8 @@ interface AdminUser {
   login: string;
   githubLogin?: string;
   roles?: string[];
+  /** The session's audience (#495): only a first-party (`console`) session may drive admin. */
+  aud?: string;
 }
 
 export type AuthResult =
@@ -39,6 +41,9 @@ export async function authenticateApiRequest(request: Request, env: Env): Promis
   if (!res.ok) return { ok: false, status: 401, error: "Unauthorized" };
 
   const user = (await res.json()) as AdminUser;
+  // A token an app received is scoped to that app (#495) and a pre-#495 one
+  // carries no audience: neither may provision, deprovision or moderate.
+  if (user.aud !== "console") return { ok: false, status: 401, error: "console session required" };
   if (!Array.isArray(user.roles) || !user.roles.includes("admin")) {
     return { ok: false, status: 403, error: "admin only" };
   }

@@ -229,7 +229,7 @@ async function finishFlow(
 ): Promise<Response> {
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, {
     ...roles,
-    aud: sessionAudience(state.appId, state.returnTo),
+    aud: sessionAudience(state.appId),
   });
   const delivery = await deliverSession(c.env, state, session);
   if (!delivery.ok) return c.text(delivery.error, 400);
@@ -290,14 +290,24 @@ authRoutes.get('/auth/github/callback', async (c) => {
   };
 
   const userId = `gh:${ghUser.id}`;
+  // A new row starts its sessions_valid_after at now (every insert below does
+  // the same): an account deleted and signed up again must not revive the
+  // tokens issued to it before the deletion (#495). ON CONFLICT leaves it.
   await c.env.DB.prepare(
-    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, sessions_valid_after)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        github_login = excluded.github_login,
        avatar_url = excluded.avatar_url`,
   )
-    .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url, Date.now())
+    .bind(
+      userId,
+      ghUser.id,
+      ghUser.login,
+      ghUser.avatar_url,
+      Date.now(),
+      Math.floor(Date.now() / 1000),
+    )
     .run();
 
   const roles = await computeRoles(userId, ghUser.login, c.env);
@@ -364,8 +374,8 @@ authRoutes.get('/auth/google/callback', async (c) => {
     const providerName = claims.name ?? null;
 
     await c.env.DB.prepare(
-      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-       VALUES (?, 0, ?, ?, ?, 'google', ?, ?, COALESCE(?, ?))
+      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name, sessions_valid_after)
+       VALUES (?, 0, ?, ?, ?, 'google', ?, ?, COALESCE(?, ?), ?)
        ON CONFLICT(id) DO UPDATE SET
          avatar_url = excluded.avatar_url,
          email = excluded.email,
@@ -380,6 +390,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
         claims.email ?? null,
         providerName,
         login,
+        Math.floor(Date.now() / 1000),
         providerName,
       )
       .run();
@@ -491,8 +502,8 @@ authRoutes.post('/auth/apple/callback', async (c) => {
     const login = neutralDisplayName();
 
     await c.env.DB.prepare(
-      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-       VALUES (?, 0, ?, NULL, ?, 'apple', ?, ?, COALESCE(?, ?))
+      `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name, sessions_valid_after)
+       VALUES (?, 0, ?, NULL, ?, 'apple', ?, ?, COALESCE(?, ?), ?)
        ON CONFLICT(id) DO UPDATE SET
          email = COALESCE(excluded.email, users.email),
          display_name = COALESCE(?, users.display_name)`,
@@ -505,6 +516,7 @@ authRoutes.post('/auth/apple/callback', async (c) => {
         claims.email ?? null,
         displayName,
         login,
+        Math.floor(Date.now() / 1000),
         displayName,
       )
       .run();
@@ -642,10 +654,18 @@ authRoutes.get('/auth/email/callback', async (c) => {
     const login = neutralDisplayName();
     try {
       await c.env.DB.prepare(
-        `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
-         VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?)`,
+        `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name, sessions_valid_after)
+         VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?, ?)`,
       )
-        .bind(userId, login, Date.now(), state.email, state.email, login)
+        .bind(
+          userId,
+          login,
+          Date.now(),
+          state.email,
+          state.email,
+          login,
+          Math.floor(Date.now() / 1000),
+        )
         .run();
       existing = { id: userId, github_login: login };
     } catch {
@@ -668,7 +688,7 @@ authRoutes.get('/auth/email/callback', async (c) => {
 
   const { roles, appRoles } = await computeRoles(userId, login, c.env, 'email');
   const session = await signSession(userId, c.env.SESSION_SIGNING_KEY, {
-    aud: sessionAudience(state.appId, state.returnTo),
+    aud: sessionAudience(state.appId),
     roles,
     appRoles,
   });
@@ -729,12 +749,14 @@ authRoutes.get('/auth/me', async (c) => {
 
 /**
  * Sign out everywhere (#495): every session of this account issued before now
- * — in every app, on every device — is refused from the next request. The
- * SDK's signOut() calls this best-effort before clearing its own copy.
+ * — in every app, on every device — is refused from the next request. A
+ * console action: an app's token must not be able to sign the user out of
+ * every other app. Apps sign out locally (SDK signOut()) until per-session
+ * revocation by `sid` exists.
  */
 authRoutes.post('/auth/logout', async (c) => {
   try {
-    const user = await requireUser(c);
+    const user = await requireConsoleUser(c);
     await c.env.DB.prepare('UPDATE users SET sessions_valid_after = ? WHERE id = ?')
       .bind(Math.floor(Date.now() / 1000), user.id)
       .run();

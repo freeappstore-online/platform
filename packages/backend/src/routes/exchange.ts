@@ -78,13 +78,20 @@ exchangeRoutes.post('/auth/exchange', async (c) => {
 
   const userId = `gh:${ghUser.id}`;
   await c.env.DB.prepare(
-    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, sessions_valid_after)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        github_login = excluded.github_login,
        avatar_url = excluded.avatar_url`,
   )
-    .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url ?? null, Date.now())
+    .bind(
+      userId,
+      ghUser.id,
+      ghUser.login,
+      ghUser.avatar_url ?? null,
+      Date.now(),
+      Math.floor(Date.now() / 1000),
+    )
     .run();
 
   const dobRow = await c.env.DB.prepare('SELECT date_of_birth FROM users WHERE id = ?')

@@ -285,7 +285,7 @@ The `appId` must match the subdomain (e.g. `'timer'` for `timer.freeappstore.onl
 fas.auth.signIn()           // redirects to GitHub OAuth
 fas.auth.signIn('google')   // redirects to Google OAuth
 fas.auth.signIn('apple')    // redirects to Apple OAuth (optional)
-fas.auth.signOut()          // revokes every session of the account (all apps, all devices), then clears the local one
+fas.auth.signOut()          // signs out of this app ("sign out everywhere" lives in the console)
 fas.auth.user               // { id, login, avatarUrl } | null
 fas.auth.token              // session token string | null
 fas.auth.onChange(listener)  // subscribe to auth state changes

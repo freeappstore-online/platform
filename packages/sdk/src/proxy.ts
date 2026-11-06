@@ -16,6 +16,18 @@ import type { Auth } from './auth.js';
  *
  * The developer's secret never touches the browser.
  */
+/**
+ * The proxy would have used the signed-in user's own vault key (OpenAI,
+ * Anthropic, …) for an app they do not own. Their key is spent only in their
+ * own apps for now; per-app consent is tracked in platform#504.
+ */
+export class ProxyNoGrantError extends Error {
+  constructor(readonly provider: string) {
+    super(`This app can't use your ${provider} key: only apps you own may use your keys for now.`);
+    this.name = 'ProxyNoGrantError';
+  }
+}
+
 export class ApiProxy {
   constructor(
     private readonly appId: string,
@@ -40,6 +52,13 @@ export class ApiProxy {
     if (proxyResponse.status === 401) {
       this.auth.handleUnauthorized(token);
       throw new Error('proxy.fetch: request was unauthorized.');
+    }
+    if (proxyResponse.status === 403) {
+      const body = (await proxyResponse
+        .clone()
+        .json()
+        .catch(() => null)) as { error?: unknown; provider?: unknown } | null;
+      if (body?.error === 'no_grant') throw new ProxyNoGrantError(String(body.provider ?? ''));
     }
     return proxyResponse;
   }

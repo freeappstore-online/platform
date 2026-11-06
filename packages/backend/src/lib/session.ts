@@ -4,8 +4,13 @@ const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 /** The audience of every first-party session (storefront, console, admin, MCP, CLI). */
 export const CONSOLE_AUD = 'console';
-/** The audience `requireUser` assigns to a session minted before #495 (no `aud`). */
-export const LEGACY_AUD = 'legacy';
+/**
+ * The audience `requireUser` assigns to a session minted before #495 (no
+ * `aud`). Deliberately outside APP_ID_RE, so no app id can ever equal it.
+ */
+export const LEGACY_AUD = '#legacy';
+/** A cross-store token that claims `console`: matches no app and is not first-party. */
+export const CROSS_STORE_AUD = '#cross-store';
 
 export async function signSession(
   uid: string,

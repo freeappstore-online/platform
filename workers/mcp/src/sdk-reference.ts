@@ -204,7 +204,7 @@ ${CONNECTED_DRAFT}\`\`\``,
 import { initApp } from '@freeappstore/sdk'
 const fas = initApp({ appId: 'my-app' })
 // fas.auth.signIn()  — GitHub by default; google, apple, email when configured
-// fas.auth.signOut()        — revokes every session of the account, then clears the local one
+// fas.auth.signOut()
 // fas.auth.token     — current session token (string | null)
 // fas.auth.user      — current user ({ id, login, avatarUrl } | null)
 \`\`\``,

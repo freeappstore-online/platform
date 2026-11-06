@@ -68,6 +68,8 @@ interface SessionState {
   ownerIsAdmin?: boolean;
   tokenHash: string | null;
   tokenValidatedAt: number | null;
+  /** Audience of the cached token (#495). A hash cached before #495 has none and is re-validated. */
+  tokenAud?: string;
   sessionId: string | null;
   /** Only a newly generated platform scaffold may receive bounded package preparation. */
   freshTemplate?: boolean;
@@ -302,7 +304,7 @@ export class AgentSession implements DurableObject {
     const session = await this.load();
 
     // If we already have an owner and the token hash matches, check TTL
-    if (session.ownerId && session.tokenHash) {
+    if (session.ownerId && session.tokenHash && session.tokenAud === "console") {
       const hash = await hashToken(token);
       if (hash === session.tokenHash) {
         const age = session.tokenValidatedAt ? Date.now() - session.tokenValidatedAt : Infinity;
@@ -330,7 +332,15 @@ export class AgentSession implements DurableObject {
       return { userId: null, error: json({ error: "Invalid auth token" }, 401, request, this.config.domain) };
     }
 
-    const user = (await res.json()) as { id: string; login: string; githubLogin?: string; roles?: string[] };
+    const user = (await res.json()) as { id: string; login: string; githubLogin?: string; roles?: string[]; aud?: string };
+
+    // This session writes to repos with the platform GITHUB_TOKEN on the
+    // user's behalf, so only a first-party (console) session may drive it — a
+    // token an app received is scoped to that app, and a pre-#495 token has no
+    // audience at all (#495).
+    if (user.aud !== "console") {
+      return { userId: null, error: json({ error: "console session required" }, 401, request, this.config.domain) };
+    }
 
     if (session.ownerId && session.ownerId !== user.id) {
       return { userId: null, error: json({ error: "Session belongs to another user" }, 403, request, this.config.domain) };
@@ -343,6 +353,7 @@ export class AgentSession implements DurableObject {
     session.ownerLogin = user.githubLogin || user.login;
     session.ownerIsAdmin = user.roles?.includes("admin") ?? false;
     session.tokenHash = await hashToken(token);
+    session.tokenAud = user.aud;
     session.tokenValidatedAt = Date.now();
     await this.save();
 

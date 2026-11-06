@@ -132,6 +132,8 @@ describe('POST /v1/auth/exchange', () => {
       'alice',
       'https://avatars/alice',
       expect.any(Number),
+      // sessions_valid_after for a new row (#495)
+      expect.any(Number),
     ]);
   });
 
