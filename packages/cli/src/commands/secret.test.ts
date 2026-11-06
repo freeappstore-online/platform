@@ -1,8 +1,121 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { bearer, dieFromHttp, resolveAppIdOrExit } from './secret.js';
+import { Readable } from 'node:stream';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  bearer,
+  dieFromHttp,
+  rejectSecretPositionals,
+  resolveAppIdOrExit,
+  resolveSecretValue,
+} from './secret.js';
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('resolveSecretValue', () => {
+  it('rejects positional values with safe input guidance', () => {
+    const exitSpy = mockExit();
+    let stderr = '';
+    const write = process.stderr.write.bind(process.stderr);
+    (process.stderr as any).write = (s: string) => {
+      stderr += s;
+      return true;
+    };
+    try {
+      expect(() => rejectSecretPositionals(['OPENWEATHER_KEY', 'synthetic-fixture'])).toThrow(
+        'exit:1',
+      );
+      expect(stderr).toContain('not supported');
+      expect(stderr).toContain('--from-env VAR_NAME');
+      expect(stderr).not.toContain('synthetic-fixture');
+    } finally {
+      process.stderr.write = write;
+      exitSpy.restore();
+    }
+  });
+
+  it('reads from the named environment variable', async () => {
+    await expect(
+      resolveSecretValue(
+        { fromEnv: 'SYNTHETIC_SECRET' },
+        {
+          env: { SYNTHETIC_SECRET: 'fixture-value' },
+        },
+      ),
+    ).resolves.toBe('fixture-value');
+  });
+
+  it('reads and trims piped stdin', async () => {
+    await expect(
+      resolveSecretValue(
+        {},
+        {
+          stdin: Object.assign(Readable.from([' fixture-value \n']), { isTTY: false }),
+        },
+      ),
+    ).resolves.toBe('fixture-value');
+  });
+
+  it('uses a hidden prompt on an interactive terminal', async () => {
+    const prompt = vi.fn(async () => 'fixture-value');
+    await expect(
+      resolveSecretValue(
+        {},
+        {
+          stdin: Object.assign(Readable.from([]), { isTTY: true }),
+          prompt,
+        },
+      ),
+    ).resolves.toBe('fixture-value');
+    expect(prompt).toHaveBeenCalledWith('Secret value');
+  });
+
+  it('fails clearly when non-interactive stdin has no value', async () => {
+    const exitSpy = mockExit();
+    let stderr = '';
+    const write = process.stderr.write.bind(process.stderr);
+    (process.stderr as any).write = (s: string) => {
+      stderr += s;
+      return true;
+    };
+    try {
+      await expect(
+        resolveSecretValue(
+          {},
+          {
+            stdin: Object.assign(Readable.from([]), { isTTY: false }),
+          },
+        ),
+      ).rejects.toThrow('exit:1');
+      expect(stderr).toContain('no secret value received from stdin');
+    } finally {
+      process.stderr.write = write;
+      exitSpy.restore();
+    }
+  });
+
+  it('does not include the secret in errors', async () => {
+    const exitSpy = mockExit();
+    let stderr = '';
+    const write = process.stderr.write.bind(process.stderr);
+    (process.stderr as any).write = (s: string) => {
+      stderr += s;
+      return true;
+    };
+    const fixture = 'synthetic-private-fixture';
+    try {
+      await expect(
+        dieFromHttp(new Response(`server echoed ${fixture}`, { status: 500 }), 'set KEY', fixture),
+      ).rejects.toThrow('exit:1');
+      expect(stderr).not.toContain(fixture);
+      expect(stderr).toContain('[redacted]');
+    } finally {
+      process.stderr.write = write;
+      exitSpy.restore();
+    }
+  });
+});
 
 function chdir(d: string): () => void {
   const prev = process.cwd();

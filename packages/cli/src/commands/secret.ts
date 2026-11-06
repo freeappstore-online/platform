@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Command } from 'commander';
+import prompts from 'prompts';
 import { isValidAppId } from '../lib/app-id.js';
 import { type FasConfig, readConfig } from '../lib/config.js';
 
@@ -16,23 +17,33 @@ export const secretCommand = new Command('secret')
     new Command('set')
       .description('Store or replace an encrypted API key for an app.')
       .argument('<name>', 'secret name (uppercase + underscores, e.g. OPENWEATHER_KEY)')
-      .argument('<value>', 'plaintext value to encrypt and store')
+      .allowExcessArguments(true)
       .option('--app <id>', 'app id (defaults to package.json name in cwd)')
-      .action(async (name: string, value: string, opts: { app?: string }) => {
-        const cfg = await requireSession();
-        const appId = await resolveAppIdOrExit(opts.app);
-        assertValidSecretName(name);
-        const res = await fetch(
-          `${cfg.apiBase}/v1/apps/${appId}/secrets/${encodeURIComponent(name)}`,
-          {
-            method: 'PUT',
-            headers: bearer(cfg),
-            body: JSON.stringify({ value }),
-          },
-        );
-        if (!res.ok) await dieFromHttp(res, `set ${name}`);
-        process.stdout.write(`✓ stored ${name} for ${appId}\n`);
-      }),
+      .option('--from-env <name>', 'read the secret value from this environment variable')
+      .option('--stdin', 'read the secret value from stdin')
+      .action(
+        async (
+          name: string,
+          opts: { app?: string; fromEnv?: string; stdin?: boolean },
+          command: Command,
+        ) => {
+          rejectSecretPositionals(command.args);
+          const value = await resolveSecretValue(opts);
+          const cfg = await requireSession();
+          const appId = await resolveAppIdOrExit(opts.app);
+          assertValidSecretName(name);
+          const res = await fetch(
+            `${cfg.apiBase}/v1/apps/${appId}/secrets/${encodeURIComponent(name)}`,
+            {
+              method: 'PUT',
+              headers: bearer(cfg),
+              body: JSON.stringify({ value }),
+            },
+          );
+          if (!res.ok) await dieFromHttp(res, `set ${name}`, value);
+          process.stdout.write(`✓ stored ${name} for ${appId}\n`);
+        },
+      ),
   )
   .addCommand(
     new Command('list')
@@ -83,6 +94,65 @@ export const secretCommand = new Command('secret')
         process.stdout.write(`✓ removed ${name} from ${appId}\n`);
       }),
   );
+
+type SecretInputOptions = { fromEnv?: string; stdin?: boolean };
+
+export function rejectSecretPositionals(args: string[]): void {
+  if (args.length <= 1) return;
+  process.stderr.write(
+    'fas: passing the secret value as a positional argument is not supported (shell history, process listing). Use --from-env VAR_NAME, pipe the value via stdin, or run interactively for a prompt.\n',
+  );
+  process.exit(1);
+}
+
+export async function resolveSecretValue(
+  options: SecretInputOptions,
+  dependencies: {
+    env?: NodeJS.ProcessEnv;
+    stdin?: NodeJS.ReadableStream & { isTTY?: boolean };
+    prompt?: (message: string) => Promise<string | undefined>;
+  } = {},
+): Promise<string> {
+  const env = dependencies.env ?? process.env;
+  if (options.fromEnv) {
+    const value = env[options.fromEnv];
+    if (value === undefined || value.length === 0) {
+      return secretInputError(`environment variable ${options.fromEnv} is not set or is empty`);
+    }
+    return value;
+  }
+
+  const stdin = dependencies.stdin ?? process.stdin;
+  if (options.stdin || !stdin.isTTY) {
+    let value = '';
+    try {
+      for await (const chunk of stdin) value += String(chunk);
+    } catch {
+      return secretInputError('could not read secret from stdin');
+    }
+    value = value.trim();
+    if (!value) return secretInputError('no secret value received from stdin');
+    return value;
+  }
+
+  const prompt =
+    dependencies.prompt ??
+    (async (message) => {
+      const result = await prompts({ type: 'password', name: 'value', message });
+      return result.value as string | undefined;
+    });
+  const value = await prompt('Secret value');
+  if (!value) return secretInputError('no secret value entered');
+  return value;
+}
+
+function secretInputError(reason: string): never {
+  process.stderr.write(
+    `fas: ${reason}. Use --from-env VAR_NAME or provide the value through stdin.\n`,
+  );
+  process.exit(1);
+  throw new Error('unreachable');
+}
 
 // -----------------------------------------------------------------------------
 // Shared helpers (also used by proxy.ts)
@@ -138,7 +208,11 @@ export async function resolveAppIdOrExit(explicit: string | undefined): Promise<
   process.exit(1);
 }
 
-export async function dieFromHttp(res: Response, action: string): Promise<never> {
+export async function dieFromHttp(
+  res: Response,
+  action: string,
+  sensitiveValue?: string,
+): Promise<never> {
   const text = await res.text();
   let msg = text;
   try {
@@ -147,6 +221,7 @@ export async function dieFromHttp(res: Response, action: string): Promise<never>
   } catch {
     // not JSON; use raw body
   }
+  if (sensitiveValue) msg = msg.split(sensitiveValue).join('[redacted]');
   process.stderr.write(`fas: ${action} failed (${res.status}): ${msg}\n`);
   process.exit(1);
 }

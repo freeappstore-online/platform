@@ -168,8 +168,9 @@ fas logs calculator
 Manage server-side encrypted API keys for an app. Secrets are stored on the platform and injected at runtime via the proxy. Values are encrypted at rest; `list` only shows names, never values.
 
 ```bash
-fas secret set OPENWEATHER_KEY sk-abc123         # store a secret
-fas secret set OPENWEATHER_KEY sk-abc123 --app my-app  # explicit app id
+fas secret set OPENWEATHER_KEY --from-env OPENWEATHER_KEY
+printf '%s' "$OPENWEATHER_KEY" | fas secret set OPENWEATHER_KEY
+fas secret set OPENWEATHER_KEY                  # hidden interactive prompt
 fas secret list                                  # list secret names
 fas secret list --json                           # machine-readable
 fas secret rm OPENWEATHER_KEY                    # delete a secret
@@ -177,7 +178,7 @@ fas secret rm OPENWEATHER_KEY                    # delete a secret
 
 | Subcommand | Usage | Description |
 |---|---|---|
-| `set` | `fas secret set <name> <value> [--app <id>]` | Store or replace an encrypted API key. Name must be uppercase + underscores. |
+| `set` | `fas secret set <name> [--from-env <variable>] [--stdin] [--app <id>]` | Store or replace an encrypted API key from an environment variable, stdin, or hidden interactive prompt. Name must be uppercase + underscores. |
 | `list` (alias `ls`) | `fas secret list [--app <id>] [--json]` | List secret names registered for an app. |
 | `rm` (alias `remove`) | `fas secret rm <name> [--app <id>]` | Delete a stored secret. |
 
