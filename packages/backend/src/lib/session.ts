@@ -12,6 +12,9 @@ export const LEGACY_AUD = '#legacy';
 /** A cross-store token that claims `console`: matches no app and is not first-party. */
 export const CROSS_STORE_AUD = '#cross-store';
 
+/** The `iss` of every session this backend mints. */
+export const SESSION_ISSUER = 'fas';
+
 export async function signSession(
   uid: string,
   signingKey: string,
@@ -24,6 +27,7 @@ export async function signSession(
     roles: opts.roles ?? ['user'],
     appRoles: opts.appRoles ?? {},
     aud: opts.aud,
+    iss: SESSION_ISSUER,
     sid: b64urlBytes(sid),
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
@@ -59,6 +63,8 @@ export async function verifySession(
   // minted before it must sign in again rather than keep handing the address
   // to apps and room peers.
   if (claims.uid.startsWith('email:')) return null;
+  // A token another issuer stamped with its own `iss` is never a FAS session.
+  if (payload.iss !== undefined && payload.iss !== SESSION_ISSUER) return null;
   return payload;
 }
 
@@ -86,7 +92,7 @@ export async function verifyPayload<T>(token: string, signingKey: string): Promi
   }
 }
 
-async function hmac(data: string, keyMaterial: string): Promise<string> {
+export async function hmac(data: string, keyMaterial: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(keyMaterial),

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
-import { signSession } from '../lib/session.js';
+import { hmac, signSession } from '../lib/session.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -225,5 +225,98 @@ describe('roles routes', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { ok: boolean; assigned: boolean };
     expect(data.assigned).toBe(false);
+  });
+
+  describe('service-assign proof (#463)', () => {
+    const now = () => Math.floor(Date.now() / 1000);
+    const NONCE = 'n'.repeat(20);
+    const msg = (appId: string, userId: string, role: string, exp: number, nonce: string) =>
+      `fas:service-assign:v1|${[appId, userId, role, String(exp), nonce].map((f) => `${f.length}:${f}`).join('|')}`;
+
+    async function assign(
+      over: Record<string, unknown> = {},
+      opts: { app?: boolean; used?: Set<string> } = {},
+    ) {
+      const exp = (over.exp as number | undefined) ?? now() + 60;
+      const fields = { userId: 'gh:7', role: 'editor', nonce: NONCE, exp, ...over };
+      const proof =
+        (over.proof as string | undefined) ??
+        (await hmac(
+          msg(
+            'timer',
+            fields.userId as string,
+            fields.role as string,
+            fields.exp as number,
+            fields.nonce as string,
+          ),
+          SIGNING_KEY,
+        ));
+      const used = opts.used ?? new Set<string>();
+      const inserts: unknown[][] = [];
+      const db = {
+        prepare: (sql: string) => {
+          const t = sql.replace(/\s+/g, ' ').trim();
+          const stmt = (args: unknown[]) => ({
+            first: async () => (t.includes('FROM apps') && opts.app !== false ? { 1: 1 } : null),
+            run: async () => {
+              if (t.includes('consumed_tokens')) {
+                if (used.has(args[0] as string)) throw new Error('UNIQUE');
+                used.add(args[0] as string);
+              }
+              if (t.includes('INTO app_roles')) inserts.push(args);
+              return { meta: { changes: 1 } };
+            },
+          });
+          return { ...stmt([]), bind: (...args: unknown[]) => stmt(args) };
+        },
+      } as unknown as D1Database;
+      const res = await app.request(
+        '/v1/apps/timer/roles/service-assign',
+        { method: 'POST', body: JSON.stringify({ ...fields, proof }) },
+        env(db),
+      );
+      return { res, inserts, used };
+    }
+
+    it('assigns with a fresh, valid proof', async () => {
+      const { res, inserts } = await assign();
+      expect(res.status).toBe(200);
+      expect(inserts).toEqual([['timer', 'gh:7', 'editor', null]]);
+    });
+
+    it('refuses a replayed proof', async () => {
+      const exp = now() + 60;
+      const used = new Set<string>();
+      expect((await assign({ exp }, { used })).res.status).toBe(200);
+      const replay = await assign({ exp }, { used });
+      expect(replay.res.status).toBe(403);
+      expect(replay.inserts).toEqual([]);
+    });
+
+    it('refuses an expired proof and an exp too far ahead', async () => {
+      expect((await assign({ exp: now() - 1 })).res.status).toBe(403);
+      expect((await assign({ exp: now() + 3600 })).res.status).toBe(403);
+    });
+
+    it('refuses the old unsalted proof format and a wrong proof', async () => {
+      const legacy = await hmac('claim:timer:gh:7:editor', SIGNING_KEY);
+      expect((await assign({ proof: legacy })).res.status).toBe(403);
+      expect((await assign({ proof: 'x' })).res.status).toBe(403);
+    });
+
+    it('binds the proof to every field, so a shifted ":" boundary does not verify', async () => {
+      const proof = await hmac(msg('timer', 'gh:7', 'editor', now() + 60, NONCE), SIGNING_KEY);
+      const { res } = await assign({ userId: 'gh:7e', proof });
+      expect(res.status).toBe(403);
+    });
+
+    it('rejects unknown apps, owner, and malformed roles without burning the proof', async () => {
+      const unknown = await assign({}, { app: false });
+      expect(unknown.res.status).toBe(404);
+      expect(unknown.used.size).toBe(0);
+      expect((await assign({ role: 'owner' })).res.status).toBe(400);
+      expect((await assign({ role: 'Bad Role' })).res.status).toBe(400);
+      expect((await assign({ nonce: 'short' })).res.status).toBe(400);
+    });
   });
 });

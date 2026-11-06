@@ -114,6 +114,8 @@ export interface SessionPayload {
    * `legacy` (see lib/auth.ts).
    */
   aud?: string;
+  /** Issuer: `fas` on sessions this backend mints (#463). Absent on older ones; any other value is refused. */
+  iss?: string;
   /** Random per-session id, for audit logs and future per-session revocation. */
   sid?: string;
   iat: number;

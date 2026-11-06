@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
 import { assertAppOwner, isAppOwner, requireAppUser } from '../lib/auth.js';
-import { timingSafeEqual } from '../lib/session.js';
+import { hmac, timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
 /**
@@ -185,45 +185,81 @@ rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
   return c.json({ ok: true, assigned: true });
 });
 
+/** Longest a service-assign proof may be valid for. */
+const SERVICE_PROOF_MAX_TTL_SECONDS = 300;
+
+/** Length-prefixed fields: no value can shift into its neighbour (user ids contain ':'). */
+function serviceAssignMessage(fields: string[]): string {
+  return `fas:service-assign:v1|${fields.map((f) => `${f.length}:${f}`).join('|')}`;
+}
+
 /**
- * Service-to-service role assignment via HMAC proof. Used by PAS invite
- * redeem to assign a role without requiring owner auth. The caller
- * proves knowledge of SESSION_SIGNING_KEY by providing:
- *   proof = HMAC-SHA256("claim:{appId}:{userId}:{role}", key)
+ * Service-to-service role assignment via HMAC proof, for a caller that holds
+ * SESSION_SIGNING_KEY. The proof is single-use and short-lived (#463):
+ *   proof = HMAC-SHA256(key, serviceAssignMessage([appId, userId, role, exp, nonce]))
+ * with `exp` (unix seconds, at most 5 minutes ahead) and a caller-chosen
+ * `nonce` (16-64 chars) sent alongside. A replayed proof is refused.
  */
 rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
   const appId = c.req.param('appId');
   const body = (await c.req.json().catch(() => null)) as {
-    userId?: string;
-    role?: string;
-    proof?: string;
-    grantedBy?: string;
+    userId?: unknown;
+    role?: unknown;
+    proof?: unknown;
+    exp?: unknown;
+    nonce?: unknown;
+    grantedBy?: unknown;
   } | null;
 
-  if (!body?.userId || !body?.role || !body?.proof) {
-    return c.json({ error: 'userId, role, and proof are required' }, 400);
+  if (
+    typeof body?.userId !== 'string' ||
+    typeof body.role !== 'string' ||
+    typeof body.proof !== 'string' ||
+    typeof body.nonce !== 'string' ||
+    typeof body.exp !== 'number' ||
+    !body.userId ||
+    !body.role ||
+    !body.proof
+  ) {
+    return c.json({ error: 'userId, role, exp, nonce and proof are required' }, 400);
+  }
+  if (!/^[a-z][a-z0-9_-]{0,49}$/.test(body.role)) {
+    return c.json(
+      { error: 'role must be lowercase alphanumeric with hyphens/underscores, 1-50 chars' },
+      400,
+    );
   }
   if (body.role === 'owner') {
     return c.json({ error: "cannot assign 'owner' via service" }, 400);
   }
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(body.nonce)) {
+    return c.json({ error: 'nonce must be 16-64 url-safe characters' }, 400);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  if (
+    !Number.isInteger(body.exp) ||
+    body.exp <= now ||
+    body.exp > now + SERVICE_PROOF_MAX_TTL_SECONDS
+  ) {
+    return c.json({ error: 'proof expired or exp too far ahead' }, 403);
+  }
 
-  const enc = new TextEncoder();
-  const message = `claim:${appId}:${body.userId}:${body.role}`;
-  const key = await crypto.subtle.importKey(
-    'raw',
-    enc.encode(c.env.SESSION_SIGNING_KEY) as BufferSource,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
+  const expected = await hmac(
+    serviceAssignMessage([appId, body.userId, body.role, String(body.exp), body.nonce]),
+    c.env.SESSION_SIGNING_KEY,
   );
-  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message) as BufferSource);
-  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
   if (!timingSafeEqual(body.proof, expected)) {
     return c.json({ error: 'invalid proof' }, 403);
+  }
+
+  // Only a valid proof reaches the existence check and the single-use burn.
+  if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
+  try {
+    await c.env.DB.prepare('INSERT INTO consumed_tokens (hash, expires_at) VALUES (?, ?)')
+      .bind(`service-assign:${expected}`, body.exp)
+      .run();
+  } catch {
+    return c.json({ error: 'proof already used' }, 403);
   }
 
   await c.env.DB.prepare(
@@ -231,7 +267,7 @@ rolesRoutes.post('/apps/:appId/roles/service-assign', async (c) => {
      VALUES (?, ?, ?, ?)
      ON CONFLICT(app_id, user_id, role_name) DO NOTHING`,
   )
-    .bind(appId, body.userId, body.role, body.grantedBy ?? null)
+    .bind(appId, body.userId, body.role, typeof body.grantedBy === 'string' ? body.grantedBy : null)
     .run();
 
   return c.json({ ok: true });

@@ -11,6 +11,19 @@ describe('session HMAC roundtrip', () => {
     expect(payload?.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
+  it('stamps iss=fas and refuses a token with another issuer (#463)', async () => {
+    const payload = await verifySession(await signSession('gh:42', KEY, { aud: 'chess' }), KEY);
+    expect(payload?.iss).toBe('fas');
+    const now = Math.floor(Date.now() / 1000);
+    const foreign = await signPayload(
+      { uid: 'gh:42', aud: 'chess', iss: 'pas', iat: now, exp: now + 60 },
+      KEY,
+    );
+    expect(await verifySession(foreign, KEY)).toBeNull();
+    const noIss = await signPayload({ uid: 'gh:42', aud: 'chess', iat: now, exp: now + 60 }, KEY);
+    expect((await verifySession(noIss, KEY))?.uid).toBe('gh:42');
+  });
+
   it('carries the audience and a random session id (#495)', async () => {
     const a = await verifySession(await signSession('gh:42', KEY, { aud: 'chess' }), KEY);
     const b = await verifySession(await signSession('gh:42', KEY, { aud: 'chess' }), KEY);
