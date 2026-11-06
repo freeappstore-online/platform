@@ -232,7 +232,7 @@ export async function resolveDeployApp(db: D1Database, claims: OidcClaims): Prom
     .prepare(
       `SELECT a.id, a.repo, p.repository_id AS pinned_to
          FROM apps a LEFT JOIN app_repositories p ON p.app_id = a.id
-        WHERE a.id = ? AND a.store = 'apps'`,
+        WHERE a.id = ? AND (a.store IS NULL OR a.store = 'apps')`,
     )
     .bind(appId)
     .first<{ id: string; repo: string | null; pinned_to: string | null }>();

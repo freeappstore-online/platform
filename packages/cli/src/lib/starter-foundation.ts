@@ -932,7 +932,8 @@ oidc=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \\
 echo "::add-mask::$oidc"
 session=$(curl -sS --fail-with-body -X POST "$DEPLOY_API/v1/deploys" \\
   -H "Authorization: Bearer $oidc" -H 'Content-Type: application/json' \\
-  --data-binary @"$RUNNER_TEMP/manifest.json")
+  --data-binary @"$RUNNER_TEMP/manifest.json") \\
+  || { echo "::error::deploy refused: $session"; exit 1; }
 DEPLOY_TOKEN=$(jq -r .token <<<"$session")
 echo "::add-mask::$DEPLOY_TOKEN"
 DEPLOY_URL="$DEPLOY_API/v1/deploys/$(jq -r .id <<<"$session")"
