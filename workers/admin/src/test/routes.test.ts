@@ -192,6 +192,22 @@ describe("routes/ai-keys-proxy", () => {
     ]);
   });
 
+  it("forwards the acting admin's login, and never a client-supplied header (#534)", async () => {
+    const seen: Array<string | null> = [];
+    const backend = {
+      fetch: async (_u: RequestInfo | URL, init?: RequestInit) => {
+        seen.push(new Headers(init?.headers).get("X-Acting-Admin"));
+        return new Response("{}", { headers: { "Content-Type": "application/json" } });
+      },
+    };
+    const e = env({ BACKEND_FAS: backend, ADMIN_PROVISION_TOKEN: "tok" });
+    const init: RequestInit = { method: "POST", body: "{}", headers: { "X-Acting-Admin": "spoofed" } };
+    const admin: AuthResult = { ok: true, kind: "admin", user: { id: "gh:1", login: "Display", githubLogin: "serge", aud: "console" } };
+    await call(aiKeysProxyRoutes, "/api/ai-keys/userkey", init, e, admin);
+    await call(aiKeysProxyRoutes, "/api/ai-keys/userkey", init, e, { ok: true, kind: "local" });
+    expect(seen).toEqual(["serge", null]);
+  });
+
   it("405s a wrong method without calling the backend", async () => {
     const backend = fakeBackend();
     for (const [method, path] of [

@@ -15,7 +15,7 @@
 import { Hono } from 'hono';
 import { requireConsoleUser, requireUser } from '../lib/auth.js';
 import { openSecret, sealSecret } from '../lib/encryption.js';
-import { isInternalCall, isServiceBindingCall } from '../lib/internal.js';
+import { actingAdmin, isInternalCall, isServiceBindingCall } from '../lib/internal.js';
 import { isAllowedReturnTo } from '../lib/origins.js';
 import { isAppAudience } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -321,7 +321,8 @@ async function revokeGrant(env: Env, rawUserId: string): Promise<GrantResult> {
 keysRoutes.post('/internal/keys/grants', async (c) => {
   if (!isInternalCall(c)) return c.json({ error: 'forbidden' }, 403);
   const body = await c.req.json<GrantInput & { grantedBy?: string }>().catch(() => null);
-  const grantedBy = body?.grantedBy ? String(body.grantedBy).trim().slice(0, 120) : 'admin';
+  const grantedBy =
+    actingAdmin(c) ?? (body?.grantedBy ? String(body.grantedBy).trim().slice(0, 120) : 'admin');
   const r = await applyGrant(c.env, body ?? {}, grantedBy);
   return c.json(r.body, r.status);
 });
@@ -393,7 +394,7 @@ keysRoutes.post('/internal/keys/userkey', async (c) => {
       sealed.dekWrapped,
       sealed.iv,
       Date.now(),
-      'admin-worker',
+      actingAdmin(c) ?? 'admin-worker',
     )
     .run();
 

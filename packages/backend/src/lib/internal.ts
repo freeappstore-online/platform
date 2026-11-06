@@ -26,3 +26,17 @@ export function isInternalCall(c: {
 }): boolean {
   return isServiceBindingCall(c.req.url) && hasInternalToken(c);
 }
+
+/**
+ * The admin who triggered an internal call, as forwarded by the admin Worker
+ * in `X-Acting-Admin` (#534). Trusted only on the service binding: a header
+ * sent to any public host is ignored. Callers must already have passed
+ * isInternalCall.
+ */
+export function actingAdmin(c: {
+  req: { url: string; header: (name: string) => string | undefined };
+}): string | null {
+  if (!isServiceBindingCall(c.req.url)) return null;
+  const login = c.req.header('x-acting-admin')?.trim();
+  return login && /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,119}$/.test(login) ? login : null;
+}

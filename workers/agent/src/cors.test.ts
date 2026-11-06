@@ -13,6 +13,19 @@ describe("corsHeaders", () => {
     expect(h["Access-Control-Allow-Origin"]).toBe("https://console.freeappstore.online");
   });
 
+  it("allows the console host only, not other subdomains (#476)", () => {
+    const h = corsHeaders(req("https://evil-app.freeappstore.online"), "freeappstore.online");
+    expect(h["Access-Control-Allow-Origin"]).toBe("https://freeappstore.online");
+  });
+
+  it.each(["http://localhost.evil.com", "http://localhost@evil.com", "http://localhost:5173.evil.com"])(
+    "rejects the localhost look-alike %s",
+    (origin) => {
+      const h = corsHeaders(req(origin), "freeappstore.online");
+      expect(h["Access-Control-Allow-Origin"]).toBe("https://freeappstore.online");
+    },
+  );
+
   it("allows apex domain", () => {
     const h = corsHeaders(req("https://freeappstore.online"), "freeappstore.online");
     expect(h["Access-Control-Allow-Origin"]).toBe("https://freeappstore.online");

@@ -125,6 +125,52 @@ describe("Security: fetch_url SSRF prevention", () => {
     expect(r).toContain("Error");
   });
 
+  it.each([
+    ["decimal IPv4", "https://2130706433/"],
+    ["hex IPv4", "https://0x7f000001/"],
+    ["octal IPv4", "https://0177.0.0.1/"],
+    ["short IPv4", "https://127.1/"],
+    ["IPv4-mapped IPv6", "https://[::ffff:127.0.0.1]/"],
+    ["IPv6 unique-local", "https://[fd00::1]/"],
+    ["carrier-grade NAT", "https://100.64.0.1/"],
+    ["userinfo trick", "https://example.com@127.0.0.1/"],
+    ["non-default port", "https://example.com:8443/"],
+    ["single-label host", "https://intranet/"],
+    ["subdomain of localhost", "https://app.localhost/"],
+  ])("blocks %s", async (_label, url) => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await executeInfraTool({ id: "1", name: "fetch_url", input: { url } }, makeCtx());
+    expect(r).toContain("Error");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("blocks a hostname that resolves to a private address", async () => {
+    const fetchSpy = vi.fn(async (u: string) =>
+      Response.json({ Answer: [{ type: 1, data: u.includes("type=A&") || u.endsWith("type=A") ? "127.0.0.1" : "::1" }] }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const r = await executeInfraTool({ id: "1", name: "fetch_url", input: { url: "https://rebind.example.com/" } }, makeCtx());
+    expect(r).toContain("cannot fetch private/internal URLs");
+    expect(fetchSpy.mock.calls.every(([u]) => String(u).startsWith("https://cloudflare-dns.com/"))).toBe(true);
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches a hostname whose records are all public, and refuses non GET/HEAD", async () => {
+    const fetchSpy = vi.fn(async (u: string) =>
+      String(u).startsWith("https://cloudflare-dns.com/")
+        ? Response.json({ Answer: [{ type: 1, data: "93.184.216.34" }] })
+        : new Response("hello", { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const ok = await executeInfraTool({ id: "1", name: "fetch_url", input: { url: "https://example.com/" } }, makeCtx());
+    expect(ok).toContain("200");
+    const post = await executeInfraTool({ id: "1", name: "fetch_url", input: { url: "https://example.com/", method: "POST" } }, makeCtx());
+    expect(post).toContain("only supports GET and HEAD");
+    vi.unstubAllGlobals();
+  });
+
   it("blocks admin.freeappstore.online", async () => {
     const ctx = makeCtx();
     const r = await executeInfraTool({ id: "1", name: "fetch_url", input: { url: "https://admin.freeappstore.online/api/stats" } }, ctx);
@@ -288,12 +334,16 @@ describe("Security: deploy ID validation", () => {
 describe("Security: fetch_url redirect handling", () => {
   it("does not follow redirects (prevents SSRF bypass)", async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      status: 302,
-      statusText: "Found",
-      headers: new Headers({ Location: "http://169.254.169.254/metadata" }),
-      text: () => Promise.resolve(""),
-    }) as any;
+    globalThis.fetch = vi.fn(async (u: string) =>
+      String(u).startsWith("https://cloudflare-dns.com/")
+        ? Response.json({ Answer: [{ type: 1, data: "93.184.216.34" }] })
+        : ({
+            status: 302,
+            statusText: "Found",
+            headers: new Headers({ Location: "http://169.254.169.254/metadata" }),
+            text: () => Promise.resolve(""),
+          } as any),
+    ) as any;
     try {
       const ctx = makeCtx();
       const r = await executeInfraTool({ id: "1", name: "fetch_url", input: { url: "https://example.com/redirect" } }, ctx);

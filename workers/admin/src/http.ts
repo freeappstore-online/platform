@@ -9,9 +9,19 @@
  */
 export const CORS_ORIGINS = new Set(["https://freeappstore.online", "https://console.freeappstore.online"]);
 
+/** `http(s)://localhost[:port]` by parsed hostname, so `http://localhost.evil.com` is not local. */
+function isLocalhostOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return (url.protocol === "http:" || url.protocol === "https:") && url.hostname === "localhost" && origin === url.origin;
+  } catch {
+    return false;
+  }
+}
+
 export function corsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin");
-  const allowed = origin && (CORS_ORIGINS.has(origin) || origin.startsWith("http://localhost")) ? origin : "https://freeappstore.online";
+  const allowed = origin && (CORS_ORIGINS.has(origin) || isLocalhostOrigin(origin)) ? origin : "https://freeappstore.online";
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",

@@ -396,8 +396,8 @@ export class AgentSession implements DurableObject {
   }
 
   private async routeRequest(request: Request, path: string): Promise<Response> {
-    // Require auth on all endpoints that expose session data; only /status is public
-    const auth = await this.validateAuth(request, path !== "/status");
+    // Every endpoint exposes session data, /status included (#475).
+    const auth = await this.validateAuth(request, true);
     if (auth.error) return auth.error;
 
     const route = `${request.method} ${path}`;

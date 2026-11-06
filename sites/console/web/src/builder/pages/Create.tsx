@@ -161,8 +161,7 @@ export function Create() {
   const currentProject = agent.projects.find((p: any) => p.id === agent.currentProjectId);
   const appId = currentProject?.appId;
   const previewUrl = currentProject?.appUrl
-    || (agent.deployState?.appUrl?.includes("pages.dev") ? agent.deployState.appUrl : null)
-    || (appId ? `https://free${appId.replace(/-/g, "")}app.pages.dev` : null);
+    || (appId ? `https://${appId}.freeappstore.online` : null);
   const showPreview = !!previewUrl;
 
   if (!user) {

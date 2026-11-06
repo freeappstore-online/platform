@@ -8,6 +8,7 @@ import { formatSharedFailure, runSharedChecks } from "./compliance";
 import type { StoreConfig } from "./config";
 import type { DeployEnv, DeployStatus } from "./deploy";
 import { deployApp, pushUpdate, readDeployRun, waitForGitHubDeploy } from "./deploy";
+import { fetchUrlDenied } from "./ssrf";
 import { checkDeployStatus, fetchUrl, getAuditResults, getBuildLogs, getCIResults, listDeployed } from "./infra";
 import type { ToolCall } from "./providers/types";
 import { substituteAppName } from "./template";
@@ -595,13 +596,10 @@ async function executeCheckDeployStatus(appId: string, ctx: ExecContext): Promis
 
 async function executeFetchUrl(tc: ToolCall, config: StoreConfig): Promise<string> {
   const url = tc.input.url as string;
-  if (!url.startsWith("https://")) {
-    return "Error: can only fetch public HTTPS URLs.";
-  }
-  // Block private IPs and internal platform services
-  if (/localhost|127\.|192\.168|10\.|172\.1[6-9]\.|172\.2|172\.3[01]\.|169\.254|0\.0\.0\.0|\[::1\]/i.test(url)) {
-    return "Error: cannot fetch private/internal URLs.";
-  }
+  const method = String(tc.input.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") return "Error: fetch_url only supports GET and HEAD.";
+  // Parsed and DNS-resolved, not pattern-matched (#474). Redirects are never
+  // followed (fetchUrl uses redirect: manual), so there is no second hop to check.
   if (
     /admin\.(freeappstore|freegamestore)|publish\.(freeappstore|freegamestore)|agent\.(freeappstore|freegamestore)|api\.(freeappstore|freegamestore)\.online\/v1\/(publish|apps|auth\/(exchange|me))/i.test(
       url,
@@ -609,5 +607,7 @@ async function executeFetchUrl(tc: ToolCall, config: StoreConfig): Promise<strin
   ) {
     return "Error: cannot fetch internal platform URLs.";
   }
-  return fetchUrl(url, (tc.input.method as string) || "GET", config.agentName);
+  const denied = await fetchUrlDenied(url);
+  if (denied) return denied;
+  return fetchUrl(url, method, config.agentName);
 }

@@ -159,7 +159,7 @@ export function useProjects() {
       updatedAt: Date.now(),
       deployed: !!appId,
       appId,
-      appUrl: appId ? `https://free${appId.replace(/-/g, "")}app.pages.dev` : undefined,
+      appUrl: appId ? `https://${appId}.freeappstore.online` : undefined,
     };
     setProjects((prev) => [project, ...prev]);
     setCurrentId(id);

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AGENT_URL } from "../lib/api";
+import { AGENT_URL, authHeaders } from "../lib/api";
 
 export type DevState = "working" | "deploying" | "error" | "idle";
 export interface DevStatus {
@@ -9,7 +9,7 @@ export interface DevStatus {
 
 async function fetchStatus(id: string, signal: AbortSignal): Promise<DevStatus | null> {
   try {
-    const res = await fetch(`${AGENT_URL}/session/${id}/status`, { signal });
+    const res = await fetch(`${AGENT_URL}/session/${id}/status`, { headers: authHeaders(), signal });
     if (!res.ok) return null;
     const data = (await res.json()) as { devStatus?: DevStatus };
     return data.devStatus ?? null;

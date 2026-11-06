@@ -13,7 +13,7 @@ const ROUTES: Record<string, { method: "GET" | "POST"; backend: string }> = {
 
 /** AI key provisioning: proxies to the backend's /v1/internal/keys/* over the
  *  BACKEND_FAS service binding, authenticated with the internal token. */
-export const aiKeysProxyRoutes: RouteHandler = async ({ request, env, url }) => {
+export const aiKeysProxyRoutes: RouteHandler = async ({ request, env, url, auth }) => {
   const method = request.method;
   // /api/ai-grants is the one path that takes both GET (list) and POST (grant).
   const route =
@@ -28,11 +28,14 @@ export const aiKeysProxyRoutes: RouteHandler = async ({ request, env, url }) => 
   }
   if (method !== route.method) return json({ error: "method not allowed" }, 405, request);
 
+  // Record who acted in provisioned_by / granted_by instead of "admin-worker" (#534).
+  const actingAdmin = auth?.ok && auth.kind === "admin" ? auth.user.githubLogin || auth.user.login : null;
   const res = await env.BACKEND_FAS.fetch(`https://backend${route.backend}`, {
     method,
     headers: {
       "Content-Type": "application/json",
       "X-Internal-Token": backendToken,
+      ...(actingAdmin ? { "X-Acting-Admin": actingAdmin } : {}),
     },
     body: method === "POST" ? await request.text() : undefined,
   });

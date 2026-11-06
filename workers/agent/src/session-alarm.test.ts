@@ -213,7 +213,7 @@ describe("ALARM_LOOP=true: /chat", () => {
     const first = await new AgentSession(state, env).fetch(chatRequest());
     await first.body?.cancel();
 
-    const status = await new AgentSession(state, env).fetch(new Request("https://agent/status"));
+    const status = await new AgentSession(state, env).fetch(new Request("https://agent/status", { headers: { Authorization: "Bearer tok", "X-Session-Id": "sess-1" } }));
     expect(status.status).toBe(200);
     expect(((await status.json()) as any).devStatus).toEqual({ state: "working", detail: "Building…" });
   });

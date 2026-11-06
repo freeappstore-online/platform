@@ -420,6 +420,53 @@ describe('keys routes', () => {
     expect(runs[0]!.binds[3]).toBeInstanceOf(Uint8Array);
   });
 
+  it('records the acting admin from X-Acting-Admin on the service binding only (#534)', async () => {
+    const send = async (url: string, path: string, extra: Record<string, string>) => {
+      const runs: Array<{ sql: string; binds: unknown[] }> = [];
+      const res = await app.request(
+        `${url}${path}`,
+        {
+          method: 'POST',
+          headers: {
+            'X-Internal-Token': 'internal-token',
+            'Content-Type': 'application/json',
+            ...extra,
+          },
+          body: JSON.stringify({
+            userId: 'gh:1',
+            provider: 'openai',
+            key: 'sk-test-key',
+            model: 'm',
+          }),
+        },
+        env(
+          fakeDB({ user: { id: 'gh:1' }, provider: { id: 'openai', key_prefix: 'sk-' }, runs }),
+          internalEnv,
+        ),
+      );
+      return { res, runs };
+    };
+    const key = await send('https://backend', '/v1/internal/keys/userkey', {
+      'X-Acting-Admin': 'serge',
+    });
+    expect(key.res.status).toBe(200);
+    expect(key.runs[0]!.binds).toContain('serge');
+    expect(key.runs[0]!.binds).not.toContain('admin-worker');
+    // No header: the old value. Malformed header: ignored.
+    const bare = await send('https://backend', '/v1/internal/keys/userkey', {});
+    expect(bare.runs[0]!.binds).toContain('admin-worker');
+    const bad = await send('https://backend', '/v1/internal/keys/userkey', {
+      'X-Acting-Admin': 'a b;c',
+    });
+    expect(bad.runs[0]!.binds).toContain('admin-worker');
+    // On the public host the request is refused outright and nothing is written.
+    const pub = await send('https://api.freeappstore.online', '/v1/internal/keys/userkey', {
+      'X-Acting-Admin': 'serge',
+    });
+    expect(pub.res.status).toBe(403);
+    expect(pub.runs).toEqual([]);
+  });
+
   it('POST /v1/internal/keys/userkey/delete removes a user key', async () => {
     const runs: Array<{ sql: string; binds: unknown[] }> = [];
     const res = await app.request(
