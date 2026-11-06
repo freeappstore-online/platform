@@ -247,11 +247,14 @@ export const CONSOLE_INLINE_SCRIPT_HASHES = [
  */
 const CONSOLE_CSP = [
   "default-src 'self'",
-  `script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")}`,
+  // static.cloudflareinsights.com: Cloudflare injects the Web Analytics beacon
+  // into HTML served on the apex (where /app/ lives), as the storefront's own
+  // CSP already allows; it reports to cloudflareinsights.com.
+  `script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")} https://static.cloudflareinsights.com`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com",
+  "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com",
   "worker-src 'self'",
   "frame-src https://*.freeappstore.online",
   "frame-ancestors 'none'",

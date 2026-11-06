@@ -327,7 +327,9 @@ describe("first-party console policy", () => {
   });
 
   it("allows no inline, eval, or third-party script beyond the hashed boot scripts", () => {
-    expect(directive("script-src")).toBe(`script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")}`);
+    expect(directive("script-src")).toBe(
+      `script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")} https://static.cloudflareinsights.com`,
+    );
     expect(directive("script-src")).not.toContain("'unsafe-inline'");
     expect(csp).not.toContain("'unsafe-eval'");
     for (const name of ["script-src", "connect-src", "frame-src", "style-src", "font-src"]) {
@@ -357,7 +359,7 @@ describe("first-party console policy", () => {
 
   it("lets the console reach only the platform services and GitHub it calls", () => {
     expect(directive("connect-src")).toBe(
-      "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com",
+      "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com",
     );
     // 'unsafe-inline' for styles only: the SDK UI kit injects a keyframes <style>.
     expect(directive("style-src")).toBe("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
