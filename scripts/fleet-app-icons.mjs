@@ -1,17 +1,17 @@
-// Writes the install icons a legacy app's manifest declares but never shipped
-// (/icons/icon-192.png, /icons/icon-512.png), so the keyless build job's
+// Writes the icon files a legacy app's manifest or HTML declares but never
+// shipped (e.g. /icons/icon-192.png), so the keyless build job's
 // `build-target --artifact` icon check passes (#523).
 //
 //   node scripts/fleet-app-icons.mjs <repo-dir> <app-id>
 //
-// Never overwrites an existing icon. Source art, in order: the app's own
+// Local declarations only; never overwrites an existing file. Source art, in order: the app's own
 // web/public/favicon.svg or icon.svg, else a personalised lettermark derived
 // from the app id (initials on a colour fixed by a hash of the id), the same
 // idea as the PAS lettermark icons. Never the template "F".
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import sharp from 'sharp';
 
@@ -30,16 +30,38 @@ export function lettermarkSvg(appId) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="hsl(${hue} 62% 36%)"/><text x="256" y="256" dy="0.35em" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="${size}" fill="#fff">${text}</text></svg>`;
 }
 
+/** Local icon files the app's manifest or HTML declares: [web path, declared sizes]. */
+export function declaredIcons(dir) {
+  const refs = [];
+  const read = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : '');
+  try {
+    const manifest = JSON.parse(read(join(dir, 'web/public/manifest.json')) || '{}');
+    for (const icon of manifest.icons ?? []) refs.push([icon.src, icon.sizes]);
+  } catch {}
+  const html = read(join(dir, 'web/index.html'));
+  for (const tag of html.matchAll(/<link\b[^>]*>/gi)) {
+    const attr = (name) => new RegExp(`${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag[0])?.[1];
+    if (/icon/i.test(attr('rel') ?? '') && attr('href')) refs.push([attr('href'), attr('sizes')]);
+  }
+  return refs.filter(
+    ([src]) => typeof src === 'string' && src.startsWith('/') && !src.startsWith('//'),
+  );
+}
+
 export async function writeIcons(dir, appId) {
   const pub = join(dir, 'web/public');
   const own = ['favicon.svg', 'icon.svg'].map((f) => join(pub, f)).find((f) => existsSync(f));
   const svg = own ? readFileSync(own) : Buffer.from(lettermarkSvg(appId));
-  mkdirSync(join(pub, 'icons'), { recursive: true });
   const written = [];
-  for (const size of [192, 512]) {
-    const path = join(pub, 'icons', `icon-${size}.png`);
+  for (const [src, sizes] of declaredIcons(dir)) {
+    const path = join(pub, decodeURIComponent(src.split(/[?#]/)[0]));
     if (existsSync(path)) continue;
-    writeFileSync(path, await sharp(svg, { density: 384 }).resize(size, size).png().toBuffer());
+    mkdirSync(dirname(path), { recursive: true });
+    if (/\.svg$/i.test(path)) writeFileSync(path, svg);
+    else if (/\.png$/i.test(path)) {
+      const size = Number(/(\d+)x\d+/.exec(sizes ?? '')?.[1] ?? /(\d+)/.exec(path)?.[1] ?? 192);
+      writeFileSync(path, await sharp(svg, { density: 384 }).resize(size, size).png().toBuffer());
+    } else continue;
     written.push(path);
   }
   return { source: own ? 'app svg' : `lettermark ${lettermark(appId)}`, written };
