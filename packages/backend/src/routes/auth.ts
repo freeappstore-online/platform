@@ -72,6 +72,7 @@ function readCodeChallenge(
 
 const STATE_TTL_SECONDS = 10 * 60;
 const MAGIC_LINK_TTL_SECONDS = 15 * 60;
+const MAX_PENDING_LINK_COOKIES = 5;
 
 // Best-effort per-recipient throttle for magic-link sends (per-isolate, same
 // pattern as friends.ts rate limits). Stops an unauthenticated caller from
@@ -133,6 +134,12 @@ function readFlowCookie(c: Ctx, nonce: string): string | null {
     return part.slice(eq + 1).trim() || null;
   }
   return null;
+}
+
+/** How many flow cookies (any provider) this request carries. */
+function countFlowCookies(c: Ctx): number {
+  const header = c.req.header('cookie') ?? '';
+  return header.split(';').filter((part) => /^\s*(__Host-)?fas_oauth_[^=]*=/.test(part)).length;
 }
 
 function randomToken(): string {
@@ -600,7 +607,12 @@ authRoutes.post('/auth/email/start', async (c) => {
     returnTo,
     exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS,
   };
-  if (c.req.header('origin') === new URL(returnTo).origin) {
+  // At most MAX_PENDING_LINK_COOKIES pending links bind per browser, so a page
+  // looping this endpoint cannot grow the API's Cookie header without bound.
+  if (
+    c.req.header('origin') === new URL(returnTo).origin &&
+    countFlowCookies(c) < MAX_PENDING_LINK_COOKIES
+  ) {
     const nonce = randomToken();
     const secret = randomToken();
     claims.nonce = nonce;
@@ -690,10 +702,13 @@ authRoutes.post('/auth/email/callback', async (c) => {
   return completeMagicLink(c, tokenRaw, link.state);
 });
 
-/** "Continue signing in as a***@example.com to <app>?" — consumes nothing. */
+/**
+ * "Continue signing in as alice@example.com to <app>?" — consumes nothing. The
+ * address is shown in full: a masked one (a***@example.com) is easy for an
+ * attacker to match with an address of their own, and whoever holds the link
+ * can sign in as it anyway.
+ */
 function confirmMagicLinkPage(tokenRaw: string, state: EmailMagicState): Response {
-  const at = state.email.lastIndexOf('@');
-  const masked = `${state.email.slice(0, 1)}***${state.email.slice(at)}`;
   const host = new URL(state.returnTo).host;
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -712,7 +727,7 @@ function confirmMagicLinkPage(tokenRaw: string, state: EmailMagicState): Respons
 <body>
 <main>
   <h1>Continue signing in?</h1>
-  <p>Continue signing in as <strong>${escapeHtml(masked)}</strong> to <strong>${escapeHtml(state.appId)}</strong> (${escapeHtml(host)})?</p>
+  <p>Continue signing in as <strong>${escapeHtml(state.email)}</strong> to <strong>${escapeHtml(state.appId)}</strong> (${escapeHtml(host)})?</p>
   <form method="post" action="/v1/auth/email/callback">
     <input type="hidden" name="token" value="${escapeHtml(tokenRaw)}">
     <button type="submit">Continue</button>
@@ -726,8 +741,9 @@ function confirmMagicLinkPage(tokenRaw: string, state: EmailMagicState): Respons
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'no-store',
-      // The URL carries the token.
-      'Referrer-Policy': 'no-referrer',
+      // The URL carries the token. Not no-referrer: that would make a browser
+      // without Sec-Fetch-Site send `Origin: null` on the confirm POST.
+      'Referrer-Policy': 'same-origin',
       'Content-Security-Policy':
         "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
     },

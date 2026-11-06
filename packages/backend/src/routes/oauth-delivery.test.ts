@@ -186,6 +186,31 @@ describe('magic link bound to the requesting browser (#514)', () => {
     );
   });
 
+  it('binds at most five pending links per browser', async () => {
+    const flows = Array.from({ length: 5 }, (_, i) => `__Host-fas_oauth_n${i}=s`).join('; ');
+    const send = vi.fn().mockResolvedValue({ messageId: 'm' });
+    const res = await app.request(
+      `${API}/v1/auth/email/start`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://demo.freeappstore.online',
+          cookie: flows,
+        },
+        body: JSON.stringify({
+          email: 'many@example.com',
+          appId: 'demo',
+          returnTo: VALID_RETURN_TO,
+        }),
+      },
+      makeEnv({ EMAIL: { send } } as Partial<Env>),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toBeNull();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it('sets no cookie when another origin asks for the link', async () => {
     const { setCookie } = await startEmail(makeEnv(), 'https://evil.freeappstore.online');
     expect(setCookie).toBe('');
@@ -211,10 +236,10 @@ describe('magic link bound to the requesting browser (#514)', () => {
     expect(page.headers.get('cache-control')).toBe('no-store');
     const html = await page.text();
     expect(html).toMatch(
-      /Continue signing in as <strong>b\*\*\*@example\.com<\/strong> to <strong>demo<\/strong>/,
+      /Continue signing in as <strong>bind-[\w-]+@example\.com<\/strong> to <strong>demo<\/strong>/,
     );
     expect(html).toContain('<form method="post" action="/v1/auth/email/callback">');
-    expect(html).not.toContain('bind-');
+    expect(page.headers.get('referrer-policy')).toBe('same-origin');
 
     // A wrong cookie for the same nonce is no better than none.
     const wrong = await openLink(env, token, `${cookie.split('=')[0]}=not-the-secret`);

@@ -71,7 +71,10 @@ app.use('*', async (c, next) => {
   await next();
   c.header('X-Content-Type-Options', 'nosniff');
   c.header('X-Frame-Options', 'DENY');
-  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  // A page that sets its own (the magic-link confirmation, #514) keeps it.
+  if (!c.res.headers.has('Referrer-Policy')) {
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  }
   c.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   // The API serves data, not documents: a response opened as a page can run
   // nothing and be framed by nothing (#495). The two documents it does serve —
