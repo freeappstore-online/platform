@@ -92,7 +92,7 @@ describe("/api/provision → CF Web Analytics (#8)", () => {
     };
 
     const res = await worker.fetch(
-      new Request("https://localhost/api/provision", {
+      new Request("https://admin/api/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Internal-Token": ADMIN_TOKEN },
         body: JSON.stringify(provisionBody),

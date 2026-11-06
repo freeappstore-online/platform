@@ -386,7 +386,7 @@ contentAdminRoutes.get('/admin/creators', async (c) => {
     );
   }
 
-  const res = await c.env.ADMIN.fetch('https://admin.freeappstore.online/api/creators', {
+  const res = await c.env.ADMIN.fetch('https://admin/api/creators', {
     headers: { 'X-Internal-Token': c.env.ADMIN_PROVISION_TOKEN },
   });
   const text = await res.text();

@@ -503,7 +503,7 @@ describe('content-admin routes', () => {
   it('GET /v1/admin/creators proxies through the admin worker binding', async () => {
     const admin = {
       fetch: async (url: string, init?: RequestInit) => {
-        expect(url).toBe('https://admin.freeappstore.online/api/creators');
+        expect(url).toBe('https://admin/api/creators');
         expect(init?.headers).toEqual({ 'X-Internal-Token': 'token-1' });
         return Response.json([{ github: 'alice', apps: [], banned: false, maxApps: 3 }]);
       },

@@ -14,11 +14,28 @@ export type AuthResult =
   | { ok: true; kind: "service" | "ci" | "local" }
   | { ok: false; status: number; error: string };
 
+/**
+ * The backend reaches this Worker over its ADMIN service binding as
+ * https://admin/…; no public hostname is ever `admin`, so the hostname proves
+ * the call never crossed the internet. Mirrors the backend's
+ * isServiceBindingCall (packages/backend/src/lib/internal.ts).
+ */
+export function isServiceBindingCall(request: Request): boolean {
+  return new URL(request.url).hostname === "admin";
+}
+
 export async function authenticateApiRequest(request: Request, env: Env): Promise<AuthResult> {
   // Trusted server-to-server callers (the FAS backend → /api/provision via the
-  // ADMIN service binding) present the shared ADMIN_PROVISION_TOKEN.
+  // ADMIN service binding) present the shared ADMIN_PROVISION_TOKEN. The token
+  // alone is not enough: from the public host a leaked token would reach every
+  // /api/* route and the backend's /v1/internal/* behind the proxies (#513).
   const internalToken = request.headers.get("X-Internal-Token");
-  if (env.ADMIN_PROVISION_TOKEN && internalToken && timingSafeEqual(internalToken, env.ADMIN_PROVISION_TOKEN)) {
+  if (
+    isServiceBindingCall(request) &&
+    env.ADMIN_PROVISION_TOKEN &&
+    internalToken &&
+    timingSafeEqual(internalToken, env.ADMIN_PROVISION_TOKEN)
+  ) {
     return { ok: true, kind: "service" };
   }
 
@@ -29,11 +46,9 @@ export async function authenticateApiRequest(request: Request, env: Env): Promis
   const auth = request.headers.get("Authorization");
   if (!auth?.startsWith("Bearer ")) return { ok: false, status: 401, error: "Unauthorized" };
 
-  if (!env.BACKEND_FAS) {
-    // Local unit tests/dev can omit the backend binding. Production has it.
-    if (!env.ADMIN_PROVISION_TOKEN) return { ok: true, kind: "local" };
-    return { ok: false, status: 500, error: "admin auth is not wired (missing BACKEND_FAS)" };
-  }
+  // Fail closed: a misdeploy (renamed binding, secret lost in a rotation) must
+  // not turn into unauthenticated admin. Local mode is ALLOW_LOCAL_ADMIN_AUTH only (#521).
+  if (!env.BACKEND_FAS) return { ok: false, status: 500, error: "admin auth is not wired (missing BACKEND_FAS)" };
 
   const res = await env.BACKEND_FAS.fetch("https://backend/v1/auth/me", {
     headers: { Authorization: auth },

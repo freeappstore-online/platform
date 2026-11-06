@@ -54,7 +54,8 @@ The rule: **this worker owns provisioning and anything that needs its privileged
 ## Auth
 
 - **Humans:** the SPA redirects through `api.freeappstore.online/v1/auth/{github,google}/start`, stores the returned `fas:session`, and sends it as `Authorization: Bearer <session>` to `/api/*`. The Worker verifies that session through the `BACKEND_FAS` service binding and requires the returned roles to include `admin`. Admin membership is controlled by the backend's `ADMIN_GITHUB_LOGINS` / `ADMIN_USER_IDS` configuration.
-- **Service:** the api worker calls in via service binding (`env.ADMIN.fetch(...)`). Service-binding calls bypass the edge entirely, so they never see CF Access; they authenticate to this Worker with `X-Internal-Token: ADMIN_PROVISION_TOKEN` instead.
+- **Service:** the api worker calls in via service binding (`env.ADMIN.fetch(...)`). Service-binding calls bypass the edge entirely, so they never see CF Access; they authenticate to this Worker with `X-Internal-Token: ADMIN_PROVISION_TOKEN` instead, and must address it as `https://admin/…`. The token is accepted only on that binding host, never on `admin.freeappstore.online` (#513).
+- **Local:** with no `BACKEND_FAS` binding, `/api/*` returns 500. Set `ALLOW_LOCAL_ADMIN_AUTH=true` in `.dev.vars` to treat every request as admin in `wrangler dev`; never set it in production (#521).
 
 Do **not** add a Cloudflare Access application in front of `admin.freeappstore.online`. It blocks the SPA before FAS auth can run and has broken before when the Zero Trust team domain changed.
 

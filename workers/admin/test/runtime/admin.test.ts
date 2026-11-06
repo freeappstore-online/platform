@@ -12,11 +12,15 @@ const PROVISION_TOKEN = "test-provision-token";
 
 type Step = { name: string; status: string; detail?: string };
 
-function call(path: string, init: RequestInit = {}) {
-  return exports.default.fetch(new Request(`https://admin.freeappstore.online${path}`, init));
+/** Browsers reach the public host; the backend's service binding arrives as https://admin. */
+const PUBLIC = "https://admin.freeappstore.online";
+const BINDING = "https://admin";
+
+function call(path: string, init: RequestInit = {}, origin = PUBLIC) {
+  return exports.default.fetch(new Request(`${origin}${path}`, init));
 }
 
-function provision(id: string, headers: Record<string, string>) {
+function provision(id: string, headers: Record<string, string>, origin = "X-Internal-Token" in headers ? BINDING : PUBLIC) {
   return call("/api/provision", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
@@ -30,7 +34,7 @@ function provision(id: string, headers: Record<string, string>) {
       store: "apps",
       creatorGithub: "alice",
     }),
-  });
+  }, origin);
 }
 
 const step = (steps: Step[], name: string) => steps.find((s) => s.name === name);
@@ -72,7 +76,10 @@ describe("service-binding auth: the backend's /v1/publish → /api/provision", (
     expect((await provision("no-token", {})).status).toBe(401);
     expect((await provision("bad-token", { "X-Internal-Token": "nope" })).status).toBe(401);
 
-    const row = await env.DB.prepare("SELECT 1 FROM routes WHERE slug IN ('no-token', 'bad-token')").first();
+    // #513: the right token from the public host is refused; only the binding host counts.
+    expect((await provision("public-token", { "X-Internal-Token": PROVISION_TOKEN }, PUBLIC)).status).toBe(401);
+
+    const row = await env.DB.prepare("SELECT 1 FROM routes WHERE slug IN ('no-token', 'bad-token', 'public-token')").first();
     expect(row).toBeNull();
   });
 });

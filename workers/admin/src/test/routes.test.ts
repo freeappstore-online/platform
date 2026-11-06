@@ -479,12 +479,31 @@ describe("router", () => {
     expect(res.status).toBe(401);
   });
 
-  it("accepts the service-binding internal token", async () => {
+  it("accepts the internal token on the service-binding host", async () => {
     const res = await worker.fetch(
-      req("/api/ping", { headers: { "X-Internal-Token": "tok" } }),
+      new Request("https://admin/api/ping", { headers: { "X-Internal-Token": "tok" } }),
       env({ ADMIN_PROVISION_TOKEN: "tok", BACKEND_FAS: fakeBackend() }),
     );
     expect(res.status).toBe(200);
+  });
+
+  // #513: from the public host the token alone must reach nothing, neither the
+  // admin routes nor the backend's /v1/internal/* behind the proxies.
+  it.each([
+    ["GET", "/api/ping"],
+    ["GET", "/api/ai-keys/users"],
+    ["POST", "/api/ai-grants"],
+    ["GET", "/api/content/kv"],
+    ["POST", "/api/provision"],
+    ["POST", "/api/deprovision"],
+  ])("refuses a valid internal token on the public host: %s %s", async (method, path) => {
+    const backend = fakeBackend();
+    const res = await worker.fetch(
+      req(path, { method, headers: { "X-Internal-Token": "tok" } }),
+      env({ ADMIN_PROVISION_TOKEN: "tok", BACKEND_FAS: backend }),
+    );
+    expect(res.status).toBe(401);
+    expect(backend.calls).toEqual([]);
   });
 
   it("verifies a browser session through BACKEND_FAS and requires the admin role", async () => {
