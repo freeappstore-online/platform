@@ -15,11 +15,11 @@ jobs:
     if: github.repository == 'freeappstore-online/template-standalone' || github.repository == 'freeappstore-online/template-connected'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           token: ${{ secrets.TEMPLATE_SYNC_TOKEN || github.token }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
       - name: Read accepted release
@@ -33,14 +33,14 @@ jobs:
           const state = JSON.parse(fs.readFileSync('.fas-template/state.json'));
           fs.appendFileSync(process.env.GITHUB_OUTPUT, `sha=${release.sourceSha}\nchanged=${state.sourceSha !== release.sourceSha}\n`);
           JS
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         if: steps.release.outputs.changed == 'true'
         with:
           repository: freeappstore-online/platform
           ref: ${{ steps.release.outputs.sha }}
           path: .platform-maintenance
           persist-credentials: false
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         if: steps.release.outputs.changed == 'true'
       - name: Apply, verify and commit canonical changes
         if: steps.release.outputs.changed == 'true'
