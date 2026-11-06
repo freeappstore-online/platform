@@ -15,40 +15,7 @@ import type { Env } from '../types.js';
  */
 export const APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
 
-/**
- * Repos the platform itself lives in (#9). An app may never take one of these
- * names: the repo already exists, and publishing grants the creator push access
- * to the app's repo. Vendored in workers/admin/src/publish.ts (isReservedId);
- * keep the two in sync.
- */
-export const RESERVED_APP_IDS: ReadonlySet<string> = new Set([
-  'platform',
-  'admin',
-  'agent',
-  'mcp',
-  'host',
-  'console',
-  'create',
-  'publisher',
-  'freeappstore',
-  // First-party `app_id`s at /v1/auth/*/start (#495): a session minted for
-  // one of these gets `aud: console`, so no creator may own the name.
-  'store',
-  'fas-admin',
-  'cli',
-  'keys',
-  // The audience marker for pre-#495 tokens is not an app id either way, but
-  // keep the word out of reach (#495).
-  'legacy',
-  // Existing app address aliases; provisioning these would replace their routes.
-  'hanzi',
-  'yi',
-]);
-
-export function isReservedAppId(id: string): boolean {
-  const lower = id.toLowerCase();
-  return RESERVED_APP_IDS.has(lower) || lower.startsWith('template-');
-}
+export { isReservedAppId, RESERVED_APP_IDS } from './reserved-app-ids.js';
 
 /** True iff `appId` is well-formed and exists in the apps registry. */
 export async function appExists(env: Env, appId: string): Promise<boolean> {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { RESERVED_APP_IDS } from "../../../packages/backend/src/lib/reserved-app-ids";
 import { getConfig } from "./config";
 import type { DeployStatus } from "./deploy";
 import { executeInfraTool } from "./infra-exec";
@@ -246,6 +247,9 @@ describe("Security: deploy ID validation", () => {
     { id: "freeappstore", reason: "reserved name (starts with free)" },
     { id: "www", reason: "reserved name" },
   ];
+
+  // Every name in the shared list, so a private copy here could not drift (#515).
+  for (const id of [...RESERVED_APP_IDS, "template-x"]) badIds.push({ id, reason: `reserved name ${id}` });
 
   for (const { id, reason } of badIds) {
     it(`rejects ID: ${reason}`, async () => {

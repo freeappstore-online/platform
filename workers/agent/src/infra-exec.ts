@@ -1,5 +1,6 @@
 /** Execute infra tools server-side. Extracted from session.ts to keep it manageable. */
 
+import { isReservedAppId } from "../../../packages/backend/src/lib/reserved-app-ids";
 import { validateBuildTarget } from "../../../packages/compliance/src/checks/build-target";
 import type { CheckResult } from "../../../packages/compliance/src/types";
 import { checkBuildSanity, formatSanityBlock } from "./build-sanity";
@@ -79,22 +80,7 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   // Validate deploy ID
   if (tc.name === "deploy" && tc.input.id) {
     const id = tc.input.id as string;
-    const RESERVED = [
-      "platform",
-      "admin",
-      "api",
-      "agent",
-      "publish",
-      "create",
-      "sdk",
-      "freeappstore",
-      "freegamestore",
-      "store",
-      "www",
-      "mail",
-      "status",
-    ];
-    if (!isValidId(config, id) || id.startsWith("free") || id.startsWith("pro") || RESERVED.includes(id)) {
+    if (!isValidId(config, id) || id.startsWith("free") || id.startsWith("pro") || isReservedAppId(id)) {
       return `Error: invalid ${config.noun} ID "${id}". ${idRuleText(config)} No "free"/"pro" prefix, no reserved names.`;
     }
     if (ctx.appId && ctx.appId !== id) {

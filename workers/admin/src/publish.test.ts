@@ -10,6 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+import { RESERVED_APP_IDS } from "../../../packages/backend/src/lib/reserved-app-ids";
 import { type GhFn, handlePublish, insertHostRoute, STORE_CONFIG, writeRegistryWithRetry } from "./publish";
 
 // ── Helpers ──
@@ -442,26 +443,18 @@ describe("handlePublish never grants access to a repo that isn't the publisher's
     return { gh, calls, granted };
   }
 
-  it.each([
-    "platform",
-    "admin",
-    "agent",
-    "mcp",
-    "host",
-    "console",
-    "create",
-    "publisher",
-    "template-standalone",
-    "template-connected",
-    "template-anything",
-  ])("rejects the reserved platform repo name %s before touching GitHub", async (id) => {
-    const { gh, calls } = recordingGh();
-    const result = await handlePublish(baseReq({ id }), baseEnv(), gh);
-    expect(result.success).toBe(false);
-    expect(result.steps[0]).toMatchObject({ name: "Validation", status: "fail" });
-    expect(result.steps[0]?.detail).toContain("reserved");
-    expect(calls).toEqual([]);
-  });
+  // Every name in the shared list, so a private copy here could not drift (#515).
+  it.each([...RESERVED_APP_IDS, "template-standalone", "template-connected", "template-anything"])(
+    "rejects the reserved name %s before touching GitHub",
+    async (id) => {
+      const { gh, calls } = recordingGh();
+      const result = await handlePublish(baseReq({ id }), baseEnv(), gh);
+      expect(result.success).toBe(false);
+      expect(result.steps[0]).toMatchObject({ name: "Validation", status: "fail" });
+      expect(result.steps[0]?.detail).toContain("reserved");
+      expect(calls).toEqual([]);
+    },
+  );
 
   it("rejects reserved names case-insensitively", async () => {
     const result = await handlePublish(baseReq({ id: "Platform" }), baseEnv(), recordingGh().gh);

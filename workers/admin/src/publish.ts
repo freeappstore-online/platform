@@ -13,6 +13,7 @@
 //
 // FAS admin now serves only the FreeAppStore.
 
+import { isReservedAppId } from "../../../packages/backend/src/lib/reserved-app-ids";
 import { APP_ID_RE } from "./transfer-owner";
 
 export type Store = "apps";
@@ -151,40 +152,9 @@ export async function ghApi(env: Pick<PublishEnv, "GITHUB_TOKEN">, path: string,
   return parseJsonSafe(res);
 }
 
-/**
- * Repos the platform itself lives in (#9). An app may never take one of these
- * names: the repo already exists, so publishing would skip creating it and
- * then grant the creator push access to platform code. Vendored in the
- * backend's lib/apps.ts (RESERVED_APP_IDS); keep the two in sync.
- */
-// Hanzi and Yi are short addresses for existing apps, not new app identities.
-const RESERVED_IDS = new Set([
-  "platform",
-  "admin",
-  "agent",
-  "mcp",
-  "host",
-  "console",
-  "create",
-  "publisher",
-  "freeappstore",
-  // First-party sign-in ids (backend lib/apps.ts, #495).
-  "store",
-  "fas-admin",
-  "cli",
-  "keys",
-  "hanzi",
-  "yi",
-]);
-
-export function isReservedId(id: string): boolean {
-  const lower = id.toLowerCase();
-  return RESERVED_IDS.has(lower) || lower.startsWith("template-");
-}
-
 function validateId(id: string): string | null {
   if (!id) return "ID is required";
-  if (isReservedId(id)) return `"${id}" is reserved for the platform`;
+  if (isReservedAppId(id)) return `"${id}" is reserved for the platform`;
   // The FreeAppStore id rule, shared with the backend, agent and transfer (#279).
   if (!APP_ID_RE.test(id))
     return "ID must be 2-31 characters: a lowercase letter first, a letter or number last, lowercase letters, numbers and dashes between.";

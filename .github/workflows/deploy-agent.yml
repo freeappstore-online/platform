@@ -10,6 +10,8 @@ on:
     branches: [main]
     paths:
       - 'workers/agent/**'
+      # The shared reserved-app-id list (#515) is imported from the backend.
+      - 'packages/backend/src/lib/reserved-app-ids.ts'
       - 'packages/cli/src/lib/developer-recipes.ts'
       # The agent imports the shared Web Push sender from the backend (#146).
       - 'packages/backend/src/lib/web-push.ts'

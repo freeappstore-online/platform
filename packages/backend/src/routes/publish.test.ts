@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
+import { RESERVED_APP_IDS } from '../lib/reserved-app-ids.js';
 import { signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -99,34 +100,28 @@ describe('POST /v1/publish', () => {
     expect(res.status).toBe(400);
   });
 
-  it.each([
-    'platform',
-    'admin',
-    'agent',
-    'mcp',
-    'host',
-    'console',
-    'create',
-    'publisher',
-    'template-standalone',
-    'template-x',
-  ])('rejects the reserved platform repo name %s without calling admin (#9)', async (name) => {
-    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
-    const calls: AdminCall[] = [];
-    const admin = fakeAdmin({ response: new Response('{}', { status: 200 }), capture: calls });
-    const res = await app.request(
-      '/v1/publish',
-      {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...validBody, name }),
-      },
-      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
-    );
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain('reserved');
-    expect(calls).toHaveLength(0);
-  });
+  it.each([...RESERVED_APP_IDS, 'template-standalone', 'template-x'])(
+    'rejects the reserved name %s without calling admin (#9, #515)',
+    async (name) => {
+      const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
+      const calls: AdminCall[] = [];
+      const admin = fakeAdmin({ response: new Response('{}', { status: 200 }), capture: calls });
+      const res = await app.request(
+        '/v1/publish',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...validBody, name }),
+        },
+        baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), {
+          ADMIN: admin,
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(await res.text()).toContain('reserved');
+      expect(calls).toHaveLength(0);
+    },
+  );
 
   it('returns 400 for invalid type', async () => {
     const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
