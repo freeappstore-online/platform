@@ -46,6 +46,7 @@ export function sqliteD1(opts: { before?: string } = {}): { db: SqliteDb; d1: D1
     prepare(sql: string) {
       let binds: unknown[] = [];
       const stmt = {
+        sql,
         bind(...args: unknown[]) {
           // D1 binds an ArrayBuffer as a BLOB; node:sqlite only takes typed arrays.
           binds = args.map((a) => (a instanceof ArrayBuffer ? new Uint8Array(a) : a));
@@ -64,8 +65,19 @@ export function sqliteD1(opts: { before?: string } = {}): { db: SqliteDb; d1: D1
       };
       return stmt;
     },
-    async batch(stmts: Array<{ all(): Promise<unknown> }>) {
-      return Promise.all(stmts.map((s) => s.all()));
+    // Like D1: one transaction; a SELECT yields rows, a write yields meta.changes.
+    async batch(stmts: Array<{ sql: string; all(): Promise<unknown>; run(): Promise<unknown> }>) {
+      db.exec('BEGIN');
+      try {
+        const results = [];
+        for (const s of stmts)
+          results.push(await (/^\s*(SELECT|WITH)\b/i.test(s.sql) ? s.all() : s.run()));
+        db.exec('COMMIT');
+        return results;
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
     },
   } as unknown as D1Database;
   return { db, d1 };

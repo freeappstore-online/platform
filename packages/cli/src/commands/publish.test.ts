@@ -162,24 +162,17 @@ describe('DEPLOY_YML', () => {
     expect(DEPLOY_YML).toContain('jobs:');
   });
 
-  it('references the three required R2 secrets', () => {
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
-    expect(DEPLOY_YML).toContain('${{ secrets.R2_ACCESS_KEY_ID }}');
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
-    expect(DEPLOY_YML).toContain('${{ secrets.R2_SECRET_ACCESS_KEY }}');
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
-    expect(DEPLOY_YML).toContain('${{ secrets.R2_ACCOUNT_ID }}');
-  });
-
-  it('uploads to the correct R2 bucket path', () => {
-    expect(DEPLOY_YML).toContain('s3://fas-apps/apps/');
+  it('references no secret: it deploys with a GitHub OIDC token', () => {
+    expect(DEPLOY_YML).not.toMatch(/secrets\.|R2_/);
+    expect(DEPLOY_YML).toContain('id-token: write');
+    expect(DEPLOY_YML).toContain('DEPLOY_API: https://api.freeappstore.online');
   });
 
   it('includes build verification step', () => {
     expect(DEPLOY_YML).toContain('Verify build output');
     expect(DEPLOY_YML).toContain('build-target --artifact');
     expect(DEPLOY_YML).toContain('steps.target.outputs.output-path');
-    expect(DEPLOY_YML).toContain('aws s3 sync "$OUTPUT_PATH"');
+    expect(DEPLOY_YML).toContain('"$DEPLOY_URL/commit"');
   });
 
   it('is the same workflow fas init and the builder generate', () => {

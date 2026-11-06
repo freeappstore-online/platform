@@ -43,6 +43,7 @@ describe("unmigrated routes schema (#308)", () => {
     expect(() => db.prepare(ROUTE_LOOKUP_SQL).get("kanban", "freeappstore.online")).toThrow(/no such column: cross_origin_isolated/);
 
     db.exec(sql("0002_cross_origin_isolated.sql"));
+    db.exec(sql("0004_routes_release.sql"));
 
     const column = (db.prepare("PRAGMA table_info(routes)").all() as RouteInfo[]).find((info) => info.name === "cross_origin_isolated");
     expect(column?.notnull).toBe(1);

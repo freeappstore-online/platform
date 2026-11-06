@@ -160,7 +160,7 @@ it('ships the tested scripts in build order and pins both validators', () => {
     workflow.indexOf('Retain verified dependency lock'),
   );
   expect(workflow.indexOf('Retain verified dependency lock')).toBeLessThan(
-    workflow.indexOf('Upload to R2'),
+    workflow.indexOf('Upload keylessly'),
   );
 });
 
@@ -177,7 +177,7 @@ it.each(['missing', 'passing', 'failing'])(
       '- name: Build',
       'Verify build output',
       'Retain verified dependency lock',
-      'Upload to R2',
+      'Upload keylessly',
     ].map((name) => workflow.indexOf(name));
     expect(stages.every((position) => position >= 0)).toBe(true);
     expect(stages).toEqual([...stages].sort((a, b) => a - b));

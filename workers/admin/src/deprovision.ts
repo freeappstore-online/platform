@@ -99,7 +99,8 @@ export async function removeRegistryEntry(gh: GhFn, id: string, config: StoreCon
 }
 
 /** Delete the two D1 rows insertHostRoute writes: the `routes` row the host
- *  reads, AND the `apps` ownership row. Same batch so they can't drift.
+ *  reads, AND the `apps` ownership row, plus the app's keyless-deploy pin and
+ *  sessions. Same batch so they can't drift.
  *  Until this existed nothing deleted the `apps` row at all, so an unpublished
  *  app stayed owned, listed in /v1/apps/creators, and reachable through every
  *  per-app backend feature. */
@@ -110,7 +111,11 @@ export async function deleteHostRoute(env: DeprovisionEnv, id: string, config: S
   try {
     const routesStmt = env.DB.prepare("DELETE FROM routes WHERE slug = ?1 AND zone = ?2").bind(id, config.domain);
     const appsStmt = env.DB.prepare("DELETE FROM apps WHERE id = ?1").bind(id);
-    await env.DB.batch([routesStmt, appsStmt]);
+    // The keyless-deploy repository pin and sessions (#460): a re-created app id
+    // must be able to pin its new repository, and the old repo must lose access.
+    const pinStmt = env.DB.prepare("DELETE FROM app_repositories WHERE app_id = ?1").bind(id);
+    const deploysStmt = env.DB.prepare("DELETE FROM app_deploys WHERE app_id = ?1").bind(id);
+    await env.DB.batch([routesStmt, appsStmt, pinStmt, deploysStmt]);
     return { name: "hosting_route", status: "ok", detail: "Route + ownership row deleted" };
   } catch (e: any) {
     return { name: "hosting_route", status: "fail", detail: e?.message ?? "D1 delete failed" };

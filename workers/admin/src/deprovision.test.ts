@@ -205,7 +205,10 @@ describe("deleteHostRoute", () => {
     const capture: StmtCapture[] = [];
     const step = await deleteHostRoute(baseEnv({ DB: fakeDB({ capture }) }), "kanban", config);
     expect(step.status).toBe("ok");
-    expect(capture).toHaveLength(2);
+    expect(capture).toHaveLength(4);
+    expect(capture[2].sql).toBe("DELETE FROM app_repositories WHERE app_id = ?1");
+    expect(capture[3].sql).toBe("DELETE FROM app_deploys WHERE app_id = ?1");
+    expect(capture.slice(2).map((c) => c.binds)).toEqual([["kanban"], ["kanban"]]);
     expect(capture[0].sql).toMatch(/^DELETE FROM routes WHERE slug = \?1 AND zone = \?2$/);
     expect(capture[0].binds).toEqual(["kanban", "freeappstore.online"]);
     expect(capture[1].sql).toMatch(/^DELETE FROM apps WHERE id = \?1$/);
@@ -287,7 +290,7 @@ describe("handleDeprovision", () => {
       cf: noDns,
     });
     expect(result.ok).toBe(false);
-    expect(capture).toHaveLength(2);
+    expect(capture).toHaveLength(4);
     expect(result.steps.find((s) => s.name === "delete_repo")?.status).toBe("fail");
     expect(result.steps.find((s) => s.name === "registry")?.status).toBe("ok");
   });

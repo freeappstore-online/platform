@@ -16,6 +16,7 @@ import { contentAdminRoutes } from './routes/content-admin.js';
 import { counterRoutes } from './routes/counters.js';
 import { dataRoomRoutes } from './routes/data-rooms.js';
 import { dbRoutes } from './routes/db.js';
+import { deployRoutes, pruneDeploys } from './routes/deploy.js';
 import { emailRoutes } from './routes/email.js';
 import { exchangeRoutes } from './routes/exchange.js';
 import { friendsRoutes } from './routes/friends.js';
@@ -127,6 +128,7 @@ v1.route('/', webhookRoutes);
 v1.route('/', friendsRoutes);
 v1.route('/', contentAdminRoutes);
 v1.route('/', agentSessionRoutes);
+v1.route('/', deployRoutes);
 v1.route('/', qualityRoutes);
 v1.route('/', votesRoutes);
 v1.route('/', ideaBuildersRoutes);
@@ -146,6 +148,8 @@ export default {
     } else if (event.cron === '0 4 * * *') {
       await runDailyBackup(env);
     } else if (event.cron === '0 3 * * *') {
+      // Abandoned and superseded keyless-deploy releases (#460).
+      await pruneDeploys(env, undefined, 25).catch((e) => console.error('pruneDeploys:', e));
       // Daily log cleanup — prune entries older than 7 days.
       const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
       const result = await env.DB.prepare('DELETE FROM app_logs WHERE ingested_at < ?')

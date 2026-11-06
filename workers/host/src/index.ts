@@ -20,6 +20,7 @@ import {
   robotsTxtFor,
   type SecurityPolicy,
   securityHeaders,
+  servedPrefix,
   sitemapXmlFor,
 } from "./host";
 
@@ -232,7 +233,7 @@ async function serve(
   // assets (with extensions) still 404 — we don't want to mask missing JS
   // bundles or images.
   if (!obj && !/\.[a-z0-9]+$/i.test(url.pathname)) {
-    const fallbackKey = `${route.r2_prefix}/index.html`;
+    const fallbackKey = `${servedPrefix(route)}/index.html`;
     obj = await bucket.get(fallbackKey);
     if (obj) servedKey = fallbackKey;
   }
@@ -270,7 +271,7 @@ async function appCrawlResponse(
   ifNoneMatch: string | null,
   policy: SecurityPolicy,
 ): Promise<Response> {
-  const root = (app || route.zone !== "freeappstore.online") && (await bucket.get(`${route.r2_prefix}/index.html`));
+  const root = (app || route.zone !== "freeappstore.online") && (await bucket.get(`${servedPrefix(route)}/index.html`));
   let noindex = false;
   let canonical = new URL(app?.appUrl || url.origin).href;
   if (root) {

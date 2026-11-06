@@ -24,6 +24,7 @@ it("shares deployed assets and preserves old routes without taking over occupied
       "INSERT INTO routes VALUES ('hanzi-practice', 'freeappstore.online', 'apps/hanzi-practice', 'apps', 'r2', 1, 1, 0), ('hanzi-associations', 'freeappstore.online', 'apps/hanzi-associations', 'apps', 'r2', 1, 1, 0)",
     );
     db.exec(sql("0003_hanzi_short_addresses.sql"));
+    db.exec(sql("0004_routes_release.sql"));
     for (const [short, original] of [
       ["hanzi", "hanzi-practice"],
       ["yi", "hanzi-associations"],

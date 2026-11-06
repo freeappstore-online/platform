@@ -5,7 +5,12 @@ import {
   CODE_HEALTH_CLI_VERSION,
   DEPLOY_ACTIONS,
 } from './starter-dependencies.js';
-import { APP_STARTER_CONFIG, deployWorkflow, type StoreConfig } from './starter-foundation.js';
+import {
+  APP_STARTER_CONFIG,
+  deployWorkflow,
+  KEYLESS_UPLOAD,
+  type StoreConfig,
+} from './starter-foundation.js';
 
 const GAME_CONFIG: StoreConfig = { store: 'games', r2Bucket: 'fgs-games', nounPlural: 'games' };
 const R2_SECRETS = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ACCOUNT_ID'];
@@ -76,38 +81,35 @@ describe.each([
     expect(build.steps.at(-1)!.uses).toBe(DEPLOY_ACTIONS.uploadArtifact.split(' ')[0]);
   });
 
-  it('gives the deploy job exactly the three R2 secrets and runs no project code', () => {
-    const deploy = workflow.jobs.deploy!;
-    expect(deploy.permissions).toEqual({ contents: 'read' });
-    const secrets = new Set(
-      [...JSON.stringify(deploy.steps).matchAll(/secrets\.(\w+)/g)].map((m) => m[1]),
-    );
-    expect([...secrets].sort()).toEqual([...R2_SECRETS].sort());
-    const text = JSON.stringify(deploy.steps);
-    expect(text).not.toMatch(/npx|pnpm|npm |checkout/);
-    const download = DEPLOY_ACTIONS.downloadArtifact.split(' ')[0];
-    expect(deploy.steps[0]!.uses).toBe(download);
-    for (const step of deploy.steps) {
-      if (step.uses) expect(step.uses).toBe(download);
-      else expect(step.run).toMatch(/aws s3 (sync|cp)/);
-    }
+  it('holds no secret anywhere: the deploy job authenticates with an OIDC token', () => {
+    expect(source).not.toMatch(/secrets\./);
+    for (const name of R2_SECRETS) expect(source).not.toContain(name);
+    expect(workflow.jobs.build!.permissions).not.toHaveProperty('id-token');
+    expect(workflow.jobs.deploy!.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
   });
 
-  it('downloads the artifact to the declared output path and syncs it to the bucket prefix', () => {
+  it('runs no project code in the deploy job', () => {
+    const deploy = workflow.jobs.deploy!;
+    expect(JSON.stringify(deploy.steps)).not.toMatch(/npx|pnpm|npm |checkout|aws /);
+    const download = DEPLOY_ACTIONS.downloadArtifact.split(' ')[0];
+    expect(deploy.steps[0]!.uses).toBe(download);
+    for (const step of deploy.steps) if (step.uses) expect(step.uses).toBe(download);
+  });
+
+  it('uploads the artifact through the store API session and commits it', () => {
     const deploy = workflow.jobs.deploy! as Job & { env: Record<string, string> };
-    expect(deploy.env.OUTPUT_PATH).toBe(
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
-      config.store === 'apps' ? '${{ needs.build.outputs.output-path }}' : 'web/dist',
+    expect(deploy.env.DEPLOY_API).toBe(
+      config.store === 'apps'
+        ? 'https://api.freeappstore.online'
+        : 'https://admin.freegamestore.online',
     );
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
-    expect(deploy.steps[0]!.with).toEqual({ name: 'app', path: '${{ env.OUTPUT_PATH }}' });
-    const upload = deploy.steps.find((s) => s.name === 'Upload to R2')!;
-    // The pinned build-target validator only accepts a non-literal upload path
-    // or one equal to fas.json's outputPath; "$OUTPUT_PATH" keeps both true.
-    expect(upload.run).toContain(
-      `aws s3 sync "$OUTPUT_PATH" "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/"`,
-    );
-    expect(upload.run).toContain('--delete');
+    expect(deploy.steps[0]!.with).toEqual({ name: 'app', path: 'site' });
+    const upload = deploy.steps.at(-1)!;
+    expect(upload.run).toBe(`${KEYLESS_UPLOAD.trimEnd()}\n`);
+    expect(upload.run).toContain('audience=$DEPLOY_API');
+    expect(upload.run).toContain('"$DEPLOY_API/v1/deploys"');
+    expect(upload.run).toContain('"$DEPLOY_URL/commit"');
+    expect(upload.run).toContain('::add-mask::$DEPLOY_TOKEN');
   });
 });
 
@@ -125,18 +127,30 @@ describe('deployWorkflow (apps specifics)', () => {
   });
 
   it('uploads the resolved build output and ships the code-health report as a second artifact', () => {
-    const build = workflow.jobs.build! as Job & { outputs: Record<string, string> };
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
-    expect(build.outputs).toEqual({ 'output-path': '${{ steps.target.outputs.output-path }}' });
+    const build = workflow.jobs.build!;
     const app = build.steps.find((s) => s.name === 'Upload build artifact')!;
     // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
     expect(app.with?.path).toBe('${{ steps.target.outputs.output-path }}');
     expect(app.with?.['if-no-files-found']).toBe('error');
     const report = build.steps.find((s) => s.name === 'Upload code health report')!;
     expect(report.with?.['if-no-files-found']).toBe('ignore');
-    const health = workflow.jobs.deploy!.steps.find((s) => s.name === 'Upload code health')!;
-    expect(health.run).toContain('.vibe-check/report.json');
-    expect(health.run).toContain('/.vcqa"');
+    const health = workflow.jobs.deploy!.steps.find(
+      (s) => s.name === 'Download code health report',
+    )!;
+    expect(health.with).toEqual({ name: 'code-health', path: 'site/.vcqa' });
+  });
+
+  it('stamps the build identity and the installed size the store shows', () => {
+    const steps = workflow.jobs.build!.steps;
+    expect(Object.keys(steps.find((s) => s.name === 'Build')!.env!)).toEqual([
+      'BUILD_COMMAND',
+      'VITE_APP_VERSION',
+      'VITE_COMMIT_SHA',
+      'VITE_BUILD_DATE',
+    ]);
+    const names = steps.map((s) => s.name);
+    expect(names.indexOf('Write build info')).toBe(names.indexOf('Verify build output') + 1);
+    expect(steps.find((s) => s.name === 'Write build info')!.run).toContain('/.buildinfo.json');
   });
 
   it('matches the reviewed snapshot (bump deliberately)', () => {

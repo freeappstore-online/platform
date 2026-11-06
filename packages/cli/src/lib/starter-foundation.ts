@@ -888,12 +888,13 @@ SOFTWARE.`,
 // Two jobs on purpose (mirrors freegamestore-online/ci-workflows game-ci.yml):
 //   build  — installs, tests and builds the app, runs the pinned
 //            @freeappstore/cli validator and the pinned code-health scan, then
-//            uploads the built output as a workflow artifact. It has NO R2
-//            secrets: a compromised npm release can fail the build, but it
-//            cannot read the bucket credentials.
-//   deploy — downloads that artifact and syncs it to R2. Runs no project code:
-//            no checkout, no install, no npx. Only this job sees the org-level
-//            R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / R2_ACCOUNT_ID secrets.
+//            uploads the built output as a workflow artifact. No secrets and
+//            no id-token: a compromised npm release can fail the build only.
+//   deploy — downloads that artifact and uploads it keylessly (#460): a GitHub
+//            OIDC token opens a deploy session on the store API, which writes
+//            each file under this app's own R2 prefix and switches the route
+//            to the new release only once every file is in. Runs no project
+//            code (no checkout, no install, no npx) and holds no R2 secret.
 // Every `uses:` is commit-pinned and every `npx` names an exact version.
 //
 // Fresh builder apps acquire a lock on their first successful build; later
@@ -909,10 +910,44 @@ function indent(script: string, spaces: number): string {
     .join('\n');
 }
 
-const R2_SECRETS_ENV = `          AWS_ACCESS_KEY_ID: \${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: \${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          R2_ACCOUNT_ID: \${{ secrets.R2_ACCOUNT_ID }}`;
+/** The store API that verifies the OIDC token and owns the bucket binding. */
+const DEPLOY_API = {
+  apps: 'https://api.freeappstore.online',
+  games: 'https://admin.freegamestore.online',
+} as const;
+
+/**
+ * The deploy job's whole client: plain bash, curl and jq from the runner image.
+ * The token is requested for the store API's audience; the API maps the
+ * verified repository_id to exactly one app and refuses anything else.
+ */
+export const KEYLESS_UPLOAD = `set -euo pipefail
+cd site
+test -n "$(ls -A .)" || { echo "::error::build artifact is empty"; exit 1; }
+find . -type f -printf '%P\\t%s\\n' \\
+  | jq -Rn '{files: [inputs | split("\\t") | {key: .[0], value: (.[1] | tonumber)}] | from_entries}' \\
+  > "$RUNNER_TEMP/manifest.json"
+oidc=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \\
+  "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$DEPLOY_API" | jq -r .value)
+echo "::add-mask::$oidc"
+session=$(curl -sS --fail-with-body -X POST "$DEPLOY_API/v1/deploys" \\
+  -H "Authorization: Bearer $oidc" -H 'Content-Type: application/json' \\
+  --data-binary @"$RUNNER_TEMP/manifest.json")
+DEPLOY_TOKEN=$(jq -r .token <<<"$session")
+echo "::add-mask::$DEPLOY_TOKEN"
+DEPLOY_URL="$DEPLOY_API/v1/deploys/$(jq -r .id <<<"$session")"
+export DEPLOY_TOKEN DEPLOY_URL
+upload() {
+  curl -sS --fail-with-body --retry 3 --retry-all-errors -T "./$1" \\
+    -H "Authorization: Bearer $DEPLOY_TOKEN" -H 'Content-Type: application/octet-stream' \\
+    "$DEPLOY_URL/files/$(jq -rn --arg p "$1" '$p | split("/") | map(@uri) | join("/")')"
+}
+export -f upload
+find . -type f -printf '%P\\0' | xargs -0 -P 8 -n 1 bash -c 'upload "$1"' _
+curl -sS --fail-with-body -X POST -H "Authorization: Bearer $DEPLOY_TOKEN" "$DEPLOY_URL/commit"
+echo
+echo "Deployed \${GITHUB_REPOSITORY##*/} from \${GITHUB_SHA::7}"
+`;
 
 export function deployWorkflow(config: StoreConfig): string {
   const apps = config.store === 'apps';
@@ -937,9 +972,17 @@ ${indent(INSTALL_APP_DEPENDENCIES, 10)}
       - name: Build
         env:
           BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
+          VITE_APP_VERSION: \${{ github.event.repository.name }}@\${{ github.run_number }}
+          VITE_COMMIT_SHA: \${{ github.sha }}
+          VITE_BUILD_DATE: \${{ github.event.head_commit.timestamp }}
         run: bash -e -c "$BUILD_COMMAND"
       - name: Verify build output
         run: ${cli} build-target --artifact --app-id "\${GITHUB_REPOSITORY##*/}"
+      # Installed size for the store's detail page (sites/storefront/build.js).
+      - name: Write build info
+        env:
+          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}
+        run: echo "{\\"size\\":$(du -sb "$OUTPUT_PATH" | cut -f1)}" > "$OUTPUT_PATH/.buildinfo.json"
       - name: Retain verified dependency lock
         run: |
 ${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
@@ -983,28 +1026,13 @@ ${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
           if-no-files-found: error
           retention-days: 1
 `;
-  const deploySteps = apps
-    ? `
-      - name: Download code health report
+  const codeHealthDownload = apps
+    ? `      - name: Download code health report
         continue-on-error: true
         uses: ${DEPLOY_ACTIONS.downloadArtifact}
         with:
           name: code-health
-          path: .vibe-check
-      - name: Upload code health
-        env:
-${R2_SECRETS_ENV}
-        run: |
-          EP="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
-          PREFIX="s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/.vcqa"
-          if [ -f .vibe-check/report.json ]; then
-            aws s3 cp .vibe-check/report.json "$PREFIX/report.json" \\
-              --endpoint-url "$EP" --content-type application/json --no-progress
-          fi
-          if [ -f .vibe-check/badge.svg ]; then
-            aws s3 cp .vibe-check/badge.svg "$PREFIX/badge.svg" \\
-              --endpoint-url "$EP" --content-type image/svg+xml --no-progress
-          fi
+          path: site/.vcqa
 `
     : '';
   return `name: Deploy to R2
@@ -1012,8 +1040,9 @@ ${R2_SECRETS_ENV}
 # Generated by @freeappstore/cli. Two jobs on purpose:
 #   build  — runs the app's install/test/build plus the pinned validators.
 #            No secrets here: a compromised npm package can only fail the build.
-#   deploy — syncs the uploaded artifact to R2. Runs no project code (no
-#            checkout, no install, no npx); only this job sees the R2 secrets.
+#   deploy — uploads the artifact with a GitHub OIDC token (no stored secret):
+#            the store API writes it under this app's prefix and switches to it
+#            once complete. Runs no project code (no checkout, install or npx).
 # Regenerate with \`fas publish --update-workflow\`; do not add secrets to build.
 
 on:
@@ -1031,13 +1060,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: ${apps ? 'write' : 'read'}
-${
-  apps
-    ? `    outputs:
-      output-path: \${{ steps.target.outputs.output-path }}
-`
-    : ''
-}    steps:
+    steps:
       - uses: ${DEPLOY_ACTIONS.checkout}
       - uses: ${DEPLOY_ACTIONS.pnpm}
       - uses: ${DEPLOY_ACTIONS.setupNode}
@@ -1049,25 +1072,19 @@ ${buildSteps}
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      id-token: write
     env:
-      OUTPUT_PATH: ${apps ? `\${{ needs.build.outputs.output-path }}` : 'web/dist'}
+      DEPLOY_API: ${DEPLOY_API[config.store]}
     steps:
       - name: Download build artifact
         uses: ${DEPLOY_ACTIONS.downloadArtifact}
         with:
           name: app
-          path: \${{ env.OUTPUT_PATH }}
-      - name: Upload to R2
-        env:
-${R2_SECRETS_ENV}
+          path: site
+${codeHealthDownload}      - name: Upload keylessly
         run: |
-          test -n "$(ls -A "$OUTPUT_PATH")" || { echo "::error::build artifact is empty"; exit 1; }
-          aws s3 sync "$OUTPUT_PATH" "s3://${config.r2Bucket}/${config.nounPlural}/\${GITHUB_REPOSITORY##*/}/" \\
-            --endpoint-url "https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com" \\
-            --delete \\
-            --no-progress
-          echo "Deployed ${config.nounPlural}/\${GITHUB_REPOSITORY##*/} from \${GITHUB_SHA::7} to R2"
-${deploySteps}`;
+${indent(KEYLESS_UPLOAD, 10)}
+`;
 }
 
 // ── Public API ──

@@ -19,6 +19,8 @@ export interface Route {
   store: string;
   /** 1 when the app opted into cross-origin isolation (#286). Default 0. */
   cross_origin_isolated?: number;
+  /** Live keyless-deploy release (#460): files are served from `<r2_prefix>/.r/<release>/`. */
+  release?: string | null;
 }
 
 /**
@@ -30,8 +32,18 @@ export interface Route {
  * — no privilege is attached to the resolved slug, so spoofing it just
  * picks which 404 you see.
  */
-/** Lookup used on every app request. Deploy must apply migration 0002 first (#308). */
-export const ROUTE_LOOKUP_SQL = "SELECT slug, zone, r2_prefix, store, cross_origin_isolated FROM routes WHERE slug = ?1 AND zone = ?2";
+/** Lookup used on every app request. Deploy must apply migrations 0002 and 0004 first (#308). */
+export const ROUTE_LOOKUP_SQL =
+  "SELECT slug, zone, r2_prefix, store, cross_origin_isolated, release FROM routes WHERE slug = ?1 AND zone = ?2";
+
+/**
+ * The R2 prefix the route's files are served from: the release the backend's
+ * keyless deploy switched to atomically (#460), or the app prefix itself for
+ * apps still deployed by the legacy aws-sync workflow.
+ */
+export function servedPrefix(route: Pick<Route, "r2_prefix" | "release">): string {
+  return route.release ? `${route.r2_prefix}/.r/${route.release}` : route.r2_prefix;
+}
 
 export async function resolveRoute(db: D1Database, host: string): Promise<Route | null> {
   const cleaned = host.toLowerCase().split(":")[0];
@@ -64,7 +76,7 @@ export function r2KeyFor(route: Route, pathname: string): string {
     p = decodeURIComponent(pathname);
   } catch {}
   if (p === "" || p === "/" || p.endsWith("/")) p += "index.html";
-  return `${route.r2_prefix}/${p.replace(/^\/+/, "")}`;
+  return `${servedPrefix(route)}/${p.replace(/^\/+/, "")}`;
 }
 
 /**

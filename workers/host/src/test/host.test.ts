@@ -108,6 +108,13 @@ describe("resolveRoute", () => {
 });
 
 describe("r2KeyFor", () => {
+  it("serves the keyless-deploy release once one is live (#460)", () => {
+    const released: Route = { ...kanban, release: "a1b2c3" };
+    expect(r2KeyFor(released, "/")).toBe("apps/kanban/.r/a1b2c3/index.html");
+    expect(r2KeyFor(released, "/assets/x.js")).toBe("apps/kanban/.r/a1b2c3/assets/x.js");
+    expect(r2KeyFor({ ...kanban, release: null }, "/assets/x.js")).toBe("apps/kanban/assets/x.js");
+  });
+
   it("defaults / to index.html", () => {
     expect(r2KeyFor(kanban, "/")).toBe("apps/kanban/index.html");
   });
