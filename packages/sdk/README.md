@@ -93,7 +93,7 @@ Limits (server-enforced): max 1MB per user, max 100 keys per user, max 64KB per 
 
 ### Shared counters
 
-App-wide atomic counters — not user-scoped. Anyone can read; authenticated users can increment. Use for vote tallies, view counts, leaderboards.
+App-wide atomic counters — not user-scoped. Anyone can read; authenticated users can increment. Decrementing is reserved for the app owner and users with a privileged app role (anything other than `member` / `viewer`). Use for vote tallies, view counts, leaderboards.
 
 ```ts
 // Read (no auth required)
@@ -103,7 +103,7 @@ const views = await fas.counters.get('views');   // 100
 // Increment (auth required)
 const newVal = await fas.counters.increment('likes');      // +1, returns new value
 const newVal2 = await fas.counters.increment('score', 10); // +10
-await fas.counters.increment('lives', -1);                 // decrement
+await fas.counters.increment('lives', -1);                 // decrement — owner / privileged role only
 ```
 
 Limits: max 1000 counters per app, increment range -1000 to +1000 per call.

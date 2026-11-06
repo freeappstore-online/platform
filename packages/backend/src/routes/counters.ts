@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
-import { appExists } from '../lib/apps.js';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { APP_ID_RE } from '../lib/apps.js';
+import { type CurrentUser, HttpError, isAppOwner, requireUser } from '../lib/auth.js';
 import { likePrefix } from '../lib/like.js';
 import type { Env } from '../types.js';
 
@@ -15,6 +15,8 @@ import type { Env } from '../types.js';
  * - max 1000 counters per app
  * - counter names ≤ 128 chars
  * - increment value: -1000 to +1000 per call (prevents abuse)
+ * - decrements: app owner, or a user holding a privileged app role (#492) —
+ *   otherwise any session could zero another app's likes/votes/scores.
  */
 const MAX_COUNTERS_PER_APP = 1000;
 const MAX_KEY_LENGTH = 128;
@@ -55,12 +57,37 @@ counterRoutes.get('/apps/:appId/counters/:key', async (c) => {
   return c.json({ value: row.value });
 });
 
+/**
+ * Whether `user` may take a counter down: the app owner, or anyone the owner
+ * gave a role beyond the self-service 'member' / read-only 'viewer'.
+ */
+async function mayDecrement(
+  env: Env,
+  user: CurrentUser,
+  appId: string,
+  ownerLogin: string | null,
+): Promise<boolean> {
+  if (isAppOwner(user, ownerLogin)) return true;
+  const role = await env.DB.prepare(
+    "SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? AND role_name NOT IN ('member', 'viewer') LIMIT 1",
+  )
+    .bind(appId, user.id)
+    .first();
+  return role !== null;
+}
+
 /** Increment (or decrement) a counter. Requires auth. */
 counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
   try {
-    await requireUser(c);
+    const user = await requireUser(c);
     const { appId, key } = c.req.param();
-    if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
+    // Require a real app — otherwise rotating the id resets the per-app cap.
+    const appRow = APP_ID_RE.test(appId)
+      ? await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+          .bind(appId)
+          .first<{ owner_login: string | null }>()
+      : null;
+    if (!appRow) return c.text('unknown app', 404);
 
     if (key.length > MAX_KEY_LENGTH) {
       return c.text(`counter key exceeds ${MAX_KEY_LENGTH} chars`, 400);
@@ -74,6 +101,9 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
         `increment must be integer between -${MAX_INCREMENT} and +${MAX_INCREMENT}`,
         400,
       );
+    }
+    if (increment < 0 && !(await mayDecrement(c.env, user, appId, appRow.owner_login))) {
+      return c.text('decrementing requires the app owner or a privileged app role', 403);
     }
 
     // Check counter limit

@@ -2,7 +2,8 @@ import type { Auth } from './auth.js';
 
 /**
  * Shared atomic counters — not user-scoped.
- * Any authenticated user can increment; anyone can read.
+ * Any authenticated user can increment; anyone can read. Decrementing is
+ * reserved for the app owner and users with a privileged app role.
  * Use for: vote tallies, view counts, leaderboards.
  */
 export class Counters {
@@ -33,7 +34,10 @@ export class Counters {
     return data.value;
   }
 
-  /** Increment (or decrement) a counter. Requires auth. Returns new value. */
+  /**
+   * Increment (or decrement) a counter. Requires auth. Returns new value.
+   * A negative amount needs the app owner or a privileged app role (403 otherwise).
+   */
   async increment(key: string, amount = 1): Promise<number> {
     const token = this.auth.token;
     if (!token) throw new Error('Not signed in.');

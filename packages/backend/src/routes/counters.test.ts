@@ -181,3 +181,79 @@ describe.skipIf(!hasSqlite)('counter prefix is a literal starts-with', () => {
     expect(await list('score\\')).toEqual({});
   });
 });
+
+describe.skipIf(!hasSqlite)('decrements are owner / privileged-role only (#492)', () => {
+  function setup() {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    const users = db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    );
+    users.run('gh:1', 1, 'alice', now); // owner
+    users.run('gh:2', 2, 'bob', now); // member
+    users.run('gh:3', 3, 'carol', now); // moderator
+    users.run('gh:4', 4, 'dave', now); // viewer
+    users.run('gh:5', 5, 'eve', now); // no role
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+      'timer',
+      'Alice',
+      now,
+    );
+    const roles = db.prepare(
+      "INSERT INTO app_roles (app_id, user_id, role_name, granted_by) VALUES ('timer', ?, ?, NULL)",
+    );
+    roles.run('gh:2', 'member');
+    roles.run('gh:3', 'moderator');
+    roles.run('gh:4', 'viewer');
+    db.prepare('INSERT INTO counters (app_id, key, value, updated_at) VALUES (?, ?, ?, ?)').run(
+      'timer',
+      'likes',
+      100,
+      now,
+    );
+    const bump = async (userId: string, increment: number) =>
+      (
+        await app.request(
+          '/v1/apps/timer/counters/likes',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${await signSession(userId, SIGNING_KEY)}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ increment }),
+          },
+          env(d1),
+        )
+      ).status;
+    const likes = () =>
+      (
+        db.prepare("SELECT value FROM counters WHERE app_id = 'timer' AND key = 'likes'").get() as {
+          value: number;
+        }
+      ).value;
+    return { bump, likes };
+  }
+
+  it('any signed-in user can still increment', async () => {
+    const { bump, likes } = setup();
+    expect(await bump('gh:5', 1)).toBe(200);
+    expect(await bump('gh:2', 10)).toBe(200);
+    expect(likes()).toBe(111);
+  });
+
+  it('a stranger, a member and a viewer cannot decrement', async () => {
+    const { bump, likes } = setup();
+    expect(await bump('gh:5', -1)).toBe(403);
+    expect(await bump('gh:2', -1000)).toBe(403);
+    expect(await bump('gh:4', -1)).toBe(403);
+    expect(likes()).toBe(100);
+  });
+
+  it('the owner (case-insensitive login) and a moderator can decrement', async () => {
+    const { bump, likes } = setup();
+    expect(await bump('gh:1', -10)).toBe(200);
+    expect(await bump('gh:3', -5)).toBe(200);
+    expect(likes()).toBe(85);
+  });
+});

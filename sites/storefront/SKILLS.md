@@ -320,13 +320,13 @@ Limits: 1MB total per user, 100 keys max, 64KB per value, No separate daily-acti
 
 ### Shared Counters
 
-Not user-scoped. Atomic. Anyone can read, auth required to write.
+Not user-scoped. Atomic. Anyone can read, auth required to write. Decrementing is reserved for the app owner and users with a privileged app role (anything other than `member` / `viewer`).
 
 ```tsx
 const likes = await fas.counters.get('likes')           // public, no auth
 await fas.counters.increment('likes')                    // +1, requires auth
 await fas.counters.increment('score', 10)                // +10
-await fas.counters.increment('lives', -1)                // decrement
+await fas.counters.increment('lives', -1)                // decrement — owner / privileged role only
 const all = await fas.counters.list()                    // all counters
 const votes = await fas.counters.list({ prefix: 'vote:' })
 ```
