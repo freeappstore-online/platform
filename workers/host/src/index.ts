@@ -13,13 +13,14 @@ import {
   type Env,
   etagsMatch,
   isImmutablePath,
+  policyFor,
   type Route,
   r2KeyFor,
   resolveRoute,
   robotsTxtFor,
+  type SecurityPolicy,
   securityHeaders,
   sitemapXmlFor,
-  wantsCrossOriginIsolation,
 } from "./host";
 
 import { injectMetadata, isMonitoringFixture, publicApp } from "./seo";
@@ -218,9 +219,9 @@ async function serve(
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
   }
-  const isolated = wantsCrossOriginIsolation(route);
+  const policy = policyFor(route);
   const app = isRoot || isCrawl ? await publicApp(route) : undefined;
-  if (isCrawl) return appCrawlResponse(bucket, route, url, method, app, ifNoneMatch, isolated);
+  if (isCrawl) return appCrawlResponse(bucket, route, url, method, app, ifNoneMatch, policy);
 
   const key = r2KeyFor(route, url.pathname);
   let obj = await bucket.get(key);
@@ -251,12 +252,12 @@ async function serve(
   // a fresh copy. Saves bandwidth on every refresh of every asset. The
   // R2 object metadata fetch still happens, but the body stream isn't read.
   if (!(app && isRoot && ct.startsWith("text/html")) && etagsMatch(ifNoneMatch, obj.httpEtag)) {
-    const headers = securityHeaders({ htmlCache: shortCache, crossOriginIsolated: isolated });
+    const headers = securityHeaders({ htmlCache: shortCache, ...policy });
     headers.set("etag", obj.httpEtag);
     return new Response(null, { status: 304, headers });
   }
 
-  const response = respond(obj, ct, method, shortCache, isolated);
+  const response = respond(obj, ct, method, shortCache, policy);
   return app && isRoot && ct.startsWith("text/html") ? injectMetadata(response, app) : response;
 }
 
@@ -267,7 +268,7 @@ async function appCrawlResponse(
   method: string,
   app: Awaited<ReturnType<typeof publicApp>>,
   ifNoneMatch: string | null,
-  isolated: boolean,
+  policy: SecurityPolicy,
 ): Promise<Response> {
   const root = (app || route.zone !== "freeappstore.online") && (await bucket.get(`${route.r2_prefix}/index.html`));
   let noindex = false;
@@ -307,25 +308,25 @@ async function appCrawlResponse(
   // Preserve an app's multipage sitemap and robots exclusions only after
   // the public/root/canonical checks shared with generated crawl files.
   const authored = await bucket.get(r2KeyFor(route, url.pathname));
-  if (authored) return crawlAssetResponse(authored, url.pathname, method, ifNoneMatch, { crossOriginIsolated: isolated });
-  return generatedCrawlResponse(url, method, url.origin, isolated)!;
+  if (authored) return crawlAssetResponse(authored, url.pathname, method, ifNoneMatch, policy);
+  return generatedCrawlResponse(url, method, url.origin, policy)!;
 }
 
-function generatedCrawlResponse(url: URL, method: string, origin = url.origin, isolated = false): Response | null {
+function generatedCrawlResponse(url: URL, method: string, origin = url.origin, policy: SecurityPolicy = {}): Response | null {
   if (url.pathname !== "/robots.txt" && url.pathname !== "/sitemap.xml") return null;
 
   const isRobots = url.pathname === "/robots.txt";
   const body = isRobots ? robotsTxtFor(origin) : sitemapXmlFor(origin);
-  const headers = securityHeaders({ htmlCache: true, crossOriginIsolated: isolated });
+  const headers = securityHeaders({ htmlCache: true, ...policy });
   headers.set("content-type", isRobots ? "text/plain; charset=utf-8" : "application/xml; charset=utf-8");
   headers.set("cache-control", "public, max-age=3600, must-revalidate");
   return new Response(method === "HEAD" ? null : body, { headers });
 }
 
-function respond(obj: R2ObjectBody, ct: string, method: string, shortCache: boolean, isolated = false): Response {
+function respond(obj: R2ObjectBody, ct: string, method: string, shortCache: boolean, policy: SecurityPolicy = {}): Response {
   // Headers are constructed in securityHeaders() so the policy lives in one
   // testable place. We just layer content-type + etag on top.
-  const headers = securityHeaders({ htmlCache: shortCache, crossOriginIsolated: isolated });
+  const headers = securityHeaders({ htmlCache: shortCache, ...policy });
   headers.set("content-type", ct);
   headers.set("etag", obj.httpEtag);
   // HEAD requests get headers only.

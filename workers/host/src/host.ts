@@ -207,6 +207,89 @@ function permissionsPolicy(crossOriginIsolated: boolean): string {
 const PERMISSIONS_POLICY = permissionsPolicy(false);
 
 /**
+ * The creator console is the one first-party SPA this Worker serves from R2
+ * (routes row console.freeappstore.online → apps/console; user-facing URL is
+ * freeappstore.online/app/ via the storefront's proxy Function, which forwards
+ * these headers). It holds the creator's session, so it gets a strict
+ * allowlist CSP and X-Frame-Options instead of the default-open policy hosted
+ * apps get (#497). The storefront is a Pages project and admin is its own
+ * Worker, so neither comes through here.
+ */
+export function isFirstPartyRoute(route: Pick<Route, "zone" | "r2_prefix">): boolean {
+  return route.zone === "freeappstore.online" && route.r2_prefix === "apps/console";
+}
+
+/**
+ * sha256 of the three inline boot scripts in sites/console/web/index.html
+ * (<base> for the /app/ mount, theme, text size), in document order. Vite
+ * copies classic inline scripts into the build byte-for-byte, so the hashes
+ * are computed from the source file; workers/host/src/test/host.test.ts
+ * recomputes them so an edit to those scripts fails CI instead of blanking
+ * the console. Everything else the console runs is a same-origin bundle.
+ */
+export const CONSOLE_INLINE_SCRIPT_HASHES = [
+  "sha256-8O2IPEowYy9mTengIhQu41uD6sCZajsHEplxgYuyjDA=",
+  "sha256-szzCDnIvCnioMMwpbl8bnsjp6++N4jUwgDu3xjPQnIE=",
+  "sha256-QJbsF1MAHCSxn3FpUOa86W8HZFof3n0uABnqtxclTpo=",
+] as const;
+
+/**
+ * Derived from what the console build loads (sites/console/web): its own
+ * bundle + the inline boot scripts, Google Fonts, the platform API (REST +
+ * rooms WebSocket), the VibeCode agent, the admin Worker (deploy status),
+ * GitHub (org repo list, raw fas.json), app previews in iframes, and the
+ * service worker's runtime cache of the font hosts. img-src stays `https:`
+ * because the builder previews arbitrary image URLs from the chat. style-src
+ * keeps 'unsafe-inline' because the @freeappstore/sdk UI kit injects its
+ * keyframes as a <style id="fas-ui-keyframes"> element at runtime and React
+ * sets dynamic style props; a hash would pin the console to one SDK version's
+ * CSS. Script is what CSP is for; it allows no inline at all.
+ */
+const CONSOLE_CSP = [
+  "default-src 'self'",
+  `script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")}`,
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com",
+  "worker-src 'self'",
+  "frame-src https://*.freeappstore.online",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+const APP_CSP = [
+  "default-src 'self' https: data: blob:",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https: https://api.freeappstore.online https://static.cloudflareinsights.com https://www.googletagmanager.com https://plausible.io",
+  "style-src 'self' 'unsafe-inline' https:",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data: https:",
+  "connect-src 'self' data: blob: https: wss: https://api.freeappstore.online https://cloudflareinsights.com https://www.google-analytics.com https://plausible.io",
+  // Without worker-src, workers fall back to script-src; list blob: so
+  // libraries that spawn Blob-URL workers (pdf.js, ffmpeg.wasm, Monaco,
+  // emscripten pthreads) work (#284).
+  "worker-src 'self' blob: https:",
+  "frame-src 'self' https:",
+  "frame-ancestors 'self' https://freeappstore.online https://*.freeappstore.online",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+/** Which policy a route gets: COOP/COEP opt-in (#286), first-party SPA (#497). */
+export interface SecurityPolicy {
+  crossOriginIsolated?: boolean;
+  firstParty?: boolean;
+}
+
+export function policyFor(route: Route): SecurityPolicy {
+  return { crossOriginIsolated: wantsCrossOriginIsolation(route), firstParty: isFirstPartyRoute(route) };
+}
+
+/**
  * Build the security headers we attach to every R2-served response. Split
  * out from the index.ts respond() helper so the policy is unit-testable
  * without spinning up the full Worker, and so the next person to tighten
@@ -218,31 +301,15 @@ const PERMISSIONS_POLICY = permissionsPolicy(false);
  * an allowlist) doesn't silently break the platform analytics loader,
  * CF Web Analytics, or BYO GA4 / Plausible tags.
  */
-export function securityHeaders(opts: { htmlCache: boolean; crossOriginIsolated?: boolean }): Headers {
+export function securityHeaders(opts: { htmlCache: boolean } & SecurityPolicy): Headers {
   const headers = new Headers();
   if (opts.htmlCache) {
     headers.set("cache-control", "public, max-age=60, must-revalidate");
   } else {
     headers.set("cache-control", "public, max-age=31536000, immutable");
   }
-  const csp = [
-    "default-src 'self' https: data: blob:",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: https: https://api.freeappstore.online https://static.cloudflareinsights.com https://www.googletagmanager.com https://plausible.io",
-    "style-src 'self' 'unsafe-inline' https:",
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data: https:",
-    "connect-src 'self' data: blob: https: wss: https://api.freeappstore.online https://cloudflareinsights.com https://www.google-analytics.com https://plausible.io",
-    // Without worker-src, workers fall back to script-src; list blob: so
-    // libraries that spawn Blob-URL workers (pdf.js, ffmpeg.wasm, Monaco,
-    // emscripten pthreads) work (#284).
-    "worker-src 'self' blob: https:",
-    "frame-src 'self' https:",
-    "frame-ancestors 'self' https://freeappstore.online https://*.freeappstore.online",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "upgrade-insecure-requests",
-  ].join("; ");
-  headers.set("content-security-policy", csp);
+  headers.set("content-security-policy", opts.firstParty ? CONSOLE_CSP : APP_CSP);
+  if (opts.firstParty) headers.set("x-frame-options", "DENY");
   headers.set("permissions-policy", opts.crossOriginIsolated ? permissionsPolicy(true) : PERMISSIONS_POLICY);
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
@@ -313,9 +380,9 @@ export function crawlAssetResponse(
   pathname: string,
   method: string,
   ifNoneMatch: string | null,
-  opts: { crossOriginIsolated?: boolean } = {},
+  policy: SecurityPolicy = {},
 ): Response {
-  const headers = securityHeaders({ htmlCache: true, crossOriginIsolated: opts.crossOriginIsolated });
+  const headers = securityHeaders({ htmlCache: true, ...policy });
   headers.set("content-type", contentType(pathname));
   headers.set("etag", obj.httpEtag);
   const unchanged = etagsMatch(ifNoneMatch, obj.httpEtag);

@@ -25,6 +25,7 @@ beforeAll(async () => {
     route.bind("unbuilt", "freeappstore.online", "apps/unbuilt", now, now),
     route.bind("smoke-sandbox", "freeappstore.online", "apps/smoke-sandbox", now, now),
     route.bind("agentcoder", "space", "apps/agentcoder", now, now),
+    route.bind("console", "freeappstore.online", "apps/console", now, now),
     isolated.bind("wasm", "freeappstore.online", "apps/wasm", now, now),
   ]);
   await env.APPS.put("apps/dict/index.html", INDEX_HTML);
@@ -34,6 +35,8 @@ beforeAll(async () => {
   await env.APPS.put("apps/dict/assets/app.js", APP_JS);
   await env.APPS.put("apps/dict/manifest.json", "{}");
   await env.APPS.put("apps/agentcoder/index.html", "<!doctype html><title>AgentCoder</title>");
+  await env.APPS.put("apps/console/index.html", "<!doctype html><title>Console</title>");
+  await env.APPS.put("apps/console/assets/index.js", "console.log('console')");
   await env.APPS.put("apps/wasm/index.html", "<!doctype html><title>Wasm</title>");
   await env.APPS.put("apps/wasm/assets/app.js", "console.log('wasm')");
 });
@@ -103,6 +106,22 @@ describe("serving an app: D1 routes row → R2 object", () => {
     expect(neighbour.headers.get("cross-origin-opener-policy")).toBeNull();
     expect(neighbour.headers.get("cross-origin-embedder-policy")).toBeNull();
     await neighbour.body?.cancel();
+  });
+
+  it("serves the creator console with the strict first-party policy on every response (#497)", async () => {
+    for (const path of ["/", "/publish", "/assets/index.js"]) {
+      const res = await get(`https://console.freeappstore.online${path}`);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get("x-frame-options"), path).toBe("DENY");
+      const csp = res.headers.get("content-security-policy") ?? "";
+      expect(csp, path).toContain("frame-ancestors 'none'");
+      expect(csp, path).toContain("form-action 'self'");
+      expect(csp, path).not.toContain("'unsafe-eval'");
+      await res.body?.cancel();
+    }
+    const app = await get("https://dict.freeappstore.online/");
+    expect(app.headers.get("x-frame-options")).toBeNull();
+    await app.body?.cancel();
   });
 
   it("serves assets with their own type and a long immutable cache", async () => {

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONSOLE_INLINE_SCRIPT_HASHES,
   contentType,
   crawlAssetResponse,
   etagsMatch,
+  isFirstPartyRoute,
   isImmutablePath,
   PERMISSIONS_POLICY_BLOCKED,
   PERMISSIONS_POLICY_EMBED,
   PERMISSIONS_POLICY_SELF,
+  policyFor,
   type Route,
   r2KeyFor,
   resolveRoute,
@@ -303,6 +306,83 @@ describe("securityHeaders", () => {
     expect(entries).toContain("microphone=(self)");
     expect(entries).toContain("camera=(self)");
     expect(entries).toContain("fullscreen=*");
+  });
+});
+
+// The creator console is a first-party SPA holding the creator's session: it
+// gets an allowlist CSP + X-Frame-Options, not the default-open app policy (#497).
+describe("first-party console policy", () => {
+  const console_: Route = { slug: "console", zone: "freeappstore.online", r2_prefix: "apps/console", store: "apps" };
+  const html = securityHeaders({ htmlCache: true, firstParty: true });
+  const csp = html.get("content-security-policy") ?? "";
+  const directive = (name: string) => csp.split("; ").find((d) => d === name || d.startsWith(`${name} `)) ?? "";
+
+  it("recognises only the console routes row", () => {
+    expect(isFirstPartyRoute(console_)).toBe(true);
+    expect(isFirstPartyRoute(kanban)).toBe(false);
+    expect(isFirstPartyRoute({ zone: "space", r2_prefix: "apps/console" })).toBe(false);
+    expect(policyFor(console_)).toEqual({ crossOriginIsolated: false, firstParty: true });
+    expect(policyFor(kanban)).toEqual({ crossOriginIsolated: false, firstParty: false });
+  });
+
+  it("allows no inline, eval, or third-party script beyond the hashed boot scripts", () => {
+    expect(directive("script-src")).toBe(`script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")}`);
+    expect(directive("script-src")).not.toContain("'unsafe-inline'");
+    expect(csp).not.toContain("'unsafe-eval'");
+    for (const name of ["script-src", "connect-src", "frame-src", "style-src", "font-src"]) {
+      expect(directive(name).split(" "), name).not.toContain("https:");
+    }
+    expect(directive("default-src")).toBe("default-src 'self'");
+    expect(directive("worker-src")).toBe("worker-src 'self'");
+  });
+
+  it("script hashes match the inline boot scripts in sites/console/web/index.html", async () => {
+    // workers-types is the only tsconfig `types` entry, so node builtins come in
+    // through a typed dynamic import (same as migration-0002.test.ts).
+    const nodeModule = <T>(name: string) => import(/* @vite-ignore */ name) as Promise<T>;
+    const fs = await nodeModule<{ readFileSync(file: URL, encoding: "utf8"): string }>("node:fs");
+    const crypto = await nodeModule<{ createHash(alg: "sha256"): { update(data: string): { digest(enc: "base64"): string } } }>(
+      "node:crypto",
+    );
+    const indexHtml = fs.readFileSync(
+      new URL("../../../../sites/console/web/index.html", (import.meta as unknown as { url: string }).url),
+      "utf8",
+    );
+    const inline = [...indexHtml.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(
+      (m) => `sha256-${crypto.createHash("sha256").update(m[1]).digest("base64")}`,
+    );
+    expect(inline).toEqual([...CONSOLE_INLINE_SCRIPT_HASHES]);
+  });
+
+  it("lets the console reach only the platform services and GitHub it calls", () => {
+    expect(directive("connect-src")).toBe(
+      "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com",
+    );
+    // 'unsafe-inline' for styles only: the SDK UI kit injects a keyframes <style>.
+    expect(directive("style-src")).toBe("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
+    expect(directive("font-src")).toBe("font-src 'self' https://fonts.gstatic.com");
+    expect(directive("frame-src")).toBe("frame-src https://*.freeappstore.online");
+  });
+
+  it("cannot be framed, posts forms only to itself, and keeps the defence-in-depth locks", () => {
+    expect(directive("frame-ancestors")).toBe("frame-ancestors 'none'");
+    expect(html.get("x-frame-options")).toBe("DENY");
+    expect(directive("form-action")).toBe("form-action 'self'");
+    expect(directive("base-uri")).toBe("base-uri 'self'");
+    expect(directive("object-src")).toBe("object-src 'none'");
+    expect(csp).toContain("upgrade-insecure-requests");
+    expect(html.get("x-content-type-options")).toBe("nosniff");
+    expect(html.get("strict-transport-security")).toContain("includeSubDomains");
+  });
+
+  it("hosted apps keep the default-open policy and no X-Frame-Options; crawl files follow the route's policy", () => {
+    const app = securityHeaders({ htmlCache: true });
+    expect(app.get("x-frame-options")).toBeNull();
+    expect(app.get("content-security-policy")).toContain("'unsafe-inline'");
+    const crawl = crawlAssetResponse({ body: null, httpEtag: '"x"' } as unknown as R2ObjectBody, "/robots.txt", "HEAD", null, {
+      firstParty: true,
+    });
+    expect(crawl.headers.get("x-frame-options")).toBe("DENY");
   });
 });
 
