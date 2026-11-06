@@ -925,3 +925,64 @@ describe.skipIf(!hasSqlite)('/v1/internal/admin/* is service-binding only (#489)
     expect(ok.status).toBe(200);
   });
 });
+
+describe.skipIf(!hasSqlite)(
+  'GET /v1/admin/apps only trusts sessions of the app owner (#491)',
+  () => {
+    it("ignores another user's session that claims the app id", async () => {
+      const { db, d1 } = sqliteD1();
+      // The admin Worker owns this table; it is not in the backend migrations.
+      db.exec(
+        'CREATE TABLE routes (slug TEXT, zone TEXT, r2_prefix TEXT, store TEXT, hosted_on TEXT, created_at INTEGER, updated_at INTEGER)',
+      );
+      const now = Date.now();
+      const users = db.prepare(
+        'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+      );
+      users.run('gh:1', 1, 'Alice', now);
+      users.run('gh:2', 2, 'bob', now);
+      users.run('gh:99', 99, 'ops', now);
+      db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+        'timer',
+        'alice',
+        now,
+      );
+      const session = db.prepare(
+        'INSERT INTO agent_sessions (session_id, user_id, name, app_id, app_url, deployed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
+      );
+      session.run(
+        's-owner',
+        'gh:1',
+        'Timer',
+        'timer',
+        'https://timer.freeappstore.online',
+        now,
+        now,
+      );
+      // Newer, so it would be "latest" if it were trusted.
+      session.run('s-bob', 'gh:2', 'pwned', 'timer', 'https://evil.example', now, now + 1000);
+
+      const token = await signSession('gh:99', SIGNING_KEY);
+      const res = await app.request(
+        '/v1/admin/apps',
+        { headers: { Authorization: `Bearer ${token}` } },
+        { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY, ADMIN_USER_IDS: ADMIN_IDS },
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        apps: Array<{
+          id: string;
+          name: string;
+          appUrl: string | null;
+          sessionCount: number;
+          latestSession: { sessionId: string } | null;
+        }>;
+      };
+      const timer = body.apps.find((a) => a.id === 'timer');
+      expect(timer?.sessionCount).toBe(1);
+      expect(timer?.latestSession?.sessionId).toBe('s-owner');
+      expect(timer?.name).toBe('Timer');
+      expect(timer?.appUrl).toBe('https://timer.freeappstore.online');
+    });
+  },
+);

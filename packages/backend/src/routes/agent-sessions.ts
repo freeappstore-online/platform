@@ -10,12 +10,19 @@
  */
 
 import { Hono } from 'hono';
-import { requireUser } from '../lib/auth.js';
+import { APP_ID_RE } from '../lib/apps.js';
+import { assertAppOwner, requireUser } from '../lib/auth.js';
 import { parseJsonArray, parseJsonObject } from '../lib/json.js';
 import { queryLimit } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
 export const agentSessionRoutes = new Hono<{ Bindings: Env }>();
+
+/** Cap message size to prevent storage abuse (300 messages, ~500KB typical max). */
+const MAX_BODY_BYTES = 2_000_000;
+const MAX_MESSAGES = 300;
+const MAX_NAME_LENGTH = 200;
+const MAX_URL_LENGTH = 2048;
 
 // ── List sessions ───────────────────────────────────────────────
 
@@ -109,18 +116,50 @@ agentSessionRoutes.get('/agent/sessions/:id', async (c) => {
 agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
   const user = await requireUser(c);
   const sessionId = c.req.param('id')!;
-  const body = await c.req
-    .json<{
-      name?: string;
-      appId?: string;
-      appUrl?: string;
-      deployed?: boolean;
-      messages?: unknown[];
-      deployState?: unknown;
-    }>()
-    .catch(() => null);
+  // Same ceiling as /messages below; this route used to take any size (#491).
+  const raw = await c.req.text();
+  if (raw.length > MAX_BODY_BYTES) return c.json({ error: 'body too large (max 2MB)' }, 413);
+  let body: {
+    name?: unknown;
+    appId?: unknown;
+    appUrl?: unknown;
+    deployed?: unknown;
+    messages?: unknown;
+    deployState?: unknown;
+  } | null;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    body = null;
+  }
+  if (!body || typeof body !== 'object') return c.json({ error: 'invalid body' }, 400);
 
-  if (!body) return c.json({ error: 'invalid body' }, 400);
+  if (
+    body.name !== undefined &&
+    (typeof body.name !== 'string' || body.name.length > MAX_NAME_LENGTH)
+  )
+    return c.json({ error: `name must be a string of at most ${MAX_NAME_LENGTH} chars` }, 400);
+  if (
+    body.appUrl !== undefined &&
+    (typeof body.appUrl !== 'string' || body.appUrl.length > MAX_URL_LENGTH)
+  )
+    return c.json({ error: `appUrl must be a string of at most ${MAX_URL_LENGTH} chars` }, 400);
+  if (body.deployed !== undefined && typeof body.deployed !== 'boolean')
+    return c.json({ error: 'deployed must be a boolean' }, 400);
+  if (body.messages !== undefined && !Array.isArray(body.messages))
+    return c.json({ error: 'messages must be an array' }, 400);
+  if (
+    body.deployState !== undefined &&
+    (typeof body.deployState !== 'object' || body.deployState === null)
+  )
+    return c.json({ error: 'deployState must be an object' }, 400);
+  // The admin overview and the console trust app_id, so a session may only
+  // point at an app the caller owns (404 unknown / 403 someone else's).
+  if (body.appId !== undefined) {
+    if (typeof body.appId !== 'string' || !APP_ID_RE.test(body.appId))
+      return c.json({ error: 'invalid appId' }, 400);
+    await assertAppOwner(c.env, user, body.appId);
+  }
 
   // Verify ownership: if a session with this ID already exists, it must belong to this user
   const existing = await c.env.DB.prepare('SELECT user_id FROM agent_sessions WHERE session_id = ?')
@@ -141,7 +180,7 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
   const appId = body.appId ?? null;
   const appUrl = body.appUrl ?? null;
   const deployed = body.deployed === undefined ? null : body.deployed ? 1 : 0;
-  const messages = body.messages ? JSON.stringify(body.messages) : null;
+  const messages = body.messages ? JSON.stringify(body.messages.slice(-MAX_MESSAGES)) : null;
   const deployState = body.deployState ? JSON.stringify(body.deployState) : null;
 
   await c.env.DB.batch([
@@ -177,10 +216,9 @@ agentSessionRoutes.put('/agent/sessions/:id/messages', async (c) => {
 
   if (!body?.messages) return c.json({ error: 'messages required' }, 400);
 
-  // Cap message size to prevent storage abuse (300 messages, ~500KB typical max)
-  const messages = Array.isArray(body.messages) ? body.messages.slice(-300) : [];
+  const messages = Array.isArray(body.messages) ? body.messages.slice(-MAX_MESSAGES) : [];
   const json = JSON.stringify(messages);
-  if (json.length > 2_000_000) return c.json({ error: 'messages too large (max 2MB)' }, 413);
+  if (json.length > MAX_BODY_BYTES) return c.json({ error: 'messages too large (max 2MB)' }, 413);
 
   await c.env.DB.prepare(
     `UPDATE agent_sessions SET messages = ?, updated_at = ? WHERE session_id = ? AND user_id = ?`,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -230,5 +231,75 @@ describe('agent-sessions', () => {
     expect(res.status).toBe(200);
     const data = (await res.json()) as { ok: boolean };
     expect(data.ok).toBe(true);
+  });
+});
+
+describe.skipIf(!hasSqlite)('PUT /v1/agent/sessions/:id validation (#491)', () => {
+  function setup() {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    const users = db.prepare(
+      'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+    );
+    users.run('gh:1', 1, 'alice', now);
+    users.run('gh:2', 2, 'bob', now);
+    db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+      'timer',
+      'alice',
+      now,
+    );
+    const put = async (userId: string, id: string, body: unknown) =>
+      app.request(
+        `/v1/agent/sessions/${id}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: await authHeader(userId),
+            'Content-Type': 'application/json',
+          },
+          body: typeof body === 'string' ? body : JSON.stringify(body),
+        },
+        { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY },
+      );
+    const row = (id: string) =>
+      db.prepare('SELECT app_id, name FROM agent_sessions WHERE session_id = ?').get(id) as
+        | { app_id: string | null; name: string }
+        | undefined;
+    return { put, row };
+  }
+
+  it('lets the owner attach their app, and nobody else', async () => {
+    const { put, row } = setup();
+    expect((await put('gh:1', 's1', { name: 'Timer', appId: 'timer' })).status).toBe(200);
+    expect(row('s1')?.app_id).toBe('timer');
+    expect((await put('gh:2', 's2', { name: 'Fake timer', appId: 'timer' })).status).toBe(403);
+    expect(row('s2')).toBeUndefined();
+    expect((await put('gh:2', 's3', { appId: 'ghost' })).status).toBe(404);
+    expect(row('s3')).toBeUndefined();
+  });
+
+  it('rejects a malformed appId, an over-long name, and non-string/non-array fields', async () => {
+    const { put, row } = setup();
+    const bad: Array<[string, unknown]> = [
+      ['appId shape', { appId: 'Not_An_Id' }],
+      ['appId type', { appId: 42 }],
+      ['name length', { name: 'x'.repeat(201) }],
+      ['name type', { name: { nested: true } }],
+      ['appUrl type', { appUrl: ['https://x'] }],
+      ['deployed type', { deployed: 'yes' }],
+      ['messages type', { messages: 'hi' }],
+      ['deployState type', { deployState: 'live' }],
+    ];
+    for (const [label, body] of bad) {
+      expect((await put('gh:1', 's1', body)).status, label).toBe(400);
+    }
+    expect(row('s1')).toBeUndefined();
+  });
+
+  it('rejects a body over 2 MB before touching the database', async () => {
+    const { put, row } = setup();
+    const res = await put('gh:1', 's1', { messages: [{ content: 'x'.repeat(2_000_001) }] });
+    expect(res.status).toBe(413);
+    expect(row('s1')).toBeUndefined();
   });
 });

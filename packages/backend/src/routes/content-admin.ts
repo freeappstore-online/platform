@@ -295,11 +295,16 @@ contentAdminRoutes.get('/admin/apps', async (c) => {
        WHERE zone = 'freeappstore.online'
        ORDER BY slug ASC`,
     ).all<Record<string, unknown>>(),
+    // Only sessions whose user owns the app: a session's app_id, name and
+    // app_url are client-supplied, so anyone else's session must not stand
+    // in for the app in this overview (#491).
     c.env.DB.prepare(
-      `SELECT session_id, app_id, name, app_url, deployed, deploy_state, updated_at
-       FROM agent_sessions
-       WHERE app_id IS NOT NULL
-       ORDER BY updated_at DESC`,
+      `SELECT s.session_id, s.app_id, s.name, s.app_url, s.deployed, s.deploy_state, s.updated_at
+       FROM agent_sessions s
+       JOIN apps a ON a.id = s.app_id
+       JOIN users u ON u.id = s.user_id AND lower(u.github_login) = lower(a.owner_login)
+       WHERE s.app_id IS NOT NULL
+       ORDER BY s.updated_at DESC`,
     ).all<Record<string, unknown>>(),
     c.env.DB.prepare(
       'SELECT github_login, display_name, avatar_url FROM users WHERE github_login IS NOT NULL',
