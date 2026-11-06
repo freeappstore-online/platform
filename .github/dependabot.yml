@@ -5,9 +5,9 @@
 # re-accumulating between advisories. Without it, the only thing that ever moved
 # these lockfiles was someone noticing the vulnerability banner on a push.
 #
-# One entry per manifest, because these are seven independent installs, not one
+# One entry per manifest, because these are eight independent installs, not one
 # workspace: pnpm-workspace.yaml covers `packages/*` and `examples/*` only, and
-# every worker, the console site and the two web builds carry their own lockfile.
+# every worker, the console and storefront sites and the two web builds carry their own lockfile.
 # Dependabot does not discover them recursively. workers/mcp is npm, not pnpm.
 #
 # Grouped so a week's worth of dev-tooling bumps arrives as one reviewable PR per
@@ -19,6 +19,7 @@ updates:
     directories:
       - /
       - /sites/console
+      - /sites/storefront
       - /workers/admin
       - /workers/admin/web
       - /workers/agent
@@ -52,3 +53,14 @@ updates:
       # Patch releases still come through.
       - dependency-name: agents
         update-types: [version-update:semver-minor, version-update:semver-major]
+
+  # Third-party actions are pinned to commit SHAs (#502); this is what moves
+  # those pins. Grouped: one PR per week for all of them.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
