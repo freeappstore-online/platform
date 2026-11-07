@@ -594,7 +594,51 @@ describe('PUT /v1/apps/:appId/allowlist', () => {
     );
     expect(res.status).toBe(400);
     const body = await res.json<{ error: string }>();
-    expect(body.error).toMatch(/PAS AI key vault/);
+    expect(body.error).toMatch(/user key vault/);
+  });
+
+  it('stores a user_key rule for a provider host without any secret (#466)', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: 'https://api.openai.com/',
+          injectKind: 'user_key',
+          methods: ['POST'],
+        }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(204);
+    expect(data.allow).toHaveLength(1);
+    expect(data.allow[0]).toMatchObject({
+      pattern: 'https://api.openai.com/',
+      inject_kind: 'user_key',
+      secret_name: '',
+      methods: 'POST',
+    });
+  });
+
+  it('rejects a user_key rule for a host that is not a key-vault provider', async () => {
+    const data = freshData();
+    const res = await app.request(
+      '/v1/apps/weather/allowlist',
+      {
+        method: 'PUT',
+        headers: { Authorization: await ownerAuth(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pattern: 'https://api.example.com/',
+          injectKind: 'user_key',
+          methods: ['GET'],
+        }),
+      },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(400);
+    expect(data.allow).toHaveLength(0);
   });
 
   it('inserts when valid', async () => {
@@ -1137,15 +1181,31 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  describe('user-key path (#495)', () => {
+  describe('user-key path (#495, #466)', () => {
     const openai = '/v1/apps/weather/proxy/api.openai.com/v1/chat/completions';
     const errorOf = async (res: Response) => ((await res.json()) as { error: string }).error;
+    // The app has declared the provider host: `fas proxy allow --user-key`.
+    const withOpenAiRule = (): FakeData => {
+      const data = freshData();
+      data.allow.push({
+        app_id: 'weather',
+        pattern: 'https://api.openai.com/',
+        inject_kind: 'user_key',
+        inject_name: '',
+        secret_name: '',
+        secret_name_2: null,
+        token_url: null,
+        methods: 'GET,POST',
+        created_at: 0,
+      });
+      return data;
+    };
 
     it("spends the owner's own key inside their own app", async () => {
       const res = await app.request(
         openai,
         { headers: { Authorization: await ownerAuth('weather') } },
-        baseEnv(fakeDB(freshData())),
+        baseEnv(fakeDB(withOpenAiRule())),
       );
       // Past the grant check; the vault has no key in these tests.
       expect(res.status).toBe(403);
@@ -1156,7 +1216,7 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       const res = await app.request(
         openai,
         { headers: { Authorization: await strangerAuth('console') } },
-        baseEnv(fakeDB(freshData())),
+        baseEnv(fakeDB(withOpenAiRule())),
       );
       expect(await errorOf(res)).toBe('no_key');
     });
@@ -1165,10 +1225,63 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       const res = await app.request(
         openai,
         { headers: { Authorization: await strangerAuth('weather') } },
-        baseEnv(fakeDB(freshData())),
+        baseEnv(fakeDB(withOpenAiRule())),
       );
       expect(res.status).toBe(403);
       expect(await errorOf(res)).toBe('no_grant');
+    });
+
+    it('refuses a provider host the app has not declared, naming fas proxy allow (#466)', async () => {
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+      const res = await app.request(
+        openai,
+        { headers: { Authorization: await ownerAuth('weather') } },
+        baseEnv(fakeDB(freshData())),
+      );
+      expect(res.status).toBe(403);
+      const error = await errorOf(res);
+      expect(error).toContain('no allowlist match');
+      expect(error).toContain('fas proxy allow');
+      expect(error).toContain('--user-key');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('refuses a method the rule does not allow', async () => {
+      const data = withOpenAiRule();
+      data.allow[0]!.methods = 'POST';
+      const res = await app.request(
+        openai,
+        { headers: { Authorization: await ownerAuth('weather') } },
+        baseEnv(fakeDB(data)),
+      );
+      expect(res.status).toBe(403);
+      expect(await errorOf(res)).toContain('no allowlist match');
+    });
+
+    it("does not let one app's rule open the host for another app (#466)", async () => {
+      const data = withOpenAiRule();
+      data.allow[0]!.app_id = 'other-app';
+      const res = await app.request(
+        openai,
+        { headers: { Authorization: await ownerAuth('weather') } },
+        baseEnv(fakeDB(data)),
+      );
+      expect(await errorOf(res)).toContain('no allowlist match');
+    });
+
+    it('never sends the vault key to a look-alike host that prefix-matches the pattern', async () => {
+      const data = withOpenAiRule();
+      data.allow[0]!.pattern = 'https://api.openai.com'; // legacy/hand-written, no trailing slash
+      const fetchSpy = vi.fn();
+      globalThis.fetch = fetchSpy as unknown as typeof fetch;
+      const res = await app.request(
+        '/v1/apps/weather/proxy/api.openai.com.evil.example/v1/x',
+        { headers: { Authorization: await ownerAuth('weather') } },
+        baseEnv(fakeDB(data)),
+      );
+      expect(res.status).toBe(403);
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
 
     it('no longer maps api.stripe.com to a user key', async () => {

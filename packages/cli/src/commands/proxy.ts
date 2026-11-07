@@ -3,7 +3,7 @@ import { bearer, dieFromHttp, requireSession, resolveAppIdOrExit } from './secre
 
 interface AllowlistRule {
   pattern: string;
-  injectKind: 'query' | 'header' | 'bearer' | 'oauth2_cc';
+  injectKind: 'query' | 'header' | 'bearer' | 'oauth2_cc' | 'user_key';
   injectName: string;
   secretName: string;
   secretName2?: string;
@@ -31,16 +31,54 @@ export function parseInject(s: string): {
   return { kind: m[1] as 'query' | 'header', name: m[2]! };
 }
 
+/**
+ * What `fas proxy allow` sends for the injection. `--user-key` declares a
+ * key-vault provider host (api.openai.com, ...): the proxy spends the signed-in
+ * user's own key, so there is no secret to name. Every other rule needs both
+ * `--secret` and `--inject`.
+ */
+export function resolveAllowInjection(opts: {
+  userKey?: boolean;
+  secret?: string;
+  inject?: string;
+}): {
+  injectKind: string;
+  injectName: string;
+  secretName: string;
+} {
+  if (opts.userKey) {
+    if (opts.secret || opts.inject) {
+      throw new Error('--user-key cannot be combined with --secret or --inject');
+    }
+    return { injectKind: 'user_key', injectName: '', secretName: '' };
+  }
+  if (!opts.secret || !opts.inject) {
+    throw new Error(
+      '--secret and --inject are required (or --user-key for a key-vault provider host)',
+    );
+  }
+  const inject = parseInject(opts.inject);
+  return { injectKind: inject.kind, injectName: inject.name, secretName: opts.secret };
+}
+
 export const proxyCommand = new Command('proxy')
-  .description('Manage the URL allowlist for the per-app secret-injecting proxy.')
+  .description(
+    'Manage the URL allowlist for the per-app proxy. The proxy refuses every host that is not on it.',
+  )
   .addCommand(
     new Command('allow')
-      .description('Allow the proxy to inject <secret> when calling URLs starting with <pattern>.')
+      .description(
+        'Allow the app to call URLs starting with <pattern> through the proxy, injecting <secret> or the user key.',
+      )
       .argument('<pattern>', 'URL prefix (must start with https://)')
-      .requiredOption('--secret <name>', 'name of a previously stored secret')
-      .requiredOption(
+      .option('--secret <name>', 'name of a previously stored secret')
+      .option(
         '--inject <spec>',
         "how to inject: 'query:<name>', 'header:<name>', 'bearer', or 'oauth2_cc'",
+      )
+      .option(
+        '--user-key',
+        "key-vault provider host (api.openai.com, api.anthropic.com, ...): spend the signed-in user's own key; no secret",
       )
       .option('--secret2 <name>', 'second secret (client_secret for oauth2_cc)')
       .option('--token-url <url>', 'OAuth2 token endpoint (required for oauth2_cc)')
@@ -50,10 +88,11 @@ export const proxyCommand = new Command('proxy')
         async (
           pattern: string,
           opts: {
-            secret: string;
+            secret?: string;
             secret2?: string;
             tokenUrl?: string;
-            inject: string;
+            inject?: string;
+            userKey?: boolean;
             methods: string;
             app?: string;
           },
@@ -62,7 +101,7 @@ export const proxyCommand = new Command('proxy')
           const appId = await resolveAppIdOrExit(opts.app);
           let inject;
           try {
-            inject = parseInject(opts.inject);
+            inject = resolveAllowInjection(opts);
           } catch (err) {
             process.stderr.write(`fas: ${(err as Error).message}\n`);
             process.exit(1);
@@ -72,9 +111,7 @@ export const proxyCommand = new Command('proxy')
             headers: bearer(cfg),
             body: JSON.stringify({
               pattern,
-              injectKind: inject.kind,
-              injectName: inject.name,
-              secretName: opts.secret,
+              ...inject,
               ...(opts.secret2 ? { secretName2: opts.secret2 } : {}),
               ...(opts.tokenUrl ? { tokenUrl: opts.tokenUrl } : {}),
               methods: opts.methods
@@ -112,10 +149,10 @@ export const proxyCommand = new Command('proxy')
         }
         for (const r of rules) {
           const inject =
-            r.injectKind === 'bearer' || r.injectKind === 'oauth2_cc'
+            r.injectKind === 'bearer' || r.injectKind === 'oauth2_cc' || r.injectKind === 'user_key'
               ? r.injectKind
               : `${r.injectKind}:${r.injectName}`;
-          let line = `${r.pattern}\n  secret=${r.secretName}  inject=${inject}  methods=${r.methods.join(',')}`;
+          let line = `${r.pattern}\n  ${r.secretName ? `secret=${r.secretName}  ` : ''}inject=${inject}  methods=${r.methods.join(',')}`;
           if (r.secretName2) line += `  secret2=${r.secretName2}`;
           if (r.tokenUrl) line += `\n  token-url=${r.tokenUrl}`;
           process.stdout.write(`${line}\n`);

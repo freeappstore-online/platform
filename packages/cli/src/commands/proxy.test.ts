@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseInject, proxyCommand } from './proxy.js';
+import { parseInject, proxyCommand, resolveAllowInjection } from './proxy.js';
 
 describe('parseInject', () => {
   it('recognizes bearer (no name)', () => {
@@ -59,15 +59,44 @@ describe('proxyCommand wiring', () => {
     expect(deny?.aliases()).toContain('rm');
   });
 
-  it('requires --secret and --inject on `allow`', () => {
+  it('offers --user-key on `allow`', () => {
     const allow = proxyCommand.commands.find((c) => c.name() === 'allow')!;
-    const required = allow.options.filter((o) => o.required).map((o) => o.long);
-    expect(required).toEqual(expect.arrayContaining(['--secret', '--inject']));
+    expect(allow.options.map((o) => o.long)).toContain('--user-key');
   });
 
   it('defaults `methods` to GET on `allow`', () => {
     const allow = proxyCommand.commands.find((c) => c.name() === 'allow')!;
     const methods = allow.options.find((o) => o.long === '--methods');
     expect(methods?.defaultValue).toBe('GET');
+  });
+});
+
+describe('resolveAllowInjection (#466)', () => {
+  it('needs --secret and --inject for an app-secret rule', () => {
+    expect(resolveAllowInjection({ secret: 'K', inject: 'query:appid' })).toEqual({
+      injectKind: 'query',
+      injectName: 'appid',
+      secretName: 'K',
+    });
+    expect(() => resolveAllowInjection({})).toThrow(/--user-key/);
+    expect(() => resolveAllowInjection({ secret: 'K' })).toThrow(/--secret and --inject/);
+    expect(() => resolveAllowInjection({ inject: 'bearer' })).toThrow(/--secret and --inject/);
+  });
+
+  it('declares a key-vault provider host with --user-key and no secret', () => {
+    expect(resolveAllowInjection({ userKey: true })).toEqual({
+      injectKind: 'user_key',
+      injectName: '',
+      secretName: '',
+    });
+  });
+
+  it('refuses --user-key together with --secret or --inject', () => {
+    expect(() => resolveAllowInjection({ userKey: true, secret: 'K' })).toThrow(
+      /cannot be combined/,
+    );
+    expect(() => resolveAllowInjection({ userKey: true, inject: 'bearer' })).toThrow(
+      /cannot be combined/,
+    );
   });
 });

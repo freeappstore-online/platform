@@ -43,8 +43,44 @@ describe('validateRule', () => {
     'foo.openai.com',
   ])('blocks AI provider host: %s', (host) => {
     expect(() => validateRule({ ...base, pattern: `https://${host}/v1/x` })).toThrow(
-      /PAS AI key vault/,
+      /user key vault.*user_key/,
     );
+  });
+
+  describe("user_key (spend the signed-in user's vault key)", () => {
+    const userKey = {
+      pattern: 'https://api.openai.com/',
+      injectKind: 'user_key',
+      injectName: '',
+      secretName: '',
+      methods: ['post'],
+    };
+
+    it('accepts a key-vault provider host with no secret', () => {
+      const rule = validateRule(userKey);
+      expect(rule).toMatchObject({ injectKind: 'user_key', secretName: '', methods: ['POST'] });
+    });
+
+    it('accepts a path prefix on a provider host', () => {
+      expect(() =>
+        validateRule({ ...userKey, pattern: 'https://api.anthropic.com/v1/messages' }),
+      ).not.toThrow();
+    });
+
+    it.each([
+      'https://api.example.com/',
+      'https://api.stripe.com/',
+      'https://api.openai.com.evil.example/',
+      'https://api.openai.com@evil.example/',
+      'https://api.openai.com',
+      'https://openai.com/',
+    ])('rejects a non-provider or look-alike host: %s', (pattern) => {
+      expect(() => validateRule({ ...userKey, pattern })).toThrow(/key-vault provider/);
+    });
+
+    it('still requires methods', () => {
+      expect(() => validateRule({ ...userKey, methods: [] })).toThrow(/methods/);
+    });
   });
 
   it('does NOT block hosts that merely contain the substring', () => {

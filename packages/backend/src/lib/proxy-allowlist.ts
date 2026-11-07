@@ -1,20 +1,24 @@
 /**
- * Proxy allowlist: per-app rules for what upstream URLs the secret-injecting
- * proxy will forward to. Two responsibilities:
+ * Proxy allowlist: per-app rules for what upstream URLs the proxy will forward
+ * to. The proxy refuses every host that has no rule for the app (#466), so a
+ * rule is the only way an app reaches an upstream. Two responsibilities:
  *
- *   1. Hard blocklist of AI-provider hosts at *registration* time. Free-tier
- *      app proxy is for cheap third-party APIs (weather, music, etc.) — not
- *      for OpenAI/Anthropic/etc., which route through the PAS key vault and
- *      have real billing teeth. Block early so a leaked OpenAI key in this
- *      table can't quietly drain a developer's account.
+ *   1. Validate rules at *registration* time. AI-provider hosts cannot carry an
+ *      app secret (a leaked OpenAI key in this table could quietly drain a
+ *      developer's account); they are allowed only as a `user_key` rule, which
+ *      spends the signed-in user's own vault key.
  *   2. Match an inbound proxy request (URL + method) against the registered
  *      rules at *call* time, and return the rule that wins (or null).
  */
 export interface AllowlistRule {
   pattern: string; // URL prefix, no globs
-  injectKind: 'query' | 'header' | 'bearer' | 'oauth2_cc';
-  injectName: string; // ignored for 'bearer' and 'oauth2_cc'
-  secretName: string; // FK to app_secrets.name (client_id for oauth2_cc)
+  /**
+   * 'user_key' injects the signed-in user's own vault key for a provider host
+   * (HOST_TO_PROVIDER); it has no secret. The others inject an app secret.
+   */
+  injectKind: 'query' | 'header' | 'bearer' | 'oauth2_cc' | 'user_key';
+  injectName: string; // ignored for 'bearer', 'oauth2_cc' and 'user_key'
+  secretName: string; // FK to app_secrets.name (client_id for oauth2_cc); '' for user_key
   secretName2: string; // FK to app_secrets.name for client_secret (oauth2_cc only)
   tokenUrl: string; // token endpoint URL (oauth2_cc only)
   methods: string[]; // upper-case HTTP verbs
@@ -31,6 +35,21 @@ const AI_PROVIDER_HOSTS = [
   'openrouter.ai',
   'generativelanguage.googleapis.com',
 ] as const;
+
+/** Hosts whose calls spend the user's own vault key → the key vault provider id. */
+export const HOST_TO_PROVIDER: Record<string, string> = {
+  'api.openai.com': 'openai',
+  'api.anthropic.com': 'anthropic',
+  'openrouter.ai': 'openrouter',
+  'api.openrouter.ai': 'openrouter',
+  'generativelanguage.googleapis.com': 'google-ai',
+  'api.replicate.com': 'replicate',
+  'api.stability.ai': 'stability',
+  'api.elevenlabs.io': 'elevenlabs',
+  // api.stripe.com was removed in #495: a user's Stripe *secret* key relayed
+  // by any browser app is unbounded, and payments are a compliance violation
+  // on FAS anyway. A developer's own Stripe key still works via an app rule.
+};
 
 export class AllowlistError extends Error {
   constructor(message: string) {
@@ -63,14 +82,33 @@ export function validateRule(input: {
   } catch {
     throw new AllowlistError('pattern is not a valid URL');
   }
-  if (isAiProviderHost(url.hostname)) {
-    throw new AllowlistError(
-      `host ${url.hostname} is reserved for the PAS AI key vault and cannot be used with the free app-secret proxy`,
-    );
-  }
-  const validKinds = ['query', 'header', 'bearer', 'oauth2_cc'] as const;
+  const validKinds = ['query', 'header', 'bearer', 'oauth2_cc', 'user_key'] as const;
   if (!validKinds.includes(injectKind as (typeof validKinds)[number])) {
     throw new AllowlistError(`injectKind must be one of: ${validKinds.join(', ')}`);
+  }
+  if (injectKind === 'user_key') {
+    // The user's vault key may only ever be sent to its own provider host, and
+    // the prefix must end the host (`https://api.openai.com.evil.com/` must not match).
+    const host = url.hostname.toLowerCase();
+    if (!HOST_TO_PROVIDER[host] || !pattern.toLowerCase().startsWith(`https://${host}/`)) {
+      throw new AllowlistError(
+        `user_key is only for key-vault provider hosts (${Object.keys(HOST_TO_PROVIDER).join(', ')}); the pattern must be https://<host>/...`,
+      );
+    }
+    return {
+      pattern,
+      injectKind,
+      injectName: '',
+      secretName: '',
+      secretName2: '',
+      tokenUrl: '',
+      methods: validateMethods(methods),
+    };
+  }
+  if (isAiProviderHost(url.hostname)) {
+    throw new AllowlistError(
+      `host ${url.hostname} is reserved for the user key vault: allow it with injectKind 'user_key' (fas proxy allow --user-key); app secrets cannot be used with it`,
+    );
   }
   if (injectKind !== 'bearer' && injectKind !== 'oauth2_cc' && !injectName) {
     throw new AllowlistError(`injectName is required for injectKind='${injectKind}'`);
@@ -118,15 +156,7 @@ export function validateRule(input: {
     }
   }
 
-  if (!Array.isArray(methods) || methods.length === 0) {
-    throw new AllowlistError('methods must be a non-empty array');
-  }
-  const upperMethods = methods.map((m) => m.toUpperCase());
-  for (const m of upperMethods) {
-    if (!/^[A-Z]+$/.test(m)) {
-      throw new AllowlistError(`invalid HTTP method: ${m}`);
-    }
-  }
+  const upperMethods = validateMethods(methods);
   return {
     pattern,
     injectKind: injectKind as AllowlistRule['injectKind'],
@@ -136,6 +166,19 @@ export function validateRule(input: {
     tokenUrl,
     methods: upperMethods,
   };
+}
+
+function validateMethods(methods: string[]): string[] {
+  if (!Array.isArray(methods) || methods.length === 0) {
+    throw new AllowlistError('methods must be a non-empty array');
+  }
+  const upperMethods = methods.map((m) => m.toUpperCase());
+  for (const m of upperMethods) {
+    if (!/^[A-Z]+$/.test(m)) {
+      throw new AllowlistError(`invalid HTTP method: ${m}`);
+    }
+  }
+  return upperMethods;
 }
 
 /**

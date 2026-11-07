@@ -179,7 +179,7 @@ fas secret rm OPENWEATHER_KEY
 
 ## `fas proxy`
 
-Manage the URL allowlist for the secret-injecting proxy.
+Manage the URL allowlist for the proxy. It is mandatory: the proxy refuses every host that has no rule for the app (403, naming `fas proxy allow`).
 
 ```bash
 fas proxy allow "https://api.openweathermap.org/" \
@@ -192,11 +192,14 @@ fas proxy allow "https://api.spotify.com/v1/" \
   --secret SPOTIFY_CLIENT_ID --secret2 SPOTIFY_CLIENT_SECRET \
   --inject oauth2_cc --token-url "https://accounts.spotify.com/api/token"
 
+# A key-vault provider host (OpenAI, Anthropic, ...): spend the signed-in user's own key, no secret
+fas proxy allow "https://api.openai.com/" --user-key --methods POST
+
 fas proxy list
 fas proxy deny "https://api.openweathermap.org/"
 ```
 
-Injection modes: `query:<name>`, `header:<name>`, `bearer`, `oauth2_cc`.
+Injection modes: `query:<name>`, `header:<name>`, `bearer`, `oauth2_cc`. Use `--user-key` instead of `--secret`/`--inject` for the key-vault provider hosts (OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs).
 
 ## `fas screencheck`
 

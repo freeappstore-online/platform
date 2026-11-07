@@ -104,9 +104,9 @@ GET    /v1/apps/:appId/secrets             → [{ name, createdAt, lastUsedAt }]
 ```
 PUT    /v1/apps/:appId/allowlist           {
   pattern: string,
-  injectKind: 'query' | 'header' | 'bearer',
+  injectKind: 'query' | 'header' | 'bearer' | 'oauth2_cc' | 'user_key',
   injectName: string,
-  secretName: string,
+  secretName: string,      // omitted for 'user_key'
   methods: string[]
 }
 DELETE /v1/apps/:appId/allowlist           { pattern: string }
@@ -124,7 +124,8 @@ The Worker:
 1. Authenticates the session.
 2. Reconstructs the upstream URL: `https://<host>/<path...>?<query>`.
 3. Looks up `app_proxy_allowlist` for the app — finds the rule whose `pattern` is a prefix of the URL and whose `methods` includes the request method.
-4. If no match → 403 with `{ error: "no allowlist match for <url>" }`.
+4. If no match → 403 with `{ error: "no allowlist match for <method> <url>. ... fas proxy allow ..." }`. There is no fallback: a host the app has not declared is always refused (#466).
+4a. A rule with `injectKind: "user_key"` (`fas proxy allow --user-key`, only for key-vault provider hosts) has no secret: the proxy spends the signed-in user's own vault key for that provider instead.
 5. Looks up the secret named in the rule, decrypts it (envelope: KEK from env → unwrap DEK → decrypt key).
 6. Injects the key per `inject_kind`/`inject_name`.
 7. Forwards the request body as-is (max 100KB; larger → 413).
@@ -170,7 +171,7 @@ const data = await res.json();
 | Proxy requests per app per day | 10,000 | unlimited |
 | Request body size | 100 KB | 1 MB |
 | Response body size | 100 KB | 1 MB |
-| AI provider hosts (`openai.com`, `anthropic.com`, `openrouter.ai`, `generativelanguage.googleapis.com`) | **blocked at allowlist registration** — must use PAS vault | allowed via PAS vault |
+| AI provider hosts (`openai.com`, `anthropic.com`, `openrouter.ai`, `generativelanguage.googleapis.com`) | **cannot carry an app secret**; declare with `--user-key` to spend the user's own vault key | allowed via PAS vault |
 
 Pro caps land later — for now the implementation enforces the free caps and treats every app as free.
 

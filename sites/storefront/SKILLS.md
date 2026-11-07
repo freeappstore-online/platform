@@ -488,6 +488,7 @@ const data = await weather.json()
 
 **User key** (each user's own key, for AI providers):
 ```tsx
+// Developer declares the provider host once: fas proxy allow "https://api.openai.com/" --user-key --methods POST
 // User configures key on the platform key page
 const res = await fas.proxy.fetch('api.openai.com/v1/chat/completions', {
   method: 'POST',
@@ -496,7 +497,7 @@ const res = await fas.proxy.fetch('api.openai.com/v1/chat/completions', {
 })
 ```
 
-If the user has no key, the proxy returns `{ error: "no_key", provider: "openai" }`. Show `<KeyPrompt>` (see UI section).
+Every proxied host must be on the app's allowlist (`fas proxy allow`); otherwise the proxy answers 403 and names the command. If the user has no key, the proxy returns `{ error: "no_key", provider: "openai" }`. Show `<KeyPrompt>` (see UI section).
 
 **Let users choose a supported provider.** Check the provider's current model availability, pricing, and account requirements rather than promising a free tier or relying on a hardcoded model count.
 

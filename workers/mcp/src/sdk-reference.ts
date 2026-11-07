@@ -277,7 +277,7 @@ Limits: 32 peers/room, 64 active rooms/app, 100 messages/second/peer, 4 KiB/mess
 const weather = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London')
 const data = await weather.json()
 \`\`\`
-Calls third-party APIs without exposing keys. Developer keys configured by platform admin, user keys stored in the key vault.`,
+Calls third-party APIs without exposing keys. Every host must be on the app's allowlist (\`fas proxy allow\`; a host with no rule gets a 403 naming it): developer-key hosts need \`--secret\`/\`--inject\`, user-key vault providers (OpenAI, Anthropic, ...) need \`--user-key\`.`,
   keys: `## User API Key Vault
 \`\`\`tsx
 // Check if user has a key

@@ -10,6 +10,7 @@ import { openSecret, type SealedSecret, sealSecret } from '../lib/encryption.js'
 import {
   AllowlistError,
   type AllowlistRule,
+  HOST_TO_PROVIDER,
   injectSecret,
   pickRule,
   validateRule,
@@ -239,12 +240,12 @@ secretsRoutes.put(
     });
 
     // Secret(s) must exist before we let an allowlist rule reference them —
-    // otherwise the proxy will silently 404 every call.
-    const secretExists = await c.env.DB.prepare(
-      'SELECT 1 FROM app_secrets WHERE app_id = ? AND name = ?',
-    )
-      .bind(appId, rule.secretName)
-      .first();
+    // otherwise the proxy will silently 404 every call. A user_key rule has none.
+    const secretExists =
+      rule.injectKind === 'user_key' ||
+      (await c.env.DB.prepare('SELECT 1 FROM app_secrets WHERE app_id = ? AND name = ?')
+        .bind(appId, rule.secretName)
+        .first());
     if (!secretExists) {
       throw new HttpError(400, `secret '${rule.secretName}' not found for this app`);
     }
@@ -379,21 +380,6 @@ const PROXY_RESPONSE_SKIP_HEADERS = new Set([
   'content-length',
 ]);
 
-// Map upstream hosts to user key vault provider IDs.
-const HOST_TO_PROVIDER: Record<string, string> = {
-  'api.openai.com': 'openai',
-  'api.anthropic.com': 'anthropic',
-  'openrouter.ai': 'openrouter',
-  'api.openrouter.ai': 'openrouter',
-  'generativelanguage.googleapis.com': 'google-ai',
-  'api.replicate.com': 'replicate',
-  'api.stability.ai': 'stability',
-  'api.elevenlabs.io': 'elevenlabs',
-  // api.stripe.com was removed in #495: a user's Stripe *secret* key relayed
-  // by any browser app is unbounded, and payments are a compliance violation
-  // on FAS anyway. A developer's own Stripe key still works via an app rule.
-};
-
 secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
   try {
     // Auth: a session delivered to THIS app (or a first-party one) — #495.
@@ -441,17 +427,26 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
     const rules = (ruleRows.results ?? []).map(rowToRule);
     const rule = pickRule(rules, upstreamUrl, c.req.method);
 
-    // If no app-level rule matches, try the user's key vault.
-    // This is the path for AI providers (OpenAI, Anthropic, etc.) where users
-    // store their own keys on the platform.
+    // The app must declare every host it calls (#466): no rule, no request.
+    if (!rule) {
+      return c.json(
+        {
+          error: `no allowlist match for ${c.req.method} ${upstreamUrl}. The app owner must allow this host with \`fas proxy allow https://${host}/ --secret <NAME> --inject <how>\`, or \`fas proxy allow https://${host}/ --user-key\` for a user key-vault provider (see docs/proxy-and-keys.md).`,
+        },
+        403,
+      );
+    }
+
     let plaintext: string;
     let injectedUrl: string;
     let injectedHeaders: Headers;
 
-    if (!rule) {
+    if (rule.injectKind === 'user_key') {
+      // AI providers (OpenAI, Anthropic, etc.) where users store their own
+      // keys on the platform.
       const provider = HOST_TO_PROVIDER[host.toLowerCase()];
       if (!provider) {
-        return c.json({ error: `no allowlist match for ${c.req.method} ${upstreamUrl}` }, 403);
+        return c.json({ error: `no key-vault provider for ${host}` }, 403);
       }
 
       // The user's own vault key may be spent only from a first-party session
@@ -628,7 +623,7 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
     }
 
     // Update last_used_at probabilistically (1 in 10) to save D1 writes.
-    if (rule && Math.random() < 0.1) {
+    if (rule.injectKind !== 'user_key' && Math.random() < 0.1) {
       const update = c.env.DB.prepare(
         'UPDATE app_secrets SET last_used_at = ? WHERE app_id = ? AND name = ?',
       )

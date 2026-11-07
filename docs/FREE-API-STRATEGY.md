@@ -93,6 +93,7 @@ User stores their own API key on the platform. Each user pays their own provider
 5. User is redirected back to app -- everything works
 
 **Developer experience:**
+0. App owner declares the host once: `fas proxy allow "https://api.openai.com/" --user-key --methods POST` (the proxy refuses any host the app has not declared)
 1. App code: `fas.proxy.fetch('api.openai.com/v1/chat/completions', { method: 'POST', body: ... })`
 2. If user has no key, proxy returns `{ error: "no_key", provider: "openai", manage_url: "..." }`
 3. App catches this and renders `<KeyPrompt app={fas} provider="openai" providerName="OpenAI" />`

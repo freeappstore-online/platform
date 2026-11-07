@@ -225,11 +225,11 @@ const res = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=Lon
 const data = await res.json();
 ```
 
-The developer registers secrets and allowlist rules via the CLI. The proxy decrypts and injects the key server-side. See [Proxy & Keys](proxy-and-keys.md).
+The developer registers secrets and allowlist rules via the CLI (`fas proxy allow`). A host with no rule for the app is refused. The proxy decrypts and injects the key server-side. See [Proxy & Keys](proxy-and-keys.md).
 
 ## User API key vault (`fas.keys`)
 
-Users store their own API keys on the platform (encrypted AES-256-GCM). Keys are injected by `fas.proxy.fetch()` when the upstream host matches a supported provider; the requesting app does not receive the plaintext key.
+Users store their own API keys on the platform (encrypted AES-256-GCM). Keys are injected by `fas.proxy.fetch()` when the upstream host is a supported provider that the app has declared with `fas proxy allow --user-key`; the requesting app does not receive the plaintext key.
 
 ```ts
 const hasKey = await fas.keys.has('openai');
