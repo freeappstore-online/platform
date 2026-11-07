@@ -6,6 +6,7 @@ import {
   classify,
   fasJsonFor,
   missingTestRunner,
+  withoutCodeHealthScan,
 } from './fleet-deploy-workflow.mjs';
 
 const generated = deployWorkflow(APP_STARTER_CONFIG);
