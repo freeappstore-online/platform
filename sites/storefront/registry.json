@@ -2784,6 +2784,21 @@
           "reason": "Optionally take a photo to attach to a diary entry."
         }
       ]
+    },
+    {
+      "id": "personality-quiz",
+      "name": "Personality Quizzes",
+      "category": "Lifestyle",
+      "icon": "🧠",
+      "iconBg": "#2563eb",
+      "description": "Fun personality quizzes: find your hidden flaw, or the food and drink that match you.",
+      "appUrl": "https://personality-quiz.freeappstore.online",
+      "repo": "freeappstore-online/personality-quiz",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "creatorGithub": "SASASKIA",
+      "permissions": []
     }
   ]
 }
