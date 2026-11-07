@@ -426,7 +426,18 @@ async function ensureRepo(req: PublishRequest, config: StoreConfig, env: Publish
   return { name: "GitHub repo", status: "fail", detail: createRepo.message || "Failed to create repo" };
 }
 
-export async function handlePublish(req: PublishRequest, env: PublishEnv, gh?: GhFn): Promise<{ steps: Step[]; success: boolean }> {
+/** True when the repo has no commits yet (GitHub answers 409 "Git Repository is empty"). */
+async function isRepoEmpty(config: StoreConfig, id: string, ghCall: GhFn): Promise<boolean> {
+  const commits = await ghCall(`/repos/${config.org}/${id}/commits?per_page=1`);
+  return commits.__status === 409;
+}
+
+/** `repoEmpty` tells clients nothing is deployed until the creator pushes code (#547). */
+export async function handlePublish(
+  req: PublishRequest,
+  env: PublishEnv,
+  gh?: GhFn,
+): Promise<{ steps: Step[]; success: boolean; repoEmpty?: boolean }> {
   const steps: Step[] = [];
   const ghCall: GhFn = gh ?? ((path, method, body) => ghApi(env, path, method, body));
 
@@ -509,7 +520,7 @@ export async function handlePublish(req: PublishRequest, env: PublishEnv, gh?: G
   steps.push(analyticsStep);
 
   const success = steps.every((s) => s.status !== "fail");
-  return { steps, success };
+  return { steps, success, repoEmpty: await isRepoEmpty(config, req.id, ghCall) };
 }
 
 /**

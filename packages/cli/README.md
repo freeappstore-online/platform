@@ -36,7 +36,7 @@ After the first successful code push and deploy, live at `https://my-app.freeapp
 | `fas doctor` | App health and stage report; `--offline`, `--json`, `--verify`, `--artifact`. |
 | `fas init <app-id>` | Generate standalone and connected apps from the canonical platform starter foundation; for games use the separate `fgs` CLI. Replaces app placeholders, runs `git init`, makes the first commit. |
 | `fas check` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
-| `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing (never overwrites an existing one unless `--update-workflow`), then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
+| `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing and commits it (never overwrites an existing one unless `--update-workflow`; a workflow that reads `secrets.R2_*` or lacks `id-token: write` stops the command until you pass `--update-workflow`), then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
 | `fas list` (alias `fas ls`) | List apps you have published. `--json` for scripting, `-v` for recent commits. |
 | `fas logs <app-id>` | Show recent deployment runs and links for an app (GitHub Actions). |
 | `fas secret set\|list\|rm` | Manage server-side encrypted API keys for an app. |

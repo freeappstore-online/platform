@@ -192,6 +192,27 @@ describe('POST /v1/publish', () => {
     expect(respBody.appId).toBe('my-app');
     expect(respBody.appUrl).toBe('https://my-app.freeappstore.online');
     expect(respBody.repoUrl).toBe('https://github.com/freeappstore-online/my-app');
+    expect((respBody as { repoEmpty?: boolean }).repoEmpty).toBe(false);
+  });
+
+  it('reports repoEmpty when admin says the repo has no commits (#547)', async () => {
+    const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
+    const admin = fakeAdmin({
+      response: new Response(JSON.stringify({ steps: [], success: true, repoEmpty: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    });
+    const res = await app.request(
+      '/v1/publish',
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(validBody),
+      },
+      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
+    );
+    expect(((await res.json()) as { repoEmpty: boolean }).repoEmpty).toBe(true);
   });
 
   it('forwards the full ownership payload to admin (which writes the apps row atomically)', async () => {

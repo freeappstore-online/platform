@@ -417,6 +417,21 @@ describe("handlePublish", () => {
     expect(repoCreated).toBe(true);
   });
 
+  it("reports repoEmpty when GitHub says the repo has no commits (#547)", async () => {
+    const gh: GhFn = async (path, method, body) =>
+      path.endsWith("/commits?per_page=1") ? { message: "Git Repository is empty.", __status: 409 } : successGh()(path, method, body);
+    const result = await handlePublish(baseReq(), baseEnv(), gh);
+    expect(result.success).toBe(true);
+    expect(result.repoEmpty).toBe(true);
+  });
+
+  it("reports repoEmpty false once the repo has commits (#547)", async () => {
+    const gh: GhFn = async (path, method, body) =>
+      path.endsWith("/commits?per_page=1") ? { __status: 200, __body: [{ sha: "abc" }] } : successGh()(path, method, body);
+    const result = await handlePublish(baseReq(), baseEnv(), gh);
+    expect(result.repoEmpty).toBe(false);
+  });
+
   it("fails early when repo creation fails", async () => {
     const gh: GhFn = async (path, method) => {
       if (path.includes("/repos/freeappstore-online/testapp") && !method) {

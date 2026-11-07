@@ -98,7 +98,7 @@ describe('public platform documentation matches the implementation', () => {
     const options = [...source.matchAll(/\.option\(\s*['"](?:-[a-z],\s*)?(--[a-z-]+)/g)].map(
       (m) => m[1],
     );
-    expect(options).toContain('--store');
+    expect(options).not.toContain('--store');
     for (const path of ['docs/cli.md', 'packages/cli/README.md']) {
       const text = read(path);
       const heading = /^#{2,3} `fas publish`[^\n]*\n/m.exec(text)!;

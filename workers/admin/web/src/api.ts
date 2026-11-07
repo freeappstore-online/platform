@@ -53,6 +53,8 @@ export interface ProvisionStep {
 export interface ProvisionResult {
   steps: ProvisionStep[]
   success: boolean
+  /** The repo has no commits yet: nothing is live until code is pushed. */
+  repoEmpty?: boolean
 }
 
 export interface DeprovisionResult {

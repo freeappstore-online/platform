@@ -105,12 +105,12 @@ describe("insertHostRoute", () => {
     expect(step.detail).toContain("D1 unreachable");
   });
 
-  it("writes routes (upsert) + apps (insert-or-ignore) in the same batch", async () => {
+  it("writes routes (upsert) + apps (insert, repo refreshed on conflict) in the same batch", async () => {
     const { db, prepared } = mockDb();
     await insertHostRoute(env(db), req, config);
     const routesSql = prepared.find((s) => /INSERT\s+INTO\s+routes/.test(s.sql))!.sql;
     expect(routesSql).toMatch(/ON\s+CONFLICT\s*\(\s*slug\s*,\s*zone\s*\)\s+DO\s+UPDATE/);
-    const appsSql = prepared.find((s) => /INSERT\s+OR\s+IGNORE\s+INTO\s+apps/.test(s.sql))!.sql;
+    const appsSql = prepared.find((s) => /INSERT\s+INTO\s+apps/.test(s.sql))!.sql;
     expect(appsSql).toBeDefined();
   });
 });

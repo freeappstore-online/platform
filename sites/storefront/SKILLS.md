@@ -988,7 +988,7 @@ npm i -g @freeappstore/cli
 | `fas login` | GitHub OAuth device flow, caches token at `~/.fas/config.json` |
 | `fas logout` | Clear saved session |
 | `fas whoami` | Print signed-in GitHub user |
-| `fas init <id>` | Scaffold from template (`--template standalone\|connected\|game-canvas\|game-grid\|game-3d`) |
+| `fas init <id>` | Scaffold from template (`--template standalone\|connected`) |
 | `fas check` | Run compliance checks (brand, bundle size, PWA, tracking, license) |
 | `fas screencheck` | Build + viewport test in real Chromium (portrait + landscape) |
 | `fas publish` | Provision repo + hosting + DNS + store listing. Flags: `--name`, `--category`, `--type`, `--oneliner`, `--demo`, `--yes`, `--skip-checks` |

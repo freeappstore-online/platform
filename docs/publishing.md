@@ -22,9 +22,9 @@ Go to [freeappstore.online/app/build](https://freeappstore.online/app/build), de
    - An empty GitHub repo in the `freeappstore-online` org
    - A D1 hosting route (subdomain -> R2 prefix)
    - A pending storefront registry entry (kept out of public discovery until deployment)
-4. **Deploy workflow** -- injects `.github/workflows/deploy.yml` locally if missing.
+4. **Deploy workflow** -- injects `.github/workflows/deploy.yml` locally if missing and commits it, so the push carries it. A workflow that reads `secrets.R2_*` or lacks `id-token: write` stops the command before anything is provisioned; rerun with `--update-workflow` to replace it.
 5. **Ownership** -- records the app in the platform DB. The server always records `apps.repo` as `https://github.com/freeappstore-online/<app-id>`; any `repo` a client sends to `/v1/publish` is ignored, and re-publishing repairs a wrong value. The keyless deploy accepts only that repository.
-6. **Output** -- prints the launch URL, repo URL, future storefront URL, and `git remote add` + `git push` commands.
+6. **Output** -- prints the launch URL, repo URL, future storefront URL, and `git remote add` + `git push` commands. The new repo is empty: the app is not live until you push. `/v1/publish` returns `repoEmpty: true` while the repo has no commits, and the console and admin forms say so.
 
 If provisioning is unavailable, the command reports the error and exits. Nothing is queued and no submission form opens. Retry after checking the platform status; `--issue` is not a supported flag.
 

@@ -255,3 +255,8 @@ export function summarizeSteps(steps: AdminStep[] | undefined | null): StepSumma
         : `Partly provisioned — ${failed.length} steps failed (${names})`,
   }
 }
+
+/** Shell commands that push existing code to a freshly provisioned, empty repo (#547). */
+export function pushCommands(repoUrl: string): string[] {
+  return [`git remote add upstream ${repoUrl}.git`, 'git push upstream main']
+}

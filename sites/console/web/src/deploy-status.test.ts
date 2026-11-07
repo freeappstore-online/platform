@@ -9,6 +9,7 @@ import {
   fetchOwnedDeployStatuses,
   formatTimeAgo,
   formatTimestamp,
+  pushCommands,
   summarizeSteps,
 } from './deploy-status'
 
@@ -250,5 +251,14 @@ describe('formatting', () => {
 
   it('renders a real timestamp', () => {
     expect(formatTimestamp('2026-09-09T10:00:00Z')).not.toBe('')
+  })
+})
+
+describe('pushCommands', () => {
+  it('pushes existing code to the empty repo', () => {
+    expect(pushCommands('https://github.com/freeappstore-online/my-app')).toEqual([
+      'git remote add upstream https://github.com/freeappstore-online/my-app.git',
+      'git push upstream main',
+    ])
   })
 })

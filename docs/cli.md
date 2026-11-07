@@ -81,12 +81,11 @@ Scaffolds a new app from a platform template.
 ```bash
 fas init my-app                          # standalone (default)
 fas init my-app --template connected     # uses platform backend
-fas init asteroids --template game-canvas
 ```
 
 | Flag | Purpose |
 |------|---------|
-| `-t, --template <name>` | `standalone`, `connected`, `game-canvas`, `game-grid`, `game-3d` |
+| `-t, --template <name>` | `standalone`, `connected` |
 
 `standalone` and `connected` are generated from the same canonical foundation and
 capability registry used by the builder and `fas add`. Both start inside the SDK
@@ -120,13 +119,11 @@ headers so `SharedArrayBuffer` and threaded wasm work. Off by default; see
 
 ```bash
 fas publish                    # interactive
-fgs publish                  # use the separate FreeGameStore CLI for games
 fas publish --yes              # non-interactive (CI)
 ```
 
 | Flag | Purpose |
 |------|---------|
-| `--store apps` | Legacy selector; the FAS backend rejects games with 410. Use the separate `fgs` CLI for FreeGameStore. |
 | `--name <id>` | App id (defaults to `package.json` name) |
 | `--category <name>` | Storefront category |
 | `--type standalone\|connected` | App type |

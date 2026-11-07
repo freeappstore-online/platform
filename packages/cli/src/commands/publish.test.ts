@@ -1,12 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APP_STARTER_CONFIG, deployWorkflow } from '../lib/starter-foundation.js';
 import {
   buildPromptList,
+  commitDeployWorkflow,
   DEPLOY_YML,
   ensureDeployWorkflow,
   humanizeProvisionError,
+  legacyWorkflowReasons,
   readCrossOriginIsolatedFlag,
   resolveCategory,
   resolveFromFlags,
@@ -323,5 +326,61 @@ describe('humanizeProvisionError', () => {
     const long = 'x'.repeat(500);
     const out = humanizeProvisionError(502, long);
     expect(out.length).toBeLessThan(220);
+  });
+});
+
+describe('commitDeployWorkflow and legacyWorkflowReasons (#547)', () => {
+  let dir: string;
+  const g = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' });
+
+  beforeEach(() => {
+    dir = join(import.meta.dirname, '..', '..', 'node_modules', '.cache', `wf-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+  });
+  afterEach(() => {
+    const { rmSync } = require('node:fs');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  function initRepo() {
+    g('init', '-q', '-b', 'main');
+    g('config', 'user.email', 't@example.com');
+    g('config', 'user.name', 'T');
+    writeFileSync(join(dir, 'app.txt'), 'x');
+    g('add', '-A');
+    g('commit', '-q', '-m', 'init');
+  }
+
+  it('commits the workflow it wrote, and nothing else', async () => {
+    initRepo();
+    writeFileSync(join(dir, 'untracked.txt'), 'y');
+    await ensureDeployWorkflow({}, dir);
+    expect(await commitDeployWorkflow(dir)).toBe('committed');
+    expect(g('show', '--name-only', '--format=', 'HEAD').trim()).toBe('.github/workflows/deploy.yml');
+    expect(g('status', '--porcelain').trim()).toBe('?? untracked.txt');
+  });
+
+  it('reports failure outside a git repository so the caller prints the manual step', async () => {
+    await ensureDeployWorkflow({}, dir);
+    expect(await commitDeployWorkflow(dir)).toBe('failed');
+  });
+
+  it('flags a workflow that reads secrets.R2_ or lacks id-token: write', async () => {
+    const wf = join(dir, '.github', 'workflows');
+    mkdirSync(wf, { recursive: true });
+    writeFileSync(join(wf, 'deploy.yml'), 'jobs:\n  deploy:\n    env:\n      K: ${{ secrets.R2_ACCESS_KEY_ID }}\n');
+    const reasons = await legacyWorkflowReasons(dir);
+    expect(reasons.join('\n')).toContain('secrets.R2_');
+    expect(reasons.join('\n')).toContain('id-token: write');
+  });
+
+  it('accepts the canonical workflow, a workflow with id-token, and no workflow', async () => {
+    expect(await legacyWorkflowReasons(dir)).toEqual([]);
+    const wf = join(dir, '.github', 'workflows');
+    mkdirSync(wf, { recursive: true });
+    writeFileSync(join(wf, 'deploy.yml'), DEPLOY_YML);
+    expect(await legacyWorkflowReasons(dir)).toEqual([]);
+    writeFileSync(join(wf, 'deploy.yml'), `${DEPLOY_YML}\n# custom\n`);
+    expect(await legacyWorkflowReasons(dir)).toEqual([]);
   });
 });

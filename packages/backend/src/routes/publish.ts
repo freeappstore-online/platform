@@ -242,6 +242,8 @@ publishRoutes.post('/publish', async (c) => {
     store,
     appUrl: `https://${body.name}.${meta.domain}`,
     repoUrl: `https://github.com/${meta.org}/${body.name}`,
+    // True while the repo has no commits: nothing is deployed until code is pushed (#547).
+    repoEmpty: (adminBody as { repoEmpty?: unknown } | null)?.repoEmpty === true,
     admin: adminBody,
   });
 });

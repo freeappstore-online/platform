@@ -103,9 +103,6 @@ guidance: [the Shell](ui.md#shell-the-standard-app-frame).
 ```bash
 fas init my-app                          # default: standalone (device-local, no sign-in gate)
 fas init my-app --template connected     # uses platform backend (KV, rooms, etc.)
-fas init asteroids --template game-canvas  # HTML5 canvas game
-fas init chess --template game-grid        # grid-based game
-fas init racing --template game-3d         # 3D game
 ```
 
 | Template | Use case |
@@ -122,13 +119,7 @@ entry plus one branch in `App`. A detail route does not need a nav item. Fresh S
 starters use SDK `^0.16.32`; adding optional PWA to an existing app retains its
 separate `>=0.16.15` API minimum.
 
-Game templates are available for scaffolding, but publish games with the separate `fgs` CLI:
-
-| Template | Use case |
-|----------|----------|
-| `game-canvas` | HTML5 Canvas games. |
-| `game-grid` | Grid/tile-based games. |
-| `game-3d` | Three.js 3D games. |
+Games are scaffolded and published with the separate FreeGameStore CLI (`fgs init`, `fgs publish`), not `fas`.
 
 ## Run compliance checks
 

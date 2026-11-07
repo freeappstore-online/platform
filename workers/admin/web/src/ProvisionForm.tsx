@@ -155,9 +155,16 @@ export function ProvisionForm({ navigate }: { navigate: (h: string) => void }) {
             className={`mt-4 text-sm font-semibold ${result.success ? 'text-success' : 'text-danger'}`}
           >
             {result.success
-              ? 'Provisioned successfully!'
+              ? result.repoEmpty
+                ? 'Provisioned. The repository is empty, so the app is not live until you push.'
+                : 'Provisioned successfully!'
               : 'Some steps failed.'}
           </p>
+          {result.success && result.repoEmpty && (
+            <pre className="mt-2 overflow-x-auto rounded bg-panel p-2 text-xs text-ink">
+              {`git remote add upstream https://github.com/freeappstore-online/${form.id}.git\ngit push upstream main`}
+            </pre>
+          )}
           {result.success && (
             <Button
               onClick={() => navigate(`/apps/${form.id}`)}

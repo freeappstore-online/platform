@@ -12,7 +12,7 @@ function fakeDB(): D1Database {
         return s;
       },
       run: async () => {
-        if (sql.includes("INSERT OR IGNORE INTO apps") && !owners.has(args[0] as string)) owners.set(args[0] as string, args[1] as string);
+        if (sql.includes("INSERT INTO apps") && !owners.has(args[0] as string)) owners.set(args[0] as string, args[1] as string);
         return { meta: { changes: 1 } };
       },
       first: async () =>

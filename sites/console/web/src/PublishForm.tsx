@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
-import { summarizeSteps } from './deploy-status'
+import { pushCommands, summarizeSteps } from './deploy-status'
 
 const API = 'https://api.freeappstore.online/v1'
 
@@ -32,6 +32,7 @@ interface PublishResult {
   appId: string
   appUrl: string
   repoUrl: string
+  repoEmpty?: boolean
   admin?: { steps?: AdminStep[] }
 }
 
@@ -200,7 +201,15 @@ export function PublishForm({ getToken }: Props) {
                 <span className="text-ink"><strong>{s.name}</strong>{s.detail ? `: ${s.detail}` : ''}</span>
               </div>
             ))}
-            {steps.allOk ? (
+            {steps.allOk && result.repoEmpty ? (
+              <div className="mt-3 rounded-lg border border-warning bg-warning/10 p-3 font-sans">
+                <p className="font-semibold text-ink">
+                  Provisioned. The repository is empty, so {result.appUrl} is not live until you push your code.
+                </p>
+                <p className="mt-1.5 text-xs text-muted">From your project folder (it must contain .github/workflows/deploy.yml; `fas publish` adds it):</p>
+                <pre className="mt-1 overflow-x-auto rounded bg-panel p-2 text-xs text-ink">{pushCommands(result.repoUrl).join('\n')}</pre>
+              </div>
+            ) : steps.allOk ? (
               <p className="mt-3 font-semibold text-success">
                 Published! <a href={result.appUrl} target="_blank" rel="noreferrer" className="text-accent">{result.appUrl}</a>
               </p>

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fsFileSource, runChecks, validateBuildTarget } from '@freeappstore/compliance';
@@ -191,6 +192,19 @@ export const publishCommand = new Command('publish')
         expectedAppId: input.name,
       });
       if (targetResult.status === 'fail') throw new Error(targetResult.detail);
+      // A workflow that cannot deploy keylessly would leave a provisioned app
+      // that fails on its first push. Refuse before anything is created.
+      if (!opts.updateWorkflow) {
+        const legacy = await legacyWorkflowReasons();
+        if (legacy.length > 0) {
+          process.stdout.write(
+            `\n✗ .github/workflows/deploy.yml cannot deploy this app:\n${legacy.map((r) => `    - ${r}\n`).join('')}` +
+              '  Replace it with the current workflow, then publish again:\n\n' +
+              '    fas publish --update-workflow\n',
+          );
+          process.exit(1);
+        }
+      }
       const autoResult = await tryAutoProvision(input);
       if (autoResult.kind === 'success') {
         // Ensure the deploy workflow exists locally so the first push
@@ -206,7 +220,7 @@ export const publishCommand = new Command('publish')
           '  The listing appears after the first successful, publicly accessible deployment.\n\n',
         );
         if (workflowResult === 'created') {
-          process.stdout.write(`  Added .github/workflows/deploy.yml (R2 deploy workflow)\n\n`);
+          process.stdout.write(`  Added ${WORKFLOW_PATH} (R2 deploy workflow)\n\n`);
         } else if (workflowResult === 'updated') {
           process.stdout.write(
             `  Replaced .github/workflows/deploy.yml with the current workflow\n\n`,
@@ -218,7 +232,21 @@ export const publishCommand = new Command('publish')
               '    Left untouched. Re-run with --update-workflow to replace it.\n\n',
           );
         }
-        process.stdout.write(`Push your code so the live URL serves it:\n\n`);
+        // The repo is empty: it is not live until this commit (with the
+        // workflow in it) is pushed. Commit the workflow here so it is part of
+        // what gets pushed rather than an untracked file left behind.
+        const committed =
+          workflowResult === 'created' || workflowResult === 'updated'
+            ? await commitDeployWorkflow()
+            : 'unchanged';
+        process.stdout.write(
+          `The repository is empty, so ${autoResult.appUrl} is not live until you push your code:\n\n`,
+        );
+        if (committed === 'failed') {
+          process.stdout.write(
+            `  git add ${WORKFLOW_PATH}\n  git commit -m "Add deploy workflow"\n`,
+          );
+        }
         process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
         process.stdout.write(`  git push upstream main\n\n`);
         process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
@@ -589,4 +617,44 @@ export async function ensureDeployWorkflow(
     return 'updated';
   }
   return { drift: summarizeWorkflowDrift(existing, DEPLOY_YML) };
+}
+
+const WORKFLOW_PATH = '.github/workflows/deploy.yml';
+
+/**
+ * Why an existing deploy.yml cannot deploy keylessly: it still reads the org R2
+ * secrets (being removed, #523) or lacks the OIDC `id-token: write` grant.
+ * Empty when there is no file or it is deployable.
+ */
+export async function legacyWorkflowReasons(cwd = process.cwd()): Promise<string[]> {
+  let existing: string;
+  try {
+    existing = await readFile(join(cwd, WORKFLOW_PATH), 'utf8');
+  } catch {
+    return [];
+  }
+  if (existing === DEPLOY_YML) return [];
+  const reasons: string[] = [];
+  if (/secrets\.R2_/.test(existing)) reasons.push('reads secrets.R2_*, which are being removed');
+  if (!/id-token:\s*write/.test(existing)) reasons.push('lacks `id-token: write` for keyless deploys');
+  return reasons.length > 0 ? [...reasons, ...summarizeWorkflowDrift(existing, DEPLOY_YML)] : [];
+}
+
+function git(args: string[], cwd: string): Promise<number> {
+  return new Promise((resolveFn) => {
+    const child = spawn('git', args, { cwd, stdio: 'ignore' });
+    child.on('exit', (code) => resolveFn(code ?? 1));
+    child.on('error', () => resolveFn(1));
+  });
+}
+
+/**
+ * Commit only the deploy workflow, so a later `git push` carries it. 'failed'
+ * (no git repo, no identity, hooks) leaves the file in place; the caller then
+ * prints the explicit `git add`/`git commit` step.
+ */
+export async function commitDeployWorkflow(cwd = process.cwd()): Promise<'committed' | 'failed'> {
+  if ((await git(['add', WORKFLOW_PATH], cwd)) !== 0) return 'failed';
+  const code = await git(['commit', '-q', '-m', 'Add deploy workflow', '--', WORKFLOW_PATH], cwd);
+  return code === 0 ? 'committed' : 'failed';
 }
