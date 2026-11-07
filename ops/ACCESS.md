@@ -60,13 +60,19 @@ org repos and reads their files with the workflow's own `github.token`, probes
 each listed site with `HEAD`, and writes nothing except that issue. Repos that
 are tooling, not apps, are listed in `config/non-app-repos.json`.
 
-**D1 checks need a credential, and one has not been chosen.** `apps` and
-`routes` rows are only readable through `GET /v1/admin/apps`, which requires a
-signed-in platform admin (`requireAdmin`); there is no read-only service
-credential. Until one is decided, the audit runs those checks only if the
-repository secret `FAS_AUDIT_ADMIN_TOKEN` exists (a fas session of an admin
-account; sessions last 30 days, so it needs renewing) and otherwise says in its
-report that they were skipped. It sends the token only to
-`https://api.freeappstore.online/v1/admin/apps` and never prints it. A proper
-fix is a dedicated read-only audit endpoint with its own token, which changes
-the auth surface and is for the owner to decide.
+**D1 checks use no stored credential (keyless OIDC, #552).** `apps` and `routes`
+rows are read through `GET /v1/audit/apps`, which accepts only a GitHub Actions
+OIDC token minted by this workflow: audience `freeappstore-fleet-audit`,
+`repository_id` of `freeappstore-online/platform` and the org's
+`repository_owner_id` (immutable ids), `job_workflow_ref` exactly
+`freeappstore-online/platform/.github/workflows/fleet-consistency-audit.yml@refs/heads/main`,
+`ref` `refs/heads/main`, event `schedule` or `workflow_dispatch`. Anything else
+gets 401 or 403 with a reason code. The token lives about 5 minutes, is masked in
+logs, and is never stored; there is no `FAS_AUDIT_ADMIN_TOKEN` or any other
+secret, only the default `github.token`. The endpoint is read-only, returns only
+app ids, repos and route prefixes (no owners or user data), and allows 30 reads
+an hour. The token is not a FAS session and is refused by every session and admin
+route; a FAS session is refused by the audit endpoint. Details:
+`docs/architecture.md`, "Fleet audit endpoint". If the workflow file is renamed or
+the repo is recreated, update `AUDIT_WORKFLOW_REF` and `PLATFORM_REPO_ID` in
+`packages/backend/src/routes/fleet-audit.ts` with it.

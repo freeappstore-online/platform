@@ -111,6 +111,25 @@ All data lives in a single D1 database (`fas`):
 - `audit_results` -- compliance audit results
 - `agent_sessions` -- VibeCode sessions, messages, deploy state, deploy logs, and errors
 - `push_subscriptions`, `push_schedules` -- user devices and scheduled reminders
+- `fleet_audit_reads` -- one row per read of `GET /v1/audit/apps`, for its hourly limit (#552)
+
+## Fleet audit endpoint
+
+`GET /v1/audit/apps` (`routes/fleet-audit.ts`) gives the daily fleet consistency audit
+(`.github/workflows/fleet-consistency-audit.yml`, #552) read access to the `apps` and
+`routes` tables with no stored credential. It takes `Authorization: Bearer <GitHub Actions OIDC token>`
+and verifies it on every request (RS256 against GitHub's JWKS, `iss`, `exp`). It accepts only a token with:
+
+- `aud` = `freeappstore-fleet-audit` (not the deploy audience);
+- `repository_id` = the numeric id of `freeappstore-online/platform` and `repository_owner_id` = the org id
+  (immutable ids, not names);
+- `job_workflow_ref` = `freeappstore-online/platform/.github/workflows/fleet-consistency-audit.yml@refs/heads/main`;
+- `ref` = `refs/heads/main`, and `event_name` = `schedule` or `workflow_dispatch`.
+
+Anything else gets `401 missing_token` or `403 <reason code>`; at most 30 accepted reads an hour (`429`).
+It returns only `{ apps: [{ id, repo, r2Prefix }], routesWithoutApps: [slug] }` for the FreeAppStore store:
+no owner, user data or secret. It is separate from sessions: `requireUser`/`requireAdmin` never accept
+the OIDC token, and the endpoint never accepts a FAS session. FreeGameStore has no part in it.
 
 ## Cron jobs
 

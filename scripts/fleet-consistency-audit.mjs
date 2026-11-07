@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 // Read-only fleet consistency audit (#552). It compares what exists in the org,
-// the storefront registry, the live sites, the platform database (through the
-// admin API, when a credential is provided) and each repo's own files, and
-// reports every disagreement. It never writes to a repo, the registry or D1.
+// the storefront registry, the live sites, the platform database (through
+// GET /v1/audit/apps, when run by the audit workflow) and each repo's own
+// files, and reports every disagreement. It never writes to a repo, the registry or D1.
 //
 //   node scripts/fleet-consistency-audit.mjs [--report <file>]
 //
-// Env: GITHUB_TOKEN (read), FAS_AUDIT_ADMIN_TOKEN (optional; a fas session of an
-// admin, sent only to api.freeappstore.online/v1/admin/apps; without it the D1
-// checks are skipped and said so, see ops/ACCESS.md).
+// Env: GITHUB_TOKEN (read), FAS_AUDIT_OIDC_TOKEN (optional; the workflow's GitHub
+// Actions OIDC token for audience freeappstore-fleet-audit, sent only to
+// api.freeappstore.online/v1/audit/apps; without it the D1 checks are skipped and
+// said so, see ops/ACCESS.md). No stored credential exists.
 
 import { readFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -40,14 +41,15 @@ export function workflowProblems(text) {
  *  repos     non-archived org repos: { name, createdAt (ms), empty, deployYml (text|null), fasAppId (string|null) }
  *  registry  storefront registry entries
  *  siteStatus  { [registryId]: HTTP status of the entry's site }
- *  adminApps GET /v1/admin/apps `apps`, or null when the D1 half was skipped
+ *  d1        GET /v1/audit/apps `{ apps: [{ id, repo, r2Prefix }], routesWithoutApps }`,
+ *            or null when the D1 half was skipped
  */
 export function auditFleet({
   repos,
   registry,
   allowlist,
   siteStatus = {},
-  adminApps = null,
+  d1 = null,
   now = Date.now(),
 }) {
   const findings = [];
@@ -101,17 +103,12 @@ export function auditFleet({
     if (!listed.has(name)) add('repo-without-registry', repo.name, 'no registry entry');
   }
 
-  if (adminApps) {
-    for (const app of adminApps) {
-      if (app.owner == null) {
-        if (app.hasRoute)
-          add('route-without-apps', app.id, 'a routes row exists but there is no apps row (#512)');
-        continue;
-      }
+  if (d1) {
+    for (const app of d1.apps) {
       if (repoRef(app.repo) !== `${ORG}/${app.id}`.toLowerCase()) {
         add('apps-repo-not-org', app.id, `apps.repo is ${app.repo}, expected ${ORG}/${app.id}`);
       }
-      if (!app.hasRoute) add('apps-without-route', app.id, 'apps row without a routes row');
+      if (app.r2Prefix === null) add('apps-without-route', app.id, 'apps row without a routes row');
       else if (app.r2Prefix !== `apps/${app.id}`) {
         add(
           'route-prefix-wrong',
@@ -120,7 +117,10 @@ export function auditFleet({
         );
       }
     }
-    const known = new Set(adminApps.map((a) => a.id));
+    for (const slug of d1.routesWithoutApps) {
+      add('route-without-apps', slug, 'a routes row exists but there is no apps row (#512)');
+    }
+    const known = new Set(d1.apps.map((a) => a.id));
     for (const repo of repos) {
       const name = repo.name.toLowerCase();
       if (skip.has(name) || repo.empty || repo.deployYml === null) continue;
@@ -233,11 +233,10 @@ async function siteStatuses(registry) {
   return statuses;
 }
 
-async function adminApps(token) {
-  const data = await getJson('https://api.freeappstore.online/v1/admin/apps', {
+async function auditApps(token) {
+  return getJson('https://api.freeappstore.online/v1/audit/apps', {
     Authorization: `Bearer ${token}`,
   });
-  return data.apps;
 }
 
 async function main() {
@@ -248,18 +247,20 @@ async function main() {
   const { repos, headers } = await listRepos(process.env.GITHUB_TOKEN);
   const facts = await pool(repos, 10, (repo) => gatherRepoFacts(repo, headers));
   const notes = [];
-  let apps = null;
-  if (process.env.FAS_AUDIT_ADMIN_TOKEN) {
-    apps = await adminApps(process.env.FAS_AUDIT_ADMIN_TOKEN);
+  let d1 = null;
+  if (process.env.FAS_AUDIT_OIDC_TOKEN) {
+    d1 = await auditApps(process.env.FAS_AUDIT_OIDC_TOKEN);
   } else {
-    notes.push('D1 checks (apps/routes rows) skipped: FAS_AUDIT_ADMIN_TOKEN is not set.');
+    notes.push(
+      'D1 checks (apps/routes rows) skipped: no FAS_AUDIT_OIDC_TOKEN (only the audit workflow can mint one).',
+    );
   }
   const findings = auditFleet({
     repos: facts,
     registry,
     allowlist,
     siteStatus: await siteStatuses(registry),
-    adminApps: apps,
+    d1,
   });
   const report = formatReport(findings, notes);
   process.stdout.write(report);

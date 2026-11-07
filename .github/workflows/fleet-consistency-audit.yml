@@ -1,9 +1,13 @@
 name: Fleet consistency audit
 
 # Read-only. Compares the org's repos, the storefront registry, the live sites,
-# the platform database (via the admin API, when FAS_AUDIT_ADMIN_TOKEN is set)
-# and each repo's own files (#552). It never writes to a repo, the registry or
-# D1; its only write is the tracking issue below.
+# the platform database (via GET /v1/audit/apps) and each repo's own files
+# (#552). It never writes to a repo, the registry or D1; its only write is the
+# tracking issue below.
+#
+# No stored credential: the job mints a GitHub Actions OIDC token for the
+# audience freeappstore-fleet-audit, and the API accepts it only from this
+# workflow on main (see ops/ACCESS.md). The only secret used is github.token.
 #
 # Green when the fleet is consistent. On findings it opens or updates ONE issue
 # labelled `verification`, then fails the run so the drift is visible; when a
@@ -17,6 +21,7 @@ on:
 permissions:
   contents: read
   issues: write
+  id-token: write # mint the OIDC token for the audit API; grants no repo access
 
 concurrency:
   group: fleet-consistency-audit
@@ -33,12 +38,26 @@ jobs:
         with:
           node-version: 22
 
+      - name: Authenticate to the audit API (OIDC)
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        with:
+          script: |
+            const token = await core.getIDToken('freeappstore-fleet-audit')
+            core.setSecret(token)
+            const res = await fetch('https://api.freeappstore.online/v1/audit/apps', {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!res.ok) {
+              const { code } = await res.json().catch(() => ({}))
+              core.setFailed(`audit API refused the OIDC token: HTTP ${res.status} ${code ?? ''}`)
+              return
+            }
+            core.exportVariable('FAS_AUDIT_OIDC_TOKEN', token)
+
       - name: Audit the fleet
         id: audit
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          # Optional. Without it the apps/routes (D1) checks are skipped and the report says so.
-          FAS_AUDIT_ADMIN_TOKEN: ${{ secrets.FAS_AUDIT_ADMIN_TOKEN }}
         run: |
           set +e
           node scripts/fleet-consistency-audit.mjs --report "$RUNNER_TEMP/report.md"

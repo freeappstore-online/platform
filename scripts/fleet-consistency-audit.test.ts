@@ -95,25 +95,25 @@ it('flags a registry repo that is not the org repo for its id', () => {
   expect(codes(findings)).toContain('registry-repo-mismatch:typeflow');
 });
 
-it('flags every D1 inconsistency when the admin API data is available', () => {
+it('flags every D1 inconsistency when the audit endpoint data is available', () => {
   const app = (id: string, over = {}) => ({
     id,
-    owner: 'serge-ivo',
     repo: `freeappstore-online/${id}`,
-    hasRoute: true,
     r2Prefix: `apps/${id}`,
     ...over,
   });
   const findings = audit({
     repos: ['ok', 'fork', 'noroute', 'badprefix', 'norow'].map(healthy),
     registry: ['ok', 'fork', 'noroute', 'badprefix', 'norow'].map((id) => entry(id)),
-    adminApps: [
-      app('ok'),
-      app('fork', { repo: 'https://github.com/someone/fork' }),
-      app('noroute', { hasRoute: false, r2Prefix: null }),
-      app('badprefix', { r2Prefix: 'apps/other' }),
-      { id: 'orphan-route', owner: null, hasRoute: true, repo: 'freeappstore-online/orphan-route' },
-    ],
+    d1: {
+      apps: [
+        app('ok'),
+        app('fork', { repo: 'https://github.com/someone/fork' }),
+        app('noroute', { r2Prefix: null }),
+        app('badprefix', { r2Prefix: 'apps/other' }),
+      ],
+      routesWithoutApps: ['orphan-route'],
+    },
   });
   expect(codes(findings)).toEqual([
     'apps-repo-not-org:fork',
@@ -124,7 +124,21 @@ it('flags every D1 inconsistency when the admin API data is available', () => {
   ]);
 });
 
-it('skips the D1 checks without admin data', () => {
+it('is clean when the D1 data agrees with the fleet', () => {
+  expect(
+    audit({
+      repos: [healthy('timer')],
+      registry: [entry('timer')],
+      siteStatus: { timer: 200 },
+      d1: {
+        apps: [{ id: 'timer', repo: 'freeappstore-online/timer', r2Prefix: 'apps/timer' }],
+        routesWithoutApps: [],
+      },
+    }),
+  ).toEqual([]);
+});
+
+it('skips the D1 checks without audit endpoint data', () => {
   expect(audit({ repos: [healthy('timer')], registry: [entry('timer')] })).toEqual([]);
 });
 
