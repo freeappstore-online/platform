@@ -199,7 +199,18 @@ const isCustomStep = (step) =>
 
 /** The generated workflow with the original's custom steps spliced into its build job. */
 export function spliceCustomSteps(generated, original) {
-  const steps = Object.values(parse(original).jobs)[0].steps ?? [];
+  const steps = (Object.values(parse(original).jobs)[0].steps ?? []).flatMap((step) => {
+    // Extra install commands (e.g. `python -m pip install -r requirements.txt`)
+    // become a step of their own after the generated, lock-aware Install.
+    if (step.name !== 'Install' || typeof step.run !== 'string') return [step];
+    const extra = step.run
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !/^pnpm install\b/.test(l));
+    return extra.length
+      ? [step, { name: 'Install extra dependencies', run: `${extra.join('\n')}\n` }]
+      : [step];
+  });
   const lines = generated.split('\n');
   const start = lines.findIndex((l) => l === '  build:');
   const end = lines.findIndex((l, i) => i > start && /^ {2}\S/.test(l));
@@ -308,7 +319,8 @@ async function inspect(repo, generated, workdir) {
   const keepsSteps =
     KEEP_CUSTOM_STEPS.has(repo) &&
     review.length > 0 &&
-    review.every((r) => /^(step|action) /.test(r));
+    // scoreplay's own ordered publisher is superseded by the atomic release (#510)
+    review.every((r) => /^(step|action) /.test(r) || (repo === 'scoreplay' && r === 'no R2 sync'));
   const action =
     variant === 'current' ? 'skip' : review.length && !keepsSteps ? 'review' : 'update';
   return {
