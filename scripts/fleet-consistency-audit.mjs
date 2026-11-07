@@ -40,6 +40,7 @@ export function workflowProblems(text) {
  *
  *  repos     non-archived org repos: { name, createdAt (ms), empty, deployYml (text|null), fasAppId (string|null) }
  *  registry  storefront registry entries
+ *  routeAllowlist  route slugs that legitimately have no apps row (config/non-app-routes.json)
  *  siteStatus  { [registryId]: HTTP status of the entry's site }
  *  d1        GET /v1/audit/apps `{ apps: [{ id, repo, r2Prefix }], routesWithoutApps }`,
  *            or null when the D1 half was skipped
@@ -48,6 +49,7 @@ export function auditFleet({
   repos,
   registry,
   allowlist,
+  routeAllowlist = [],
   siteStatus = {},
   d1 = null,
   now = Date.now(),
@@ -118,6 +120,7 @@ export function auditFleet({
       }
     }
     for (const slug of d1.routesWithoutApps) {
+      if (routeAllowlist.includes(slug)) continue;
       add('route-without-apps', slug, 'a routes row exists but there is no apps row (#512)');
     }
     const known = new Set(d1.apps.map((a) => a.id));
@@ -244,6 +247,7 @@ async function main() {
   const reportPath = reportIndex > -1 ? process.argv[reportIndex + 1] : null;
   const registry = JSON.parse(readFileSync('sites/storefront/registry.json', 'utf8')).apps;
   const allowlist = JSON.parse(readFileSync('config/non-app-repos.json', 'utf8')).repos;
+  const routeAllowlist = JSON.parse(readFileSync('config/non-app-routes.json', 'utf8')).routes;
   const { repos, headers } = await listRepos(process.env.GITHUB_TOKEN);
   const facts = await pool(repos, 10, (repo) => gatherRepoFacts(repo, headers));
   const notes = [];
@@ -259,6 +263,7 @@ async function main() {
     repos: facts,
     registry,
     allowlist,
+    routeAllowlist,
     siteStatus: await siteStatuses(registry),
     d1,
   });

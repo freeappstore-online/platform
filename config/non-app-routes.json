@@ -1,0 +1,4 @@
+{
+  "_comment": "Routes that legitimately have no apps row. console and create are first-party platform sites (sites/console, create); hanzi and yi are short addresses sharing the deployment of hanzi-practice and hanzi-associations (workers/host migration 0003).",
+  "routes": ["console", "create", "hanzi", "yi"]
+}

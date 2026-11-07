@@ -124,6 +124,14 @@ it('flags every D1 inconsistency when the audit endpoint data is available', () 
   ]);
 });
 
+it('ignores allowlisted routes that have no apps row', () => {
+  const findings = audit({
+    routeAllowlist: ['console'],
+    d1: { apps: [], routesWithoutApps: ['console', 'orphan-route'] },
+  });
+  expect(codes(findings)).toEqual(['route-without-apps:orphan-route']);
+});
+
 it('is clean when the D1 data agrees with the fleet', () => {
   expect(
     audit({

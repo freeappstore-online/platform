@@ -58,7 +58,8 @@ plan it returns 404. Old events age out, so check promptly.
 "Fleet consistency audit findings", up to date (#552). It is read-only: it lists
 org repos and reads their files with the workflow's own `github.token`, probes
 each listed site with `HEAD`, and writes nothing except that issue. Repos that
-are tooling, not apps, are listed in `config/non-app-repos.json`.
+are tooling, not apps, are listed in `config/non-app-repos.json`; routes that have no `apps`
+row by design (first-party sites, short addresses) are in `config/non-app-routes.json`.
 
 **D1 checks use no stored credential (keyless OIDC, #552).** `apps` and `routes`
 rows are read through `GET /v1/audit/apps`, which accepts only a GitHub Actions
