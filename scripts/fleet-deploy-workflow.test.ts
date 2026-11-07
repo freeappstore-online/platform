@@ -6,6 +6,7 @@ import {
   classify,
   fasJsonFor,
   missingTestRunner,
+  spliceCustomSteps,
   withoutCodeHealthScan,
 } from './fleet-deploy-workflow.mjs';
 
@@ -158,5 +159,23 @@ describe('withoutCodeHealthScan', () => {
     expect(w).not.toContain('@vibecodeqa/cli');
     expect(w).toContain('Upload code health report');
     expect(w).toContain('Upload build artifact');
+  });
+});
+
+describe('spliceCustomSteps', () => {
+  const custom = LEGACY.replace(
+    '      - name: Build\n        run: pnpm build\n',
+    '      - name: Unit tests\n        run: pnpm test\n      - name: Build\n        run: pnpm build\n      - name: Browser flows\n        run: pnpm test:e2e\n',
+  );
+  it('keeps the repo steps in the credential-free build job, after the step they followed', () => {
+    const out = spliceCustomSteps(generated, custom);
+    const names = out.split('\n').filter((l) => /^ {6}- name:/.test(l));
+    const at = (n: string) => names.findIndex((l) => l.includes(n));
+    expect(at('Unit tests')).toBeGreaterThan(at('Install'));
+    expect(at('Unit tests')).toBeLessThan(at('- name: Build'));
+    expect(at('Browser flows')).toBeGreaterThan(at('- name: Build'));
+    expect(at('Browser flows')).toBeLessThan(at('Upload build artifact'));
+    expect(out.indexOf('Unit tests')).toBeLessThan(out.indexOf('  deploy:'));
+    expect(out).not.toMatch(/secrets\./);
   });
 });

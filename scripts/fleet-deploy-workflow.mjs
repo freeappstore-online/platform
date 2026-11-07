@@ -24,7 +24,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const ORG = 'freeappstore-online';
 const WORKFLOW = '.github/workflows/deploy.yml';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const { parse } = createRequire(join(ROOT, 'packages/cli/package.json'))('yaml');
+const { parse, stringify } = createRequire(join(ROOT, 'packages/cli/package.json'))('yaml');
 
 export const COMMIT_MESSAGE = `ci: keyless OIDC deploy workflow from the fas generator
 
@@ -178,6 +178,70 @@ export function withoutCodeHealthScan(workflow) {
   );
 }
 
+/**
+ * Repos whose own quality steps (lint, unit tests, browser flows, python tests)
+ * ran in the old deploy job and must keep gating the deploy. The generated build
+ * job has no credential, so those steps move into it unchanged, each right after
+ * the step it followed in the original. Only repos listed here, and only when the
+ * custom steps are the sole reason for review, are rewritten this way.
+ */
+export const KEEP_CUSTOM_STEPS = new Set([
+  'card',
+  'cue-scroll',
+  'hanzi-practice',
+  'karaoke',
+  'scoreplay',
+  'slowdown',
+]);
+
+const isCustomStep = (step) =>
+  step.uses ? !KNOWN_ACTIONS.test(step.uses) : !KNOWN_STEPS.has(step.name);
+
+/** The generated workflow with the original's custom steps spliced into its build job. */
+export function spliceCustomSteps(generated, original) {
+  const steps = Object.values(parse(original).jobs)[0].steps ?? [];
+  const lines = generated.split('\n');
+  const start = lines.findIndex((l) => l === '  build:');
+  const end = lines.findIndex((l, i) => i > start && /^ {2}\S/.test(l));
+  const bodyStart = lines.findIndex((l, i) => i > start && l.startsWith('      - '));
+  // [first line, last line) of each step in the build job
+  const bounds = [];
+  for (let i = bodyStart; i < end; i++) if (lines[i].startsWith('      - ')) bounds.push(i);
+  const blocks = bounds.map((from, k) => ({
+    from,
+    to: bounds[k + 1] ?? end,
+    key: lines[from],
+  }));
+  const keyOf = (step) =>
+    step.uses ? `      - uses: ${step.uses.split('@')[0]}@` : `      - name: ${step.name}`;
+  let anchor = null; // generated step the previous original step maps to
+  const inserts = []; // [after-line, text]
+  let last = null;
+  for (const step of steps) {
+    if (!isCustomStep(step)) {
+      const found = blocks.find((b) => b.key.startsWith(keyOf(step)));
+      if (found) anchor = found;
+      last = null;
+      continue;
+    }
+    if (!anchor) throw new Error(`no anchor for custom step ${step.name ?? step.uses}`);
+    const text = stringify([step], { indent: 2, lineWidth: 0 })
+      .trimEnd()
+      .split('\n')
+      .map((l) => `      ${l}`)
+      .join('\n');
+    // consecutive custom steps keep their order after the same anchor
+    inserts.push({ at: anchor.to, text, order: inserts.length });
+    last = anchor;
+  }
+  const out = [];
+  lines.forEach((line, i) => {
+    for (const ins of inserts.filter((x) => x.at === i)) out.push(ins.text);
+    out.push(line);
+  });
+  return out.join('\n');
+}
+
 function sh(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 }
@@ -241,8 +305,14 @@ async function inspect(repo, generated, workdir) {
     review.push('test script runs vitest but vitest is not a dependency');
   const live = await status(`https://${repo}.freeappstore.online/`);
   if (live !== 200) review.push(`site returns ${live}`);
-  const action = variant === 'current' ? 'skip' : review.length ? 'review' : 'update';
+  const keepsSteps =
+    KEEP_CUSTOM_STEPS.has(repo) &&
+    review.length > 0 &&
+    review.every((r) => /^(step|action) /.test(r));
+  const action =
+    variant === 'current' ? 'skip' : review.length && !keepsSteps ? 'review' : 'update';
   return {
+    keepsSteps,
     repo,
     dir,
     variant: addFasJson ? `${variant}+fas.json` : variant,
@@ -290,6 +360,8 @@ async function waitForDeploy(repo, sha) {
 }
 
 async function apply(plan, generated, wait) {
+  if (plan.keepsSteps)
+    generated = spliceCustomSteps(generated, readFileSync(join(plan.dir, WORKFLOW), 'utf8'));
   if (SKIP_CODE_HEALTH.has(plan.repo)) generated = withoutCodeHealthScan(generated);
   const { repo, dir } = plan;
   mkdirSync(join(dir, '.github/workflows'), { recursive: true });
