@@ -417,15 +417,14 @@
       "permissions": []
     },
     {
-      "id": "spending",
+      "id": "gcp-spending",
       "name": "GCP Spending",
       "category": "Finance",
       "icon": "💰",
       "iconBg": "#4f46e5",
       "description": "Track Google Cloud spending in real-time. Visual breakdowns by service, cost trends, and budget alerts. No backend needed.",
-      "appUrl": "https://spending.freeappstore.online",
-      "repo": "freeappstore-online/spending",
-      "cfProject": "freespendingapp",
+      "appUrl": "https://gcp-spending.freeappstore.online",
+      "repo": "freeappstore-online/gcp-spending",
       "type": "standalone",
       "developer": "FreeAppStore",
       "hostedOn": "r2",
@@ -1813,22 +1812,6 @@
       ]
     },
     {
-      "id": "grade-goal",
-      "status": "unavailable",
-      "name": "grade-goal",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Calculate your current grade and the marks needed on remaining assessments to reach your target.",
-      "appUrl": "https://grade-goal.freeappstore.online",
-      "repo": "freeappstore-online/grade-goal",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "creatorGithub": "Mateysh3112",
-      "permissions": []
-    },
-    {
       "id": "my-todo-app-2",
       "name": "my-todo-app-2",
       "category": "Productivity",
@@ -2338,22 +2321,6 @@
       "permissions": [
         "notifications"
       ]
-    },
-    {
-      "id": "pulse-stack",
-      "status": "unavailable",
-      "name": "pulse-stack",
-      "category": "Productivity",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "A schedule optimiser that helps you get more done based on your energy levels at different times of the day.",
-      "appUrl": "https://pulse-stack.freeappstore.online",
-      "repo": "freeappstore-online/pulse-stack",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "creatorGithub": "aymanzs-3184",
-      "permissions": []
     },
     {
       "id": "quantlab",

@@ -24,7 +24,6 @@
   "snowman": "Snow finder",
   "typeflow": "Typing speed test",
   "streak": "Habit streak tracker",
-  "spending": "Google Cloud cost tracker",
   "artout": "Street art map",
   "whenly": "Weekly planner",
   "kanban": "Kanban board",
@@ -103,7 +102,6 @@
   "future-letters": "Letter to your future self",
   "shopping-list": "Shopping list",
   "face-morpher": "Face filter camera",
-  "grade-goal": "Grade calculator",
   "my-todo-app-2": "To-do list",
   "petdo": "To-do list with a virtual pet",
   "my-todos": "To-do list",
@@ -135,7 +133,6 @@
   "reactionlab": "Reaction time test",
   "echoshift": "Voice changer",
   "pulsestack": "Energy-based schedule planner",
-  "pulse-stack": "Energy-based schedule planner",
   "quantlab": "Quant interview prep",
   "cycle": "Period tracker",
   "sleepsounds": "White noise and sleep sounds",
@@ -154,5 +151,6 @@
   "karaoke": "Karaoke maker",
   "song-to-midi": "Audio to MIDI converter",
   "music-share": "Tab audio recorder",
-  "mytunes": "Tab audio recorder"
+  "mytunes": "Tab audio recorder",
+  "gcp-spending": "Google Cloud cost tracker"
 }
