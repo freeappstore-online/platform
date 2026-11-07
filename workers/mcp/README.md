@@ -33,7 +33,7 @@ Streamable HTTP transport at `https://mcp.freeappstore.online/mcp`
 
 | Tool | Auth | Description |
 |------|------|-------------|
-| `deploy_status` | None | Check last 5 GitHub Actions runs for any app |
+| `deploy_status` | None | Check last 5 GitHub Actions runs for a public app repo (server-side GitHub auth; reports rate limits vs permission errors) |
 | `app_info` | None | Live URL, repo, store listing, up/down status |
 | `sdk_reference` | None | SDK docs. Start with `shell` (the standard app frame), then `components` (every UI component); also auth, KV, counters, collections, rooms, proxy, keys, push, hooks |
 | `platform_guide` | None | Fetch full SKILLS.md, followed by the current app-building rules |

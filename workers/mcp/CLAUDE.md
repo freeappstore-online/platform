@@ -16,7 +16,7 @@ Remote MCP server for AI agents to interact with the FreeAppStore platform.
 
 | Tool | Auth | Description |
 |------|------|-------------|
-| `create_app` | FAS token | Provision repo+hosting+listing, scaffold a template, push → live at `<id>.freeappstore.online`. The `fas init`+`publish`+push loop, server-side. |
+| `create_app` | FAS token | Provision repo+hosting+listing, scaffold the current starter (same generator as `fas init`, `src/scaffold.ts`), push. Not live until `update_files` replaces the starter screen and a deploy is green; a failed run resumes by calling it again. The `fas init`+`publish`+push loop, server-side. `update_files` runs the shared source preflight (`src/preflight.ts`) and refuses a push that would break the build. |
 | `update_files` | owner | Write/overwrite files in your app's repo → auto-deploys in ~30-60s. The improve loop. |
 | `read_file` | None | Read a file from an app's repo |
 | `list_files` | None | List files in an app's repo |

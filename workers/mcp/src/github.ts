@@ -3,7 +3,6 @@
 // (no deps). Text files are base64-(de)coded UTF-8 safe; binary passes through.
 
 const UA = "freeappstore-mcp";
-const TEXT_RE = /\.(ts|tsx|js|jsx|mjs|cjs|json|html|css|md|txt|svg|yml|yaml|toml)$/i;
 
 async function gh(token: string | undefined, url: string, method = "GET", body?: unknown): Promise<any> {
   const res = await fetch(url, {
@@ -63,49 +62,23 @@ export interface RepoFile {
   encoding: "base64";
 }
 
-/** Fetch every file of a template repo, substituting APPNAME → appId in text
- *  files (matches `fas init`). Returns path → base64 content. */
-export async function fetchTemplateFiles(
-  org: string,
-  templateRepo: string,
-  token: string,
-  appId: string,
-): Promise<Map<string, RepoFile>> {
-  const base = repoBase(org, templateRepo);
-  const ref = await gh(token, `${base}/git/ref/heads/main`);
-  const headSha = ref?.object?.sha;
-  if (!headSha) throw new Error(`template ${templateRepo}: no main ref (${ref.message ?? ref.__status})`);
-  const tree = await gh(token, `${base}/git/trees/${headSha}?recursive=1`);
-  if (!Array.isArray(tree?.tree)) throw new Error(`template tree fetch failed (${tree.message ?? tree.__status})`);
-
-  const files = new Map<string, RepoFile>();
-  for (const item of tree.tree) {
-    if (item.type !== "blob" || item.path.startsWith(".git/")) continue;
-    // Mirror maintenance is never application code, including for custom templates.
-    if (item.path.startsWith(".fas-template/") || item.path === ".github/workflows/sync-template.yml") continue;
-    const blob = await gh(token, `${base}/git/blobs/${item.sha}`);
-    if (typeof blob?.content !== "string") throw new Error(`blob ${item.path} fetch failed`);
-    if (TEXT_RE.test(item.path)) {
-      const text = b64ToText(blob.content).replaceAll("APPNAME", appId);
-      files.set(item.path, { content: textToB64(text), encoding: "base64" });
-    } else {
-      files.set(item.path, { content: blob.content.replace(/\n/g, ""), encoding: "base64" });
-    }
-  }
-  if (files.size === 0) throw new Error("template has no files");
-  return files;
-}
-
-/** Push a set of files to org/repo's main branch as one commit. Handles both an
- *  empty repo (seeds it) and an existing one (preserves untouched files via
- *  base_tree). Returns the new commit sha. */
+/**
+ * Push a set of files to org/repo's main branch. An existing repo gets one
+ * commit that preserves untouched files via base_tree. The Git Data API cannot
+ * write to an EMPTY repo, so its first commit is made through the Contents API
+ * with one real file from the set (never a placeholder), then the rest follows.
+ * A workflow file is never that first file: GitHub runs the workflows a push
+ * contains, and a push of only a few files would run (and fail) the deploy
+ * before the rest arrived. Returns the last commit sha.
+ */
 export async function pushFiles(
   org: string,
   repo: string,
   token: string,
-  files: Map<string, RepoFile>,
+  allFiles: Map<string, RepoFile>,
   message: string,
 ): Promise<string> {
+  let files = allFiles;
   const base = repoBase(org, repo);
 
   let parentSha: string | undefined;
@@ -116,15 +89,22 @@ export async function pushFiles(
     const parent = await gh(token, `${base}/git/commits/${parentSha}`);
     baseTree = parent?.tree?.sha;
   } else {
-    // Empty repo — Git Data API needs a commit to exist. Seed via Contents API.
-    const seed = await gh(token, `${base}/contents/.gitkeep`, "PUT", {
-      message: "seed",
-      content: textToB64(""),
+    // 404 (no main) and 409 ("Git Repository is empty") mean an empty repo; anything else is an outage.
+    if (ref?.__status !== 404 && ref?.__status !== 409) throw new Error(`cannot read ${repo} main: ${ref?.message ?? ref?.__status}`);
+    // Empty repo: the first commit holds one real, non-workflow file.
+    const first = [...files.keys()].find((path) => !path.startsWith(".github/"));
+    if (!first) throw new Error("cannot seed an empty repo: no non-workflow file to commit first");
+    const seed = await gh(token, `${base}/contents/${encodePath(first)}`, "PUT", {
+      message,
+      content: files.get(first)!.content,
     });
-    if (!seed?.commit?.sha) throw new Error(`repo seed failed: ${seed.message ?? seed.__status}`);
-    parentSha = seed.commit.sha;
-    const parent = await gh(token, `${base}/git/commits/${parentSha}`);
+    if (!seed?.commit?.sha) throw new Error(`first commit failed: ${seed.message ?? seed.__status}`);
+    const seedSha: string = seed.commit.sha;
+    parentSha = seedSha;
+    const parent = await gh(token, `${base}/git/commits/${seedSha}`);
     baseTree = parent?.tree?.sha;
+    files = new Map([...files].filter(([path]) => path !== first));
+    if (files.size === 0) return seedSha;
   }
 
   const treeItems: Array<{ path: string; mode: string; type: string; sha: string }> = [];
@@ -158,6 +138,14 @@ export async function listRepoFiles(org: string, repo: string, token?: string): 
   const tree = await gh(token, `${base}/git/trees/${headSha}?recursive=1`);
   if (!Array.isArray(tree?.tree)) return [];
   return tree.tree.filter((i: any) => i.type === "blob" && !i.path.startsWith(".git/")).map((i: any) => i.path);
+}
+
+/** Read one file's raw bytes from a repo (icons and other binary files). */
+export async function readRepoBytes(org: string, repo: string, token: string | undefined, path: string): Promise<Uint8Array | null> {
+  const base = repoBase(org, repo);
+  const res = await gh(token, `${base}/contents/${encodePath(path)}`);
+  if (typeof res?.content !== "string") return null;
+  return Uint8Array.from(atob(res.content.replace(/\n/g, "")), (c) => c.charCodeAt(0));
 }
 
 /** Read one file's text content from a repo. */

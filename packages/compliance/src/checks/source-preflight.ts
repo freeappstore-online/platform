@@ -155,3 +155,17 @@ export async function runSourcePreflight(
   failures.push(...(await iconFailures(source, root)));
   return { ok: failures.length === 0, failures };
 }
+
+/**
+ * Why a `.github/workflows/deploy.yml` cannot deploy keylessly: it still reads
+ * the org R2 secrets (being removed, #523), lacks the OIDC `id-token: write`
+ * grant, or has no `deploy` job. Empty when it can. Comments are ignored.
+ */
+export function workflowDeployProblems(text: string): string[] {
+  const body = text.replace(/^\s*#.*$/gm, '');
+  const problems: string[] = [];
+  if (/secrets\.R2_/.test(body)) problems.push('reads secrets.R2_*, which are being removed');
+  if (!/id-token:\s*write/.test(body)) problems.push('lacks `id-token: write` for keyless deploys');
+  if (!/^ {2}deploy:\s*$/m.test(body)) problems.push('has no `deploy` job');
+  return problems;
+}

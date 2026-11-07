@@ -1,7 +1,12 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fsFileSource, runChecks, runSourcePreflight } from '@freeappstore/compliance';
+import {
+  fsFileSource,
+  runChecks,
+  runSourcePreflight,
+  workflowDeployProblems,
+} from '@freeappstore/compliance';
 import { Command } from 'commander';
 import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
@@ -627,8 +632,7 @@ export async function ensureDeployWorkflow(
 const WORKFLOW_PATH = '.github/workflows/deploy.yml';
 
 /**
- * Why an existing deploy.yml cannot deploy keylessly: it still reads the org R2
- * secrets (being removed, #523) or lacks the OIDC `id-token: write` grant.
+ * Why an existing deploy.yml cannot deploy keylessly (see workflowDeployProblems).
  * Empty when there is no file or it is deployable.
  */
 export async function legacyWorkflowReasons(cwd = process.cwd()): Promise<string[]> {
@@ -639,10 +643,7 @@ export async function legacyWorkflowReasons(cwd = process.cwd()): Promise<string
     return [];
   }
   if (existing === DEPLOY_YML) return [];
-  const reasons: string[] = [];
-  if (/secrets\.R2_/.test(existing)) reasons.push('reads secrets.R2_*, which are being removed');
-  if (!/id-token:\s*write/.test(existing))
-    reasons.push('lacks `id-token: write` for keyless deploys');
+  const reasons = workflowDeployProblems(existing);
   return reasons.length > 0 ? [...reasons, ...summarizeWorkflowDrift(existing, DEPLOY_YML)] : [];
 }
 

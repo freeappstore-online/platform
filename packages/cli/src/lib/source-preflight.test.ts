@@ -12,8 +12,12 @@ describe('runSourcePreflight on the current starter output', () => {
         'generic',
         preset,
       );
-      const files = new Map(Object.entries(substituteAppName(generated, 'my-new-app', 'my-new-app')));
-      const result = await runSourcePreflight(mapFileSource(files), { expectedAppId: 'my-new-app' });
+      const files = new Map(
+        Object.entries(substituteAppName(generated, 'my-new-app', 'my-new-app')),
+      );
+      const result = await runSourcePreflight(mapFileSource(files), {
+        expectedAppId: 'my-new-app',
+      });
       expect(result).toEqual({ ok: true, failures: [] });
     });
   }

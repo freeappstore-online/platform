@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mapFileSource } from '../lib/file-source.js';
-import { runSourcePreflight } from './source-preflight.js';
+import { runSourcePreflight, workflowDeployProblems } from './source-preflight.js';
 
 /** A small, valid app: committed icons, vitest installed, aligned build target. */
 function app(over: Record<string, string | null> = {}) {
@@ -155,5 +155,28 @@ describe('runSourcePreflight', () => {
       'other-app',
     );
     expect(r.failures.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('workflowDeployProblems', () => {
+  const keyless =
+    'jobs:\n  build:\n    runs-on: x\n  deploy:\n    permissions:\n      id-token: write\n';
+
+  it('accepts a keyless workflow with a deploy job', () => {
+    expect(workflowDeployProblems(keyless)).toEqual([]);
+  });
+
+  it('names each reason: R2 secrets, no id-token, no deploy job', () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+    const legacy = 'jobs:\n  upload:\n    env:\n      K: ${{ secrets.R2_ACCESS_KEY_ID }}\n';
+    expect(workflowDeployProblems(legacy)).toEqual([
+      expect.stringContaining('secrets.R2_'),
+      expect.stringContaining('id-token: write'),
+      expect.stringContaining('no `deploy` job'),
+    ]);
+  });
+
+  it('ignores a comment that mentions secrets.R2_', () => {
+    expect(workflowDeployProblems(`# do not use secrets.R2_ here\n${keyless}`)).toEqual([]);
   });
 });

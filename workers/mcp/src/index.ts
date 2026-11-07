@@ -4,7 +4,10 @@ import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { fetchTemplateFiles, listRepoFiles, pushFiles, readRepoFile, type RepoFile, textToB64 } from "./github.js";
+import { listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
+import { getDeployStatus } from "./deploy-status.js";
+import { createAppProblems, planScaffold, preflightUpdate } from "./preflight.js";
+import { buildScaffold } from "./scaffold.js";
 import { AuthHandler } from "./auth-handler.js";
 import { sessionPrefix, auditLog } from "./lib.js";
 import { ownsApp, ownershipGateText } from "./ownership.js";
@@ -25,32 +28,6 @@ interface Env {
   MCP_READ_ONLY?: string;
   /** Per-IP request limit, applied before routing (see ratelimit.ts). */
   MCP_RATE_LIMIT?: RateLimiter;
-}
-
-// GitHub Actions API (public repos, no auth needed)
-async function getDeployStatus(org: string, appId: string) {
-  const res = await fetch(
-    `https://api.github.com/repos/${org}/${appId}/actions/runs?per_page=5`,
-    { headers: { Accept: "application/vnd.github+json", "User-Agent": "freeappstore-mcp" } }
-  );
-  if (!res.ok) return { error: `GitHub API ${res.status}` };
-  const data = (await res.json()) as {
-    workflow_runs: Array<{
-      name: string;
-      conclusion: string | null;
-      status: string;
-      updated_at: string;
-      html_url: string;
-      head_sha: string;
-    }>;
-  };
-  return (data.workflow_runs ?? []).map((r) => ({
-    name: r.name,
-    status: r.conclusion ?? r.status,
-    updatedAt: r.updated_at,
-    url: r.html_url,
-    sha: r.head_sha?.slice(0, 7),
-  }));
 }
 
 // FAS backend API
@@ -178,11 +155,11 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         inputSchema: { app_id: z.string().describe("App ID (e.g. 'timer', 'pdfreader')") },
       },
       async ({ app_id }) => {
-        const runs = await getDeployStatus(this.env.GITHUB_ORG, app_id);
-        if ("error" in runs) return { content: [{ type: "text" as const, text: `Error: ${(runs as { error: string }).error}` }] };
-        if ((runs as Array<unknown>).length === 0)
-          return { content: [{ type: "text" as const, text: `No workflow runs found for ${app_id}.` }] };
-        const lines = (runs as Array<{ name: string; status: string; updatedAt: string; sha: string; url: string }>).map(
+        const result = await getDeployStatus(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN);
+        if ("error" in result) return toolError(`Error: ${result.error}`);
+        const runs = result.runs;
+        if (runs.length === 0) return txt(`No workflow runs found for ${app_id}.`);
+        const lines = runs.map(
           (r) => `- ${r.status === "success" ? "✅" : r.status === "failure" ? "❌" : "⏳"} ${r.name} (${r.sha}) — ${r.updatedAt}\n  ${r.url}`
         );
         return { content: [{ type: "text" as const, text: `Deploy history for **${app_id}**:\n\n${lines.join("\n")}` }] };
@@ -302,7 +279,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "create_app",
       {
         title: "Create and publish an app",
-        description: "Create and publish a new FreeAppStore app: provisions its GitHub repo, hosting and store listing (the same steps as `fas publish`), scaffolds the chosen template and pushes it, so the app deploys at <app_id>.freeappstore.online in about 1–2 minutes. The new app is public. dry_run=true validates the inputs without creating anything.",
+        description: "Create and publish a new FreeAppStore app: provisions its GitHub repo, hosting and store listing (the same steps as `fas publish`), then scaffolds the current starter and pushes it. The first build rejects the untouched starter screen, so the app goes live only after `update_files` replaces it and a deploy succeeds (watch with `deploy_status`). The new app is public. If a run fails midway, call create_app again with the same app_id to resume. dry_run=true validates the inputs without creating anything.",
         annotations: WRITE,
         inputSchema: {
           app_id: z.string().describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
@@ -322,37 +299,45 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");
         const kind = type ?? "standalone";
         auditLog("create_app", this.props.userId, { app_id, category, kind, dry_run: !!dry_run });
+        const problems = createAppProblems(app_id);
+        if (problems.length) return toolError(`Cannot create ${app_id}: ${problems.join("; ")}.`);
         if (dry_run) {
           await audit(this.safety(), { tool: "create_app", action: "dry_run", input: { app_id, category, kind } });
           return txt(
             `[DRY RUN] Would create **${app_id}** (${kind}):\n` +
             `- Provision: GitHub repo \`${this.env.GITHUB_ORG}/${app_id}\` + R2 hosting + store listing\n` +
-            `- Scaffold: \`template-${kind}\` with APPNAME→${app_id} substitution\n` +
-            `- Deploy: push to main → GitHub Actions → live at https://${app_id}.freeappstore.online\n` +
+            `- Scaffold: the current ${kind} starter, generated like \`fas init\` (identity set to ${app_id})\n` +
+            `- Deploy: push to main → GitHub Actions. The first build rejects the untouched starter screen, so it stays red until update_files replaces it; the app is live only after a green deploy\n` +
             `- Build: wrap web/src/App.tsx in <Shell app={fas} nav={NAV}> with a nav item per screen, then write the screens\n` +
             `- Category: ${category}\n- Oneliner: ${oneliner}\n\nNo changes made. Remove dry_run to execute.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         }
-        // 1. Provision via the same backend endpoint `fas publish` uses.
+        // 1. Provision via the same backend endpoint `fas publish` uses. It is idempotent for the
+        //    app's own owner, so calling create_app again resumes a run that failed midway.
         const prov = (await fasPost(this.env.API_BASE, "/v1/publish", token, {
           name: app_id, store: "apps", category, type: kind, oneliner, description: description || oneliner,
         })) as { error?: string; detail?: string; appUrl?: string; repoUrl?: string };
         if (prov.error) return txt(`Provision failed: ${prov.error}${prov.detail ? ` — ${typeof prov.detail === "string" ? prov.detail : JSON.stringify(prov.detail)}` : ""}`);
-        // 2. Scaffold: fetch the template, substitute, push → triggers deploy.
+        // 2. Scaffold the current starter and push it (only what the repo does not have yet).
         try {
-          const templateRepo = kind === "connected" ? "template-connected" : "template-standalone";
-          const files = await fetchTemplateFiles(this.env.GITHUB_ORG, templateRepo, this.env.GITHUB_TOKEN, app_id);
+          const plan = planScaffold(await listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN));
+          if (plan.action === "already-scaffolded") {
+            return txt(`**${app_id}** already exists and has its deploy workflow, so nothing was overwritten. Use \`update_files\` to change it and \`deploy_status\` to watch it.`);
+          }
+          const files = buildScaffold(app_id, kind);
+          for (const path of plan.skip) files.delete(path);
+          const resumed = plan.skip.size > 0 ? " (resumed: files already in the repo were kept)" : "";
           await pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, files, `Initial ${app_id} — scaffolded via MCP`);
           await audit(this.safety(), { tool: "create_app", action: "success", input: { app_id, category, kind }, result: { url: `https://${app_id}.freeappstore.online` } });
           return txt(
-            `Created **${app_id}** (${kind}).\n` +
-            `Live in ~1-2 min: https://${app_id}.freeappstore.online\n` +
+            `Created **${app_id}** (${kind})${resumed}. It is NOT live yet.\n` +
+            `The first build runs the starter-UI gate and will fail until update_files replaces the starter screen (web/src/App.tsx); the app is live at https://${app_id}.freeappstore.online only after a green deploy.\n` +
             `Repo: https://github.com/${this.env.GITHUB_ORG}/${app_id}\n` +
-            `Listing: https://freeappstore.online/apps/${app_id}\n\n` +
+            `Listing (appears after the first successful deploy): https://freeappstore.online/apps/${app_id}\n\n` +
             `Scaffolded ${files.size} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         } catch (e) {
-          return txt(`Provisioned the repo + hosting, but the scaffold push failed: ${String(e)}\nThe app exists — retry by pushing files with update_files.`);
+          return toolError(`Provisioned the repo + hosting, but the scaffold push failed: ${String(e)}\nNothing is lost: call create_app again with the same app_id to resume the scaffold.`);
         }
       },
     );
@@ -573,16 +558,36 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const ownershipFailure = ownershipGateText(app_id, await ownsApp(this.env.API_BASE, token, app_id));
         if (ownershipFailure) return ownershipFailure.startsWith("Ownership check failed") ? toolError(ownershipFailure) : txt(ownershipFailure);
         auditLog("update_files", this.props.userId, { app_id, fileCount: files.length, dry_run: !!dry_run });
+        // Check the app as it would be after the push, with the same shared preflight
+        // VibeCode and `fas publish` run. dry_run reports the same findings.
+        const org = this.env.GITHUB_ORG;
+        const ghToken = this.env.GITHUB_TOKEN;
+        let failures: string[];
+        try {
+          failures = await preflightUpdate(app_id, files, {
+            paths: await listRepoFiles(org, app_id, ghToken),
+            read: (path) => readRepoFile(org, app_id, ghToken, path),
+            readBytes: (path) => readRepoBytes(org, app_id, ghToken, path),
+          });
+        } catch (e) {
+          return toolError(`Could not check ${app_id} before pushing: ${String(e)}. Nothing was pushed.`);
+        }
+        const findings = failures.map((f) => `- ${f}`).join("\n");
         if (dry_run) {
-          await audit(this.safety(), { tool: "update_files", action: "dry_run", input: { app_id, fileCount: files.length } });
+          await audit(this.safety(), { tool: "update_files", action: "dry_run", input: { app_id, fileCount: files.length, preflightFailures: failures.length } });
           const listing = files.map((f) => `- ${f.path} (${f.content.length} chars)`).join("\n");
           return txt(
             `[DRY RUN] Would push ${files.length} file(s) to **${app_id}**:\n${listing}\n\n` +
             `Commit: ${message || `Update ${app_id} via MCP`}\n` +
-            `Ownership: verified. No changes made. Remove dry_run to execute.`,
+            `Ownership: verified. Preflight: ${failures.length ? `WOULD BLOCK the push:\n${findings}` : "passed."}\n` +
+            `No changes made. Remove dry_run to execute.`,
           );
         }
-        const map = new Map<string, RepoFile>(
+        if (failures.length) {
+          await audit(this.safety(), { tool: "update_files", action: "denied", input: { app_id, fileCount: files.length, preflightFailures: failures.length } });
+          return toolError(`Push to **${app_id}** refused: it would leave the app unable to build or deploy.\n${findings}\nFix these in the same update_files call, then push again.`);
+        }
+        const map = new Map(
           files.map((f) => [f.path, { content: textToB64(f.content), encoding: "base64" as const }]),
         );
         try {
