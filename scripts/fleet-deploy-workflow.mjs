@@ -55,6 +55,7 @@ const KNOWN_STEPS = new Set([
   'Verify build output',
   'Write build info',
   'Upload to R2',
+  'Upload to R2 (via wrangler)',
   'Verify route',
   'Code health scan',
   'Upload code health',
@@ -260,6 +261,8 @@ export function spliceCustomSteps(generated, original) {
 /** Repos never published (no route, site 404): migrated without a deploy to verify. */
 export const UNPUBLISHED = new Set(['e2e-fix-check', 'personality-quiz']);
 
+export const WRANGLER_UPLOADERS = new Set(['mytunes', 'music-share']);
+
 export const BUILD_VARS = { 'gcp-spending': ['VITE_GOOGLE_CLIENT_ID'] };
 export function withBuildVars(workflow, names) {
   const anchor = '          BUILD_COMMAND: ${{ steps.target.outputs.build-command }}\n';
@@ -338,6 +341,16 @@ async function inspect(repo, generated, workdir) {
     review.length > 0 &&
     // scoreplay's own ordered publisher is superseded by the atomic release (#510)
     review.every((r) => /^(step|action) /.test(r) || (repo === 'scoreplay' && r === 'no R2 sync'));
+  // mytunes and music-share upload with wrangler and the Cloudflare API token; the
+  // keyless upload replaces both, so those reasons no longer apply.
+  if (WRANGLER_UPLOADERS.has(repo))
+    for (const reason of [...review])
+      if (
+        /^(secrets|env) CLOUDFLARE_API_TOKEN$|^wrangler\/Cloudflare token$|^no R2 sync$/.test(
+          reason,
+        )
+      )
+        review.splice(review.indexOf(reason), 1);
   // Repository variables named in BUILD_VARS are reproduced by the generated Build step.
   const known = BUILD_VARS[repo] ?? [];
   for (const reason of [...review])
