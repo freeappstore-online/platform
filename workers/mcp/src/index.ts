@@ -6,8 +6,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
 import { getDeployStatus } from "./deploy-status.js";
-import { createAppProblems, planScaffold, preflightUpdate } from "./preflight.js";
-import { buildScaffold } from "./scaffold.js";
+import { createAppProblems, preflightUpdate } from "./preflight.js";
+import { scaffoldRepo } from "./scaffold.js";
 import { AuthHandler } from "./auth-handler.js";
 import { sessionPrefix, auditLog } from "./lib.js";
 import { ownsApp, ownershipGateText } from "./ownership.js";
@@ -320,21 +320,25 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (prov.error) return txt(`Provision failed: ${prov.error}${prov.detail ? ` — ${typeof prov.detail === "string" ? prov.detail : JSON.stringify(prov.detail)}` : ""}`);
         // 2. Scaffold the current starter and push it (only what the repo does not have yet).
         try {
-          const plan = planScaffold(await listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN));
-          if (plan.action === "already-scaffolded") {
+          const outcome = await scaffoldRepo(
+            {
+              listFiles: () => listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN),
+              push: (files) => pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN!, files, `Initial ${app_id} — scaffolded via MCP`),
+            },
+            app_id,
+            kind,
+          );
+          if (outcome.status === "already-scaffolded") {
             return txt(`**${app_id}** already exists and has its deploy workflow, so nothing was overwritten. Use \`update_files\` to change it and \`deploy_status\` to watch it.`);
           }
-          const files = buildScaffold(app_id, kind);
-          for (const path of plan.skip) files.delete(path);
-          const resumed = plan.skip.size > 0 ? " (resumed: files already in the repo were kept)" : "";
-          await pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, files, `Initial ${app_id} — scaffolded via MCP`);
+          const resumed = outcome.resumed ? " (resumed: files already in the repo were kept)" : "";
           await audit(this.safety(), { tool: "create_app", action: "success", input: { app_id, category, kind }, result: { url: `https://${app_id}.freeappstore.online` } });
           return txt(
             `Created **${app_id}** (${kind})${resumed}. It is NOT live yet.\n` +
             `The first build runs the starter-UI gate and will fail until update_files replaces the starter screen (web/src/App.tsx); the app is live at https://${app_id}.freeappstore.online only after a green deploy.\n` +
             `Repo: https://github.com/${this.env.GITHUB_ORG}/${app_id}\n` +
             `Listing (appears after the first successful deploy): https://freeappstore.online/apps/${app_id}\n\n` +
-            `Scaffolded ${files.size} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.\n\n${BUILD_HANDOFF_BLOCK}`,
+            `Scaffolded ${outcome.fileCount} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         } catch (e) {
           return toolError(`Provisioned the repo + hosting, but the scaffold push failed: ${String(e)}\nNothing is lost: call create_app again with the same app_id to resume the scaffold.`);

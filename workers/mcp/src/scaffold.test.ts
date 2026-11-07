@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { b64ToText } from "./github.js";
-import { type AppKind, buildScaffold } from "./scaffold.js";
+import { type AppKind, buildScaffold, scaffoldRepo } from "./scaffold.js";
 
 // The slug comes from the test input, never from the template token the
 // implementation substitutes, so a renderer that leaves APPID behind cannot
@@ -55,4 +55,47 @@ describe.each(["standalone", "connected"] as const)("MCP scaffold (%s)", (kind) 
 it("the connected preset adds the connected draft", () => {
   expect(render("connected").has("web/src/components/ConnectedDraft.tsx")).toBe(true);
   expect(render("standalone").has("web/src/components/ConnectedDraft.tsx")).toBe(false);
+});
+
+describe("scaffoldRepo recovery (#549)", () => {
+  it("a forced push failure is recoverable: calling again resumes with only the files the repo lacks", async () => {
+    const repo = new Set<string>(); // what GitHub holds
+    let failNext = true;
+    const deps = {
+      listFiles: async () => [...repo],
+      push: async (files: Map<string, unknown>) => {
+        if (failNext) {
+          // The failure strikes after the empty repo's first commit landed.
+          repo.add("fas.json");
+          failNext = false;
+          throw new Error("GitHub 502 while creating the tree");
+        }
+        for (const path of files.keys()) repo.add(path);
+      },
+    };
+
+    await expect(scaffoldRepo(deps, SLUG, "standalone")).rejects.toThrow(/502/);
+    expect([...repo]).toEqual(["fas.json"]); // workflow-less: the app could never deploy
+
+    const resumed = await scaffoldRepo(deps, SLUG, "standalone");
+    expect(resumed).toEqual({ status: "pushed", fileCount: buildScaffold(SLUG, "standalone").size - 1, resumed: true });
+    expect(repo.has(".github/workflows/deploy.yml")).toBe(true);
+    expect(repo.size).toBe(buildScaffold(SLUG, "standalone").size);
+  });
+
+  it("scaffolds an empty repo in full", async () => {
+    const pushed: string[] = [];
+    const result = await scaffoldRepo({ listFiles: async () => [], push: async (f) => void pushed.push(...f.keys()) }, SLUG, "connected");
+    expect(result).toMatchObject({ status: "pushed", resumed: false });
+    expect(pushed).toContain("web/src/components/ConnectedDraft.tsx");
+  });
+
+  it("never overwrites an app that already has its deploy workflow", async () => {
+    const push = async () => {
+      throw new Error("must not push");
+    };
+    expect(await scaffoldRepo({ listFiles: async () => [".github/workflows/deploy.yml", "fas.json"], push }, SLUG, "standalone")).toEqual({
+      status: "already-scaffolded",
+    });
+  });
 });

@@ -5,6 +5,7 @@
 
 import { getTemplateFiles, substituteAppName } from "../../../packages/cli/src/lib/starter-foundation";
 import { type RepoFile, textToB64 } from "./github.js";
+import { planScaffold } from "./preflight.js";
 
 export type AppKind = "standalone" | "connected";
 
@@ -16,4 +17,24 @@ export function buildScaffold(appId: string, kind: AppKind): Map<string, RepoFil
     files.set(path, { content: textToB64(text), encoding: "base64" });
   }
   return files;
+}
+
+export type ScaffoldOutcome = { status: "already-scaffolded" } | { status: "pushed"; fileCount: number; resumed: boolean };
+
+/**
+ * Push the scaffold, resuming a run that failed midway: only files the repo does
+ * not have yet are pushed, and a repo that already has its deploy workflow is
+ * left alone. A push failure throws, leaving the repo in a state this recovers from.
+ */
+export async function scaffoldRepo(
+  deps: { listFiles(): Promise<string[]>; push(files: Map<string, RepoFile>): Promise<unknown> },
+  appId: string,
+  kind: AppKind,
+): Promise<ScaffoldOutcome> {
+  const plan = planScaffold(await deps.listFiles());
+  if (plan.action === "already-scaffolded") return { status: "already-scaffolded" };
+  const files = buildScaffold(appId, kind);
+  for (const path of plan.skip) files.delete(path);
+  await deps.push(files);
+  return { status: "pushed", fileCount: files.size, resumed: plan.skip.size > 0 };
 }
