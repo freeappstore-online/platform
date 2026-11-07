@@ -395,7 +395,11 @@ describe("executeInfraTool — uniqueness check", () => {
       const repos = new Map<string, string>();
       const ctx = makeCtx({ ownerLogin: "SASASKIA", apps, repos });
       await executeInfraTool(
-        { id: "1", name: "deploy", input: { id: "room-bloom", name: "Room Bloom", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "t" } },
+        {
+          id: "1",
+          name: "deploy",
+          input: { id: "room-bloom", name: "Room Bloom", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "t" },
+        },
         ctx,
       );
       expect(repos.get("room-bloom")).toBe("https://github.com/freeappstore-online/room-bloom");
