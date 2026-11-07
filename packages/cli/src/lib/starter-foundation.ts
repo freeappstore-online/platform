@@ -990,7 +990,8 @@ ${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
       # Code health scan — the JSON report + badge are published next to the
       # app so the console and store listings can show them. Never blocks.
       - name: Code health scan
-        run: npx --yes @vibecodeqa/cli@${CODE_HEALTH_CLI_VERSION} --json --badge > /dev/null 2>&1 || true
+        # Own session: the scan signals its process group on some repos, which killed this step's shell (exit 143).
+        run: setsid --wait npx --yes @vibecodeqa/cli@${CODE_HEALTH_CLI_VERSION} --json --badge > /dev/null 2>&1 || true
       - name: Upload build artifact
         uses: ${DEPLOY_ACTIONS.uploadArtifact}
         with:
