@@ -2799,6 +2799,22 @@
       "developer": "FreeAppStore",
       "creatorGithub": "SASASKIA",
       "permissions": []
+    },
+    {
+      "id": "accompanist",
+      "name": "accompanist",
+      "category": "Learning",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "A piano accompanist that follows your voice and starts from any bar on command.",
+      "appUrl": "https://accompanist.freeappstore.online",
+      "repo": "freeappstore-online/accompanist",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-07T10:31:01.561Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
