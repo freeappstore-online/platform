@@ -2777,8 +2777,7 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-05T04:39:50.497Z",
       "creatorGithub": "serge-ivo",
-      "permissions": [],
-      "discoveryDeliveryPending": "92945793-7895-4d79-86c2-e819c5c86fd1"
+      "permissions": []
     },
     {
       "id": "scoreplay",
