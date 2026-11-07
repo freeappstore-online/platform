@@ -2812,9 +2812,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-07T10:31:01.561Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "discoveryDeliveryPending": "97e18062-c315-4ef3-8323-0c01bef88125"
     }
   ]
 }
