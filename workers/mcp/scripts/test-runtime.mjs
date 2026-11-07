@@ -29,6 +29,16 @@ try {
   await client.connect(new StreamableHTTPClientTransport(url));
   const tools = await client.listTools();
   assert(tools.tools.some((tool) => tool.name === 'sdk_reference'));
+  // AI directories (Claude Connectors, ChatGPT Apps) reject tools without a title
+  // and explicit read-only / destructive / open-world hints (#539).
+  for (const tool of tools.tools) {
+    assert(tool.name.length <= 64, `${tool.name}: name over 64 chars`);
+    assert(tool.title || tool.annotations?.title, `${tool.name}: missing title`);
+    for (const hint of ['readOnlyHint', 'destructiveHint', 'openWorldHint']) {
+      assert.equal(typeof tool.annotations?.[hint], 'boolean', `${tool.name}: ${hint} must be an explicit boolean`);
+    }
+    assert(!(tool.annotations.readOnlyHint && tool.annotations.destructiveHint), `${tool.name}: read-only tool marked destructive`);
+  }
   const guide = await client.callTool({ name: 'sdk_reference', arguments: { feature: 'forms' } });
   assert(!guide.isError && JSON.stringify(guide).includes('EditItemButton'));
   const refused = await client.callTool({ name: 'sdk_reference', arguments: { feature: 'forms', excessive: Array(10_001).fill(0) } });

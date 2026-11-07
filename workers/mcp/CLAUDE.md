@@ -50,6 +50,13 @@ starter contract; preserve app-owned choices instead of replacing their layouts.
 When the SDK's UI exports or Shell props change, update `sdk-reference.ts`;
 `sdk-reference.test.ts` fails until the `components` list matches `packages/sdk/src/ui/index.ts`.
 
+**Every tool is registered with `server.registerTool` and carries a `title` plus explicit
+`readOnlyHint` / `destructiveHint` / `openWorldHint` booleans** (presets `READ`, `WRITE`,
+`OVERWRITE` in `src/index.ts`). The Claude Connectors Directory and the ChatGPT Apps Directory
+reject tools without them (#539), and `npm run test:runtime` fails the build if one is missing.
+Keep descriptions factual — say what the tool does, never instruct the model how to behave;
+build guidance belongs in the returned content.
+
 Write tools require the `GITHUB_TOKEN` secret (org token with contents:write) on the
 worker; writes are gated by verified app ownership (`/v1/apps/mine`). `create_app`
 provisions via the backend `/v1/publish` (same path as `fas publish`) with the

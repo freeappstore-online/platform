@@ -79,6 +79,17 @@ async function fasPost(apiBase: string, path: string, token: string, body: unkno
 const txt = (text: string) => ({ content: [{ type: "text" as const, text }] });
 const toolError = (text: string) => ({ ...txt(text), isError: true });
 
+const NOT_SIGNED_IN = "Not signed in to FreeAppStore. Reconnect the FreeAppStore connector, sign in, then retry.";
+
+// Every tool carries a title and all three hints as explicit booleans: the
+// Claude Connectors Directory and the ChatGPT Apps Directory both reject tools
+// without them (#539). openWorldHint is false throughout — every tool works on
+// the bounded FreeAppStore catalog or the caller's own account.
+const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+const WRITE = { readOnlyHint: false, destructiveHint: false, openWorldHint: false } as const;
+/** Writes that can overwrite existing content. */
+const OVERWRITE = { readOnlyHint: false, destructiveHint: true, openWorldHint: false } as const;
+
 // sessionPrefix, auditLog, decodeUid are in lib.ts for testability.
 
 export interface McpProps extends Record<string, unknown> {
@@ -114,10 +125,14 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
 
   async init() {
     // ── mcp_audit_log ──────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "mcp_audit_log",
-      "Read your recent MCP audit events for this account — every write/dry-run/denied tool action, newest first. User-scoped.",
-      { limit: z.number().int().min(1).max(200).optional().describe("Max events to return (default 50)") },
+      {
+        title: "Read my audit log",
+        description: "Read your recent MCP audit events for this account — every write/dry-run/denied tool action, newest first. User-scoped.",
+        annotations: READ,
+        inputSchema: { limit: z.number().int().min(1).max(200).optional().describe("Max events to return (default 50)") },
+      },
       async ({ limit }) => {
         const denied = await requirePermission(this.safety(), "read", "mcp_audit_log", { limit });
         if (denied) return denied;
@@ -126,14 +141,18 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── list_apps ──────────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "list_apps",
-      "List your published apps on FreeAppStore. Requires authentication (connect with a FAS session token).",
-      {},
+      {
+        title: "List my apps",
+        description: "List the apps you have published on FreeAppStore: id, category, one-line description, live URL and repository.",
+        annotations: READ,
+        inputSchema: {},
+      },
       async () => {
         const token = this.props.token;
         if (!token) {
-          return { content: [{ type: "text" as const, text: "Not authenticated. Connect with a FAS session token to use this tool." }] };
+          return { content: [{ type: "text" as const, text: NOT_SIGNED_IN }] };
         }
         const data = (await fasApi(this.env.API_BASE, "/v1/apps/mine", token)) as {
           apps?: Array<{ id: string; store: string; category: string; oneliner: string; appUrl: string; repoUrl: string }>;
@@ -150,10 +169,14 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── deploy_status ──────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "deploy_status",
-      "Check the deploy status of an app (last 5 GitHub Actions runs). No auth needed for public repos.",
-      { app_id: z.string().describe("App ID (e.g. 'timer', 'pdfreader')") },
+      {
+        title: "Check deploy status",
+        description: "Show the last 5 GitHub Actions deploy runs for a FreeAppStore app, with status, commit and a link to each run.",
+        annotations: READ,
+        inputSchema: { app_id: z.string().describe("App ID (e.g. 'timer', 'pdfreader')") },
+      },
       async ({ app_id }) => {
         const runs = await getDeployStatus(this.env.GITHUB_ORG, app_id);
         if ("error" in runs) return { content: [{ type: "text" as const, text: `Error: ${(runs as { error: string }).error}` }] };
@@ -167,10 +190,14 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── app_info ───────────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "app_info",
-      "Get info about any app on FreeAppStore — live URL, repo, store listing.",
-      { app_id: z.string().describe("App ID (e.g. 'timer', 'pdfreader')") },
+      {
+        title: "Get app info",
+        description: "Show a FreeAppStore app's live URL, repository and store listing, and whether the live site currently responds.",
+        annotations: READ,
+        inputSchema: { app_id: z.string().describe("App ID (e.g. 'timer', 'pdfreader')") },
+      },
       async ({ app_id }) => {
         const domain = "freeappstore.online";
         const org = this.env.GITHUB_ORG;
@@ -199,18 +226,22 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── app_logs ──────────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "app_logs",
-      "Query recent logs for an app — errors, warnings, SDK calls, build info. Requires authentication (app owner).",
       {
-        app_id: z.string().describe("App ID"),
-        level: z.enum(["debug", "info", "warn", "error"]).optional().describe("Filter by log level"),
-        limit: z.number().optional().describe("Max entries to return (default 50, max 500)"),
+        title: "Read app logs",
+        description: "Read recent runtime logs for an app you own: errors, warnings, SDK calls and build info.",
+        annotations: READ,
+        inputSchema: {
+          app_id: z.string().describe("App ID"),
+          level: z.enum(["debug", "info", "warn", "error"]).optional().describe("Filter by log level"),
+          limit: z.number().optional().describe("Max entries to return (default 50, max 500)"),
+        },
       },
       async ({ app_id, level, limit }) => {
         const token = this.props.token;
         if (!token) {
-          return { content: [{ type: "text" as const, text: "Not authenticated. Connect with a FAS session token to query logs." }] };
+          return { content: [{ type: "text" as const, text: NOT_SIGNED_IN }] };
         }
         const params = new URLSearchParams();
         if (level) params.set("level", level);
@@ -239,10 +270,14 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── platform_guide ─────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "platform_guide",
-      "Get the FreeAppStore platform guide (SKILLS.md) for AI-assisted development, followed by the current app-building rules: wrap the app in the SDK Shell with real nav items and build screens from the SDK components.",
-      {},
+      {
+        title: "Get the platform guide",
+        description: "Return the FreeAppStore platform guide (SKILLS.md): how apps are structured, built, checked and published, followed by the current app-building conventions.",
+        annotations: READ,
+        inputSchema: {},
+      },
       async () => {
         const res = await fetch("https://freeappstore.online/skills.md");
         if (!res.ok) return txt(withBuildHandoff("Failed to fetch SKILLS.md"));
@@ -251,29 +286,37 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── sdk_reference ──────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "sdk_reference",
-      "Reference for @freeappstore/sdk. Start with feature \"shell\": every app wraps itself in <Shell> with a nav item per screen (topbar, <nav aria-label=\"Main\">, error boundary, toasts). \"components\" lists every UI component with its props. Also auth, KV, counters, collections, rooms, proxy, keys, push reminders, hooks and free APIs.",
-      { feature: z.enum(["all", ...SDK_REFERENCE_FEATURES]).optional().describe("Specific feature to look up (start with 'shell', then 'components'), or 'all' for the full reference") },
+      {
+        title: "Look up the SDK reference",
+        description: "Return reference documentation for @freeappstore/sdk, for one feature or all of them: shell (app frame and navigation), components (every UI component and its props), auth, KV, counters, collections, rooms, proxy, keys, push reminders, hooks and free APIs.",
+        annotations: READ,
+        inputSchema: { feature: z.enum(["all", ...SDK_REFERENCE_FEATURES]).optional().describe("Feature to look up, or 'all' for the full reference. 'shell' and 'components' cover app layout.") },
+      },
       async ({ feature }) => txt(getSdkReference(feature)),
     );
 
     // ── create_app (provision + scaffold + go live) ────────────
-    this.server.tool(
+    this.server.registerTool(
       "create_app",
-      "Create AND publish a brand-new app on FreeAppStore, end to end. Provisions the GitHub repo + R2 hosting + store listing (same as `fas publish`), scaffolds the chosen template, and pushes it so the app deploys live at <app_id>.freeappstore.online (~1-2 min). Then use read_file/update_files to build it out on the SDK Shell with a nav item per screen (see sdk_reference 'shell'). Requires authentication. Set dry_run=true to validate without creating.",
       {
-        app_id: z.string().describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
-        category: z.string().describe("Learning, Strategy, Discovery, Brain Training, Social, Productivity, Health & Fitness, Finance, News & Weather, Utilities, or Other"),
-        oneliner: z.string().describe("One-line description shown in the store"),
-        type: z.enum(["standalone", "connected"]).optional().describe("standalone (no backend, default) or connected (uses the SDK: auth/kv/rooms/etc.)"),
-        description: z.string().optional().describe("Longer description (defaults to the oneliner)"),
-        dry_run: z.boolean().optional().describe("If true, validate inputs and return what would happen without actually creating the app"),
+        title: "Create and publish an app",
+        description: "Create and publish a new FreeAppStore app: provisions its GitHub repo, hosting and store listing (the same steps as `fas publish`), scaffolds the chosen template and pushes it, so the app deploys at <app_id>.freeappstore.online in about 1–2 minutes. The new app is public. dry_run=true validates the inputs without creating anything.",
+        annotations: WRITE,
+        inputSchema: {
+          app_id: z.string().describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
+          category: z.string().describe("Learning, Strategy, Discovery, Brain Training, Social, Productivity, Health & Fitness, Finance, News & Weather, Utilities, or Other"),
+          oneliner: z.string().describe("One-line description shown in the store"),
+          type: z.enum(["standalone", "connected"]).optional().describe("standalone (no backend, default) or connected (uses the SDK: auth/kv/rooms/etc.)"),
+          description: z.string().optional().describe("Longer description (defaults to the oneliner)"),
+          dry_run: z.boolean().optional().describe("If true, validate inputs and return what would happen without actually creating the app"),
+        },
       },
       async ({ app_id, category, oneliner, type, description, dry_run }) => {
         if (this.props.readOnly) return txt("Read-only mode is active. Write tools are disabled.");
         const token = this.props.token;
-        if (!token) return txt("Not authenticated. Connect with a FAS session token to create apps.");
+        if (!token) return txt(NOT_SIGNED_IN);
         const denied = await requirePermission(this.safety(), "write", "create_app", { app_id, category, type });
         if (denied) return denied;
         if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");
@@ -315,10 +358,14 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── list_files ─────────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "list_files",
-      "List the files in an app's repo (so you know what to read/edit).",
-      { app_id: z.string().describe("App ID") },
+      {
+        title: "List app files",
+        description: "List the files in a FreeAppStore app's repository.",
+        annotations: READ,
+        inputSchema: { app_id: z.string().describe("App ID") },
+      },
       async ({ app_id }) => {
         const files = await listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN);
         if (files.length === 0) return txt(`No files found for ${app_id} (repo empty or not found).`);
@@ -327,10 +374,14 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── read_file ──────────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "read_file",
-      "Read one file's contents from an app's repo (e.g. web/src/App.tsx).",
-      { app_id: z.string().describe("App ID"), path: z.string().describe("File path relative to repo root, e.g. web/src/App.tsx") },
+      {
+        title: "Read an app file",
+        description: "Read one file's contents from a FreeAppStore app's repository (e.g. web/src/App.tsx).",
+        annotations: READ,
+        inputSchema: { app_id: z.string().describe("App ID"), path: z.string().describe("File path relative to repo root, e.g. web/src/App.tsx") },
+      },
       async ({ app_id, path }) => {
         const content = await readRepoFile(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, path);
         if (content === null) return txt(`Could not read ${path} from ${app_id} (not found?).`);
@@ -339,18 +390,22 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── agent_build (delegate code-gen to the platform's VibeCode agent) ──
-    this.server.tool(
+    this.server.registerTool(
       "agent_build",
-      "Hand a natural-language prompt to the FreeAppStore VibeCode AGENT — the platform's own AI writes the code AND deploys it. This is different from create_app/update_files (where the CALLING model writes the code): here you just prompt, and the platform builds. Uses your stored AI key (provider must be in your vault). Long-running; it builds in the background. Returns the session_id — poll agent_status to watch it and get the live URL. Tip: include the app id in your prompt, e.g. 'Build a dice roller and deploy it as dice-roller'.",
       {
-        prompt: z.string().describe("What to build, in plain English. Include a desired app id."),
-        provider: z.enum(["anthropic", "openai", "openrouter", "google"]).optional().describe("Which vaulted AI key to use (default anthropic). Must be a provider you have a key for."),
-        model: z.string().optional().describe("Model id (defaults per provider, e.g. claude-sonnet-4-6)"),
-        session_id: z.string().optional().describe("Continue an existing build session"),
+        title: "Build with the VibeCode agent",
+        description: "Send a plain-English build request to FreeAppStore's VibeCode agent, which writes the code and deploys the app. It uses the AI key stored in your FreeAppStore key vault for the chosen provider. Runs in the background and returns a session_id to check with agent_status. Continuing a session can change files of that session's existing app.",
+        annotations: OVERWRITE,
+        inputSchema: {
+          prompt: z.string().describe("What to build, in plain English. Include a desired app id, e.g. 'Build a dice roller and deploy it as dice-roller'."),
+          provider: z.enum(["anthropic", "openai", "openrouter", "google"]).optional().describe("Which vaulted AI key to use (default anthropic). Must be a provider you have a key for."),
+          model: z.string().optional().describe("Model id (defaults per provider, e.g. claude-sonnet-4-6)"),
+          session_id: z.string().optional().describe("Continue an existing build session"),
+        },
       },
       async ({ prompt, provider, model, session_id }) => {
         const token = this.props.token;
-        if (!token) return txt("Not authenticated. Connect with a FAS session token.");
+        if (!token) return txt(NOT_SIGNED_IN);
         const denied = await requirePermission(this.safety(), "runtime", "agent_build", { provider: provider ?? "anthropic" });
         if (denied) return denied;
         auditLog("agent_build", this.props.userId, { provider: provider ?? "anthropic" });
@@ -434,13 +489,17 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── agent_status ───────────────────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "agent_status",
-      "Check a VibeCode agent build session (started with agent_build): active, deploying, failed, or idle status, app id, deploy phase, and live URL once ready.",
-      { session_id: z.string().describe("The session_id returned by agent_build") },
+      {
+        title: "Check a VibeCode build",
+        description: "Check a VibeCode agent build session (started with agent_build): active, deploying, failed, or idle status, app id, deploy phase, and live URL once ready.",
+        annotations: READ,
+        inputSchema: { session_id: z.string().describe("The session_id returned by agent_build") },
+      },
       async ({ session_id }) => {
         const token = this.props.token;
-        if (!token) return txt("Not authenticated. Connect with a FAS session token.");
+        if (!token) return txt(NOT_SIGNED_IN);
         // Only let callers read sessions in their own namespace.
         if (!session_id.startsWith(sessionPrefix(this.props.userId)))
           return txt("That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.");
@@ -454,16 +513,20 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── agent_activity (read your conversation with the build agent) ──
-    this.server.tool(
+    this.server.registerTool(
       "agent_activity",
-      "Read your VibeCode conversation with the build agent for a session: your prompts, the agent's replies, and its tool actions (file writes, compliance checks, deploys). Scoped to sessions you own — the backend rejects others. Get a session_id from agent_build, or from the Console URL /create/<id>.",
       {
-        session_id: z.string().describe("Session id — from agent_build, or the Console /create/<id> URL"),
-        limit: z.number().int().min(1).max(200).optional().describe("Max recent messages to return (default 30)"),
+        title: "Read a VibeCode session",
+        description: "Read your VibeCode conversation with the build agent for a session: your prompts, the agent's replies, and its tool actions (file writes, compliance checks, deploys). Scoped to sessions you own — the backend rejects others. Get a session_id from agent_build, or from the Console URL /create/<id>.",
+        annotations: READ,
+        inputSchema: {
+          session_id: z.string().describe("Session id — from agent_build, or the Console /create/<id> URL"),
+          limit: z.number().int().min(1).max(200).optional().describe("Max recent messages to return (default 30)"),
+        },
       },
       async ({ session_id, limit }) => {
         const token = this.props.token;
-        if (!token) return txt("Not authenticated. Connect with a FAS session token.");
+        if (!token) return txt(NOT_SIGNED_IN);
         const res = await fetch(`${this.env.AGENT_BASE}/session/${encodeURIComponent(session_id)}/history`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -487,18 +550,22 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
     );
 
     // ── update_files (improve loop) ────────────────────────────
-    this.server.tool(
+    this.server.registerTool(
       "update_files",
-      "Improve an app you own: write/overwrite one or more files in its repo with full new contents. The push auto-deploys to <app_id>.freeappstore.online in ~30-60s. Requires authentication + ownership. Set dry_run=true to validate without pushing.",
       {
-        app_id: z.string().describe("App ID (must be one you published)"),
-        files: z.array(z.object({ path: z.string(), content: z.string() })).describe("Files to write — each with the FULL new content. Paths relative to repo root, e.g. web/src/App.tsx"),
-        message: z.string().optional().describe("Commit message"),
-        dry_run: z.boolean().optional().describe("If true, validate ownership and list files that would be written without pushing"),
+        title: "Update app files",
+        description: "Write or overwrite files in the repository of an app you own, each with its full new contents. The push deploys to <app_id>.freeappstore.online in about 30–60 seconds. dry_run=true checks ownership and lists the files without pushing.",
+        annotations: OVERWRITE,
+        inputSchema: {
+          app_id: z.string().describe("App ID (must be one you published)"),
+          files: z.array(z.object({ path: z.string(), content: z.string() })).describe("Files to write — each with the FULL new content. Paths relative to repo root, e.g. web/src/App.tsx"),
+          message: z.string().optional().describe("Commit message"),
+          dry_run: z.boolean().optional().describe("If true, validate ownership and list files that would be written without pushing"),
+        },
       },
       async ({ app_id, files, message, dry_run }) => {
         const token = this.props.token;
-        if (!token) return txt("Not authenticated. Connect with a FAS session token.");
+        if (!token) return txt(NOT_SIGNED_IN);
         const denied = await requirePermission(this.safety(), "write", "update_files", { app_id, fileCount: files?.length ?? 0 });
         if (denied) return denied;
         if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");

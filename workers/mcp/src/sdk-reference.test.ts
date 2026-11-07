@@ -197,7 +197,7 @@ describe("the MCP tools return the hand-off (pinned in index.ts)", () => {
   const index = read("./index.ts");
   const tool = (name: string) => {
     const start = index.indexOf(`"${name}",`);
-    const next = index.indexOf("this.server.tool(", start);
+    const next = index.indexOf("this.server.registerTool(", start);
     return index.slice(start, next === -1 ? undefined : next);
   };
 
@@ -205,17 +205,18 @@ describe("the MCP tools return the hand-off (pinned in index.ts)", () => {
     const createApp = tool("create_app");
     expect(createApp.match(/\$\{BUILD_HANDOFF_BLOCK\}`/g)).toHaveLength(2);
     expect(createApp).toMatch(/Build: wrap web\/src\/App\.tsx in <Shell app=\{fas\} nav=\{NAV\}>/);
-    expect(createApp).toMatch(/build it out on the SDK Shell with a nav item per screen/);
   });
 
   it("platform_guide wraps both the fetched guide and the failure path with the hand-off", () => {
     expect(tool("platform_guide").match(/withBuildHandoff\(/g)).toHaveLength(2);
   });
 
-  it("sdk_reference serves getSdkReference and tells callers to start with shell", () => {
+  // Descriptions stay factual (no instructions to the model) for AI-directory review (#539);
+  // the Shell guidance lives in the returned content instead.
+  it("sdk_reference serves getSdkReference and lists the shell feature", () => {
     const ref = tool("sdk_reference");
     expect(ref).toContain("getSdkReference(feature)");
     expect(ref).toContain("...SDK_REFERENCE_FEATURES");
-    expect(ref).toMatch(/Start with feature \\"shell\\"/);
+    expect(ref).toMatch(/shell \(app frame and navigation\)/);
   });
 });
