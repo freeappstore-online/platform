@@ -929,7 +929,7 @@ find . -type f -printf '%P\\t%s\\n' \\
   > "$RUNNER_TEMP/sizes.json"
 # Content hashes let the API skip files unchanged since the live release.
 find . -type f -print0 | xargs -0 sha256sum \\
-  | jq -Rn '[inputs | capture("^(?<h>[0-9a-f]{64})  \\./(?<p>.*)$")] | map({key: .p, value: .h}) | from_entries' \\
+  | jq -Rn '[inputs | capture("^(?<h>[0-9a-f]{64})  \\\\./(?<p>.*)$")] | map({key: .p, value: .h}) | from_entries' \\
   > "$RUNNER_TEMP/hashes.json"
 jq -n --slurpfile f "$RUNNER_TEMP/sizes.json" --slurpfile h "$RUNNER_TEMP/hashes.json" \\
   '{files: $f[0], hashes: $h[0]}' > "$RUNNER_TEMP/manifest.json"

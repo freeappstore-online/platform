@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import {
@@ -161,5 +162,33 @@ describe('deployWorkflow (apps specifics)', () => {
 describe('deployWorkflow (games specifics)', () => {
   it('matches the reviewed snapshot (bump deliberately)', () => {
     expect(deployWorkflow(GAME_CONFIG)).toMatchSnapshot();
+  });
+});
+
+describe('keyless upload client: delta manifest', () => {
+  const hasJq = spawnSync('jq', ['--version']).status === 0;
+  it.skipIf(!hasJq)('turns sha256sum output into a path -> hash map with the real jq', () => {
+    const filter = /capture\("[^']*'/.exec(KEYLESS_UPLOAD);
+    const program = /jq -Rn '(\[inputs \| capture[^']*)'/.exec(KEYLESS_UPLOAD)![1]!;
+    expect(filter).not.toBeNull();
+    const hash = 'ab'.repeat(32);
+    const out = spawnSync('jq', ['-Rn', program], {
+      input: `${hash}  ./index.html\n${hash}  ./a/my file.js\n`,
+      encoding: 'utf8',
+    });
+    expect(out.stderr).toBe('');
+    expect(JSON.parse(out.stdout)).toEqual({ 'index.html': hash, 'a/my file.js': hash });
+  });
+
+  it.skipIf(!hasJq)('batches the reuse list by 100 and sends nothing when it is empty', () => {
+    const program = /jq -c '(\.reuse as[^']*)'/.exec(KEYLESS_UPLOAD)![1]!;
+    const run = (reuse: string[]) =>
+      spawnSync('jq', ['-c', program], { input: JSON.stringify({ reuse }), encoding: 'utf8' })
+        .stdout.trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => JSON.parse(l).paths.length);
+    expect(run([])).toEqual([]);
+    expect(run(Array.from({ length: 250 }, (_, i) => `f${i}`))).toEqual([100, 100, 50]);
   });
 });
