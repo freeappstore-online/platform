@@ -10,6 +10,7 @@ export interface GeoBBox {
 }
 
 export interface QueryOptions {
+  /** Your own user id. Another user's id is refused (403). */
   owner?: string;
   limit?: number;
   offset?: number;
@@ -24,9 +25,17 @@ export interface QueryResult<T> {
   total: number;
 }
 
-/** Collections are currently public-read; this explicit option prevents implying private visibility. */
+/**
+ * Who can read a collection's documents (#467). The server decides: a collection
+ * is `'private'` (owner-only) until its app owner marks it shared with
+ * `fas db share <collection>`. `'public-read'` states in code that the
+ * collection is shared, so readers know other users' documents will be listed.
+ * Writes are always owner-only.
+ */
+export type CollectionVisibility = 'private' | 'public-read';
+
 export interface CollectionOptions {
-  visibility: 'public-read';
+  visibility: CollectionVisibility;
 }
 
 /** Document database — organize data into named collections. */
@@ -37,29 +46,45 @@ export class Collections {
     private readonly auth: Auth,
   ) {}
 
-  /** Legacy selection; collection visibility is public-read. */
-  /** @deprecated Pass `{ visibility: 'public-read' }` to make the access contract explicit. */
-  collection(name: string): Collection;
-  /** Select a collection and acknowledge its server-enforced public-read visibility. */
-  collection(name: string, options: CollectionOptions): Collection;
+  /** Select a collection. Without options it is private: you read only your own documents. */
   collection(name: string, options?: CollectionOptions): Collection {
-    if (options && options.visibility !== 'public-read') {
-      throw new Error('Collections are public-read. Use fas.kv for private per-account data.');
+    if (options && options.visibility !== 'private' && options.visibility !== 'public-read') {
+      throw new Error("Collection visibility must be 'private' or 'public-read'.");
     }
-    return new Collection(this.appId, name, this.apiBase, this.auth);
+    return new Collection(
+      this.appId,
+      name,
+      this.apiBase,
+      this.auth,
+      options?.visibility ?? 'private',
+    );
   }
 }
 
 /** A named collection of JSON documents. */
 export class Collection {
-  readonly visibility = 'public-read' as const;
-
   constructor(
     private readonly appId: string,
     private readonly name: string,
     private readonly apiBase: string,
     private readonly auth: Auth,
+    readonly visibility: CollectionVisibility,
   ) {}
+
+  /**
+   * GET with the session when signed in: a private collection needs it, and a
+   * shared one shows `_owner` only to the document's owner. A 401 on a signed-in
+   * read drops the stale session, like a write does.
+   */
+  private async read(url: URL): Promise<Response> {
+    const token = this.auth.token;
+    const response = await fetch(
+      url,
+      token ? { headers: { Authorization: `Bearer ${token}` } } : {},
+    );
+    if (response.status === 401 && token) this.auth.handleUnauthorized(token);
+    return response;
+  }
 
   /** Create a new document. Auth required. Returns the document with its generated `id`. */
   async create<T extends Record<string, unknown>>(doc: T): Promise<T & { id: string }> {
@@ -88,19 +113,22 @@ export class Collection {
     return (await response.json()) as T & { id: string };
   }
 
-  /** Get a document by ID. Returns null if not found. Public read. */
+  /** Get a document by ID. Returns null if not found (or not yours, in a private collection). */
   async get<T = Record<string, unknown>>(id: string): Promise<(T & { id: string }) | null> {
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/db/${encodeURIComponent(this.name)}/${encodeURIComponent(id)}`,
       this.apiBase,
     );
-    const response = await fetch(url);
+    const response = await this.read(url);
     if (response.status === 404) return null;
     if (!response.ok) throw new Error(`db.get failed: ${response.status}`);
     return (await response.json()) as T & { id: string };
   }
 
-  /** Query documents with optional filtering and pagination. Public read. */
+  /**
+   * Query documents with optional filtering and pagination. A private collection
+   * lists only your documents; `owner` can only be your own id.
+   */
   async query<T = Record<string, unknown>>(opts?: QueryOptions): Promise<QueryResult<T>> {
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/db/${encodeURIComponent(this.name)}`,
@@ -119,7 +147,7 @@ export class Collection {
       if (opts.bbox.latField) url.searchParams.set('lat_field', opts.bbox.latField);
       if (opts.bbox.lonField) url.searchParams.set('lon_field', opts.bbox.lonField);
     }
-    const response = await fetch(url);
+    const response = await this.read(url);
     if (!response.ok) throw new Error(`db.query failed: ${response.status}`);
     return (await response.json()) as QueryResult<T>;
   }

@@ -66,10 +66,10 @@ await fas.auth.init();     // capture callback, must be called once
 | --- | --- | --- |
 | Device-local | `@freeappstore/sdk/persist` | This browser profile and origin only; not account sync. |
 | Private per-account | `fas.kv` | Server-side `(appId, userId)` isolation; authentication required. |
-| Public shared | `fas.collections` | Public reads, owner-only writes. Visibility is public even when a query filters by owner. |
+| Shared documents | `fas.collections` | Owner-only until the app owner shares the collection (`fas db share`); then public reads, owner-only writes. A shared collection is public even when a query filters by owner. |
 | Room-restricted | Backend data-room HTTP API | Authenticated endpoints enforce room membership. They are separate from public collections and realtime room broadcasts; the SDK does not yet provide a wrapper. See the [data-room API](../../docs/data-rooms.md). |
 
-`fas.collections.collection(name, { visibility: 'public-read' })` makes the current visibility explicit in code. Other visibility claims are rejected by the SDK type and runtime.
+A collection is `'private'` (owner-only) by default. `fas.collections.collection(name, { visibility: 'public-read' })` declares in code that the collection is shared; the server enforces what the app owner set with `fas db share`. Any other visibility is rejected by the SDK type and runtime.
 
 ### Per-user KV
 
@@ -129,7 +129,7 @@ Rooms provide ephemeral realtime broadcast, not durable storage or a room-member
 
 ### Collections (document database)
 
-Public-read document store for queryable shared data. Anyone can read documents; authenticated owners can write their own. An `owner` query filter is not a privacy boundary. No SQL required — just JSON in, JSON out.
+Document store for queryable data. Documents are private to their owner by default; `fas db share <collection>` lets everyone read a collection (authenticated owners still write only their own). `owner` can only be your own id, and `_owner` is hidden from other users. No SQL required — just JSON in, JSON out.
 
 ```ts
 const posts = fas.collections.collection('posts', { visibility: 'public-read' });
@@ -137,12 +137,12 @@ const posts = fas.collections.collection('posts', { visibility: 'public-read' })
 // Create (auth required, you become the owner)
 const post = await posts.create({ title: 'Hello', body: '...' });
 
-// Query (public read)
+// Query (your own documents, or everyone's once shared)
 const { documents, total } = await posts.query({
   limit: 20,
   orderBy: 'created_at',
   order: 'desc',
-  owner: userId,  // optional: filter by creator
+  owner: userId,  // optional: only ever your own id
 });
 
 // Get single document

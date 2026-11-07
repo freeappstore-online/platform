@@ -3,7 +3,7 @@
  *
  * These helpers never report success before the write is committed, and they
  * never delete unreadable data. Account-backed data is a different API:
- * `fas.kv` stores the signed-in user's keys on the server. Public documents
+ * `fas.kv` stores the signed-in user's keys on the server. Documents
  * use `fas.collections`. Room messages are ephemeral. None of those are
  * replaced by this module.
  */

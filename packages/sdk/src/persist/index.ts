@@ -6,7 +6,7 @@
  *
  * Account-backed and shared data use different APIs:
  * - Private account: `fas.kv` (the signed-in user's keys for this app, on the server).
- * - Public shared: `fas.collections` (public read, owner writes).
+ * - Shared documents: `fas.collections` (owner-only until the app owner shares the collection; then public read, owner writes).
  * - Room fan-out: `fas.rooms` (ephemeral; not an access-control list).
  *
  * A failed save returns `{ ok: false, reason }` and must not be presented as

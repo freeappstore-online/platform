@@ -143,9 +143,47 @@ describe('Collection.delete', () => {
   });
 });
 
-describe('collection visibility contract', () => {
-  it('rejects an unsupported privacy claim at collection selection', () => {
+describe('collection visibility contract (#467)', () => {
+  it('is private unless the code says the collection is shared', () => {
     const db = new Collections('demo', 'https://api.example', fakeAuth(null) as any);
-    expect(() => db.collection('votes', { visibility: 'private' } as any)).toThrow(/public-read/i);
+    expect(db.collection('votes').visibility).toBe('private');
+    expect(db.collection('votes', { visibility: 'private' }).visibility).toBe('private');
+    expect(db.collection('posts', { visibility: 'public-read' }).visibility).toBe('public-read');
+  });
+
+  it('rejects an unknown visibility', () => {
+    const db = new Collections('demo', 'https://api.example', fakeAuth(null) as any);
+    expect(() => db.collection('votes', { visibility: 'world' } as any)).toThrow(/visibility/i);
+  });
+});
+
+describe('reads send the session (#467)', () => {
+  it('query and get carry the bearer token when signed in', async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify({ id: 'abc', documents: [] })));
+    const db = new Collections('myapp', 'https://api.example', fakeAuth('tok') as any);
+    await db.collection('notes').query({ owner: 'gh:1' });
+    await db.collection('notes').get('abc');
+    for (const call of (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(new Headers(call[1].headers).get('authorization')).toBe('Bearer tok');
+    }
+    const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0].toString();
+    expect(url).toContain('owner=gh%3A1');
+  });
+
+  it('reads anonymously when signed out', async () => {
+    const db = new Collections('myapp', 'https://api.example', fakeAuth(null) as any);
+    await db.collection('feed', { visibility: 'public-read' }).query();
+    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(call[1]?.headers).toBeUndefined();
+  });
+
+  it('drops a stale session on a 401 read', async () => {
+    const auth = fakeAuth('expired');
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response('', { status: 401 }));
+    const db = new Collections('myapp', 'https://api.example', auth as any);
+    await expect(db.collection('notes').query()).rejects.toThrow(/db.query failed/);
+    expect(auth.handleUnauthorized).toHaveBeenCalledWith('expired');
   });
 });
