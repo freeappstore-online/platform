@@ -64,9 +64,7 @@ it('flags pulse-stack: an old empty repo that the registry still lists with a de
 it('does not flag an empty repo younger than 24 hours, nor a pending listing with no site yet', () => {
   expect(
     audit({
-      repos: [
-        { ...healthy('new-app'), empty: true, deployYml: null, createdAt: NOW - 3_600_000 },
-      ],
+      repos: [{ ...healthy('new-app'), empty: true, deployYml: null, createdAt: NOW - 3_600_000 }],
       registry: [entry('new-app', { discoveryStatus: 'pending' })],
       siteStatus: { 'new-app': 404 },
     }),
@@ -131,11 +129,15 @@ it('skips the D1 checks without admin data', () => {
 });
 
 it('normalises repo references and detects non-keyless workflows', () => {
-  expect(repoRef('https://github.com/FreeAppStore-Online/Timer.git')).toBe('freeappstore-online/timer');
+  expect(repoRef('https://github.com/FreeAppStore-Online/Timer.git')).toBe(
+    'freeappstore-online/timer',
+  );
   expect(repoRef('freeappstore-online/timer')).toBe('freeappstore-online/timer');
   expect(repoRef(null)).toBeNull();
   expect(workflowProblems(KEYLESS)).toEqual([]);
-  expect(workflowProblems('# secrets.R2_X in a comment\njobs: {}')).toEqual(['lacks id-token: write']);
+  expect(workflowProblems('# secrets.R2_X in a comment\njobs: {}')).toEqual([
+    'lacks id-token: write',
+  ]);
 });
 
 it('formats a report grouped by finding, and a clean one', () => {

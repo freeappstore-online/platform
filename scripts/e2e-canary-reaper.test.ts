@@ -46,7 +46,10 @@ it('unpublishes each leaked canary and keeps going after a failure', async () =>
     now: NOW,
     log,
   });
-  expect(unpublish.mock.calls.map((c) => c[0])).toEqual(['e2e-canary-bad00000', 'e2e-canary-good0000']);
+  expect(unpublish.mock.calls.map((c) => c[0])).toEqual([
+    'e2e-canary-bad00000',
+    'e2e-canary-good0000',
+  ]);
   expect(result).toEqual({
     reaped: ['e2e-canary-good0000'],
     failed: [{ id: 'e2e-canary-bad00000', reason: 'unpublish returned 502' }],

@@ -203,7 +203,12 @@ export async function archiveRepo(gh: GhFn, id: string, config: StoreConfig): Pr
   try {
     const res = await gh(`/repos/${config.org}/${id}`, "PATCH", { archived: true });
     const status: number | undefined = res.__status;
-    if (status === 200) return { name: "archive_repo", status: "ok", detail: `Archived ${config.org}/${id} (reversible: unarchive it, or publish ${id} again)` };
+    if (status === 200)
+      return {
+        name: "archive_repo",
+        status: "ok",
+        detail: `Archived ${config.org}/${id} (reversible: unarchive it, or publish ${id} again)`,
+      };
     if (status === 404) return { name: "archive_repo", status: "skip", detail: "No repository to archive" };
     if (status === 403) {
       return {

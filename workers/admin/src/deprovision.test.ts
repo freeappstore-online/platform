@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { archiveRepo, type CfFn, type DeprovisionEnv, deleteHostRoute, deleteRepo, handleDeprovision, removeRegistryEntry } from "./deprovision";
+import {
+  archiveRepo,
+  type CfFn,
+  type DeprovisionEnv,
+  deleteHostRoute,
+  deleteRepo,
+  handleDeprovision,
+  removeRegistryEntry,
+} from "./deprovision";
 import { type GhFn, STORE_CONFIG } from "./publish";
 
 const config = STORE_CONFIG.apps;

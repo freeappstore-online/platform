@@ -113,14 +113,19 @@ export function auditFleet({
       }
       if (!app.hasRoute) add('apps-without-route', app.id, 'apps row without a routes row');
       else if (app.r2Prefix !== `apps/${app.id}`) {
-        add('route-prefix-wrong', app.id, `routes.r2_prefix is ${app.r2Prefix}, expected apps/${app.id}`);
+        add(
+          'route-prefix-wrong',
+          app.id,
+          `routes.r2_prefix is ${app.r2Prefix}, expected apps/${app.id}`,
+        );
       }
     }
     const known = new Set(adminApps.map((a) => a.id));
     for (const repo of repos) {
       const name = repo.name.toLowerCase();
       if (skip.has(name) || repo.empty || repo.deployYml === null) continue;
-      if (!known.has(repo.name)) add('repo-without-apps-row', repo.name, 'deployable repo with no apps row');
+      if (!known.has(repo.name))
+        add('repo-without-apps-row', repo.name, 'deployable repo with no apps row');
     }
   }
 
