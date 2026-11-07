@@ -4,7 +4,7 @@ import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
+import { isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
 import { getDeployStatus } from "./deploy-status.js";
 import { createAppProblems, preflightUpdate } from "./preflight.js";
 import { scaffoldRepo } from "./scaffold.js";
@@ -57,6 +57,8 @@ const txt = (text: string) => ({ content: [{ type: "text" as const, text }] });
 const toolError = (text: string) => ({ ...txt(text), isError: true });
 
 const NOT_SIGNED_IN = "Not signed in to FreeAppStore. Reconnect the FreeAppStore connector, sign in, then retry.";
+const NO_GITHUB_TOKEN = "Write tools are disabled (server missing GITHUB_TOKEN).";
+const badAppId = (appId: string) => toolError(`Invalid app_id "${appId}": use the app's id as it appears in its URL, e.g. 'timer' for timer.freeappstore.online.`);
 
 // Every tool carries a title and all three hints as explicit booleans: the
 // Claude Connectors Directory and the ChatGPT Apps Directory both reject tools
@@ -128,20 +130,18 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       },
       async () => {
         const token = this.props.token;
-        if (!token) {
-          return { content: [{ type: "text" as const, text: NOT_SIGNED_IN }] };
-        }
+        if (!token) return txt(NOT_SIGNED_IN);
         const data = (await fasApi(this.env.API_BASE, "/v1/apps/mine", token)) as {
           apps?: Array<{ id: string; store: string; category: string; oneliner: string; appUrl: string; repoUrl: string }>;
           error?: string;
         };
-        if (data.error) return { content: [{ type: "text" as const, text: `Error: ${data.error}` }] };
+        if (data.error) return toolError(`Could not list your apps: ${data.error}`);
         const apps = data.apps ?? [];
-        if (apps.length === 0) return { content: [{ type: "text" as const, text: "No apps published yet." }] };
+        if (apps.length === 0) return txt("No apps published yet.");
         const lines = apps.map(
           (a) => `- **${a.id}** (${a.category}) — ${a.oneliner}\n  Live: ${a.appUrl} | Repo: ${a.repoUrl}`
         );
-        return { content: [{ type: "text" as const, text: `${apps.length} app(s):\n\n${lines.join("\n")}` }] };
+        return txt(`${apps.length} app(s):\n\n${lines.join("\n")}`);
       }
     );
 
@@ -162,7 +162,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const lines = runs.map(
           (r) => `- ${r.status === "success" ? "✅" : r.status === "failure" ? "❌" : "⏳"} ${r.name} (${r.sha}) — ${r.updatedAt}\n  ${r.url}`
         );
-        return { content: [{ type: "text" as const, text: `Deploy history for **${app_id}**:\n\n${lines.join("\n")}` }] };
+        return txt(`Deploy history for **${app_id}**:\n\n${lines.join("\n")}`);
       }
     );
 
@@ -176,6 +176,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         inputSchema: { app_id: z.string().describe("App ID (e.g. 'timer', 'pdfreader')") },
       },
       async ({ app_id }) => {
+        // app_id becomes a hostname label: unchecked, "example.com/?" would point the probe at another host.
+        if (!isRepoName(app_id)) return badAppId(app_id);
         const domain = "freeappstore.online";
         const org = this.env.GITHUB_ORG;
         const liveUrl = `https://${app_id}.${domain}`;
@@ -183,22 +185,22 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const listingUrl = `https://${domain}/apps/${app_id}`;
 
         // Check if app is actually live
-        const check = await fetch(liveUrl, { method: "HEAD" });
-        const status = check.ok ? "Live (200)" : `Down (${check.status})`;
+        let status: string;
+        try {
+          const check = await fetch(liveUrl, { method: "HEAD" });
+          status = check.ok ? "Live (200)" : `Down (${check.status})`;
+        } catch (e) {
+          status = `Unreachable (${e instanceof Error ? e.message : String(e)})`;
+        }
 
-        return {
-          content: [{
-            type: "text" as const,
-            text: [
-              `**${app_id}**`,
-              `Status: ${status}`,
-              `Live: ${liveUrl}`,
-              `Repo: ${repoUrl}`,
-              `Listing: ${listingUrl}`,
-              `Deploy: push to main auto-deploys via GitHub Actions → R2`,
-            ].join("\n"),
-          }],
-        };
+        return txt([
+          `**${app_id}**`,
+          `Status: ${status}`,
+          `Live: ${liveUrl}`,
+          `Repo: ${repoUrl}`,
+          `Listing: ${listingUrl}`,
+          `Deploy: push to main auto-deploys via GitHub Actions → R2`,
+        ].join("\n"));
       }
     );
 
@@ -212,24 +214,23 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         inputSchema: {
           app_id: z.string().describe("App ID"),
           level: z.enum(["debug", "info", "warn", "error"]).optional().describe("Filter by log level"),
-          limit: z.number().optional().describe("Max entries to return (default 50, max 500)"),
+          limit: z.number().int().min(1).max(500).optional().describe("Max entries to return (default 50, max 500)"),
         },
       },
       async ({ app_id, level, limit }) => {
         const token = this.props.token;
-        if (!token) {
-          return { content: [{ type: "text" as const, text: NOT_SIGNED_IN }] };
-        }
+        if (!token) return txt(NOT_SIGNED_IN);
+        if (!isRepoName(app_id)) return badAppId(app_id);
         const params = new URLSearchParams();
         if (level) params.set("level", level);
         params.set("limit", String(limit ?? 50));
-        const data = (await fasApi(this.env.API_BASE, `/v1/apps/${app_id}/logs?${params}`, token)) as {
+        const data = (await fasApi(this.env.API_BASE, `/v1/apps/${encodeURIComponent(app_id)}/logs?${params}`, token)) as {
           logs?: Array<{ ts: number; level: string; category: string; message: string; data?: unknown; userId: string; build?: Record<string, unknown> }>;
           error?: string;
         };
-        if (data.error) return { content: [{ type: "text" as const, text: `Error: ${data.error}` }] };
+        if (data.error) return toolError(`Could not read logs for ${app_id}: ${data.error}`);
         const logs = data.logs ?? [];
-        if (logs.length === 0) return { content: [{ type: "text" as const, text: `No logs found for ${app_id}.` }] };
+        if (logs.length === 0) return txt(`No logs found for ${app_id}.`);
         const lines = logs.map(l => {
           const time = new Date(l.ts).toISOString().slice(11, 23);
           const data = l.data ? ` ${JSON.stringify(l.data)}` : "";
@@ -242,7 +243,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           const b = buildEntry.build;
           buildInfo = `\n\n**Build:** ${b.appVersion ?? "?"} (${(b.commitSha as string)?.slice(0, 7) ?? "?"}) built ${b.buildDate ?? "?"} | SDK ${b.sdkVersion ?? "?"} | ${b.viewport ?? "?"}`;
         }
-        return { content: [{ type: "text" as const, text: `Logs for **${app_id}** (${logs.length} entries):${buildInfo}\n\n\`\`\`\n${lines.join("\n")}\n\`\`\`` }] };
+        return txt(`Logs for **${app_id}** (${logs.length} entries):${buildInfo}\n\n\`\`\`\n${lines.join("\n")}\n\`\`\``);
       }
     );
 
@@ -291,12 +292,11 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         },
       },
       async ({ app_id, category, oneliner, type, description, dry_run }) => {
-        if (this.props.readOnly) return txt("Read-only mode is active. Write tools are disabled.");
         const token = this.props.token;
         if (!token) return txt(NOT_SIGNED_IN);
         const denied = await requirePermission(this.safety(), "write", "create_app", { app_id, category, type });
         if (denied) return denied;
-        if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");
+        if (!this.env.GITHUB_TOKEN) return toolError(NO_GITHUB_TOKEN);
         const kind = type ?? "standalone";
         auditLog("create_app", this.props.userId, { app_id, category, kind, dry_run: !!dry_run });
         const problems = createAppProblems(app_id);
@@ -317,7 +317,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const prov = (await fasPost(this.env.API_BASE, "/v1/publish", token, {
           name: app_id, store: "apps", category, type: kind, oneliner, description: description || oneliner,
         })) as { error?: string; detail?: string; appUrl?: string; repoUrl?: string };
-        if (prov.error) return txt(`Provision failed: ${prov.error}${prov.detail ? ` — ${typeof prov.detail === "string" ? prov.detail : JSON.stringify(prov.detail)}` : ""}`);
+        if (prov.error) return toolError(`Provision failed: ${prov.error}${prov.detail ? ` — ${typeof prov.detail === "string" ? prov.detail : JSON.stringify(prov.detail)}` : ""}`);
         // 2. Scaffold the current starter and push it (only what the repo does not have yet).
         try {
           const outcome = await scaffoldRepo(
@@ -341,7 +341,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
             `Scaffolded ${outcome.fileCount} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         } catch (e) {
-          return toolError(`Provisioned the repo + hosting, but the scaffold push failed: ${String(e)}\nNothing is lost: call create_app again with the same app_id to resume the scaffold.`);
+          return toolError(`Provisioned the repo + hosting, but the scaffold failed: ${String(e)}\nNothing is lost: call create_app again with the same app_id to resume the scaffold.`);
         }
       },
     );
@@ -356,7 +356,13 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         inputSchema: { app_id: z.string().describe("App ID") },
       },
       async ({ app_id }) => {
-        const files = await listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN);
+        if (!isRepoName(app_id)) return badAppId(app_id);
+        let files: string[];
+        try {
+          files = await listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN);
+        } catch (e) {
+          return toolError(`Could not list ${app_id}'s files: ${String(e)}. Check the app_id, or retry shortly if GitHub is failing.`);
+        }
         if (files.length === 0) return txt(`No files found for ${app_id} (repo empty or not found).`);
         return txt(`**${app_id}** — ${files.length} files:\n\n${files.map((f) => `- ${f}`).join("\n")}`);
       },
@@ -372,8 +378,9 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         inputSchema: { app_id: z.string().describe("App ID"), path: z.string().describe("File path relative to repo root, e.g. web/src/App.tsx") },
       },
       async ({ app_id, path }) => {
+        if (!isRepoName(app_id)) return badAppId(app_id);
         const content = await readRepoFile(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, path);
-        if (content === null) return txt(`Could not read ${path} from ${app_id} (not found?).`);
+        if (content === null) return toolError(`Could not read ${path} from ${app_id}: no such file. Use list_files to see the repo's paths.`);
         return txt(`\`\`\`\n${content}\n\`\`\``);
       },
     );
@@ -397,25 +404,22 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!token) return txt(NOT_SIGNED_IN);
         const denied = await requirePermission(this.safety(), "runtime", "agent_build", { provider: provider ?? "anthropic" });
         if (denied) return denied;
-        auditLog("agent_build", this.props.userId, { provider: provider ?? "anthropic" });
-        await audit(this.safety(), { tool: "agent_build", action: "success", input: { provider: provider ?? "anthropic" } });
         const prov = provider ?? "anthropic";
+        auditLog("agent_build", this.props.userId, { provider: prov });
         const defaultModel: Record<string, string> = {
           anthropic: "claude-sonnet-4-6",
           openai: "gpt-4o",
           openrouter: "anthropic/claude-sonnet-4",
           google: "gemini-2.0-flash",
         };
-        // Force the session under the caller's namespace (see sessionPrefix):
-        // a passed session_id is only honored if it's already in the caller's
-        // namespace, otherwise it's re-scoped — so you can't target another
-        // user's session id.
+        // Force the session under the caller's namespace (see sessionPrefix), so
+        // you can't target another user's session id. The rest is sanitized even
+        // when the prefix matches: it is a URL path segment.
         const prefix = sessionPrefix(this.props.userId);
-        const sid = session_id
-          ? session_id.startsWith(prefix)
-            ? session_id
-            : prefix + session_id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40)
-          : prefix + crypto.randomUUID().slice(0, 12);
+        const rest = (session_id?.startsWith(prefix) ? session_id.slice(prefix.length) : session_id ?? "")
+          .replace(/[^a-zA-Z0-9_-]/g, "")
+          .slice(0, 40);
+        const sid = prefix + (rest || crypto.randomUUID().slice(0, 12));
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 110_000); // cap; build continues server-side
         let phases: string[] = [];
@@ -432,7 +436,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           });
           if (!res.ok || !res.body) {
             clearTimeout(timer);
-            return txt(`Agent chat failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+            return toolError(`Agent chat failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
           }
           const reader = res.body.getReader();
           const dec = new TextDecoder();
@@ -464,6 +468,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           }
         }
         clearTimeout(timer);
+        await audit(this.safety(), { tool: "agent_build", action: engineError || transportError ? "error" : "success", input: { provider: prov }, result: { session: sid } });
         if (engineError) return toolError(`Agent turn failed (session \`${sid}\`): ${engineError}\nCheck agent_status before retrying; the session may contain partial work.`);
         if (transportError) return toolError(`Could not confirm the agent turn result (session \`${sid}\`): ${transportError.slice(0, 500)}\nCheck agent_status before retrying.`);
         const last = phases[phases.length - 1];
@@ -490,12 +495,13 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const token = this.props.token;
         if (!token) return txt(NOT_SIGNED_IN);
         // Only let callers read sessions in their own namespace.
-        if (!session_id.startsWith(sessionPrefix(this.props.userId)))
+        if (!session_id.startsWith(sessionPrefix(this.props.userId)) || !/^[a-zA-Z0-9_-]+$/.test(session_id))
           return txt("That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.");
         const res = await fetch(`${this.env.AGENT_BASE}/session/${session_id}/status`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) return txt(`Status fetch failed (${res.status}).`);
+        if (res.status === 404) return toolError(`No session "${session_id}" found. Use the session_id returned by agent_build.`);
+        if (!res.ok) return toolError(`Could not read the status of session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`);
         const s = (await res.json()) as Parameters<typeof formatAgentStatus>[1];
         return txt(formatAgentStatus(session_id, s));
       },
@@ -521,7 +527,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         });
         if (res.status === 403) return txt("That session isn't yours — agent sessions are scoped to your account.");
         if (res.status === 404 || res.status === 400) return txt(`No session "${session_id}" found.`);
-        if (!res.ok) return txt(`History fetch failed (${res.status}).`);
+        if (!res.ok) return toolError(`Could not read session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`);
         const data = (await res.json()) as {
           messages?: Array<{
             role: string;
@@ -557,10 +563,10 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!token) return txt(NOT_SIGNED_IN);
         const denied = await requirePermission(this.safety(), "write", "update_files", { app_id, fileCount: files?.length ?? 0 });
         if (denied) return denied;
-        if (!this.env.GITHUB_TOKEN) return txt("Write tools are disabled (server missing GITHUB_TOKEN).");
-        if (!files?.length) return txt("No files provided.");
+        if (!this.env.GITHUB_TOKEN) return toolError(NO_GITHUB_TOKEN);
+        if (!files?.length) return toolError("No files provided: pass at least one { path, content }.");
         const ownershipFailure = ownershipGateText(app_id, await ownsApp(this.env.API_BASE, token, app_id));
-        if (ownershipFailure) return ownershipFailure.startsWith("Ownership check failed") ? toolError(ownershipFailure) : txt(ownershipFailure);
+        if (ownershipFailure) return toolError(ownershipFailure);
         auditLog("update_files", this.props.userId, { app_id, fileCount: files.length, dry_run: !!dry_run });
         // Check the app as it would be after the push, with the same shared preflight
         // VibeCode and `fas publish` run. dry_run reports the same findings.
@@ -599,7 +605,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           await audit(this.safety(), { tool: "update_files", action: "success", input: { app_id, fileCount: files.length }, result: { sha: sha.slice(0, 7) } });
           return txt(`Pushed ${files.length} file(s) to **${app_id}** (${sha.slice(0, 7)}). Auto-deploying to https://${app_id}.freeappstore.online (~30-60s). Use deploy_status to watch.`);
         } catch (e) {
-          return txt(`Push failed: ${String(e)}`);
+          return toolError(`Push to ${app_id} failed: ${String(e)}. Nothing was deployed; retry the same update_files call.`);
         }
       },
     );

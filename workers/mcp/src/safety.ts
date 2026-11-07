@@ -12,7 +12,7 @@ export type McpEnv = {
   MCP_READ_ONLY?: string;
 };
 
-export type TextResult = { content: { type: "text"; text: string }[] };
+export type TextResult = { content: { type: "text"; text: string }[]; isError?: boolean };
 
 export const text = (value: string): TextResult => ({
   content: [{ type: "text" as const, text: value }],
@@ -62,7 +62,7 @@ export async function requirePermission(
   const readOnly = ctx.readOnly || ctx.env.MCP_READ_ONLY === "1";
   if (scope !== "read" && readOnly) {
     await audit(ctx, { tool, action: "denied", reason: "read_only", requiredScope: scope, input });
-    return text(`Error: ${tool} requires ${scope} permission, but MCP is in read-only mode.`);
+    return { ...text(`Error: ${tool} requires ${scope} permission, but MCP is in read-only mode.`), isError: true };
   }
   if (!hasScope(ctx, scope)) {
     await audit(ctx, {
@@ -73,7 +73,7 @@ export async function requirePermission(
       scopes: ctx.scopes ?? null,
       input,
     });
-    return text(`Error: ${tool} requires MCP scope "${scope}". Reconnect with that scope or use a token that allows it.`);
+    return { ...text(`Error: ${tool} requires MCP scope "${scope}". Reconnect with that scope or use a token that allows it.`), isError: true };
   }
   return null;
 }
@@ -91,11 +91,24 @@ export async function dryRun(
   return jsonText(body);
 }
 
+/**
+ * KV lists keys in ascending order and applies `limit` before we see them, so
+ * keys carry an inverted timestamp: the first page of a listing is the newest
+ * events. (An ISO-timestamp key returned the OLDEST `limit` events.)
+ */
+const AUDIT_PREFIX = "auditlog";
+const MAX_TS = 9_999_999_999_999;
+
+export function auditKey(subject: string, nowMs: number, id: string): string {
+  return `${AUDIT_PREFIX}:${subject}:${String(MAX_TS - nowMs).padStart(13, "0")}:${id}`;
+}
+
 /** Append a redacted audit event to KV, keyed per user (subject), 90-day TTL. */
 export async function audit(ctx: SafetyContext, event: Record<string, unknown>): Promise<void> {
   if (!ctx.env.OAUTH_KV || !ctx.subject) return;
-  const now = new Date().toISOString();
-  const key = `audit:${ctx.subject}:${now}:${crypto.randomUUID()}`;
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  const key = auditKey(ctx.subject, nowMs, crypto.randomUUID());
   await ctx.env.OAUTH_KV.put(
     key,
     JSON.stringify({ time: now, subject: ctx.subject, ...(redact(event) as Record<string, unknown>) }),
@@ -107,11 +120,9 @@ export async function audit(ctx: SafetyContext, event: Record<string, unknown>):
 export async function listAuditEvents(ctx: SafetyContext, limit = 50): Promise<unknown[]> {
   if (!ctx.env.OAUTH_KV || !ctx.subject) return [];
   const safeLimit = Math.max(1, Math.min(200, limit));
-  const listed = await ctx.env.OAUTH_KV.list({ prefix: `audit:${ctx.subject}:`, limit: safeLimit });
+  const listed = await ctx.env.OAUTH_KV.list({ prefix: `${AUDIT_PREFIX}:${ctx.subject}:`, limit: safeLimit });
   const rows = await Promise.all(
     listed.keys
-      .sort((a, b) => b.name.localeCompare(a.name))
-      .slice(0, safeLimit)
       .map(async (key) => {
         const raw = await ctx.env.OAUTH_KV?.get(key.name);
         if (!raw) return null;

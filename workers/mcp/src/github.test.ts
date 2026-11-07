@@ -101,3 +101,39 @@ describe("pushFiles", () => {
     await expect(pushFiles("org", "app", "t", new Map([[".github/workflows/deploy.yml", file("w")]]), "x")).rejects.toThrow(/non-workflow/);
   });
 });
+
+// #555: create_app scaffolds whatever the listing says is missing, so a GitHub
+// failure read as "empty repo" would push the starter over an existing app.
+describe("listRepoFiles", () => {
+  function stub(ref: { status: number; body: unknown }, tree?: unknown) {
+    vi.stubGlobal("fetch", async (url: string) =>
+      url.endsWith("/git/ref/heads/main")
+        ? new Response(JSON.stringify(ref.body), { status: ref.status })
+        : new Response(JSON.stringify(tree), { status: 200 }),
+    );
+  }
+
+  it.each([404, 409])("lists a repo without main (%i) as empty", async (status) => {
+    stub({ status, body: { message: "Not Found" } });
+    expect(await listRepoFiles("org", "app", "t")).toEqual([]);
+  });
+
+  it("throws on a GitHub outage or rate limit instead of reporting an empty repo", async () => {
+    stub({ status: 500, body: { message: "Server Error" } });
+    await expect(listRepoFiles("org", "app", "t")).rejects.toThrow(/cannot read app main/);
+    stub({ status: 403, body: { message: "API rate limit exceeded" } });
+    await expect(listRepoFiles("org", "app", "t")).rejects.toThrow(/rate limit/);
+  });
+
+  it("throws when the tree is unreadable or truncated", async () => {
+    stub({ status: 200, body: { object: { sha: "h" } } }, { message: "boom" });
+    await expect(listRepoFiles("org", "app", "t")).rejects.toThrow(/cannot list app files/);
+    stub({ status: 200, body: { object: { sha: "h" } } }, { tree: [], truncated: true });
+    await expect(listRepoFiles("org", "app", "t")).rejects.toThrow(/too many files/);
+  });
+
+  it("lists blob paths", async () => {
+    stub({ status: 200, body: { object: { sha: "h" } } }, { tree: [{ type: "blob", path: "a.ts" }, { type: "tree", path: "web" }] });
+    expect(await listRepoFiles("org", "app", "t")).toEqual(["a.ts"]);
+  });
+});

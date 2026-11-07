@@ -46,8 +46,13 @@ function textToB64(text: string): string {
 // reach. Allow only a plain repo name and plain path segments.
 const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+/** A plain repo name — safe in an API path, and as the label of `<name>.freeappstore.online`. */
+export function isRepoName(name: string): boolean {
+  return REPO_RE.test(name) && !name.includes("..");
+}
+
 function repoBase(org: string, repo: string): string {
-  if (!REPO_RE.test(repo) || repo.includes("..")) throw new Error(`invalid repo name: ${repo}`);
+  if (!isRepoName(repo)) throw new Error(`invalid repo name: ${repo}`);
   return `https://api.github.com/repos/${org}/${repo}`;
 }
 
@@ -129,14 +134,23 @@ export async function pushFiles(
   return commit.sha;
 }
 
-/** List file paths in a repo (recursive). Read-only; works on public repos. */
+/**
+ * List file paths in a repo (recursive). Read-only; works on public repos.
+ * Only a repo with no main branch (404, or 409 "empty") lists as []; any other
+ * failure throws. create_app scaffolds whatever the listing says is missing, so
+ * a GitHub blip read as "empty" would push the starter over an existing app.
+ */
 export async function listRepoFiles(org: string, repo: string, token?: string): Promise<string[]> {
   const base = repoBase(org, repo);
   const ref = await gh(token, `${base}/git/ref/heads/main`);
   const headSha = ref?.object?.sha;
-  if (!headSha) return [];
+  if (!headSha) {
+    if (ref?.__status === 404 || ref?.__status === 409) return [];
+    throw new Error(`cannot read ${repo} main: ${ref?.message ?? ref?.__status}`);
+  }
   const tree = await gh(token, `${base}/git/trees/${headSha}?recursive=1`);
-  if (!Array.isArray(tree?.tree)) return [];
+  if (!Array.isArray(tree?.tree)) throw new Error(`cannot list ${repo} files: ${tree?.message ?? tree?.__status}`);
+  if (tree.truncated) throw new Error(`${repo} has too many files to list in one call`);
   return tree.tree.filter((i: any) => i.type === "blob" && !i.path.startsWith(".git/")).map((i: any) => i.path);
 }
 

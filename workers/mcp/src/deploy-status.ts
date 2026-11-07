@@ -7,8 +7,9 @@
 // GitHub's message and rate-limit headers so a creator can tell a rate limit
 // from a permission or upstream failure.
 
+import { isRepoName } from "./github.js";
+
 const UA = "freeappstore-mcp";
-const REPO_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export interface DeployRun {
   name: string;
@@ -58,7 +59,7 @@ async function describeFailure(res: Response, actionsUrl: string): Promise<strin
 }
 
 export async function getDeployStatus(org: string, appId: string, token?: string): Promise<DeployStatusResult> {
-  if (!REPO_RE.test(appId) || appId.includes("..")) return { error: `invalid app_id: ${appId}` };
+  if (!isRepoName(appId)) return { error: `invalid app_id: ${appId}` };
   const actionsUrl = `https://github.com/${org}/${appId}/actions`;
   const repoUrl = `https://api.github.com/repos/${org}/${appId}`;
   try {
