@@ -636,7 +636,8 @@ export async function legacyWorkflowReasons(cwd = process.cwd()): Promise<string
   if (existing === DEPLOY_YML) return [];
   const reasons: string[] = [];
   if (/secrets\.R2_/.test(existing)) reasons.push('reads secrets.R2_*, which are being removed');
-  if (!/id-token:\s*write/.test(existing)) reasons.push('lacks `id-token: write` for keyless deploys');
+  if (!/id-token:\s*write/.test(existing))
+    reasons.push('lacks `id-token: write` for keyless deploys');
   return reasons.length > 0 ? [...reasons, ...summarizeWorkflowDrift(existing, DEPLOY_YML)] : [];
 }
 

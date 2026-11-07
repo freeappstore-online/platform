@@ -356,7 +356,9 @@ describe('commitDeployWorkflow and legacyWorkflowReasons (#547)', () => {
     writeFileSync(join(dir, 'untracked.txt'), 'y');
     await ensureDeployWorkflow({}, dir);
     expect(await commitDeployWorkflow(dir)).toBe('committed');
-    expect(g('show', '--name-only', '--format=', 'HEAD').trim()).toBe('.github/workflows/deploy.yml');
+    expect(g('show', '--name-only', '--format=', 'HEAD').trim()).toBe(
+      '.github/workflows/deploy.yml',
+    );
     expect(g('status', '--porcelain').trim()).toBe('?? untracked.txt');
   });
 
@@ -368,7 +370,9 @@ describe('commitDeployWorkflow and legacyWorkflowReasons (#547)', () => {
   it('flags a workflow that reads secrets.R2_ or lacks id-token: write', async () => {
     const wf = join(dir, '.github', 'workflows');
     mkdirSync(wf, { recursive: true });
-    writeFileSync(join(wf, 'deploy.yml'), 'jobs:\n  deploy:\n    env:\n      K: ${{ secrets.R2_ACCESS_KEY_ID }}\n');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+    const reads = 'jobs:\n  deploy:\n    env:\n      K: ${{ secrets.R2_ACCESS_KEY_ID }}\n';
+    writeFileSync(join(wf, 'deploy.yml'), reads);
     const reasons = await legacyWorkflowReasons(dir);
     expect(reasons.join('\n')).toContain('secrets.R2_');
     expect(reasons.join('\n')).toContain('id-token: write');
