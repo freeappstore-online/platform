@@ -11,11 +11,11 @@
     "test:runtime": "node scripts/test-runtime.mjs"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261012.1",
+    "@cloudflare/workers-types": "^5.20261104.1",
     "@types/node": "^25.9.9",
     "typescript": "^7.0.2",
-    "vite": "^8.3.4",
-    "vitest": "^5.0.4",
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0",
     "wrangler": "^4.149.0"
   },
   "dependencies": {
