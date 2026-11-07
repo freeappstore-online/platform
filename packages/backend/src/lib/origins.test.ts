@@ -4,11 +4,25 @@ import { isAllowedOrigin, isAllowedReturnTo, sessionAudience } from './origins.j
 describe('isAllowedReturnTo binds return_to to the app id (#495)', () => {
   it('allows an app only on its own subdomain of a platform zone', () => {
     expect(isAllowedReturnTo('https://chess.freeappstore.online/auth/done', 'chess')).toBe(true);
-    expect(isAllowedReturnTo('https://chess.freegamestore.online/', 'chess')).toBe(true);
-    expect(isAllowedReturnTo('https://chess.proappstore.online/x?y=z#hash', 'chess')).toBe(true);
+    expect(isAllowedReturnTo('https://chess.agentcoder.space/', 'chess')).toBe(true);
     expect(isAllowedReturnTo('https://notes.freeappstore.online/', 'chess')).toBe(false);
     expect(isAllowedReturnTo('https://a.chess.freeappstore.online/', 'chess')).toBe(false);
     expect(isAllowedReturnTo('https://freeappstore.online/', 'chess')).toBe(false);
+  });
+
+  it("rejects other stores' zones for any app id (#536)", () => {
+    for (const zone of [
+      'freegamestore.online',
+      'progamestore.online',
+      'proappstore.online',
+      'freeagentstore.online',
+      'proagentstore.online',
+      'freeideastore.online',
+      'proideastore.online',
+    ]) {
+      expect(isAllowedReturnTo(`https://chess.${zone}/`, 'chess')).toBe(false);
+      expect(isAllowedReturnTo(`https://${zone}/`, 'chess')).toBe(false);
+    }
   });
 
   it('rejects http on the production domain', () => {
@@ -154,21 +168,39 @@ describe('isAllowedOrigin (CORS allowlist)', () => {
     expect(isAllowedOrigin('https://chess.freeappstore.online')).toBe(true);
   });
 
-  it('allows freegamestore.online apex + subdomains (shared FAS backend)', () => {
-    expect(isAllowedOrigin('https://freegamestore.online')).toBe(true);
-    expect(isAllowedOrigin('https://chess.freegamestore.online')).toBe(true);
+  it('allows the FAS app custom domain apex + subdomains', () => {
+    expect(isAllowedOrigin('https://agentcoder.space')).toBe(true);
+    expect(isAllowedOrigin('https://www.agentcoder.space')).toBe(true);
   });
 
-  it('allows proappstore.online apex + subdomains (shared session)', () => {
-    expect(isAllowedOrigin('https://proappstore.online')).toBe(true);
-    expect(isAllowedOrigin('https://carsads.proappstore.online')).toBe(true);
-  });
-
-  it('allows the idea and agent store origins that share auth', () => {
-    expect(isAllowedOrigin('https://freeideastore.online')).toBe(true);
-    expect(isAllowedOrigin('https://proideastore.online')).toBe(true);
-    expect(isAllowedOrigin('https://freeagentstore.online')).toBe(true);
+  it("rejects other stores' zones, apex and subdomains (#536)", () => {
+    for (const zone of [
+      'freegamestore.online',
+      'progamestore.online',
+      'proappstore.online',
+      'freeagentstore.online',
+      'proagentstore.online',
+      'freeideastore.online',
+      'proideastore.online',
+    ]) {
+      expect(isAllowedOrigin(`https://chess.${zone}`)).toBe(false);
+    }
+    for (const zone of [
+      'freegamestore.online',
+      'proappstore.online',
+      'proagentstore.online',
+      'freeideastore.online',
+      'proideastore.online',
+    ]) {
+      expect(isAllowedOrigin(`https://${zone}`)).toBe(false);
+    }
     expect(isAllowedOrigin('https://freeideastore-mcp.serge-the-dev.workers.dev')).toBe(false);
+  });
+
+  it('allows only the exact fags-console exception host from the agent store (#536)', () => {
+    expect(isAllowedOrigin('https://freeagentstore.online')).toBe(true);
+    expect(isAllowedOrigin('https://evil.freeagentstore.online')).toBe(false);
+    expect(isAllowedOrigin('http://freeagentstore.online')).toBe(false);
   });
 
   it('allows localhost / 127.0.0.1 dev origins', () => {

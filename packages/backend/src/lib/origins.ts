@@ -12,26 +12,20 @@
  *        aliases, custom domains), or localhost (dev).
  *    No userinfo, no non-default port (except on localhost).
  *
- *  - `isAllowedOrigin(origin)` — the CORS allowlist: any https host on a
- *    platform zone plus localhost.
+ *  - `isAllowedOrigin(origin)` — the CORS allowlist: any https host on an
+ *    app zone, an APP_ORIGIN_EXCEPTIONS host, plus localhost.
  */
 import { APP_ID_RE, isReservedAppId } from './apps.js';
 
-/** Zones whose `<appId>.<zone>` hosts are app origins that share this backend. */
-const APP_ZONES = [
-  'freeappstore.online',
-  'proappstore.online',
-  // FGS games run on freegamestore.online subdomains and share the FAS
-  // backend (analytics, auth, KV).
-  'freegamestore.online',
-  // Agent and idea stores share the FAS auth backend.
-  'freeagentstore.online',
-  'proagentstore.online',
-  'freeideastore.online',
-  'proideastore.online',
-  // Custom domains for FAS apps
-  'agentcoder.space',
-];
+/**
+ * Zones whose `<appId>.<zone>` hosts are FAS app origins: freeappstore.online
+ * and the custom domain of one FAS app. Other stores' zones are deliberately
+ * absent (#536): each store has its own backend, so a FAS session is never
+ * delivered to, and the FAS API never answers CORS for, an origin FAS does not
+ * operate. With a single app zone per id, an app id also names one origin, so
+ * the bare-id session audience cannot collide across stores (#511).
+ */
+const APP_ZONES = ['freeappstore.online', 'agentcoder.space'];
 
 /**
  * App ids whose sign-in may return somewhere other than `<appId>.<zone>`:
@@ -47,6 +41,8 @@ const APP_ORIGIN_EXCEPTIONS: Record<string, string[]> = {
   agentcoder: ['agentcoder.space', 'www.agentcoder.space'],
   // The FreeAgentStore creator console source signs in through this backend
   // (fags/platform/console/web/src/App.tsx) and lives at /console/ on the apex.
+  // Kept for now (#536); under review in its own issue. Its host is also
+  // CORS-allowed (isAllowedOrigin), otherwise the session it receives is unusable.
   'fags-console': ['freeagentstore.online'],
 };
 
@@ -77,6 +73,12 @@ function isPlatformHost(url: URL): boolean {
   const host = url.hostname.toLowerCase();
   if (url.protocol !== 'https:') return false;
   return APP_ZONES.some((zone) => host === zone || host.endsWith(`.${zone}`));
+}
+
+function isExceptionHost(url: URL): boolean {
+  if (url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  return Object.values(APP_ORIGIN_EXCEPTIONS).some((hosts) => hosts.includes(host));
 }
 
 function isAppOrigin(url: URL, appId: string): boolean {
@@ -125,7 +127,7 @@ export function sessionAudience(appId: string): string {
 export function isAllowedOrigin(origin: string): boolean {
   try {
     const url = new URL(origin);
-    return isLocalhost(url) || isPlatformHost(url);
+    return isLocalhost(url) || isPlatformHost(url) || isExceptionHost(url);
   } catch {
     return false;
   }
