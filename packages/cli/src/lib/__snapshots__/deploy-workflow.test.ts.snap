@@ -98,8 +98,7 @@ jobs:
       # Code health scan — the JSON report + badge are published next to the
       # app so the console and store listings can show them. Never blocks.
       - name: Code health scan
-        # Own session: the scan signals its process group on some repos, which killed this step's shell (exit 143).
-        run: setsid --wait npx --yes @vibecodeqa/cli@0.57.0 --json --badge > /dev/null 2>&1 || true
+        run: npx --yes @vibecodeqa/cli@0.57.0 --json --badge > /dev/null 2>&1 || true
       - name: Upload build artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
