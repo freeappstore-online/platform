@@ -7,7 +7,6 @@ interface ListedApp {
   id: string;
   ownerLogin: string;
   createdAt: number;
-  store?: 'apps' | 'games';
   category: string | null;
   type: string | null;
   oneliner: string | null;
@@ -19,7 +18,7 @@ interface ListedApp {
 
 export const listCommand = new Command('list')
   .alias('ls')
-  .description('List apps and games you have published.')
+  .description('List apps you have published.')
   .option('--json', 'Output JSON instead of a table (includes per-app commit history).')
   .option(
     '-v, --verbose',
@@ -73,14 +72,7 @@ export const listCommand = new Command('list')
       const h = histories[i]!;
       printApp(a, h, opts.verbose ?? false);
     }
-    const gameCount = apps.filter((a) => a.store === 'games').length;
-    const appCount = apps.length - gameCount;
-    const summary =
-      gameCount === 0
-        ? `${appCount} app${appCount === 1 ? '' : 's'}`
-        : appCount === 0
-          ? `${gameCount} game${gameCount === 1 ? '' : 's'}`
-          : `${appCount} app${appCount === 1 ? '' : 's'}, ${gameCount} game${gameCount === 1 ? '' : 's'}`;
+    const summary = `${apps.length} app${apps.length === 1 ? '' : 's'}`;
     process.stdout.write(dim(`${summary}\n`));
 
     // Surface rate-limit failure as a hint, not an error — output above
@@ -95,16 +87,15 @@ export const listCommand = new Command('list')
   });
 
 function printApp(a: ListedApp, h: AppHistory, verbose: boolean) {
-  const storeBadge = a.store === 'games' ? dim('[game] ') : dim('[app]  ');
-  process.stdout.write(`${storeBadge}${bold(a.id.padEnd(20))} ${dim(a.category ?? '—')}\n`);
-  if (a.oneliner) process.stdout.write(`         ${a.oneliner}\n`);
+  process.stdout.write(`${bold(a.id.padEnd(20))} ${dim(a.category ?? '—')}\n`);
+  if (a.oneliner) process.stdout.write(`  ${a.oneliner}\n`);
   if (h.lastUpdated) {
-    process.stdout.write(`         ${dim('updated:')} ${formatRelative(h.lastUpdated)}\n`);
+    process.stdout.write(`  ${dim('updated:')} ${formatRelative(h.lastUpdated)}\n`);
   }
-  process.stdout.write(`         ${dim('live:')} ${a.appUrl}\n`);
-  process.stdout.write(`         ${dim('repo:')} ${a.repoUrl}\n`);
+  process.stdout.write(`  ${dim('live:')} ${a.appUrl}\n`);
+  process.stdout.write(`  ${dim('repo:')} ${a.repoUrl}\n`);
   if (verbose && h.commits && h.commits.length > 0) {
-    process.stdout.write(`         ${dim('recent:')}\n`);
+    process.stdout.write(`  ${dim('recent:')}\n`);
     for (const c of h.commits) {
       const short = c.sha.slice(0, 7);
       const msg = c.message.split('\n')[0]!.slice(0, 80);

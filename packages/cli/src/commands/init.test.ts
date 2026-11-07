@@ -5,6 +5,7 @@ import ts from 'typescript';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installCapabilities } from '../lib/capabilities.js';
 import { getTemplateFiles, substituteAppName } from '../lib/starter-foundation.js';
+import { ALL_TEMPLATES, runInit } from './init.js';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -134,5 +135,17 @@ describe('starter display name substitution', () => {
     expect(app).not.toContain('APPNAME_TEXT');
     if (!displayName.includes('APPID')) expect(app).not.toContain('APPID');
     if (!displayName.includes('APPNAME')) expect(app).not.toContain('APPNAME');
+  });
+});
+
+describe('runInit templates (FAS only, #553)', () => {
+  it('offers only the app templates', () => {
+    expect(ALL_TEMPLATES).toEqual(['standalone', 'connected']);
+  });
+
+  it('rejects a game template and points to the FGS CLI', async () => {
+    await expect(runInit({ appId: 'asteroids', template: 'game-canvas' as never })).rejects.toThrow(
+      /fgs init/,
+    );
   });
 });

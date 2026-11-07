@@ -30,8 +30,6 @@ const TYPES = [
   'Connected (Firebase/Supabase backend, shared with Pro version)',
 ] as const;
 
-export type Store = 'apps' | 'games';
-
 interface SubmissionInput {
   name: string;
   category: (typeof CATEGORIES)[number];
@@ -41,19 +39,7 @@ interface SubmissionInput {
   demo: string | null;
 }
 
-/** Per-store branding the publish flow needs to keep the two stores parallel. */
-export const STORE_META = {
-  apps: {
-    label: 'FreeAppStore',
-    domain: 'freeappstore.online',
-    org: 'freeappstore-online',
-  },
-  games: {
-    label: 'FreeGameStore',
-    domain: 'freegamestore.online',
-    org: 'freegamestore-online',
-  },
-} as const;
+const DOMAIN = 'freeappstore.online';
 
 // Where to look when provisioning is down. Surfaced on hard failures so a
 // blocked creator can see status instead of being quietly shunted to a form.
@@ -61,12 +47,7 @@ const STATUS_URL = 'https://api.freeappstore.online/status';
 
 export const publishCommand = new Command('publish')
   .description(
-    'Publish this app or game. Provisions repo + hosting + DNS automatically. If provisioning fails, it fails loudly with the reason — there is no manual submission fallback.',
-  )
-  .option(
-    '--store <name>',
-    'Target store: "apps" (FreeAppStore) or "games" (FreeGameStore). Defaults to "apps".',
-    'apps',
+    'Publish this app. Provisions repo + hosting + DNS automatically. If provisioning fails, it fails loudly with the reason — there is no manual submission fallback.',
   )
   .option(
     '--skip-checks',
@@ -90,7 +71,6 @@ export const publishCommand = new Command('publish')
   )
   .action(
     async (opts: {
-      store?: string;
       skipChecks?: boolean;
       name?: string;
       category?: string;
@@ -100,12 +80,6 @@ export const publishCommand = new Command('publish')
       yes?: boolean;
       updateWorkflow?: boolean;
     }) => {
-      const store: Store = opts.store === 'games' ? 'games' : 'apps';
-      if (opts.store && opts.store !== 'apps' && opts.store !== 'games') {
-        process.stdout.write(`✗ --store must be "apps" or "games", got "${opts.store}"\n`);
-        process.exit(1);
-      }
-      const meta = STORE_META[store];
       // Check auth BEFORE prompting — there's no point asking the user for
       // 5 fields just to bail at the end with an auth error.
       // We distinguish "never signed in" from "session expired": both are
@@ -165,9 +139,7 @@ export const publishCommand = new Command('publish')
       const appName = await detectAppName();
       const description = await detectDescription();
 
-      process.stdout.write(
-        `\nLet's publish your ${store === 'games' ? 'game' : 'app'} to ${meta.label}.\n`,
-      );
+      process.stdout.write("\nLet's publish your app to FreeAppStore.\n");
 
       // Resolve flag values up-front. Whatever's missing falls through to a
       // prompt — unless --yes is set, in which case missing values abort.
@@ -219,11 +191,8 @@ export const publishCommand = new Command('publish')
         expectedAppId: input.name,
       });
       if (targetResult.status === 'fail') throw new Error(targetResult.detail);
-      const autoResult = await tryAutoProvision(input, store);
+      const autoResult = await tryAutoProvision(input);
       if (autoResult.kind === 'success') {
-        const noun = store === 'games' ? 'game' : 'app';
-        const listingPath = store === 'games' ? 'games' : 'apps';
-
         // Ensure the deploy workflow exists locally so the first push
         // triggers an R2 deploy. An existing file is only replaced with
         // --update-workflow; otherwise the drift is reported below.
@@ -232,11 +201,10 @@ export const publishCommand = new Command('publish')
         process.stdout.write(`\n✓ Provisioned!\n`);
         process.stdout.write(`  Launch URL: ${autoResult.appUrl}\n`);
         process.stdout.write(`  Repo:     ${autoResult.repoUrl}\n`);
-        process.stdout.write(`  Listing:  https://${meta.domain}/${listingPath}/${input.name}\n\n`);
-        if (store === 'apps')
-          process.stdout.write(
-            '  The listing appears after the first successful, publicly accessible deployment.\n\n',
-          );
+        process.stdout.write(`  Listing:  https://${DOMAIN}/apps/${input.name}\n\n`);
+        process.stdout.write(
+          '  The listing appears after the first successful, publicly accessible deployment.\n\n',
+        );
         if (workflowResult === 'created') {
           process.stdout.write(`  Added .github/workflows/deploy.yml (R2 deploy workflow)\n\n`);
         } else if (workflowResult === 'updated') {
@@ -254,7 +222,7 @@ export const publishCommand = new Command('publish')
         process.stdout.write(`  git remote add upstream ${autoResult.repoUrl}.git\n`);
         process.stdout.write(`  git push upstream main\n\n`);
         process.stdout.write(`Future commits to main auto-deploy in ~30s.\n`);
-        process.stdout.write(`Run \`fas list\` any time to see your ${noun}s.\n`);
+        process.stdout.write(`Run \`fas list\` any time to see your apps.\n`);
         return;
       }
 
@@ -270,16 +238,12 @@ export const publishCommand = new Command('publish')
         );
         process.exit(1);
       }
-      if (autoResult.kind === 'wrong_store') {
-        process.stdout.write(`\n✗ Publish failed: ${autoResult.reason}\n`);
-        process.exit(1);
-      }
       // unconfigured | failed → a real platform-side problem. Tell the creator
       // exactly what broke and where to watch status, and exit non-zero so CI
       // and scripts see the failure. Nothing they did is wrong.
       process.stdout.write(
         `\n✗ Provisioning failed: ${autoResult.reason}\n` +
-          `  This is a platform-side error, not a problem with your ${store === 'games' ? 'game' : 'app'} — your compliance checks passed.\n` +
+          `  This is a platform-side error, not a problem with your app — your compliance checks passed.\n` +
           `  Nothing is queued; no submission form. Please retry shortly, and if it persists, report it.\n` +
           `  Live status: ${STATUS_URL}\n`,
       );
@@ -293,7 +257,7 @@ interface AutoProvisionSuccess {
   repoUrl: string;
 }
 interface AutoProvisionFailure {
-  kind: 'unconfigured' | 'failed' | 'unauthorized' | 'wrong_store';
+  kind: 'unconfigured' | 'failed' | 'unauthorized';
   reason: string;
 }
 type AutoProvisionResult = AutoProvisionSuccess | AutoProvisionFailure;
@@ -317,10 +281,7 @@ export async function readCrossOriginIsolatedFlag(
   }
 }
 
-async function tryAutoProvision(
-  input: SubmissionInput,
-  store: Store,
-): Promise<AutoProvisionResult> {
+async function tryAutoProvision(input: SubmissionInput): Promise<AutoProvisionResult> {
   const config = await readConfig();
   const sessionToken = config.session?.token;
   if (!sessionToken) return { kind: 'unauthorized', reason: 'no fas session' };
@@ -335,7 +296,7 @@ async function tryAutoProvision(
     },
     body: JSON.stringify({
       name: input.name,
-      store,
+      store: 'apps',
       category: input.category,
       type: typeShort,
       oneliner: input.oneliner,
@@ -345,11 +306,6 @@ async function tryAutoProvision(
     }),
   });
   if (res.status === 401) return { kind: 'unauthorized', reason: 'session expired' };
-  if (res.status === 410) {
-    // wrong_store: this CLI doesn't publish to that store (e.g. games → fgs).
-    const body = (await res.json().catch(() => ({}))) as { error?: string; hint?: string };
-    return { kind: 'wrong_store', reason: body.hint ?? body.error ?? 'wrong store for this CLI' };
-  }
   if (res.status === 503) {
     const body = (await res.json().catch(() => ({}))) as { error?: string };
     return { kind: 'unconfigured', reason: body.error ?? '503' };

@@ -34,10 +34,10 @@ After the first successful code push and deploy, live at `https://my-app.freeapp
 | `fas logout` | Clear the cached session. |
 | `fas whoami` | Print the currently signed-in GitHub login. |
 | `fas doctor` | App health and stage report; `--offline`, `--json`, `--verify`, `--artifact`. |
-| `fas init <app-id>` | Generate standalone and connected apps from the canonical platform starter foundation; game templates remain available through their template repositories. Replaces app placeholders, runs `git init`, makes the first commit. |
+| `fas init <app-id>` | Generate standalone and connected apps from the canonical platform starter foundation; for games use the separate `fgs` CLI. Replaces app placeholders, runs `git init`, makes the first commit. |
 | `fas check` | Run compliance checks (no-tracking, brand fonts, manifest, bundle size). Exits non-zero on hard failures. |
 | `fas publish` | Provisions repo + hosting route + storefront entry, injects `deploy.yml` if missing (never overwrites an existing one unless `--update-workflow`), then prints `git remote add` and `git push` instructions. Auto-runs `fas check` first. |
-| `fas list` (alias `fas ls`) | List apps and games you have published. `--json` for scripting, `-v` for recent commits. |
+| `fas list` (alias `fas ls`) | List apps you have published. `--json` for scripting, `-v` for recent commits. |
 | `fas logs <app-id>` | Show recent deployment runs and links for an app (GitHub Actions). |
 | `fas secret set\|list\|rm` | Manage server-side encrypted API keys for an app. |
 | `fas proxy allow\|list\|deny` | Manage the URL allowlist for the per-app secret-injecting proxy. |
@@ -84,17 +84,16 @@ fas doctor --offline --json
 
 ### `fas init <app-id>`
 
-Scaffold a standalone or connected app from the same canonical starter foundation used by the builder. The presets share their routing, PWA, styling, and capability files; connected adds a private draft example while leaving public screens reachable. Game templates remain available through their template repositories. The command substitutes app identity and creates the first git commit.
+Scaffold a standalone or connected app from the same canonical starter foundation used by the builder. The presets share their routing, PWA, styling, and capability files; connected adds a private draft example while leaving public screens reachable. Games are scaffolded and published with the separate `fgs` CLI. The command substitutes app identity and creates the first git commit.
 
 ```bash
 fas init my-app                        # default: standalone template
 fas init my-app --template connected   # uses platform backend (KV, rooms, etc.)
-fas init asteroids --template game-canvas  # HTML5 canvas game template
 ```
 
 | Flag | Purpose |
 |---|---|
-| `-t, --template <name>` | Template to use. Choices: `standalone`, `connected`, `game-canvas`, `game-grid`, `game-3d`. Default: `standalone`. |
+| `-t, --template <name>` | Template to use. Choices: `standalone`, `connected`. Default: `standalone`. |
 
 ### `fas check`
 
@@ -117,7 +116,6 @@ By default, `publish` is interactive — it asks for category, type, oneliner, a
 
 ```bash
 fas publish                          # interactive
-fgs publish                          # FreeGameStore projects use their own CLI
 fas publish \
   --name my-app \
   --category Utilities \
@@ -128,7 +126,6 @@ fas publish \
 
 | Flag | Purpose |
 |---|---|
-| `--store apps` | Legacy selector; the FAS backend rejects games with 410. Use the separate `fgs` CLI for FreeGameStore. |
 | `--name <id>` | App id (lowercase, used as subdomain). Defaults to `package.json#name`. |
 | `--category <name>` | Storefront category. Case-insensitive (e.g. `utilities`, `brain training`). |
 | `--type standalone\|connected` | Standalone (localStorage only) or Connected (uses platform backend). |
@@ -142,7 +139,7 @@ The generated `deploy.yml` is the same one `fas init` writes. It has two jobs: `
 
 ### `fas list` (alias `fas ls`)
 
-List apps and games you have published. Shows app id, category, live URL, and creation date.
+List apps you have published. Shows app id, category, live URL, and creation date.
 
 ```bash
 fas list               # human-readable table
