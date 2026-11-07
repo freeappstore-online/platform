@@ -1,0 +1,12 @@
+{
+  "repos": [
+    "platform",
+    "ci-workflows",
+    "submissions",
+    "vibe-check",
+    "ai",
+    "vault",
+    "template-standalone",
+    "template-connected"
+  ]
+}

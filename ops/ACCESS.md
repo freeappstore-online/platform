@@ -50,3 +50,23 @@ The same loop over `$(gh api "user/repos?affiliation=owner&per_page=100" --pagin
 org **Settings → Audit log**, filter e.g. `action:repo.add_member` or
 `action:org.add_member`. The audit-log REST API is Enterprise-only; on the free
 plan it returns 404. Old events age out, so check promptly.
+
+## Fleet consistency audit
+
+`.github/workflows/fleet-consistency-audit.yml` (daily and on demand) runs
+`scripts/fleet-consistency-audit.mjs` and keeps one `verification` issue,
+"Fleet consistency audit findings", up to date (#552). It is read-only: it lists
+org repos and reads their files with the workflow's own `github.token`, probes
+each listed site with `HEAD`, and writes nothing except that issue. Repos that
+are tooling, not apps, are listed in `config/non-app-repos.json`.
+
+**D1 checks need a credential, and one has not been chosen.** `apps` and
+`routes` rows are only readable through `GET /v1/admin/apps`, which requires a
+signed-in platform admin (`requireAdmin`); there is no read-only service
+credential. Until one is decided, the audit runs those checks only if the
+repository secret `FAS_AUDIT_ADMIN_TOKEN` exists (a fas session of an admin
+account; sessions last 30 days, so it needs renewing) and otherwise says in its
+report that they were skipped. It sends the token only to
+`https://api.freeappstore.online/v1/admin/apps` and never prints it. A proper
+fix is a dedicated read-only audit endpoint with its own token, which changes
+the auth surface and is for the owner to decide.
