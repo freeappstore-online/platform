@@ -432,6 +432,45 @@ describe("handlePublish", () => {
     expect(result.repoEmpty).toBe(false);
   });
 
+  it("unarchives the repo of an app that was unpublished earlier (#551)", async () => {
+    const patches: unknown[] = [];
+    const gh: GhFn = async (path, method, body) => {
+      if (method === "PATCH" && path === "/repos/freeappstore-online/testapp") {
+        patches.push(body);
+        return { __status: 200, archived: false };
+      }
+      if (!method && path === "/repos/freeappstore-online/testapp") return { id: 5, archived: true };
+      return successGh()(path, method, body);
+    };
+    const result = await handlePublish(baseReq(), baseEnv(), gh);
+    expect(result.success).toBe(true);
+    expect(patches).toEqual([{ archived: false }]);
+    expect(result.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("unarchived");
+  });
+
+  it("explains an archived repo it cannot unarchive instead of a generic error (#551)", async () => {
+    const gh: GhFn = async (path, method, body) => {
+      if (method === "PATCH") return { __status: 403, message: "Resource not accessible" };
+      if (!method && path === "/repos/freeappstore-online/testapp") return { id: 5, archived: true };
+      return successGh()(path, method, body);
+    };
+    const result = await handlePublish(baseReq(), baseEnv(), gh);
+    expect(result.success).toBe(false);
+    expect(result.steps[0]?.detail).toMatch(/is archived \(unpublished earlier\) and could not be unarchived: Resource not accessible/);
+  });
+
+  it("does not unarchive a repo that is not the publisher's", async () => {
+    const patches: unknown[] = [];
+    const gh: GhFn = async (path, method, body) => {
+      if (method === "PATCH") patches.push(body);
+      if (!method && path === "/repos/freeappstore-online/testapp") return { id: 5, archived: true };
+      return successGh()(path, method, body);
+    };
+    const result = await handlePublish(baseReq(), baseEnv({ DB: fakeDB({ owner: "someone-else" }) }), gh);
+    expect(result.success).toBe(false);
+    expect(patches).toEqual([]);
+  });
+
   it("fails early when repo creation fails", async () => {
     const gh: GhFn = async (path, method) => {
       if (path.includes("/repos/freeappstore-online/testapp") && !method) {

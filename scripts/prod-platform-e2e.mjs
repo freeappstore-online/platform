@@ -41,6 +41,8 @@
 // checks against prod:
 //   FAS_E2E_ALLOW_NO_TOKEN=1 node scripts/prod-platform-e2e.mjs
 
+import { reapLeakedCanaries } from './e2e-canary-reaper.mjs';
+
 const API_BASE = (process.env.FAS_API_BASE || 'https://api.freeappstore.online').replace(
   /\/+$/,
   '',
@@ -280,6 +282,41 @@ async function unpublishApp(id, token) {
   console.log(`  unpublished ${id}: registry + route + R2 + DNS + repo removed`);
 }
 
+/** Org repos, newest first (two pages: a leaked canary is recent or the audit will list it). */
+async function listOrgRepos() {
+  const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'fas-prod-platform-e2e' };
+  if (RAW_GITHUB_TOKEN) headers.Authorization = `Bearer ${RAW_GITHUB_TOKEN}`;
+  const repos = [];
+  for (const page of [1, 2]) {
+    const { res, text } = await fetchText(
+      `https://api.github.com/orgs/${GITHUB_ORG}/repos?per_page=100&sort=created&direction=desc&page=${page}`,
+      { headers },
+      30_000,
+    );
+    if (!res.ok) fail(`listing ${GITHUB_ORG} repos failed (${res.status})`);
+    repos.push(...JSON.parse(text));
+  }
+  return repos;
+}
+
+/** Unpublish a leaked canary through the owner path; a canary already unpublished is fine. */
+async function unpublishLeakedCanary(id, token) {
+  const { res, text } = await fetchText(
+    `${API_BASE}/v1/unpublish`,
+    {
+      method: 'POST',
+      headers: bearer(token),
+      body: JSON.stringify({ id, store: 'apps', deleteRepo: true }),
+    },
+    120_000,
+  );
+  if (res.status === 404) {
+    // No `apps` row: this token cannot unpublish it, so an admin has to remove the repo.
+    fail(`${id} has no apps row; delete the repo from the admin dashboard`);
+  }
+  if (!res.ok) fail(`unpublish returned ${res.status}: ${text.slice(0, 200)}`);
+}
+
 async function githubRepo(id) {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'fas-prod-platform-e2e' };
   if (RAW_GITHUB_TOKEN) headers.Authorization = `Bearer ${RAW_GITHUB_TOKEN}`;
@@ -369,6 +406,22 @@ async function main() {
   console.log('\n› authenticated pipeline');
   const { token } = await exchangeToken(RAW_GITHUB_TOKEN);
   await verifyAuthenticatedSurfaces(token);
+
+  // Remove canaries earlier crashed runs leaked. Best-effort: a failure here is
+  // reported but must not fail this run (the audit lists what is left).
+  // Deleting repos is destructive, so it stays off until FAS_E2E_REAP=1 is set
+  // in the workflow's env (enabled once the owner has reviewed what it would remove).
+  if (process.env.FAS_E2E_REAP === '1') {
+    console.log('\n› reaping leaked canaries');
+    try {
+      await reapLeakedCanaries({
+        listRepos: listOrgRepos,
+        unpublish: (leaked) => unpublishLeakedCanary(leaked, token),
+      });
+    } catch (e) {
+      console.warn(`  reaping skipped: ${e?.message || e}`);
+    }
+  }
 
   // Cleanup runs outside try/finally on purpose: a throw inside `finally`
   // replaces whatever failed in the create path with the cleanup failure and

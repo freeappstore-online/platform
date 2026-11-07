@@ -39,6 +39,14 @@ After the initial publish, every `git push` to `main` triggers auto-deploy:
 
 The URL starts serving your code after a successful first push and deploy. Runtime depends on build time and the Actions queue; use `fas logs <id>` or the console to check it.
 
+## Unpublishing
+
+`POST /v1/unpublish` (the app's owner or an admin) removes the registry entry, the hosting route, the R2 objects, the DNS record, the `apps` row and the keyless-deploy repository pin. What it leaves behind:
+
+- **The GitHub repo is archived**, not deleted (reversible; read-only, so its deploy workflow no longer runs on pushes it can no longer receive). The response carries an `archive_repo` step. Pass `deleteRepo: true` to delete the repo instead.
+- Publishing the same id again by its owner **unarchives** the repo and provisions it again.
+- Leaked `e2e-canary-*` apps from a crashed production e2e run are reaped by `scripts/e2e-canary-reaper.mjs`, which the e2e script runs when `FAS_E2E_REAP=1` is set.
+
 ## Storefront listing
 
 Provisioning creates the repo and route early so a failed first build can be retried by pushing corrected code. A new listing starts with `discoveryStatus: pending`; it is absent from the homepage, search, public registry, sitemap and cached detail routes while pending.

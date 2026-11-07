@@ -196,6 +196,28 @@ export async function deleteRepo(gh: GhFn, id: string, config: StoreConfig): Pro
   }
 }
 
+/** Archive the org repo (reversible, unlike delete) so an unpublished app does not
+ *  keep a live-looking, writable repo whose deploy workflow now fails on every
+ *  push (#551). 404 means there is no repo; 403 is the token lacking admin rights. */
+export async function archiveRepo(gh: GhFn, id: string, config: StoreConfig): Promise<Step> {
+  try {
+    const res = await gh(`/repos/${config.org}/${id}`, "PATCH", { archived: true });
+    const status: number | undefined = res.__status;
+    if (status === 200) return { name: "archive_repo", status: "ok", detail: `Archived ${config.org}/${id} (reversible: unarchive it, or publish ${id} again)` };
+    if (status === 404) return { name: "archive_repo", status: "skip", detail: "No repository to archive" };
+    if (status === 403) {
+      return {
+        name: "archive_repo",
+        status: "fail",
+        detail: "HTTP 403 — GITHUB_TOKEN cannot archive repositories (fine-grained Administration: write)",
+      };
+    }
+    return { name: "archive_repo", status: "fail", detail: `HTTP ${status ?? "?"}${res.message ? ` ${res.message}` : ""}` };
+  } catch (e: any) {
+    return { name: "archive_repo", status: "fail", detail: e?.message ?? "GitHub archive failed" };
+  }
+}
+
 export async function handleDeprovision(
   req: DeprovisionRequest,
   env: DeprovisionEnv,
@@ -213,7 +235,7 @@ export async function handleDeprovision(
   steps.push(await deleteHostRoute(env, req.id, config));
   steps.push(await purgeR2Objects(env, req.id, config));
   steps.push(await deleteDnsRecords(cf, env, req.id, config));
-  if (req.deleteRepo) steps.push(await deleteRepo(gh, req.id, config));
+  steps.push(await (req.deleteRepo ? deleteRepo(gh, req.id, config) : archiveRepo(gh, req.id, config)));
 
   const ok = steps.every((s) => s.status !== "fail");
   return { ok, id: req.id, steps };

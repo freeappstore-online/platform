@@ -397,6 +397,18 @@ async function ensureRepo(req: PublishRequest, config: StoreConfig, env: Publish
     if (!isOwner) {
       return { name: "GitHub repo", status: "fail", detail: `${config.org}/${req.id} already exists and isn't yours to publish` };
     }
+    // An unpublished app's repo is archived (#551); publishing it again brings it back.
+    if (repoCheck.archived === true) {
+      const unarchived = await ghCall(`/repos/${config.org}/${req.id}`, "PATCH", { archived: false });
+      if (unarchived.__status !== 200) {
+        return {
+          name: "GitHub repo",
+          status: "fail",
+          detail: `${config.org}/${req.id} is archived (unpublished earlier) and could not be unarchived: ${unarchived.message || `HTTP ${unarchived.__status ?? "?"}`}`,
+        };
+      }
+      return { name: "GitHub repo", status: "skip", detail: `${config.org}/${req.id} was archived (unpublished earlier); unarchived` };
+    }
     return { name: "GitHub repo", status: "skip", detail: `${config.org}/${req.id} already exists` };
   }
   // Claim the id before creating anything (#279). The repo used to be created

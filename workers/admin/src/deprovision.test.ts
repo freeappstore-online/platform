@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CfFn, type DeprovisionEnv, deleteHostRoute, deleteRepo, handleDeprovision, removeRegistryEntry } from "./deprovision";
+import { archiveRepo, type CfFn, type DeprovisionEnv, deleteHostRoute, deleteRepo, handleDeprovision, removeRegistryEntry } from "./deprovision";
 import { type GhFn, STORE_CONFIG } from "./publish";
 
 const config = STORE_CONFIG.apps;
@@ -63,9 +63,10 @@ function registryFile(apps: { id: string }[]) {
 }
 
 /** GitHub mock: serves registry.json, records PUTs and DELETEs. */
-function fakeGh(opts: { apps: { id: string }[]; putStatus?: number[]; deleteStatus?: number }) {
+function fakeGh(opts: { apps: { id: string }[]; putStatus?: number[]; deleteStatus?: number; archiveStatus?: number }) {
   const puts: any[] = [];
   const deletes: string[] = [];
+  const archives: { path: string; body: unknown }[] = [];
   const putStatuses = [...(opts.putStatus ?? [200])];
   const gh: GhFn = async (path, method = "GET", body) => {
     if (path.endsWith("/contents/sites/storefront/registry.json") && method === "GET") return registryFile(opts.apps);
@@ -74,6 +75,11 @@ function fakeGh(opts: { apps: { id: string }[]; putStatus?: number[]; deleteStat
       const status = putStatuses.shift() ?? 200;
       return status === 200 ? { content: {}, __status: 200 } : { message: "conflict", __status: status };
     }
+    if (method === "PATCH") {
+      archives.push({ path, body });
+      const status = opts.archiveStatus ?? 200;
+      return status === 200 ? { __status: 200, archived: true } : { __status: status, message: `status ${status}` };
+    }
     if (method === "DELETE") {
       deletes.push(path);
       const status = opts.deleteStatus ?? 204;
@@ -81,7 +87,7 @@ function fakeGh(opts: { apps: { id: string }[]; putStatus?: number[]; deleteStat
     }
     throw new Error(`unexpected gh call ${method} ${path}`);
   };
-  return { gh, puts, deletes };
+  return { gh, puts, deletes, archives };
 }
 
 const noDns: CfFn = async () => ({ result: [] });
@@ -248,6 +254,35 @@ describe("deleteRepo", () => {
   });
 });
 
+describe("archiveRepo", () => {
+  it("ok on 200", async () => {
+    const { gh, archives } = fakeGh({ apps: [] });
+    const step = await archiveRepo(gh, "kanban", config);
+    expect(step.status).toBe("ok");
+    expect(step.detail).toContain("reversible");
+    expect(archives[0]?.body).toEqual({ archived: true });
+  });
+
+  it("skips on 404: there is no repository", async () => {
+    const { gh } = fakeGh({ apps: [], archiveStatus: 404 });
+    expect((await archiveRepo(gh, "kanban", config)).status).toBe("skip");
+  });
+
+  it("names the missing token permission on 403", async () => {
+    const { gh } = fakeGh({ apps: [], archiveStatus: 403 });
+    const step = await archiveRepo(gh, "kanban", config);
+    expect(step.status).toBe("fail");
+    expect(step.detail).toContain("Administration: write");
+  });
+
+  it("fails on any other status", async () => {
+    const { gh } = fakeGh({ apps: [], archiveStatus: 500 });
+    const step = await archiveRepo(gh, "kanban", config);
+    expect(step.status).toBe("fail");
+    expect(step.detail).toContain("HTTP 500");
+  });
+});
+
 describe("handleDeprovision", () => {
   it("runs every step and purges R2 for a full unpublish", async () => {
     const { gh, deletes } = fakeGh({ apps: [{ id: "kanban" }] });
@@ -274,12 +309,29 @@ describe("handleDeprovision", () => {
     expect(deletes).toEqual(["/repos/freeappstore-online/kanban"]);
   });
 
-  it("skips the repo step unless deleteRepo is set", async () => {
-    const { gh, deletes } = fakeGh({ apps: [] });
+  it("archives the repo (never deletes it) unless deleteRepo is set (#551)", async () => {
+    const { gh, deletes, archives } = fakeGh({ apps: [] });
     const result = await handleDeprovision({ id: "kanban", store: "apps" }, baseEnv(), { gh, cf: noDns });
     expect(result.ok).toBe(true);
+    expect(result.steps.find((s) => s.name === "archive_repo")?.status).toBe("ok");
     expect(result.steps.some((s) => s.name === "delete_repo")).toBe(false);
+    expect(archives).toEqual([{ path: "/repos/freeappstore-online/kanban", body: { archived: true } }]);
     expect(deletes).toHaveLength(0);
+  });
+
+  it("deletes instead of archiving when deleteRepo is set", async () => {
+    const { gh, archives } = fakeGh({ apps: [] });
+    const result = await handleDeprovision({ id: "kanban", store: "apps", deleteRepo: true }, baseEnv(), { gh, cf: noDns });
+    expect(result.steps.some((s) => s.name === "archive_repo")).toBe(false);
+    expect(archives).toHaveLength(0);
+  });
+
+  it("reports not ok, after every other step ran, when archiving is forbidden", async () => {
+    const { gh } = fakeGh({ apps: [{ id: "kanban" }], archiveStatus: 403 });
+    const result = await handleDeprovision({ id: "kanban", store: "apps" }, baseEnv(), { gh, cf: noDns });
+    expect(result.ok).toBe(false);
+    expect(result.steps.find((s) => s.name === "archive_repo")?.status).toBe("fail");
+    expect(result.steps.find((s) => s.name === "registry")?.status).toBe("ok");
   });
 
   it("still runs the other steps, and reports not ok, when repo deletion is forbidden", async () => {
