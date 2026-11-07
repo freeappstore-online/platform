@@ -504,6 +504,33 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
       expect(store.objects.has(`apps/alpha/.d/${ids[2]}.json`)).toBe(true);
     });
 
+    it('keeps a busy session open past 15 minutes, up to a cap', async () => {
+      const files = { 'index.html': 'a', 'b.js': 'b' };
+      const res = await openDelta('alpha', '101', files, {
+        'index.html': hex('a'),
+        'b.js': hex('b'),
+      });
+      const s = (await res.json()) as Session;
+      const expiry = () =>
+        (
+          db.prepare('SELECT expires_at FROM app_deploys WHERE id = ?').get(s.id) as {
+            expires_at: number;
+          }
+        ).expires_at;
+      // 14 minutes in: a file extends the session by another 15
+      db.prepare(
+        'UPDATE app_deploys SET created_at = created_at - 840000, expires_at = ? WHERE id = ?',
+      ).run(Date.now() + 60000, s.id);
+      expect((await put(s.id, s.token, 'index.html', 'a')).status).toBe(204);
+      expect(expiry()).toBeGreaterThan(Date.now() + 10 * 60000);
+      // past the 3 hour cap it cannot extend, and then expires
+      db.prepare(
+        'UPDATE app_deploys SET created_at = created_at - 11000000, expires_at = ? WHERE id = ?',
+      ).run(Date.now() + 60000, s.id);
+      expect((await put(s.id, s.token, 'b.js', 'b')).status).toBe(204);
+      expect(expiry()).toBeLessThan(Date.now() + 15 * 60000 - 1000 * 60 * 5);
+    });
+
     it('keeps the default limits, and an override raises them for that app only', async () => {
       expect(await limitsFor(d1, 'alpha')).toEqual(DEFAULT_LIMITS);
       const big = DEFAULT_LIMITS.fileBytes + 1;

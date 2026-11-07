@@ -31,6 +31,8 @@ const PLATFORM_SITES: Record<string, string> = {
   [`${PLATFORM_REPO}/.github/workflows/deploy-console.yml@${DEPLOY_REF}`]: 'console',
 };
 const SESSION_TTL_MS = 15 * 60 * 1000;
+/** A session that keeps receiving files stays open, up to this long in all (770 MiB takes ~40 min). */
+const SESSION_MAX_MS = 3 * 60 * 60 * 1000;
 const DEPLOYS_PER_HOUR = 20;
 const OPEN_DEPLOYS = 3;
 const PRUNE_GRACE_MS = 10 * 60 * 1000;
@@ -436,7 +438,19 @@ async function openDeploy(env: Env, id: string, authorization: string | undefine
   if (!row || row.token_hash !== (await sha256Hex(token)))
     throw new HttpError(401, 'unknown deploy or upload token');
   if (row.status !== 'open') throw new HttpError(409, `deploy is ${row.status}`);
-  if (row.expires_at < Date.now()) throw new HttpError(410, 'deploy session expired');
+  const now = Date.now();
+  if (row.expires_at < now) throw new HttpError(410, 'deploy session expired');
+  // Slide the expiry while the client is active, so a large upload is not cut off
+  // after the first 15 minutes (the cap above still bounds an abandoned-but-busy one).
+  if (row.expires_at - now < SESSION_TTL_MS / 2) {
+    const next = Math.min(now + SESSION_TTL_MS, row.created_at + SESSION_MAX_MS);
+    if (next > row.expires_at) {
+      await env.DB.prepare('UPDATE app_deploys SET expires_at = ? WHERE id = ?')
+        .bind(next, id)
+        .run();
+      row.expires_at = next;
+    }
+  }
   const stored = await loadManifest(env, id, row.manifest);
   return { row, files: stored.files, stored };
 }
