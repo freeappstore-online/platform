@@ -68,6 +68,8 @@ jobs:
         id: run
         env:
           FAS_E2E_GITHUB_TOKEN: ${{ secrets.FAS_E2E_GITHUB_TOKEN }}
+          # Reap leaked e2e-canary-* apps older than 1 hour (#551; enabled by Serge 2026-11-08).
+          FAS_E2E_REAP: '1'
         run: |
           set -o pipefail
           if node scripts/prod-platform-e2e.mjs 2>&1 | tee /tmp/e2e.log; then
