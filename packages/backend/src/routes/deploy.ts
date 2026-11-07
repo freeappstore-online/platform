@@ -144,6 +144,13 @@ const CONTENT_TYPES: Record<string, string> = {
   pem: 'text/plain; charset=utf-8',
   asc: 'text/plain; charset=utf-8',
   sig: 'application/octet-stream',
+  // Music notation and sound data (scoreplay, karaoke)
+  abc: 'text/vnd.abc',
+  ly: 'text/plain; charset=utf-8',
+  musicxml: 'application/vnd.recordare.musicxml+xml',
+  mxl: 'application/vnd.recordare.musicxml',
+  sf2: 'application/octet-stream',
+  sf3: 'application/octet-stream',
 };
 
 /**
