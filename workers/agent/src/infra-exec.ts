@@ -314,8 +314,8 @@ async function claimApp(appId: string, appName: string, tc: ToolCall, ctx: ExecC
   }
 
   await ctx.env.DB.prepare(
-    `INSERT INTO apps (id, owner_login, created_at, category, type, oneliner, display_name, store)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO apps (id, owner_login, created_at, category, type, oneliner, display_name, store, repo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO NOTHING`,
   )
     .bind(
@@ -329,6 +329,9 @@ async function claimApp(appId: string, appName: string, tc: ToolCall, ctx: ExecC
       (tc.input.description as string) || appName,
       appName,
       ctx.config.store,
+      // The same derived URL /v1/publish records (#546). Without it the row sat
+      // with a null repo until a publish happened to repair it (#554).
+      `https://github.com/${ctx.config.org}/${appId}`,
     )
     .run();
 

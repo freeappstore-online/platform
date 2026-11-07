@@ -65,7 +65,7 @@ describe("build target deployment guard", () => {
  * Minimal in-memory stand-in for the `apps`/`routes` D1 tables — enough to
  * exercise the ownership checks in executeDeploy. `apps` maps id -> owner_login.
  */
-function makeDb(apps: Map<string, string>) {
+function makeDb(apps: Map<string, string>, repos?: Map<string, string>) {
   return {
     prepare(sql: string) {
       return {
@@ -81,7 +81,10 @@ function makeDb(apps: Map<string, string>) {
             async run() {
               if (sql.includes("INSERT INTO apps")) {
                 const [id, owner] = args as [string, string];
-                if (!apps.has(id)) apps.set(id, owner); // ON CONFLICT DO NOTHING
+                if (!apps.has(id)) {
+                  apps.set(id, owner); // ON CONFLICT DO NOTHING
+                  repos?.set(id, args[8] as string);
+                }
               } else if (sql.includes("DELETE FROM apps")) {
                 const [id, owner] = args as [string, string];
                 if (apps.get(id) === owner) apps.delete(id);
@@ -100,6 +103,7 @@ function makeCtx(
     appId: string | null;
     ownerLogin: string | null;
     apps: Map<string, string>;
+    repos: Map<string, string>;
   }> = {},
 ) {
   return {
@@ -111,7 +115,7 @@ function makeCtx(
       GITHUB_TOKEN: "test-token",
       // /v1/publish succeeds; the auth re-check (/v1/auth/me) answers 200 too.
       PLATFORM: { fetch: async () => new Response("{}", { status: 200 }) } as never,
-      ...(overrides.apps ? { DB: makeDb(overrides.apps) as never } : {}),
+      ...(overrides.apps ? { DB: makeDb(overrides.apps, overrides.repos) as never } : {}),
     },
     config: appsConfig,
     onDeployStatus: vi.fn() as (status: DeployStatus) => void,
@@ -378,6 +382,23 @@ describe("executeInfraTool — uniqueness check", () => {
       // The old code inserted the apps row only after a successful deploy, so
       // the builder's claim did not exist while their code was being pushed.
       expect(ownerAtDeployTime).toBe("SASASKIA");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("records the org repo URL on the apps row it claims (#554)", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(() => Promise.resolve({ status: 404, json: () => Promise.resolve({}) })) as any;
+    try {
+      const apps = new Map<string, string>();
+      const repos = new Map<string, string>();
+      const ctx = makeCtx({ ownerLogin: "SASASKIA", apps, repos });
+      await executeInfraTool(
+        { id: "1", name: "deploy", input: { id: "room-bloom", name: "Room Bloom", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "t" } },
+        ctx,
+      );
+      expect(repos.get("room-bloom")).toBe("https://github.com/freeappstore-online/room-bloom");
     } finally {
       globalThis.fetch = originalFetch;
     }
