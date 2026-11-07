@@ -52,8 +52,9 @@ interface PublishRequest {
   store: Store;
   type?: string;
   creatorGithub?: string;
-  /** GitHub repo the code lives in ('owner/name' or URL), if known. Persisted
-   *  to the `apps.repo` column. */
+  /** Ignored. `apps.repo` is derived server-side from the store org and the id
+   *  (#546); a client-supplied repo (e.g. a creator's own clone) must never be
+   *  recorded, or the keyless deploy is refused as registered elsewhere. */
   repo?: string | null;
   /** Live demo URL, if any. Persisted to the `apps.demo` column. */
   demo?: string | null;
@@ -304,13 +305,21 @@ export async function writeRegistryWithRetry(gh: GhFn, req: PublishRequest, conf
  *  bumps updated_at); `apps` uses INSERT OR IGNORE so a re-publish never
  *  clobbers an existing owner. The r2_prefix follows `{registryKey}/{id}`
  *  (e.g. `apps/kanban`) — the path the per-app deploy.yml uploads to. */
-/** The apps row that records an app's owner. INSERT OR IGNORE: the first claim wins. */
+/** The repository every app deploys from: `https://github.com/<org>/<id>` (#546). */
+export function appRepoUrl(req: Pick<PublishRequest, "id" | "store">): string {
+  return `https://github.com/${STORE_CONFIG[req.store].org}/${req.id}`;
+}
+
+/** The apps row that records an app's owner. The first claim wins for every
+ *  column except `repo`, which is always rewritten to the derived org URL so a
+ *  wrong value recorded earlier is repaired on re-publish (#546). */
 function claimAppStmt(db: D1Database, req: PublishRequest, ownerLogin: string, now: number): D1PreparedStatement {
   return db
     .prepare(
-      `INSERT OR IGNORE INTO apps
+      `INSERT INTO apps
          (id, owner_login, created_at, category, type, oneliner, repo, demo, store)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT (id) DO UPDATE SET repo = excluded.repo`,
     )
     .bind(
       req.id,
@@ -319,7 +328,7 @@ function claimAppStmt(db: D1Database, req: PublishRequest, ownerLogin: string, n
       req.category ?? null,
       req.type || "standalone",
       req.description ?? null,
-      req.repo ?? null,
+      appRepoUrl(req),
       req.demo ?? null,
       req.store,
     );

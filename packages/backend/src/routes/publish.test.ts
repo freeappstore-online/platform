@@ -228,7 +228,8 @@ describe('POST /v1/publish', () => {
     expect(sentBody.category).toBe('Productivity');
     expect(sentBody.type).toBe('standalone');
     expect(sentBody.description).toBe('A simple test'); // oneliner → apps.oneliner
-    expect(sentBody.repo).toBe('https://github.com/me/my-app');
+    // apps.repo is derived by admin (#546); the client's repo is never forwarded.
+    expect(sentBody.repo).toBeUndefined();
     expect(sentBody.demo).toBeNull();
     expect(sentBody.crossOriginIsolated).toBeUndefined();
   });

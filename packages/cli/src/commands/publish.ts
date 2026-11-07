@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fsFileSource, runChecks, validateBuildTarget } from '@freeappstore/compliance';
@@ -39,7 +38,6 @@ interface SubmissionInput {
   type: (typeof TYPES)[number];
   oneliner: string;
   description: string;
-  repo: string | null;
   demo: string | null;
 }
 
@@ -164,7 +162,6 @@ export const publishCommand = new Command('publish')
         process.stdout.write('\n');
       }
 
-      const repo = await detectGitRepo();
       const appName = await detectAppName();
       const description = await detectDescription();
 
@@ -212,7 +209,6 @@ export const publishCommand = new Command('publish')
         // The backend's /v1/publish requires a non-empty description; the
         // storefront only shows the oneliner, so we reuse it here.
         description: merged.oneliner!,
-        repo: repo ? `https://github.com/${repo}` : null,
         demo: merged.demo?.trim() ? merged.demo : null,
       };
 
@@ -344,7 +340,6 @@ async function tryAutoProvision(
       type: typeShort,
       oneliner: input.oneliner,
       description: input.description,
-      repo: input.repo,
       demo: input.demo,
       ...(crossOriginIsolated !== undefined ? { crossOriginIsolated } : {}),
     }),
@@ -567,27 +562,6 @@ async function detectDescription(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-function detectGitRepo(): Promise<string | null> {
-  return new Promise((resolveFn) => {
-    const child = spawn('git', ['remote', 'get-url', 'origin'], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    });
-    let buf = '';
-    child.stdout.on('data', (chunk: Buffer) => (buf += chunk.toString()));
-    child.on('close', (code) => {
-      if (code !== 0) resolveFn(null);
-      else resolveFn(parseGitHubRepo(buf.trim()));
-    });
-    child.on('error', () => resolveFn(null));
-  });
-}
-
-export function parseGitHubRepo(url: string): string | null {
-  const m = /github\.com[:/]([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(url);
-  if (!m?.[1] || !m[2]) return null;
-  return `${m[1]}/${m[2]}`;
 }
 
 /** The canonical FreeAppStore deploy workflow — same generator as `fas init` and the builder. */

@@ -16,7 +16,8 @@ interface PublishBody {
   type: string;
   oneliner: string;
   description: string;
-  repo: string | null;
+  /** Ignored: `apps.repo` is derived server-side (#546). Old CLIs still send it. */
+  repo?: string | null;
   demo: string | null;
   /**
    * Attribute the app to a different creator than the publisher — for onboarding
@@ -186,7 +187,6 @@ publishRoutes.post('/publish', async (c) => {
       type: body.type,
       githubLogin: creatorGithub,
       creatorGithub,
-      repo: body.repo,
       demo: body.demo,
       ...(typeof body.crossOriginIsolated === 'boolean'
         ? { crossOriginIsolated: body.crossOriginIsolated }

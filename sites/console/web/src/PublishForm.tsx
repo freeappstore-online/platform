@@ -90,7 +90,6 @@ export function PublishForm({ getToken }: Props) {
       type: String(form.get('type') ?? 'standalone'),
       oneliner: String(form.get('oneliner') ?? ''),
       description: String(form.get('description') ?? ''),
-      repo: null,
       demo: null,
     }
     try {

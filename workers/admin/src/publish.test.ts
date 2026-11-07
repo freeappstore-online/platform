@@ -22,7 +22,7 @@ interface StmtCapture {
 
 /**
  * `owner`: the apps.owner_login already recorded (default: the test creator;
- * null = unclaimed). A claim (INSERT OR IGNORE INTO apps) records an owner if
+ * null = unclaimed). A claim (INSERT INTO apps) records an owner if
  * none exists. `failBatch`: the hosting-route batch throws, as a mid-publish
  * D1 failure would.
  */
@@ -44,7 +44,7 @@ function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?:
       },
       run: async () => {
         if (opts?.shouldThrow) throw new Error("D1 constraint error");
-        if (sql.includes("INSERT OR IGNORE INTO apps") && !owner) owner = stmt.binds[1] as string;
+        if (sql.includes("INSERT INTO apps") && !owner) owner = stmt.binds[1] as string;
         return { meta: { changes: 1 } };
       },
       first: async () => (sql.includes("SELECT owner_login FROM apps") && owner ? { owner_login: owner } : null),
@@ -156,7 +156,7 @@ describe("insertHostRoute", () => {
       category: "Productivity",
       type: "connected",
       description: "Boards",
-      repo: "abid8195/kanban",
+      repo: "https://github.com/someone/fork",
       demo: "https://demo.example",
     });
     const config = { org: "freeappstore-online", domain: "freeappstore.online", registryKey: "apps" } as any;
@@ -167,7 +167,7 @@ describe("insertHostRoute", () => {
     // Both statements land in the same batch() call — that's the atomicity.
     expect(capture).toHaveLength(2);
     const routesStmt = capture.find((s) => s.sql.startsWith("INSERT INTO routes"));
-    const appsStmt = capture.find((s) => s.sql.startsWith("INSERT OR IGNORE INTO apps"));
+    const appsStmt = capture.find((s) => s.sql.startsWith("INSERT INTO apps"));
     expect(routesStmt).toBeDefined();
     expect(appsStmt).toBeDefined();
     // apps binds: id, owner_login, created_at, category, type, oneliner, repo, demo, store
@@ -177,7 +177,10 @@ describe("insertHostRoute", () => {
     expect(appsStmt!.binds[3]).toBe("Productivity");
     expect(appsStmt!.binds[4]).toBe("connected");
     expect(appsStmt!.binds[5]).toBe("Boards");
-    expect(appsStmt!.binds[6]).toBe("abid8195/kanban");
+    // A client-supplied repo is ignored: the org URL is derived server-side (#546).
+    expect(appsStmt!.binds[6]).toBe("https://github.com/freeappstore-online/kanban");
+    expect(appsStmt!.sql).toContain("ON CONFLICT (id) DO UPDATE SET repo = excluded.repo");
+    expect(appsStmt!.sql).not.toMatch(/owner_login = excluded/);
     expect(appsStmt!.binds[7]).toBe("https://demo.example");
     expect(appsStmt!.binds[8]).toBe("apps");
   });
@@ -189,7 +192,7 @@ describe("insertHostRoute", () => {
     const config = { org: "freeappstore-online", domain: "freeappstore.online", registryKey: "apps" } as any;
     const result = await insertHostRoute(env, req, config);
     expect(result.status).toBe("ok");
-    const appsStmt = capture.find((s) => s.sql.startsWith("INSERT OR IGNORE INTO apps"));
+    const appsStmt = capture.find((s) => s.sql.startsWith("INSERT INTO apps"));
     expect(appsStmt!.binds[1]).toBe("freeappstore-online");
   });
 });
@@ -339,6 +342,15 @@ describe("handlePublish", () => {
     const result = await handlePublish(baseReq({ id: "freeapp" }), baseEnv(), successGh());
     expect(result.success).toBe(false);
     expect(result.steps[0]?.detail).toContain("free");
+  });
+
+  it("re-publishing records the org repo even when the client sends an outside fork (#546)", async () => {
+    const capture: StmtCapture[] = [];
+    const env = baseEnv({ DB: fakeDB({ capture }) });
+    const result = await handlePublish(baseReq({ repo: "https://github.com/someone/fork" }), env, successGh());
+    expect(result.success).toBe(true);
+    const appsStmt = capture.find((s) => s.sql.startsWith("INSERT INTO apps"));
+    expect(appsStmt!.binds[6]).toBe("https://github.com/freeappstore-online/testapp");
   });
 
   it("rejects IDs with uppercase", async () => {
