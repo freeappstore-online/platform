@@ -2616,7 +2616,16 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-10-24T06:48:21.937Z",
       "creatorGithub": "serge-ivo",
-      "permissions": []
+      "permissions": [
+        {
+          "name": "clipboard",
+          "reason": "Copies playlist share links"
+        },
+        {
+          "name": "screen",
+          "reason": "Captures the audio of a browser tab you choose to record"
+        }
+      ]
     },
     {
       "id": "mytunes",
@@ -2814,7 +2823,13 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-07T10:31:01.561Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        {
+          "name": "microphone",
+          "reason": "Listens for spoken commands such as “from bar 5”, “play” and “stop”."
+        }
+      ]
     }
   ]
 }
