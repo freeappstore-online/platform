@@ -954,12 +954,14 @@ export -f upload
 if jq -e 'has("missing")' "$RUNNER_TEMP/session.json" > /dev/null; then
   # Delta: upload only what changed; the API copies the rest from the live release.
   jq -r '.missing[]' "$RUNNER_TEMP/session.json" | tr '\\n' '\\0' | xargs -0 -P 8 -n 1 bash -c 'upload "$1"' _
-  jq -c '.reuse as $r | if ($r | length) == 0 then empty else ($r | _nwise(100) | {paths: .}) end' \\
-    "$RUNNER_TEMP/session.json" | while IFS= read -r batch; do
+  reuse_batch() {
     curl -sS --fail-with-body --retry 3 --retry-all-errors -X POST \\
       -H "Authorization: Bearer $DEPLOY_TOKEN" -H 'Content-Type: application/json' \\
-      --data-binary "$batch" "$DEPLOY_URL/reuse"
-  done
+      --data-binary "$1" "$DEPLOY_URL/reuse"
+  }
+  export -f reuse_batch
+  jq -c '.reuse as $r | if ($r | length) == 0 then empty else ($r | _nwise(100) | {paths: .}) end' \\
+    "$RUNNER_TEMP/session.json" | tr '\\n' '\\0' | xargs -0 -P 3 -n 1 bash -c 'reuse_batch "$1"' _
 else
   find . -type f -printf '%P\\0' | xargs -0 -P 8 -n 1 bash -c 'upload "$1"' _
 fi

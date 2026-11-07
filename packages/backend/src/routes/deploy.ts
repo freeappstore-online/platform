@@ -653,9 +653,10 @@ deployRoutes.post('/deploys/:id/reuse', async (c) => {
     throw new HttpError(400, `body must be {"paths": [1..${REUSE_BATCH} paths]}`);
   const allowed = new Set(stored.reuse);
   const bucket = bucketOf(c.env);
-  for (const path of paths) {
+  for (const path of paths)
     if (typeof path !== 'string' || !allowed.has(path))
       throw new HttpError(400, `${String(path)} is not a reusable file of this deploy`);
+  const copy = async (path: string) => {
     const from = await bucket.get(`${releasePrefix(row.app_id, stored.base!)}${path}`);
     if (!from || from.size !== files[path]) {
       from?.body?.cancel();
@@ -664,7 +665,14 @@ deployRoutes.post('/deploys/:id/reuse', async (c) => {
     await bucket.put(`${releasePrefix(row.app_id, id)}${path}`, from.size === 0 ? '' : from.body, {
       httpMetadata: { contentType: contentTypeFor(path)! },
     });
-  }
+  };
+  // A Worker runs six subrequests at a time; copy that many files at once.
+  const queue = [...(paths as string[])];
+  await Promise.all(
+    Array.from({ length: 6 }, async () => {
+      for (let path = queue.shift(); path !== undefined; path = queue.shift()) await copy(path);
+    }),
+  );
   return c.body(null, 204);
 });
 
