@@ -962,7 +962,7 @@ if jq -e 'has("missing")' "$RUNNER_TEMP/session.json" > /dev/null; then
   }
   export -f reuse_batch
   jq -c '.reuse as $r | if ($r | length) == 0 then empty else ($r | _nwise(100) | {paths: .}) end' \\
-    "$RUNNER_TEMP/session.json" | tr '\\n' '\\0' | xargs -0 -P 3 -n 1 bash -c 'reuse_batch "$1"' _
+    "$RUNNER_TEMP/session.json" | tr '\\n' '\\0' | xargs -0 -P 8 -n 1 bash -c 'reuse_batch "$1"' _
 else
   find . -type f -printf '%P\\0' | xargs -0 -P 8 -n 1 bash -c 'upload "$1"' _
 fi
