@@ -7,6 +7,7 @@ import {
   fasJsonFor,
   missingTestRunner,
   spliceCustomSteps,
+  withBuildVars,
   withoutCodeHealthScan,
 } from './fleet-deploy-workflow.mjs';
 
@@ -177,5 +178,13 @@ describe('spliceCustomSteps', () => {
     expect(at('Browser flows')).toBeLessThan(at('Upload build artifact'));
     expect(out.indexOf('Unit tests')).toBeLessThan(out.indexOf('  deploy:'));
     expect(out).not.toMatch(/secrets\./);
+  });
+});
+
+describe('withBuildVars', () => {
+  it('passes repository variables to the Build step only', () => {
+    const w = withBuildVars(generated, ['VITE_GOOGLE_CLIENT_ID']);
+    expect(w).toContain('          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}');
+    expect(w).not.toMatch(/secrets\./);
   });
 });

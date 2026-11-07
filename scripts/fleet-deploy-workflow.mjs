@@ -253,6 +253,23 @@ export function spliceCustomSteps(generated, original) {
   return out.join('\n');
 }
 
+/**
+ * Public build-time config the old workflow passed from repository variables
+ * (`vars.NAME`, never secrets) to the Build step; the generated Build step keeps it.
+ */
+/** Repos never published (no route, site 404): migrated without a deploy to verify. */
+export const UNPUBLISHED = new Set(['e2e-fix-check', 'personality-quiz']);
+
+export const BUILD_VARS = { 'gcp-spending': ['VITE_GOOGLE_CLIENT_ID'] };
+export function withBuildVars(workflow, names) {
+  const anchor = '          BUILD_COMMAND: ${{ steps.target.outputs.build-command }}\n';
+  if (!workflow.includes(anchor)) throw new Error('generated Build step has no BUILD_COMMAND env');
+  return workflow.replace(
+    anchor,
+    anchor + names.map((n) => `          ${n}: \${{ vars.${n} }}\n`).join(''),
+  );
+}
+
 function sh(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 }
@@ -315,12 +332,17 @@ async function inspect(repo, generated, workdir) {
   if (missingTestRunner(manifests))
     review.push('test script runs vitest but vitest is not a dependency');
   const live = await status(`https://${repo}.freeappstore.online/`);
-  if (live !== 200) review.push(`site returns ${live}`);
+  if (live !== 200 && !UNPUBLISHED.has(repo)) review.push(`site returns ${live}`);
   const keepsSteps =
     KEEP_CUSTOM_STEPS.has(repo) &&
     review.length > 0 &&
     // scoreplay's own ordered publisher is superseded by the atomic release (#510)
     review.every((r) => /^(step|action) /.test(r) || (repo === 'scoreplay' && r === 'no R2 sync'));
+  // Repository variables named in BUILD_VARS are reproduced by the generated Build step.
+  const known = BUILD_VARS[repo] ?? [];
+  for (const reason of [...review])
+    if (known.length && (reason === 'repo variables' || known.some((n) => reason === `env ${n}`)))
+      review.splice(review.indexOf(reason), 1);
   const action =
     variant === 'current' ? 'skip' : review.length && !keepsSteps ? 'review' : 'update';
   return {
@@ -372,6 +394,7 @@ async function waitForDeploy(repo, sha) {
 }
 
 async function apply(plan, generated, wait) {
+  if (BUILD_VARS[plan.repo]) generated = withBuildVars(generated, BUILD_VARS[plan.repo]);
   if (plan.keepsSteps)
     generated = spliceCustomSteps(generated, readFileSync(join(plan.dir, WORKFLOW), 'utf8'));
   if (SKIP_CODE_HEALTH.has(plan.repo)) generated = withoutCodeHealthScan(generated);
