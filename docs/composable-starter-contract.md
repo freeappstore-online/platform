@@ -53,7 +53,7 @@ The PWA capability ships with the starter. The shared runtime prompts before act
 | --- | --- | --- |
 | Device-local | `@freeappstore/sdk/persist` (localStorage/IndexedDB helpers) | Stored on this origin and device; does not sync or constitute a backup. A failed write is not a successful save. |
 | Private account | `fas.kv` | Per-user keys for this app; requires a signed-in account. Clear/hide account data when the session changes and ignore stale responses. |
-| Public shared | `fas.collections` | Public read, owner write. UI filtering or an owner query does not make documents private. |
+| Shared documents | `fas.collections` | Owner-only until the app owner shares the collection (`fas db share`); once shared, public read and owner write. UI filtering or an owner query does not make documents private. |
 | Durable room data | Authenticated data-room endpoints | Explicit room members have equal CRUD access to room documents. Members can read, change, and delete shared votes or records; membership does not hide one member's values from another. |
 | Realtime room | `fas.rooms` | Ephemeral WebSocket broadcast, not durable storage, an access-control list, or a private room. |
 

@@ -54,7 +54,7 @@
     "shared-data": {
       "status": "limited",
       "limits": "10,000 documents per collection, 64 KiB each, 100 per query page",
-      "note": "Every document is publicly readable and only its creator can edit or delete it; queries filter only by owner or geo box and sort by created/updated time.",
+      "note": "A collection is owner-only by default and publicly readable once the app owner shares it; only a document's creator can edit or delete it; queries filter only by owner or geo box and sort by created/updated time.",
       "evidence": [
         "packages/sdk/src/db.ts:42",
         "packages/backend/src/routes/db.ts:19",
@@ -341,7 +341,7 @@
     "private-shared-data": {
       "status": "no",
       "limits": null,
-      "note": "Shared collections are publicly readable and only a document's creator can edit it, so data a family, team or business keeps private cannot be shared between its members.",
+      "note": "Shared collections are publicly readable (collections are owner-only until shared) and only a document's creator can edit it, so data a family, team or business keeps private cannot be shared between its members.",
       "evidence": [
         "packages/backend/src/routes/db.ts:149",
         "packages/backend/src/routes/db.ts:236",

@@ -29,6 +29,7 @@ Fresh app scaffolds include the versioned `pwa` capability. Existing apps can us
 | `fas logs <id>` | Show recent deploy runs (GitHub Actions) |
 | `fas secret set\|list\|rm` | Manage app API keys |
 | `fas proxy allow\|list\|deny` | Manage proxy URL allowlist |
+| `fas db share\|unshare\|list` | Choose which `fas.collections` collections other users can read |
 | `fas screencheck` | Responsive layout test across viewports |
 | `fas quality [id]` | VCQA code quality report |
 | `fas admin transfer-owner` | Admin-only ownership transfer (compare-and-set) |
@@ -200,6 +201,16 @@ fas proxy deny "https://api.openweathermap.org/"
 ```
 
 Injection modes: `query:<name>`, `header:<name>`, `bearer`, `oauth2_cc`. Use `--user-key` instead of `--secret`/`--inject` for the key-vault provider hosts (OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs).
+
+## `fas db`
+
+Collections are private to each document's owner by default. Share one with every user of the app, or make it private again:
+
+```bash
+fas db share posts      # other users can now read documents in `posts` (owners still write)
+fas db unshare posts
+fas db list
+```
 
 ## `fas screencheck`
 

@@ -62,7 +62,7 @@ This data stays on this origin on this device. Clearing site data removes it. It
 | --- | --- | --- |
 | Device-local | `@freeappstore/sdk/persist` | This browser profile only |
 | Private account | `fas.kv` | The signed-in user's keys on the server |
-| Public shared | `fas.collections` | Public read, owner writes |
+| Shared documents | `fas.collections` | Private to the owner by default; other users read it only once the app owner shares the collection (`fas db share`). Owner writes |
 | Room fan-out | `fas.rooms` | Ephemeral broadcast, not an access list |
 
 A save reports `{ ok: true, value }` only after `localStorage` accepts the write or the IndexedDB transaction commits. Do not show a success toast before that. `{ ok: false, reason }` is `unavailable` (storage blocked), `corrupt` (unreadable bytes, left in place), `quota`, `validation`, `aborted`, `conflict`, or `not-installed`. Nothing in this module deletes corrupt data or resets it to a default.
@@ -150,20 +150,22 @@ await fas.counters.increment('lives', -1);                 // decrement — owne
 
 ## Collections (`fas.collections`)
 
-Simple document store for public-read, queryable data. Select visibility explicitly with `fas.collections.collection(name, { visibility: 'public-read' })`; public collections cannot represent private rooms or hidden votes.
+Simple document store for queryable data. **A collection is private to the user who wrote each document by default**: a read lists and returns only your own documents, a signed-out read gets 401, another user's document id answers 404, and `owner` can only be your own id (anything else is 403). `_owner` is shown only on your own documents.
+
+A collection that other users must read (a public feed, a shared playlist, a poll) has to be marked shared by the app owner, once: `fas db share posts`. Declare it in code with `{ visibility: 'public-read' }` (default `'private'`). A shared collection is readable by anyone, signed in or not, and still cannot represent private rooms or hidden votes. Writes are owner-only either way. `fas db unshare posts` makes it private again; `fas db list` shows what is shared.
 
 ```ts
-const posts = fas.collections.collection('posts', { visibility: 'public-read' });
+const posts = fas.collections.collection('posts', { visibility: 'public-read' }); // after `fas db share posts`
 
 // Create (auth required, you become the owner)
 const post = await posts.create({ title: 'Hello', body: '...' });
 
-// Query (public read)
+// Query (your own documents, or everyone's once shared)
 const { documents, total } = await posts.query({
   limit: 20,
   orderBy: 'created_at',
   order: 'desc',
-  owner: userId,
+  owner: userId, // only ever your own id
 });
 
 // Get / Update / Delete (owner only for writes)

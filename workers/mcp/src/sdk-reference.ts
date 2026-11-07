@@ -259,9 +259,12 @@ const mine = await posts.query({ owner: fas.auth.user?.id })
 await posts.update(doc.id, { title: 'Updated' })
 await posts.delete(doc.id)
 \`\`\`
-Public queryable JSON documents with ownership. public-read data is readable by other
-users: a client-side owner filter or hidden UI is not confidentiality. Private account
-data belongs in per-user KV; room access rules require a separately authorized backend.`,
+Queryable JSON documents with ownership. A collection is private to each document's owner
+by default (you read only your own; \`owner\` can only be your own id; \`_owner\` is hidden
+from others). Other users can read it only after the app owner runs \`fas db share posts\`;
+shared data is public: a client-side owner filter or hidden UI is not confidentiality.
+Private account data belongs in per-user KV; room access rules require a separately
+authorized backend.`,
   rooms: `## Real-time Rooms (WebSocket)
 \`\`\`tsx
 const room = fas.rooms.join('my-room')

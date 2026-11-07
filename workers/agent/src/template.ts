@@ -226,7 +226,7 @@ Choose storage by product requirements, not layout or preset:
 - Private-account: fas.kv stores the signed-in user's keys for this app. Share the app-owned fas instance via props; never initialize a second instance in a feature, because profile sign-out must revoke its access too. Keep Home/About public; gate private data rather than Shell. Use useAuth from "@freeappstore/sdk/hooks" and SDK sign-in UI.
   await fas.kv.set("notes", notesArray); await fas.kv.get("notes"); fas.kv.list({ prefix }); fas.kv.delete(key).
   Free limits: 64KB per value, 1MB per user, 100 keys. Handle auth/network failures and account changes; stale responses from an earlier account must not overwrite current state.
-- Public-shared: fas.collections has public reads and owner writes. Never store private data here or describe hidden UI as confidentiality.
+- Shared documents: fas.collections is owner-only until the app owner shares the collection with \`fas db share <collection>\`; shared collections have public reads and owner writes. Never store private data in a shared collection or describe hidden UI as confidentiality. Another user's documents, the owner filter and _owner are not available from a private collection.
 - Room fan-out: fas.rooms is ephemeral broadcast, not durable persistence, a private room or an access-control list. Never send secrets or private account records.
 Use installed cloud-data capability examples for validated, race-safe connected wiring. Capability installation and updates must never delete user records.
 

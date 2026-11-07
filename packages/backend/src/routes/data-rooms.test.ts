@@ -55,8 +55,12 @@ describe.skipIf(!hasSqlite)('durable data room permissions (synthetic identities
     const { request, room } = await setup();
     const created = await request('alice', `${room}/db/votes`, 'POST', '{"secret":42}');
     const { id } = (await created.json()) as { id: string };
-    expect((await request(null, `demo/db/votes/${id}`)).status).toBe(404);
-    const publicList = await request(null, 'demo/db/votes?owner=alice');
+    // The collection is private (#467): signed out is refused, and a room record
+    // is never visible through it even to its own author.
+    expect((await request(null, `demo/db/votes/${id}`)).status).toBe(401);
+    expect((await request('alice', `demo/db/votes/${id}`)).status).toBe(404);
+    expect((await request(null, 'demo/db/votes?owner=alice')).status).toBe(401);
+    const publicList = await request('alice', 'demo/db/votes?owner=alice');
     expect(publicList.status).toBe(200);
     expect(await publicList.json()).toEqual({ documents: [], total: 0 });
     const privateList = await request('alice', `${room}/db/votes`);

@@ -1,6 +1,11 @@
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { HttpError, requireAppUser } from '../lib/auth.js';
+import {
+  type CurrentUser,
+  HttpError,
+  requireAppUser,
+  requireConsoleAppOwner,
+} from '../lib/auth.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 
@@ -8,8 +13,12 @@ import type { Env } from '../types.js';
  * Collections — a simple document database for apps.
  *
  * Documents are JSON objects stored per (appId, collection, id).
- * Write operations require auth; reads are public.
- * Updates and deletes are owner-only.
+ * Write operations require auth. Updates and deletes are owner-only.
+ *
+ * Reads are private to the document owner by default (#467): a collection is
+ * readable by other users only when its app owner has marked it shared
+ * (collection_settings, `fas db share`). `_owner` is shown only to the owner,
+ * and `?owner=` can only name the caller.
  *
  * Limits:
  * - collection names ≤ 64 chars, alphanumeric + hyphens + underscores
@@ -20,6 +29,7 @@ const MAX_COLLECTION_LENGTH = 64;
 const MAX_DOCS_PER_COLLECTION = 10_000;
 const MAX_DOC_BYTES = 64 * 1024;
 const COLLECTION_RE = /^[a-zA-Z0-9_-]+$/;
+const MAX_SHARED_COLLECTIONS_PER_APP = 50;
 
 function generateId(): string {
   const ts = Date.now().toString(36);
@@ -50,19 +60,61 @@ function sanitizeJsonField(name: string): string | null {
  * Server id and row metadata win over same-named fields stored in the JSON
  * body. Spreading the body first matches the create response, which already
  * puts `id` last so a client-supplied `data.id` cannot shadow the row id.
+ * `_owner` is the owner's own business: everyone else gets no such field, and
+ * a `_owner` stored in the body is dropped with it.
  */
 function withDocumentMeta(
   id: string,
   data: Record<string, unknown>,
   meta: { ownerId: string; createdAt: number; updatedAt: number },
+  viewerId: string | null,
 ) {
+  const { _owner: _stored, ...body } = data;
   return {
-    ...data,
+    ...body,
     id,
-    _owner: meta.ownerId,
+    ...(viewerId === meta.ownerId ? { _owner: meta.ownerId } : {}),
     _createdAt: meta.createdAt,
     _updatedAt: meta.updatedAt,
   };
+}
+
+async function isShared(db: D1Database, appId: string, collection: string): Promise<boolean> {
+  const row = await db
+    .prepare('SELECT shared FROM collection_settings WHERE app_id = ? AND collection = ?')
+    .bind(appId, collection)
+    .first<{ shared: number }>();
+  return row?.shared === 1;
+}
+
+/**
+ * The caller of a read, or null for an anonymous one. A stale or foreign
+ * token reads as anonymous: shared collections stay readable by anyone, and
+ * private ones then answer 401 like any other signed-out read.
+ */
+async function readerOrNull(c: Context<{ Bindings: Env }>, appId: string) {
+  if (!c.req.header('Authorization')) return null;
+  try {
+    return await requireAppUser(c, appId);
+  } catch (err) {
+    if (err instanceof HttpError) return null;
+    throw err;
+  }
+}
+
+/**
+ * Who may read this collection. A private collection needs a signed-in
+ * caller and shows only their own documents; a shared one is open to anyone.
+ */
+async function readAccess(
+  c: Context<{ Bindings: Env }>,
+  appId: string,
+  collection: string,
+): Promise<{ viewer: CurrentUser | null; shared: boolean }> {
+  const viewer = await readerOrNull(c, appId);
+  const shared = await isShared(c.env.DB, appId, collection);
+  if (!shared && !viewer) throw new HttpError(401, 'sign in to read this collection');
+  return { viewer, shared };
 }
 
 export const dbRoutes = new Hono<{ Bindings: Env }>();
@@ -141,14 +193,35 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
   }
 });
 
-/** List/query documents. Public read. */
+/** List/query documents. Owner-only unless the collection is shared. */
 dbRoutes.get('/apps/:appId/db/:collection', async (c) => {
-  const { appId, collection } = c.req.param();
+  try {
+    const { appId, collection } = c.req.param();
 
-  const colErr = validateCollection(collection);
-  if (colErr) return c.text(colErr, 400);
+    const colErr = validateCollection(collection);
+    if (colErr) return c.text(colErr, 400);
 
-  const owner = c.req.query('owner');
+    const { viewer, shared } = await readAccess(c, appId, collection);
+    const owner = c.req.query('owner');
+    // `?owner=` filters to the caller's own documents; naming anyone else would
+    // enumerate what that user wrote across the app.
+    if (owner && owner !== viewer?.id) {
+      return c.text('owner filter is limited to your own documents', viewer ? 403 : 401);
+    }
+    return await listDocuments(c, appId, collection, viewer, shared ? owner : viewer?.id);
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+});
+
+async function listDocuments(
+  c: Context<{ Bindings: Env }>,
+  appId: string,
+  collection: string,
+  viewer: CurrentUser | null,
+  owner: string | undefined,
+) {
   const limit = queryLimit(c.req.query('limit'), 20, 100);
   const offset = queryOffset(c.req.query('offset'));
   const orderBy = c.req.query('orderBy') === 'updated_at' ? 'updated_at' : 'created_at';
@@ -195,44 +268,54 @@ dbRoutes.get('/apps/:appId/db/:collection', async (c) => {
     .all<{ id: string; data: string; owner_id: string; created_at: number; updated_at: number }>();
 
   const documents = results.map((r) =>
-    withDocumentMeta(r.id, JSON.parse(r.data) as Record<string, unknown>, {
-      ownerId: r.owner_id,
-      createdAt: r.created_at,
-      updatedAt: r.updated_at,
-    }),
+    withDocumentMeta(
+      r.id,
+      JSON.parse(r.data) as Record<string, unknown>,
+      { ownerId: r.owner_id, createdAt: r.created_at, updatedAt: r.updated_at },
+      viewer?.id ?? null,
+    ),
   );
 
   return c.json({ documents, total: countResult?.total ?? 0 });
-});
+}
 
-/** Get a single document. Public read. */
+/** Get a single document. Owner-only unless the collection is shared. */
 dbRoutes.get('/apps/:appId/db/:collection/:id', async (c) => {
-  const { appId, collection, id } = c.req.param();
+  try {
+    const { appId, collection, id } = c.req.param();
 
-  const colErr = validateCollection(collection);
-  if (colErr) return c.text(colErr, 400);
+    const colErr = validateCollection(collection);
+    if (colErr) return c.text(colErr, 400);
 
-  const row = await c.env.DB.prepare(
-    'SELECT id, data, owner_id, created_at, updated_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
-  )
-    .bind(appId, collection, id)
-    .first<{
-      id: string;
-      data: string;
-      owner_id: string;
-      created_at: number;
-      updated_at: number;
-    }>();
+    const { viewer, shared } = await readAccess(c, appId, collection);
 
-  if (!row) return c.text('not found', 404);
+    const row = await c.env.DB.prepare(
+      'SELECT id, data, owner_id, created_at, updated_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
+    )
+      .bind(appId, collection, id)
+      .first<{
+        id: string;
+        data: string;
+        owner_id: string;
+        created_at: number;
+        updated_at: number;
+      }>();
 
-  return c.json(
-    withDocumentMeta(row.id, JSON.parse(row.data) as Record<string, unknown>, {
-      ownerId: row.owner_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }),
-  );
+    // Someone else's document in a private collection looks like a missing one.
+    if (!row || (!shared && row.owner_id !== viewer?.id)) return c.text('not found', 404);
+
+    return c.json(
+      withDocumentMeta(
+        row.id,
+        JSON.parse(row.data) as Record<string, unknown>,
+        { ownerId: row.owner_id, createdAt: row.created_at, updatedAt: row.updated_at },
+        viewer?.id ?? null,
+      ),
+    );
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
 });
 
 /** Update a document. Auth required, owner only. */
@@ -294,11 +377,12 @@ dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
     }
 
     return c.json(
-      withDocumentMeta(id, merged, {
-        ownerId: existing.owner_id,
-        createdAt: existing.created_at,
-        updatedAt: now,
-      }),
+      withDocumentMeta(
+        id,
+        merged,
+        { ownerId: existing.owner_id, createdAt: existing.created_at, updatedAt: now },
+        user.id,
+      ),
     );
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
@@ -328,6 +412,68 @@ dbRoutes.delete('/apps/:appId/db/:collection/:id', async (c) => {
       .bind(appId, collection, id)
       .run();
 
+    return c.body(null, 204);
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Collection visibility (app owner)
+// -----------------------------------------------------------------------------
+
+/** Collections of this app that other users may read. */
+dbRoutes.get('/apps/:appId/collections', async (c) => {
+  try {
+    const appId = c.req.param('appId');
+    await requireConsoleAppOwner(c, appId);
+    const { results } = await c.env.DB.prepare(
+      'SELECT collection, updated_at FROM collection_settings WHERE app_id = ? AND shared = 1 ORDER BY collection',
+    )
+      .bind(appId)
+      .all<{ collection: string; updated_at: number }>();
+    return c.json({
+      shared: results.map((r) => ({ collection: r.collection, updatedAt: r.updated_at })),
+    });
+  } catch (err) {
+    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
+    throw err;
+  }
+});
+
+/** Mark a collection shared (`{ shared: true }`) or private again (`{ shared: false }`). */
+dbRoutes.put('/apps/:appId/collections/:collection', async (c) => {
+  try {
+    const { appId, collection } = c.req.param();
+    await requireConsoleAppOwner(c, appId);
+
+    const colErr = validateCollection(collection);
+    if (colErr) return c.text(colErr, 400);
+
+    const body = await c.req.json<{ shared?: unknown }>().catch(() => ({}) as { shared?: unknown });
+    if (typeof body.shared !== 'boolean') return c.text('shared must be true or false', 400);
+
+    if (!body.shared) {
+      await c.env.DB.prepare('DELETE FROM collection_settings WHERE app_id = ? AND collection = ?')
+        .bind(appId, collection)
+        .run();
+      return c.body(null, 204);
+    }
+
+    // Cap the rows an app can take, counting only new collections.
+    const write = await c.env.DB.prepare(
+      `INSERT INTO collection_settings (app_id, collection, shared, updated_at)
+       SELECT ?1, ?2, 1, ?3
+       WHERE EXISTS (SELECT 1 FROM collection_settings WHERE app_id = ?1 AND collection = ?2)
+          OR (SELECT COUNT(*) FROM collection_settings WHERE app_id = ?1) < ?4
+       ON CONFLICT(app_id, collection) DO UPDATE SET shared = 1, updated_at = excluded.updated_at`,
+    )
+      .bind(appId, collection, Date.now(), MAX_SHARED_COLLECTIONS_PER_APP)
+      .run();
+    if (!write.meta.changes) {
+      return c.text(`max ${MAX_SHARED_COLLECTIONS_PER_APP} shared collections per app`, 409);
+    }
     return c.body(null, 204);
   } catch (err) {
     if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);

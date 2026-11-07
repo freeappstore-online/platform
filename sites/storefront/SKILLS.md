@@ -335,7 +335,7 @@ Use for: vote tallies, view counts, leaderboards, any shared numeric state.
 
 ### Collections (Document Database)
 
-Public-read queryable JSON documents with owner-only writes. Owner filters are not a privacy boundary.
+Queryable JSON documents with owner-only writes. A collection is private to each document's owner by default (you list and read only your own, `owner` can only be your own id, `_owner` is hidden from everyone else). The app owner marks a collection shared once with `fas db share <collection>`; a shared collection is readable by anyone, so an owner filter there is not a privacy boundary.
 
 ```tsx
 const col = fas.collections.collection('posts', { visibility: 'public-read' })
@@ -343,7 +343,7 @@ const col = fas.collections.collection('posts', { visibility: 'public-read' })
 // Create (requires auth, auto-assigns id + owner)
 const doc = await col.create({ title: 'Hello', body: 'World' })
 
-// Read (public)
+// Read (your own documents, or everyone's once the collection is shared)
 const post = await col.get(doc.id)
 
 // Query (public, with filters)

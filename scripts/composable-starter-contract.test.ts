@@ -51,7 +51,7 @@ describe('composable starter contract (#343)', () => {
       'fas.rooms',
       'Device-local',
       'Private account',
-      'Public shared',
+      'Shared documents',
       'custom frame',
       'zoom',
       "reason: 'rollback'",

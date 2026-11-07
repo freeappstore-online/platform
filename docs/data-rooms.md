@@ -1,7 +1,7 @@
 # Durable authorized data rooms
 
 These HTTP endpoints require a session bearer token, including reads. They are
-separate from public-read `fas.collections` and ephemeral `fas.rooms` WebSocket
+separate from `fas.collections` (owner-only unless shared) and ephemeral `fas.rooms` WebSocket
 fan-out. Joining a WebSocket room never grants durable data access; messages sent
 there are not protected by durable room membership. Do not broadcast secrets there.
 
