@@ -18,6 +18,12 @@ describe("ownsApp", () => {
     await expect(ownsApp("https://api.example", "token", "calendar")).resolves.toEqual({ owned: false });
   });
 
+  it("does not count a game with the same id as an owned app", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [{ id: "chess", store: "games" }] }))));
+
+    await expect(ownsApp("https://api.example", "token", "chess")).resolves.toEqual({ owned: false });
+  });
+
   it("propagates 401 instead of returning false ownership", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })));
 

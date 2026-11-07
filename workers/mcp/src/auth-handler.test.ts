@@ -137,6 +137,16 @@ afterEach(() => {
 describe("GET /callback", () => {
   const token = SESSION;
 
+  it("answers 502 with a retry hint, not a bare 500, when FreeAppStore is unreachable", async () => {
+    const { env, completeAuthorization } = makeEnv();
+    const flow = await startFlow(env);
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("network down"); }));
+    const res = await callback(env, callbackUrl(flow), flow.cookie);
+    expect(res.status).toBe(502);
+    expect(await res.text()).toMatch(/try connecting again/);
+    expect(completeAuthorization).not.toHaveBeenCalled();
+  });
+
   it("accepts a matching nonce, state and cookie, redeems with the PKCE verifier, and completes authorization", async () => {
     const { env, completeAuthorization } = makeEnv();
     const exchange = stubExchange(() => Response.json({ fas_session: token }));

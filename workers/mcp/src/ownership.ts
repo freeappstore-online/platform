@@ -30,9 +30,10 @@ export async function ownsApp(apiBase: string, token: string, appId: string): Pr
     return { error: await readError(res), status: res.status };
   }
 
-  const data = (await res.json()) as { apps?: Array<{ id: string }>; error?: string };
+  const data = (await res.json()) as { apps?: Array<{ id: string; store?: string }>; error?: string };
   if (data.error) return { error: data.error, status: 502 };
-  return { owned: (data.apps ?? []).some((a) => a.id === appId) };
+  // /v1/apps/mine lists games too; a game is not an app in this org's repos.
+  return { owned: (data.apps ?? []).some((a) => a.id === appId && (a.store ?? "apps") === "apps") };
 }
 
 export function ownershipGateText(appId: string, result: OwnershipResult): string | null {

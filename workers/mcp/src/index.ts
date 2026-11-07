@@ -4,7 +4,7 @@ import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
+import { isFilePath, isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
 import { getDeployStatus } from "./deploy-status.js";
 import { createAppProblems, preflightUpdate } from "./preflight.js";
 import { scaffoldRepo } from "./scaffold.js";
@@ -30,13 +30,26 @@ interface Env {
   MCP_RATE_LIMIT?: RateLimiter;
 }
 
-// FAS backend API
-async function fasApi(apiBase: string, path: string, token?: string) {
+// FAS backend API. Never throws: a network or parse failure comes back as { error }.
+async function fasApi(apiBase: string, path: string, token?: string): Promise<any> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${apiBase}${path}`, { headers });
-  if (!res.ok) return { error: `API ${res.status}: ${await res.text()}` };
-  return await res.json();
+  try {
+    const res = await fetch(`${apiBase}${path}`, { headers });
+    if (!res.ok) return { error: `API ${res.status}: ${(await res.text()).slice(0, 300)}` };
+    return await res.json();
+  } catch (e) {
+    return { error: `FreeAppStore API unreachable (${e instanceof Error ? e.message : String(e)}). Retry shortly.` };
+  }
+}
+
+/** fetch() that reports a network failure as a message instead of throwing. */
+async function tryFetch(url: string, init?: RequestInit): Promise<Response | string> {
+  try {
+    return await fetch(url, init);
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 // POST to the FAS backend (e.g. /v1/publish — the same path `fas publish` uses).
@@ -136,7 +149,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           error?: string;
         };
         if (data.error) return toolError(`Could not list your apps: ${data.error}`);
-        const apps = data.apps ?? [];
+        // The endpoint lists games too; those live on FreeGameStore.
+        const apps = (data.apps ?? []).filter((a) => (a.store ?? "apps") === "apps");
         if (apps.length === 0) return txt("No apps published yet.");
         const lines = apps.map(
           (a) => `- **${a.id}** (${a.category}) — ${a.oneliner}\n  Live: ${a.appUrl} | Repo: ${a.repoUrl}`
@@ -233,7 +247,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (logs.length === 0) return txt(`No logs found for ${app_id}.`);
         const lines = logs.map(l => {
           const time = new Date(l.ts).toISOString().slice(11, 23);
-          const data = l.data ? ` ${JSON.stringify(l.data)}` : "";
+          const data = l.data ? ` ${JSON.stringify(l.data).slice(0, 300)}` : "";
           return `${time} [${l.level.toUpperCase().padEnd(5)}] ${l.category}: ${l.message}${data}`;
         });
         // Include build info if present
@@ -257,8 +271,10 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         inputSchema: {},
       },
       async () => {
-        const res = await fetch("https://freeappstore.online/skills.md");
-        if (!res.ok) return txt(withBuildHandoff("Failed to fetch SKILLS.md"));
+        const res = await tryFetch("https://freeappstore.online/skills.md");
+        if (typeof res === "string" || !res.ok) {
+          return txt(withBuildHandoff(`Could not fetch the full guide (${typeof res === "string" ? res : `HTTP ${res.status}`}); it is at https://freeappstore.online/skills.md.`));
+        }
         return txt(withBuildHandoff(await res.text()));
       }
     );
@@ -379,7 +395,13 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       },
       async ({ app_id, path }) => {
         if (!isRepoName(app_id)) return badAppId(app_id);
-        const content = await readRepoFile(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, path);
+        if (!isFilePath(path)) return toolError(`Invalid path "${path}": use a path relative to the repo root, e.g. web/src/App.tsx.`);
+        let content: string | null;
+        try {
+          content = await readRepoFile(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, path);
+        } catch (e) {
+          return toolError(`Could not read ${path} from ${app_id}: ${String(e)}. Retry shortly.`);
+        }
         if (content === null) return toolError(`Could not read ${path} from ${app_id}: no such file. Use list_files to see the repo's paths.`);
         return txt(`\`\`\`\n${content}\n\`\`\``);
       },
@@ -497,9 +519,10 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         // Only let callers read sessions in their own namespace.
         if (!session_id.startsWith(sessionPrefix(this.props.userId)) || !/^[a-zA-Z0-9_-]+$/.test(session_id))
           return txt("That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.");
-        const res = await fetch(`${this.env.AGENT_BASE}/session/${session_id}/status`, {
+        const res = await tryFetch(`${this.env.AGENT_BASE}/session/${session_id}/status`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (typeof res === "string") return toolError(`Could not reach the VibeCode agent (${res}). Retry shortly.`);
         if (res.status === 404) return toolError(`No session "${session_id}" found. Use the session_id returned by agent_build.`);
         if (!res.ok) return toolError(`Could not read the status of session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`);
         const s = (await res.json()) as Parameters<typeof formatAgentStatus>[1];
@@ -522,9 +545,10 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       async ({ session_id, limit }) => {
         const token = this.props.token;
         if (!token) return txt(NOT_SIGNED_IN);
-        const res = await fetch(`${this.env.AGENT_BASE}/session/${encodeURIComponent(session_id)}/history`, {
+        const res = await tryFetch(`${this.env.AGENT_BASE}/session/${encodeURIComponent(session_id)}/history`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (typeof res === "string") return toolError(`Could not reach the VibeCode agent (${res}). Retry shortly.`);
         if (res.status === 403) return txt("That session isn't yours — agent sessions are scoped to your account.");
         if (res.status === 404 || res.status === 400) return txt(`No session "${session_id}" found.`);
         if (!res.ok) return toolError(`Could not read session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`);
@@ -565,6 +589,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (denied) return denied;
         if (!this.env.GITHUB_TOKEN) return toolError(NO_GITHUB_TOKEN);
         if (!files?.length) return toolError("No files provided: pass at least one { path, content }.");
+        const badPaths = files.map((f) => f.path).filter((p) => !isFilePath(p));
+        if (badPaths.length) return toolError(`Invalid path(s): ${badPaths.join(", ")}. Use paths relative to the repo root (no leading "/", "..", or ".git/"), e.g. web/src/App.tsx.`);
         const ownershipFailure = ownershipGateText(app_id, await ownsApp(this.env.API_BASE, token, app_id));
         if (ownershipFailure) return toolError(ownershipFailure);
         auditLog("update_files", this.props.userId, { app_id, fileCount: files.length, dry_run: !!dry_run });

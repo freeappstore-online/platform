@@ -137,3 +137,32 @@ describe("listRepoFiles", () => {
     expect(await listRepoFiles("org", "app", "t")).toEqual(["a.ts"]);
   });
 });
+
+describe("readRepoFile", () => {
+  function stub(routes: Record<string, { status?: number; body: unknown }>) {
+    vi.stubGlobal("fetch", async (url: string) => {
+      const hit = Object.entries(routes).find(([suffix]) => url.endsWith(suffix));
+      return hit ? new Response(JSON.stringify(hit[1].body), { status: hit[1].status ?? 200 }) : new Response("{}", { status: 500 });
+    });
+  }
+
+  it("returns null only when there is no such file", async () => {
+    stub({ "/contents/a.ts": { status: 404, body: { message: "Not Found" } } });
+    expect(await readRepoFile("org", "app", "t", "a.ts")).toBeNull();
+    stub({ "/contents/web": { body: [{ name: "x", type: "file" }] } });
+    expect(await readRepoFile("org", "app", "t", "web")).toBeNull();
+  });
+
+  it("throws on a GitHub failure instead of reporting the file missing", async () => {
+    stub({ "/contents/a.ts": { status: 403, body: { message: "API rate limit exceeded" } } });
+    await expect(readRepoFile("org", "app", "t", "a.ts")).rejects.toThrow(/rate limit/);
+  });
+
+  it("reads a file over 1 MB through the blob API", async () => {
+    stub({
+      "/contents/big.json": { body: { type: "file", encoding: "none", content: "", sha: "s1" } },
+      "/git/blobs/s1": { body: { content: textToB64("big"), encoding: "base64" } },
+    });
+    expect(await readRepoFile("org", "app", "t", "big.json")).toBe("big");
+  });
+});

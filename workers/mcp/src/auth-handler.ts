@@ -144,13 +144,18 @@ app.get("/callback", async (c) => {
     return c.text("this sign-in was started in a different browser — start again", 400);
   }
 
-  const fasSession = await exchangeCode(c.env.API_BASE, code, pending.codeVerifier);
-  if (!fasSession) return c.text("could not redeem the sign-in code — start again", 400);
-
-  // The backend is the only verifier: it checks signature, expiry and
-  // revocation. The backend mints `aud: console` for app_id=mcp on this
-  // worker's own origin (#495); anything else could not drive the tools below.
-  const me = await fetchMe(c.env.API_BASE, fasSession);
+  let fasSession: string | null;
+  let me: { id: string; aud: string } | null = null;
+  try {
+    fasSession = await exchangeCode(c.env.API_BASE, code, pending.codeVerifier);
+    if (!fasSession) return c.text("could not redeem the sign-in code — start again", 400);
+    // The backend is the only verifier: it checks signature, expiry and
+    // revocation. The backend mints `aud: console` for app_id=mcp on this
+    // worker's own origin (#495); anything else could not drive the tools below.
+    me = await fetchMe(c.env.API_BASE, fasSession);
+  } catch {
+    return c.text("could not reach FreeAppStore to finish signing in — try connecting again in a moment", 502);
+  }
   if (!me || me.aud !== CONSOLE_AUD) return c.text("invalid session", 400);
 
   const scopes = parseScopes(pending.req.scope);

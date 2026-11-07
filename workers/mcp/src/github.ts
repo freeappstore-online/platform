@@ -56,10 +56,14 @@ function repoBase(org: string, repo: string): string {
   return `https://api.github.com/repos/${org}/${repo}`;
 }
 
+/** A repo-relative file path: plain segments, no `.`/`..`/empty segment, nothing under `.git/`. */
+export function isFilePath(path: string): boolean {
+  return !path.split("/").some((s) => s === "" || s === "." || s === ".." || s === ".git");
+}
+
 function encodePath(path: string): string {
-  const segments = path.split("/");
-  if (segments.some((s) => s === "" || s === "." || s === "..")) throw new Error(`invalid file path: ${path}`);
-  return segments.map(encodeURIComponent).join("/");
+  if (!isFilePath(path)) throw new Error(`invalid file path: ${path}`);
+  return path.split("/").map(encodeURIComponent).join("/");
 }
 
 export interface RepoFile {
@@ -154,20 +158,33 @@ export async function listRepoFiles(org: string, repo: string, token?: string): 
   return tree.tree.filter((i: any) => i.type === "blob" && !i.path.startsWith(".git/")).map((i: any) => i.path);
 }
 
-/** Read one file's raw bytes from a repo (icons and other binary files). */
-export async function readRepoBytes(org: string, repo: string, token: string | undefined, path: string): Promise<Uint8Array | null> {
+/**
+ * One file's base64 content, or null when there is no file at `path` (404, or
+ * a directory). Any other failure throws: callers must not read a GitHub
+ * outage as "file missing". Files over 1 MB come back from the Contents API
+ * with `encoding: "none"` and empty content, so those are read as a blob.
+ */
+async function readContentB64(org: string, repo: string, token: string | undefined, path: string): Promise<string | null> {
   const base = repoBase(org, repo);
   const res = await gh(token, `${base}/contents/${encodePath(path)}`);
-  if (typeof res?.content !== "string") return null;
-  return Uint8Array.from(atob(res.content.replace(/\n/g, "")), (c) => c.charCodeAt(0));
+  if (res?.__status === 404 || Array.isArray(res) || (res?.type && res.type !== "file")) return null;
+  if (res?.__status) throw new Error(`cannot read ${path}: ${res.message ?? res.__status}`);
+  if (res.encoding !== "none" && typeof res.content === "string") return res.content;
+  const blob = await gh(token, `${base}/git/blobs/${res.sha}`);
+  if (typeof blob?.content !== "string") throw new Error(`cannot read ${path}: ${blob?.message ?? blob?.__status}`);
+  return blob.content;
+}
+
+/** Read one file's raw bytes from a repo (icons and other binary files). */
+export async function readRepoBytes(org: string, repo: string, token: string | undefined, path: string): Promise<Uint8Array | null> {
+  const b64 = await readContentB64(org, repo, token, path);
+  return b64 === null ? null : Uint8Array.from(atob(b64.replace(/\n/g, "")), (c) => c.charCodeAt(0));
 }
 
 /** Read one file's text content from a repo. */
 export async function readRepoFile(org: string, repo: string, token: string | undefined, path: string): Promise<string | null> {
-  const base = repoBase(org, repo);
-  const res = await gh(token, `${base}/contents/${encodePath(path)}`);
-  if (typeof res?.content !== "string") return null;
-  return b64ToText(res.content);
+  const b64 = await readContentB64(org, repo, token, path);
+  return b64 === null ? null : b64ToText(b64);
 }
 
 export { textToB64, b64ToText };
