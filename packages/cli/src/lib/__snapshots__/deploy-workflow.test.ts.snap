@@ -46,12 +46,10 @@ jobs:
               status=$?
               cat "$log"
               if grep -q 'ERR_PNPM_OUTDATED_LOCKFILE' "$log"; then
-                echo "Dependency manifests changed; updating the app lock deliberately."
-                pnpm install --no-frozen-lockfile
-              else
-                rm "$log"
-                exit "$status"
+                echo "::error::pnpm-lock.yaml does not match package.json. Run pnpm install locally and commit the updated lock; deploys never rewrite it."
               fi
+              rm "$log"
+              exit "$status"
             fi
             rm "$log"
           fi

@@ -168,6 +168,11 @@ describe('spliceCustomSteps', () => {
     '      - name: Build\n        run: pnpm build\n',
     '      - name: Unit tests\n        run: pnpm test\n      - name: Build\n        run: pnpm build\n      - name: Browser flows\n        run: pnpm test:e2e\n',
   );
+  it('does not mistake the generated Install script for extra install commands', () => {
+    const again = spliceCustomSteps(generated, generated);
+    expect(again).not.toContain('Install extra dependencies');
+  });
+
   it('keeps the repo steps in the credential-free build job, after the step they followed', () => {
     const out = spliceCustomSteps(generated, custom);
     const names = out.split('\n').filter((l) => /^ {6}- name:/.test(l));

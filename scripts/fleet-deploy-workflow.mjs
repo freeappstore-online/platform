@@ -203,7 +203,13 @@ export function spliceCustomSteps(generated, original) {
   const steps = (Object.values(parse(original).jobs)[0].steps ?? []).flatMap((step) => {
     // Extra install commands (e.g. `python -m pip install -r requirements.txt`)
     // become a step of their own after the generated, lock-aware Install.
-    if (step.name !== 'Install' || typeof step.run !== 'string') return [step];
+    // The generated Install already is the lock-aware script: nothing extra in it.
+    if (
+      step.name !== 'Install' ||
+      typeof step.run !== 'string' ||
+      step.run.includes('Creating the first dependency lock')
+    )
+      return [step];
     const extra = step.run
       .split('\n')
       .map((l) => l.trim())

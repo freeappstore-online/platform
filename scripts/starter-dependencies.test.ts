@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 it.each(['missing', 'current', 'changed', 'network', 'lifecycle'])(
-  'handles %s dependencies without retrying unrelated install failures',
+  'handles %s dependencies without retrying any install failure',
   (mode) => {
     const cwd = temporary();
     if (mode !== 'missing') writeFileSync(join(cwd, 'pnpm-lock.yaml'), 'retained');
@@ -46,18 +46,21 @@ ${INSTALL_APP_DEPENDENCIES}`,
       ],
       { cwd, encoding: 'utf8', env: { ...process.env, MODE: mode } },
     );
-    expect(result.status).toBe(mode === 'network' ? 9 : mode === 'lifecycle' ? 7 : 0);
+    expect(result.status).toBe(
+      mode === 'network' ? 9 : mode === 'lifecycle' ? 7 : mode === 'changed' ? 1 : 0,
+    );
     const calls = result.stdout.split('\n').filter((line) => line.startsWith('INSTALL'));
     expect(calls).toEqual(
       mode === 'missing'
         ? ['INSTALL install --no-frozen-lockfile']
-        : mode === 'changed'
-          ? ['INSTALL install --frozen-lockfile', 'INSTALL install --no-frozen-lockfile']
-          : ['INSTALL install --frozen-lockfile'],
+        : ['INSTALL install --frozen-lockfile'],
     );
     expect(readFileSync(join(cwd, 'pnpm-lock.yaml'), 'utf8').trim()).toBe(
-      mode === 'missing' || mode === 'changed' ? 'resolved' : 'retained',
+      mode === 'missing' ? 'resolved' : 'retained',
     );
+    // An outdated lock fails the build with an instruction; the deploy never rewrites it.
+    if (mode === 'changed')
+      expect(result.stdout).toContain('::error::pnpm-lock.yaml does not match');
   },
 );
 
@@ -106,7 +109,7 @@ it('retains only the validated lock and rejects concurrent main changes', () => 
   expect(git(remote, 'rev-parse', 'main')).toBe(newHead);
 }, 30_000);
 
-it('reproduces a fresh minimal workspace and deliberately updates changed manifests with real pnpm', () => {
+it('reproduces a fresh minimal workspace and refuses changed manifests with real pnpm', () => {
   const cwd = temporary();
   writeFileSync(join(cwd, 'package.json'), '{"private":true,"packageManager":"pnpm@10.30.3"}');
   const run = () =>
@@ -127,12 +130,9 @@ it('reproduces a fresh minimal workspace and deliberately updates changed manife
     }),
   );
   const changed = run();
-  expect(changed.status, changed.stderr).toBe(0);
-  expect(changed.stdout).toContain('Dependency manifests changed');
-  const updated = readFileSync(join(cwd, 'pnpm-lock.yaml'), 'utf8');
-  expect(updated).not.toBe(lock);
-  expect(run().status).toBe(0);
-  expect(readFileSync(join(cwd, 'pnpm-lock.yaml'), 'utf8')).toBe(updated);
+  expect(changed.status).not.toBe(0);
+  expect(changed.stdout).toContain('::error::pnpm-lock.yaml does not match package.json');
+  expect(readFileSync(join(cwd, 'pnpm-lock.yaml'), 'utf8')).toBe(lock);
 }, 60_000);
 
 it('ships the tested scripts in build order and pins both validators', () => {
