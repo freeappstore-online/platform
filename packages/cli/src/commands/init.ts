@@ -140,7 +140,7 @@ export const initCommand = new Command('init')
         process.stderr.write(`${unknownTemplateMessage(opts.template)}\n`);
         process.exit(1);
       }
-      const result = await runInit({
+      await runInit({
         appId,
         template: opts.template as TemplateName,
         capabilities: opts.capabilities?.split(',').filter(Boolean) ?? [],
