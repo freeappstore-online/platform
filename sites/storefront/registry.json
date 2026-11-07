@@ -2830,22 +2830,6 @@
           "reason": "Listens for spoken commands such as “from bar 5”, “play” and “stop”."
         }
       ]
-    },
-    {
-      "id": "e2e-canary-mw6wovdemzxn",
-      "name": "e2e-canary-mw6wovdemzxn",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mw6wovdemzxn.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mw6wovdemzxn",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
-      "discoveryRequestedAt": "2026-11-07T21:19:19.976Z",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
