@@ -2799,22 +2799,6 @@
       "developer": "FreeAppStore",
       "creatorGithub": "SASASKIA",
       "permissions": []
-    },
-    {
-      "id": "e2e-canary-mw60djrapgyc",
-      "name": "e2e-canary-mw60djrapgyc",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mw60djrapgyc.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mw60djrapgyc",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
-      "discoveryRequestedAt": "2026-11-07T06:14:41.159Z",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
