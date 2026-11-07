@@ -13,6 +13,12 @@ import type { Unsubscribe } from './types.js';
  * - max 4KB per message
  * - max 64 active rooms per app (new rooms rejected with 429 at capacity)
  * - rooms idle for 24h are auto-evicted
+ *
+ * Rooms are open to any signed-in user by default. `join(id, { private: true })`
+ * marks a room private (#468): from then on only users who hold an app role for
+ * this app can join it, whatever options they pass. Making a room private needs
+ * that role too. A user the server refuses sees `room.denied` and the room does
+ * not retry.
  */
 export interface RoomPeer {
   uid: string;
@@ -27,6 +33,15 @@ export interface RoomMessage<T = unknown> {
 
 export type ConnectionState = 'connecting' | 'open' | 'closed' | 'error';
 
+export interface JoinOptions {
+  /**
+   * `true` marks the room private (only users with an app role can join, from
+   * now on and for everyone); `false` opens a private room again. Omit it to
+   * join the room as it is.
+   */
+  private?: boolean;
+}
+
 export class Rooms {
   constructor(
     private readonly appId: string,
@@ -34,8 +49,8 @@ export class Rooms {
     private readonly auth: Auth,
   ) {}
 
-  join(roomId: string): Room {
-    return new Room(this.appId, this.apiBase, this.auth, roomId);
+  join(roomId: string, options?: JoinOptions): Room {
+    return new Room(this.appId, this.apiBase, this.auth, roomId, options?.private);
   }
 }
 
@@ -52,6 +67,7 @@ export class Room {
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private explicitlyClosed = false;
+  private _denied = false;
 
   /** Enable to log all WebSocket traffic to console. */
   debug = false;
@@ -61,8 +77,18 @@ export class Room {
     private readonly apiBase: string,
     private readonly auth: Auth,
     private readonly roomId: string,
+    private readonly markPrivate?: boolean,
   ) {
     this.connect();
+  }
+
+  /**
+   * True once the server refused this user a ticket (403): the room is private and
+   * they hold no app role, or they tried to make it private without one. The room
+   * stays in the 'error' state and does not retry.
+   */
+  get denied(): boolean {
+    return this._denied;
   }
 
   /** Current connection state. */
@@ -162,8 +188,23 @@ export class Room {
           `/v1/apps/${encodeURIComponent(this.appId)}/rooms/${encodeURIComponent(this.roomId)}/ticket`,
           this.apiBase,
         ),
-        { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            ...(this.markPrivate === undefined ? {} : { 'Content-Type': 'application/json' }),
+          },
+          ...(this.markPrivate === undefined
+            ? {}
+            : { body: JSON.stringify({ private: this.markPrivate }) }),
+        },
       );
+      if (res.status === 403) {
+        // A refusal does not change by retrying.
+        this._denied = true;
+        this.setState('error');
+        return;
+      }
       if (!res.ok) throw new Error(`ticket request failed (${res.status})`);
       ticket = ((await res.json()) as { ticket: string }).ticket;
     } catch (e) {

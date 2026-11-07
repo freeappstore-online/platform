@@ -357,7 +357,7 @@ await col.delete(doc.id)
 
 ### Real-time Rooms (WebSocket)
 
-Durable-Object-backed fan-out. Use for: cursor presence, multiplayer, chat, live collaboration.
+Durable-Object-backed fan-out. Use for: cursor presence, multiplayer, chat, live collaboration. Open to any signed-in user by default; `fas.rooms.join(id, { private: true })` restricts a room to users holding an app role for this app (the automatic `member` role does not count); a refused user gets `room.denied`.
 
 ```tsx
 const room = fas.rooms.join('game-lobby')

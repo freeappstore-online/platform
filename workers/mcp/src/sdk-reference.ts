@@ -274,7 +274,7 @@ room.onConnectionState((state) => console.log('connection:', state))
 room.send({ type: 'move', x: 10, y: 20 })
 room.close()
 \`\`\`
-Limits: 32 peers/room, 64 active rooms/app, 100 messages/second/peer, 4 KiB/message. New rooms return 429 at capacity; messages are ephemeral.`,
+Limits: 32 peers/room, 64 active rooms/app, 100 messages/second/peer, 4 KiB/message. New rooms return 429 at capacity; messages are ephemeral. Rooms are open to any signed-in user; \`fas.rooms.join(id, { private: true })\` restricts a room to users holding an app role for this app (the automatic member role does not count); a refused user gets \`room.denied\`.`,
   proxy: `## Secret-injecting API Proxy
 \`\`\`tsx
 const weather = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London')

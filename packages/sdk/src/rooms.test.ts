@@ -405,3 +405,62 @@ describe('Room error handling', () => {
     expect(room.state).toBe('error');
   });
 });
+
+describe('private rooms (#468)', () => {
+  const ticketCall = () => (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]!;
+
+  it('sends no body when joining without options', async () => {
+    await newRoom();
+    expect(ticketCall()[1].body).toBeUndefined();
+  });
+
+  it('asks the server to mark the room private', async () => {
+    const rooms = new Rooms('demo', 'https://api.example', fakeAuth('tok'));
+    rooms.join('staff', { private: true });
+    await flush();
+    const [url, init] = ticketCall();
+    expect(String(url)).toContain('/rooms/staff/ticket');
+    expect(JSON.parse(init.body)).toEqual({ private: true });
+    expect(init.headers['Content-Type']).toBe('application/json');
+  });
+
+  it('can ask the server to open a private room again', async () => {
+    const rooms = new Rooms('demo', 'https://api.example', fakeAuth('tok'));
+    rooms.join('staff', { private: false });
+    await flush();
+    expect(JSON.parse(ticketCall()[1].body)).toEqual({ private: false });
+  });
+
+  it('a refused user is denied and does not retry', async () => {
+    vi.useFakeTimers();
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: 'room_private' }),
+    }));
+    const rooms = new Rooms('demo', 'https://api.example', fakeAuth('tok'));
+    const room = rooms.join('staff');
+    await flush();
+    expect(room.denied).toBe(true);
+    expect(room.state).toBe('error');
+    expect(created).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(room.isReconnecting).toBe(false);
+  });
+
+  it('other ticket failures still retry', async () => {
+    vi.useFakeTimers();
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      json: async () => ({}),
+    }));
+    const rooms = new Rooms('demo', 'https://api.example', fakeAuth('tok'));
+    const room = rooms.join('lobby');
+    await flush();
+    expect(room.denied).toBe(false);
+    expect(room.isReconnecting).toBe(true);
+    room.close();
+  });
+});

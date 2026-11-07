@@ -66,7 +66,7 @@ export {
 } from './push.js';
 export type { DefaultRole, RoleAssignment } from './roles.js';
 export { DEFAULT_ROLES } from './roles.js';
-export type { ConnectionState, Room, RoomMessage, RoomPeer } from './rooms.js';
+export type { ConnectionState, JoinOptions, Room, RoomMessage, RoomPeer } from './rooms.js';
 export type { DataAccessModel, FasInitOptions, Unsubscribe, User } from './types.js';
 // React-dependent exports (useVoiceInput, UseVoiceInputReturn) live in the
 // './hooks' subpath, NOT this barrel. Re-exporting them here forced the main

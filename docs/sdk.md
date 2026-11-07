@@ -194,14 +194,16 @@ room.send({ text: 'hello' });
 room.close();
 ```
 
-Room properties: `room.state`, `room.peers`, `room.isReconnecting`, `room.reconnectAttempts`.
+Room properties: `room.state`, `room.peers`, `room.isReconnecting`, `room.reconnectAttempts`, `room.denied`.
+
+Rooms are open to any signed-in user by default. `fas.rooms.join('staff', { private: true })` marks a room private: from then on only users who hold an app role for this app (the app's owner, or anyone the owner granted a role with the roles API; the `member` role every user gets automatically does not count) can join it, and only such a user can make a room private. Everyone else gets `room.denied === true` (state `error`, no retry). `{ private: false }` opens a private room again. Private rooms gate who can join; messages are still ephemeral broadcast, not stored.
 
 **Limits:** 32 peers/room, 100 msgs/sec/peer, 4KB/message, 64 active rooms/app (a new room past that gets `429`), 24h idle eviction. Room ids: 1–64 characters of letters, digits and `. _ ~ : @ -`.
 
 For component cleanup, unsubscribe listeners and call `room.close()`; closing is
 permanent and cancels reconnect. Rejoin after sign-in or account changes because
 the connected identity is captured when the room opens. Rooms are ephemeral
-broadcast, not private membership or file transport. See the optional realtime
+broadcast (private rooms gate who joins, nothing more), not file transport. See the optional realtime
 capability recipe from `fas add realtime` for an abort-bound adapter.
 
 ## Optional browser media (`@freeappstore/sdk/media`)

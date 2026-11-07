@@ -253,3 +253,130 @@ describe.skipIf(!hasSqlite)('rooms: 64 live rooms per app', () => {
     ).toBe(64);
   });
 });
+
+describe.skipIf(!hasSqlite)('rooms: opt-in private rooms (#468)', () => {
+  // alice owns `timer`; bob holds a role she granted; carol only has the
+  // automatic `member` role every signed-in user gets; dave has none.
+  async function setup() {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    for (const [id, ghId, login] of [
+      ['u-alice', 1, 'alice'],
+      ['u-bob', 2, 'bob'],
+      ['u-carol', 3, 'carol'],
+      ['u-dave', 4, 'dave'],
+    ] as const) {
+      db.prepare(
+        'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, ?)',
+      ).run(id, ghId, login, now);
+    }
+    for (const appId of ['timer', 'chess']) {
+      db.prepare('INSERT INTO apps (id, owner_login, created_at) VALUES (?, ?, ?)').run(
+        appId,
+        'alice',
+        now,
+      );
+    }
+    const role = db.prepare(
+      'INSERT INTO app_roles (app_id, user_id, role_name, granted_by) VALUES (?, ?, ?, ?)',
+    );
+    role.run('timer', 'u-bob', 'editor', 'u-alice');
+    role.run('timer', 'u-carol', 'member', null);
+    const e = env({ DB: d1 });
+    const ticket = async (uid: string, roomId: string, body?: unknown, appId = 'timer') => {
+      const res = await app.request(
+        `/v1/apps/${appId}/rooms/${roomId}/ticket`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: await bearer(uid),
+            ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        },
+        e,
+      );
+      return res;
+    };
+    const privateFlag = (roomId: string, appId = 'timer') =>
+      (
+        db
+          .prepare('SELECT private FROM app_rooms WHERE app_id = ? AND room_id = ?')
+          .get(appId, roomId) as { private: number } | undefined
+      )?.private;
+    return { db, ticket, privateFlag };
+  }
+
+  it('rooms are open to any signed-in user by default', async () => {
+    const { ticket, privateFlag } = await setup();
+    for (const uid of ['u-alice', 'u-bob', 'u-carol', 'u-dave']) {
+      expect((await ticket(uid, 'lobby')).status).toBe(200);
+    }
+    expect(privateFlag('lobby')).toBe(0);
+  });
+
+  it('an app role holder can mark a room private; then only role holders join', async () => {
+    const { ticket, privateFlag } = await setup();
+    expect((await ticket('u-bob', 'staff', { private: true })).status).toBe(200);
+    expect(privateFlag('staff')).toBe(1);
+
+    expect((await ticket('u-alice', 'staff')).status).toBe(200); // the app owner
+    expect((await ticket('u-bob', 'staff')).status).toBe(200); // an owner-granted role
+
+    const dave = await ticket('u-dave', 'staff');
+    expect(dave.status).toBe(403);
+    expect(((await dave.json()) as { error: string }).error).toBe('room_private');
+  });
+
+  it('the automatic member role does not count as an app role', async () => {
+    const { db, ticket } = await setup();
+    await ticket('u-alice', 'staff', { private: true });
+    expect((await ticket('u-carol', 'staff')).status).toBe(403);
+    // The same role granted by the app owner does.
+    db.prepare(
+      "UPDATE app_roles SET granted_by = 'u-alice' WHERE app_id = 'timer' AND user_id = 'u-carol'",
+    ).run();
+    expect((await ticket('u-carol', 'staff')).status).toBe(200);
+  });
+
+  it('a user without a role cannot make a room private, nor open a private one', async () => {
+    const { ticket, privateFlag } = await setup();
+    const refused = await ticket('u-dave', 'lobby', { private: true });
+    expect(refused.status).toBe(403);
+    expect(((await refused.json()) as { error: string }).error).toBe('forbidden');
+    expect(privateFlag('lobby')).toBeUndefined();
+
+    await ticket('u-alice', 'staff', { private: true });
+    expect((await ticket('u-dave', 'staff', { private: false })).status).toBe(403);
+    expect(privateFlag('staff')).toBe(1);
+  });
+
+  it('a role holder can open a private room again', async () => {
+    const { ticket, privateFlag } = await setup();
+    await ticket('u-alice', 'staff', { private: true });
+    expect((await ticket('u-bob', 'staff', { private: false })).status).toBe(200);
+    expect(privateFlag('staff')).toBe(0);
+    expect((await ticket('u-dave', 'staff')).status).toBe(200);
+  });
+
+  it('keeps the private mark across later joins that say nothing, and per app', async () => {
+    const { ticket } = await setup();
+    await ticket('u-alice', 'staff', { private: true });
+    expect((await ticket('u-bob', 'staff')).status).toBe(200);
+    expect((await ticket('u-dave', 'staff')).status).toBe(403);
+    // Same room name in another app is its own room.
+    expect((await ticket('u-dave', 'staff', undefined, 'chess')).status).toBe(200);
+  });
+
+  it('marking a room private still counts against the 64-room cap', async () => {
+    const { db, ticket } = await setup();
+    const ins = db.prepare('INSERT INTO app_rooms (app_id, room_id, last_active) VALUES (?, ?, ?)');
+    for (let i = 0; i < 64; i++) ins.run('timer', `r${i}`, Date.now());
+    expect((await ticket('u-alice', 'one-more', { private: true })).status).toBe(429);
+  });
+
+  it('rejects a non-boolean private value', async () => {
+    const { ticket } = await setup();
+    expect((await ticket('u-alice', 'lobby', { private: 'yes' })).status).toBe(400);
+  });
+});

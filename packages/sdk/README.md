@@ -125,7 +125,7 @@ room.send({ text: 'hello' });
 room.close();
 ```
 
-Rooms provide ephemeral realtime broadcast, not durable storage or a room-membership access-control list. Do not use them to claim private-room confidentiality. Limits (server-enforced): 32 peers per room, 100 msgs/sec per peer, 4KB per message, 24h idle eviction, 64 active rooms per app.
+Rooms provide ephemeral realtime broadcast, not durable storage. Rooms are open to any signed-in user by default. `fas.rooms.join('staff', { private: true })` marks a room private: from then on only users who hold an app role for this app (the app's owner, or anyone the owner granted a role with the roles API; the `member` role every user gets automatically does not count) can join it, and only such a user can make a room private. Everyone else gets `room.denied === true` (state `error`, no retry). `{ private: false }` opens a private room again. Private rooms gate who can join; messages are still ephemeral broadcast, not stored. Do not claim confidentiality beyond who can join. Limits (server-enforced): 32 peers per room, 100 msgs/sec per peer, 4KB per message, 24h idle eviction, 64 active rooms per app.
 
 ### Collections (document database)
 

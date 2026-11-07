@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { requireAppUser } from '../lib/auth.js';
+import { type CurrentUser, isAppOwner, requireAppUser } from '../lib/auth.js';
 import { signPayload, verifyPayload } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -28,19 +28,51 @@ const ROOM_LIVE_MS = 24 * 60 * 60 * 1000;
  * Register use of a room, or refuse a new one when the app already has
  * MAX_ROOMS_PER_APP live rooms. One statement, so parallel claims can't
  * overshoot the cap. Rooms idle past ROOM_LIVE_MS stop counting.
+ *
+ * `markPrivate` sets (true) or clears (false) the room's private flag in the
+ * same statement; null leaves it as it is (a new room starts open).
  */
-export async function claimRoom(env: Env, appId: string, roomId: string): Promise<boolean> {
+export async function claimRoom(
+  env: Env,
+  appId: string,
+  roomId: string,
+  markPrivate: boolean | null = null,
+): Promise<boolean> {
   const now = Date.now();
+  const flag = markPrivate === null ? null : markPrivate ? 1 : 0;
   const r = await env.DB.prepare(
-    `INSERT INTO app_rooms (app_id, room_id, last_active)
-     SELECT ?, ?, ?
-     WHERE EXISTS (SELECT 1 FROM app_rooms WHERE app_id = ? AND room_id = ?)
-        OR (SELECT COUNT(*) FROM app_rooms WHERE app_id = ? AND last_active > ?) < ?
-     ON CONFLICT(app_id, room_id) DO UPDATE SET last_active = excluded.last_active`,
+    `INSERT INTO app_rooms (app_id, room_id, last_active, private)
+     SELECT ?1, ?2, ?3, COALESCE(?4, 0)
+     WHERE EXISTS (SELECT 1 FROM app_rooms WHERE app_id = ?1 AND room_id = ?2)
+        OR (SELECT COUNT(*) FROM app_rooms WHERE app_id = ?1 AND last_active > ?5) < ?6
+     ON CONFLICT(app_id, room_id) DO UPDATE SET
+       last_active = excluded.last_active,
+       private = COALESCE(?4, private)`,
   )
-    .bind(appId, roomId, now, appId, roomId, appId, now - ROOM_LIVE_MS, MAX_ROOMS_PER_APP)
+    .bind(appId, roomId, now, flag, now - ROOM_LIVE_MS, MAX_ROOMS_PER_APP)
     .run();
   return !!r.meta.changes;
+}
+
+/**
+ * Does the user hold an app role: the app's owner, or a role the owner granted?
+ * The `member` role every signed-in user gets automatically on sign-in
+ * (roles.ts ensure-member, granted_by NULL) is not one; it would make a private
+ * room open to everyone who ever opened the app.
+ */
+async function holdsAppRole(env: Env, appId: string, user: CurrentUser): Promise<boolean> {
+  const app = await env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+    .bind(appId)
+    .first<{ owner_login: string | null }>();
+  if (app && isAppOwner(user, app.owner_login)) return true;
+  const role = await env.DB.prepare(
+    `SELECT 1 FROM app_roles
+     WHERE app_id = ? AND user_id = ? AND NOT (role_name = 'member' AND granted_by IS NULL)
+     LIMIT 1`,
+  )
+    .bind(appId, user.id)
+    .first();
+  return role !== null;
 }
 
 const ROOM_LIMIT_MESSAGE = `room limit reached: an app can have ${MAX_ROOMS_PER_APP} active rooms`;
@@ -53,13 +85,44 @@ const ROOM_LIMIT_MESSAGE = `room limit reached: an app can have ${MAX_ROOMS_PER_
  * origin — stays out of WebSocket URLs. WS connect URLs routinely land in CF
  * edge / Durable Object / reverse-proxy access logs; a leaked ticket is useless
  * after 30s and only grants this one room.
+ *
+ * Rooms are open to any signed-in user unless marked private (#468). The body
+ * `{ "private": true | false }` marks or opens the room; joining a private room,
+ * and making a room private, need an app role (holdsAppRole), otherwise 403.
  */
 roomRoutes.post('/apps/:appId/rooms/:roomId/ticket', async (c) => {
   const user = await requireAppUser(c, c.req.param('appId'));
   const { appId, roomId } = c.req.param();
   if (!ROOM_ID_RE.test(roomId)) return c.text('invalid room id', 400);
   if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
-  if (!(await claimRoom(c.env, appId, roomId))) return c.text(ROOM_LIMIT_MESSAGE, 429);
+
+  const body = (await c.req.json().catch(() => null)) as { private?: unknown } | null;
+  const requested = body?.private;
+  if (requested !== undefined && typeof requested !== 'boolean') {
+    return c.text('private must be true or false', 400);
+  }
+
+  const room = await c.env.DB.prepare(
+    'SELECT private FROM app_rooms WHERE app_id = ? AND room_id = ?',
+  )
+    .bind(appId, roomId)
+    .first<{ private: number }>();
+  const isPrivate = room?.private === 1;
+  if ((isPrivate || requested === true) && !(await holdsAppRole(c.env, appId, user))) {
+    return c.json(
+      {
+        error: isPrivate ? 'room_private' : 'forbidden',
+        message: isPrivate
+          ? 'This room is private: only users with a role in this app can join.'
+          : 'Only users with a role in this app can make a room private.',
+      },
+      403,
+    );
+  }
+
+  if (!(await claimRoom(c.env, appId, roomId, requested ?? null))) {
+    return c.text(ROOM_LIMIT_MESSAGE, 429);
+  }
 
   const ticket = await signPayload<RoomTicket>(
     {
