@@ -2,6 +2,7 @@
  * Content admin — platform-level read + delete across all apps.
  * Admin-only (ADMIN_GITHUB_LOGINS). Used by the console for moderation.
  *
+ * GET|PUT|DELETE /v1/admin/deploy-limits/:app       — per-app keyless deploy limits (#544)
  * GET  /v1/admin/kv?app=&user=&prefix=&limit=        — browse KV entries
  * DELETE /v1/admin/kv?app=&user=&key=                  — delete a KV entry
  * GET  /v1/admin/collections?app=&collection=&limit=  — browse collection docs
@@ -34,8 +35,32 @@ import { parseJsonArray, parseJsonObject } from '../lib/json.js';
 import { escapeLike, likePrefix } from '../lib/like.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
+import { limitsFor, setDeployLimits } from './deploy.js';
 
 export const contentAdminRoutes = new Hono<{ Bindings: Env }>();
+
+// ── Deploy limits (#544) ─────────────────────────────────────────
+
+contentAdminRoutes.get('/admin/deploy-limits/:app', async (c) => {
+  await requireAdmin(c);
+  return c.json(await limitsFor(c.env.DB, c.req.param('app')));
+});
+
+contentAdminRoutes.put('/admin/deploy-limits/:app', async (c) => {
+  const admin = await requireAdmin(c);
+  const body = await c.req.json().catch(() => null);
+  return c.json(
+    await setDeployLimits(c.env.DB, c.req.param('app'), body, admin.githubLogin || admin.id),
+  );
+});
+
+contentAdminRoutes.delete('/admin/deploy-limits/:app', async (c) => {
+  await requireAdmin(c);
+  await c.env.DB.prepare('DELETE FROM app_deploy_limits WHERE app_id = ?')
+    .bind(c.req.param('app'))
+    .run();
+  return c.json(await limitsFor(c.env.DB, c.req.param('app')));
+});
 
 // ── KV ──────────────────────────────────────────────────────────
 

@@ -2,7 +2,15 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { app } from '../index.js';
 import { _resetJwksCache } from '../lib/github-oidc.js';
 import { hasSqlite, type SqliteDb, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
-import { APP_ORG_ID, contentTypeFor, DEPLOY_AUDIENCE, pruneDeploys } from './deploy.js';
+import {
+  APP_ORG_ID,
+  contentTypeFor,
+  DEFAULT_LIMITS,
+  DEPLOY_AUDIENCE,
+  limitsFor,
+  pruneDeploys,
+  setDeployLimits,
+} from './deploy.js';
 
 const ISSUER = 'https://token.actions.githubusercontent.com';
 const KID = 'deploy-test';
@@ -79,6 +87,15 @@ function memoryBucket() {
           : new Uint8Array(await new Response(body).arrayBuffer());
       objects.set(key, bytes);
       return { key, size: bytes.byteLength };
+    },
+    async get(key: string) {
+      const bytes = objects.get(key);
+      if (!bytes) return null;
+      return {
+        size: bytes.byteLength,
+        body: new Response(bytes).body,
+        json: async () => JSON.parse(new TextDecoder().decode(bytes)),
+      };
     },
     async list({ prefix }: { prefix: string }) {
       return {
@@ -328,6 +345,206 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     it('refuses another repo claiming the console workflow', async () => {
       const token = await oidc('alpha', '101', { job_workflow_ref: wf('deploy-console.yml') });
       expect((await open(token, { 'index.html': 1 })).status).toBe(403);
+    });
+  });
+
+  describe('delta upload and per-app limits (#544)', () => {
+    const hex = (c: string) => c.repeat(64);
+    const openDelta = async (
+      repo: string,
+      repoId: string,
+      files: Record<string, string>,
+      hashes: Record<string, string>,
+    ) => {
+      const sizes = Object.fromEntries(Object.entries(files).map(([p, b]) => [p, b.length]));
+      const res = await app.request(
+        '/v1/deploys',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${await oidc(repo, repoId)}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ files: sizes, hashes }),
+        },
+        env(),
+      );
+      return res;
+    };
+    const reuse = (id: string, token: string, paths: string[]) =>
+      app.request(
+        `/v1/deploys/${id}/reuse`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paths }),
+        },
+        env(),
+      );
+    type Session = { id: string; token: string; missing: string[]; reuse: string[] };
+
+    async function deployDelta(files: Record<string, string>, hashes: Record<string, string>) {
+      const res = await openDelta('alpha', '101', files, hashes);
+      expect(res.status).toBe(201);
+      const session = (await res.json()) as Session;
+      for (const path of session.missing)
+        expect((await put(session.id, session.token, path, files[path]!)).status).toBe(204);
+      if (session.reuse.length)
+        expect((await reuse(session.id, session.token, session.reuse)).status).toBe(204);
+      const committed = await commit(session.id, session.token);
+      return { session, committed };
+    }
+
+    it('uploads everything the first time, then only what changed', async () => {
+      const v1 = { 'index.html': '<a>', 'big.pdf': 'x'.repeat(50), 'a.js': 'one' };
+      const h1 = { 'index.html': hex('a'), 'big.pdf': hex('b'), 'a.js': hex('c') };
+      const first = await deployDelta(v1, h1);
+      expect(first.session.reuse).toEqual([]);
+      expect(first.session.missing.sort()).toEqual(Object.keys(v1).sort());
+      expect(first.committed.status).toBe(200);
+
+      const v2 = { ...v1, 'a.js': 'two' };
+      const second = await deployDelta(v2, { ...h1, 'a.js': hex('d') });
+      expect(second.session.missing).toEqual(['a.js']);
+      expect(second.session.reuse.sort()).toEqual(['big.pdf', 'index.html']);
+      expect(second.committed.status).toBe(200);
+      expect(release('alpha')).toBe(second.session.id);
+      const at = (path: string) =>
+        new TextDecoder().decode(store.objects.get(`apps/alpha/.r/${second.session.id}/${path}`));
+      expect(at('big.pdf')).toBe('x'.repeat(50));
+      expect(at('a.js')).toBe('two');
+      expect(at('index.html')).toBe('<a>');
+    });
+
+    it('a same-size file with a different hash is uploaded again', async () => {
+      await deployDelta({ 'index.html': 'aaa' }, { 'index.html': hex('a') });
+      const res = await openDelta(
+        'alpha',
+        '101',
+        { 'index.html': 'bbb' },
+        { 'index.html': hex('b') },
+      );
+      const session = (await res.json()) as Session;
+      expect(session.missing).toEqual(['index.html']);
+      expect(session.reuse).toEqual([]);
+    });
+
+    it('will not copy a path that is not on the reuse list, nor leave the release incomplete', async () => {
+      await deployDelta(
+        { 'index.html': 'aaa', 'b.js': 'bbb' },
+        { 'index.html': hex('a'), 'b.js': hex('b') },
+      );
+      const res = await openDelta(
+        'alpha',
+        '101',
+        { 'index.html': 'aaa', 'b.js': 'ccc' },
+        { 'index.html': hex('a'), 'b.js': hex('c') },
+      );
+      const s = (await res.json()) as Session;
+      expect((await reuse(s.id, s.token, ['b.js'])).status).toBe(400);
+      // index.html neither uploaded nor copied: commit refuses
+      expect((await put(s.id, s.token, 'b.js', 'ccc')).status).toBe(204);
+      expect((await commit(s.id, s.token)).status).toBe(409);
+      expect((await reuse(s.id, s.token, ['index.html'])).status).toBe(204);
+      expect((await commit(s.id, s.token)).status).toBe(200);
+    });
+
+    it("never reuses another app's files", async () => {
+      await deployDelta({ 'index.html': 'aaa' }, { 'index.html': hex('a') });
+      const res = await app.request(
+        '/v1/deploys',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${await oidc('beta', '202')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ files: { 'index.html': 3 }, hashes: { 'index.html': hex('a') } }),
+        },
+        env(),
+      );
+      const s = (await res.json()) as Session;
+      expect(s.reuse).toEqual([]);
+      expect(s.missing).toEqual(['index.html']);
+    });
+
+    it('rejects malformed hashes', async () => {
+      const res = await openDelta(
+        'alpha',
+        '101',
+        { 'index.html': 'aaa' },
+        { 'index.html': 'nothex' },
+      );
+      expect(res.status).toBe(400);
+      const stray = await openDelta(
+        'alpha',
+        '101',
+        { 'index.html': 'aaa' },
+        { 'other.js': hex('a') },
+      );
+      expect(stray.status).toBe(400);
+    });
+
+    it('still serves a client that sends no hashes (the pinned fleet workflow)', async () => {
+      const { session, committed } = await deploy('alpha', '101', { 'index.html': 'old client' });
+      expect(committed.status).toBe(200);
+      expect(session).not.toHaveProperty('missing');
+    });
+
+    it('prunes the stored manifest with its release', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const files = { 'index.html': `v${i}` };
+        ids.push((await deployDelta(files, { 'index.html': hex(String(i)) })).session.id);
+      }
+      expect(store.objects.has(`apps/alpha/.d/${ids[0]}.json`)).toBe(true);
+      db.prepare('UPDATE app_deploys SET committed_at = committed_at - 3600000').run();
+      await pruneDeploys(env() as never);
+      expect(store.objects.has(`apps/alpha/.d/${ids[0]}.json`)).toBe(false);
+      expect(store.objects.has(`apps/alpha/.d/${ids[2]}.json`)).toBe(true);
+    });
+
+    it('keeps the default limits, and an override raises them for that app only', async () => {
+      expect(await limitsFor(d1, 'alpha')).toEqual(DEFAULT_LIMITS);
+      const big = DEFAULT_LIMITS.fileBytes + 1;
+      const tooBig = async (repo: string, id: string) =>
+        (
+          await app.request(
+            '/v1/deploys',
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${await oidc(repo, id)}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ files: { 'index.html': 1, 'big.pdf': big } }),
+            },
+            env(),
+          )
+        ).status;
+      expect(await tooBig('alpha', '101')).toBe(413);
+      const set = await setDeployLimits(d1, 'alpha', { max_file_bytes: big }, 'serge-ivo');
+      expect(set).toEqual({ ...DEFAULT_LIMITS, fileBytes: big });
+      expect(await tooBig('alpha', '101')).toBe(201);
+      expect(await tooBig('beta', '202')).toBe(413);
+    });
+
+    it('validates an override and needs a real app', async () => {
+      await expect(setDeployLimits(d1, 'alpha', { max_files: 0 }, 'x')).rejects.toThrow(
+        /max_files/,
+      );
+      await expect(setDeployLimits(d1, 'alpha', { max_file_bytes: 1e12 }, 'x')).rejects.toThrow();
+      await expect(setDeployLimits(d1, 'nope', { max_files: 5 }, 'x')).rejects.toThrow(/no app/);
+    });
+
+    it('grants scoreplay its override in migration 0040', async () => {
+      expect(
+        (
+          db.prepare("SELECT max_files FROM app_deploy_limits WHERE app_id='scoreplay'").get() as {
+            max_files: number;
+          }
+        ).max_files,
+      ).toBe(20000);
     });
   });
 

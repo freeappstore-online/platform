@@ -37,6 +37,38 @@ const PRUNE_GRACE_MS = 10 * 60 * 1000;
 export const MAX_FILES = 15000;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const MAX_TOTAL_BYTES = 250 * 1024 * 1024;
+/** Uploads and copies the reuse endpoint takes per request (each is a get and a put). */
+const REUSE_BATCH = 100;
+
+export interface DeployLimits {
+  files: number;
+  totalBytes: number;
+  fileBytes: number;
+}
+export const DEFAULT_LIMITS: DeployLimits = {
+  files: MAX_FILES,
+  totalBytes: MAX_TOTAL_BYTES,
+  fileBytes: MAX_FILE_BYTES,
+};
+
+/** The app's limits: the defaults, with any column its app_deploy_limits row sets (#544). */
+export async function limitsFor(db: D1Database, appId: string): Promise<DeployLimits> {
+  const row = await db
+    .prepare(
+      'SELECT max_files, max_total_bytes, max_file_bytes FROM app_deploy_limits WHERE app_id = ?',
+    )
+    .bind(appId)
+    .first<{
+      max_files: number | null;
+      max_total_bytes: number | null;
+      max_file_bytes: number | null;
+    }>();
+  return {
+    files: row?.max_files ?? DEFAULT_LIMITS.files,
+    totalBytes: row?.max_total_bytes ?? DEFAULT_LIMITS.totalBytes,
+    fileBytes: row?.max_file_bytes ?? DEFAULT_LIMITS.fileBytes,
+  };
+}
 /** Code-health files live beside the app, not in a release (routes/quality.ts reads them). */
 const META_PATHS = new Set(['.vcqa/report.json', '.vcqa/badge.svg']);
 
@@ -153,6 +185,49 @@ const CONTENT_TYPES: Record<string, string> = {
   sf3: 'application/octet-stream',
 };
 
+/** Ceilings for an override: the Worker request body limit bounds one file. */
+const OVERRIDE_CEILING: DeployLimits = {
+  files: 100_000,
+  totalBytes: 10 * 1024 * 1024 * 1024,
+  fileBytes: 95 * 1024 * 1024,
+};
+
+/**
+ * Admin-set override of one app's deploy limits. A column left out or null keeps
+ * its default; every given value must be a positive integer within the ceiling.
+ */
+export async function setDeployLimits(
+  db: D1Database,
+  appId: string,
+  body: unknown,
+  setBy: string,
+): Promise<DeployLimits> {
+  const b = (body ?? {}) as Record<string, unknown>;
+  const pick = (key: string, max: number): number | null => {
+    const v = b[key];
+    if (v === undefined || v === null) return null;
+    if (!Number.isSafeInteger(v) || (v as number) < 1 || (v as number) > max)
+      throw new HttpError(400, `${key} must be an integer from 1 to ${max}`);
+    return v as number;
+  };
+  const files = pick('max_files', OVERRIDE_CEILING.files);
+  const total = pick('max_total_bytes', OVERRIDE_CEILING.totalBytes);
+  const perFile = pick('max_file_bytes', OVERRIDE_CEILING.fileBytes);
+  const app = await db.prepare('SELECT 1 AS ok FROM apps WHERE id = ?').bind(appId).first();
+  if (!app) throw new HttpError(404, `no app ${appId}`);
+  await db
+    .prepare(
+      `INSERT INTO app_deploy_limits (app_id, max_files, max_total_bytes, max_file_bytes, set_by, set_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(app_id) DO UPDATE SET max_files = excluded.max_files,
+         max_total_bytes = excluded.max_total_bytes, max_file_bytes = excluded.max_file_bytes,
+         set_by = excluded.set_by, set_at = excluded.set_at`,
+    )
+    .bind(appId, files, total, perFile, setBy, Date.now())
+    .run();
+  return limitsFor(db, appId);
+}
+
 /**
  * A repo-relative build-output path: no absolute paths, no `.`/`..` segments,
  * no backslashes, quotes or control characters, and an allowed file extension
@@ -175,13 +250,16 @@ export function contentTypeFor(path: string): string | null {
 }
 
 /** The manifest problems, or the parsed {path: bytes} map. */
-export function parseManifest(body: unknown): { files: Record<string, number>; total: number } {
+export function parseManifest(
+  body: unknown,
+  limits: DeployLimits = DEFAULT_LIMITS,
+): { files: Record<string, number>; total: number; hashes?: Record<string, string> } {
   const files = (body as { files?: unknown } | null)?.files;
   if (!files || typeof files !== 'object' || Array.isArray(files))
     throw new HttpError(400, 'body must be {"files": {"<path>": <bytes>}}');
   const entries = Object.entries(files as Record<string, unknown>);
   if (entries.length === 0) throw new HttpError(400, 'build output is empty');
-  if (entries.length > MAX_FILES) throw new HttpError(413, `more than ${MAX_FILES} files`);
+  if (entries.length > limits.files) throw new HttpError(413, `more than ${limits.files} files`);
   if (!entries.some(([path]) => path === 'index.html'))
     throw new HttpError(400, 'build output has no index.html');
   let total = 0;
@@ -189,13 +267,28 @@ export function parseManifest(body: unknown): { files: Record<string, number>; t
     if (contentTypeFor(path) === null) throw new HttpError(400, `path refused: ${path}`);
     if (!Number.isSafeInteger(size) || (size as number) < 0)
       throw new HttpError(400, `bad size for ${path}`);
-    if ((size as number) > MAX_FILE_BYTES)
-      throw new HttpError(413, `${path} is larger than ${MAX_FILE_BYTES} bytes`);
+    if ((size as number) > limits.fileBytes)
+      throw new HttpError(413, `${path} is larger than ${limits.fileBytes} bytes`);
     total += size as number;
   }
-  if (total > MAX_TOTAL_BYTES)
-    throw new HttpError(413, `build is larger than ${MAX_TOTAL_BYTES} bytes`);
-  return { files: files as Record<string, number>, total };
+  if (total > limits.totalBytes)
+    throw new HttpError(413, `build is larger than ${limits.totalBytes} bytes`);
+  // Optional content hashes (delta upload, #544): path -> hex digest of the file.
+  const rawHashes = (body as { hashes?: unknown }).hashes;
+  let hashes: Record<string, string> | undefined;
+  if (rawHashes !== undefined) {
+    if (!rawHashes || typeof rawHashes !== 'object' || Array.isArray(rawHashes))
+      throw new HttpError(400, '"hashes" must be {"<path>": "<hex sha-256>"}');
+    for (const [path, hash] of Object.entries(rawHashes as Record<string, unknown>))
+      if (
+        !(path in (files as object)) ||
+        typeof hash !== 'string' ||
+        !/^[0-9a-f]{32,64}$/.test(hash)
+      )
+        throw new HttpError(400, `bad hash for ${path}`);
+    hashes = rawHashes as Record<string, string>;
+  }
+  return { files: files as Record<string, number>, total, ...(hashes ? { hashes } : {}) };
 }
 
 /** `owner/name` from a stored repo reference, which may be a GitHub URL. */
@@ -302,6 +395,37 @@ interface DeployRow {
   expires_at: number;
 }
 
+/**
+ * What a deploy session holds. Old-protocol sessions keep {path: bytes} in the
+ * D1 row. Delta sessions (hashes sent) keep this in R2, because a large app's
+ * manifest with hashes would not fit a D1 row, and the row points at it.
+ */
+interface StoredManifest {
+  files: Record<string, number>;
+  hashes: Record<string, string>;
+  /** Paths whose bytes are unchanged since `base`: copied server side, not uploaded. */
+  reuse: string[];
+  base: string | null;
+}
+
+const manifestRef = (appId: string, id: string) => `apps/${appId}/.d/${id}.json`;
+const manifestCache = new Map<string, StoredManifest>();
+
+async function loadManifest(env: Env, id: string, raw: string): Promise<StoredManifest> {
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+  const ref = parsed.$manifest;
+  if (typeof ref !== 'string')
+    return { files: parsed as Record<string, number>, hashes: {}, reuse: [], base: null };
+  const cached = manifestCache.get(id);
+  if (cached) return cached;
+  const object = await bucketOf(env).get(ref);
+  if (!object) throw new HttpError(410, 'deploy manifest is gone');
+  const stored = (await object.json()) as StoredManifest;
+  manifestCache.set(id, stored);
+  if (manifestCache.size > 4) manifestCache.delete(manifestCache.keys().next().value!);
+  return stored;
+}
+
 async function openDeploy(env: Env, id: string, authorization: string | undefined) {
   const token = bearer(authorization);
   const row = await env.DB.prepare(
@@ -313,7 +437,8 @@ async function openDeploy(env: Env, id: string, authorization: string | undefine
     throw new HttpError(401, 'unknown deploy or upload token');
   if (row.status !== 'open') throw new HttpError(409, `deploy is ${row.status}`);
   if (row.expires_at < Date.now()) throw new HttpError(410, 'deploy session expired');
-  return { row, files: JSON.parse(row.manifest) as Record<string, number> };
+  const stored = await loadManifest(env, id, row.manifest);
+  return { row, files: stored.files, stored };
 }
 
 function bucketOf(env: Env): R2Bucket {
@@ -364,6 +489,7 @@ export async function pruneDeploys(env: Env, appId?: string, limit = 5): Promise
       .bind(old.id)
       .run();
     await deletePrefix(env.APPS_BUCKET, releasePrefix(old.app_id, old.id));
+    await env.APPS_BUCKET.delete(manifestRef(old.app_id, old.id));
   }
   return stale.results.length;
 }
@@ -380,9 +506,12 @@ deployRoutes.post('/deploys', async (c) => {
     if (e instanceof HttpError) throw e;
     throw new HttpError(401, `OIDC verification failed: ${(e as Error).message}`);
   }
-  const { files, total } = parseManifest(await c.req.json().catch(() => null));
   const appId = await resolveDeployApp(c.env.DB, claims);
   bucketOf(c.env);
+  const { files, total, hashes } = parseManifest(
+    await c.req.json().catch(() => null),
+    await limitsFor(c.env.DB, appId),
+  );
 
   const route = await c.env.DB.prepare(
     "SELECT 1 AS ok FROM routes WHERE r2_prefix = ? AND hosted_on = 'r2' LIMIT 1",
@@ -410,6 +539,36 @@ deployRoutes.post('/deploys', async (c) => {
 
   const id = randomHex(12);
   const token = randomHex(32);
+  // Delta upload (#544): a client that sends hashes gets back only the files that
+  // changed since the live release; the rest are copied by /reuse. Old clients
+  // send no hashes and upload everything, as before.
+  let storedManifest = JSON.stringify(files);
+  let delta: { missing: string[]; reuse: string[] } | undefined;
+  if (hashes) {
+    const base = await c.env.DB.prepare(
+      "SELECT id, manifest FROM app_deploys WHERE app_id = ? AND status = 'live' LIMIT 1",
+    )
+      .bind(appId)
+      .first<{ id: string; manifest: string }>();
+    const before = base ? await loadManifest(c.env, base.id, base.manifest) : null;
+    const reuse = Object.keys(files).filter(
+      (path) =>
+        !META_PATHS.has(path) &&
+        before !== null &&
+        before.hashes[path] !== undefined &&
+        before.hashes[path] === hashes[path] &&
+        before.files[path] === files[path],
+    );
+    const reused = new Set(reuse);
+    delta = { missing: Object.keys(files).filter((path) => !reused.has(path)), reuse };
+    const ref = manifestRef(appId, id);
+    await bucketOf(c.env).put(
+      ref,
+      JSON.stringify({ files, hashes, reuse, base: reuse.length ? base!.id : null }),
+      { httpMetadata: { contentType: 'application/json' } },
+    );
+    storedManifest = JSON.stringify({ $manifest: ref });
+  }
   try {
     await c.env.DB.prepare(
       `INSERT INTO app_deploys (id, app_id, jti, repository_id, sha, run_id, token_hash, manifest,
@@ -424,7 +583,7 @@ deployRoutes.post('/deploys', async (c) => {
         claims.sha ?? null,
         claims.run_id ?? null,
         await sha256Hex(token),
-        JSON.stringify(files),
+        storedManifest,
         total,
         now,
         now + SESSION_TTL_MS,
@@ -435,7 +594,10 @@ deployRoutes.post('/deploys', async (c) => {
     throw e;
   }
   console.log(`deploy ${id} opened for ${appId} by ${claims.repository} run ${claims.run_id}`);
-  return c.json({ id, token, app_id: appId, expires_at: now + SESSION_TTL_MS }, 201);
+  return c.json(
+    { id, token, app_id: appId, expires_at: now + SESSION_TTL_MS, ...(delta ?? {}) },
+    201,
+  );
 });
 
 deployRoutes.put('/deploys/:id/files/*', async (c) => {
@@ -464,6 +626,30 @@ deployRoutes.put('/deploys/:id/files/*', async (c) => {
   if (put?.size !== expected) {
     await bucket.delete(key);
     throw new HttpError(400, `${path}: received ${put?.size} bytes, expected ${expected}`);
+  }
+  return c.body(null, 204);
+});
+
+deployRoutes.post('/deploys/:id/reuse', async (c) => {
+  const id = c.req.param('id');
+  const { row, files, stored } = await openDeploy(c.env, id, c.req.header('Authorization'));
+  const body = (await c.req.json().catch(() => null)) as { paths?: unknown } | null;
+  const paths = body?.paths;
+  if (!Array.isArray(paths) || paths.length === 0 || paths.length > REUSE_BATCH)
+    throw new HttpError(400, `body must be {"paths": [1..${REUSE_BATCH} paths]}`);
+  const allowed = new Set(stored.reuse);
+  const bucket = bucketOf(c.env);
+  for (const path of paths) {
+    if (typeof path !== 'string' || !allowed.has(path))
+      throw new HttpError(400, `${String(path)} is not a reusable file of this deploy`);
+    const from = await bucket.get(`${releasePrefix(row.app_id, stored.base!)}${path}`);
+    if (!from || from.size !== files[path]) {
+      from?.body?.cancel();
+      throw new HttpError(409, `${path}: the previous release no longer has it; deploy again`);
+    }
+    await bucket.put(`${releasePrefix(row.app_id, id)}${path}`, from.size === 0 ? '' : from.body, {
+      httpMetadata: { contentType: contentTypeFor(path)! },
+    });
   }
   return c.body(null, 204);
 });
