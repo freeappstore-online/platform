@@ -83,7 +83,7 @@ const KNOWN_ENV = new Set([
   'OUTPUT_PATH',
 ]);
 const R2_SECRETS = new Set(['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ACCOUNT_ID']);
-const SYNC_SOURCES = new Set(['./web/dist', 'web/dist', '"$OUTPUT_PATH"']);
+const SYNC_SOURCES = new Set(['./web/dist', 'web/dist', '"$OUTPUT_PATH"', '"$DIST_DIR"']);
 
 /** Variants whose workflow hard-codes `pnpm build` → web/dist (fas.json's defaults). */
 const LEGACY_DEFAULTS = new Set([
