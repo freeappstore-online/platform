@@ -38,6 +38,11 @@ export function declaredIcons(dir) {
     const manifest = JSON.parse(read(join(dir, 'web/public/manifest.json')) || '{}');
     for (const icon of manifest.icons ?? []) refs.push([icon.src, icon.sizes]);
   } catch {}
+  // VitePWA manifest options in vite.config.ts: { src: 'icon-192x192.png', sizes: '192x192' }
+  for (const m of read(join(dir, 'web/vite.config.ts')).matchAll(
+    /src:\s*['"]([^'"]+\.(?:png|svg))['"]\s*,\s*sizes:\s*['"]([^'"]+)['"]/g,
+  ))
+    refs.push([m[1].startsWith('/') ? m[1] : `/${m[1]}`, m[2]]);
   const html = read(join(dir, 'web/index.html'));
   for (const tag of html.matchAll(/<link\b[^>]*>/gi)) {
     const attr = (name) => new RegExp(`${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(tag[0])?.[1];
