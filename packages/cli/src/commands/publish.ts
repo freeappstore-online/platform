@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fsFileSource, runChecks, validateBuildTarget } from '@freeappstore/compliance';
+import { fsFileSource, runChecks, runSourcePreflight } from '@freeappstore/compliance';
 import { Command } from 'commander';
 import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
@@ -188,10 +188,15 @@ export const publishCommand = new Command('publish')
       // Provision. There is no manual submission fallback: provisioning either
       // succeeds, or we fail loudly with the reason so it gets fixed (rather
       // than silently shunting the creator to a form they hate).
-      const targetResult = await validateBuildTarget(fsFileSource(process.cwd()), {
+      const preflight = await runSourcePreflight(fsFileSource(process.cwd()), {
         expectedAppId: input.name,
       });
-      if (targetResult.status === 'fail') throw new Error(targetResult.detail);
+      if (!preflight.ok) {
+        process.stdout.write(
+          `\n✗ This app would fail its first deploy:\n${preflight.failures.map((f) => `    - ${f}\n`).join('')}`,
+        );
+        process.exit(1);
+      }
       // A workflow that cannot deploy keylessly would leave a provisioned app
       // that fails on its first push. Refuse before anything is created.
       if (!opts.updateWorkflow) {

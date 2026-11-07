@@ -106,8 +106,11 @@ function makeCtx(
     appId: overrides.appId ?? null,
     ownerLogin: overrides.ownerLogin ?? null,
     files: new Map<string, string>(),
+    authHeader: "Bearer test",
     env: {
       GITHUB_TOKEN: "test-token",
+      // /v1/publish succeeds; the auth re-check (/v1/auth/me) answers 200 too.
+      PLATFORM: { fetch: async () => new Response("{}", { status: 200 }) } as never,
       ...(overrides.apps ? { DB: makeDb(overrides.apps) as never } : {}),
     },
     config: appsConfig,

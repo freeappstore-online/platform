@@ -1,7 +1,7 @@
 /** Execute infra tools server-side. Extracted from session.ts to keep it manageable. */
 
 import { isReservedAppId } from "../../../packages/backend/src/lib/reserved-app-ids";
-import { validateBuildTarget } from "../../../packages/compliance/src/checks/build-target";
+import { runSourcePreflight } from "../../../packages/compliance/src/checks/source-preflight";
 import type { CheckResult } from "../../../packages/compliance/src/types";
 import { checkBuildSanity, formatSanityBlock } from "./build-sanity";
 import { formatSharedFailure, runSharedChecks } from "./compliance";
@@ -121,7 +121,9 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
       const preview = new Map(ctx.files);
       const expectedAppId = (tc.input.id as string | undefined) ?? ctx.appId ?? undefined;
       if (expectedAppId) applyPlaceholders(preview, expectedAppId, (tc.input.name as string) ?? expectedAppId);
-      const target = await validateBuildTarget(
+      // One shared source-level preflight (build target, declared icons, test
+      // script vs vitest), the same one MCP and `fas publish` run (#550).
+      const preflight = await runSourcePreflight(
         {
           async *list() {
             yield* preview.keys();
@@ -129,12 +131,17 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
           async read(path) {
             return preview.get(path) ?? null;
           },
+          async readBytes(path) {
+            const text = preview.get(path);
+            return text === undefined ? null : new TextEncoder().encode(text);
+          },
         },
         { expectedAppId },
       );
-      if (target.status === "fail") {
-        await ctx.onDeployStatus({ phase: "error", error: target.detail });
-        return `Deploy BLOCKED: ${target.detail}`;
+      if (!preflight.ok) {
+        const reasons = preflight.failures.join("\n  - ");
+        await ctx.onDeployStatus({ phase: "error", error: preflight.failures[0] ?? "Preflight failed" });
+        return `Deploy BLOCKED: ${preflight.failures.length === 1 ? reasons : `\n  - ${reasons}`}`;
       }
     }
     const findings = checkBuildSanity(ctx.files);
@@ -308,14 +315,17 @@ async function claimApp(appId: string, appName: string, tc: ToolCall, ctx: ExecC
 
   await ctx.env.DB.prepare(
     `INSERT INTO apps (id, owner_login, created_at, category, type, oneliner, display_name, store)
-       VALUES (?, ?, ?, ?, 'standalone', ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO NOTHING`,
   )
     .bind(
       appId,
       ctx.ownerLogin,
       Date.now(),
-      (tc.input.category as string) || "utilities",
+      // The same values /v1/publish validates and records, so the first-claim
+      // row is never a placeholder that the later publish cannot correct.
+      normalizePublishCategory(String(tc.input.category || "Utilities")),
+      appTypeOf(tc),
       (tc.input.description as string) || appName,
       appName,
       ctx.config.store,
@@ -375,6 +385,23 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
   applyPlaceholders(ctx.files, appId, appName);
   if (ctx.baselineFiles) applyPlaceholders(ctx.baselineFiles, appId, appName);
 
+  // Provision BEFORE the first push: /v1/publish creates the repo, the hosting
+  // route and the registry entry in one admin call (the same path MCP and the
+  // CLI use). The first push triggers the app's deploy workflow at once, and
+  // the deploy API refuses an app with no route, so pushing first raced its own
+  // deploy and left unrouted or unlisted apps when this step failed afterwards.
+  // A failure stops here with nothing pushed; the claim is kept when the repo
+  // exists, so running deploy again for the same id resumes where this stopped.
+  const publishError = await publishStoreListing(appId, appName, tc, ctx);
+  if (publishError) {
+    if (claim.createdNow && !(await repoExists(appId, ctx).catch(() => true))) {
+      await releaseApp(appId, ctx);
+    }
+    const error = `Provisioning ${appId} failed, so nothing was pushed: ${publishError}`;
+    await ctx.onDeployStatus({ phase: "error", error });
+    return `Deploy FAILED: ${error}. Run deploy again to retry.`;
+  }
+
   await ctx.onAppDeployed(appId, appName);
 
   // Track the LAST status, not just "live": a failed CI build is reported
@@ -399,8 +426,8 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
       finalStatus = status;
       if (status.phase === "building") codePushed = true;
     },
-    // Only reuse an existing repo when it is provably ours.
-    claim.ownedAlready || (!ctx.env.DB && ctx.appId === appId),
+    // /v1/publish just created (or confirmed) this repo for its owner.
+    true,
     ctx.baselineFiles,
   ).catch((err) => {
     thrown = String(err);
@@ -422,52 +449,28 @@ async function executeDeploy(tc: ToolCall, ctx: ExecContext): Promise<string> {
   }
   advanceBaseline(ctx);
 
-  // The code is pushed and the app provisioned, whatever CI says. Finish the
-  // listing and hosting route either way, so a push_update fix goes live
-  // without another deploy.
-  const publishError = await publishStoreListing(appId, appName, tc, ctx);
-
-  await upsertHostingRoute(appId, ctx);
-
   const renamed = appId !== requestedId ? ` (ID "${requestedId}" was taken — deployed as "${appId}")` : "";
-  return deployOutcomeMessage(last, renamed, publishError);
+  return deployOutcomeMessage(last, renamed);
 }
 
 /** The deploy tool's result for an app whose code was pushed, by CI outcome (#11). */
-function deployOutcomeMessage(last: DeployStatus | null, renamed: string, publishError: string | null): string {
-  const listing = publishError ? ` Store listing failed: ${publishError}` : " Store listing published.";
+function deployOutcomeMessage(last: DeployStatus | null, renamed: string): string {
+  const listing = " Store listing registered; it appears after the first successful deploy.";
   if (last?.phase === "error") return `Deploy FAILED${renamed}: the code was pushed but the build broke.\n${last.error}\n${FIX_HINT}`;
   if (last?.phase === "live") return `Deploy succeeded${renamed}. Live: ${last.appUrl}.${listing}`;
   return `Deploy pushed${renamed}. ${STILL_BUILDING}${listing}`;
 }
 
-/**
- * Insert the D1 hosting route so the host worker can serve this app from R2.
- * Ownership was already settled by claimApp; the WHERE clause is a second lock
- * on the same door — an existing route is only ever repointed when the app it
- * serves is ours (or is unclaimed). Without it a colliding deploy would redirect
- * a live app at another owner's URL to its own bundle.
- */
-async function upsertHostingRoute(appId: string, ctx: ExecContext): Promise<void> {
-  if (!ctx.env.DB) return;
-  const r2Prefix = `${ctx.config.nounPlural}/${appId}`;
-  try {
-    await ctx.env.DB.prepare(
-      `INSERT INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 'r2', ?5, ?5)
-         ON CONFLICT (slug, zone) DO UPDATE SET
-           r2_prefix = excluded.r2_prefix, store = excluded.store,
-           hosted_on = excluded.hosted_on, updated_at = excluded.updated_at
-         WHERE EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug AND apps.owner_login = ?6)
-            OR NOT EXISTS (SELECT 1 FROM apps WHERE apps.id = routes.slug)`,
-    )
-      .bind(appId, ctx.config.domain, r2Prefix, ctx.config.store, Date.now(), ctx.ownerLogin)
-      .run();
-  } catch {
-    /* D1 insert failed — app deploys but won't be routable until published */
-  }
+/** "connected" only when the model said so; everything else is a standalone app. */
+function appTypeOf(tc: ToolCall): "standalone" | "connected" {
+  return tc.input.type === "connected" ? "connected" : "standalone";
 }
 
+/**
+ * Create the repo, hosting route and registry entry through /v1/publish. Returns
+ * the failure reason, or null when every step succeeded. `apps.repo` is derived
+ * by the server (#546), so none is sent.
+ */
 async function publishStoreListing(appId: string, appName: string, tc: ToolCall, ctx: ExecContext): Promise<string | null> {
   if (!ctx.env.PLATFORM || !ctx.authHeader) return "platform publish binding unavailable";
   try {
@@ -482,19 +485,31 @@ async function publishStoreListing(appId: string, appName: string, tc: ToolCall,
         name: appId,
         store: "apps",
         category: normalizePublishCategory(String(tc.input.category || "Utilities")),
-        type: "standalone",
+        type: appTypeOf(tc),
         oneliner: description,
         description,
-        repo: `${ctx.config.org}/${appId}`,
         demo: null,
       }),
     });
     if (res.ok) return null;
-    const body = await res.text().catch(() => "");
-    return `${res.status} ${body.slice(0, 300)}`;
+    return describePublishFailure(res.status, await res.text().catch(() => ""));
   } catch (err) {
     return err instanceof Error ? err.message : String(err);
   }
+}
+
+/** A readable reason from a failed /v1/publish response (failed steps, an error, or the raw body). */
+function describePublishFailure(status: number, body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: string; hint?: string; failedSteps?: { name?: string; detail?: string }[] };
+    if (parsed.failedSteps?.length) {
+      return parsed.failedSteps.map((step) => `${step.name ?? "step"}: ${step.detail ?? "failed"}`).join("; ");
+    }
+    if (parsed.error) return `${status} ${parsed.error}${parsed.hint ? ` (${parsed.hint})` : ""}`;
+  } catch {
+    // not JSON
+  }
+  return `${status} ${body.slice(0, 300)}`;
 }
 
 function normalizePublishCategory(category: string): string {

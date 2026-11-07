@@ -120,6 +120,11 @@ export function getToolDefinitions(config: StoreConfig): ToolDef[] {
           id: { type: "string", description: `${Noun} ID — lowercase letters, numbers, hyphens. e.g. '${example}'` },
           name: { type: "string", description: `Display name. e.g. '${exampleName}'` },
           category: { type: "string", description: `Category: ${categories}` },
+          type: {
+            type: "string",
+            enum: ["standalone", "connected"],
+            description: `"standalone" (default) for a self-contained ${noun}; "connected" only if it uses platform account services (sign-in, KV, rooms).`,
+          },
           icon: { type: "string", description: "HTML entity for icon emoji. e.g. '&#128992;'" },
           iconBg: { type: "string", description: "Icon background color. e.g. '#f0f9ff'" },
           description: { type: "string", description: "One-sentence store description." },

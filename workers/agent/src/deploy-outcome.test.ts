@@ -26,6 +26,7 @@ const BUILD_ERROR =
 /** D1 stand-in: `apps` ownership plus a record of every statement run. */
 function makeDb(apps: Map<string, string>) {
   const ran: string[] = [];
+  const inserted: unknown[][] = [];
   const db = {
     prepare(sql: string) {
       return {
@@ -37,6 +38,7 @@ function makeDb(apps: Map<string, string>) {
             },
             async run() {
               ran.push(sql);
+              if (sql.includes("INSERT INTO apps")) inserted.push(args);
               if (sql.includes("INSERT INTO apps") && !apps.has(args[0] as string)) apps.set(args[0] as string, args[1] as string);
               if (sql.includes("DELETE FROM apps") && apps.get(args[0] as string) === args[1]) apps.delete(args[0] as string);
               return { success: true };
@@ -46,20 +48,23 @@ function makeDb(apps: Map<string, string>) {
       };
     },
   };
-  return { db, ran };
+  return { db, ran, inserted };
 }
 
 function makeCtx(overrides: { appId?: string | null; deployStatus?: DeployStatus | null } = {}) {
   // A session bound to an app is working on alice's own app.
   const apps = new Map<string, string>(overrides.appId ? [[overrides.appId, "alice"]] : []);
-  const { db, ran } = makeDb(apps);
+  const { db, ran, inserted } = makeDb(apps);
   const published: string[] = [];
+  const events: string[] = [];
+  const publishResponse = { current: () => new Response("{}", { status: 200 }) };
   const PLATFORM = {
     fetch: vi.fn(async (url: string, init: RequestInit) => {
       // The session re-check before deploy (#518) is not a publish.
       if (url.endsWith("/v1/auth/me")) return Response.json({ id: "gh:1", aud: "console" });
+      events.push("publish");
       published.push(String(init.body));
-      return new Response("{}", { status: 200 });
+      return publishResponse.current();
     }),
   };
   const statuses: DeployStatus[] = [];
@@ -76,7 +81,7 @@ function makeCtx(overrides: { appId?: string | null; deployStatus?: DeployStatus
     }),
     onAppDeployed: vi.fn(),
   };
-  return { ctx, apps, ran, published, statuses };
+  return { ctx, apps, ran, inserted, published, statuses, events, publishResponse };
 }
 
 const deployCall = {
@@ -110,21 +115,20 @@ describe("deploy reports the CI outcome (#11)", () => {
 
     const result = await executeInfraTool(deployCall, ctx);
 
-    expect(result).toBe(`Deploy succeeded. Live: ${APP_URL}. Store listing published.`);
+    expect(result).toBe(`Deploy succeeded. Live: ${APP_URL}. Store listing registered; it appears after the first successful deploy.`);
   });
 
   it("terminal error deploy: fails with the build reason and fix instructions, keeps the app provisioned", async () => {
     deployReports({ phase: "building", deployUrl: APP_URL }, { phase: "error", error: BUILD_ERROR });
-    const { ctx, apps, ran, published, statuses } = makeCtx();
+    const { ctx, apps, published, statuses } = makeCtx();
 
     const result = await executeInfraTool(deployCall, ctx);
 
     expect(result).toMatch(/^Deploy FAILED: the code was pushed but the build broke\./);
     expect(result).toContain("error TS2322");
     expect(result).toContain("Use get_build_logs to see the full log, fix the code, then push_update.");
-    // The code is on GitHub, so ownership, route and listing stay: a push_update fix goes live without another deploy.
+    // The code is on GitHub, so ownership stays; /v1/publish (repo, route, listing) ran once, before the push.
     expect(apps.get("dict")).toBe("alice");
-    expect(ran.some((sql) => sql.includes("INSERT INTO routes"))).toBe(true);
     expect(published).toHaveLength(1);
     // The error was reported once, by the build, not repeated by the tool.
     expect(statuses.filter((s) => s.phase === "error")).toHaveLength(1);
@@ -152,6 +156,125 @@ describe("deploy reports the CI outcome (#11)", () => {
     expect(result).toBe("Deploy FAILED: GitHub repo creation failed: 422");
     expect(apps.has("dict")).toBe(false);
     expect(ran.some((sql) => sql.includes("INSERT INTO routes"))).toBe(false);
+  });
+});
+
+describe("push-time preflight blocks a broken app before anything is created or pushed (#550)", () => {
+  function appFiles(webPackage: object, manifestIcon = "/icon.svg") {
+    return new Map<string, string>([
+      ["fas.json", JSON.stringify({ appId: "dict", applicationRoot: "web" })],
+      ["package.json", JSON.stringify({ name: "dict", scripts: { build: "pnpm --dir web build" } })],
+      ["web/package.json", JSON.stringify(webPackage)],
+      ["web/index.html", '<script type="module" src="/src/main.tsx"></script>'],
+      ["web/src/main.tsx", "import './App';"],
+      ["web/src/App.tsx", "export default () => null"],
+      ["web/public/icon.svg", "<svg></svg>"],
+      ["web/public/manifest.json", JSON.stringify({ icons: [{ src: manifestIcon }] })],
+    ]);
+  }
+
+  it("refuses deploy when scripts.test runs vitest that is not installed", async () => {
+    const { ctx, published } = makeCtx();
+    ctx.files = appFiles({ scripts: { build: "vite build", test: "vitest run" } });
+
+    const result = await executeInfraTool(deployCall, ctx);
+
+    expect(result).toMatch(/^Deploy BLOCKED:/);
+    expect(result).toContain("scripts.test runs vitest");
+    expect(published).toHaveLength(0);
+    expect(deployMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses push_update when a declared icon was never committed", async () => {
+    const { ctx } = makeCtx({ appId: "dict" });
+    ctx.files = appFiles({ scripts: { build: "vite build" } }, "/pwa-512x512.png");
+
+    const result = await executeInfraTool(pushCall, ctx);
+
+    expect(result).toMatch(/^Deploy BLOCKED:/);
+    expect(result).toContain("/pwa-512x512.png");
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("deploy provisions before it pushes (#548)", () => {
+  it("publishes the route and listing BEFORE the first push, so the first deploy cannot hit 'has no route'", async () => {
+    const { ctx, events } = makeCtx();
+    deployMock.mockImplementation(async (_cfg, _files, _env, _config, onStatus) => {
+      events.push("push");
+      await onStatus({ phase: "live", appUrl: APP_URL });
+    });
+
+    await executeInfraTool(deployCall, ctx);
+
+    expect(events).toEqual(["publish", "push"]);
+  });
+
+  it("a failing /v1/publish stops the deploy: nothing is pushed and the session reports the reason", async () => {
+    const { ctx, publishResponse, statuses } = makeCtx();
+    publishResponse.current = () =>
+      Response.json(
+        { error: "admin_provision_partial_failure", failedSteps: [{ name: "Hosting route", detail: "D1 write failed" }] },
+        { status: 502 },
+      );
+
+    const result = await executeInfraTool(deployCall, ctx);
+
+    expect(deployMock).not.toHaveBeenCalled();
+    expect(result).toMatch(/^Deploy FAILED: Provisioning dict failed, so nothing was pushed: Hosting route: D1 write failed/);
+    expect(statuses.at(-1)).toEqual({
+      phase: "error",
+      error: "Provisioning dict failed, so nothing was pushed: Hosting route: D1 write failed",
+    });
+    expect(ctx.onAppDeployed).not.toHaveBeenCalled();
+  });
+
+  it("a thrown publish error is surfaced, never swallowed", async () => {
+    const { ctx } = makeCtx();
+    ctx.env.PLATFORM.fetch.mockImplementation(async (url: string) => {
+      if (url.endsWith("/v1/auth/me")) return Response.json({ id: "gh:1", aud: "console" });
+      throw new Error("service binding down");
+    });
+
+    const result = await executeInfraTool(deployCall, ctx);
+
+    expect(result).toContain("service binding down");
+    expect(deployMock).not.toHaveBeenCalled();
+  });
+
+  it("records the normalised category and the chosen type, not placeholders", async () => {
+    deployReports({ phase: "live", appUrl: APP_URL });
+    const { ctx, inserted, published } = makeCtx();
+
+    await executeInfraTool({ ...deployCall, input: { ...deployCall.input, category: "health", type: "connected" } }, ctx);
+
+    // apps insert binds: id, owner, created_at, category, type, ...
+    expect(inserted[0]?.[3]).toBe("Health & Fitness");
+    expect(inserted[0]?.[4]).toBe("connected");
+    expect(JSON.parse(published[0]!)).toMatchObject({ category: "Health & Fitness", type: "connected" });
+    expect(JSON.parse(published[0]!).repo).toBeUndefined();
+  });
+
+  it("re-running deploy for the same id after a failed provision resumes and completes", async () => {
+    // The repo exists (an earlier run created it), so the claim is kept for the retry.
+    globalThis.fetch = vi.fn(async () => Response.json({ id: 1 }, { status: 200 })) as typeof fetch;
+    // A new session: the earlier one left the owned apps row and the repo behind.
+    const { ctx, apps, publishResponse } = makeCtx({ appId: "dict" });
+    ctx.appId = null;
+    publishResponse.current = () => new Response("boom", { status: 500 });
+
+    const first = await executeInfraTool(deployCall, ctx);
+    expect(first).toContain("Run deploy again to retry");
+    expect(apps.get("dict")).toBe("alice");
+    expect(deployMock).not.toHaveBeenCalled();
+
+    publishResponse.current = () => new Response("{}", { status: 200 });
+    deployReports({ phase: "building", deployUrl: APP_URL }, { phase: "live", appUrl: APP_URL });
+    const second = await executeInfraTool(deployCall, ctx);
+
+    expect(second).toContain("Deploy succeeded");
+    expect(deployMock).toHaveBeenCalledTimes(1);
+    expect(ctx.onAppDeployed).toHaveBeenCalledWith("dict", "Dict");
   });
 });
 

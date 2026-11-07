@@ -17,14 +17,23 @@ import { executeInfraTool } from "./infra-exec";
 const appsConfig = getConfig("apps");
 const gamesConfig = getConfig("games");
 
+/** Platform backend stand-in: every /v1/publish succeeds, and the calls are recorded. */
+const publishCalls: { name: string }[] = [];
 const mockEnv = {
   GITHUB_TOKEN: "ghp_test",
+  PLATFORM: {
+    fetch: async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/publish")) publishCalls.push(JSON.parse(String(init?.body)));
+      return new Response("{}", { status: 200 });
+    },
+  } as never,
 };
 
 let originalFetch: typeof fetch;
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
+  publishCalls.length = 0;
 });
 
 afterEach(() => {
@@ -46,9 +55,10 @@ describe("deploy uniqueness — apps", () => {
         name: "deploy",
         input: { id: "taken-app", name: "Taken", category: "utilities", icon: "x", iconBg: "#fff", description: "test" },
       },
-      { appId: null, files: new Map(), env: mockEnv, config: appsConfig, onDeployStatus: vi.fn(), onAppDeployed },
+      { appId: null, files: new Map(), env: mockEnv, authHeader: "Bearer t", config: appsConfig, onDeployStatus: vi.fn(), onAppDeployed },
     );
     expect(result).not.toContain("already taken");
+    expect(publishCalls.map((call) => call.name)).toEqual(["taken-app-2"]);
     expect(onAppDeployed).toHaveBeenCalledWith("taken-app-2", "Taken");
   });
 
@@ -107,9 +117,10 @@ describe("deploy uniqueness — games", () => {
         name: "deploy",
         input: { id: "taken-game", name: "Taken", category: "arcade", icon: "x", iconBg: "#fff", description: "test" },
       },
-      { appId: null, files: new Map(), env: mockEnv, config: gamesConfig, onDeployStatus: vi.fn(), onAppDeployed },
+      { appId: null, files: new Map(), env: mockEnv, authHeader: "Bearer t", config: gamesConfig, onDeployStatus: vi.fn(), onAppDeployed },
     );
     expect(result).not.toContain("already taken");
+    expect(publishCalls.map((call) => call.name)).toEqual(["taken-game-2"]);
     expect(onAppDeployed).toHaveBeenCalledWith("taken-game-2", "Taken");
     // Verify it checked the correct org
     expect((globalThis.fetch as any).mock.calls[0][0]).toContain("freegamestore-online");

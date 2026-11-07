@@ -2,6 +2,7 @@ import { checkBrandFonts } from './checks/brand-fonts.js';
 
 export { checkArtifactIcons as inspectArtifactIcons } from './checks/artifact-icons.js';
 export { type BuildTarget, readBuildTarget, validateBuildTarget } from './checks/build-target.js';
+export { type PreflightResult, runSourcePreflight } from './checks/source-preflight.js';
 
 import { checkBrandTokens } from './checks/brand-tokens.js';
 import { checkBundleSize } from './checks/bundle-size.js';
