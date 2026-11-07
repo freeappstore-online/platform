@@ -164,6 +164,20 @@ export function classify(text, generated) {
   return { variant, review: [...new Set(review)] };
 }
 
+/**
+ * Repos where the pinned code-health scan takes the Actions runner down (runner
+ * shutdown signal, orphaned `npm exec biome`), failing the build job. The scan is
+ * optional (never blocks, its report artifact is `if-no-files-found: ignore`), so
+ * their workflow omits the step.
+ */
+const SKIP_CODE_HEALTH = new Set(['facer', 'faces']);
+export function withoutCodeHealthScan(workflow) {
+  return workflow.replace(
+    / {6}# Code health scan[\s\S]*?\n {6}- name: Code health scan\n {8}run: [^\n]*\n/,
+    '',
+  );
+}
+
 function sh(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 }
@@ -276,6 +290,7 @@ async function waitForDeploy(repo, sha) {
 }
 
 async function apply(plan, generated, wait) {
+  if (SKIP_CODE_HEALTH.has(plan.repo)) generated = withoutCodeHealthScan(generated);
   const { repo, dir } = plan;
   mkdirSync(join(dir, '.github/workflows'), { recursive: true });
   writeFileSync(join(dir, WORKFLOW), generated);

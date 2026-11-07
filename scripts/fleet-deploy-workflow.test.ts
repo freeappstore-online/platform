@@ -150,3 +150,12 @@ describe('missingTestRunner', () => {
     expect(missingTestRunner([null, { scripts: { test: 'node --test' } }])).toBe(false);
   });
 });
+
+describe('withoutCodeHealthScan', () => {
+  it('drops only the scan step and its comment', () => {
+    const w = withoutCodeHealthScan(generated);
+    expect(w).not.toContain('@vibecodeqa/cli');
+    expect(w).toContain('Upload code health report');
+    expect(w).toContain('Upload build artifact');
+  });
+});
