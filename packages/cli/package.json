@@ -1,6 +1,6 @@
 {
   "name": "@freeappstore/cli",
-  "version": "0.4.102",
+  "version": "0.4.103",
   "description": "fas — CLI for publishing free apps to freeappstore.online",
   "license": "MIT",
   "type": "module",
