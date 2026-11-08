@@ -9,6 +9,28 @@
 (function () {
   var API = "https://api.freeappstore.online";
 
+  // The value this browser sends at sign-in start; the API echoes it with the
+  // session so a crafted link can't silently plant another account (#564).
+  var CLIENT_STATE_KEY = "fas:auth-state";
+  function clientState() {
+    try {
+      var value = localStorage.getItem(CLIENT_STATE_KEY);
+      if (!value) {
+        var bytes = crypto.getRandomValues(new Uint8Array(24));
+        value = Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+        localStorage.setItem(CLIENT_STATE_KEY, value);
+      }
+      return value;
+    } catch (e) { return null; }
+  }
+  function claimClientState(state) {
+    try {
+      if (!state || localStorage.getItem(CLIENT_STATE_KEY) !== state) return false;
+      localStorage.removeItem(CLIENT_STATE_KEY);
+      return true;
+    } catch (e) { return false; }
+  }
+
   // ── Icon fallback (runs on every page that has .app-icon elements) ──
   // If an apple-touch-icon fails to load, swap the <img> for a text node
   // containing the first letter (stored on the parent as data-letter).
@@ -173,7 +195,9 @@
     var hash = window.location.hash;
     if (hash.indexOf("#fas_session=") === 0) {
       var token = "";
-      try { token = decodeURIComponent(hash.slice("#fas_session=".length)); } catch (e) {}
+      var parts = hash.slice("#fas_session=".length).split("&fas_state=");
+      try { token = decodeURIComponent(parts[0]); } catch (e) {}
+      var startedHere = claimClientState(parts[1]);
       // Always strip the hash so a malformed token doesn't linger in the URL.
       history.replaceState(null, "", window.location.pathname + window.location.search);
       if (isPlausibleToken(token)) {
@@ -183,6 +207,11 @@
             return r.json();
           })
           .then(function (user) {
+            // A session this browser did not ask for may be someone else's account (#564).
+            if (user && user.id && !startedHere && !window.confirm("Sign in as " + user.login + "?")) {
+              showSignIn();
+              return;
+            }
             if (user && user.id) {
               try { localStorage.setItem("fas:session", JSON.stringify({ token: token, user: user })); } catch (e) {}
               showUser(user);
@@ -225,6 +254,8 @@
       var url = new URL("/v1/auth/github/start", API);
       url.searchParams.set("app_id", "store");
       url.searchParams.set("return_to", window.location.href);
+      var state = clientState();
+      if (state) url.searchParams.set("client_state", state);
       window.location.href = url.toString();
     };
     el.appendChild(link);

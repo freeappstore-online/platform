@@ -36,6 +36,13 @@ export interface SessionDelivery {
   returnTo: string;
   responseMode?: 'code';
   codeChallenge?: string;
+  /** The value the client generated at /start, echoed so it can recognise its own sign-in (#564). */
+  clientState?: string;
+}
+
+/** A client's `client_state`: an opaque random value, never interpreted here. */
+export function isClientState(value: string): boolean {
+  return /^[A-Za-z0-9_-]{16,128}$/.test(value);
 }
 
 /** The `response_mode` values a /start call may ask for. */
@@ -77,7 +84,9 @@ export async function deliverSession(
       .run();
     redirect.searchParams.set('code', code);
   } else {
-    redirect.hash = `fas_session=${encodeURIComponent(session)}`;
+    redirect.hash = `fas_session=${encodeURIComponent(session)}${
+      delivery.clientState ? `&fas_state=${delivery.clientState}` : ''
+    }`;
   }
 
   return { ok: true, url: redirect.toString() };

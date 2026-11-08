@@ -8,7 +8,12 @@ import {
   requireConsoleUser,
   requireUser,
 } from '../lib/auth.js';
-import { deliverSession, exchangeAuthCode, isResponseMode } from '../lib/deliver-session.js';
+import {
+  deliverSession,
+  exchangeAuthCode,
+  isClientState,
+  isResponseMode,
+} from '../lib/deliver-session.js';
 import { escapeHtml, isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo, sessionAudience } from '../lib/origins.js';
 import { d1UsageStore, dayKey } from '../lib/proxy-rate-limit.js';
@@ -34,6 +39,7 @@ interface OAuthState {
   returnTo: string;
   responseMode?: 'code';
   codeChallenge?: string;
+  clientState?: string;
   nonce: string;
   bh: string;
   exp: number;
@@ -49,6 +55,7 @@ interface EmailMagicState {
   email: string;
   appId: string;
   returnTo: string;
+  clientState?: string;
   nonce?: string;
   bh?: string;
   exp: number;
@@ -187,6 +194,10 @@ async function beginFlow(
     c.req.query('code_challenge_method'),
   );
   if (!pkce.ok) return { ok: false, res: c.text(pkce.error, 400) };
+  const clientState = c.req.query('client_state');
+  if (clientState !== undefined && !isClientState(clientState)) {
+    return { ok: false, res: c.text('invalid client_state', 400) };
+  }
 
   const nonce = randomToken();
   const secret = randomToken();
@@ -195,6 +206,7 @@ async function beginFlow(
     returnTo,
     ...(responseMode ? { responseMode } : {}),
     ...(pkce.codeChallenge ? { codeChallenge: pkce.codeChallenge } : {}),
+    ...(clientState ? { clientState } : {}),
     nonce,
     bh: await sha256Hex(secret),
     exp: Math.floor(Date.now() / 1000) + STATE_TTL_SECONDS,
@@ -338,14 +350,7 @@ authRoutes.get('/auth/github/callback', async (c) => {
        github_login = excluded.github_login,
        avatar_url = excluded.avatar_url`,
   )
-    .bind(
-      userId,
-      ghUser.id,
-      ghUser.login,
-      ghUser.avatar_url,
-      Date.now(),
-      newAccountSessionMark(),
-    )
+    .bind(userId, ghUser.id, ghUser.login, ghUser.avatar_url, Date.now(), newAccountSessionMark())
     .run();
 
   const roles = await computeRoles(userId, ghUser.login, c.env);
@@ -583,16 +588,23 @@ authRoutes.post('/auth/email/start', async (c) => {
       appId?: string;
       returnTo?: string;
       responseMode?: string;
+      clientState?: string;
     } | null>()
     .catch(() => null);
   if (!body) return c.text('invalid JSON body', 400);
-  const { email: rawEmail, appId, returnTo, responseMode } = body;
+  const { email: rawEmail, appId, returnTo, responseMode, clientState } = body;
 
   if (!rawEmail || !appId || !returnTo) {
     return c.text('missing email, appId, or returnTo', 400);
   }
   if (responseMode !== undefined) {
     return c.text('responseMode is not supported for magic links', 400);
+  }
+  if (
+    clientState !== undefined &&
+    !(typeof clientState === 'string' && isClientState(clientState))
+  ) {
+    return c.text('invalid clientState', 400);
   }
   // Normalize first (trim + lowercase) so UI-side whitespace doesn't reject
   // valid addresses; then validate the canonical form.
@@ -633,6 +645,7 @@ authRoutes.post('/auth/email/start', async (c) => {
     email,
     appId,
     returnTo,
+    ...(clientState ? { clientState } : {}),
     exp: Math.floor(Date.now() / 1000) + MAGIC_LINK_TTL_SECONDS,
   };
   // At most MAX_PENDING_LINK_COOKIES pending links bind per browser, so a page
@@ -813,15 +826,7 @@ async function completeMagicLink(
         `INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name, sessions_valid_after)
          VALUES (?, 0, ?, NULL, ?, 'email', ?, ?, ?, ?)`,
       )
-        .bind(
-          userId,
-          login,
-          Date.now(),
-          state.email,
-          state.email,
-          login,
-          newAccountSessionMark(),
-        )
+        .bind(userId, login, Date.now(), state.email, state.email, login, newAccountSessionMark())
         .run();
       existing = { id: userId, github_login: login };
     } catch {
@@ -848,11 +853,15 @@ async function completeMagicLink(
     roles,
     appRoles,
   });
-  // Only these two fields: a link always delivers in the fragment, whatever
-  // else its (signed, but possibly pre-#495) state carries.
+  // Only these fields: a link always delivers in the fragment, whatever else
+  // its (signed, but possibly pre-#495) state carries.
   const delivery = await deliverSession(
     c.env,
-    { appId: state.appId, returnTo: state.returnTo },
+    {
+      appId: state.appId,
+      returnTo: state.returnTo,
+      ...(state.clientState ? { clientState: state.clientState } : {}),
+    },
     session,
   );
   if (!delivery.ok) return c.text(delivery.error, 400);

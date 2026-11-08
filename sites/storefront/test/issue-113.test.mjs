@@ -58,6 +58,7 @@ test("auth dispatches fas:auth-ready after an OAuth session is confirmed", async
     window: {
       location: { hash: "#fas_session=valid-token", pathname: "/", search: "", href: "https://freeappstore.online/analytics.html" },
       dispatchEvent: (event) => events.push(event.type),
+      confirm: () => true,
     },
     Event: BrowserEvent,
     history: { replaceState() {} },

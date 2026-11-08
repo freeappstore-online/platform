@@ -4,6 +4,7 @@ import {
   AUTH_CODE_TTL_SECONDS,
   deliverSession,
   exchangeAuthCode,
+  isClientState,
   s256Challenge,
 } from './deliver-session.js';
 
@@ -89,6 +90,26 @@ async function mintCode(env: Pick<Env, 'DB'>, challenge: string): Promise<string
 }
 
 describe('deliverSession', () => {
+  it('echoes the client state after the session in the fragment (#564)', async () => {
+    const env = { DB: {} } as never;
+    const clientState = 'abcdefghijklmnop-_123';
+    const result = await deliverSession(
+      env,
+      { appId: 'demo', returnTo: 'https://demo.freeappstore.online/', clientState },
+      'tok.en',
+    );
+    expect(result.ok && new URL(result.url).hash).toBe(
+      `#fas_session=tok.en&fas_state=${clientState}`,
+    );
+  });
+
+  it.each(['short', 'a'.repeat(129), 'has space in it 123', 'x&fas_session=evil12345'])(
+    'refuses client state %j',
+    (value) => {
+      expect(isClientState(value)).toBe(false);
+    },
+  );
+
   it('puts the session in the fragment by default', async () => {
     const { env } = fakeCodeDB();
     const result = await deliverSession(env, { appId: 'demo', returnTo: RETURN_TO }, SESSION);

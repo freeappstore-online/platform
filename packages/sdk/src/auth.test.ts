@@ -18,6 +18,7 @@ interface FakeWindow {
   };
   localStorage: FakeStorage;
   history: { replaceState: (state: unknown, title: string, url: string) => void };
+  confirm: (message: string) => boolean;
 }
 
 function makeWindow(initial: { href: string; hash?: string }): {
@@ -48,6 +49,7 @@ function makeWindow(initial: { href: string; hash?: string }): {
       history: {
         replaceState: (_s, _t, u) => replaces.push(u),
       },
+      confirm: () => true,
     },
     assigns,
     replaces,
@@ -184,6 +186,73 @@ describe('Auth.init — hash handling', () => {
     expect(auth.token).toBe('good-token');
     expect(window.localStorage.store.get('fas:session')).toContain('good-token');
     expect(replaces[0]).toBe('/dashboard');
+  });
+
+  describe('a session this browser did not ask for (#564)', () => {
+    function callback(hash: string, confirm: (m: string) => boolean, pending?: string) {
+      const { window } = makeWindow({ href: 'https://app.example/', hash });
+      window.confirm = vi.fn(confirm);
+      if (pending) window.localStorage.setItem('fas:auth-state', pending);
+      (globalThis as Record<string, unknown>).window = window;
+      (globalThis as Record<string, unknown>).history = window.history;
+      globalThis.fetch = vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ id: 'gh:9', login: 'mallory', avatarUrl: null, dateOfBirth: null }),
+          ),
+      ) as typeof fetch;
+      return window;
+    }
+
+    it('signs in silently when the state is the one this browser sent, once', async () => {
+      const window = callback('#fas_session=tok&fas_state=abc', () => false, 'abc');
+      const auth = new Auth('demo', 'https://api.example');
+      await auth.init();
+      expect(auth.token).toBe('tok');
+      expect(window.confirm).not.toHaveBeenCalled();
+      expect(window.localStorage.getItem('fas:auth-state')).toBeNull();
+    });
+
+    it.each([
+      ['no state', '#fas_session=tok', 'abc'],
+      ['the wrong state', '#fas_session=tok&fas_state=zzz', 'abc'],
+      ['nothing pending', '#fas_session=tok&fas_state=abc', undefined],
+    ])('refuses %s unless the person accepts the named account', async (_l, hash, pending) => {
+      const window = callback(hash, () => false, pending);
+      const auth = new Auth('demo', 'https://api.example');
+      await auth.init();
+      expect(window.confirm).toHaveBeenCalledWith('Sign in as mallory?');
+      expect(auth.token).toBeNull();
+      expect(window.localStorage.getItem('fas:session')).toBeNull();
+    });
+
+    it('does not replace a signed-in session when declined', async () => {
+      const window = callback('#fas_session=tok', () => false);
+      window.localStorage.setItem(
+        'fas:session',
+        JSON.stringify({ token: 'mine', user: { id: 'gh:1', login: 'alice' } }),
+      );
+      const auth = new Auth('demo', 'https://api.example');
+      await auth.init();
+      expect(window.localStorage.getItem('fas:session')).toContain('mine');
+    });
+
+    it('accepts a magic link from another device once confirmed', async () => {
+      callback('#fas_session=tok', () => true);
+      const auth = new Auth('demo', 'https://api.example');
+      await auth.init();
+      expect(auth.token).toBe('tok');
+    });
+
+    it('sends the same state with signIn and keeps it for the callback', () => {
+      const { window, assigns } = makeWindow({ href: 'https://app.example/' });
+      (globalThis as Record<string, unknown>).window = window;
+      const auth = new Auth('demo', 'https://api.example');
+      auth.signIn();
+      const sent = new URL(assigns[0]!).searchParams.get('client_state');
+      expect(sent).toMatch(/^[0-9a-f]{48}$/);
+      expect(window.localStorage.getItem('fas:auth-state')).toBe(sent);
+    });
   });
 
   it('is a no-op when no fas_session hash is present', async () => {

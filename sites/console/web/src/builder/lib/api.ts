@@ -38,6 +38,25 @@ function setSession(session: Session): void {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
+const CLIENT_STATE_KEY = "fas:auth-state";
+
+/** The value this browser sends at sign-in start, shared with the SDK on this origin (#564). */
+function clientState(): string {
+  let value = localStorage.getItem(CLIENT_STATE_KEY);
+  if (!value) {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    value = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    localStorage.setItem(CLIENT_STATE_KEY, value);
+  }
+  return value;
+}
+
+function claimClientState(state: string | undefined): boolean {
+  if (!state || localStorage.getItem(CLIENT_STATE_KEY) !== state) return false;
+  localStorage.removeItem(CLIENT_STATE_KEY);
+  return true;
+}
+
 /** Capture #fas_session= from URL hash after OAuth redirect */
 export async function handleAuthCallback(): Promise<Session | null> {
   const hash = window.location.hash;
@@ -46,13 +65,15 @@ export async function handleAuthCallback(): Promise<Session | null> {
   // Clear hash immediately so reload won't retry
   history.replaceState(null, "", window.location.pathname + window.location.search);
 
+  const [rawToken = "", state] = hash.slice("#fas_session=".length).split("&fas_state=");
   let token: string;
   try {
-    token = decodeURIComponent(hash.slice("#fas_session=".length));
+    token = decodeURIComponent(rawToken);
   } catch {
     return null;
   }
   if (!token) return null;
+  const startedHere = claimClientState(state);
 
   const res = await fetch(`${API_URL}/v1/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -60,6 +81,8 @@ export async function handleAuthCallback(): Promise<Session | null> {
   if (!res.ok) return null;
 
   const user = (await res.json()) as User;
+  // A session this browser did not ask for may be someone else's account (#564).
+  if (!startedHere && !window.confirm(`Sign in as ${user.login}?`)) return null;
   const session = { token, user };
   setSession(session);
   return session;
@@ -71,6 +94,7 @@ export function getSignInUrl(redirect: string): string {
   // in as the console so its token can publish (#495). "create" is reserved.
   url.searchParams.set("app_id", "console");
   url.searchParams.set("return_to", redirect);
+  url.searchParams.set("client_state", clientState());
   return url.toString();
 }
 

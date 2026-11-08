@@ -768,6 +768,7 @@ function renderKeysPage(opts: {
   // (app_id=keys → aud: console, #495) and its own copy of the session under
   // the SDK's storage key.
   var STORAGE_KEY = 'fas:session';
+  var CLIENT_STATE_KEY = 'fas:auth-state';
   function getToken() {
     try {
       var stored = localStorage.getItem(STORAGE_KEY);
@@ -776,13 +777,32 @@ function renderKeysPage(opts: {
     return null;
   }
 
+  // #564: only a session this browser asked for. A crafted link must not plant
+  // someone else's account here, where the person is about to paste API keys.
   function consumeCallback() {
     var hash = window.location.hash;
     if (hash.indexOf('#fas_session=') !== 0) return;
     history.replaceState(null, '', window.location.pathname + window.location.search);
+    var parts = hash.slice('#fas_session='.length).split('&fas_state=');
+    var pending = null;
+    try { pending = localStorage.getItem(CLIENT_STATE_KEY); } catch (_) {}
+    if (!pending || parts[1] !== pending) return;
+    try { localStorage.removeItem(CLIENT_STATE_KEY); } catch (_) {}
     var t = '';
-    try { t = decodeURIComponent(hash.slice('#fas_session='.length)); } catch (_) {}
+    try { t = decodeURIComponent(parts[0]); } catch (_) {}
     if (t) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ token: t })); } catch (_) {} }
+  }
+
+  function clientState() {
+    try {
+      var value = localStorage.getItem(CLIENT_STATE_KEY);
+      if (!value) {
+        var bytes = crypto.getRandomValues(new Uint8Array(24));
+        value = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+        localStorage.setItem(CLIENT_STATE_KEY, value);
+      }
+      return value;
+    } catch (_) { return null; }
   }
 
   function signInUrl() {
@@ -791,6 +811,8 @@ function renderKeysPage(opts: {
     var u = new URL(API + '/auth/github/start', window.location.origin);
     u.searchParams.set('app_id', 'keys');
     u.searchParams.set('return_to', here.toString());
+    var state = clientState();
+    if (state) u.searchParams.set('client_state', state);
     return u.toString();
   }
 

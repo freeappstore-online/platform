@@ -51,12 +51,34 @@ async function fetchUser(token: string): Promise<AdminUser> {
 
 export type SignInProvider = 'github' | 'google'
 
+const CLIENT_STATE_KEY = 'fas:auth-state'
+
+/** The value this browser sends at sign-in start; only a session echoing it is accepted (#564). */
+function clientState(): string {
+  let value = localStorage.getItem(CLIENT_STATE_KEY)
+  if (!value) {
+    const bytes = crypto.getRandomValues(new Uint8Array(24))
+    value = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    localStorage.setItem(CLIENT_STATE_KEY, value)
+  }
+  return value
+}
+
+/** The session token in a callback hash, only if this browser started that sign-in. */
+function claimCallbackToken(hash: string): string | null {
+  const [raw = '', state] = hash.slice('#fas_session='.length).split('&fas_state=')
+  if (!state || localStorage.getItem(CLIENT_STATE_KEY) !== state) return null
+  localStorage.removeItem(CLIENT_STATE_KEY)
+  return decodeURIComponent(raw)
+}
+
 function signInUrl(provider: SignInProvider): string {
   const here = new URL(window.location.href)
   here.hash = ''
   const url = new URL(`/v1/auth/${provider}/start`, API_BASE)
   url.searchParams.set('app_id', 'fas-admin')
   url.searchParams.set('return_to', here.toString())
+  url.searchParams.set('client_state', clientState())
   return url.toString()
 }
 
@@ -71,10 +93,12 @@ export function useAdminAuth() {
     async function init() {
       let session = readSession()
       if (window.location.hash.startsWith('#fas_session=')) {
-        const token = decodeURIComponent(window.location.hash.slice('#fas_session='.length))
+        const token = claimCallbackToken(window.location.hash)
         history.replaceState(null, '', window.location.pathname + window.location.search)
-        session = { token, user: await fetchUser(token) }
-        writeSession(session)
+        if (token) {
+          session = { token, user: await fetchUser(token) }
+          writeSession(session)
+        }
       }
 
       if (session) {

@@ -36,19 +36,31 @@ function searchCard(item, domain = 'freegamestore.online', path = 'games') {
   return elements['cross-store-grid'].children[0];
 }
 
-async function authCallback(hash, response = { ok: true, status: 200, json: async () => ({ id: '1', login: '<img src=x onerror=alert(1)>' }) }, session = null) {
+async function authCallback(hash, response = { ok: true, status: 200, json: async () => ({ id: '1', login: '<img src=x onerror=alert(1)>' }) }, session = null, { confirm = () => true, pending = null } = {}) {
   const avatar = node();
   const calls = [], stored = [], cleared = [];
   runInNewContext(readFileSync(new URL('./auth.js', import.meta.url), 'utf8'), {
     document: { querySelectorAll: () => [], querySelector: selector => selector === '.header-right' ? node() : null, getElementById: () => avatar, createElement: node, documentElement: node() },
-    window: { location: { hash, pathname: '/', search: '' } },
+    window: { location: { hash, pathname: '/', search: '' }, confirm },
     history: { replaceState: (...args) => cleared.push(args) },
-    localStorage: { getItem: key => key === 'fas:session' ? session : null, setItem: (...args) => stored.push(args), removeItem() {} },
+    localStorage: { getItem: key => key === 'fas:session' ? session : key === 'fas:auth-state' ? pending : null, setItem: (...args) => stored.push(args), removeItem() {} },
     fetch: async (...args) => { calls.push(args); return response; }, URL,
   });
   await new Promise(resolve => setImmediate(resolve));
   return { avatar, calls, stored, cleared };
 }
+
+it('a session this browser did not ask for needs the person to accept it (#564)', async () => {
+  const user = { ok: true, status: 200, json: async () => ({ id: '9', login: 'mallory' }) };
+  const prompts = [];
+  const declined = await authCallback('#fas_session=tok', user, null, { confirm: m => { prompts.push(m); return false; } });
+  assert.deepEqual(prompts, ['Sign in as mallory?']);
+  assert.equal(declined.stored.length, 0);
+  const wrong = await authCallback('#fas_session=tok&fas_state=zzz', user, null, { confirm: () => false, pending: 'abc' });
+  assert.equal(wrong.stored.length, 0);
+  const own = await authCallback('#fas_session=tok&fas_state=abc', user, null, { confirm: () => { throw new Error('asked'); }, pending: 'abc' });
+  assert.equal(own.stored.length, 1);
+});
 
 const XSS_PAYLOADS = [
   '<script>alert(1)</script>',

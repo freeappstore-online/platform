@@ -8,6 +8,34 @@ export type AuthProvider = 'github' | 'google' | 'apple' | 'email';
  * routes, not for other apps or the console.
  */
 const STORAGE_KEY = 'fas:session';
+/** The value this browser sent at sign-in start; the API echoes it with the session (#564). */
+const CLIENT_STATE_KEY = 'fas:auth-state';
+
+/** This browser's pending sign-in value, created on first use. Null when storage is unavailable. */
+function clientState(): string | null {
+  try {
+    let value = window.localStorage.getItem(CLIENT_STATE_KEY);
+    if (!value) {
+      const bytes = crypto.getRandomValues(new Uint8Array(24));
+      value = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+      window.localStorage.setItem(CLIENT_STATE_KEY, value);
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+/** Did this browser start the sign-in that delivered `state`? Consumes the pending value on a match. */
+function claimClientState(state: string | null): boolean {
+  try {
+    if (!state || window.localStorage.getItem(CLIENT_STATE_KEY) !== state) return false;
+    window.localStorage.removeItem(CLIENT_STATE_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Where account-level actions that need a first-party session live. */
 const CONSOLE_ACCOUNT_URL = 'https://freeappstore.online/app/settings';
@@ -70,6 +98,8 @@ export class Auth {
     const url = new URL(`/v1/auth/${provider}/start`, this.apiBase);
     url.searchParams.set('app_id', this.appId);
     url.searchParams.set('return_to', here.toString());
+    const state = clientState();
+    if (state) url.searchParams.set('client_state', state);
     window.location.assign(url.toString());
   }
 
@@ -89,13 +119,19 @@ export class Auth {
     if (typeof window === 'undefined') return;
     const here = new URL(window.location.href);
     here.hash = '';
+    const state = clientState();
     const res = await fetch(new URL('/v1/auth/email/start', this.apiBase), {
       method: 'POST',
       // Lets the API set the cookie that binds the link to this browser: opened
       // here it signs in directly, elsewhere it asks the user to confirm.
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, appId: this.appId, returnTo: here.toString() }),
+      body: JSON.stringify({
+        email,
+        appId: this.appId,
+        returnTo: here.toString(),
+        ...(state ? { clientState: state } : {}),
+      }),
     });
     if (!res.ok) {
       const body = await res.text();
@@ -177,20 +213,27 @@ export class Auth {
     // permanently stuck on a "broken" URL.
     history.replaceState(null, '', window.location.pathname + window.location.search);
 
+    const [rawToken = '', ...params] = hash.slice('#fas_session='.length).split('&');
+    const state = new URLSearchParams(params.join('&')).get('fas_state');
     let token: string;
     try {
-      token = decodeURIComponent(hash.slice('#fas_session='.length));
+      token = decodeURIComponent(rawToken);
     } catch {
       // Malformed hash (% with nothing after, etc.). Hash already cleared.
       return;
     }
     if (!token) return;
+    const startedHere = claimClientState(state);
 
     const revision = this.sessionRevision;
     try {
       const user = await this.fetchUser(token);
       // A sign-out during verification must win over this stale callback.
       if (revision !== this.sessionRevision) return;
+      // A session this browser did not ask for may be someone else's account,
+      // planted by a crafted link (#564). A magic link opened on another device
+      // is the legitimate case, so the person decides, seeing whose account it is.
+      if (!startedHere && !window.confirm(`Sign in as ${user.login}?`)) return;
       this.sessionRevision++;
       this.session = { token, user };
       // Emit/ensure BEFORE persisting: writeStorage() can throw in
