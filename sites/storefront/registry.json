@@ -3026,14 +3026,9 @@
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
       "permissions": [
-        {
-          "name": "camera",
-          "reason": "Shares your video with the other person in the meeting."
-        },
-        {
-          "name": "microphone",
-          "reason": "Shares your voice with the other person in the meeting."
-        }
+        "microphone",
+        "camera",
+        "screen"
       ],
       "requiresAuth": true
     },
@@ -3051,18 +3046,9 @@
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
       "permissions": [
-        {
-          "name": "camera",
-          "reason": "Shares your video during calls."
-        },
-        {
-          "name": "microphone",
-          "reason": "Shares your voice during calls."
-        },
-        {
-          "name": "notifications",
-          "reason": "Alerts you to new messages."
-        }
+        "microphone",
+        "camera",
+        "notifications"
       ],
       "requiresAuth": true
     },
@@ -3110,10 +3096,7 @@
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
       "permissions": [
-        {
-          "name": "location",
-          "reason": "Shows the forecast for where you are."
-        }
+        "location"
       ]
     },
     {
