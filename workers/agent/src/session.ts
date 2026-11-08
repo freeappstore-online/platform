@@ -728,6 +728,7 @@ export class AgentSession implements DurableObject {
     try {
       return await executeInfraTool(tc, {
         appId: ctx.session.appId,
+        ownerId: ctx.session.ownerId,
         ownerLogin: ctx.session.ownerLogin,
         authHeader: ctx.authHeader,
         files: ctx.files,
@@ -1186,6 +1187,7 @@ export class AgentSession implements DurableObject {
       try {
         toolResult = await executeInfraTool(tc, {
           appId: session.appId,
+          ownerId: session.ownerId,
           ownerLogin: session.ownerLogin,
           authHeader: pending.authHeader,
           files,
@@ -1497,8 +1499,8 @@ export class AgentSession implements DurableObject {
 
     const isAdmin = session.ownerIsAdmin ?? false;
     if (!this.env.DB && !isAdmin) return reply({ error: "cannot verify app ownership right now" }, 503);
-    const owner = this.env.DB ? await readAppOwner(this.env.DB, appId) : null;
-    const access = editAccess(owner, session.ownerLogin, isAdmin);
+    const owner = this.env.DB ? await readAppOwner(this.env.DB, appId, this.config.store) : null;
+    const access = editAccess(owner, { id: session.ownerId, login: session.ownerLogin }, isAdmin);
     if (access === "unknown_app") return reply({ error: `no ${this.config.noun} "${appId}"` }, 404);
     if (access === "not_owner") return reply({ error: `you do not own "${appId}"` }, 403);
 

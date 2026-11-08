@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { type CurrentUser, isAppOwner, requireAppUser } from '../lib/auth.js';
+import { type CurrentUser, FAS_APP_ROWS, isAppOwner, requireAppUser } from '../lib/auth.js';
 import { signPayload, verifyPayload } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -61,10 +61,10 @@ export async function claimRoom(
  * room open to everyone who ever opened the app.
  */
 async function holdsAppRole(env: Env, appId: string, user: CurrentUser): Promise<boolean> {
-  const app = await env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+  const app = await env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
     .bind(appId)
-    .first<{ owner_login: string | null }>();
-  if (app && isAppOwner(user, app.owner_login)) return true;
+    .first<{ owner_id: string | null }>();
+  if (app && isAppOwner(user, app.owner_id)) return true;
   const role = await env.DB.prepare(
     `SELECT 1 FROM app_roles
      WHERE app_id = ? AND user_id = ? AND NOT (role_name = 'member' AND granted_by IS NULL)

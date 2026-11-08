@@ -52,6 +52,9 @@ interface PublishRequest {
   store: Store;
   type?: string;
   creatorGithub?: string;
+  /** Immutable owner id (`gh:<numeric>`) of `creatorGithub`; null when that user
+   *  has not signed in yet (the first sign-in binds it, #566). */
+  creatorId?: string | null;
   /** Ignored. `apps.repo` is derived server-side from the store org and the id
    *  (#546); a client-supplied repo (e.g. a creator's own clone) must never be
    *  recorded, or the keyless deploy is refused as registered elsewhere. */
@@ -163,14 +166,27 @@ function validateId(id: string): string | null {
   return null;
 }
 
-/** `apps.owner_login` for an id, or null when there's no row or no DB to ask. */
-async function recordedOwner(env: PublishEnv, id: string): Promise<string | null> {
+interface RecordedApp {
+  owner_login: string;
+  owner_id: string | null;
+  store: string | null;
+}
+
+/** The `apps` row for an id, or null when there's no row or no DB to ask. */
+async function recordedApp(env: PublishEnv, id: string): Promise<RecordedApp | null> {
   if (!env.DB) return null;
-  const row = await env.DB.prepare("SELECT owner_login FROM apps WHERE id = ?")
+  return env.DB.prepare("SELECT owner_login, owner_id, store FROM apps WHERE id = ?")
     .bind(id)
-    .first<{ owner_login: string }>()
+    .first<RecordedApp>()
     .catch(() => null);
-  return row?.owner_login ?? null;
+}
+
+/** Does the publisher own the recorded app? By the immutable id (#566); a row
+ *  not yet bound to an id (attributed to a login whose owner hadn't signed in)
+ *  falls back to the login, and the claim then binds the id. */
+function ownsRecorded(row: RecordedApp, req: PublishRequest, publisherLogin: string): boolean {
+  if (row.owner_id) return !!req.creatorId && row.owner_id === req.creatorId;
+  return row.owner_login.toLowerCase() === publisherLogin.toLowerCase();
 }
 
 /** Build the registry entry that ships into the storefront's registry.json. */
@@ -317,9 +333,12 @@ function claimAppStmt(db: D1Database, req: PublishRequest, ownerLogin: string, n
   return db
     .prepare(
       `INSERT INTO apps
-         (id, owner_login, created_at, category, type, oneliner, repo, demo, store)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-         ON CONFLICT (id) DO UPDATE SET repo = excluded.repo`,
+         (id, owner_login, created_at, category, type, oneliner, repo, demo, store, owner_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+         ON CONFLICT (id) DO UPDATE SET
+           repo = excluded.repo,
+           owner_id = COALESCE(apps.owner_id, excluded.owner_id)
+         WHERE apps.store IS NULL OR apps.store = excluded.store`,
     )
     .bind(
       req.id,
@@ -331,6 +350,7 @@ function claimAppStmt(db: D1Database, req: PublishRequest, ownerLogin: string, n
       appRepoUrl(req),
       req.demo ?? null,
       req.store,
+      req.creatorId ?? null,
     );
 }
 
@@ -386,9 +406,15 @@ async function ensureRepo(req: PublishRequest, config: StoreConfig, env: Publish
   // them to do in the fas publish "Push your code:" instructions.
   // The apps row can exist before the repo does (the VibeCode agent claims the
   // id first), so check the recorded owner whether or not the repo exists.
-  const owner = await recordedOwner(env, req.id);
+  const recorded = await recordedApp(env, req.id);
   const publisher = req.creatorGithub || config.org;
-  const isOwner = !!owner && owner.toLowerCase() === publisher.toLowerCase();
+  // The shared `apps` table also holds other stores' rows (PAS 'apps_pro'); an id
+  // one of them holds is not claimable here (#571).
+  if (recorded?.store && recorded.store !== req.store) {
+    return { name: "GitHub repo", status: "fail", detail: `${req.id} is already taken by another store and can't be published here` };
+  }
+  const owner = recorded;
+  const isOwner = !!recorded && ownsRecorded(recorded, req, publisher);
   if (owner && !isOwner) {
     return { name: "GitHub repo", status: "fail", detail: `${req.id} is already claimed and isn't yours to publish` };
   }
@@ -418,8 +444,8 @@ async function ensureRepo(req: PublishRequest, config: StoreConfig, env: Publish
   if (!owner) {
     if (!env.DB) return { name: "GitHub repo", status: "fail", detail: "D1 binding not available; can't record the owner" };
     await claimAppStmt(env.DB, req, publisher, Date.now()).run();
-    const claimed = await recordedOwner(env, req.id);
-    if (!claimed || claimed.toLowerCase() !== publisher.toLowerCase()) {
+    const claimed = await recordedApp(env, req.id);
+    if (!claimed || (claimed.store ?? req.store) !== req.store || !ownsRecorded(claimed, req, publisher)) {
       return { name: "GitHub repo", status: "fail", detail: `${req.id} is already claimed and isn't yours to publish` };
     }
   }

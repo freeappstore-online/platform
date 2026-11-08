@@ -21,7 +21,12 @@ function fakeDB(opts: {
           if (opts.unknownTarget && trimmed.startsWith('SELECT 1 FROM users')) return null;
           if (trimmed.includes('FROM users')) return opts.user ?? null;
           if (trimmed.includes('FROM apps'))
-            return opts.appCreator != null ? { owner_login: opts.appCreator } : null;
+            return opts.appCreator != null
+              ? {
+                  owner_id:
+                    opts.appCreator === opts.user?.github_login ? opts.user.id : 'gh:someone-else',
+                }
+              : null;
           if (trimmed.includes('SELECT 1 FROM app_roles'))
             return opts.existingRole ? { 1: 1 } : null;
           return null;

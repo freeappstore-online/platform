@@ -120,11 +120,9 @@ auditRoutes.post('/audit/run', async (c) => {
     throw err;
   }
   if (!isAdmin(user, c.env)) {
-    const owns = user.githubLogin
-      ? await c.env.DB.prepare('SELECT 1 FROM apps WHERE owner_login = ? COLLATE NOCASE LIMIT 1')
-          .bind(user.githubLogin)
-          .first()
-      : null;
+    const owns = await c.env.DB.prepare('SELECT 1 FROM apps WHERE owner_id = ? LIMIT 1')
+      .bind(user.id)
+      .first();
     if (!owns) return c.json({ error: 'app owners and admins only' }, 403);
   }
   const usage = await checkAndBump(d1UsageStore(c.env.DB), {

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isReservedAppId } from "../../../packages/backend/src/lib/reserved-app-ids";
 import { getConfig } from "./config";
 import type { DeployStatus } from "./deploy";
 import { applyPlaceholders, executeInfraTool, repairAppIdPlaceholders } from "./infra-exec";
@@ -63,9 +64,10 @@ describe("build target deployment guard", () => {
 
 /**
  * Minimal in-memory stand-in for the `apps`/`routes` D1 tables — enough to
- * exercise the ownership checks in executeDeploy. `apps` maps id -> owner_login.
+ * exercise the ownership checks in executeDeploy. `apps` maps id -> owner_login;
+ * `ids` maps id -> apps.owner_id and `stores` id -> apps.store (default "apps").
  */
-function makeDb(apps: Map<string, string>, repos?: Map<string, string>) {
+function makeDb(apps: Map<string, string>, repos?: Map<string, string>, ids?: Map<string, string>, stores?: Map<string, string>) {
   return {
     prepare(sql: string) {
       return {
@@ -74,7 +76,11 @@ function makeDb(apps: Map<string, string>, repos?: Map<string, string>) {
             async first<T>(): Promise<T | null> {
               if (sql.includes("FROM apps WHERE id")) {
                 const owner = apps.get(args[0] as string);
-                return owner ? ({ owner_login: owner } as T) : null;
+                const id = args[0] as string;
+                // The ownership read honours its own store filter, as D1 would.
+                const store = stores?.get(id) ?? "apps";
+                const filtered = sql.includes("store IS NULL OR store = ?") && store !== args[1];
+                return owner && !filtered ? ({ owner_login: owner, owner_id: ids?.get(id) ?? null, store } as T) : null;
               }
               return null;
             },
@@ -83,8 +89,11 @@ function makeDb(apps: Map<string, string>, repos?: Map<string, string>) {
                 const [id, owner] = args as [string, string];
                 if (!apps.has(id)) {
                   apps.set(id, owner); // ON CONFLICT DO NOTHING
-                  repos?.set(id, args[8] as string);
+                  if (args[2]) ids?.set(id, args[2] as string);
+                  repos?.set(id, args[9] as string);
                 }
+              } else if (sql.includes("UPDATE apps SET owner_id")) {
+                ids?.set(args[1] as string, args[0] as string);
               } else if (sql.includes("DELETE FROM apps")) {
                 const [id, owner] = args as [string, string];
                 if (apps.get(id) === owner) apps.delete(id);
@@ -102,20 +111,24 @@ function makeCtx(
   overrides: Partial<{
     appId: string | null;
     ownerLogin: string | null;
+    ownerId: string | null;
     apps: Map<string, string>;
     repos: Map<string, string>;
+    ids: Map<string, string>;
+    stores: Map<string, string>;
   }> = {},
 ) {
   return {
     appId: overrides.appId ?? null,
     ownerLogin: overrides.ownerLogin ?? null,
+    ownerId: overrides.ownerId ?? null,
     files: new Map<string, string>(),
     authHeader: "Bearer test",
     env: {
       GITHUB_TOKEN: "test-token",
       // /v1/publish succeeds; the auth re-check (/v1/auth/me) answers 200 too.
       PLATFORM: { fetch: async () => new Response("{}", { status: 200 }) } as never,
-      ...(overrides.apps ? { DB: makeDb(overrides.apps, overrides.repos) as never } : {}),
+      ...(overrides.apps ? { DB: makeDb(overrides.apps, overrides.repos, overrides.ids, overrides.stores) as never } : {}),
     },
     config: appsConfig,
     onDeployStatus: vi.fn() as (status: DeployStatus) => void,
@@ -565,3 +578,107 @@ it.each(["dashboard", "tracker", "calculator", "generic"] as const)(
     expect(JSON.parse(files.get("fas.json")!).appId).toBe("connected-test");
   },
 );
+
+describe("executeInfraTool — owner id and store (#566, #571, #575)", () => {
+  const deployInput = { name: "Taken", category: "utilities", icon: "&#128992;", iconBg: "#fff", description: "t" };
+  const free404 = () => Promise.resolve({ status: 404, json: () => Promise.resolve({}) });
+
+  it("a different account with the owner's login (a renamed-away username) does not own the app", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(free404) as any;
+    try {
+      const apps = new Map([["taken-app", "alice"]]);
+      const ids = new Map([["taken-app", "gh:1"]]);
+      const ctx = makeCtx({ ownerLogin: "alice", ownerId: "gh:2", apps, ids });
+      await executeInfraTool({ id: "1", name: "deploy", input: { ...deployInput, id: "taken-app" } }, ctx);
+      expect(ctx.onAppDeployed).toHaveBeenCalledWith("taken-app-2", "Taken");
+      expect(ids.get("taken-app")).toBe("gh:1");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("the owner keeps their id when the login differs only in case or after a rename", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(free404) as any;
+    try {
+      const apps = new Map([["my-app", "alice"]]);
+      const ids = new Map([["my-app", "gh:1"]]);
+      const ctx = makeCtx({ ownerLogin: "ALICE-NEW", ownerId: "gh:1", apps, ids });
+      await executeInfraTool({ id: "1", name: "deploy", input: { ...deployInput, id: "my-app" } }, ctx);
+      expect(ctx.onAppDeployed).toHaveBeenCalledWith("my-app", "Taken");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("a legacy row without owner_id compares logins case-insensitively and gets bound", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(free404) as any;
+    try {
+      const ids = new Map<string, string>();
+      const ctx = makeCtx({ ownerLogin: "Alice", ownerId: "gh:1", apps: new Map([["my-app", "alice"]]), ids });
+      await executeInfraTool({ id: "1", name: "deploy", input: { ...deployInput, id: "my-app" } }, ctx);
+      expect(ctx.onAppDeployed).toHaveBeenCalledWith("my-app", "Taken");
+      expect(ids.get("my-app")).toBe("gh:1");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("a PAS row holding the id does not block or half-claim it: the deploy moves to the next id", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(free404) as any;
+    try {
+      const apps = new Map([["held-app", "alice"]]);
+      const ids = new Map([["held-app", "gh:1"]]);
+      const stores = new Map([["held-app", "apps_pro"]]);
+      const ctx = makeCtx({ ownerLogin: "alice", ownerId: "gh:1", apps, ids, stores });
+      await executeInfraTool({ id: "1", name: "deploy", input: { ...deployInput, id: "held-app" } }, ctx);
+      expect(ctx.onAppDeployed).toHaveBeenCalledWith("held-app-2", "Taken");
+      expect(stores.get("held-app")).toBe("apps_pro");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("ownership reads for push_update ignore other stores' rows", async () => {
+    const apps = new Map([["held-app", "alice"]]);
+    const ids = new Map([["held-app", "gh:1"]]);
+    const stores = new Map([["held-app", "apps_pro"]]);
+    const ctx = makeCtx({ appId: "held-app", ownerLogin: "alice", ownerId: "gh:1", apps, ids, stores });
+    const result = await executeInfraTool({ id: "1", name: "push_update", input: { message: "x" } }, ctx);
+    expect(result).toContain("do not own");
+  });
+
+  it("push_update without an id pushes to the session's app, never to <org>/undefined", async () => {
+    const originalFetch = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn((url: string) => {
+      urls.push(String(url));
+      return free404();
+    }) as any;
+    try {
+      const apps = new Map([["my-app", "alice"]]);
+      const ids = new Map([["my-app", "gh:1"]]);
+      const ctx = makeCtx({ appId: "my-app", ownerLogin: "alice", ownerId: "gh:1", apps, ids });
+      ctx.files.set("index.html", "<p>hi</p>");
+      await executeInfraTool({ id: "1", name: "push_update", input: { message: "x" } }, ctx);
+      expect(urls.length).toBeGreaterThan(0);
+      expect(urls.some((u) => u.includes("/undefined"))).toBe(false);
+      expect(urls.some((u) => u.includes("/my-app"))).toBe(true);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it.each(["push_update", "get_build_logs", "check_deploy_status"])("%s with no id and no deployed app is refused", async (name) => {
+    const result = await executeInfraTool({ id: "1", name, input: {} }, makeCtx());
+    expect(result).toContain("no app deployed yet");
+  });
+
+  it("reserves the stringified missing ids", () => {
+    expect(isReservedAppId("undefined")).toBe(true);
+    expect(isReservedAppId("null")).toBe(true);
+  });
+});

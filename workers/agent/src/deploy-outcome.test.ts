@@ -248,9 +248,9 @@ describe("deploy provisions before it pushes (#548)", () => {
 
     await executeInfraTool({ ...deployCall, input: { ...deployCall.input, category: "health", type: "connected" } }, ctx);
 
-    // apps insert binds: id, owner, created_at, category, type, ...
-    expect(inserted[0]?.[3]).toBe("Health & Fitness");
-    expect(inserted[0]?.[4]).toBe("connected");
+    // apps insert binds: id, owner, owner_id, created_at, category, type, ...
+    expect(inserted[0]?.[4]).toBe("Health & Fitness");
+    expect(inserted[0]?.[5]).toBe("connected");
     expect(JSON.parse(published[0]!)).toMatchObject({ category: "Health & Fitness", type: "connected" });
     expect(JSON.parse(published[0]!).repo).toBeUndefined();
   });

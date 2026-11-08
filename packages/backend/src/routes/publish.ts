@@ -141,6 +141,8 @@ publishRoutes.post('/publish', async (c) => {
     return c.text('publishing requires signing in with GitHub', 403);
   }
   let creatorGithub = user.githubLogin;
+  // The immutable id the admin worker records as apps.owner_id (#566).
+  let creatorId: string | null = user.id;
   // GitHub logins are case-insensitive (as in isAppOwner / isAdminLogin).
   if (body.creatorGithub && body.creatorGithub.toLowerCase() !== user.githubLogin.toLowerCase()) {
     if (!isAdmin(user, c.env)) {
@@ -150,6 +152,14 @@ publishRoutes.post('/publish', async (c) => {
       return c.text('invalid creatorGithub', 400);
     }
     creatorGithub = body.creatorGithub;
+    // Another user: bind to their account if they have signed in, else leave the
+    // id empty and the first sign-in as that login claims it (computeRoles).
+    const found = await c.env.DB.prepare(
+      "SELECT id FROM users WHERE id LIKE 'gh:%' AND github_login = ? COLLATE NOCASE",
+    )
+      .bind(creatorGithub)
+      .all<{ id: string }>();
+    creatorId = found.results?.length === 1 ? found.results[0]!.id : null;
   }
 
   if (!c.env.ADMIN) {
@@ -187,6 +197,7 @@ publishRoutes.post('/publish', async (c) => {
       type: body.type,
       githubLogin: creatorGithub,
       creatorGithub,
+      creatorId,
       demo: body.demo,
       ...(typeof body.crossOriginIsolated === 'boolean'
         ? { crossOriginIsolated: body.crossOriginIsolated }
@@ -288,11 +299,11 @@ publishRoutes.post('/unpublish', async (c) => {
   if (store !== 'apps') return c.text('store must be "apps"', 400);
 
   // Ownership gate: only the app's owner or a platform admin may unpublish.
-  const row = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ? AND store = ?')
+  const row = await c.env.DB.prepare('SELECT owner_id FROM apps WHERE id = ? AND store = ?')
     .bind(body.id, store)
-    .first<{ owner_login: string | null }>();
+    .first<{ owner_id: string | null }>();
   if (!row) return c.json({ error: 'not_found', appId: body.id }, 404);
-  if (!isAppOwner(user, row.owner_login) && !isAdmin(user, c.env)) {
+  if (!isAppOwner(user, row.owner_id) && !isAdmin(user, c.env)) {
     return c.text('only the app owner or an admin may unpublish', 403);
   }
 

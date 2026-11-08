@@ -14,6 +14,8 @@ interface InsertCapture {
 function userLookupDB(
   user: { id: string; github_login: string; avatar_url: string | null } | null,
   inserts?: InsertCapture[],
+  /** `users` rows matching the creatorGithub an admin attributes an app to. */
+  creatorRows: Array<{ id: string }> = [],
 ): D1Database {
   const prepare = (sql: string): D1PreparedStatement => {
     const trimmed = sql.replace(/\s+/g, ' ').trim();
@@ -29,6 +31,7 @@ function userLookupDB(
         }
         return null;
       },
+      all: async <T>() => ({ results: creatorRows as unknown as T[] }) as D1Result<T>,
       run: async <T>() => {
         inserts?.push({ sql: trimmed, binds: bound });
         return { meta: { changes: 1 } } as unknown as D1Result<T>;
@@ -298,10 +301,12 @@ describe('POST /v1/publish', () => {
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...validBody, creatorGithub: 'abid8195' }),
       },
-      baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, inserts), {
-        ADMIN: admin,
-        ADMIN_GITHUB_LOGINS: 'me',
-      }),
+      baseEnv(
+        userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }, inserts, [
+          { id: 'gh:8195' },
+        ]),
+        { ADMIN: admin, ADMIN_GITHUB_LOGINS: 'me' },
+      ),
     );
     expect(res.status).toBe(200);
     // The contributor is forwarded as creatorGithub — the admin worker credits
@@ -310,6 +315,8 @@ describe('POST /v1/publish', () => {
     const sentBody = JSON.parse(calls[0]!.init.body as string);
     expect(sentBody.creatorGithub).toBe('abid8195');
     expect(sentBody.githubLogin).toBe('abid8195');
+    // ...and bound to their immutable account id, not just the mutable login (#566).
+    expect(sentBody.creatorId).toBe('gh:8195');
     expect(inserts.some((i) => i.sql.startsWith('INSERT OR IGNORE INTO apps'))).toBe(false);
   });
 
@@ -512,7 +519,7 @@ describe('POST /v1/publish', () => {
 
 /**
  * DB mock for the unpublish path: resolves the session user (SELECT id,
- * github_login) AND the app-ownership lookup (SELECT owner_login FROM apps).
+ * github_login) AND the app-ownership lookup (SELECT owner_id FROM apps).
  * ownerLogin=null means the app row doesn't exist.
  */
 function unpublishDB(
@@ -525,8 +532,12 @@ function unpublishDB(
       bind: () => stmt as D1PreparedStatement,
       first: async <T>() => {
         if (trimmed.startsWith('SELECT id, github_login')) return (user ?? null) as T | null;
-        if (trimmed.startsWith('SELECT owner_login FROM apps')) {
-          return (ownerLogin ? { owner_login: ownerLogin } : null) as T | null;
+        if (trimmed.startsWith('SELECT owner_id FROM apps')) {
+          return (
+            ownerLogin
+              ? { owner_id: ownerLogin === user?.github_login ? user.id : 'gh:other' }
+              : null
+          ) as T | null;
         }
         return null;
       },

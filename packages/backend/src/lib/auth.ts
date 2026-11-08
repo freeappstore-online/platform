@@ -170,19 +170,20 @@ export function isAdmin(user: Pick<CurrentUser, 'id' | 'githubLogin'>, env: Env)
 }
 
 /**
- * Whether `user` owns an app whose `apps.owner_login` is `ownerLogin`. GitHub
- * logins are case-insensitive. An empty githubLogin (non-GitHub identity) never
- * owns anything.
+ * SQL predicate for the FreeAppStore's own rows in the shared `apps` table.
+ * PAS registers `store = 'apps_pro'` rows there too, whose ids can collide with
+ * FAS ids (#571), so every FAS ownership read filters on it.
  */
-export function isAppOwner(
-  user: Pick<CurrentUser, 'githubLogin'>,
-  ownerLogin: string | null,
-): boolean {
-  return (
-    !!user.githubLogin &&
-    !!ownerLogin &&
-    ownerLogin.toLowerCase() === user.githubLogin.toLowerCase()
-  );
+export const FAS_APP_ROWS = "(store IS NULL OR store = 'apps')";
+
+/**
+ * Whether `user` owns an app whose immutable `apps.owner_id` is `ownerId`
+ * (`gh:<numeric GitHub id>`, #566). Never the login: a GitHub username is
+ * mutable and can be re-registered by someone else. A null owner_id (not yet
+ * bound to an account) is owned by nobody.
+ */
+export function isAppOwner(user: Pick<CurrentUser, 'id'>, ownerId: string | null): boolean {
+  return !!ownerId && user.id === ownerId;
 }
 
 /**
@@ -197,12 +198,12 @@ export async function assertAppOwner(
 ): Promise<void> {
   // Existence first, even for admins: otherwise an admin can mint app_roles
   // rows for an app id that doesn't exist (#442).
-  const row = await env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+  const row = await env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
     .bind(appId)
-    .first<{ owner_login: string | null }>();
+    .first<{ owner_id: string | null }>();
   if (!row) throw new HttpError(404, 'app not found');
   if (opts.allowAdmin && isAdmin(user, env)) return;
-  if (!isAppOwner(user, row.owner_login)) throw new HttpError(403, 'not the app owner');
+  if (!isAppOwner(user, row.owner_id)) throw new HttpError(403, 'not the app owner');
 }
 
 /** Require a platform admin (decided live — see isAdmin) on a first-party session. */
@@ -269,13 +270,27 @@ export function hasInternalToken(c: {
   return !!expected && !!provided && timingSafeEqual(provided, expected);
 }
 
-/** Whether a GitHub login is in ADMIN_GITHUB_LOGINS. Empty never matches. */
+/**
+ * Whether a GitHub login is in ADMIN_GITHUB_LOGINS. Empty never matches.
+ *
+ * Transitional (#566): a username is mutable and re-registrable, so admin
+ * belongs on the immutable id. Until ADMIN_USER_IDS carries at least one
+ * `gh:<id>` entry the login list still applies, so deploying this can't lock
+ * every admin out; once a `gh:` id is configured the login list is ignored.
+ */
 export function isAdminLogin(login: string, env: Env): boolean {
+  if (hasGithubAdminId(env)) return false;
   const admins = (env.ADMIN_GITHUB_LOGINS ?? '')
     .split(',')
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
   return admins.includes(login.toLowerCase());
+}
+
+function hasGithubAdminId(env: Env): boolean {
+  return (env.ADMIN_USER_IDS ?? '')
+    .split(',')
+    .some((s) => s.trim().toLowerCase().startsWith('gh:'));
 }
 
 export function isAdminUserId(userId: string, env: Env): boolean {

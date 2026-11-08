@@ -54,6 +54,10 @@ export const RESERVED_APP_IDS: ReadonlySet<string> = new Set([
   // live under `platform:`-prefixed keys, which no app id can equal.
   'email-platform',
   'audit-run',
+  // Stringified missing values: a tool call with no id once pushed to
+  // `<org>/undefined` (#575).
+  'undefined',
+  'null',
 ]);
 
 export function isReservedAppId(id: string): boolean {

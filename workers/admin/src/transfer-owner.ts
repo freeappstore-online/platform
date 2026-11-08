@@ -92,13 +92,13 @@ async function readApp(db: D1Database, appId: string): Promise<AppRow | null> {
   return db.prepare("SELECT id, owner_login FROM apps WHERE id = ?1").bind(appId).first<AppRow>();
 }
 
-/** Canonical `users.github_login` for this login, or null when nobody has it. */
-async function canonicalLogin(db: D1Database, login: string): Promise<string | null> {
+/** Canonical GitHub account (`users.github_login` + immutable `gh:<id>`) for this login, or null. */
+async function canonicalAccount(db: D1Database, login: string): Promise<{ id: string; login: string } | null> {
   const row = await db
-    .prepare("SELECT github_login FROM users WHERE lower(github_login) = lower(?1) LIMIT 1")
+    .prepare("SELECT id, github_login FROM users WHERE id LIKE 'gh:%' AND lower(github_login) = lower(?1) LIMIT 1")
     .bind(login)
-    .first<{ github_login: string }>();
-  return row?.github_login ?? null;
+    .first<{ id: string; github_login: string }>();
+  return row ? { id: row.id, login: row.github_login } : null;
 }
 
 /**
@@ -119,8 +119,9 @@ export async function transferAppOwner(db: D1Database, input: TransferInput, act
     return { status: 409, body: { error: "owner mismatch", app_id: input.app_id, owner_login: app.owner_login } };
   }
 
-  const toLogin = await canonicalLogin(db, input.to_login);
-  if (!toLogin) return { status: 400, body: { error: "unknown login", login: input.to_login } };
+  const account = await canonicalAccount(db, input.to_login);
+  const toLogin = account?.login;
+  if (!account || !toLogin) return { status: 400, body: { error: "unknown login", login: input.to_login } };
   if (same(app.owner_login, toLogin)) {
     return { status: 400, body: { error: "app is already owned by this login", login: toLogin } };
   }
@@ -136,10 +137,10 @@ export async function transferAppOwner(db: D1Database, input: TransferInput, act
     .bind(input.app_id, toLogin, input.reason, actor, now, input.from_login);
   const update = db
     .prepare(
-      `UPDATE apps SET owner_login = ?1
+      `UPDATE apps SET owner_login = ?1, owner_id = ?4
        WHERE id = ?2 AND lower(owner_login) = lower(?3) AND lower(owner_login) != lower(?1)`,
     )
-    .bind(toLogin, input.app_id, input.from_login);
+    .bind(toLogin, input.app_id, input.from_login, account.id);
 
   const [inserted, updated] = await db.batch([insert, update]);
   if (changes(inserted) !== 1 || changes(updated) !== 1) {

@@ -34,6 +34,8 @@ function idRuleText(config: { store: string }): string {
 
 interface ExecContext {
   appId: string | null;
+  /** Immutable account id (`gh:<numeric>`): what `apps.owner_id` is checked against (#566). */
+  ownerId?: string | null;
   ownerLogin: string | null;
   /** Platform admin: may update any app (#12). */
   isAdmin?: boolean;
@@ -84,20 +86,22 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   const { config } = ctx;
 
   // Authorization: scope write tools to the session's own item
-  const targetId = tc.input.id as string | undefined;
-  if (targetId && ["push_update", "get_build_logs", "get_ci_results", "check_deploy_status", "get_audit_results"].includes(tc.name)) {
-    if (!ctx.appId) return `Error: no ${config.noun} deployed yet. Deploy first before using ${tc.name}.`;
-    if (targetId !== ctx.appId)
-      return `Error: you can only ${tc.name} on your own ${config.noun} "${ctx.appId}". No access to "${targetId}".`;
+  const requestedId = tc.input.id as string | undefined;
+  // The id these tools act on: the one named, else the session's own. Resolved
+  // once so an omitted `id` can never reach GitHub as "undefined" (#575).
+  const id = requestedId || ctx.appId || undefined;
+  if (["push_update", "get_build_logs", "get_ci_results", "check_deploy_status", "get_audit_results"].includes(tc.name)) {
+    if (!ctx.appId || !id) return `Error: no ${config.noun} deployed yet. Deploy first before using ${tc.name}.`;
+    if (id !== ctx.appId) return `Error: you can only ${tc.name} on your own ${config.noun} "${ctx.appId}". No access to "${id}".`;
   }
 
   // Validate deploy ID
   if (tc.name === "deploy" && tc.input.id) {
-    const id = tc.input.id as string;
-    if (!isValidId(config, id) || id.startsWith("free") || id.startsWith("pro") || isReservedAppId(id)) {
-      return `Error: invalid ${config.noun} ID "${id}". ${idRuleText(config)} No "free"/"pro" prefix, no reserved names.`;
+    const deployId = tc.input.id as string;
+    if (!isValidId(config, deployId) || deployId.startsWith("free") || deployId.startsWith("pro") || isReservedAppId(deployId)) {
+      return `Error: invalid ${config.noun} ID "${deployId}". ${idRuleText(config)} No "free"/"pro" prefix, no reserved names.`;
     }
-    if (ctx.appId && ctx.appId !== id) {
+    if (ctx.appId && ctx.appId !== deployId) {
       return `Error: this session already deployed "${ctx.appId}". Create a new project for a different ${config.noun}.`;
     }
   }
@@ -112,14 +116,14 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   }
 
   if (tc.name === "push_update") {
-    const denied = await pushUpdateDenied((targetId ?? ctx.appId) as string, ctx);
+    const denied = await pushUpdateDenied(id as string, ctx);
     if (denied) return denied;
   }
 
   if (tc.name === "deploy" || tc.name === "push_update") {
     if (config.store === "apps" && ctx.files.has("fas.json")) {
       const preview = new Map(ctx.files);
-      const expectedAppId = (tc.input.id as string | undefined) ?? ctx.appId ?? undefined;
+      const expectedAppId = id;
       if (expectedAppId) applyPlaceholders(preview, expectedAppId, (tc.input.name as string) ?? expectedAppId);
       // One shared source-level preflight (build target, declared icons, test
       // script vs vitest), the same one MCP and `fas publish` run (#550).
@@ -169,20 +173,20 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
     case "deploy":
       return executeDeploy(tc, ctx);
     case "push_update":
-      return executePushUpdate(tc, ctx);
+      return executePushUpdate(tc, ctx, id as string);
     case "check_deploy_status":
-      return executeCheckDeployStatus(targetId!, ctx);
+      return executeCheckDeployStatus(id as string, ctx);
     case "list_deployed_apps":
     case "list_deployed_games":
       return listDeployed(ctx.env, config);
     case "fetch_url":
       return executeFetchUrl(tc, config);
     case "get_build_logs":
-      return getBuildLogs(targetId!, ctx.env, config);
+      return getBuildLogs(id as string, ctx.env, config);
     case "get_ci_results":
-      return getCIResults(targetId!, ctx.env, config);
+      return getCIResults(id as string, ctx.env, config);
     case "get_audit_results":
-      return getAuditResults(targetId!, config);
+      return getAuditResults(id as string, config);
     default:
       return `Unknown infra tool: ${tc.name}`;
   }
@@ -212,12 +216,18 @@ async function repoExists(id: string, ctx: ExecContext): Promise<boolean> {
 
 /** The `apps` row fields that decide who may change an app. */
 export interface AppOwnerRow {
+  /** Immutable `gh:<id>` of the owner; null until the owner's first sign-in binds it (#566). */
+  owner_id: string | null;
   owner_login: string;
   display_name: string | null;
 }
 
-export async function readAppOwner(db: D1Database, id: string): Promise<AppOwnerRow | null> {
-  const row = await db.prepare(`SELECT owner_login FROM apps WHERE id = ?`).bind(id).first<{ owner_login: string }>();
+/** One store's rows only: PAS rows in the shared table have their own ids (#571). */
+export async function readAppOwner(db: D1Database, id: string, store = "apps"): Promise<AppOwnerRow | null> {
+  const row = await db
+    .prepare(`SELECT owner_id, owner_login FROM apps WHERE id = ? AND (store IS NULL OR store = ?)`)
+    .bind(id, store)
+    .first<{ owner_id: string | null; owner_login: string }>();
   if (!row) return null;
   // apps.display_name isn't created by the backend's migrations, so on a
   // database built from them selecting it fails the whole query (found by the
@@ -227,35 +237,63 @@ export async function readAppOwner(db: D1Database, id: string): Promise<AppOwner
     .bind(id)
     .first<{ display_name: string | null }>()
     .catch(() => null);
-  return { owner_login: row.owner_login, display_name: named?.display_name ?? null };
+  return { owner_id: row.owner_id, owner_login: row.owner_login, display_name: named?.display_name ?? null };
+}
+
+interface Caller {
+  id: string | null;
+  login: string | null;
 }
 
 /**
- * May this caller change an existing app (#12)? Its owner by `apps.owner_login`
- * (the same authority deploy claims against; GitHub logins compare
- * case-insensitively) or a platform admin. An app with no row is unknown: we
- * cannot prove whose it is, so only an admin gets in.
+ * Does the caller own this row? By the immutable account id (#566). A row not
+ * yet bound to an id (attributed to a login whose owner had not signed in)
+ * falls back to the login, compared case-insensitively as GitHub does.
  */
-export function editAccess(row: AppOwnerRow | null, login: string | null, isAdmin: boolean): "ok" | "not_owner" | "unknown_app" {
+export function ownsApp(row: Pick<AppOwnerRow, "owner_id" | "owner_login">, caller: Caller): boolean {
+  if (row.owner_id) return !!caller.id && row.owner_id === caller.id;
+  return !!caller.login && row.owner_login.toLowerCase() === caller.login.toLowerCase();
+}
+
+/**
+ * May this caller change an existing app (#12)? Its owner by `apps.owner_id`
+ * (the same authority deploy claims against) or a platform admin. An app with
+ * no row is unknown: we cannot prove whose it is, so only an admin gets in.
+ */
+export function editAccess(row: AppOwnerRow | null, caller: Caller, isAdmin: boolean): "ok" | "not_owner" | "unknown_app" {
   if (isAdmin) return "ok";
   if (!row) return "unknown_app";
-  return login && row.owner_login.toLowerCase() === login.toLowerCase() ? "ok" : "not_owner";
+  return ownsApp(row, caller) ? "ok" : "not_owner";
+}
+
+function callerOf(ctx: ExecContext): Caller {
+  return { id: ctx.ownerId ?? null, login: ctx.ownerLogin };
 }
 
 /** Refuse push_update into an app the caller doesn't own, whatever the session is bound to. */
 async function pushUpdateDenied(appId: string, ctx: ExecContext): Promise<string | null> {
   if (ctx.isAdmin) return null;
   if (!ctx.env.DB) return `Error: cannot verify ownership of "${appId}" right now, so push_update is refused.`;
-  const access = editAccess(await readAppOwner(ctx.env.DB, appId), ctx.ownerLogin, false);
+  const access = editAccess(await readAppOwner(ctx.env.DB, appId, ctx.config.store), callerOf(ctx), false);
   if (access === "ok") return null;
   return `Error: you do not own the ${ctx.config.noun} "${appId}", so push_update is refused.`;
 }
 
-/** Current owner_login for an id, or null if unclaimed / no DB binding. */
-async function appOwner(id: string, ctx: ExecContext): Promise<string | null> {
+interface AppRow {
+  owner_id: string | null;
+  owner_login: string;
+  store: string | null;
+}
+
+/** The `apps` row for an id in ANY store, or null if unclaimed / no DB binding. */
+async function appRow(id: string, ctx: ExecContext): Promise<AppRow | null> {
   if (!ctx.env.DB) return null;
-  const row = await ctx.env.DB.prepare(`SELECT owner_login FROM apps WHERE id = ?`).bind(id).first<{ owner_login: string }>();
-  return row?.owner_login ?? null;
+  return ctx.env.DB.prepare(`SELECT owner_id, owner_login, store FROM apps WHERE id = ?`).bind(id).first<AppRow>();
+}
+
+/** Another store (PAS) holds this id in the shared `apps` table (#571). */
+function heldByOtherStore(row: AppRow, ctx: ExecContext): boolean {
+  return !!row.store && row.store !== ctx.config.store;
 }
 
 /**
@@ -267,8 +305,8 @@ async function appOwner(id: string, ctx: ExecContext): Promise<string | null> {
  * stranger's app.
  */
 async function isAvailableTo(id: string, ctx: ExecContext): Promise<boolean> {
-  const owner = await appOwner(id, ctx);
-  if (owner) return owner === ctx.ownerLogin;
+  const row = await appRow(id, ctx);
+  if (row) return !heldByOtherStore(row, ctx) && ownsApp(row, callerOf(ctx));
   // With no ownership store there is nothing to consult, so fall back to the
   // session's own id — a redeploy of what this session just built. Never do
   // this when D1 *is* available: an unclaimed id whose repo exists is someone
@@ -308,19 +346,23 @@ type Claim = { ok: true; createdNow: boolean; ownedAlready: boolean } | { ok: fa
 async function claimApp(appId: string, appName: string, tc: ToolCall, ctx: ExecContext): Promise<Claim> {
   if (!ctx.env.DB || !ctx.ownerLogin) return { ok: true, createdNow: false, ownedAlready: false };
 
-  const priorOwner = await appOwner(appId, ctx);
-  if (priorOwner && priorOwner !== ctx.ownerLogin) {
+  const prior = await appRow(appId, ctx);
+  if (prior && heldByOtherStore(prior, ctx)) {
+    return { ok: false, error: `"${appId}" is already taken by another store. Deploy under a different ID.` };
+  }
+  if (prior && !ownsApp(prior, callerOf(ctx))) {
     return { ok: false, error: `"${appId}" already belongs to another account. Deploy under a different ID.` };
   }
 
   await ctx.env.DB.prepare(
-    `INSERT INTO apps (id, owner_login, created_at, category, type, oneliner, display_name, store, repo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO apps (id, owner_login, owner_id, created_at, category, type, oneliner, display_name, store, repo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (id) DO NOTHING`,
   )
     .bind(
       appId,
       ctx.ownerLogin,
+      ctx.ownerId ?? null,
       Date.now(),
       // The same values /v1/publish validates and records, so the first-claim
       // row is never a placeholder that the later publish cannot correct.
@@ -335,19 +377,27 @@ async function claimApp(appId: string, appName: string, tc: ToolCall, ctx: ExecC
     )
     .run();
 
+  // An id attributed to this login before its owner had signed in has no
+  // owner_id yet: the verified session binds it.
+  if (prior && !prior.owner_id && ctx.ownerId) {
+    await ctx.env.DB.prepare(`UPDATE apps SET owner_id = ? WHERE id = ? AND owner_id IS NULL`).bind(ctx.ownerId, appId).run();
+  }
+
   // Read back: if a concurrent session won the insert, the row is theirs.
-  const owner = await appOwner(appId, ctx);
-  if (owner !== ctx.ownerLogin) {
+  const after = await appRow(appId, ctx);
+  if (!after || heldByOtherStore(after, ctx) || !ownsApp(after, callerOf(ctx))) {
     return { ok: false, error: `"${appId}" was claimed by another account moments ago. Deploy under a different ID.` };
   }
-  return { ok: true, createdNow: !priorOwner, ownedAlready: priorOwner === ctx.ownerLogin };
+  return { ok: true, createdNow: !prior, ownedAlready: !!prior };
 }
 
 /** Undo a claim made moments ago by this call, so a failed deploy leaves no phantom app. */
 async function releaseApp(appId: string, ctx: ExecContext): Promise<void> {
   if (!ctx.env.DB || !ctx.ownerLogin) return;
   try {
-    await ctx.env.DB.prepare(`DELETE FROM apps WHERE id = ? AND owner_login = ?`).bind(appId, ctx.ownerLogin).run();
+    await ctx.env.DB.prepare(`DELETE FROM apps WHERE id = ? AND owner_login = ? COLLATE NOCASE AND store = ?`)
+      .bind(appId, ctx.ownerLogin, ctx.config.store)
+      .run();
   } catch {
     /* best-effort rollback */
   }
@@ -566,14 +616,14 @@ export function repairAppIdPlaceholders(files: Map<string, string>, appId: strin
   }
 }
 
-async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string> {
+async function executePushUpdate(tc: ToolCall, ctx: ExecContext, id: string): Promise<string> {
   // Post-deploy edits may reintroduce the APPID placeholder (e.g. the SDK
   // initApp call). Resolve it against the deployed id before pushing.
   if (ctx.appId) repairAppIdPlaceholders(ctx.files, ctx.appId);
   if (ctx.appId && ctx.baselineFiles) repairAppIdPlaceholders(ctx.baselineFiles, ctx.appId);
   await ctx.onDeployStatus({ phase: "pushing", progress: "Pushing update..." });
   const result = await pushUpdate(
-    tc.input.id as string,
+    id,
     ctx.files,
     ctx.baselineFiles ?? new Map(),
     (tc.input.message as string) || "Update",
@@ -586,10 +636,10 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext): Promise<string
   }
   advanceBaseline(ctx);
   if (result.skipped) {
-    await ctx.onDeployStatus({ phase: "live", appUrl: `https://${tc.input.id as string}.${ctx.config.domain}` });
+    await ctx.onDeployStatus({ phase: "live", appUrl: `https://${id}.${ctx.config.domain}` });
     return result.message;
   }
-  const final = await waitForGitHubDeploy(tc.input.id as string, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
+  const final = await waitForGitHubDeploy(id, ctx.env, ctx.config, ctx.onDeployStatus, result.commitSha);
   if (final?.phase === "live") return `${result.message} Update deployed and LIVE at ${final.appUrl}.`;
   if (final?.phase === "error") return `Update pushed but the build FAILED:\n${final.error}\n${FIX_HINT}`;
   return `${result.message} ${STILL_BUILDING}`;

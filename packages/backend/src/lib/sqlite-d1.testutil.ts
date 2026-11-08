@@ -42,6 +42,21 @@ export function sqliteD1(opts: { before?: string } = {}): { db: SqliteDb; d1: D1
     .sort()) {
     db.exec(migration(f));
   }
+  // Tests seed `apps` and `users` by login. Production binds apps.owner_id by the
+  // 0048 backfill and at sign-in (computeRoles); these triggers do the same for
+  // seeded rows, filling only a NULL owner_id so a test can still set one.
+  if (!opts.before) {
+    db.exec(`
+      CREATE TRIGGER test_apps_bind_owner AFTER INSERT ON apps WHEN NEW.owner_id IS NULL BEGIN
+        UPDATE apps SET owner_id = (
+          SELECT id FROM users WHERE lower(github_login) = lower(NEW.owner_login) LIMIT 1
+        ) WHERE id = NEW.id;
+      END;
+      CREATE TRIGGER test_users_bind_owner AFTER INSERT ON users BEGIN
+        UPDATE apps SET owner_id = NEW.id
+        WHERE owner_id IS NULL AND lower(owner_login) = lower(NEW.github_login);
+      END;`);
+  }
   const d1 = {
     prepare(sql: string) {
       let binds: unknown[] = [];

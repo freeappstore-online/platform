@@ -10,6 +10,8 @@ interface Mem {
   apps: Map<string, string>;
   users: Set<string>;
   audits: TransferAudit[];
+  /** apps.owner_id as the UPDATE last set it. */
+  ownerIds: Map<string, string>;
 }
 
 function memoryDb(seed: { apps?: Record<string, string>; users?: string[] } = {}): D1Database & { mem: Mem } {
@@ -17,6 +19,7 @@ function memoryDb(seed: { apps?: Record<string, string>; users?: string[] } = {}
     apps: new Map(Object.entries(seed.apps ?? {})),
     users: new Set(seed.users ?? []),
     audits: [],
+    ownerIds: new Map(),
   };
   let nextId = 1;
 
@@ -27,10 +30,10 @@ function memoryDb(seed: { apps?: Record<string, string>; users?: string[] } = {}
       const owner = mem.apps.get(id);
       return { changes: 0, last_row_id: 0, row: owner === undefined ? null : { id, owner_login: owner }, rows: [] as TransferAudit[] };
     }
-    if (trimmed.startsWith("SELECT github_login FROM users")) {
+    if (trimmed.startsWith("SELECT id, github_login FROM users")) {
       const want = String(binds[0]).toLowerCase();
       const found = [...mem.users].find((login) => login.toLowerCase() === want) ?? null;
-      return { changes: 0, last_row_id: 0, row: found ? { github_login: found } : null, rows: [] as TransferAudit[] };
+      return { changes: 0, last_row_id: 0, row: found ? { id: `gh:${found}`, github_login: found } : null, rows: [] as TransferAudit[] };
     }
     if (trimmed.startsWith("INSERT INTO app_owner_transfers")) {
       const appId = String(binds[0]);
@@ -62,6 +65,7 @@ function memoryDb(seed: { apps?: Record<string, string>; users?: string[] } = {}
       const match = owner !== undefined && owner.toLowerCase() === fromLogin.toLowerCase() && owner.toLowerCase() !== toLogin.toLowerCase();
       if (!match) return { changes: 0, last_row_id: 0, row: null, rows: [] as TransferAudit[] };
       mem.apps.set(appId, toLogin);
+      mem.ownerIds.set(appId, String(binds[3]));
       return { changes: 1, last_row_id: 0, row: null, rows: [] as TransferAudit[] };
     }
     if (trimmed.startsWith("SELECT id, app_id")) {
@@ -169,6 +173,8 @@ describe("transferAppOwner", () => {
       audit_id: 1,
     });
     expect(db.mem.apps.get("watertracker")).toBe("serge-ivo");
+    // The new owner is recorded by immutable account id too (#566).
+    expect(db.mem.ownerIds.get("watertracker")).toBe("gh:serge-ivo");
 
     const audits = await listOwnerTransfers(db, "watertracker");
     expect(audits).toEqual([

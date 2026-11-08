@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { type CurrentUser, HttpError, isAppOwner, requireAppUser } from '../lib/auth.js';
+import {
+  type CurrentUser,
+  FAS_APP_ROWS,
+  HttpError,
+  isAppOwner,
+  requireAppUser,
+} from '../lib/auth.js';
 import { likePrefix } from '../lib/like.js';
 import type { Env } from '../types.js';
 
@@ -65,9 +71,9 @@ async function mayDecrement(
   env: Env,
   user: CurrentUser,
   appId: string,
-  ownerLogin: string | null,
+  ownerId: string | null,
 ): Promise<boolean> {
-  if (isAppOwner(user, ownerLogin)) return true;
+  if (isAppOwner(user, ownerId)) return true;
   const role = await env.DB.prepare(
     "SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? AND role_name NOT IN ('member', 'viewer') LIMIT 1",
   )
@@ -83,9 +89,9 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
     const user = await requireAppUser(c, appId);
     // Require a real app — otherwise rotating the id resets the per-app cap.
     const appRow = APP_ID_RE.test(appId)
-      ? await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+      ? await c.env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
           .bind(appId)
-          .first<{ owner_login: string | null }>()
+          .first<{ owner_id: string | null }>()
       : null;
     if (!appRow) return c.text('unknown app', 404);
 
@@ -102,7 +108,7 @@ counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
         400,
       );
     }
-    if (increment < 0 && !(await mayDecrement(c.env, user, appId, appRow.owner_login))) {
+    if (increment < 0 && !(await mayDecrement(c.env, user, appId, appRow.owner_id))) {
       return c.text('decrementing requires the app owner or a privileged app role', 403);
     }
 

@@ -40,8 +40,8 @@ function summaryEnv(owner = 'alice'): Env {
           return null as T | null;
         },
         async all<T>() {
-          if (compact === 'SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE') {
-            const ids = args[0] === owner ? [{ id: 'alpha' }, { id: 'bravo' }] : [];
+          if (compact === 'SELECT id FROM apps WHERE owner_id = ?') {
+            const ids = args[0] === 'gh:1' ? [{ id: 'alpha' }, { id: 'bravo' }] : [];
             return { results: ids as T[] } as D1Result<T>;
           }
           return { results: [] as T[] } as D1Result<T>;

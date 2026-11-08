@@ -1039,6 +1039,19 @@ export async function computeRoles(
   const isGithub = provider === 'github';
 
   try {
+    // An app attributed to a login before its owner ever signed in has no
+    // owner_id yet (e.g. an admin publishing for a contributor): the first
+    // GitHub sign-in as that login binds it to the immutable id (#566). Rows
+    // that already carry an id are never touched.
+    if (isGithub) {
+      await env.DB.prepare(
+        `UPDATE apps SET owner_id = ?
+         WHERE owner_id IS NULL AND owner_login = ? COLLATE NOCASE
+           AND (store IS NULL OR store = 'apps')`,
+      )
+        .bind(userId, login)
+        .run();
+    }
     // One D1 round trip: per-app role assignments (keyed by user_id — safe for
     // all providers) plus, for GitHub users, the apps they created. The owned
     // list doubles as the 'creator' check (#442).
@@ -1046,9 +1059,7 @@ export async function computeRoles(
       env.DB.prepare('SELECT app_id, role_name FROM app_roles WHERE user_id = ?').bind(userId),
     ];
     if (isGithub) {
-      stmts.push(
-        env.DB.prepare('SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE').bind(login),
-      );
+      stmts.push(env.DB.prepare('SELECT id FROM apps WHERE owner_id = ?').bind(userId));
     }
     const [assigned, owned] = (await env.DB.batch(stmts)) as [
       D1Result<{ app_id: string; role_name: string }>,

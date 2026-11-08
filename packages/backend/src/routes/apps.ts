@@ -42,10 +42,10 @@ appsRoutes.get('/apps/mine', async (c) => {
     const result = await c.env.DB.prepare(
       `SELECT id, owner_login, created_at, category, type, oneliner, repo, demo, store
        FROM apps
-       WHERE owner_login = ? COLLATE NOCASE
+       WHERE owner_id = ?
        ORDER BY created_at DESC`,
     )
-      .bind(user.githubLogin)
+      .bind(user.id)
       .all<AppRow>();
 
     const apps = (result.results ?? []).map((r) => {
@@ -154,8 +154,8 @@ appsRoutes.get('/apps/deploy-status', async (c) => {
     throw err;
   }
 
-  const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE')
-    .bind(user.githubLogin)
+  const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_id = ?')
+    .bind(user.id)
     .all<{ id: string }>();
   const ids = new Set((owned.results ?? []).map((r) => r.id));
   if (ids.size === 0) return c.json({ statuses: {} });

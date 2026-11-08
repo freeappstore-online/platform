@@ -26,7 +26,16 @@ interface StmtCapture {
  * none exists. `failBatch`: the hosting-route batch throws, as a mid-publish
  * D1 failure would.
  */
-function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?: string | null; failBatch?: boolean }) {
+function fakeDB(opts?: {
+  shouldThrow?: boolean;
+  capture?: StmtCapture[];
+  owner?: string | null;
+  /** apps.owner_id already recorded (default: not yet bound to an account). */
+  ownerId?: string | null;
+  /** apps.store of the recorded row (default "apps"). */
+  store?: string | null;
+  failBatch?: boolean;
+}) {
   let owner = opts?.owner === undefined ? "testuser" : opts.owner;
   const makeStmt = (sql: string) => {
     const stmt: {
@@ -47,7 +56,10 @@ function fakeDB(opts?: { shouldThrow?: boolean; capture?: StmtCapture[]; owner?:
         if (sql.includes("INSERT INTO apps") && !owner) owner = stmt.binds[1] as string;
         return { meta: { changes: 1 } };
       },
-      first: async () => (sql.includes("SELECT owner_login FROM apps") && owner ? { owner_login: owner } : null),
+      first: async () =>
+        sql.includes("SELECT owner_login, owner_id, store FROM apps") && owner
+          ? { owner_login: owner, owner_id: opts?.ownerId ?? null, store: opts?.store === undefined ? "apps" : opts.store }
+          : null,
     };
     return stmt;
   };
@@ -170,7 +182,7 @@ describe("insertHostRoute", () => {
     const appsStmt = capture.find((s) => s.sql.startsWith("INSERT INTO apps"));
     expect(routesStmt).toBeDefined();
     expect(appsStmt).toBeDefined();
-    // apps binds: id, owner_login, created_at, category, type, oneliner, repo, demo, store
+    // apps binds: id, owner_login, created_at, category, type, oneliner, repo, demo, store, owner_id
     expect(appsStmt!.binds[0]).toBe("kanban");
     expect(appsStmt!.binds[1]).toBe("abid8195");
     expect(typeof appsStmt!.binds[2]).toBe("number");
@@ -179,7 +191,10 @@ describe("insertHostRoute", () => {
     expect(appsStmt!.binds[5]).toBe("Boards");
     // A client-supplied repo is ignored: the org URL is derived server-side (#546).
     expect(appsStmt!.binds[6]).toBe("https://github.com/freeappstore-online/kanban");
-    expect(appsStmt!.sql).toContain("ON CONFLICT (id) DO UPDATE SET repo = excluded.repo");
+    expect(appsStmt!.sql).toContain("repo = excluded.repo");
+    // An existing owner_id is never replaced, and another store's row is never touched.
+    expect(appsStmt!.sql).toContain("owner_id = COALESCE(apps.owner_id, excluded.owner_id)");
+    expect(appsStmt!.sql).toContain("WHERE apps.store IS NULL OR apps.store = excluded.store");
     expect(appsStmt!.sql).not.toMatch(/owner_login = excluded/);
     expect(appsStmt!.binds[7]).toBe("https://demo.example");
     expect(appsStmt!.binds[8]).toBe("apps");
@@ -600,5 +615,30 @@ describe("handlePublish never grants access to a repo that isn't the publisher's
     expect(result.success).toBe(true);
     expect(result.steps.find((s) => s.name === "GitHub repo")).toMatchObject({ status: "skip" });
     expect(granted()).toBe(true);
+  });
+
+  it("decides ownership on the immutable id: a new holder of the owner's old username is refused (#566)", async () => {
+    const { gh, granted } = recordingGh();
+    const db = () => fakeDB({ owner: "alice", ownerId: "gh:1" });
+    const squatter = await handlePublish(baseReq({ creatorGithub: "alice", creatorId: "gh:2" }), baseEnv({ DB: db() }), gh);
+    expect(squatter.success).toBe(false);
+    expect(squatter.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("isn't yours");
+    expect(granted()).toBe(false);
+
+    const real = recordingGh();
+    const renamed = await handlePublish(baseReq({ creatorGithub: "alice-new", creatorId: "gh:1" }), baseEnv({ DB: db() }), real.gh);
+    expect(renamed.success).toBe(true);
+  });
+
+  it("fails clearly when another store holds the id (#571)", async () => {
+    const { gh, granted } = recordingGh();
+    const result = await handlePublish(
+      baseReq({ creatorGithub: "alice", creatorId: "gh:1" }),
+      baseEnv({ DB: fakeDB({ owner: "alice", ownerId: "gh:1", store: "apps_pro" }) }),
+      gh,
+    );
+    expect(result.success).toBe(false);
+    expect(result.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("taken by another store");
+    expect(granted()).toBe(false);
   });
 });

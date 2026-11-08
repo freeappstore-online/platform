@@ -16,6 +16,7 @@ interface UserRow {
 interface AppRow {
   id: string;
   owner_login: string;
+  owner_id: string;
 }
 interface SecretRow {
   app_id: string;
@@ -89,7 +90,7 @@ function first(sql: string, bound: unknown[], d: FakeData): unknown | null {
   if (sql.startsWith('SELECT id, github_login, avatar_url')) {
     return d.users.find((u) => u.id === bound[0]) ?? null;
   }
-  if (sql.startsWith('SELECT owner_login FROM apps')) {
+  if (sql.startsWith('SELECT owner_id FROM apps')) {
     return d.apps.find((a) => a.id === bound[0]) ?? null;
   }
   if (sql.startsWith('SELECT 1 FROM app_secrets')) {
@@ -249,7 +250,7 @@ const stranger: UserRow = {
   display_name: null,
   email: null,
 };
-const weatherApp: AppRow = { id: 'weather', owner_login: 'alice' };
+const weatherApp: AppRow = { id: 'weather', owner_login: 'alice', owner_id: 'gh:1' };
 
 function freshData(): FakeData {
   return {

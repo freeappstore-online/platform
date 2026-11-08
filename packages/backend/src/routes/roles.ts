@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { assertAppOwner, isAppOwner, requireAppUser } from '../lib/auth.js';
+import { assertAppOwner, FAS_APP_ROWS, isAppOwner, requireAppUser } from '../lib/auth.js';
 import { hmac, timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -164,12 +164,12 @@ rolesRoutes.get('/apps/:appId/roles/check/:role', async (c) => {
   const role = c.req.param('role');
 
   // DB is the truth: token appRoles are baked in at sign-in and go stale.
-  // 'owner' isn't stored in app_roles — it is apps.owner_login (as in computeRoles).
+  // 'owner' isn't stored in app_roles — it is apps.owner_id (as in computeRoles).
   if (role === 'owner') {
-    const app = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+    const app = await c.env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
       .bind(appId)
-      .first<{ owner_login: string | null }>();
-    return c.json({ has: !!app && isAppOwner(user, app.owner_login), source: 'db' });
+      .first<{ owner_id: string | null }>();
+    return c.json({ has: !!app && isAppOwner(user, app.owner_id), source: 'db' });
   }
   const row = await c.env.DB.prepare(
     'SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? AND role_name = ? LIMIT 1',

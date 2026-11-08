@@ -16,8 +16,8 @@ function fakeDB(): D1Database {
         return { meta: { changes: 1 } };
       },
       first: async () =>
-        sql.includes("SELECT owner_login FROM apps") && owners.has(args[0] as string)
-          ? { owner_login: owners.get(args[0] as string) }
+        sql.includes("SELECT owner_login, owner_id, store FROM apps") && owners.has(args[0] as string)
+          ? { owner_login: owners.get(args[0] as string), owner_id: null, store: "apps" }
           : null,
     };
     return s;

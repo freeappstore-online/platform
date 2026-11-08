@@ -23,7 +23,7 @@ function fakeDB(
           first: async () => {
             if (sql.includes('FROM users')) return user;
             if (sql.includes('FROM apps'))
-              return user ? { owner_login: (user as Record<string, unknown>).github_login } : null;
+              return user ? { owner_id: (user as Record<string, unknown>).id } : null;
             if (sql.includes('FROM app_logs') && sql.includes('build_meta IS NOT NULL'))
               return opts.build ?? { build_meta: '{"sdkVersion":"0.12.0"}', ts: 1000 };
             return null;

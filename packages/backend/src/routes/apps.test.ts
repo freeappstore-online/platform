@@ -7,6 +7,7 @@ import type { Env } from '../types.js';
 interface AppRow {
   id: string;
   owner_login: string;
+  owner_id: string;
   created_at: number;
   category: string | null;
   type: string | null;
@@ -48,7 +49,7 @@ function fakeDB(rows: { apps?: AppRow[]; users?: UserRow[] } = {}): D1Database {
         all: async <T>() => {
           if (trimmed.startsWith('SELECT id, owner_login, created_at')) {
             const owner = bound[0];
-            const matching = apps.filter((a) => a.owner_login === owner);
+            const matching = apps.filter((a) => a.owner_id === owner);
             return {
               results: matching as unknown as T[],
               success: true,
@@ -124,6 +125,7 @@ describe('GET /v1/apps/mine', () => {
           {
             id: 'tip',
             owner_login: 'alice',
+            owner_id: 'gh:1',
             created_at: 1700000000000,
             category: 'Finance',
             type: 'standalone',
@@ -134,6 +136,7 @@ describe('GET /v1/apps/mine', () => {
           {
             id: 'counter',
             owner_login: 'alice',
+            owner_id: 'gh:1',
             created_at: 1700000010000,
             category: 'Utilities',
             type: 'standalone',
@@ -144,6 +147,7 @@ describe('GET /v1/apps/mine', () => {
           {
             id: 'someone-else',
             owner_login: 'bob',
+            owner_id: 'gh:2',
             created_at: 1700000005000,
             category: 'Strategy',
             type: 'standalone',
@@ -176,6 +180,7 @@ describe('GET /v1/apps/mine', () => {
           {
             id: 'chess',
             owner_login: 'alice',
+            owner_id: 'gh:1',
             created_at: 1700000000000,
             category: 'Strategy',
             type: 'connected',
@@ -216,6 +221,7 @@ describe('GET /v1/apps/mine', () => {
           {
             id: 'tip',
             owner_login: 'alice',
+            owner_id: 'gh:1',
             created_at: 1700000000000,
             category: 'Finance',
             type: 'standalone',
@@ -240,6 +246,7 @@ describe('GET /v1/apps/creators', () => {
   const row = (id: string, owner: string): AppRow => ({
     id,
     owner_login: owner,
+    owner_id: `gh:${owner}`,
     created_at: 0,
     category: null,
     type: null,

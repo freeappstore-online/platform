@@ -1,6 +1,7 @@
 import { type Context, Hono } from 'hono';
 import {
   type CurrentUser,
+  FAS_APP_ROWS,
   HttpError,
   isAppOwner,
   requireAppUser,
@@ -453,10 +454,12 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       // or by the app's owner inside their own app (#495). Per-app grants for
       // other users' keys: #504.
       if (user.aud !== CONSOLE_AUD) {
-        const owner = await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+        const owner = await c.env.DB.prepare(
+          `SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`,
+        )
           .bind(appId)
-          .first<{ owner_login: string | null }>();
-        if (!owner || !isAppOwner(user, owner.owner_login)) {
+          .first<{ owner_id: string | null }>();
+        if (!owner || !isAppOwner(user, owner.owner_id)) {
           return c.json(
             {
               error: 'no_grant',

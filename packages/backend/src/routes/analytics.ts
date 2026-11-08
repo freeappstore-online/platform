@@ -256,8 +256,8 @@ analyticsRoutes.get(
       STATS_DAYS_MAX,
       Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
     );
-    const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_login = ? COLLATE NOCASE')
-      .bind(user.githubLogin)
+    const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_id = ?')
+      .bind(user.id)
       .all<OwnedAppRow>();
     // IDs originate in the apps table but retain the public app-id constraint
     // before they are embedded in the Analytics Engine SQL literal list.

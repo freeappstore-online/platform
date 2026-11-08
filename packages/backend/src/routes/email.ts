@@ -14,7 +14,7 @@
 
 import { Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { isAppOwner, requireAppUser } from '../lib/auth.js';
+import { FAS_APP_ROWS, isAppOwner, requireAppUser } from '../lib/auth.js';
 import { escapeHtml, isLikelyEmail, sendEmail } from '../lib/email.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
@@ -38,9 +38,9 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
   // rotating the id, turning this into an unbounded relay from the platform's
   // verified sending domain.
   const appRow = APP_ID_RE.test(appId)
-    ? await c.env.DB.prepare('SELECT owner_login FROM apps WHERE id = ?')
+    ? await c.env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
         .bind(appId)
-        .first<{ owner_login: string | null }>()
+        .first<{ owner_id: string | null }>()
     : null;
   if (!appRow) {
     return c.json({ ok: false, error: 'unknown app' }, 404);
@@ -89,7 +89,7 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
   // (the fas.email.send() contract). Anyone else needs a role in the app
   // and may only mail their own verified address, so a signed-in stranger
   // can't send arbitrary HTML to arbitrary people under our domain.
-  const owner = isAppOwner(user, appRow.owner_login);
+  const owner = isAppOwner(user, appRow.owner_id);
   if (!owner) {
     const role = await c.env.DB.prepare(
       'SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? LIMIT 1',
