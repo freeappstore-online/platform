@@ -39,10 +39,13 @@ const APP_ORIGIN_EXCEPTIONS: Record<string, string[]> = {
   'hanzi-associations': ['yi.freeappstore.online'],
   // Custom domain.
   agentcoder: ['agentcoder.space', 'www.agentcoder.space'],
-  // The FreeAgentStore creator console source signs in through this backend
-  // (fags/platform/console/web/src/App.tsx) and lives at /console/ on the apex.
-  // Kept for now (#536); under review in its own issue. Its host is also
-  // CORS-allowed (isAllowedOrigin), otherwise the session it receives is unusable.
+  // Deliberate exception (#557, Serge 2026-11-08): the FreeAgentStore creator
+  // console (https://freeagentstore.online/console/, source
+  // fags/platform/console/web/src/App.tsx) is live and signs in through this
+  // backend; FreeAgentStore has no auth backend of its own. Only the exact apex
+  // host is allowed, never its subdomains. It is also CORS-allowed
+  // (isAllowedOrigin), otherwise the session it receives is unusable. Remove it
+  // if that console moves to its own backend.
   'fags-console': ['freeagentstore.online'],
 };
 
