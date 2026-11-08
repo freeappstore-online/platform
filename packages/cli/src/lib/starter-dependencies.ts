@@ -8,7 +8,7 @@ export const APP_DEPLOY_CLI_VERSION = '0.4.79';
  * packages/backend/src/routes/deploy.ts and deploy the API, then pin it here.
  */
 export const APP_DEPLOY_WORKFLOW =
-  'freeappstore-online/platform/.github/workflows/app-deploy.yml@8364732cd2f2c565afa713b45ced7c8927567481';
+  'freeappstore-online/platform/.github/workflows/app-deploy.yml@3079e4813dd86c521a3664fa93505a7bf571c64e';
 
 /** Exact @vibecodeqa/cli release the generated code-health scan runs (third-party scope: never floating). */
 export const CODE_HEALTH_CLI_VERSION = '0.57.0';
