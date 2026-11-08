@@ -36,7 +36,10 @@ const PLATFORM_SITES: Record<string, string> = {
  * these commits. Retire a version by removing its sha once no caller pins it.
  */
 export const APP_DEPLOY_WORKFLOW = `${PLATFORM_REPO}/.github/workflows/app-deploy.yml`;
-export const APP_DEPLOY_WORKFLOW_SHAS = new Set(['3a675c6a83ed50ac0ea87d25680efa4a6a8e8533']);
+export const APP_DEPLOY_WORKFLOW_SHAS = new Set([
+  '3a675c6a83ed50ac0ea87d25680efa4a6a8e8533',
+  '8364732cd2f2c565afa713b45ced7c8927567481',
+]);
 const SESSION_TTL_MS = 15 * 60 * 1000;
 /** A session that keeps receiving files stays open, up to this long in all (770 MiB takes ~40 min). */
 const SESSION_MAX_MS = 3 * 60 * 60 * 1000;
