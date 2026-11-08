@@ -15,6 +15,7 @@ export const DEPLOY_ACTIONS = {
   setupNode: 'actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0',
   uploadArtifact: 'actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2',
   downloadArtifact: 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0',
+  setupPython: 'actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0',
 } as const;
 
 export const INSTALL_APP_DEPENDENCIES = `set -euo pipefail

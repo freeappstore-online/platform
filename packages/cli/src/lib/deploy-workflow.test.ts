@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import {
@@ -7,7 +8,9 @@ import {
   DEPLOY_ACTIONS,
 } from './starter-dependencies.js';
 import {
+  APP_DEPLOY_WORKFLOW_FILE,
   APP_STARTER_CONFIG,
+  appDeployWorkflow,
   deployWorkflow,
   KEYLESS_UPLOAD,
   type StoreConfig,
@@ -190,5 +193,95 @@ describe('keyless upload client: delta manifest', () => {
         .map((l) => JSON.parse(l).paths.length);
     expect(run([])).toEqual([]);
     expect(run(Array.from({ length: 250 }, (_, i) => `f${i}`))).toEqual([100, 100, 50]);
+  });
+});
+
+describe('appDeployWorkflow (the platform-owned app deploy, #559)', () => {
+  const source = appDeployWorkflow();
+  const workflow = parse(source) as Workflow & {
+    on: { workflow_call: { inputs: Record<string, unknown> } };
+    jobs: Record<string, Job & { if?: string; outputs?: Record<string, string> }>;
+  };
+
+  it('is the file committed at .github/workflows/app-deploy.yml', () => {
+    const here = new URL('.', import.meta.url);
+    const committed = readFileSync(
+      new URL(`../../../../${APP_DEPLOY_WORKFLOW_FILE}`, here),
+      'utf8',
+    );
+    expect(committed, 'regenerate the file from appDeployWorkflow()').toBe(source);
+  });
+
+  it('can only be called, and takes inputs rather than steps', () => {
+    expect(Object.keys(workflow.on)).toEqual(['workflow_call']);
+    expect(Object.keys(workflow.on.workflow_call.inputs)).toEqual([
+      'vars',
+      'setup',
+      'checks',
+      'python-version',
+      'code-health',
+    ]);
+    expect(source).not.toMatch(/secrets[.:]/);
+  });
+
+  it('never expands an input inside a run script (no template injection)', () => {
+    for (const line of source.split('\n'))
+      if (/^\s+run: /.test(line)) expect(line).not.toMatch(/\$\{\{\s*inputs\./);
+    for (const job of Object.values(workflow.jobs))
+      for (const step of job.steps) expect(step.run ?? '').not.toMatch(/\$\{\{/);
+  });
+
+  it('builds without an id-token and deploys the exact artifact by id', () => {
+    const { build, deploy } = workflow.jobs;
+    expect(build!.permissions).toEqual({ contents: 'write' });
+    expect(deploy!.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
+    expect(deploy!.needs).toBe('build');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+    expect(build!.outputs!.app).toBe('${{ steps.app.outputs.artifact-id }}');
+    expect(deploy!.if).toContain("needs.build.outputs.app != ''");
+    const download = deploy!.steps[0]!;
+    expect(download.with).toEqual({
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+      'artifact-ids': '${{ needs.build.outputs.app }}',
+      'merge-multiple': true,
+      path: 'site',
+    });
+    for (const step of deploy!.steps) expect(step.with ?? {}).not.toHaveProperty('name');
+    expect(JSON.stringify(deploy!.steps)).not.toMatch(/npx|pnpm|npm |checkout|aws /);
+    expect(deploy!.steps.at(-1)!.run).toBe(`${KEYLESS_UPLOAD.trimEnd()}\n`);
+  });
+
+  it('keeps the validators, tests and lock rule in a fixed order', () => {
+    const names = workflow.jobs.build!.steps.map((s) => s.name ?? s.uses);
+    const order = [
+      'Install',
+      'Extra setup',
+      'Resolve build target',
+      'Tests (when configured)',
+      'Build',
+      'Verify build output',
+      'App checks',
+      'Retain verified dependency lock',
+      'Upload build artifact',
+    ].map((n) => names.indexOf(n));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    for (const pin of [DEPLOY_ACTIONS.setupPython, DEPLOY_ACTIONS.uploadArtifact])
+      expect(source).toContain(pin);
+  });
+
+  const hasJq = spawnSync('jq', ['--version']).status === 0;
+  it.skipIf(!hasJq)('exports only VITE_* repo variables to the build, multi-line safe', () => {
+    const step = workflow.jobs.build!.steps.find(
+      (s) => s.name === 'Export public build variables',
+    )!;
+    const program = /jq -r '([^']*)'/.exec(step.run!)![1]!;
+    const out = spawnSync('jq', ['-r', program], {
+      input: JSON.stringify({ VITE_GOOGLE_CLIENT_ID: 'abc', NODE_OPTIONS: 'x', VITE_KEY: 'a\nb' }),
+      encoding: 'utf8',
+    });
+    expect(out.stdout).toBe(
+      'VITE_GOOGLE_CLIENT_ID<<FAS_VAR_EOF\nabc\nFAS_VAR_EOF\nVITE_KEY<<FAS_VAR_EOF\na\nb\nFAS_VAR_EOF\n',
+    );
   });
 });
