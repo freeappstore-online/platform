@@ -182,8 +182,19 @@ function validateMethods(methods: string[]): string[] {
 }
 
 /**
+ * The host of a stored pattern, or null when it doesn't parse.
+ */
+function ruleHost(pattern: string): string | null {
+  try {
+    return new URL(pattern).host;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Pick the rule that matches an inbound proxy request. Returns null if none.
- * Match = pattern is a prefix of url AND method is allowed. If multiple rules
+ * Match = pattern is a prefix of url, on the pattern's own host, AND method is allowed. If multiple rules
  * match, the longest pattern wins (most specific).
  */
 export function pickRule(
@@ -192,9 +203,18 @@ export function pickRule(
   method: string,
 ): AllowlistRule | null {
   const upperMethod = method.toUpperCase();
+  let host: string;
+  try {
+    host = new URL(url).host;
+  } catch {
+    return null;
+  }
   let best: AllowlistRule | null = null;
   for (const rule of rules) {
     if (!url.startsWith(rule.pattern)) continue;
+    // A pattern with no path (`https://api.x.com`) is also a prefix of
+    // `https://api.x.com.evil.test/`: the host must be the rule's own (#562).
+    if (ruleHost(rule.pattern) !== host) continue;
     if (!rule.methods.includes(upperMethod)) continue;
     if (best === null || rule.pattern.length > best.pattern.length) {
       best = rule;

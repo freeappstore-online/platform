@@ -980,6 +980,54 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect(res.status).toBe(403);
   });
 
+  it('a path-less rule never sends its secret to a longer host (#562)', async () => {
+    const data = freshData();
+    await realSeed(data, 'X', 'sekret', {
+      pattern: 'https://api.example.com',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'X',
+      secret_name_2: null,
+      token_url: null,
+      methods: 'GET',
+    });
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    globalThis.fetch = fetchSpy as typeof fetch;
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com.attacker.test/x',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(403);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not follow upstream redirects (#562)', async () => {
+    const data = freshData();
+    await realSeed(data, 'X', 'sekret', {
+      pattern: 'https://api.example.com/',
+      inject_kind: 'header',
+      inject_name: 'X-API-Key',
+      secret_name: 'X',
+      secret_name_2: null,
+      token_url: null,
+      methods: 'GET',
+    });
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(null, { status: 302, headers: { Location: 'https://attacker.test/' } }),
+    );
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.example.com/r',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect((fetchSpy.mock.calls[0] as unknown[])[1]).toMatchObject({ redirect: 'manual' });
+    expect(res.status).toBe(302);
+  });
+
   it('400s on host-injection (userinfo) instead of leaking the secret', async () => {
     const data = freshData();
     // Path-less rule — the vulnerable case a prefix match would wrongly accept.

@@ -71,6 +71,8 @@ async function refreshToken(
       Authorization: `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
     },
     body: 'grant_type=client_credentials',
+    // The client credentials go to tokenUrl only, never to a redirect target (#562).
+    redirect: 'manual',
   });
 
   if (!res.ok) {

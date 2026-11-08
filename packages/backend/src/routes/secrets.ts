@@ -609,10 +609,14 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       forwardBody = buf;
     }
 
+    // Never follow a redirect (#562): its target is not checked against the
+    // allowlist or privateUrlReason, and fetch would re-send injected headers
+    // to it. The 3xx goes back to the app as is.
     const upstreamRes = await fetch(injectedUrl, {
       method: c.req.method,
       headers: injectedHeaders,
       body: forwardBody,
+      redirect: 'manual',
     });
 
     // Cap response size by reading bytes ourselves; a streaming passthrough

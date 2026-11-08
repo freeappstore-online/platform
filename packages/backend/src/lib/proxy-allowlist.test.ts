@@ -139,6 +139,12 @@ describe('pickRule', () => {
     },
   ];
 
+  it('a path-less pattern does not match a longer host (#562)', () => {
+    const bare: AllowlistRule[] = [{ ...rules[2]!, pattern: 'https://api.example.com', methods: ['GET'] }];
+    expect(pickRule(bare, 'https://api.example.com.attacker.test/x', 'GET')).toBeNull();
+    expect(pickRule(bare, 'https://api.example.com/x', 'GET')?.secretName).toBe('EXAMPLE_KEY');
+  });
+
   it('returns null when no rule matches the URL', () => {
     expect(pickRule(rules, 'https://other.example.org/x', 'GET')).toBeNull();
   });
