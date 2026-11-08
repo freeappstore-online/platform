@@ -355,16 +355,18 @@ export async function resolveDeployApp(db: D1Database, claims: OidcClaims): Prom
     return site;
   }
   // The run starts from the repo's own deploy.yml on main, and the job is the
-  // platform workflow at a listed commit, so the build steps are the platform's.
-  // Until the fleet calls it, the repo's inline deploy.yml is still accepted.
-  const caller = `${claims.repository}/.github/workflows/deploy.yml@${DEPLOY_REF}`;
+  // platform workflow at a listed commit, so the build steps are the platform's:
+  // a repo's own steps (or another workflow) cannot deploy.
   const [workflow, sha] = (claims.job_workflow_ref ?? '').split('@');
-  const platform =
-    claims.workflow_ref === caller &&
-    workflow === APP_DEPLOY_WORKFLOW &&
-    APP_DEPLOY_WORKFLOW_SHAS.has(sha ?? '');
-  if (!platform && claims.job_workflow_ref !== caller)
-    throw new HttpError(403, `workflow ${claims.job_workflow_ref ?? '(none)'} may not deploy`);
+  if (
+    claims.workflow_ref !== `${claims.repository}/.github/workflows/deploy.yml@${DEPLOY_REF}` ||
+    workflow !== APP_DEPLOY_WORKFLOW ||
+    !APP_DEPLOY_WORKFLOW_SHAS.has(sha ?? '')
+  )
+    throw new HttpError(
+      403,
+      `workflow ${claims.job_workflow_ref ?? '(none)'} may not deploy; deploy.yml must call ${APP_DEPLOY_WORKFLOW} at a pinned commit`,
+    );
 
   const pinned = await db
     .prepare('SELECT app_id FROM app_repositories WHERE repository_id = ?')

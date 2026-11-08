@@ -159,11 +159,22 @@ describe('runSourcePreflight', () => {
 });
 
 describe('workflowDeployProblems', () => {
-  const keyless =
-    'jobs:\n  build:\n    runs-on: x\n  deploy:\n    permissions:\n      id-token: write\n';
+  const keyless = `jobs:\n  deploy:\n    uses: freeappstore-online/platform/.github/workflows/app-deploy.yml@${'a'.repeat(40)}\n    permissions:\n      id-token: write\n`;
 
-  it('accepts a keyless workflow with a deploy job', () => {
+  it('accepts a caller of the platform deploy workflow', () => {
     expect(workflowDeployProblems(keyless)).toEqual([]);
+  });
+
+  it.each([
+    [
+      'its own steps',
+      'jobs:\n  build:\n    runs-on: x\n  deploy:\n    permissions:\n      id-token: write\n',
+    ],
+    ['a branch of the platform workflow', keyless.replace(/@a+/, '@main')],
+    ['a look-alike workflow', keyless.replace('app-deploy.yml', 'app-deploy.yml.evil')],
+    ['another repo', keyless.replace('freeappstore-online/platform', 'someone/platform')],
+  ])('refuses a deploy job that runs %s (#559)', (_name, text) => {
+    expect(workflowDeployProblems(text)).toEqual([expect.stringContaining('app-deploy.yml')]);
   });
 
   it('names each reason: R2 secrets, no id-token, no deploy job', () => {
@@ -173,6 +184,7 @@ describe('workflowDeployProblems', () => {
       expect.stringContaining('secrets.R2_'),
       expect.stringContaining('id-token: write'),
       expect.stringContaining('no `deploy` job'),
+      expect.stringContaining('app-deploy.yml'),
     ]);
   });
 

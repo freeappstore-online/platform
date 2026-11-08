@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createAppProblems, type FileChange, planScaffold, preflightUpdate, type RepoReader } from "./preflight.js";
 
-const KEYLESS = "jobs:\n  build:\n    runs-on: x\n  deploy:\n    permissions:\n      id-token: write\n";
+const KEYLESS = `jobs:\n  deploy:\n    uses: freeappstore-online/platform/.github/workflows/app-deploy.yml@${"a".repeat(40)}\n    permissions:\n      id-token: write\n`;
 
 /** A healthy app: committed icon, vitest installed, aligned build target. */
 const repoFiles: Record<string, string> = {
@@ -61,6 +61,12 @@ describe("update_files preflight", () => {
     const failures = await run([change(".github/workflows/deploy.yml", legacy)]);
     expect(failures.join("\n")).toContain("secrets.R2_");
     expect(failures.join("\n")).toContain("no `deploy` job");
+  });
+
+  it("refuses a deploy.yml that runs its own steps instead of the platform workflow (#559)", async () => {
+    const inline = "jobs:\n  build:\n    runs-on: x\n  deploy:\n    permissions:\n      id-token: write\n";
+    const failures = await run([change(".github/workflows/deploy.yml", inline)]);
+    expect(failures.join("\n")).toContain("app-deploy.yml at a pinned commit");
   });
 
   it("allows replacing deploy.yml with a keyless workflow", async () => {

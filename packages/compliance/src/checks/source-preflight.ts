@@ -157,15 +157,25 @@ export async function runSourcePreflight(
 }
 
 /**
- * Why a `.github/workflows/deploy.yml` cannot deploy keylessly: it still reads
- * the org R2 secrets (being removed, #523), lacks the OIDC `id-token: write`
- * grant, or has no `deploy` job. Empty when it can. Comments are ignored.
+ * Why a `.github/workflows/deploy.yml` cannot deploy: it still reads the org R2
+ * secrets (removed, #523), lacks the OIDC `id-token: write` grant, has no
+ * `deploy` job, or runs its own steps instead of calling the platform deploy
+ * workflow at a pinned commit (the API accepts no other, #559). Empty when it
+ * can. Comments are ignored.
  */
 export function workflowDeployProblems(text: string): string[] {
   const body = text.replace(/^\s*#.*$/gm, '');
   const problems: string[] = [];
-  if (/secrets\.R2_/.test(body)) problems.push('reads secrets.R2_*, which are being removed');
+  if (/secrets\.R2_/.test(body)) problems.push('reads secrets.R2_*, which are removed');
   if (!/id-token:\s*write/.test(body)) problems.push('lacks `id-token: write` for keyless deploys');
   if (!/^ {2}deploy:\s*$/m.test(body)) problems.push('has no `deploy` job');
+  if (!PLATFORM_DEPLOY_CALL.test(body))
+    problems.push(
+      'does not call freeappstore-online/platform/.github/workflows/app-deploy.yml at a pinned commit',
+    );
   return problems;
 }
+
+/** The deploy job's call of the platform workflow; the pinned commit is checked by the API. */
+const PLATFORM_DEPLOY_CALL =
+  /^ {4}uses:\s*freeappstore-online\/platform\/\.github\/workflows\/app-deploy\.yml@[0-9a-f]{40}\s*$/m;

@@ -62,7 +62,8 @@ async function oidc(repo: string, repoId: string, claims: Record<string, unknown
     repository_id: repoId,
     ref: 'refs/heads/main',
     event_name: 'push',
-    job_workflow_ref: `freeappstore-online/${repo}/.github/workflows/deploy.yml@refs/heads/main`,
+    workflow_ref: `freeappstore-online/${repo}/.github/workflows/deploy.yml@refs/heads/main`,
+    job_workflow_ref: `${APP_DEPLOY_WORKFLOW}@${[...APP_DEPLOY_WORKFLOW_SHAS][0]}`,
     sha: 'abc1234',
     run_id: '1',
     jti: `jti-${++jtiSeq}`,
@@ -288,6 +289,13 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     ['another org', { repository_owner_id: '1', repository_owner: 'evil' }, 403],
     ['a branch other than main', { ref: 'refs/heads/feature' }, 403],
     ['a pull_request event', { event_name: 'pull_request' }, 403],
+    [
+      "the repo's own inline deploy.yml (#559)",
+      {
+        job_workflow_ref: 'freeappstore-online/alpha/.github/workflows/deploy.yml@refs/heads/main',
+      },
+      403,
+    ],
     [
       'another workflow in the repo',
       {
