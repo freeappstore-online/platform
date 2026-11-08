@@ -223,7 +223,8 @@ describe("deleteHostRoute", () => {
     const capture: StmtCapture[] = [];
     const step = await deleteHostRoute(baseEnv({ DB: fakeDB({ capture }) }), "kanban", config);
     expect(step.status).toBe("ok");
-    expect(capture).toHaveLength(4 + APP_DATA_TABLES.length + 1);
+    expect(capture).toHaveLength(1 + 4 + APP_DATA_TABLES.length + 1);
+    capture.shift();
     expect(capture[2].sql).toBe("DELETE FROM app_repositories WHERE app_id = ?1");
     expect(capture[3].sql).toBe("DELETE FROM app_deploys WHERE app_id = ?1");
     expect(capture.slice(2, 4).map((c) => c.binds)).toEqual([["kanban"], ["kanban"]]);
@@ -264,6 +265,17 @@ describe("deleteHostRoute", () => {
       "agent_sessions",
     ]);
     expect(tables.filter((t) => !handled.has(t))).toEqual([]);
+  });
+
+  it("remembers the owner only when the repo stays archived, before deleting the apps row (#575)", async () => {
+    const kept: StmtCapture[] = [];
+    await deleteHostRoute(baseEnv({ DB: fakeDB({ capture: kept }) }), "kanban", config, { keepRepo: true });
+    expect(kept[0].sql).toMatch(/^INSERT OR REPLACE INTO unpublished_apps .* FROM apps WHERE id = \?1/);
+    expect(kept[0].binds[0]).toBe("kanban");
+    expect(kept[2].sql).toMatch(/^DELETE FROM apps/);
+    const deleted: StmtCapture[] = [];
+    await deleteHostRoute(baseEnv({ DB: fakeDB({ capture: deleted }) }), "kanban", config);
+    expect(deleted[0].sql).toBe("DELETE FROM unpublished_apps WHERE id = ?1");
   });
 
   it("fails without a DB binding", async () => {
@@ -387,7 +399,7 @@ describe("handleDeprovision", () => {
       cf: noDns,
     });
     expect(result.ok).toBe(false);
-    expect(capture).toHaveLength(4 + APP_DATA_TABLES.length + 1);
+    expect(capture).toHaveLength(1 + 4 + APP_DATA_TABLES.length + 1);
     expect(result.steps.find((s) => s.name === "delete_repo")?.status).toBe("fail");
     expect(result.steps.find((s) => s.name === "registry")?.status).toBe("ok");
   });

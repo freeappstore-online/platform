@@ -35,6 +35,8 @@ function fakeDB(opts?: {
   /** apps.store of the recorded row (default "apps"). */
   store?: string | null;
   failBatch?: boolean;
+  /** unpublished_apps row for the id (#575). */
+  unpublished?: { owner_login: string; owner_id: string | null };
 }) {
   let owner = opts?.owner === undefined ? "testuser" : opts.owner;
   const makeStmt = (sql: string) => {
@@ -57,9 +59,13 @@ function fakeDB(opts?: {
         return { meta: { changes: 1 } };
       },
       first: async () =>
-        sql.includes("SELECT owner_login, owner_id, store FROM apps") && owner
-          ? { owner_login: owner, owner_id: opts?.ownerId ?? null, store: opts?.store === undefined ? "apps" : opts.store }
-          : null,
+        sql.includes("FROM unpublished_apps")
+          ? opts?.unpublished
+            ? { ...opts.unpublished, store: null }
+            : null
+          : sql.includes("SELECT owner_login, owner_id, store FROM apps") && owner
+            ? { owner_login: owner, owner_id: opts?.ownerId ?? null, store: opts?.store === undefined ? "apps" : opts.store }
+            : null,
     };
     return stmt;
   };
@@ -177,7 +183,7 @@ describe("insertHostRoute", () => {
     expect(result.detail).toContain("owner abid8195");
 
     // Both statements land in the same batch() call — that's the atomicity.
-    expect(capture).toHaveLength(2);
+    expect(capture).toHaveLength(3);
     const routesStmt = capture.find((s) => s.sql.startsWith("INSERT INTO routes"));
     const appsStmt = capture.find((s) => s.sql.startsWith("INSERT INTO apps"));
     expect(routesStmt).toBeDefined();
@@ -461,6 +467,47 @@ describe("handlePublish", () => {
     expect(result.success).toBe(true);
     expect(patches).toEqual([{ archived: false }]);
     expect(result.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("unarchived");
+  });
+
+  describe("publishing an unpublished app again (#575)", () => {
+    function archivedRepo() {
+      const patches: unknown[] = [];
+      const gh: GhFn = async (path, method, body) => {
+        if (method === "PATCH" && path === "/repos/freeappstore-online/testapp") {
+          patches.push(body);
+          return { __status: 200, archived: false };
+        }
+        if (!method && path === "/repos/freeappstore-online/testapp") return { id: 5, archived: true };
+        return successGh()(path, method, body);
+      };
+      return { gh, patches };
+    }
+
+    it("lets the previous owner bring it back, and clears the record", async () => {
+      const { gh, patches } = archivedRepo();
+      const capture: StmtCapture[] = [];
+      const DB = fakeDB({ owner: null, capture, unpublished: { owner_login: "someone", owner_id: "gh:7" } });
+      const result = await handlePublish(baseReq({ creatorId: "gh:7" }), baseEnv({ DB }), gh);
+      expect(result.success).toBe(true);
+      expect(patches).toEqual([{ archived: false }]);
+      expect(capture.map((c) => c.sql)).toContain("DELETE FROM unpublished_apps WHERE id = ?");
+    });
+
+    it("refuses anyone else", async () => {
+      const { gh, patches } = archivedRepo();
+      const DB = fakeDB({ owner: null, unpublished: { owner_login: "testuser", owner_id: "gh:7" } });
+      const result = await handlePublish(baseReq({ creatorId: "gh:8" }), baseEnv({ DB }), gh);
+      expect(result.success).toBe(false);
+      expect(patches).toEqual([]);
+      expect(result.steps.find((s) => s.name === "GitHub repo")?.detail).toContain("isn't yours");
+    });
+
+    it("refuses when there is no record of the owner", async () => {
+      const { gh, patches } = archivedRepo();
+      const result = await handlePublish(baseReq({ creatorId: "gh:7" }), baseEnv({ DB: fakeDB({ owner: null }) }), gh);
+      expect(result.success).toBe(false);
+      expect(patches).toEqual([]);
+    });
   });
 
   it("explains an archived repo it cannot unarchive instead of a generic error (#551)", async () => {

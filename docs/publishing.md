@@ -56,7 +56,7 @@ The URL starts serving your code after a successful first push and deploy. Runti
 `POST /v1/unpublish` (the app's owner or an admin) removes the registry entry, the hosting route, the R2 objects, the DNS record, the `apps` row, the keyless-deploy repository pin, and every D1 row of the app's data, credentials and privileges (secrets, proxy rules, webhooks, roles, KV, collections, counters, rooms, push, votes, analytics, logs), so whoever publishes the id next inherits nothing (#563). What it leaves behind:
 
 - **The GitHub repo is archived**, not deleted (reversible; read-only, so its deploy workflow no longer runs on pushes it can no longer receive). The response carries an `archive_repo` step. Pass `deleteRepo: true` to delete the repo instead.
-- Publishing the same id again by its owner **unarchives** the repo and provisions it again.
+- Publishing the same id again by its owner **unarchives** the repo and provisions it again, without the old data. `unpublished_apps` records whose it was until then; nobody else can claim an id whose repo is archived.
 - Leaked `e2e-canary-*` apps from a crashed production e2e run are reaped by `scripts/e2e-canary-reaper.mjs`, which the e2e script runs when `FAS_E2E_REAP=1` is set.
 
 ## Storefront listing

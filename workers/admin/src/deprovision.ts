@@ -133,7 +133,12 @@ export const APP_DATA_TABLES = [
 /** Delete the D1 rows of an app: the `routes` row the host reads, the `apps`
  *  ownership row, the keyless-deploy pin and sessions, and every app data
  *  table. One batch so they can't drift. */
-export async function deleteHostRoute(env: DeprovisionEnv, id: string, config: StoreConfig): Promise<Step> {
+export async function deleteHostRoute(
+  env: DeprovisionEnv,
+  id: string,
+  config: StoreConfig,
+  opts: { keepRepo?: boolean } = {},
+): Promise<Step> {
   if (!env.DB) {
     return { name: "hosting_route", status: "fail", detail: "D1 binding not available" };
   }
@@ -146,7 +151,15 @@ export async function deleteHostRoute(env: DeprovisionEnv, id: string, config: S
     const deploysStmt = env.DB.prepare("DELETE FROM app_deploys WHERE app_id = ?1").bind(id);
     const dataStmts = APP_DATA_TABLES.map((table) => env.DB!.prepare(`DELETE FROM ${table} WHERE app_id = ?1`).bind(id));
     const auditStmt = env.DB.prepare("DELETE FROM audit_results WHERE app_id = ?1 AND store = 'apps'").bind(id);
-    await env.DB.batch([routesStmt, appsStmt, pinStmt, deploysStmt, ...dataStmts, auditStmt]);
+    // An archived repo keeps blocking the id, so remember whose it was: that
+    // owner can publish it again (#575). A deleted repo frees the id for anyone.
+    const ownerStmt = opts.keepRepo
+      ? env.DB.prepare(
+          "INSERT OR REPLACE INTO unpublished_apps (id, owner_id, owner_login, unpublished_at) SELECT id, owner_id, owner_login, ?2 FROM apps WHERE id = ?1 AND owner_login IS NOT NULL",
+        ).bind(id, Date.now())
+      : env.DB.prepare("DELETE FROM unpublished_apps WHERE id = ?1").bind(id);
+    // ownerStmt first: it reads the apps row the next statements delete.
+    await env.DB.batch([ownerStmt, routesStmt, appsStmt, pinStmt, deploysStmt, ...dataStmts, auditStmt]);
     return { name: "hosting_route", status: "ok", detail: "Route, ownership row and app data deleted" };
   } catch (e: any) {
     return { name: "hosting_route", status: "fail", detail: e?.message ?? "D1 delete failed" };
@@ -268,7 +281,7 @@ export async function handleDeprovision(
 
   const steps: Step[] = [];
   steps.push(await removeRegistryEntry(gh, req.id, config));
-  steps.push(await deleteHostRoute(env, req.id, config));
+  steps.push(await deleteHostRoute(env, req.id, config, { keepRepo: !req.deleteRepo }));
   steps.push(await purgeR2Objects(env, req.id, config));
   steps.push(await deleteDnsRecords(cf, env, req.id, config));
   steps.push(await (req.deleteRepo ? deleteRepo(gh, req.id, config) : archiveRepo(gh, req.id, config)));

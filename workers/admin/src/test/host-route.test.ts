@@ -70,7 +70,7 @@ describe("insertHostRoute", () => {
     expect(step.detail).toContain("apps/calendar");
     // Both rows go through a single batch() — that atomicity is the point.
     expect(batch).toHaveBeenCalledTimes(1);
-    expect(batch.mock.calls[0][0]).toHaveLength(2);
+    expect(batch.mock.calls[0][0]).toHaveLength(3);
     // routes row shape matches what the host worker reads.
     const routes = prepared.find((s) => /INSERT\s+INTO\s+routes/.test(s.sql))!;
     expect(routes.binds.slice(0, 4)).toEqual(["calendar", "freeappstore.online", "apps/calendar", "apps"]);

@@ -181,6 +181,15 @@ async function recordedApp(env: PublishEnv, id: string): Promise<RecordedApp | n
     .catch(() => null);
 }
 
+/** The owner of an id whose repo an unpublish archived (#575). */
+async function unpublishedOwner(env: PublishEnv, id: string): Promise<RecordedApp | null> {
+  if (!env.DB) return null;
+  return env.DB.prepare("SELECT owner_login, owner_id, NULL AS store FROM unpublished_apps WHERE id = ?")
+    .bind(id)
+    .first<RecordedApp>()
+    .catch(() => null);
+}
+
 /** Does the publisher own the recorded app? By the immutable id (#566); a row
  *  not yet bound to an id (attributed to a login whose owner hadn't signed in)
  *  falls back to the login, and the claim then binds the id. */
@@ -379,7 +388,11 @@ export async function insertHostRoute(env: PublishEnv, req: PublishRequest, conf
            updated_at = excluded.updated_at,
            cross_origin_isolated = CASE WHEN ?7 = 1 THEN excluded.cross_origin_isolated ELSE routes.cross_origin_isolated END`,
     ).bind(slug, zone, r2Prefix, req.store, now, isolated, updateIsolated);
-    await env.DB.batch([routesStmt, claimAppStmt(env.DB, req, ownerLogin, now)]);
+    await env.DB.batch([
+      routesStmt,
+      claimAppStmt(env.DB, req, ownerLogin, now),
+      env.DB.prepare("DELETE FROM unpublished_apps WHERE id = ?").bind(req.id),
+    ]);
     return { name: "Hosting route", status: "ok", detail: `${slug}.${zone} → r2://fas-apps/${r2Prefix} (owner ${ownerLogin})` };
   } catch (e: any) {
     return { name: "Hosting route", status: "fail", detail: e?.message ?? "D1 write failed" };
@@ -420,7 +433,9 @@ async function ensureRepo(req: PublishRequest, config: StoreConfig, env: Publish
   }
   const repoCheck = await ghCall(`/repos/${config.org}/${req.id}`);
   if (repoCheck.id) {
-    if (!isOwner) {
+    // No apps row and an existing repo: it may be this publisher's unpublished app.
+    const previous = recorded ? null : await unpublishedOwner(env, req.id);
+    if (!isOwner && !(previous && ownsRecorded(previous, req, publisher))) {
       return { name: "GitHub repo", status: "fail", detail: `${config.org}/${req.id} already exists and isn't yours to publish` };
     }
     // An unpublished app's repo is archived (#551); publishing it again brings it back.
