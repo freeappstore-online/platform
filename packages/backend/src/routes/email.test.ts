@@ -184,7 +184,7 @@ describe.skipIf(!hasSqlite)('email daily quota against real SQLite', () => {
   it('stops at the platform-wide daily cap (#487)', async () => {
     const { db, send, sent } = setup();
     db.prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)').run(
-      'email-platform',
+      'platform:email',
       dayKey(Date.now()),
       DAILY_EMAIL_LIMIT_PLATFORM - 1,
     );

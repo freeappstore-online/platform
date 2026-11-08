@@ -142,7 +142,7 @@ emailRoutes.post('/apps/:appId/email/send', async (c) => {
   }
   // …and platform-wide, the ceiling on what the sending domain emits per day.
   const platformUsage = await checkAndBump(d1UsageStore(c.env.DB), {
-    appId: 'email-platform',
+    appId: 'platform:email',
     dailyLimit: DAILY_EMAIL_LIMIT_PLATFORM,
     nowMs: now,
     denominator: 1,

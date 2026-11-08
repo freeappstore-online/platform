@@ -188,14 +188,17 @@ export async function dispatchWebhookPlatform(
   ) as string[];
   if (userIds.length < 2) return;
 
-  // Only dispatch to apps where both users have roles (i.e., both use the app)
+  // Only dispatch to apps both users joined themselves (ensure-member rows,
+  // granted_by NULL): an owner-granted role is not consent (#568).
   const hooks = await db
     .prepare(
       `SELECT w.id, w.app_id, w.url, w.secret
        FROM app_webhooks w
        WHERE w.event = ? AND w.active = 1
-         AND EXISTS (SELECT 1 FROM app_roles WHERE app_id = w.app_id AND user_id = ?)
-         AND EXISTS (SELECT 1 FROM app_roles WHERE app_id = w.app_id AND user_id = ?)`,
+         AND EXISTS (SELECT 1 FROM app_roles WHERE app_id = w.app_id AND user_id = ?
+                     AND role_name = 'member' AND granted_by IS NULL)
+         AND EXISTS (SELECT 1 FROM app_roles WHERE app_id = w.app_id AND user_id = ?
+                     AND role_name = 'member' AND granted_by IS NULL)`,
     )
     .bind(event, userIds[0], userIds[1])
     .all<{ id: string; app_id: string; url: string; secret: string }>();

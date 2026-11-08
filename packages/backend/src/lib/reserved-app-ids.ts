@@ -50,6 +50,10 @@ export const RESERVED_APP_IDS: ReadonlySet<string> = new Set([
   'support',
   'billing',
   'github',
+  // Former app_proxy_usage keys for the platform-wide caps (#567); those now
+  // live under `platform:`-prefixed keys, which no app id can equal.
+  'email-platform',
+  'audit-run',
 ]);
 
 export function isReservedAppId(id: string): boolean {

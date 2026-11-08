@@ -282,7 +282,7 @@ describe.skipIf(!hasSqlite)('POST /v1/audit/run is gated and capped (#493)', () 
   it('stops at the platform-wide daily cap', async () => {
     const { db, run, fetchMock } = setup();
     db.prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)').run(
-      'audit-run',
+      'platform:audit-run',
       dayKey(Date.now()),
       DAILY_AUDIT_RUNS - 1,
     );

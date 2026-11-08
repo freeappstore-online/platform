@@ -9,12 +9,16 @@ function fakeDB(opts: {
   appCreator?: string | null;
   roles?: Array<Record<string, unknown>>;
   existingRole?: boolean;
+  unknownTarget?: boolean;
+  sqls?: string[];
 }) {
   return {
     prepare: (sql: string) => {
       const trimmed = sql.replace(/\s+/g, ' ').trim();
+      opts.sqls?.push(trimmed);
       const result = {
         first: async () => {
+          if (opts.unknownTarget && trimmed.startsWith('SELECT 1 FROM users')) return null;
           if (trimmed.includes('FROM users')) return opts.user ?? null;
           if (trimmed.includes('FROM apps'))
             return opts.appCreator != null ? { owner_login: opts.appCreator } : null;
@@ -114,6 +118,35 @@ describe('roles routes', () => {
     const data = (await res.json()) as { ok: boolean; role: string };
     expect(data.ok).toBe(true);
     expect(data.role).toBe('editor');
+  });
+
+  it('POST /v1/apps/:appId/roles refuses a user id that has no account (#568)', async () => {
+    const res = await app.request(
+      '/v1/apps/timer/roles',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'gh:999999', role: 'editor' }),
+      },
+      env(fakeDB({ user: owner, appCreator: 'owner', unknownTarget: true })),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('POST /v1/apps/:appId/roles leaves automatic member rows out of the cap (#575)', async () => {
+    const sqls: string[] = [];
+    await app.request(
+      '/v1/apps/timer/roles',
+      {
+        method: 'POST',
+        headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: 'u2', role: 'editor' }),
+      },
+      env(fakeDB({ user: owner, appCreator: 'owner', sqls })),
+    );
+    expect(sqls.find((q) => q.includes('COUNT(*) AS n FROM app_roles'))).toContain(
+      "role_name != 'member'",
+    );
   });
 
   it.each(['has space', 'x'.repeat(200), '<script>', ':leading'])(

@@ -102,12 +102,22 @@ rolesRoutes.post('/apps/:appId/roles', async (c) => {
     return c.json({ error: "cannot assign 'owner' role — it is managed by the platform" }, 400);
   }
 
-  const count = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM app_roles WHERE app_id = ?')
+  // Automatic `member` rows (ensure-member) don't count: a popular app's own
+  // users must not stop its owner granting roles (#575).
+  const count = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM app_roles WHERE app_id = ? AND role_name != 'member'",
+  )
     .bind(appId)
     .first<{ n: number }>();
   if ((count?.n ?? 0) >= MAX_ROLE_ROWS_PER_APP) {
     return c.json({ error: 'role assignment limit reached for this app' }, 429);
   }
+
+  // Only real accounts: a row for an arbitrary id would plant membership (#568).
+  const target = await c.env.DB.prepare('SELECT 1 FROM users WHERE id = ?')
+    .bind(targetUserId)
+    .first();
+  if (!target) return c.json({ error: 'no such user' }, 404);
 
   await c.env.DB.prepare(
     `INSERT INTO app_roles (app_id, user_id, role_name, granted_by)
@@ -172,7 +182,7 @@ rolesRoutes.get('/apps/:appId/roles/check/:role', async (c) => {
 
 /**
  * Ensure the current user has at least the 'member' role in this app.
- * Called by the SDK on app.auth.init() — idempotent, no-op if any role exists.
+ * Called by the SDK on app.auth.init() — idempotent, no-op if the user already has the member row.
  * No owner/admin gate: any authenticated user can become a member.
  */
 rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
@@ -182,9 +192,10 @@ rolesRoutes.post('/apps/:appId/roles/ensure-member', async (c) => {
   // row into the user's session token.
   if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
 
-  // Skip if user already has any role in this app
+  // Skip if the user already joined. Only the user's own `member` row counts:
+  // friend delivery treats it as consent, which an owner-granted role is not (#568).
   const existing = await c.env.DB.prepare(
-    'SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? LIMIT 1',
+    "SELECT 1 FROM app_roles WHERE app_id = ? AND user_id = ? AND role_name = 'member' LIMIT 1",
   )
     .bind(appId, user.id)
     .first();

@@ -128,7 +128,7 @@ auditRoutes.post('/audit/run', async (c) => {
     if (!owns) return c.json({ error: 'app owners and admins only' }, 403);
   }
   const usage = await checkAndBump(d1UsageStore(c.env.DB), {
-    appId: 'audit-run',
+    appId: 'platform:audit-run',
     dailyLimit: DAILY_AUDIT_RUNS,
     nowMs: Date.now(),
     denominator: 1,
