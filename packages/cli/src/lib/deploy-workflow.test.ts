@@ -26,9 +26,10 @@ interface Step {
   run?: string;
   env?: Record<string, string>;
   with?: Record<string, unknown>;
+  'working-directory'?: string;
 }
 interface Job {
-  needs?: string;
+  needs?: string | string[];
   permissions?: Record<string, string>;
   steps: Step[];
 }
@@ -51,9 +52,13 @@ describe.each([
   const workflow = parse(source) as Workflow;
 
   it('is valid YAML with a build job and a deploy job that needs it', () => {
+    if (config.store === 'apps') {
+      expect(Object.keys(workflow.jobs)).toEqual(['build', 'verify', 'deploy']);
+      expect(workflow.jobs.deploy!.needs).toEqual(['build', 'verify']);
+      return;
+    }
     expect(Object.keys(workflow.jobs)).toEqual(['build', 'deploy']);
     expect(workflow.jobs.deploy!.needs).toBe('build');
-    if (config.store === 'apps') return;
     expect(workflow.name).toBe('Deploy to R2');
     expect(workflow.on).toHaveProperty('push');
     expect(workflow.on).toHaveProperty('workflow_dispatch');
@@ -286,7 +291,7 @@ describe('appDeployWorkflow (the platform-owned app deploy, #559)', () => {
     const { build, deploy } = workflow.jobs;
     expect(build!.permissions).toEqual({ contents: 'write' });
     expect(deploy!.permissions).toEqual({ contents: 'read', 'id-token': 'write' });
-    expect(deploy!.needs).toBe('build');
+    expect(deploy!.needs).toEqual(['build', 'verify']);
     // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
     expect(build!.outputs!.app).toBe('${{ steps.app.outputs.artifact-id }}');
     expect(deploy!.if).toContain("needs.build.outputs.app != ''");
@@ -319,6 +324,36 @@ describe('appDeployWorkflow (the platform-owned app deploy, #559)', () => {
     expect(order).toEqual([...order].sort((a, b) => a - b));
     for (const pin of [DEPLOY_ACTIONS.setupPython, DEPLOY_ACTIONS.uploadArtifact])
       expect(source).toContain(pin);
+  });
+
+  describe('the verify job (#574)', () => {
+    const verify = workflow.jobs.verify!;
+    const names = verify.steps.map((s) => s.name ?? s.uses);
+    const text = JSON.stringify(verify.steps);
+
+    it('holds no id-token or write access and never runs project code', () => {
+      expect(verify.permissions).toEqual({ contents: 'read' });
+      expect(text).not.toMatch(/pnpm|npx|inputs\.|BUILD_COMMAND/);
+    });
+
+    it('installs the validator outside the checkout, without install scripts', () => {
+      const install = verify.steps.find((s) => s.name === 'Install the validator')!;
+      expect(install['working-directory']).toBe('${{ runner.temp }}');
+      expect(install.run).toContain('--ignore-scripts');
+      expect(install.run).toContain('--registry=https://registry.npmjs.org');
+      expect(install.run).toContain(`@freeappstore/cli@${APP_DEPLOY_CLI_VERSION}`);
+    });
+
+    it('checks the artifact by id, in place of anything committed at the output path', () => {
+      const at = (n: string) => names.indexOf(n);
+      expect(at('Replace the output path with the artifact')).toBeLessThan(
+        at('Download build artifact'),
+      );
+      expect(at('Download build artifact')).toBeLessThan(at('Verify build output'));
+      const download = verify.steps.find((s) => s.name === 'Download build artifact')!;
+      expect(download.with).toMatchObject({ 'artifact-ids': '${{ needs.build.outputs.app }}' });
+      expect(verify.steps.at(-1)!.run).toContain('build-target --artifact');
+    });
   });
 
   const hasJq = spawnSync('jq', ['--version']).status === 0;

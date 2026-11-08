@@ -155,7 +155,7 @@ it('ships the tested scripts in build order and pins both validators', () => {
     workflow.match(
       new RegExp(`@freeappstore/cli@${APP_DEPLOY_CLI_VERSION.replaceAll('.', '\\.')}`, 'g'),
     ),
-  ).toHaveLength(2);
+  ).toHaveLength(3);
   expect(workflow.indexOf('Verify build output')).toBeLessThan(
     workflow.indexOf('Retain verified dependency lock'),
   );
