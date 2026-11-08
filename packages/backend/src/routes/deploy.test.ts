@@ -3,6 +3,8 @@ import { app } from '../index.js';
 import { _resetJwksCache } from '../lib/github-oidc.js';
 import { hasSqlite, type SqliteDb, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import {
+  APP_DEPLOY_WORKFLOW,
+  APP_DEPLOY_WORKFLOW_SHAS,
   APP_ORG_ID,
   contentTypeFor,
   DEFAULT_LIMITS,
@@ -305,6 +307,38 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     expect((await open(await oidc('alpha', '101', claims), { 'index.html': 1 })).status).toBe(
       status,
     );
+  });
+
+  describe('the platform app deploy workflow (#559)', () => {
+    const sha = [...APP_DEPLOY_WORKFLOW_SHAS][0]!;
+    const called = (claims: Record<string, unknown> = {}) =>
+      oidc('alpha', '101', {
+        workflow_ref: 'freeappstore-online/alpha/.github/workflows/deploy.yml@refs/heads/main',
+        job_workflow_ref: `${APP_DEPLOY_WORKFLOW}@${sha}`,
+        ...claims,
+      });
+
+    it('accepts the listed commit called from the repo deploy.yml on main', async () => {
+      const res = await open(await called(), { 'index.html': 1 });
+      expect(res.status).toBe(201);
+      expect(((await res.json()) as { app_id: string }).app_id).toBe('alpha');
+    });
+
+    it.each([
+      ['an unlisted commit', { job_workflow_ref: `${APP_DEPLOY_WORKFLOW}@${'0'.repeat(40)}` }],
+      ['a branch of the workflow', { job_workflow_ref: `${APP_DEPLOY_WORKFLOW}@refs/heads/main` }],
+      [
+        'another workflow in the repo calling it',
+        { workflow_ref: 'freeappstore-online/alpha/.github/workflows/sneaky.yml@refs/heads/main' },
+      ],
+      [
+        'a caller in another repo',
+        { workflow_ref: 'freeappstore-online/beta/.github/workflows/deploy.yml@refs/heads/main' },
+      ],
+      ['a look-alike workflow path', { job_workflow_ref: `${APP_DEPLOY_WORKFLOW}.evil@${sha}` }],
+    ])('refuses %s', async (_name, claims) => {
+      expect((await open(await called(claims), { 'index.html': 1 })).status).toBe(403);
+    });
   });
 
   it('accepts an apps.repo recorded as a GitHub URL, and refuses another repo', async () => {

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runComplianceCheck } from "./compliance";
+import { APP_DEPLOY_WORKFLOW } from "../../../packages/cli/src/lib/starter-dependencies";
+import { appDeployWorkflow } from "../../../packages/cli/src/lib/starter-foundation";
 import { getConfig } from "./config";
 import {
   APP_ARCHETYPES,
@@ -25,7 +27,9 @@ describe("getTemplateFiles", () => {
       outputPath: "web/dist",
       buildCommand: "pnpm build",
     });
-    const workflow = files[".github/workflows/deploy.yml"];
+    // deploy.yml calls the platform workflow (#559), which reads fas.json for the target.
+    expect(files[".github/workflows/deploy.yml"]).toContain(`uses: ${APP_DEPLOY_WORKFLOW}\n`);
+    const workflow = appDeployWorkflow();
     expect(workflow).toContain('build-target --app-id "${GITHUB_REPOSITORY##*/}" --github-output');
     expect(workflow).toContain("build-target --artifact");
     expect(workflow).toContain('"$DEPLOY_API/v1/deploys"');

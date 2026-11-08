@@ -4,6 +4,7 @@ import { planCapabilityChanges } from './capability-definitions.js';
 import { CONNECTED_DRAFT } from './developer-recipes.js';
 import {
   APP_DEPLOY_CLI_VERSION,
+  APP_DEPLOY_WORKFLOW,
   CODE_HEALTH_CLI_VERSION,
   DEPLOY_ACTIONS,
   INSTALL_APP_DEPENDENCIES,
@@ -973,92 +974,61 @@ echo
 echo "Deployed \${GITHUB_REPOSITORY##*/} from \${GITHUB_SHA::7}"
 `;
 
-export function deployWorkflow(config: StoreConfig): string {
-  const apps = config.store === 'apps';
-  const cli = `npx --yes @freeappstore/cli@${APP_DEPLOY_CLI_VERSION}`;
-  const buildSteps = apps
-    ? `      - name: Install
-        run: |
-${indent(INSTALL_APP_DEPENDENCIES, 10)}
-      # If your app uses VITE_* public config (OAuth client IDs, Firebase
-      # config, etc.), add them as GitHub repo Variables and pass them to the
-      # Build step. See https://freeappstore.online/skills.md "App Config & Secrets".
-      # Example:
-      #   env:
-      #     VITE_GOOGLE_CLIENT_ID: \${{ vars.VITE_GOOGLE_CLIENT_ID }}
-      - name: Resolve build target
-        id: target
-        run: ${cli} build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output
-      - name: Typecheck (when configured)
-        run: pnpm run --if-present typecheck
-      - name: Tests (when configured)
-        run: pnpm run --if-present test
-      - name: Build
-        env:
-          BUILD_COMMAND: \${{ steps.target.outputs.build-command }}
-          VITE_APP_VERSION: \${{ github.event.repository.name }}@\${{ github.run_number }}
-          VITE_COMMIT_SHA: \${{ github.sha }}
-          VITE_BUILD_DATE: \${{ github.event.head_commit.timestamp }}
-        run: bash -e -c "$BUILD_COMMAND"
-      - name: Verify build output
-        run: ${cli} build-target --artifact --app-id "\${GITHUB_REPOSITORY##*/}"
-      # Installed size for the store's detail page (sites/storefront/build.js).
-      - name: Write build info
-        env:
-          OUTPUT_PATH: \${{ steps.target.outputs.output-path }}
-        run: echo "{\\"size\\":$(du -sb "$OUTPUT_PATH" | cut -f1)}" > "$OUTPUT_PATH/.buildinfo.json"
-      - name: Retain verified dependency lock
-        run: |
-${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
-      # Code health scan — the JSON report + badge are published next to the
-      # app so the console and store listings can show them. Never blocks.
-      - name: Code health scan
-        run: npx --yes @vibecodeqa/cli@${CODE_HEALTH_CLI_VERSION} --json --badge > /dev/null 2>&1 || true
-      - name: Upload build artifact
-        uses: ${DEPLOY_ACTIONS.uploadArtifact}
-        with:
-          name: app
-          path: \${{ steps.target.outputs.output-path }}
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
-      - name: Upload code health report
-        uses: ${DEPLOY_ACTIONS.uploadArtifact}
-        with:
-          name: code-health
-          path: |
-            .vibe-check/report.json
-            .vibe-check/badge.svg
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 1
-`
-    : `      - name: Install
-        run: pnpm install --no-frozen-lockfile
-      - name: Build
-        run: pnpm build
-      - name: Verify build output
-        run: |
-          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
-          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
-      - name: Upload build artifact
-        uses: ${DEPLOY_ACTIONS.uploadArtifact}
-        with:
-          name: app
-          path: web/dist
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
-`;
-  const codeHealthDownload = apps
-    ? `      - name: Download code health report
-        continue-on-error: true
-        uses: ${DEPLOY_ACTIONS.downloadArtifact}
-        with:
-          name: code-health
-          path: site/.vcqa
-`
-    : '';
+/** Repo-specific inputs a caller may pass to the platform app deploy (see appDeployWorkflow). */
+export interface AppDeployInputs {
+  setup?: string;
+  checks?: string;
+  'python-version'?: string;
+  'code-health'?: boolean;
+}
+
+/** A block-scalar or plain YAML value for one `with:` entry. */
+function withValue(value: string | boolean): string {
+  if (typeof value === 'boolean') return String(value);
+  if (value.includes('\n')) return `|\n${indent(value, 8)}`;
+  return JSON.stringify(value);
+}
+
+/**
+ * An app's whole deploy.yml: one job that calls the platform workflow at the
+ * pinned commit (#559). The API refuses uploads from anything else, so this
+ * file only chooses inputs. Games keep their inline two-job workflow.
+ */
+export function deployWorkflow(config: StoreConfig, inputs: AppDeployInputs = {}): string {
+  if (config.store === 'apps') {
+    const extra = Object.entries(inputs)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `      ${key}: ${withValue(value as string | boolean)}\n`)
+      .join('');
+    return `name: Deploy to R2
+
+# Generated by @freeappstore/cli. The deploy is the platform's: this job calls
+# freeappstore-online/platform's app-deploy.yml at a pinned commit, and
+# api.freeappstore.online accepts uploads only from that workflow (#559).
+# Repo-specific steps go in \`with:\` (setup, checks, python-version,
+# code-health) or in a separate workflow file. Regenerate with
+# \`fas publish --update-workflow\`.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-\${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: \${{ !startsWith(github.event.repository.name, 'template-') }}
+    uses: ${APP_DEPLOY_WORKFLOW}
+    permissions:
+      contents: write
+      id-token: write
+    with:
+      vars: \${{ toJSON(vars) }}
+${extra}`;
+  }
   return `name: Deploy to R2
 
 # Generated by @freeappstore/cli. Two jobs on purpose:
@@ -1083,14 +1053,30 @@ jobs:
     if: \${{ !startsWith(github.event.repository.name, 'template-') }}
     runs-on: ubuntu-latest
     permissions:
-      contents: ${apps ? 'write' : 'read'}
+      contents: read
     steps:
       - uses: ${DEPLOY_ACTIONS.checkout}
       - uses: ${DEPLOY_ACTIONS.pnpm}
       - uses: ${DEPLOY_ACTIONS.setupNode}
         with:
           node-version: 22
-${buildSteps}
+      - name: Install
+        run: pnpm install --no-frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Verify build output
+        run: |
+          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
+          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
+      - name: Upload build artifact
+        uses: ${DEPLOY_ACTIONS.uploadArtifact}
+        with:
+          name: app
+          path: web/dist
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -1105,7 +1091,7 @@ ${buildSteps}
         with:
           name: app
           path: site
-${codeHealthDownload}      - name: Upload keylessly
+      - name: Upload keylessly
         run: |
 ${indent(KEYLESS_UPLOAD, 10)}
 `;

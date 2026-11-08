@@ -35,6 +35,8 @@ export interface OidcClaims {
   jti?: string;
   /** `<owner>/<repo>/<path>@<ref>` of the workflow file the job runs in. */
   job_workflow_ref?: string;
+  /** `<owner>/<repo>/<path>@<ref>` of the workflow the run started from (the caller). */
+  workflow_ref?: string;
   exp: number;
   iat?: number;
   nbf?: number;

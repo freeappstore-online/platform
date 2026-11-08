@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import {
   APP_DEPLOY_CLI_VERSION,
+  APP_DEPLOY_WORKFLOW,
   CODE_HEALTH_CLI_VERSION,
   DEPLOY_ACTIONS,
 } from './starter-dependencies.js';
@@ -44,14 +45,16 @@ function stepText(step: Step): string {
 describe.each([
   ['apps', APP_STARTER_CONFIG],
   ['games', GAME_CONFIG],
-])('deployWorkflow (%s)', (_store, config) => {
-  const source = deployWorkflow(config);
+])('the two-job deploy (%s)', (_store, config) => {
+  // Apps run it as the platform workflow their deploy.yml calls; games inline.
+  const source = config.store === 'apps' ? appDeployWorkflow() : deployWorkflow(config);
   const workflow = parse(source) as Workflow;
 
   it('is valid YAML with a build job and a deploy job that needs it', () => {
-    expect(workflow.name).toBe('Deploy to R2');
     expect(Object.keys(workflow.jobs)).toEqual(['build', 'deploy']);
     expect(workflow.jobs.deploy!.needs).toBe('build');
+    if (config.store === 'apps') return;
+    expect(workflow.name).toBe('Deploy to R2');
     expect(workflow.on).toHaveProperty('push');
     expect(workflow.on).toHaveProperty('workflow_dispatch');
   });
@@ -107,7 +110,8 @@ describe.each([
         ? 'https://api.freeappstore.online'
         : 'https://admin.freegamestore.online',
     );
-    expect(deploy.steps[0]!.with).toEqual({ name: 'app', path: 'site' });
+    if (config.store === 'games')
+      expect(deploy.steps[0]!.with).toEqual({ name: 'app', path: 'site' });
     const upload = deploy.steps.at(-1)!;
     expect(upload.run).toBe(`${KEYLESS_UPLOAD.trimEnd()}\n`);
     expect(upload.run).toContain('audience=$DEPLOY_API');
@@ -117,8 +121,8 @@ describe.each([
   });
 });
 
-describe('deployWorkflow (apps specifics)', () => {
-  const source = deployWorkflow(APP_STARTER_CONFIG);
+describe('appDeployWorkflow (apps specifics)', () => {
+  const source = appDeployWorkflow();
   const workflow = parse(source) as Workflow;
 
   it('runs the pinned build-target validator twice and the pinned code-health scan once', () => {
@@ -141,7 +145,12 @@ describe('deployWorkflow (apps specifics)', () => {
     const health = workflow.jobs.deploy!.steps.find(
       (s) => s.name === 'Download code health report',
     )!;
-    expect(health.with).toEqual({ name: 'code-health', path: 'site/.vcqa' });
+    expect(health.with).toEqual({
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+      'artifact-ids': '${{ needs.build.outputs.code-health }}',
+      'merge-multiple': true,
+      path: 'site/.vcqa',
+    });
   });
 
   it('stamps the build identity and the installed size the store shows', () => {
@@ -153,8 +162,50 @@ describe('deployWorkflow (apps specifics)', () => {
       'VITE_BUILD_DATE',
     ]);
     const names = steps.map((s) => s.name);
-    expect(names.indexOf('Write build info')).toBe(names.indexOf('Verify build output') + 1);
+    expect(names.indexOf('Write build info')).toBe(names.indexOf('App checks') + 1);
     expect(steps.find((s) => s.name === 'Write build info')!.run).toContain('/.buildinfo.json');
+  });
+});
+
+describe("deployWorkflow (apps): the repo's caller", () => {
+  const source = deployWorkflow(APP_STARTER_CONFIG);
+  const workflow = parse(source) as {
+    name: string;
+    on: Record<string, unknown>;
+    jobs: Record<string, { if: string; uses: string; permissions: object; with: object }>;
+  };
+
+  it('is one job that calls the platform workflow at a pinned commit', () => {
+    expect(workflow.name).toBe('Deploy to R2');
+    expect(Object.keys(workflow.on)).toEqual(['push', 'workflow_dispatch']);
+    expect(Object.keys(workflow.jobs)).toEqual(['deploy']);
+    const job = workflow.jobs.deploy!;
+    expect(job.uses).toBe(APP_DEPLOY_WORKFLOW);
+    expect(job.uses).toMatch(
+      new RegExp(`^freeappstore-online/platform/${APP_DEPLOY_WORKFLOW_FILE}@[0-9a-f]{40}$`),
+    );
+    expect(job.permissions).toEqual({ contents: 'write', 'id-token': 'write' });
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+    expect(job.with).toEqual({ vars: '${{ toJSON(vars) }}' });
+    expect(job.if).toContain("startsWith(github.event.repository.name, 'template-')");
+    expect(source).not.toMatch(/secrets|steps:|run:/);
+  });
+
+  it('passes repo-specific inputs, multi-line scripts as block scalars', () => {
+    const custom = parse(
+      deployWorkflow(APP_STARTER_CONFIG, {
+        checks: 'pnpm lint\npnpm test:e2e',
+        'python-version': '3.12',
+        'code-health': false,
+      }),
+    ) as typeof workflow;
+    expect(custom.jobs.deploy!.with).toEqual({
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions template syntax
+      vars: '${{ toJSON(vars) }}',
+      checks: 'pnpm lint\npnpm test:e2e\n',
+      'python-version': '3.12',
+      'code-health': false,
+    });
   });
 
   it('matches the reviewed snapshot (bump deliberately)', () => {

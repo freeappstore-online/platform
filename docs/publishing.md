@@ -32,10 +32,22 @@ If provisioning is unavailable, the command reports the error and exits. Nothing
 
 After the initial publish, every `git push` to `main` triggers auto-deploy:
 
-1. GitHub Actions runs `.github/workflows/deploy.yml`
-2. Builds the app (`pnpm build`)
-3. Uploads `web/dist/` to the `fas-apps` R2 bucket under `apps/<app-id>/`
+1. GitHub Actions runs `.github/workflows/deploy.yml`, which only calls the platform's
+   [`app-deploy.yml`](../.github/workflows/app-deploy.yml) at a pinned commit (#559)
+2. Its `build` job installs, tests and builds the app (`fas.json`'s `buildCommand`) and runs
+   the pinned validators, with no credential
+3. Its `deploy` job uploads that exact artifact through `api.freeappstore.online` with a
+   GitHub OIDC token, under `apps/<app-id>/` in the `fas-apps` R2 bucket
 4. The host Worker at `*.freeappstore.online` serves from R2
+
+The API accepts an upload only from `app-deploy.yml` at a commit it lists, started by the
+repo's own `deploy.yml` on `main`, so the steps are the platform's: edit `deploy.yml`'s
+`with:` to add repo-specific steps (`setup`, `checks`, `python-version`, `code-health`), or
+put other checks in a separate workflow file. Every `VITE_*` repository variable reaches the
+build automatically. Changing the platform workflow: regenerate it from `appDeployWorkflow()`,
+commit, add the commit to `APP_DEPLOY_WORKFLOW_SHAS` in `packages/backend/src/routes/deploy.ts`,
+deploy the API, then bump `APP_DEPLOY_WORKFLOW` in the CLI and roll the fleet with
+`scripts/fleet-deploy-workflow.mjs`.
 
 The URL starts serving your code after a successful first push and deploy. Runtime depends on build time and the Actions queue; use `fas logs <id>` or the console to check it.
 

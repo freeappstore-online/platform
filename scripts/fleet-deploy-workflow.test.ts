@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import {
+  APP_DEPLOY_WORKFLOW_SHAS,
+  APP_DEPLOY_WORKFLOW as BACKEND_APP_DEPLOY_WORKFLOW,
+} from '../packages/backend/src/routes/deploy.js';
+import { APP_DEPLOY_WORKFLOW } from '../packages/cli/src/lib/starter-dependencies.js';
 import { APP_STARTER_CONFIG, deployWorkflow } from '../packages/cli/src/lib/starter-foundation.js';
 // @ts-expect-error -- plain .mjs script without declarations
 import {
+  CALLER_INPUTS,
   COMMIT_MESSAGE,
   classify,
   fasJsonFor,
   missingTestRunner,
-  spliceCustomSteps,
-  withBuildVars,
-  withoutCodeHealthScan,
 } from './fleet-deploy-workflow.mjs';
 
 const generated = deployWorkflow(APP_STARTER_CONFIG);
@@ -62,12 +65,20 @@ describe('fleet deploy workflow classification', () => {
     expect(classify(LEGACY, generated).review).not.toContain('repo variables');
   });
 
+  it('VITE_* repo variables need no review: the platform build receives them', () => {
+    const vite = LEGACY.replace(
+      '        run: pnpm build',
+      '        env:\n          VITE_KEY: ${{ vars.VITE_KEY }}\n        run: pnpm build',
+    );
+    expect(classify(vite, generated).review).toEqual([]);
+  });
+
   it.each([
     [
-      'a repo variable',
+      'a non-VITE repo variable',
       LEGACY.replace(
         '        run: pnpm build',
-        '        env:\n          VITE_KEY: ${{ vars.VITE_KEY }}\n        run: pnpm build',
+        '        env:\n          API_BASE: ${{ vars.API_BASE }}\n        run: pnpm build',
       ),
       /repo variables/,
     ],
@@ -111,9 +122,29 @@ describe('fleet deploy workflow classification', () => {
     expect(classify(null, generated).review).toEqual(['no deploy.yml']);
   });
 
-  it('regenerates an older keyless workflow (a generator bump) without review', () => {
-    const older = generated.replace(/@freeappstore\/cli@[\d.]+/g, '@freeappstore/cli@0.4.1');
-    expect(classify(older, generated)).toEqual({ variant: 'keyless-outdated', review: [] });
+  it('moves an inline keyless workflow onto the platform workflow without review', () => {
+    const inline = LEGACY.replace(
+      / {6}- name: Upload to R2[\s\S]*?--delete\n/,
+      '      - name: Upload keylessly\n        run: echo upload\n',
+    );
+    expect(classify(inline, generated)).toEqual({ variant: 'keyless-outdated', review: [] });
+  });
+
+  it('bumps a caller pinned to an older commit of the platform workflow', () => {
+    const older = generated.replace(
+      /app-deploy\.yml@[0-9a-f]{40}/,
+      `app-deploy.yml@${'1'.repeat(40)}`,
+    );
+    expect(older).not.toBe(generated);
+    expect(classify(older, generated)).toEqual({ variant: 'platform-outdated', review: [] });
+  });
+
+  it('maps every hand-reviewed repo to inputs the platform workflow takes', () => {
+    const inputs = new Set(['setup', 'checks', 'python-version', 'code-health']);
+    for (const [repo, values] of Object.entries(CALLER_INPUTS)) {
+      for (const key of Object.keys(values as object)) expect(inputs, repo).toContain(key);
+      expect(deployWorkflow(APP_STARTER_CONFIG, values as object)).toContain('    with:\n');
+    }
   });
 
   it('states the legacy build target in fas.json, with the deployment id', () => {
@@ -127,9 +158,7 @@ describe('fleet deploy workflow classification', () => {
 
   it('commits with the issue references and attribution', () => {
     expect(COMMIT_MESSAGE).toMatch(/^ci: /);
-    expect(COMMIT_MESSAGE).toContain(
-      'Refs freeappstore-online/platform#460, freeappstore-online/platform#523',
-    );
+    expect(COMMIT_MESSAGE).toContain('Refs freeappstore-online/platform#559');
     expect(COMMIT_MESSAGE.trim().split('\n').at(-1)).toBe(
       'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>',
     );
@@ -154,42 +183,10 @@ describe('missingTestRunner', () => {
   });
 });
 
-describe('withoutCodeHealthScan', () => {
-  it('drops only the scan step and its comment', () => {
-    const w = withoutCodeHealthScan(generated);
-    expect(w).not.toContain('@vibecodeqa/cli');
-    expect(w).toContain('Upload code health report');
-    expect(w).toContain('Upload build artifact');
-  });
-});
-
-describe('spliceCustomSteps', () => {
-  const custom = LEGACY.replace(
-    '      - name: Build\n        run: pnpm build\n',
-    '      - name: Unit tests\n        run: pnpm test\n      - name: Build\n        run: pnpm build\n      - name: Browser flows\n        run: pnpm test:e2e\n',
-  );
-  it('does not mistake the generated Install script for extra install commands', () => {
-    const again = spliceCustomSteps(generated, generated);
-    expect(again).not.toContain('Install extra dependencies');
-  });
-
-  it('keeps the repo steps in the credential-free build job, after the step they followed', () => {
-    const out = spliceCustomSteps(generated, custom);
-    const names = out.split('\n').filter((l) => /^ {6}- name:/.test(l));
-    const at = (n: string) => names.findIndex((l) => l.includes(n));
-    expect(at('Unit tests')).toBeGreaterThan(at('Install'));
-    expect(at('Unit tests')).toBeLessThan(at('- name: Build'));
-    expect(at('Browser flows')).toBeGreaterThan(at('- name: Build'));
-    expect(at('Browser flows')).toBeLessThan(at('Upload build artifact'));
-    expect(out.indexOf('Unit tests')).toBeLessThan(out.indexOf('  deploy:'));
-    expect(out).not.toMatch(/secrets\./);
-  });
-});
-
-describe('withBuildVars', () => {
-  it('passes repository variables to the Build step only', () => {
-    const w = withBuildVars(generated, ['VITE_GOOGLE_CLIENT_ID']);
-    expect(w).toContain('          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}');
-    expect(w).not.toMatch(/secrets\./);
+describe('the pinned platform workflow (#559)', () => {
+  it('is a commit the API accepts deploys from', () => {
+    const [workflow, sha] = APP_DEPLOY_WORKFLOW.split('@');
+    expect(workflow).toBe(BACKEND_APP_DEPLOY_WORKFLOW);
+    expect(APP_DEPLOY_WORKFLOW_SHAS.has(sha!)).toBe(true);
   });
 });

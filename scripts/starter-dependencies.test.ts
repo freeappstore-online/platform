@@ -8,7 +8,7 @@ import {
   INSTALL_APP_DEPENDENCIES,
   SAVE_APP_DEPENDENCY_LOCK,
 } from '../packages/cli/src/lib/starter-dependencies.js';
-import { getTemplateFiles } from '../packages/cli/src/lib/starter-foundation.js';
+import { appDeployWorkflow } from '../packages/cli/src/lib/starter-foundation.js';
 
 const dirs: string[] = [];
 const bash = process.platform === 'win32' ? 'C:/Program Files/Git/bin/bash.exe' : 'bash';
@@ -136,8 +136,8 @@ it('reproduces a fresh minimal workspace and refuses changed manifests with real
 }, 60_000);
 
 it('ships the tested scripts in build order and pins both validators', () => {
-  const files = getTemplateFiles({ store: 'apps', r2Bucket: 'fas-apps', nounPlural: 'apps' });
-  const workflow = files['.github/workflows/deploy.yml']!;
+  // The steps run in the platform workflow every app's deploy.yml calls (#559).
+  const workflow = appDeployWorkflow();
   expect(workflow).toContain('contents: write');
   expect(workflow).toContain(
     INSTALL_APP_DEPENDENCIES.trimEnd()
@@ -168,8 +168,7 @@ it.each(['missing', 'passing', 'failing'])(
   'runs configured app tests before accepting a deployment: %s',
   (mode) => {
     const cwd = temporary();
-    const files = getTemplateFiles({ store: 'apps', r2Bucket: 'fas-apps', nounPlural: 'apps' });
-    const workflow = files['.github/workflows/deploy.yml']!;
+    const workflow = appDeployWorkflow();
     const command = /- name: Tests \(when configured\)\n\s+run: ([^\n]+)/.exec(workflow)![1]!;
     const stages = [
       'Typecheck (when configured)',

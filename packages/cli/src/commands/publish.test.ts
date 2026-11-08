@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { APP_DEPLOY_WORKFLOW } from '../lib/starter-dependencies.js';
 import { APP_STARTER_CONFIG, deployWorkflow } from '../lib/starter-foundation.js';
 import {
   buildPromptList,
@@ -137,14 +138,10 @@ describe('DEPLOY_YML', () => {
   it('references no secret: it deploys with a GitHub OIDC token', () => {
     expect(DEPLOY_YML).not.toMatch(/secrets\.|R2_/);
     expect(DEPLOY_YML).toContain('id-token: write');
-    expect(DEPLOY_YML).toContain('DEPLOY_API: https://api.freeappstore.online');
   });
 
-  it('includes build verification step', () => {
-    expect(DEPLOY_YML).toContain('Verify build output');
-    expect(DEPLOY_YML).toContain('build-target --artifact');
-    expect(DEPLOY_YML).toContain('steps.target.outputs.output-path');
-    expect(DEPLOY_YML).toContain('"$DEPLOY_URL/commit"');
+  it('calls the platform deploy workflow at its pinned commit (#559)', () => {
+    expect(DEPLOY_YML).toContain(`uses: ${APP_DEPLOY_WORKFLOW}\n`);
   });
 
   it('is the same workflow fas init and the builder generate', () => {
@@ -245,12 +242,13 @@ describe('summarizeWorkflowDrift', () => {
       'runs npx packages without an exact version (@freeappstore/cli, @vibecodeqa/cli@0.31)',
       'uses tag-pinned actions instead of commit SHAs (1)',
       'exposes the R2 secrets in the same job that installs and builds the app',
+      'runs its own build and upload steps instead of the platform deploy workflow',
       expect.stringMatching(/^\d+ line\(s\) would be removed, \d+ added$/),
     ]);
   });
 
   it('reports only the line count for a customised copy of the canonical workflow', () => {
-    const customised = DEPLOY_YML.replace('node-version: 22', 'node-version: 24');
+    const customised = DEPLOY_YML.replace('cancel-in-progress: true', 'cancel-in-progress: false');
     expect(summarizeWorkflowDrift(customised, DEPLOY_YML)).toEqual([
       '1 line(s) would be removed, 1 added',
     ]);

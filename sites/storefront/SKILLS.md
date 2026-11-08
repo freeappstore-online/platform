@@ -573,7 +573,7 @@ VITE_FIREBASE_API_KEY=AIzaSy...
 ```
 
 **Production:**
-Set the same variables in your GitHub repo: Settings > Secrets and variables > Actions > Variables (not Secrets). The deploy.yml workflow passes them through at build time.
+Set the same variables in your GitHub repo: Settings > Secrets and variables > Actions > Variables (not Secrets). Every `VITE_*` variable reaches the build automatically; don't edit `deploy.yml` for it.
 
 ## Free platform boundaries
 

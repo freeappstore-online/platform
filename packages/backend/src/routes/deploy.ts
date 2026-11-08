@@ -30,6 +30,13 @@ const PLATFORM_REPO = 'freeappstore-online/platform';
 const PLATFORM_SITES: Record<string, string> = {
   [`${PLATFORM_REPO}/.github/workflows/deploy-console.yml@${DEPLOY_REF}`]: 'console',
 };
+/**
+ * The platform app deploy (#559): app repos' deploy.yml calls this reusable
+ * workflow, and an app upload is accepted only when the job runs it at one of
+ * these commits. Retire a version by removing its sha once no caller pins it.
+ */
+export const APP_DEPLOY_WORKFLOW = `${PLATFORM_REPO}/.github/workflows/app-deploy.yml`;
+export const APP_DEPLOY_WORKFLOW_SHAS = new Set(['3a675c6a83ed50ac0ea87d25680efa4a6a8e8533']);
 const SESSION_TTL_MS = 15 * 60 * 1000;
 /** A session that keeps receiving files stays open, up to this long in all (770 MiB takes ~40 min). */
 const SESSION_MAX_MS = 3 * 60 * 60 * 1000;
@@ -347,9 +354,16 @@ export async function resolveDeployApp(db: D1Database, claims: OidcClaims): Prom
       );
     return site;
   }
-  // Only the repo's own deploy.yml on main may deploy; another workflow added
-  // to the repo cannot (it would skip the generated build job's validators).
-  if (claims.job_workflow_ref !== `${claims.repository}/.github/workflows/deploy.yml@${DEPLOY_REF}`)
+  // The run starts from the repo's own deploy.yml on main, and the job is the
+  // platform workflow at a listed commit, so the build steps are the platform's.
+  // Until the fleet calls it, the repo's inline deploy.yml is still accepted.
+  const caller = `${claims.repository}/.github/workflows/deploy.yml@${DEPLOY_REF}`;
+  const [workflow, sha] = (claims.job_workflow_ref ?? '').split('@');
+  const platform =
+    claims.workflow_ref === caller &&
+    workflow === APP_DEPLOY_WORKFLOW &&
+    APP_DEPLOY_WORKFLOW_SHAS.has(sha ?? '');
+  if (!platform && claims.job_workflow_ref !== caller)
     throw new HttpError(403, `workflow ${claims.job_workflow_ref ?? '(none)'} may not deploy`);
 
   const pinned = await db

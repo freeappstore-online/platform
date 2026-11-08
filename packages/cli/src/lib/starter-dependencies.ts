@@ -1,6 +1,15 @@
 /** Worker-safe deployment recipes. Keep dependency resolution in the app repository. */
 export const APP_DEPLOY_CLI_VERSION = '0.4.79';
 
+/**
+ * The platform app deploy every app's deploy.yml calls (#559), pinned to the
+ * commit whose .github/workflows/app-deploy.yml it runs. Bumping it: commit the
+ * regenerated workflow, add that sha to APP_DEPLOY_WORKFLOW_SHAS in
+ * packages/backend/src/routes/deploy.ts and deploy the API, then pin it here.
+ */
+export const APP_DEPLOY_WORKFLOW =
+  'freeappstore-online/platform/.github/workflows/app-deploy.yml@3a675c6a83ed50ac0ea87d25680efa4a6a8e8533';
+
 /** Exact @vibecodeqa/cli release the generated code-health scan runs (third-party scope: never floating). */
 export const CODE_HEALTH_CLI_VERSION = '0.57.0';
 

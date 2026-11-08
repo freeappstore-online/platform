@@ -11,7 +11,12 @@ import { Command } from 'commander';
 import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
 import { readConfig, sessionDaysRemaining } from '../lib/config.js';
+import { APP_DEPLOY_WORKFLOW } from '../lib/starter-dependencies.js';
 import { APP_STARTER_CONFIG, deployWorkflow } from '../lib/starter-foundation.js';
+
+/** The platform workflow without its pinned commit: any pin of it is the platform's. */
+const APP_DEPLOY_WORKFLOW_PATH = APP_DEPLOY_WORKFLOW.split('@')[0];
+
 import { yellow } from '../lib/style.js';
 import { renderCheckResults } from './check.js';
 
@@ -584,6 +589,9 @@ export function summarizeWorkflowDrift(existing: string, canonical: string): str
   }
   if (/secrets\.R2_/.test(existing) && !/needs:\s*build/.test(existing)) {
     reasons.push('exposes the R2 secrets in the same job that installs and builds the app');
+  }
+  if (!existing.includes(`uses: ${APP_DEPLOY_WORKFLOW_PATH}@`)) {
+    reasons.push('runs its own build and upload steps instead of the platform deploy workflow');
   }
   const existingLines = new Set(existing.split('\n'));
   const canonicalLines = new Set(canonical.split('\n'));
