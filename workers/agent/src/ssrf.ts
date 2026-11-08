@@ -12,7 +12,7 @@ const DOH = "https://cloudflare-dns.com/dns-query";
 function isPrivateIPv4(host: string): boolean {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (!m) return false;
-  const [a, b] = [Number(m[1]), Number(m[2])];
+  const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
   return (
     a === 0 ||
     a === 10 ||
@@ -23,7 +23,9 @@ function isPrivateIPv4(host: string): boolean {
     (a === 172 && b >= 16 && b <= 31) ||
     (a === 192 && b === 168) ||
     (a === 192 && b === 0) ||
-    (a === 198 && (b === 18 || b === 19))
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113)
   );
 }
 
