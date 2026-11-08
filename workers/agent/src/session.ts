@@ -64,6 +64,8 @@ interface SessionState {
   ownerId: string | null;
   /** GitHub login: the identity `apps.owner_login` is checked against. */
   ownerLogin: string | null;
+  /** ownerLogin was bound from the verified githubLogin only (#560). */
+  ownerLoginVerified?: boolean;
   /** Holds the platform `admin` role, which may open and update any app (#12). */
   ownerIsAdmin?: boolean;
   tokenHash: string | null;
@@ -304,7 +306,9 @@ export class AgentSession implements DurableObject {
     const session = await this.load();
 
     // If we already have an owner and the token hash matches, check TTL
-    if (session.ownerId && session.tokenHash && session.tokenAud === "console") {
+    // ownerLoginVerified: a session bound before #560 may hold a display name
+    // as its owner login, so it revalidates once instead of using the cache.
+    if (session.ownerId && session.tokenHash && session.tokenAud === "console" && session.ownerLoginVerified) {
       const hash = await hashToken(token);
       if (hash === session.tokenHash) {
         const age = session.tokenValidatedAt ? Date.now() - session.tokenValidatedAt : Infinity;
@@ -348,9 +352,12 @@ export class AgentSession implements DurableObject {
 
     // Bind or refresh session auth
     session.ownerId = user.id;
-    // The backend checks app ownership against githubLogin everywhere; `login`
-    // is the display name for Google/Apple/email users, which they choose (#12).
-    session.ownerLogin = user.githubLogin || user.login;
+    // App ownership is a GitHub login (the backend checks githubLogin
+    // everywhere). `login` is the display name for Google/Apple/email users,
+    // which they choose, so it must never stand in for one (#12, #560): an
+    // account without a GitHub login owns no app.
+    session.ownerLogin = user.githubLogin || null;
+    session.ownerLoginVerified = true;
     session.ownerIsAdmin = user.roles?.includes("admin") ?? false;
     session.tokenHash = await hashToken(token);
     session.tokenAud = user.aud;

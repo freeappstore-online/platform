@@ -11,6 +11,8 @@ const MALLORY: User = { id: "gh:2", login: "mallory", githubLogin: "mallory", ro
 const ADMIN: User = { id: "gh:3", login: "ops", githubLogin: "ops", roles: ["user", "admin"], aud: "console" };
 /** A Google user whose chosen display name is alice's GitHub login. */
 const IMPOSTOR: User = { id: "google:9", login: "alice", githubLogin: "mallory9", roles: ["user"], aud: "console" };
+/** As the backend reports a Google account: no GitHub login, a display name it chose (#560). */
+const NAMED_LIKE_ALICE: User = { id: "google:10", login: "alice", githubLogin: "", roles: ["user"], aud: "console" };
 
 /** GitHub repo: path -> content. */
 type Repo = Record<string, string>;
@@ -150,6 +152,24 @@ describe("POST /import — who may open an app (#12)", () => {
     const { state } = fakeState();
     const session = new AgentSession(state, fakeEnv(IMPOSTOR, { dict: ["alice", null] }));
     expect((await importApp(session, "dict")).status).toBe(403);
+  });
+
+  it("a non-GitHub account whose display name is the owner's login can't open the app (#560)", async () => {
+    const { state } = fakeState();
+    const session = new AgentSession(state, fakeEnv(NAMED_LIKE_ALICE, { dict: ["alice", null] }));
+    expect((await importApp(session, "dict")).status).toBe(403);
+  });
+
+  it("a session bound before #560 revalidates instead of trusting its stored owner login", async () => {
+    const { state, store } = fakeState();
+    const session = new AgentSession(state, fakeEnv(NAMED_LIKE_ALICE, { dict: ["alice", null] }));
+    expect((await importApp(session, "dict")).status).toBe(403);
+    const key = [...store.keys()].find((k) => (store.get(k) as { ownerId?: string })?.ownerId);
+    const saved = store.get(key!) as Record<string, unknown>;
+    saved.ownerLogin = "alice";
+    delete saved.ownerLoginVerified;
+    const reopened = new AgentSession(state, fakeEnv(NAMED_LIKE_ALICE, { dict: ["alice", null] }));
+    expect((await importApp(reopened, "dict")).status).toBe(403);
   });
 
   it("an app with no ownership record can't be opened by a non-admin", async () => {
