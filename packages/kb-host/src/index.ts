@@ -68,9 +68,19 @@ function isDocsHost(hostname: string): boolean {
   return DOCS_HOSTS.has(hostname.toLowerCase());
 }
 
+function safeDecode(s: string): string | null {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return null;
+  }
+}
+
 /** Map a request path to an R2 key. Directory / extensionless paths -> index.html. */
 export function keyForPath(pathname: string, hostname = 'kb.freeappstore.online'): string | null {
-  let key = decodeURIComponent(pathname.replace(/^\/+/, ''));
+  const decoded = safeDecode(pathname.replace(/^\/+/, ''));
+  if (decoded === null) return null; // malformed % escape
+  let key = decoded;
   if (isDocsHost(hostname)) key = key ? `platform/${key}` : 'platform/';
   if (key === '') return null; // bare KB host — no KB selected
   if (key.includes('..')) return null; // path traversal guard
@@ -95,7 +105,7 @@ export default {
       if (!env.KB_INGEST_TOKEN || !provided || !timingSafeEqual(provided, env.KB_INGEST_TOKEN)) {
         return new Response('forbidden', { status: 403 });
       }
-      const key = decodeURIComponent(url.pathname.slice('/_ingest/'.length));
+      const key = safeDecode(url.pathname.slice('/_ingest/'.length));
       if (!key || key.includes('..') || key.endsWith('/'))
         return new Response('bad key', { status: 400 });
       await env.KB_R2.put(key, request.body);

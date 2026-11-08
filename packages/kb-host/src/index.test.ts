@@ -22,6 +22,13 @@ describe('keyForPath', () => {
   });
 });
 
+describe('malformed percent escapes (#575)', () => {
+  it('keyForPath returns null instead of throwing', () => {
+    expect(keyForPath('/timer/%E0%A4%A', 'kb.freeappstore.online')).toBeNull();
+    expect(keyForPath('/%', 'docs.freeappstore.online')).toBeNull();
+  });
+});
+
 describe('timingSafeEqual', () => {
   it('compares every character regardless of where strings differ', () => {
     expect(timingSafeEqual('abc', 'abc')).toBe(true);

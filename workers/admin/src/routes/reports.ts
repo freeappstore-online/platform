@@ -6,7 +6,15 @@ export const reportsRoutes: RouteHandler = async ({ request, env, url }) => {
   if (url.pathname === "/test-report") {
     const html = await env.CREATORS.get("report:test-report:latest");
     if (!html) return new Response("No test report available yet.", { status: 404 });
-    return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache" } });
+    // CI-uploaded HTML on the admin origin: sandbox it (opaque origin) so it can't reach admin localStorage (#572).
+    return new Response(html, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-cache",
+        "Content-Security-Policy": "sandbox",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }
 
   if (url.pathname === "/api/test-report" && request.method === "PUT") {
