@@ -137,6 +137,22 @@ describe('POST /v1/auth/exchange', () => {
     ]);
   });
 
+  it("a new account's first session is not already revoked (#565)", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(introspection({ id: 7, login: 'new' }));
+    const writes: FakeWrite[] = [];
+    const res = await post(
+      { githubToken: 'gho_real' },
+      baseEnv(fakeDB({ onUserUpsert: (w) => writes.push(w) })),
+    );
+    const { sessionToken } = (await res.json()) as { sessionToken: string };
+    const payload = JSON.parse(
+      Buffer.from(sessionToken.split('.')[0]!, 'base64url').toString(),
+    ) as { iat: number };
+    const mark = writes[0]!.args[5] as number;
+    // requireUser revokes iat <= sessions_valid_after; the clock does not move here.
+    expect(payload.iat).toBeGreaterThan(mark);
+  });
+
   // ── #47: the token must belong to THIS OAuth app ────────────────
 
   it('rejects a token that is valid but issued to another app (404 from check-token)', async () => {

@@ -190,8 +190,7 @@ describe.skipIf(!hasSqlite)('cross-store and revocation (#495)', () => {
       env,
     );
     expect(out.status).toBe(200);
-    // Same-second tokens survive (iat < mark is strict); move the clock on.
-    db.exec("UPDATE users SET sessions_valid_after = sessions_valid_after + 1 WHERE id = 'gh:1'");
+    // Tokens signed in the same second as the logout are revoked too (iat <= mark).
 
     const revoked = await me(appToken);
     expect(revoked.status).toBe(401);

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { CONSOLE_AUD, signSession } from '../lib/session.js';
+import { CONSOLE_AUD, newAccountSessionMark, signSession } from '../lib/session.js';
 import type { Env } from '../types.js';
 import { computeRoles } from './auth.js';
 
@@ -90,7 +90,7 @@ exchangeRoutes.post('/auth/exchange', async (c) => {
       ghUser.login,
       ghUser.avatar_url ?? null,
       Date.now(),
-      Math.floor(Date.now() / 1000),
+      newAccountSessionMark(),
     )
     .run();
 

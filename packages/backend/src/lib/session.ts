@@ -21,6 +21,16 @@ export function isAppAudience(aud: string): boolean {
 }
 
 /**
+ * sessions_valid_after for a new users row (#495, #565). A token is revoked when
+ * iat <= the mark, and iat has one-second resolution, so a mark at "now" would
+ * revoke the first session signed right after the insert. One second earlier
+ * still kills every token issued to a deleted account of the same id.
+ */
+export function newAccountSessionMark(): number {
+  return Math.floor(Date.now() / 1000) - 1;
+}
+
+/**
  * What an app-audience session may learn about the account (#517): no
  * platform `admin`/`creator` flags and only the roles held in that app. A
  * first-party or legacy session keeps everything.

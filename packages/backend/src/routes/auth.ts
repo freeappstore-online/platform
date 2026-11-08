@@ -14,6 +14,7 @@ import { isAllowedReturnTo, sessionAudience } from '../lib/origins.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import {
   b64urlBytes,
+  newAccountSessionMark,
   scopeRolesToAudience,
   signPayload,
   signSession,
@@ -331,7 +332,7 @@ authRoutes.get('/auth/github/callback', async (c) => {
       ghUser.login,
       ghUser.avatar_url,
       Date.now(),
-      Math.floor(Date.now() / 1000),
+      newAccountSessionMark(),
     )
     .run();
 
@@ -415,7 +416,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
         claims.email ?? null,
         providerName,
         login,
-        Math.floor(Date.now() / 1000),
+        newAccountSessionMark(),
         providerName,
       )
       .run();
@@ -538,7 +539,7 @@ authRoutes.post('/auth/apple/callback', async (c) => {
         claims.email ?? null,
         displayName,
         login,
-        Math.floor(Date.now() / 1000),
+        newAccountSessionMark(),
         displayName,
       )
       .run();
@@ -805,7 +806,7 @@ async function completeMagicLink(
           state.email,
           state.email,
           login,
-          Math.floor(Date.now() / 1000),
+          newAccountSessionMark(),
         )
         .run();
       existing = { id: userId, github_login: login };
