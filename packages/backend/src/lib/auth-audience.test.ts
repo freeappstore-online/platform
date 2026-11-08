@@ -140,7 +140,10 @@ describe.skipIf(!hasSqlite)('route audience matrix (#495)', () => {
 
   describe.each(CONSOLE_ONLY)('console-only %s %s', (method, path) => {
     it('lets a console token through', async () => {
-      const r = await call([method, path], 'console');
+      // Past the gate some routes do real work (POST /v1/audit/run scans every
+      // app); only the auth decision is under test, so no network.
+      vi.stubGlobal('fetch', async () => Response.json({ apps: [] }));
+      const r = await call([method, path], 'console').finally(() => vi.unstubAllGlobals());
       expect(passedAuth(r), `${r.status} ${r.text}`).toBe(true);
     });
 
