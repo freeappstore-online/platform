@@ -98,12 +98,41 @@ export async function removeRegistryEntry(gh: GhFn, id: string, config: StoreCon
   return { name: "registry", status: "fail", detail: "Registry write contended twice — retry the unpublish" };
 }
 
-/** Delete the two D1 rows insertHostRoute writes: the `routes` row the host
- *  reads, AND the `apps` ownership row, plus the app's keyless-deploy pin and
- *  sessions. Same batch so they can't drift.
- *  Until this existed nothing deleted the `apps` row at all, so an unpublished
- *  app stayed owned, listed in /v1/apps/creators, and reachable through every
- *  per-app backend feature. */
+/**
+ * Every D1 table keyed by app_id that holds the app's state, credentials or
+ * privileges. Unpublish deletes all of it: whoever publishes the id next must
+ * not inherit the old app's secrets, proxy rules, webhooks, roles or its users'
+ * data (#563). deprovision.test.ts checks this list against the migrations.
+ * audit_results is deleted separately (it also holds FGS games' rows).
+ * Kept on purpose: app_owner_transfers (audit trail) and agent_sessions (each
+ * user's own VibeCode history).
+ */
+export const APP_DATA_TABLES = [
+  "app_secrets",
+  "app_proxy_allowlist",
+  "app_proxy_usage",
+  "app_webhooks",
+  "app_roles",
+  "kv",
+  "counters",
+  "documents",
+  "collection_settings",
+  "data_room_documents",
+  "data_room_members",
+  "data_rooms",
+  "app_rooms",
+  "push_schedules",
+  "push_subscriptions",
+  "app_votes",
+  "app_analytics",
+  "app_logs",
+  "auth_codes",
+  "app_deploy_limits",
+] as const;
+
+/** Delete the D1 rows of an app: the `routes` row the host reads, the `apps`
+ *  ownership row, the keyless-deploy pin and sessions, and every app data
+ *  table. One batch so they can't drift. */
 export async function deleteHostRoute(env: DeprovisionEnv, id: string, config: StoreConfig): Promise<Step> {
   if (!env.DB) {
     return { name: "hosting_route", status: "fail", detail: "D1 binding not available" };
@@ -115,8 +144,10 @@ export async function deleteHostRoute(env: DeprovisionEnv, id: string, config: S
     // must be able to pin its new repository, and the old repo must lose access.
     const pinStmt = env.DB.prepare("DELETE FROM app_repositories WHERE app_id = ?1").bind(id);
     const deploysStmt = env.DB.prepare("DELETE FROM app_deploys WHERE app_id = ?1").bind(id);
-    await env.DB.batch([routesStmt, appsStmt, pinStmt, deploysStmt]);
-    return { name: "hosting_route", status: "ok", detail: "Route + ownership row deleted" };
+    const dataStmts = APP_DATA_TABLES.map((table) => env.DB!.prepare(`DELETE FROM ${table} WHERE app_id = ?1`).bind(id));
+    const auditStmt = env.DB.prepare("DELETE FROM audit_results WHERE app_id = ?1 AND store = 'apps'").bind(id);
+    await env.DB.batch([routesStmt, appsStmt, pinStmt, deploysStmt, ...dataStmts, auditStmt]);
+    return { name: "hosting_route", status: "ok", detail: "Route, ownership row and app data deleted" };
   } catch (e: any) {
     return { name: "hosting_route", status: "fail", detail: e?.message ?? "D1 delete failed" };
   }

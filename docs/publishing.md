@@ -53,7 +53,7 @@ The URL starts serving your code after a successful first push and deploy. Runti
 
 ## Unpublishing
 
-`POST /v1/unpublish` (the app's owner or an admin) removes the registry entry, the hosting route, the R2 objects, the DNS record, the `apps` row and the keyless-deploy repository pin. What it leaves behind:
+`POST /v1/unpublish` (the app's owner or an admin) removes the registry entry, the hosting route, the R2 objects, the DNS record, the `apps` row, the keyless-deploy repository pin, and every D1 row of the app's data, credentials and privileges (secrets, proxy rules, webhooks, roles, KV, collections, counters, rooms, push, votes, analytics, logs), so whoever publishes the id next inherits nothing (#563). What it leaves behind:
 
 - **The GitHub repo is archived**, not deleted (reversible; read-only, so its deploy workflow no longer runs on pushes it can no longer receive). The response carries an `archive_repo` step. Pass `deleteRepo: true` to delete the repo instead.
 - Publishing the same id again by its owner **unarchives** the repo and provisions it again.

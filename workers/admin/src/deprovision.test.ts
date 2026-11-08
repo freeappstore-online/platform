@@ -1,5 +1,7 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  APP_DATA_TABLES,
   archiveRepo,
   type CfFn,
   type DeprovisionEnv,
@@ -11,6 +13,8 @@ import {
 import { type GhFn, STORE_CONFIG } from "./publish";
 
 const config = STORE_CONFIG.apps;
+// node:sqlite (Node 22.13+) applies the backend migrations for the coverage check.
+const sqlite = await import("node:sqlite").catch(() => null);
 
 interface StmtCapture {
   sql: string;
@@ -219,14 +223,47 @@ describe("deleteHostRoute", () => {
     const capture: StmtCapture[] = [];
     const step = await deleteHostRoute(baseEnv({ DB: fakeDB({ capture }) }), "kanban", config);
     expect(step.status).toBe("ok");
-    expect(capture).toHaveLength(4);
+    expect(capture).toHaveLength(4 + APP_DATA_TABLES.length + 1);
     expect(capture[2].sql).toBe("DELETE FROM app_repositories WHERE app_id = ?1");
     expect(capture[3].sql).toBe("DELETE FROM app_deploys WHERE app_id = ?1");
-    expect(capture.slice(2).map((c) => c.binds)).toEqual([["kanban"], ["kanban"]]);
+    expect(capture.slice(2, 4).map((c) => c.binds)).toEqual([["kanban"], ["kanban"]]);
     expect(capture[0].sql).toMatch(/^DELETE FROM routes WHERE slug = \?1 AND zone = \?2$/);
     expect(capture[0].binds).toEqual(["kanban", "freeappstore.online"]);
     expect(capture[1].sql).toMatch(/^DELETE FROM apps WHERE id = \?1$/);
     expect(capture[1].binds).toEqual(["kanban"]);
+  });
+
+  it("deletes every app data table and the app's own audit rows (#563)", async () => {
+    const capture: StmtCapture[] = [];
+    await deleteHostRoute(baseEnv({ DB: fakeDB({ capture }) }), "kanban", config);
+    const sqls = capture.map((c) => c.sql);
+    for (const table of APP_DATA_TABLES) expect(sqls).toContain(`DELETE FROM ${table} WHERE app_id = ?1`);
+    expect(sqls).toContain("DELETE FROM audit_results WHERE app_id = ?1 AND store = 'apps'");
+    expect(capture.every((c) => c.binds[0] === "kanban")).toBe(true);
+  });
+
+  it.skipIf(!sqlite)("covers every app_id table in the backend migrations (#563)", () => {
+    const db = new sqlite!.DatabaseSync(":memory:");
+    const dir = new URL("../../../packages/backend/migrations/", import.meta.url);
+    for (const f of readdirSync(dir)
+      .filter((n) => n.endsWith(".sql"))
+      .sort())
+      db.exec(readFileSync(new URL(f, dir), "utf8"));
+    const tables = (
+      db
+        .prepare("SELECT m.name AS t FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table' AND p.name = 'app_id'")
+        .all() as { t: string }[]
+    ).map((r) => r.t);
+    // Deleted by name above, or kept on purpose (see APP_DATA_TABLES).
+    const handled = new Set<string>([
+      ...APP_DATA_TABLES,
+      "app_repositories",
+      "app_deploys",
+      "audit_results",
+      "app_owner_transfers",
+      "agent_sessions",
+    ]);
+    expect(tables.filter((t) => !handled.has(t))).toEqual([]);
   });
 
   it("fails without a DB binding", async () => {
@@ -350,7 +387,7 @@ describe("handleDeprovision", () => {
       cf: noDns,
     });
     expect(result.ok).toBe(false);
-    expect(capture).toHaveLength(4);
+    expect(capture).toHaveLength(4 + APP_DATA_TABLES.length + 1);
     expect(result.steps.find((s) => s.name === "delete_repo")?.status).toBe("fail");
     expect(result.steps.find((s) => s.name === "registry")?.status).toBe("ok");
   });
