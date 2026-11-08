@@ -4,7 +4,7 @@ import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
 import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { isFilePath, isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
+import { isFilePath, isPublicRepo, isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
 import { getDeployStatus } from "./deploy-status.js";
 import { createAppProblems, preflightUpdate } from "./preflight.js";
 import { scaffoldRepo } from "./scaffold.js";
@@ -375,6 +375,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!isRepoName(app_id)) return badAppId(app_id);
         let files: string[];
         try {
+          if (!(await isPublicRepo(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN))) return txt(`No files found for ${app_id} (repo empty or not found).`);
           files = await listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN);
         } catch (e) {
           return toolError(`Could not list ${app_id}'s files: ${String(e)}. Check the app_id, or retry shortly if GitHub is failing.`);
@@ -398,6 +399,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!isFilePath(path)) return toolError(`Invalid path "${path}": use a path relative to the repo root, e.g. web/src/App.tsx.`);
         let content: string | null;
         try {
+          if (!(await isPublicRepo(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN))) return toolError(`No app repository ${app_id}. Check the app_id.`);
           content = await readRepoFile(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, path);
         } catch (e) {
           return toolError(`Could not read ${path} from ${app_id}: ${String(e)}. Retry shortly.`);

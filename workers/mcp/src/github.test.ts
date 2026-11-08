@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listRepoFiles, pushFiles, type RepoFile, readRepoFile, textToB64 } from "./github.js";
+import { isPublicRepo, listRepoFiles, pushFiles, type RepoFile, readRepoFile, textToB64 } from "./github.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -33,6 +33,29 @@ describe("repo URL guards", () => {
   });
 });
 
+describe("isPublicRepo (#561)", () => {
+  function repoAs(status: number, body: unknown) {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify(body), { status }));
+  }
+  it("serves a public repo", async () => {
+    repoAs(200, { private: false });
+    expect(await isPublicRepo("org", "timer", "t")).toBe(true);
+  });
+  it("refuses a private repo the org token can read", async () => {
+    repoAs(200, { private: true });
+    expect(await isPublicRepo("org", "vault", "t")).toBe(false);
+  });
+  it("refuses a repo whose visibility is not stated", async () => {
+    repoAs(200, {});
+    expect(await isPublicRepo("org", "x", "t")).toBe(false);
+  });
+  it("treats a missing repo as not public and other failures as errors", async () => {
+    repoAs(404, { message: "Not Found" });
+    expect(await isPublicRepo("org", "nope", "t")).toBe(false);
+    repoAs(502, { message: "bad gateway" });
+    await expect(isPublicRepo("org", "timer", "t")).rejects.toThrow(/502|bad gateway/);
+  });
+});
 
 /** A GitHub that records every call; `empty` makes the repo have no commits. */
 function fakeGitHub(opts: { empty: boolean; refStatus?: number }) {

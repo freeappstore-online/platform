@@ -139,6 +139,18 @@ export async function pushFiles(
 }
 
 /**
+ * Whether `repo` is a public repo of the org. The read tools send the org
+ * token, which can read private repos too, so they only serve public ones
+ * (#561), the same rule deploy-status applies.
+ */
+export async function isPublicRepo(org: string, repo: string, token?: string): Promise<boolean> {
+  const res = await gh(token, repoBase(org, repo));
+  if (res?.__status === 404) return false;
+  if (res?.__status) throw new Error(`cannot read ${repo}: ${res.message ?? res.__status}`);
+  return res?.private === false;
+}
+
+/**
  * List file paths in a repo (recursive). Read-only; works on public repos.
  * Only a repo with no main branch (404, or 409 "empty") lists as []; any other
  * failure throws. create_app scaffolds whatever the listing says is missing, so
