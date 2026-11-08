@@ -40,12 +40,15 @@ describe("withOriginCheck", () => {
     expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
-  it("strips CORS headers from a non-preflight response to an unlisted origin", async () => {
+  it("refuses a non-preflight request from an unlisted origin", async () => {
     const res = await call({ method: "POST", headers: { Origin: "https://evil.example" } });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
     expect(res.headers.get("Access-Control-Allow-Origin")).toBeNull();
-    expect(res.headers.get("Access-Control-Allow-Headers")).toBeNull();
-    expect(res.headers.get("Content-Type")).toBe("text/plain");
+  });
+
+  it("allows a same-origin request", async () => {
+    const res = await call({ method: "POST", headers: { Origin: "https://mcp.freeappstore.online" } });
+    expect(res.status).toBe(200);
   });
 
   it("leaves a listed origin untouched", async () => {

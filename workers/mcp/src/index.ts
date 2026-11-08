@@ -9,7 +9,7 @@ import { getDeployStatus } from "./deploy-status.js";
 import { createAppProblems, preflightUpdate } from "./preflight.js";
 import { scaffoldRepo } from "./scaffold.js";
 import { AuthHandler } from "./auth-handler.js";
-import { sessionPrefix, auditLog } from "./lib.js";
+import { sessionPrefix, ownsSession, auditLog } from "./lib.js";
 import { ownsApp, ownershipGateText } from "./ownership.js";
 import { withOriginCheck } from "./origin.js";
 import { type RateLimiter, withRateLimit } from "./ratelimit.js";
@@ -439,7 +439,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         // Force the session under the caller's namespace (see sessionPrefix), so
         // you can't target another user's session id. The rest is sanitized even
         // when the prefix matches: it is a URL path segment.
-        const prefix = sessionPrefix(this.props.userId);
+        const prefix = await sessionPrefix(this.props.userId);
         const rest = (session_id?.startsWith(prefix) ? session_id.slice(prefix.length) : session_id ?? "")
           .replace(/[^a-zA-Z0-9_-]/g, "")
           .slice(0, 40);
@@ -519,7 +519,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const token = this.props.token;
         if (!token) return txt(NOT_SIGNED_IN);
         // Only let callers read sessions in their own namespace.
-        if (!session_id.startsWith(sessionPrefix(this.props.userId)) || !/^[a-zA-Z0-9_-]+$/.test(session_id))
+        if (!(await ownsSession(this.props.userId, session_id)))
           return txt("That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.");
         const res = await tryFetch(`${this.env.AGENT_BASE}/session/${session_id}/status`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -547,6 +547,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       async ({ session_id, limit }) => {
         const token = this.props.token;
         if (!token) return txt(NOT_SIGNED_IN);
+        if (!(await ownsSession(this.props.userId, session_id)))
+          return txt("That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.");
         const res = await tryFetch(`${this.env.AGENT_BASE}/session/${encodeURIComponent(session_id)}/history`, {
           headers: { Authorization: `Bearer ${token}` },
         });
