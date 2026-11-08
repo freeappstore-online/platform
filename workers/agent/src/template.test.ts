@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { runComplianceCheck } from "./compliance";
 import { APP_DEPLOY_WORKFLOW } from "../../../packages/cli/src/lib/starter-dependencies";
 import { appDeployWorkflow } from "../../../packages/cli/src/lib/starter-foundation";
+import { runComplianceCheck } from "./compliance";
 import { getConfig } from "./config";
 import {
   APP_ARCHETYPES,
