@@ -193,7 +193,7 @@ logsRoutes.get('/apps/:appId/logs/build', async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT build_meta, ts FROM app_logs
      WHERE app_id = ? AND build_meta IS NOT NULL
-     ORDER BY ts DESC LIMIT 1`,
+     ORDER BY ingested_at DESC LIMIT 1`,
   )
     .bind(appId)
     .first<{ build_meta: string; ts: number }>();

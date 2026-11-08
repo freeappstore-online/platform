@@ -429,6 +429,29 @@ describe.skipIf(!hasSqlite)('document visibility (#467)', () => {
     expect((await get('/db/feed', await as('gh:1', 'other-app'))).status).toBe(200);
   });
 
+  it("caps distinct collections per app and one user's documents per collection (#569)", async () => {
+    const { db, d1, as } = await setup(); // notes + feed already exist
+    const insert = db.prepare(
+      "INSERT INTO documents (app_id, collection, id, data, owner_id, created_at, updated_at) VALUES ('timer', ?, ?, '{}', 'gh:2', 1, 1)",
+    );
+    for (let i = 0; i < 198; i++) insert.run(`c${i}`, 'x');
+    const post = async (collection: string, user = 'gh:1') =>
+      app.request(
+        `/v1/apps/timer/db/${collection}`,
+        { method: 'POST', headers: await as(user), body: '{}' },
+        env(d1),
+      );
+    expect((await post('notes')).status).toBe(201);
+    expect((await post('one-too-many')).status).toBe(413);
+
+    const bulk = db.prepare(
+      "INSERT INTO documents (app_id, collection, id, data, owner_id, created_at, updated_at) VALUES ('timer', 'notes', ?, '{}', 'gh:2', 1, 1)",
+    );
+    for (let i = 0; i < 5000; i++) bulk.run(`b${i}`);
+    expect((await post('notes', 'gh:2')).status).toBe(413);
+    expect((await post('notes', 'gh:1')).status).toBe(201);
+  });
+
   it('a shared collection is readable by anyone but shows _owner only to the owner', async () => {
     const { as, get } = await setup();
     const anon = (await (await get('/db/feed')).json()) as Docs;

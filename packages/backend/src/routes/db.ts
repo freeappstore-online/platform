@@ -28,6 +28,10 @@ import type { Env } from '../types.js';
 const MAX_COLLECTION_LENGTH = 64;
 const MAX_DOCS_PER_COLLECTION = 10_000;
 const MAX_DOC_BYTES = 64 * 1024;
+/** One user's share of a collection, so a few accounts cannot fill it (#569). */
+const MAX_DOCS_PER_USER_PER_COLLECTION = 5_000;
+/** Distinct collection names one app may hold; names are caller-chosen (#569). */
+const MAX_COLLECTIONS_PER_APP = 200;
 const COLLECTION_RE = /^[a-zA-Z0-9_-]+$/;
 const MAX_SHARED_COLLECTIONS_PER_APP = 50;
 
@@ -149,12 +153,29 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
 
     // Check collection document limit
     const count = await c.env.DB.prepare(
-      'SELECT COUNT(*) AS cnt FROM documents WHERE app_id = ? AND collection = ?',
+      'SELECT COUNT(*) AS cnt, COALESCE(SUM(owner_id = ?), 0) AS mine FROM documents WHERE app_id = ? AND collection = ?',
     )
-      .bind(appId, collection)
-      .first<{ cnt: number }>();
+      .bind(user.id, appId, collection)
+      .first<{ cnt: number; mine: number }>();
     if ((count?.cnt ?? 0) >= MAX_DOCS_PER_COLLECTION) {
       return c.text(`max ${MAX_DOCS_PER_COLLECTION} documents per collection`, 413);
+    }
+    if ((count?.mine ?? 0) >= MAX_DOCS_PER_USER_PER_COLLECTION) {
+      return c.text(
+        `max ${MAX_DOCS_PER_USER_PER_COLLECTION} of your documents per collection`,
+        413,
+      );
+    }
+    // A first document creates the collection: bound how many an app can have.
+    if (!count?.cnt) {
+      const names = await c.env.DB.prepare(
+        'SELECT COUNT(*) AS n FROM (SELECT DISTINCT collection FROM documents WHERE app_id = ?)',
+      )
+        .bind(appId)
+        .first<{ n: number }>();
+      if ((names?.n ?? 0) >= MAX_COLLECTIONS_PER_APP) {
+        return c.text(`max ${MAX_COLLECTIONS_PER_APP} collections per app`, 413);
+      }
     }
 
     const id = generateId();
@@ -165,7 +186,8 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
     const write = await c.env.DB.prepare(
       `INSERT INTO documents (app_id, collection, id, data, owner_id, visibility, created_at, updated_at)
        SELECT ?, ?, ?, ?, ?, 'public', ?, ?
-       WHERE (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ?) < ?`,
+       WHERE (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ?) < ?
+         AND (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ? AND owner_id = ?) < ?`,
     )
       .bind(
         appId,
@@ -178,6 +200,10 @@ dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
         appId,
         collection,
         MAX_DOCS_PER_COLLECTION,
+        appId,
+        collection,
+        user.id,
+        MAX_DOCS_PER_USER_PER_COLLECTION,
       )
       .run();
     if (!write.meta.changes) {

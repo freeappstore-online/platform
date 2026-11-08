@@ -378,8 +378,32 @@ describe.skipIf(!hasSqlite)('push reminder schedules (#146)', () => {
     rule: unknown;
   };
 
-  it('returns 401 without a session and 404 for an unknown app', async () => {
+  /** Reminders need a registered device: alice and bob on `cycle`, alice on `notes`. */
+  function seededWithDevices() {
+    const r = seeded();
+    const add = r.db.prepare(
+      "INSERT INTO push_subscriptions (id, app_id, user_id, endpoint, p256dh, auth, created_at, failure_count) VALUES (?, ?, ?, ?, 'k', 'a', 1, 0)",
+    );
+    add.run('d1', 'cycle', 'gh:1', endpointN(1));
+    add.run('d2', 'cycle', 'gh:2', endpointN(2));
+    add.run('d3', 'notes', 'gh:1', endpointN(3));
+    return r;
+  }
+
+  it('refuses a reminder when the user has no device for the app (#573)', async () => {
     const { d1 } = seeded();
+    const res = await call(env(d1), 'PUT', path('pill'), { body: daily });
+    expect(res.status).toBe(409);
+    const { d1: d2 } = seededWithDevices();
+    // A device on another app does not count.
+    expect((await call(env(d2), 'PUT', path('pill', 'notes'), { body: daily })).status).toBe(201);
+    expect((await call(env(d2), 'PUT', path('pill'), { uid: 'gh:2', body: daily })).status).toBe(
+      201,
+    );
+  });
+
+  it('returns 401 without a session and 404 for an unknown app', async () => {
+    const { d1 } = seededWithDevices();
     for (const method of ['GET', 'PUT', 'DELETE']) {
       const p = method === 'GET' ? '/apps/cycle/push/schedules' : path();
       expect((await call(env(d1), method, p, { uid: null, body: daily })).status, method).toBe(401);
@@ -389,7 +413,7 @@ describe.skipIf(!hasSqlite)('push reminder schedules (#146)', () => {
   });
 
   it('creates a schedule (201) with its first occurrence in the time zone, then replaces it (200)', async () => {
-    const { d1, db } = seeded();
+    const { d1, db } = seededWithDevices();
     const e = env(d1);
     const created = await call(e, 'PUT', path(), {
       body: { ...daily, quietHours: { start: '22:00', end: '07:00' } },
@@ -430,7 +454,7 @@ describe.skipIf(!hasSqlite)('push reminder schedules (#146)', () => {
   });
 
   it('accepts a one-shot with an ISO time and stores it as that instant', async () => {
-    const { d1 } = seeded();
+    const { d1 } = seededWithDevices();
     const at = new Date(Date.now() + 3_600_000).toISOString();
     const res = await call(env(d1), 'PUT', path('pill'), {
       body: { rule: { type: 'at', at }, tz: 'UTC' },
@@ -446,19 +470,19 @@ describe.skipIf(!hasSqlite)('push reminder schedules (#146)', () => {
     ['a past one-shot', { rule: { type: 'at', at: Date.now() - 1000 }, tz: 'UTC' }],
     ['bad quiet hours', { ...daily, quietHours: { start: '10pm', end: '07:00' } }],
   ])('rejects %s with 400', async (_name, body) => {
-    const { d1, db } = seeded();
+    const { d1, db } = seededWithDevices();
     expect((await call(env(d1), 'PUT', path(), { body })).status).toBe(400);
     expect(db.prepare('SELECT COUNT(*) AS n FROM push_schedules').get()).toEqual({ n: 0 });
   });
 
   it('rejects a bad reminder id with 400', async () => {
-    const { d1 } = seeded();
+    const { d1 } = seededWithDevices();
     expect((await call(env(d1), 'PUT', path('has space'), { body: daily })).status).toBe(400);
     expect((await call(env(d1), 'PUT', path('x'.repeat(65)), { body: daily })).status).toBe(400);
   });
 
   it(`allows ${PUSH_LIMITS.maxSchedulesPerUser} reminders per user per app, then 413`, async () => {
-    const { d1 } = seeded();
+    const { d1 } = seededWithDevices();
     const e = env(d1);
     for (let i = 0; i < PUSH_LIMITS.maxSchedulesPerUser; i++) {
       expect((await call(e, 'PUT', path(`r${i}`), { body: daily })).status).toBe(201);
@@ -469,7 +493,7 @@ describe.skipIf(!hasSqlite)('push reminder schedules (#146)', () => {
   });
 
   it("lists and deletes only this user's reminders for this app", async () => {
-    const { d1 } = seeded();
+    const { d1 } = seededWithDevices();
     const e = env(d1);
     await call(e, 'PUT', path('mine'), { body: daily });
     await call(e, 'PUT', path('other-app', 'notes'), { body: daily });

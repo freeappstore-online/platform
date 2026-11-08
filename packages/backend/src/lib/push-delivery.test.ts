@@ -5,6 +5,7 @@ import {
   MAX_ATTEMPTS,
   MAX_DEVICE_FAILURES,
   MAX_LATENESS_MS,
+  MAX_PER_USER_APP_PER_TICK,
   RETRY_DELAY_MS,
   runPushDelivery,
 } from './push-delivery.js';
@@ -301,11 +302,29 @@ describe.skipIf(!hasSqlite)('runPushDelivery (#146)', () => {
   it('works through more than one batch in a tick', async () => {
     const { db, run } = setup();
     const service = mockPushService();
-    addSub(db, 'cycle', 'gh:1', 'phone');
-    for (let i = 0; i < BATCH_SIZE + 10; i++) addSchedule(db, { nextAt: NOW - i, rule: oneShot });
+    for (let i = 0; i < BATCH_SIZE + 10; i++) {
+      addSub(db, 'cycle', `gh:${i}`, `phone-${i}`);
+      addSchedule(db, { userId: `gh:${i}`, nextAt: NOW - i, rule: oneShot });
+    }
     const totals = await run();
     expect(totals.due).toBe(BATCH_SIZE + 10);
     expect(service.fn).toHaveBeenCalledTimes(BATCH_SIZE + 10);
     expect(db.prepare('SELECT COUNT(*) AS n FROM push_schedules').get()).toEqual({ n: 0 });
+  });
+
+  it('gives one (app, user) at most its fair share of a tick, leaving the rest for later (#573)', async () => {
+    const { db, run } = setup();
+    const service = mockPushService();
+    addSub(db, 'cycle', 'gh:1', 'phone');
+    addSub(db, 'cycle', 'gh:2', 'phone-2');
+    for (let i = 0; i < 20; i++)
+      addSchedule(db, { userId: 'gh:1', nextAt: NOW - 1000 - i, rule: oneShot });
+    addSchedule(db, { userId: 'gh:2', nextAt: NOW - 1, rule: oneShot });
+    const totals = await run();
+    expect(totals.due).toBe(MAX_PER_USER_APP_PER_TICK + 1);
+    expect(service.fn).toHaveBeenCalledTimes(MAX_PER_USER_APP_PER_TICK + 1);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM push_schedules').get()).toEqual({
+      n: 20 - MAX_PER_USER_APP_PER_TICK,
+    });
   });
 });

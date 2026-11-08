@@ -23,6 +23,35 @@ const MAX_BODY_BYTES = 2_000_000;
 const MAX_MESSAGES = 300;
 const MAX_NAME_LENGTH = 200;
 const MAX_URL_LENGTH = 2048;
+/** Per user, so one account cannot grow the shared D1 (#569). */
+const MAX_SESSIONS_PER_USER = 200;
+const MAX_TOTAL_BYTES_PER_USER = 100_000_000;
+
+const byteLength = (s: string) => new TextEncoder().encode(s).length;
+
+/**
+ * Whether the user's other sessions leave room for `newBytes` more (and, for a
+ * new session, one more row). Returns the error response, or null if it fits.
+ */
+async function overQuota(
+  c: { env: Env; json: (b: unknown, s: 413 | 429) => Response },
+  userId: string,
+  sessionId: string,
+  isNew: boolean,
+  newBytes: number,
+): Promise<Response | null> {
+  const used = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(CAST(messages AS BLOB))), 0) AS bytes
+     FROM agent_sessions WHERE user_id = ? AND session_id != ?`,
+  )
+    .bind(userId, sessionId)
+    .first<{ n: number; bytes: number }>();
+  if (isNew && (used?.n ?? 0) >= MAX_SESSIONS_PER_USER)
+    return c.json({ error: `session limit reached (${MAX_SESSIONS_PER_USER})` }, 429);
+  if ((used?.bytes ?? 0) + newBytes > MAX_TOTAL_BYTES_PER_USER)
+    return c.json({ error: 'stored session data limit reached; delete old sessions' }, 413);
+  return null;
+}
 
 // ── List sessions ───────────────────────────────────────────────
 
@@ -118,7 +147,8 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
   const sessionId = c.req.param('id')!;
   // Same ceiling as /messages below; this route used to take any size (#491).
   const raw = await c.req.text();
-  if (raw.length > MAX_BODY_BYTES) return c.json({ error: 'body too large (max 2MB)' }, 413);
+  const rawBytes = byteLength(raw);
+  if (rawBytes > MAX_BODY_BYTES) return c.json({ error: 'body too large (max 2MB)' }, 413);
   let body: {
     name?: unknown;
     appId?: unknown;
@@ -169,6 +199,9 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
     return c.json({ error: 'session belongs to another user' }, 403);
   }
 
+  const full = await overQuota(c, user.id, sessionId, !existing, rawBytes);
+  if (full) return full;
+
   const now = Date.now();
 
   // Bind null for any omitted field so partial PUTs preserve the prior value.
@@ -218,7 +251,10 @@ agentSessionRoutes.put('/agent/sessions/:id/messages', async (c) => {
 
   const messages = Array.isArray(body.messages) ? body.messages.slice(-MAX_MESSAGES) : [];
   const json = JSON.stringify(messages);
-  if (json.length > MAX_BODY_BYTES) return c.json({ error: 'messages too large (max 2MB)' }, 413);
+  const bytes = byteLength(json);
+  if (bytes > MAX_BODY_BYTES) return c.json({ error: 'messages too large (max 2MB)' }, 413);
+  const full = await overQuota(c, user.id, sessionId, false, bytes);
+  if (full) return full;
 
   await c.env.DB.prepare(
     `UPDATE agent_sessions SET messages = ?, updated_at = ? WHERE session_id = ? AND user_id = ?`,

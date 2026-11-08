@@ -214,8 +214,29 @@ describe.skipIf(!hasSqlite)('log ingest bounds against real SQLite (#490)', () =
         e,
       );
     const rows = () => (db.prepare('SELECT COUNT(*) AS n FROM app_logs').get() as { n: number }).n;
-    return { db, post, rows };
+    return { db, d1, e, post, rows };
   }
+
+  it('the latest build is the last one received, not the one with the highest client ts (#575)', async () => {
+    const { db, e, post } = setup();
+    db.prepare("INSERT INTO apps (id, owner_login, created_at) VALUES ('mine', 'alice', 1)").run();
+    const entry = (ts: number, v: string) => ({
+      ts,
+      level: 'info',
+      category: 'sdk',
+      message: 'boot',
+      build: { v },
+    });
+    await post('mine', [entry(9_999_999_999_999, 'clock-ahead')]);
+    await post('mine', [entry(1000, 'newest')]);
+    const res = await app.request(
+      '/v1/apps/mine/logs/build',
+      { headers: { Authorization: await authHeader('u1') } },
+      e,
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { build: { v: string } }).build.v).toBe('newest');
+  });
   const ok = (i = 0) => ({ ts: 1000 + i, level: 'info', category: 'app', message: `m${i}` });
 
   it('404s for an app that does not exist and stores nothing', async () => {

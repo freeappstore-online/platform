@@ -315,6 +315,16 @@ pushRoutes.put('/apps/:appId/push/schedules/:reminderId', async (c) => {
       }
     }
 
+    // A reminder with no device to reach only occupies a cron slot (#573).
+    const device = await c.env.DB.prepare(
+      'SELECT 1 FROM push_subscriptions WHERE app_id = ? AND user_id = ? LIMIT 1',
+    )
+      .bind(appId, user.id)
+      .first();
+    if (!device) {
+      return c.json({ error: 'subscribe this device to push before scheduling a reminder' }, 409);
+    }
+
     const usage = await c.env.DB.prepare(
       `SELECT COUNT(*) AS n,
          COALESCE(SUM(CASE WHEN reminder_id = ? THEN 1 ELSE 0 END), 0) AS mine

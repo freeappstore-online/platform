@@ -53,13 +53,13 @@ describe('runAudit', () => {
     (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => {
       calls.push(url);
       // First two calls: registries (apps + games).
-      if (/freeappstore-online\/freeappstore.*registry\.json/.test(url)) {
+      if (/freeappstore-online\/platform.*registry\.json/.test(url)) {
         return new Response(
           JSON.stringify({ apps: [{ id: 'tip', appUrl: 'https://tip.example' }] }),
           { status: 200 },
         );
       }
-      if (/freegamestore-online\/freegamestore.*registry\.json/.test(url)) {
+      if (/freegamestore-online\/platform.*registry\.json/.test(url)) {
         return new Response(
           JSON.stringify({ games: [{ id: 'asteroids', appUrl: 'https://asteroids.example' }] }),
           { status: 200 },
@@ -72,8 +72,16 @@ describe('runAudit', () => {
     const captures: Captured[] = [];
     const r = await runAudit(fakeDB(captures));
     // 2 registry fetches + each app at least 1 origin fetch attempt.
-    expect(calls.some((u) => u.includes('/freeappstore/main/registry.json'))).toBe(true);
-    expect(calls.some((u) => u.includes('/freegamestore/main/registry.json'))).toBe(true);
+    expect(
+      calls.some((u) =>
+        u.includes('/freeappstore-online/platform/main/sites/storefront/registry.json'),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some((u) =>
+        u.includes('/freegamestore-online/platform/main/sites/freegamestore/registry.json'),
+      ),
+    ).toBe(true);
     expect(r.scanned).toBe(2);
     expect(r.failed).toBe(2); // each unreachable → 1 fail check
   });
@@ -100,7 +108,7 @@ describe('runAudit', () => {
     // Confirm batch SQL is the upsert pattern.
     expect(captures.length).toBeGreaterThan(0);
     expect(captures[0]!.sql).toMatch(/INSERT INTO audit_results/);
-    expect(captures[0]!.sql).toMatch(/ON CONFLICT/);
+    expect(captures[0]!.sql).toMatch(/ON CONFLICT\(app_id, store, check_name\)/);
   });
 
   it('preserves store column for app vs game', async () => {

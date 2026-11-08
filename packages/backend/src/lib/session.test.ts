@@ -17,6 +17,13 @@ describe('session HMAC roundtrip', () => {
     expect(payload?.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
+  it('round-trips non-ASCII payload text through the UTF-8 decode (#575)', async () => {
+    const token = await signPayload({ login: 'José 漢字', n: 1 }, KEY);
+    expect(await verifyPayload<{ login: string }>(token, KEY)).toMatchObject({
+      login: 'José 漢字',
+    });
+  });
+
   it('stamps iss=fas and refuses a token with another issuer (#463)', async () => {
     const payload = await verifySession(await signSession('gh:42', KEY, { aud: 'chess' }), KEY);
     expect(payload?.iss).toBe('fas');

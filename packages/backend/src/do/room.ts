@@ -5,6 +5,10 @@ const MAX_PEERS = 32;
 const MAX_MESSAGE_BYTES = 4 * 1024;
 const MAX_MSGS_PER_SEC = 100;
 const IDLE_EVICT_MS = 24 * 60 * 60 * 1000;
+/** Sockets one user may hold in a room (tabs, devices); a ticket is reusable for 30s (#569). */
+const MAX_SOCKETS_PER_UID = 4;
+/** Idle eviction is a 24h window, so a minute of staleness in the stored stamp is harmless. */
+const ACTIVITY_PERSIST_MS = 60 * 1000;
 
 /** Wire size in bytes. A string's .length counts UTF-16 units, not UTF-8 bytes. */
 export function messageBytes(data: string | ArrayBuffer): number {
@@ -26,6 +30,7 @@ interface PublicPeer {
 export class Room {
   private peers = new Map<WebSocket, Peer>();
   private lastActivity = Date.now();
+  private lastPersisted = 0;
 
   constructor(
     private readonly state: DurableObjectState,
@@ -50,6 +55,11 @@ export class Room {
     const url = new URL(request.url);
     const uid = url.searchParams.get('uid') ?? 'anon';
     const login = url.searchParams.get('login') ?? uid;
+    let held = 0;
+    for (const p of this.peers.values()) if (p.uid === uid) held++;
+    if (held >= MAX_SOCKETS_PER_UID) {
+      return new Response('too many connections', { status: 429 });
+    }
 
     // Per the Cloudflare WebSocketPair spec, pair[0] is the client side
     // and pair[1] is the server side. Don't rely on Object.values order.
@@ -68,12 +78,14 @@ export class Room {
     this.broadcastPeers();
 
     server.addEventListener('message', (ev) => {
-      this.lastActivity = Date.now();
-      void this.state.storage.put('lastActivity', this.lastActivity);
-
       if (!consume(peer.rateLimit, Date.now(), MAX_MSGS_PER_SEC)) {
         server.send(JSON.stringify({ kind: 'error', error: 'rate_limited' }));
         return;
+      }
+      this.lastActivity = Date.now();
+      if (this.lastActivity - this.lastPersisted >= ACTIVITY_PERSIST_MS) {
+        this.lastPersisted = this.lastActivity;
+        void this.state.storage.put('lastActivity', this.lastActivity);
       }
 
       const data = ev.data;

@@ -69,9 +69,10 @@ describe.skipIf(!hasSqlite)('caps under concurrency (#277)', () => {
   it('documents: 20 parallel creates at 9999/10000, exactly one lands', async () => {
     const { db, d1, auth, now } = await setup();
     const ins = db.prepare(
-      "INSERT INTO documents (app_id, collection, id, data, owner_id, created_at, updated_at) VALUES ('timer', 'posts', ?, '{}', 'gh:1', ?, ?)",
+      "INSERT INTO documents (app_id, collection, id, data, owner_id, created_at, updated_at) VALUES ('timer', 'posts', ?, '{}', ?, ?, ?)",
     );
-    for (let i = 0; i < 9999; i++) ins.run(`d${i}`, now, now);
+    // Spread over owners: the per-user cap (#569) is not what this test is about.
+    for (let i = 0; i < 9999; i++) ins.run(`d${i}`, `other-${i % 10}`, now, now);
     const statuses = await race(
       d1,
       /SELECT COUNT\(\*\) AS cnt FROM documents/,

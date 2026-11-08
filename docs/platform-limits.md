@@ -29,6 +29,8 @@ Server-enforced quotas for the free tier. These are deliberately conservative --
 | Limit | Value |
 |-------|-------|
 | Documents per collection | 10,000 |
+| Documents per user per collection | 5,000 (`413`) |
+| Distinct collections per app | 200 (`413` when a first document would create one more) |
 | Document size | 64KB |
 
 ## Realtime rooms (`fas.rooms`)
@@ -36,6 +38,7 @@ Server-enforced quotas for the free tier. These are deliberately conservative --
 | Limit | Value | On breach |
 |-------|-------|-----------|
 | Peers per room | 32 | `503 room full` |
+| Sockets per user per room | 4 | `429` |
 | Messages per peer per second | 100 | Excess dropped |
 | Message size | 4KB | Message dropped |
 | Active rooms per app | 64 (a room stops counting after 24h without a join) | `429` for a new room |
@@ -64,6 +67,22 @@ AI provider hosts are blocked from app secrets -- use the user key vault.
 | Keys per user | 1 per provider |
 | User-key proxy requests | 1,000/day per user across all apps |
 | Key size | 500 chars |
+
+## VibeCode sessions (creator console)
+
+| Limit | Value | On breach |
+|-------|-------|-----------|
+| Sessions per user | 200 | `429` for a new session |
+| Stored message data per user | 100 MB (bytes, not characters) | `413` |
+| Body of one session write | 2 MB (bytes) | `413` |
+
+## Data rooms
+
+| Limit | Value |
+|-------|-------|
+| Rooms owned per user per app | 100 |
+| Distinct collections per room | 50 |
+| Documents per collection | 10,000 |
 
 ## Shared infrastructure
 
@@ -94,6 +113,8 @@ KV and document data share the platform D1 database. Its capacity is not a dedic
 | Request body (`POST` / `DELETE /v1/apps/:appId/push/subscriptions`) | 4 KB | `413` |
 | Endpoint URL length | 2,048 chars | `400` |
 | Reminder schedules per user per app (`PUT /v1/apps/:appId/push/schedules/:reminderId`) | 20 | `413` |
+| Reminder needs a registered device for the user and app | required | `409` |
+| Due reminders delivered per user per app per cron tick | 5 (the rest wait for later ticks) | deferred |
 | One-shot reminder lead time | up to 1 year | `400` |
 | Repeat interval (`every`) | 1 to 365 days | `400` |
 

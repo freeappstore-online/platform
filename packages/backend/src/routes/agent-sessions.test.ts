@@ -265,7 +265,7 @@ describe.skipIf(!hasSqlite)('PUT /v1/agent/sessions/:id validation (#491)', () =
       db.prepare('SELECT app_id, name FROM agent_sessions WHERE session_id = ?').get(id) as
         | { app_id: string | null; name: string }
         | undefined;
-    return { put, row };
+    return { put, row, db };
   }
 
   it('lets the owner attach their app, and nobody else', async () => {
@@ -302,4 +302,33 @@ describe.skipIf(!hasSqlite)('PUT /v1/agent/sessions/:id validation (#491)', () =
     expect(res.status).toBe(413);
     expect(row('s1')).toBeUndefined();
   });
+
+  it('counts bytes, not characters, against the 2 MB cap (#569)', async () => {
+    const { put, row } = setup();
+    // 700k three-byte characters: 700k chars but 2.1 MB.
+    const res = await put('gh:1', 's1', { messages: [{ content: '\u20ac'.repeat(700_000) }] });
+    expect(res.status).toBe(413);
+    expect(row('s1')).toBeUndefined();
+  });
+
+  it('caps sessions per user and total stored bytes (#569)', async () => {
+    const { put, row } = setup();
+    for (let i = 0; i < 200; i++)
+      expect((await put('gh:1', `s${i}`, { name: 'n' })).status).toBe(200);
+    expect((await put('gh:1', 'one-too-many', { name: 'n' })).status).toBe(429);
+    expect(row('one-too-many')).toBeUndefined();
+    // Updating an existing session is still fine, and other users are unaffected.
+    expect((await put('gh:1', 's0', { name: 'renamed' })).status).toBe(200);
+    expect((await put('gh:2', 'bobs', { name: 'n' })).status).toBe(200);
+  });
+
+  it('refuses writes once a user stores 100 MB of messages (#569)', async () => {
+    const { put, db } = setup();
+    db.prepare(
+      "INSERT INTO agent_sessions (session_id, user_id, messages, created_at, updated_at) VALUES ('fat', 'gh:1', hex(zeroblob(49500000)), 1, 1)",
+    ).run();
+    const big = [{ content: 'x'.repeat(1_900_000) }];
+    expect((await put('gh:1', 'next', { messages: big })).status).toBe(413);
+    expect((await put('gh:2', 'bobs', { messages: big })).status).toBe(200);
+  }, 30_000);
 });

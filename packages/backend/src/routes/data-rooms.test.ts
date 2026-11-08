@@ -51,6 +51,16 @@ describe.skipIf(!hasSqlite)('durable data room permissions (synthetic identities
     expect((await request('alice', 'missing/data-rooms', 'POST')).status).toBe(404);
   });
 
+  it('caps the distinct collections in a room (#569)', async () => {
+    const { request, room } = await setup();
+    for (let i = 0; i < 50; i++) {
+      expect((await request('alice', `${room}/db/c${i}`, 'POST', '{}')).status).toBe(201);
+    }
+    expect((await request('alice', `${room}/db/c50`, 'POST', '{}')).status).toBe(404);
+    // An existing collection keeps accepting documents.
+    expect((await request('alice', `${room}/db/c0`, 'POST', '{}')).status).toBe(201);
+  });
+
   it('keeps private records unreachable through public collections', async () => {
     const { request, room } = await setup();
     const created = await request('alice', `${room}/db/votes`, 'POST', '{"secret":42}');

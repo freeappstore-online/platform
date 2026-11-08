@@ -26,6 +26,8 @@ const owner =
 
 /** Rooms one user may own in one app (#469). */
 const MAX_ROOMS_PER_USER = 100;
+/** Distinct collection names in one room; names are caller-chosen (#569). */
+const MAX_COLLECTIONS_PER_ROOM = 50;
 
 dataRoomRoutes.post(base, async (c) => {
   const user = await requireAppUser(c, c.req.param('appId'));
@@ -122,7 +124,9 @@ for (const method of ['post', 'put'] as const) {
       method === 'post'
         ? await c.env.DB.prepare(`INSERT INTO data_room_documents (app_id, room_id, collection, id, data)
           SELECT ?, ?, ?, ?, ? WHERE ${access}
-          AND (SELECT COUNT(*) FROM data_room_documents WHERE app_id = ? AND room_id = ? AND collection = ?) < 10000`)
+          AND (SELECT COUNT(*) FROM data_room_documents WHERE app_id = ? AND room_id = ? AND collection = ?) < 10000
+          AND (EXISTS (SELECT 1 FROM data_room_documents WHERE app_id = ? AND room_id = ? AND collection = ?)
+            OR (SELECT COUNT(DISTINCT collection) FROM data_room_documents WHERE app_id = ? AND room_id = ?) < ?)`)
             .bind(
               appId,
               roomId,
@@ -136,6 +140,12 @@ for (const method of ['post', 'put'] as const) {
               appId,
               roomId,
               collection,
+              appId,
+              roomId,
+              collection,
+              appId,
+              roomId,
+              MAX_COLLECTIONS_PER_ROOM,
             )
             .run()
         : await c.env.DB.prepare(`UPDATE data_room_documents SET data = ?

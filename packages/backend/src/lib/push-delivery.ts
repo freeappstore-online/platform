@@ -28,6 +28,12 @@ import {
 export const BATCH_SIZE = 50;
 /** Hard cap per tick, so one tick stays well inside the Worker's CPU budget. */
 export const MAX_PER_TICK = 500;
+/**
+ * Due reminders one (app, user) gets per tick. The per-tick cap is shared, so
+ * without this a few accounts with many reminders starve everyone else (#573);
+ * what is left over is picked up on later ticks.
+ */
+export const MAX_PER_USER_APP_PER_TICK = 5;
 /** Pushes in flight at once. */
 export const CONCURRENCY = 6;
 /** Consecutive failures after which a device's subscription is dropped. */
@@ -122,17 +128,21 @@ export async function runPushDelivery(env: Env, deps: DeliveryDeps = {}): Promis
     return auth;
   };
 
-  while (totals.due < MAX_PER_TICK) {
-    const { results } = await env.DB.prepare(
-      `SELECT id, app_id, user_id, next_at, occurrence_at, rule, tz, quiet_start, quiet_end, attempts
-       FROM push_schedules WHERE next_at <= ? ORDER BY next_at LIMIT ?`,
-    )
-      .bind(now, Math.min(BATCH_SIZE, MAX_PER_TICK - totals.due))
-      .all<ScheduleRow>();
-    const due = results ?? [];
-    if (due.length === 0) break;
-    totals.due += due.length;
-    await mapLimit(due, CONCURRENCY, (s) =>
+  // Oldest first, but at most MAX_PER_USER_APP_PER_TICK per (app, user).
+  const { results } = await env.DB.prepare(
+    `SELECT id, app_id, user_id, next_at, occurrence_at, rule, tz, quiet_start, quiet_end, attempts
+     FROM (
+       SELECT *, ROW_NUMBER() OVER (PARTITION BY app_id, user_id ORDER BY next_at) AS rn
+       FROM push_schedules WHERE next_at <= ?
+     ) WHERE rn <= ? ORDER BY next_at LIMIT ?`,
+  )
+    .bind(now, MAX_PER_USER_APP_PER_TICK, MAX_PER_TICK)
+    .all<ScheduleRow>();
+  const due = results ?? [];
+  for (let i = 0; i < due.length; i += BATCH_SIZE) {
+    const batch = due.slice(i, i + BATCH_SIZE);
+    totals.due += batch.length;
+    await mapLimit(batch, CONCURRENCY, (s) =>
       deliverOne(env, s, now, totals, send, pub, priv, authFor),
     );
   }

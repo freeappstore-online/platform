@@ -38,8 +38,9 @@ interface RegistryItem {
 }
 
 const REGISTRY_URLS = {
-  apps: 'https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/registry.json',
-  games: 'https://raw.githubusercontent.com/freegamestore-online/freegamestore/main/registry.json',
+  apps: 'https://raw.githubusercontent.com/freeappstore-online/platform/main/sites/storefront/registry.json',
+  games:
+    'https://raw.githubusercontent.com/freegamestore-online/platform/main/sites/freegamestore/registry.json',
 } as const;
 
 // CF free-tier cap is 50 subrequests per invocation, and redirects
@@ -133,17 +134,16 @@ async function persistResults(
   db: D1Database,
   reports: Array<{ store: 'apps' | 'games'; report: LiveAuditReport }>,
 ): Promise<void> {
-  // Upsert each (app_id, check_name) row. D1 lacks a multi-statement
+  // Upsert each (app_id, store, check_name) row. D1 lacks a multi-statement
   // transaction wrapper at runtime; we use INSERT ... ON CONFLICT DO
   // UPDATE on the composite primary key.
   const stmt = db.prepare(
     `INSERT INTO audit_results (app_id, store, check_name, status, detail, checked_at)
      VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(app_id, check_name) DO UPDATE SET
+     ON CONFLICT(app_id, store, check_name) DO UPDATE SET
        status = excluded.status,
        detail = excluded.detail,
-       checked_at = excluded.checked_at,
-       store = excluded.store`,
+       checked_at = excluded.checked_at`,
   );
   const batch: D1PreparedStatement[] = [];
   for (const { store, report } of reports) {

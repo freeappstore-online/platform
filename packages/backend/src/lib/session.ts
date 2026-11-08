@@ -149,7 +149,8 @@ export function b64urlBytes(bytes: Uint8Array): string {
 
 function b64urlDecode(s: string): string {
   const padded = s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4);
-  return atob(padded);
+  // The payload was UTF-8 encoded; atob alone yields Latin-1 and garbles non-ASCII.
+  return new TextDecoder().decode(Uint8Array.from(atob(padded), (ch) => ch.charCodeAt(0)));
 }
 
 export function timingSafeEqual(a: string, b: string): boolean {
