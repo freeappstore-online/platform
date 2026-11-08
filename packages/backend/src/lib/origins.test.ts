@@ -57,6 +57,16 @@ describe('isAllowedReturnTo binds return_to to the app id (#495)', () => {
     expect(isAllowedReturnTo('https://mcp.freegamestore.online/', 'mcp')).toBe(false);
   });
 
+  it('pins first-party ids to their expected paths (#576)', () => {
+    expect(isAllowedReturnTo('https://freeappstore.online/', 'console')).toBe(false);
+    expect(isAllowedReturnTo('https://freeappstore.online/application', 'console')).toBe(false);
+    expect(isAllowedReturnTo('https://mcp.freeappstore.online/mcp', 'mcp')).toBe(false);
+    expect(isAllowedReturnTo('https://freeappstore.online/docs', 'store')).toBe(false);
+    expect(isAllowedReturnTo('https://freeappstore.online/docs/api.html', 'store')).toBe(false);
+    expect(isAllowedReturnTo('https://freeappstore.online/guidelines.html', 'store')).toBe(false);
+    expect(isAllowedReturnTo('https://freeappstore.online/docsify', 'store')).toBe(true);
+  });
+
   it('pins keys to the key-management page itself', () => {
     expect(isAllowedReturnTo('https://api.freeappstore.online/v1/keys', 'keys')).toBe(true);
     expect(

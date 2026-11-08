@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
 import { signPayload, verifySession } from '../lib/session.js';
 import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
@@ -41,6 +41,7 @@ describe('POST /v1/auth/email/start daily caps (#472)', () => {
   beforeEach(() => {
     emailSend = vi.fn().mockResolvedValue({ messageId: 'm' });
   });
+  afterEach(() => vi.useRealTimers());
 
   /** A D1 whose usage counter is real, so the cap is observable. */
   function countingDB(counts: Map<string, number>): D1Database {
@@ -69,31 +70,65 @@ describe('POST /v1/auth/email/start daily caps (#472)', () => {
     } as unknown as D1Database;
   }
 
-  it('sends at most 10 links a day to one address, however many isolates it comes from', async () => {
+  async function start(env: Env, ip: string, i: number, email = 'victim@example.com') {
+    // Step past the 60 s per-isolate cooldown, as a request on another isolate would.
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 7, 12, 0, 0) + i * 61_000));
+    return app.request(
+      '/v1/auth/email/start',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': ip },
+        body: JSON.stringify({
+          email,
+          appId: 'demo',
+          returnTo: VALID_RETURN_TO,
+        }),
+      },
+      env,
+    );
+  }
+
+  it('sends at most 10 links a day to one address from one IP', async () => {
     const counts = new Map<string, number>();
     const env = makeEnv({}, countingDB(counts));
     vi.useFakeTimers({ toFake: ['Date'] });
-    for (let i = 0; i < 12; i++) {
-      // Step past the 60 s per-isolate cooldown, as a request on another isolate would.
-      vi.setSystemTime(new Date(Date.UTC(2026, 10, 7, 12, 0, 0) + i * 61_000));
-      const res = await app.request(
-        '/v1/auth/email/start',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'cf-connecting-ip': `1.1.1.${i}` },
-          body: JSON.stringify({
-            email: 'victim@example.com',
-            appId: 'demo',
-            returnTo: VALID_RETURN_TO,
-          }),
-        },
-        env,
-      );
-      expect(res.status).toBe(200);
-    }
+    for (let i = 0; i < 12; i++) expect((await start(env, '1.1.1.1', i)).status).toBe(200);
     vi.useRealTimers();
     expect(emailSend).toHaveBeenCalledTimes(10);
     expect([...counts.keys()].every((k) => !k.includes('victim'))).toBe(true);
+  });
+
+  it('does not let one IP use up the address allowance of another (#570)', async () => {
+    const counts = new Map<string, number>();
+    const env = makeEnv({}, countingDB(counts));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    for (let i = 0; i < 10; i++) await start(env, '6.6.6.6', i, 'b@example.com');
+    expect(emailSend).toHaveBeenCalledTimes(10);
+    await start(env, '1.1.1.1', 10, 'b@example.com');
+    vi.useRealTimers();
+    expect(emailSend).toHaveBeenCalledTimes(11);
+  });
+
+  it('bounds one address across IPs with an absolute ceiling', async () => {
+    const counts = new Map<string, number>();
+    const env = makeEnv({}, countingDB(counts));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    for (let i = 0; i < 55; i++) await start(env, `1.1.${i}.1`, i, 'c@example.com');
+    vi.useRealTimers();
+    expect(emailSend).toHaveBeenCalledTimes(50);
+  });
+
+  it('does not count a failed send against the caps (#570)', async () => {
+    const counts = new Map<string, number>();
+    const env = makeEnv({}, countingDB(counts));
+    emailSend.mockRejectedValue(new Error('down'));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    for (let i = 0; i < 12; i++)
+      expect((await start(env, '1.1.1.1', i, 'd@example.com')).status).toBe(502);
+    emailSend.mockResolvedValue({ messageId: 'm' });
+    expect((await start(env, '1.1.1.1', 13, 'd@example.com')).status).toBe(200);
+    vi.useRealTimers();
+    expect(emailSend).toHaveBeenCalledTimes(13);
   });
 });
 

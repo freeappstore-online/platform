@@ -57,13 +57,19 @@ const APP_ORIGIN_EXCEPTIONS: Record<string, string[]> = {
 const FIRST_PARTY_RETURNS: Record<string, (url: URL) => boolean> = {
   // The console is served at freeappstore.online/app/ and at its own host.
   console: (u) =>
-    u.origin === 'https://freeappstore.online' ||
+    (u.origin === 'https://freeappstore.online' &&
+      (u.pathname === '/app' || u.pathname.startsWith('/app/'))) ||
     u.origin === 'https://console.freeappstore.online',
-  store: (u) => u.origin === 'https://freeappstore.online',
+  // Any storefront page except the ones that redirect to docs.freeappstore.online
+  // (sites/storefront/_redirects), which would carry the URL fragment there.
+  store: (u) =>
+    u.origin === 'https://freeappstore.online' &&
+    !/^\/(docs|guidelines)(\.html|\/|$)/.test(u.pathname),
   'fas-admin': (u) => u.origin === 'https://admin.freeappstore.online',
   // The key-management page and nothing else on the API origin.
   keys: (u) => u.origin === 'https://api.freeappstore.online' && u.pathname === '/v1/keys',
-  mcp: (u) => u.origin === 'https://mcp.freeappstore.online',
+  // The OAuth callback and nothing else (workers/mcp/src/auth-handler.ts).
+  mcp: (u) => u.origin === 'https://mcp.freeappstore.online' && u.pathname === '/callback',
 };
 
 function isLocalhost(url: URL): boolean {

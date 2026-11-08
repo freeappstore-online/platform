@@ -1,4 +1,4 @@
-import { Apple, decodeIdToken, Google, generateCodeVerifier, generateState } from 'arctic';
+import { Apple, decodeIdToken, Google } from 'arctic';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import {
@@ -11,7 +11,7 @@ import {
 import { deliverSession, exchangeAuthCode, isResponseMode } from '../lib/deliver-session.js';
 import { escapeHtml, isLikelyEmail, normalizeEmail, sendEmail } from '../lib/email.js';
 import { isAllowedReturnTo, sessionAudience } from '../lib/origins.js';
-import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
+import { d1UsageStore, dayKey } from '../lib/proxy-rate-limit.js';
 import {
   b64urlBytes,
   newAccountSessionMark,
@@ -37,10 +37,6 @@ interface OAuthState {
   nonce: string;
   bh: string;
   exp: number;
-}
-
-interface GoogleOAuthState extends OAuthState {
-  codeVerifier: string;
 }
 
 /**
@@ -87,7 +83,11 @@ const MAX_PENDING_LINK_COOKIES = 5;
 // D1 so they hold across isolates and colos (#472). Stops an unauthenticated
 // caller from email-bombing a victim address / burning the email quota.
 const EMAIL_SEND_COOLDOWN_MS = 60_000;
-const MAGIC_LINKS_PER_ADDRESS_PER_DAY = 10;
+// Counted only after a send succeeded, per address+IP so a third party cannot
+// use up a victim's allowance from another IP (#570); the absolute per-address
+// ceiling stays higher to still bound mail to one inbox.
+const MAGIC_LINKS_PER_ADDRESS_PER_IP_PER_DAY = 10;
+const MAGIC_LINKS_PER_ADDRESS_PER_DAY = 50;
 const MAGIC_LINKS_PER_IP_PER_DAY = 100;
 const emailSendMap = new Map<string, number>();
 
@@ -168,7 +168,9 @@ function randomToken(): string {
 async function beginFlow(
   c: Ctx,
   sameSite: 'Lax' | 'None',
-): Promise<{ ok: true; claims: OAuthState; cookie: string } | { ok: false; res: Response }> {
+): Promise<
+  { ok: true; claims: OAuthState; cookie: string; secret: string } | { ok: false; res: Response }
+> {
   const appId = c.req.query('app_id') ?? '';
   const returnTo = c.req.query('return_to') ?? '';
   const responseMode = c.req.query('response_mode');
@@ -200,8 +202,18 @@ async function beginFlow(
   return {
     ok: true,
     claims,
+    secret,
     cookie: flowCookie(c.req.url, nonce, secret, sameSite, STATE_TTL_SECONDS),
   };
+}
+
+/**
+ * Google's PKCE verifier, derived from the browser-bound flow secret (which
+ * lives only in the HttpOnly cookie) so it never travels in the signed,
+ * readable state.
+ */
+function googleCodeVerifier(secret: string): Promise<string> {
+  return sha256Hex(`pkce:${secret}`);
 }
 
 /** Redirect to the provider with the flow cookie riding along. */
@@ -351,15 +363,9 @@ authRoutes.get('/auth/google/start', async (c) => {
   const redirectUri = new URL('/v1/auth/google/callback', c.req.url).toString();
   const google = new Google(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, redirectUri);
 
-  const _state = generateState();
-  const codeVerifier = generateCodeVerifier();
+  const signedState = await signPayload<OAuthState>(flow.claims, c.env.SESSION_SIGNING_KEY);
 
-  const signedState = await signPayload<GoogleOAuthState>(
-    { ...flow.claims, codeVerifier },
-    c.env.SESSION_SIGNING_KEY,
-  );
-
-  const url = google.createAuthorizationURL(signedState, codeVerifier, [
+  const url = google.createAuthorizationURL(signedState, await googleCodeVerifier(flow.secret), [
     'openid',
     'profile',
     'email',
@@ -372,7 +378,7 @@ authRoutes.get('/auth/google/callback', async (c) => {
   const stateRaw = c.req.query('state');
   if (!code || !stateRaw) return c.text('missing code or state', 400);
 
-  const flow = await verifyFlow<GoogleOAuthState>(c, stateRaw);
+  const flow = await verifyFlow<OAuthState>(c, stateRaw);
   if (!flow.ok) return flow.res;
   const { state } = flow;
 
@@ -384,7 +390,9 @@ authRoutes.get('/auth/google/callback', async (c) => {
   const google = new Google(c.env.GOOGLE_CLIENT_ID, c.env.GOOGLE_CLIENT_SECRET, redirectUri);
 
   try {
-    const tokens = await google.validateAuthorizationCode(code, state.codeVerifier);
+    // verifyFlow already required this browser's flow cookie, so it is present.
+    const secret = readFlowCookie(c, state.nonce) as string;
+    const tokens = await google.validateAuthorizationCode(code, await googleCodeVerifier(secret));
     const claims = decodeIdToken(tokens.idToken()) as {
       sub: string;
       name?: string;
@@ -604,15 +612,20 @@ authRoutes.post('/auth/email/start', async (c) => {
   if (nowMs - lastSend < EMAIL_SEND_COOLDOWN_MS) {
     return c.json({ ok: true });
   }
-  // Keyed by hash, so no address or IP is stored. Silent on refusal, like the cooldown.
+  // Keyed by hash, so no address or IP is stored. Silent on refusal, like the
+  // cooldown. Checked here, counted only after a successful send (below).
   const usage = d1UsageStore(c.env.DB);
   const ip = c.req.header('cf-connecting-ip') ?? 'unknown';
-  for (const [key, limit] of [
-    [`magic:${await sha256Hex(email)}`, MAGIC_LINKS_PER_ADDRESS_PER_DAY],
-    [`magicip:${await sha256Hex(ip)}`, MAGIC_LINKS_PER_IP_PER_DAY],
-  ] as const) {
-    const r = await checkAndBump(usage, { appId: key, dailyLimit: limit, nowMs, denominator: 1 });
-    if (!r.allowed) return c.json({ ok: true });
+  const day = dayKey(nowMs);
+  const emailHash = await sha256Hex(email);
+  const ipHash = await sha256Hex(ip);
+  const caps = [
+    [`magic:${emailHash}:${ipHash}`, MAGIC_LINKS_PER_ADDRESS_PER_IP_PER_DAY],
+    [`magic:${emailHash}`, MAGIC_LINKS_PER_ADDRESS_PER_DAY],
+    [`magicip:${ipHash}`, MAGIC_LINKS_PER_IP_PER_DAY],
+  ] as const;
+  for (const [key, limit] of caps) {
+    if ((await usage.read(key, day)) >= limit) return c.json({ ok: true });
   }
 
   let cookie: string | undefined;
@@ -664,6 +677,7 @@ This link expires in 15 minutes. If you didn't request it, ignore this email.`,
   // Only throttle after Email Service accepted the message. A failed send must
   // be immediately retryable rather than returning a misleading success.
   emailSendMap.set(email, nowMs);
+  for (const [key] of caps) await usage.bump(key, day, 1);
 
   // 200 regardless of whether the email exists — don't leak account presence.
   if (cookie) c.header('Set-Cookie', cookie);
