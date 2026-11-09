@@ -3203,7 +3203,13 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-09T03:35:11.806Z",
-      "creatorGithub": "vuthanhvannguyen2006-commits"
+      "creatorGithub": "vuthanhvannguyen2006-commits",
+      "permissions": [
+        {
+          "name": "camera",
+          "reason": "Optionally take a photo to attach to a diary entry."
+        }
+      ]
     }
   ]
 }
