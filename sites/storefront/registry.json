@@ -3201,9 +3201,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-09T03:35:11.806Z",
-      "creatorGithub": "vuthanhvannguyen2006-commits"
+      "creatorGithub": "vuthanhvannguyen2006-commits",
+      "discoveryDeliveryPending": "5475179b-e058-427d-924e-220f57b52288"
     }
   ]
 }
