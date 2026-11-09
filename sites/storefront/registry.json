@@ -3188,6 +3188,22 @@
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
       "permissions": []
+    },
+    {
+      "id": "symptom-journal",
+      "name": "symptom-journal",
+      "category": "Health & Fitness",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Record symptoms, map pain, and export reports from a private, on-device journal.",
+      "appUrl": "https://symptom-journal.freeappstore.online",
+      "repo": "freeappstore-online/symptom-journal",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-09T03:35:11.806Z",
+      "creatorGithub": "vuthanhvannguyen2006-commits"
     }
   ]
 }
