@@ -3210,22 +3210,6 @@
           "reason": "Optionally take a photo to attach to a diary entry."
         }
       ]
-    },
-    {
-      "id": "e2e-canary-mwadfq7sp1d6",
-      "name": "e2e-canary-mwadfq7sp1d6",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mwadfq7sp1d6.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mwadfq7sp1d6",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
-      "discoveryRequestedAt": "2026-11-10T07:31:26.894Z",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
