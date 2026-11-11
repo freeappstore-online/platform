@@ -3210,6 +3210,22 @@
           "reason": "Optionally take a photo to attach to a diary entry."
         }
       ]
+    },
+    {
+      "id": "libros",
+      "name": "libros",
+      "category": "Learning",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Clásicos de la literatura en español para leer gratis, en línea o sin conexión.",
+      "appUrl": "https://libros.freeappstore.online",
+      "repo": "freeappstore-online/libros",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-11T00:57:50.033Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
