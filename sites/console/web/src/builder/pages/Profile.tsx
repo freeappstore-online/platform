@@ -7,6 +7,9 @@ import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from "../lib/push";
 import { PROVIDERS, getDefaultProvider, getDefaultModel, fetchVaultUsage, type VaultUsage } from "../lib/ai-keys";
 import { useTheme } from "../lib/theme";
 import { useTextSize } from "../lib/text-size";
+import { getSession } from "../lib/api";
+import { AccountSettings } from "../../AccountSettings";
+import { BASE } from "../../SiteNav";
 
 const MODEL_OPTIONS: Record<string, { value: string; label: string }[]> = {
   openrouter: [
@@ -87,6 +90,8 @@ export function Profile() {
       : MODEL_OPTIONS[p]?.[0]?.value || "claude-sonnet-4-6";
   });
   const [usage, setUsage] = useState<VaultUsage | null>(null);
+  // Full reload to the console root, so the console's own session state drops too.
+  const leave = () => { signOut(); window.location.assign(`${BASE}/`); };
 
   useEffect(() => { localStorage.setItem("fas_provider", provider); }, [provider]);
   useEffect(() => { localStorage.setItem("fas_model", model); }, [model]);
@@ -311,10 +316,12 @@ export function Profile() {
         </Section>
       )}
 
+      <AccountSettings getToken={() => getSession()?.token ?? null} onSignedOut={leave} />
+
       {/* Sign out — small, at bottom */}
       <div className="mt-6 pt-4 text-center border-t border-line">
         <button
-          onClick={signOut}
+          onClick={leave}
           className="text-sm bg-transparent border-0 text-muted cursor-pointer font-[inherit]"
         >
           Sign out

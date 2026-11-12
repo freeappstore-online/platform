@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { initApp } from '@freeappstore/sdk'
 import type { User } from '@freeappstore/sdk'
-import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
+import { useAuth } from '@freeappstore/sdk/hooks'
 import { Avatar, SignInButton, ThemeToggle, TextSizeToggle, ProfileMenu, ProfilePage, FasShell } from '@freeappstore/sdk/ui'
 import { AppDetail } from './AppDetail'
 import {
@@ -12,7 +12,7 @@ import {
   formatTimeAgo,
 } from './deploy-status'
 import { PublishForm } from './PublishForm'
-import { useTextSize } from './builder/lib/text-size'
+import { BASE, SiteNav } from './SiteNav'
 
 // Lazy — the builder is a large react-router island; keep it out of the console's
 // initial bundle and load it only when the user opens /build.
@@ -20,12 +20,7 @@ const BuilderApp = lazy(() => import('./builder/BuilderApp'))
 
 const fas = initApp({ appId: 'console' })
 
-// The console is served at console.freeappstore.online/ (no prefix) AND at
-// freeappstore.online/app/ (the storefront proxy strips /app server-side but the
-// browser URL keeps it). Normalize so client-side routing works under either mount.
-const BASE = (location.pathname === '/app' || location.pathname.startsWith('/app/')) ? '/app' : ''
-
-type View = 'dashboard' | 'app-detail' | 'publish' | 'settings' | 'ui-library' | 'builder'
+type View = 'dashboard' | 'app-detail' | 'publish' | 'ui-library' | 'builder'
 
 interface AppEntry {
   id: string
@@ -63,14 +58,19 @@ async function fetchApps(token: string | null): Promise<AppEntry[]> {
 }
 
 function parseRoute(): { view: View; appId: string | null } {
-  const path = location.pathname.slice(BASE.length) || '/'
+  let path = location.pathname.slice(BASE.length) || '/'
+  // Settings is one page, in the builder (#587). The SDK still deep-links apps
+  // to /settings?delete-account=1, so keep the query.
+  if (path === '/settings') {
+    path = '/build/profile'
+    history.replaceState(null, '', BASE + path + location.search)
+  }
   // The builder is a self-contained react-router island; anything under /build
   // is its territory (it manages its own sub-routes).
   if (path === '/build' || path.startsWith('/build/')) return { view: 'builder', appId: null }
   const appMatch = path.match(/^\/apps\/([a-z0-9-]+)(?:\/(.+))?$/)
   if (appMatch) return { view: 'app-detail', appId: appMatch[1] }
   if (path === '/publish') return { view: 'publish', appId: null }
-  if (path === '/settings') return { view: 'settings', appId: null }
   if (path === '/ui-library') return { view: 'ui-library', appId: null }
   return { view: 'dashboard', appId: null }
 }
@@ -82,7 +82,6 @@ function navigate(view: View, appId?: string) {
   let path = '/'
   if (view === 'app-detail' && appId) path = `/apps/${appId}`
   else if (view === 'publish') path = '/publish'
-  else if (view === 'settings') path = '/settings'
   else if (view === 'ui-library') path = '/ui-library'
   else if (view === 'builder') path = '/build'
   history.pushState(null, '', BASE + path)
@@ -160,7 +159,7 @@ export default function App() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col">
-      <Header user={user} view={view} onNavigate={setView} />
+      <SiteNav user={user} onSignIn={() => fas.auth.signIn()} onSignOut={() => fas.auth.signOut()} />
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
         {view === 'dashboard' && (
           <Dashboard user={user} apps={apps} deployStatuses={deployStatuses} onOpenApp={openAppDetail} onPublish={() => setView('publish')} />
@@ -175,7 +174,6 @@ export default function App() {
           />
         )}
         {view === 'publish' && <PublishView getToken={() => fas.auth.token} />}
-        {view === 'settings' && <Settings />}
         {view === 'ui-library' && <UILibraryView />}
       </main>
     </div>
@@ -205,69 +203,6 @@ function Landing() {
         </p>
       </div>
     </div>
-  )
-}
-
-const TABS: { key: View; label: string }[] = [
-  { key: 'dashboard', label: 'Dashboard' },
-  { key: 'builder', label: 'Build' },
-  { key: 'publish', label: 'Publish' },
-  { key: 'settings', label: 'Settings' },
-  { key: 'ui-library', label: 'UI Library' },
-]
-
-function Header({ user, view, onNavigate }: { user: User; view: View; onNavigate: (v: View) => void }) {
-  return (
-    <header className="sticky top-0 z-30">
-      <div className="border-b border-line bg-panel backdrop-blur-xl">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 flex h-11 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => onNavigate('dashboard')}
-              className="display-font text-sm font-bold text-ink tracking-tight no-underline"
-            >
-              Console
-            </button>
-            <nav className="hidden sm:flex items-center gap-2.5 text-xs font-medium text-muted">
-              <a href="https://freeappstore.online" className="hover:text-ink no-underline">Store</a>
-              <a href="https://freeappstore.online/docs" className="hover:text-ink no-underline">Docs</a>
-              <button type="button" onClick={() => onNavigate('builder')} className="hover:text-ink bg-transparent border-0 p-0 cursor-pointer text-xs font-medium text-muted">VibeCode</button>
-            </nav>
-          </div>
-          <div className="flex items-center gap-2.5">
-            <ThemeToggle />
-            {user.avatarUrl && (
-              <img src={user.avatarUrl} alt={user.login} className="h-6 w-6 rounded-full ring-1 ring-[var(--line-strong)]" />
-            )}
-            <button
-              onClick={() => fas.auth.signOut()}
-              className="text-xs font-medium text-muted hover:text-ink"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className="border-b border-line bg-panel">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-          <nav className="flex gap-0 -mb-px overflow-x-auto scrollbar-none">
-            {TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => onNavigate(tab.key)}
-                className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap min-h-[44px] ${
-                  (view === tab.key || (view === 'app-detail' && tab.key === 'dashboard'))
-                    ? 'border-accent text-ink'
-                    : 'border-transparent text-muted hover:text-ink'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
-    </header>
   )
 }
 
@@ -337,7 +272,7 @@ function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user:
         <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Quick Links</h3>
         <div className="grid gap-2 sm:grid-cols-3">
           <QuickLink href="https://freeappstore.online/docs" label="SDK Docs" desc="Auth, KV, rooms, proxy" />
-          <QuickLink href="https://freeappstore.online/docs/ui" label="UI Library" desc="Components & design tokens" />
+          <QuickLink href={`${BASE}/ui-library`} label="UI Library" desc="Live component preview" />
           <QuickLink href="https://freeappstore.online/guidelines" label="Guidelines" desc="Quality & compliance rules" />
         </div>
       </div>
@@ -387,119 +322,6 @@ cd my-app && pnpm install && pnpm dev`}
       </div>
 
       <PublishForm getToken={getToken} />
-    </div>
-  )
-}
-
-/**
- * Account actions need a first-party (console) session (#495): the SDK sends
- * apps here (`?delete-account=1`) instead of deleting from inside the app.
- */
-function AccountSettings() {
-  const [pending, setPending] = useState(false)
-  const [error, setError] = useState('')
-  const fromApp = new URLSearchParams(location.search).get('delete-account') === '1'
-
-  const signOutEverywhere = async () => {
-    // Revokes every session of this account (all apps, all devices); then drop ours.
-    await fetch(`${API_BASE}/auth/logout`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${fas.auth.token ?? ''}` },
-    }).catch(() => {})
-    fas.auth.signOut()
-  }
-
-  const deleteAccount = async () => {
-    if (!confirm('Delete your account? This permanently removes ALL your data across ALL apps. This cannot be undone.')) return
-    if (!confirm('Are you absolutely sure? Last chance.')) return
-    setPending(true)
-    setError('')
-    try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${fas.auth.token ?? ''}` },
-      })
-      if (!res.ok) throw new Error(String(res.status))
-      fas.auth.signOut()
-    } catch {
-      setError('Unable to delete your account. Please try again.')
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <div className="rounded-2xl border border-line bg-panel p-6 space-y-4">
-      <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Account</h3>
-      {fromApp && (
-        <p className="text-sm text-muted">An app sent you here to delete your account. Account deletion happens only from the console.</p>
-      )}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={signOutEverywhere}
-          className="rounded-lg border border-[var(--line-strong)] px-4 py-2 text-sm font-medium text-muted hover:text-ink"
-        >
-          Sign out everywhere
-        </button>
-        <button
-          onClick={deleteAccount}
-          disabled={pending}
-          className="rounded-lg border border-[var(--danger)] px-4 py-2 text-sm font-medium text-[var(--danger)] disabled:opacity-50"
-        >
-          {pending ? 'Deleting…' : 'Delete account'}
-        </button>
-      </div>
-      {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
-    </div>
-  )
-}
-
-function Settings() {
-  const { preference, setPreference } = useTheme()
-  const { size, setSize } = useTextSize()
-  return (
-    <div className="space-y-8">
-      <h2 className="display-font text-2xl font-bold text-ink">Settings</h2>
-      <AccountSettings />
-      <div className="rounded-2xl border border-line bg-panel p-6 space-y-6">
-        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Appearance</h3>
-        <div>
-          <p className="text-xs font-medium text-muted mb-2">Theme</p>
-          <div className="flex gap-2">
-            {(['system', 'light', 'dark'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setPreference(t)}
-                className={`rounded-lg px-4 py-2 text-sm font-medium capitalize ${
-                  preference === t
-                    ? 'bg-accent text-white'
-                    : 'border border-[var(--line-strong)] text-muted hover:text-ink'
-                }`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted mb-2">Text Size</p>
-          <div className="flex gap-2">
-            {([['sm', 'Small'], ['default', 'Default'], ['lg', 'Large']] as const).map(([val, label]) => (
-              <button
-                key={val}
-                onClick={() => setSize(val)}
-                className={`rounded-lg px-4 py-2 text-sm font-medium ${
-                  size === val
-                    ? 'bg-accent text-white'
-                    : 'border border-[var(--line-strong)] text-muted hover:text-ink'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
