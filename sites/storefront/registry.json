@@ -3227,6 +3227,22 @@
       "discoveryRequestedAt": "2026-11-11T00:57:50.033Z",
       "creatorGithub": "serge-ivo",
       "permissions": []
+    },
+    {
+      "id": "chordbook",
+      "name": "chordbook",
+      "category": "Learning",
+      "icon": "🚀",
+      "iconBg": "#f3f4f6",
+      "description": "Your pocket guitar songbook: add chords and lyrics, transpose, build a setlist, and play with autoscroll.",
+      "appUrl": "https://chordbook.freeappstore.online",
+      "repo": "freeappstore-online/chordbook",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-12T09:28:54.759Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
