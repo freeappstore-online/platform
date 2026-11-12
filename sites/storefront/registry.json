@@ -3227,22 +3227,6 @@
       "discoveryRequestedAt": "2026-11-11T00:57:50.033Z",
       "creatorGithub": "serge-ivo",
       "permissions": []
-    },
-    {
-      "id": "e2e-canary-mwd84piblwen",
-      "name": "e2e-canary-mwd84piblwen",
-      "category": "Utilities",
-      "icon": "🚀",
-      "iconBg": "#f3f4f6",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mwd84piblwen.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mwd84piblwen",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
-      "discoveryRequestedAt": "2026-11-12T07:26:11.636Z",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
