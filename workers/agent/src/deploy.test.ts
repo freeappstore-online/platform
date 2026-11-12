@@ -365,6 +365,53 @@ describe("baseline/delta deploy protection", () => {
     }
   });
 
+  it("push_update skips deleting a file main no longer has, and reports a rejected tree (#586)", async () => {
+    const originalFetch = globalThis.fetch;
+    const treeBodies: any[] = [];
+    let treeResponse: object = { sha: "tree-sha" };
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method || "GET";
+      const path = new URL(url).pathname;
+      if (method === "GET" && path.endsWith("/git/ref/heads/main")) return Response.json({ object: { sha: "parent-sha" } });
+      if (method === "GET" && path.endsWith("/git/commits/parent-sha")) return Response.json({ tree: { sha: "base-tree-sha" } });
+      if (method === "GET" && path.endsWith("/git/trees/base-tree-sha"))
+        return Response.json({ tree: [{ path: "web/src/App.tsx", type: "blob", sha: "a" }] });
+      if (method === "POST" && path.endsWith("/git/blobs")) return Response.json({ sha: "blob-sha" });
+      if (method === "POST" && path.endsWith("/git/trees")) {
+        treeBodies.push(JSON.parse(String(init?.body)));
+        return Response.json(treeResponse);
+      }
+      if (method === "POST" && path.endsWith("/git/commits")) return Response.json({ sha: "commit-sha" });
+      if (method === "PATCH" && path.endsWith("/git/refs/heads/main")) return Response.json({ ref: "refs/heads/main" });
+      return Response.json({ message: `Unexpected request: ${method} ${path}` });
+    }) as typeof fetch;
+
+    try {
+      const base = new Map([
+        ["web/src/App.tsx", "v0"],
+        ["web/src/gone.ts", "removed from main outside the session"],
+      ]);
+      const files = new Map([["web/src/App.tsx", "v1"]]);
+
+      const pushed = await pushUpdate("my-app", files, base, "Update app", mockEnv, appsConfig);
+      expect(pushed.ok).toBe(true);
+      expect(treeBodies[0].tree).toEqual([{ path: "web/src/App.tsx", mode: "100644", type: "blob", sha: "blob-sha" }]);
+
+      const onlyGone = await pushUpdate("my-app", new Map([["web/src/App.tsx", "v0"]]), base, "Update app", mockEnv, appsConfig);
+      expect(onlyGone).toMatchObject({ ok: true, skipped: true });
+      expect(treeBodies).toHaveLength(1);
+
+      treeResponse = { message: "GitRPC::BadObjectState" };
+      const rejected = await pushUpdate("my-app", files, base, "Update app", mockEnv, appsConfig);
+      expect(rejected).toEqual({
+        ok: false,
+        message: "Error: failed to create tree for freeappstore-online/my-app: GitRPC::BadObjectState",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   it.each([
     { name: "new repository", existing: false, bootstrapOnly: false, raced: false, emptyRefStatus: 404 },
     { name: "new empty repository with GitHub ref 409", existing: false, bootstrapOnly: false, raced: false, emptyRefStatus: 409 },

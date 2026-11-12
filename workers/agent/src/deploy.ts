@@ -542,6 +542,25 @@ export async function pushUpdate(
   const parentSha = ref.object?.sha;
   if (!parentSha) return { ok: false, message: `Error: could not find HEAD for ${repo}. Is the ${config.noun} deployed?` };
 
+  const parentCommit = await ghApi(`/repos/${repo}/git/commits/${parentSha}`);
+  if (!parentCommit.tree?.sha) return { ok: false, message: `Error: could not read parent commit tree for ${repo}.` };
+
+  // GitHub rejects the whole tree (422 GitRPC::BadObjectState) when it deletes
+  // a path the base tree doesn't have. The baseline can hold such a path when
+  // the repo changed outside this session, so drop deletions already done (#586).
+  if ([...delta.values()].includes(null)) {
+    const parentTree = (await ghApi(`/repos/${repo}/git/trees/${parentCommit.tree.sha}?recursive=1`)) as GhResponse;
+    if (Array.isArray(parentTree.tree) && !parentTree.truncated) {
+      const repoPaths = new Set(parentTree.tree.map((item: TreeItem) => item.path));
+      for (const [path, content] of delta) {
+        if (content === null && !repoPaths.has(path)) delta.delete(path);
+      }
+      if (delta.size === 0) {
+        return { ok: true, skipped: true, message: `No changes to push for ${repo}; the files to delete are already gone from main.` };
+      }
+    }
+  }
+
   let treeItems: TreeItem[];
   try {
     treeItems = await createTreeItems(ghApi, repo, delta);
@@ -549,25 +568,23 @@ export async function pushUpdate(
     return { ok: false, message: `Error: ${e instanceof Error ? e.message : String(e)}` };
   }
 
-  const parentCommit = await ghApi(`/repos/${repo}/git/commits/${parentSha}`);
-  if (!parentCommit.tree?.sha) return { ok: false, message: `Error: could not read parent commit tree for ${repo}.` };
-
   const tree = await ghApi(`/repos/${repo}/git/trees`, "POST", {
     base_tree: parentCommit.tree.sha,
     tree: treeItems,
   });
+  if (!tree.sha) return { ok: false, message: `Error: failed to create tree for ${repo}: ${tree.message || "unknown"}` };
 
   const commit = await ghApi(`/repos/${repo}/git/commits`, "POST", {
     message: commitMessage,
     tree: tree.sha,
     parents: [parentSha],
   });
+  if (!commit.sha) return { ok: false, message: `Error: failed to create commit for ${repo}: ${commit.message || "unknown"}` };
 
   const refUpdate = await ghApi(`/repos/${repo}/git/refs/heads/main`, "PATCH", {
     sha: commit.sha,
   });
   if (!refUpdate.ref) return { ok: false, message: `Error: failed to update ref for ${repo}: ${refUpdate.message || "unknown"}` };
-  if (!commit.sha) return { ok: false, message: `Error: GitHub did not return a commit sha for ${repo}.` };
 
   return {
     ok: true,
