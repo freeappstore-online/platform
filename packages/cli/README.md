@@ -132,7 +132,6 @@ fas publish \
 | `--oneliner <text>` | One-line description shown on the storefront. |
 | `--demo <url>` | Optional demo URL. Pass `""` to clear. |
 | `--yes` | Non-interactive: missing required fields abort instead of prompting. |
-| `--skip-checks` | Skip `fas check` before publish (not recommended). |
 | `--update-workflow` | Replace an existing `.github/workflows/deploy.yml` with the current canonical workflow. Without it a differing file is left untouched and the drift is listed. |
 
 The generated `deploy.yml` is the same one `fas init` writes. It has two jobs: `build` (install, typecheck, tests, build, pinned `@freeappstore/cli` validation, pinned code-health scan — no secrets) and `deploy` (`needs: build`; downloads the build artifact and syncs it to R2 — runs no project code). Every action is pinned to a commit SHA and every `npx` to an exact version.
@@ -287,7 +286,7 @@ Every app and game on the platform shares the same visual language — colors, f
 | `PWA manifest` | `web/public/manifest.json` with `name`, `display`, `start_url`. |
 | `Bundle size` | Initial-load JS under 300 KB gzipped; lazy wasm/workers/dynamic chunks under 25 MB each. |
 
-`fas publish` auto-runs `fas check` and aborts on hard failures (override with `--skip-checks`, admin review will still catch issues).
+`fas publish` auto-runs `fas check` and aborts on hard failures. The platform also checks the built artifact before making a deploy live.
 
 ## How `fas publish` works
 

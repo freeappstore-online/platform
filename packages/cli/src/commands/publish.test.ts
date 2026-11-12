@@ -11,6 +11,7 @@ import {
   ensureDeployWorkflow,
   humanizeProvisionError,
   legacyWorkflowReasons,
+  publishCommand,
   readCrossOriginIsolatedFlag,
   resolveCategory,
   resolveFromFlags,
@@ -19,6 +20,9 @@ import {
 } from './publish.js';
 
 describe('resolveCategory', () => {
+  it('does not expose a compliance bypass flag', () => {
+    expect(publishCommand.options.map((option) => option.long)).not.toContain('--skip-checks');
+  });
   it('matches exact label', () => {
     expect(resolveCategory('Productivity')).toBe('Productivity');
   });

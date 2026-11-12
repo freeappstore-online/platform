@@ -1260,6 +1260,8 @@ ${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
       - name: Install the validator
         working-directory: \${{ runner.temp }}
         run: npm install --prefix fas-validator --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org @freeappstore/cli@${APP_DEPLOY_CLI_VERSION}
+      - name: Fast source compliance check
+        run: '"$RUNNER_TEMP/fas-validator/node_modules/.bin/fas" check'
       - name: Resolve build target
         id: target
         run: '"$RUNNER_TEMP/fas-validator/node_modules/.bin/fas" build-target --app-id "\${GITHUB_REPOSITORY##*/}" --github-output'

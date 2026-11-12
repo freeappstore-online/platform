@@ -59,7 +59,7 @@ Without an explicit ID, legacy package names (including `@app-id/root`) supply t
 Use the provisioned ID, not `my-app` or an unresolved template placeholder.
 
 `fas doctor` includes source build-target diagnostics. `fas publish` validates the target and
-compares its ID with the requested publishing ID even with `--skip-checks`. Before uploading,
+compares its ID with the requested publishing ID. Before uploading,
 run `fas build-target --artifact --app-id <provisioned-id>`. Generated deployment CI resolves
 the build command and upload path from the same configuration with `--github-output`, then
 validates output before R2 upload. Existing custom workflows are preserved: align their build
@@ -131,7 +131,6 @@ fas publish --yes              # non-interactive (CI)
 | `--oneliner <text>` | One-line description |
 | `--demo <url>` | Demo URL |
 | `--yes` | Non-interactive mode |
-| `--skip-checks` | Skip compliance checks (not recommended) |
 | `--update-workflow` | Replace an existing `.github/workflows/deploy.yml` with the current canonical workflow; without it a differing file is left untouched and the drift is listed |
 
 ## `fas admin transfer-owner <app>`

@@ -992,7 +992,7 @@ npm i -g @freeappstore/cli
 | `fas init <id>` | Scaffold from template (`--template standalone\|connected`) |
 | `fas check` | Run compliance checks (brand, bundle size, PWA, tracking, license) |
 | `fas screencheck` | Build + viewport test in real Chromium (portrait + landscape) |
-| `fas publish` | Provision repo + hosting + DNS + store listing. Flags: `--name`, `--category`, `--type`, `--oneliner`, `--demo`, `--yes`, `--skip-checks` |
+| `fas publish` | Provision repo + hosting + DNS + store listing. Flags: `--name`, `--category`, `--type`, `--oneliner`, `--demo`, `--yes` |
 | `fas list` | List your published apps (`--json` for machine output) |
 | `fas doctor` | Health check: Node, git, pnpm, auth, API reachability |
 

@@ -43,6 +43,10 @@ const PAYMENTS: PaymentSpec[] = [
 const MANIFEST_PAYMENT_KEY = /^(?:payment\w*|serviceworker)$/i;
 const INLINE_MANIFEST_PAYMENT_KEY = /\b(?:payment\w*|serviceworker)\s*:/;
 
+export function matchPaymentsInContent(content: string): string[] {
+  return PAYMENTS.filter((p) => p.patterns.some((re) => re.test(content))).map((p) => p.name);
+}
+
 const SCAN_EXTS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.html', '.json', '.webmanifest']);
 
 // Tests and e2e specs may name the APIs they assert are absent.

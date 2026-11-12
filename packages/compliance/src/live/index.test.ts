@@ -277,7 +277,7 @@ describe('auditLive (integration)', () => {
     expect(r.results[0]!.detail).toMatch(/HTTP 503/);
   });
 
-  it('runs all 5 checks when origin is reachable', async () => {
+  it('scans fetched built JavaScript as well as the live HTML', async () => {
     const html = `
       <html><head>
         <link href="https://fonts.googleapis.com/css2?family=Manrope&family=Fraunces" rel="stylesheet">
@@ -300,19 +300,24 @@ describe('auditLive (integration)', () => {
       if (url.endsWith('.css')) {
         return new Response('body { height: 100svh; }', { status: 200 });
       }
-      // bundle: small size → pass
-      return new Response(new ArrayBuffer(150_000), { status: 200 });
+      return new Response(
+        'gtag("config", "G-123"); adsbygoogle.push({}); new PaymentRequest([]);',
+        { status: 200 },
+      );
     });
     const r = await auditLive({ appId: 'tip', liveUrl: 'https://tip.example' });
     expect(r.reachable).toBe(true);
-    // 7 results: Reachable + tracking + ads + fonts + manifest + bundle + vh.
+    // Reachable + HTML checks + manifest + bundle + artifact content + vh.
     // Reachable is recorded on success too so stale fail rows from
     // earlier runs get overwritten on the next clean pass.
-    expect(r.results).toHaveLength(7);
+    expect(r.results).toHaveLength(10);
     const reachable = r.results.find((c) => c.name === 'Reachable');
     expect(reachable?.status).toBe('pass');
-    const otherStatuses = r.results.filter((c) => c.name !== 'Reachable').map((c) => c.status);
-    expect(otherStatuses).toEqual(['pass', 'pass', 'pass', 'pass', 'pass', 'pass']);
+    expect(r.results.find((c) => c.name === 'No ads (initial bundles)')?.status).toBe('fail');
+    expect(r.results.find((c) => c.name === 'No direct tracking (initial bundles)')?.status).toBe(
+      'fail',
+    );
+    expect(r.results.find((c) => c.name === 'No payments (initial bundles)')?.status).toBe('fail');
   });
 
   it("downgrades subrequest-cap errors from fail → warn (not the app's fault)", async () => {

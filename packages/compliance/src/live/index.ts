@@ -20,6 +20,8 @@
  */
 
 import { matchAdNetworks, NO_ADS_SUGGESTIONS } from '../checks/no-ads.js';
+import { matchPaymentsInContent } from '../checks/no-payments.js';
+import { matchTrackersInCode } from '../checks/no-tracking.js';
 import { INITIAL_LOAD_MAX_GZIP_BYTES } from '../lib/bundle-limits.js';
 import { gzipByteLength } from '../lib/gzip.js';
 import { collectInitialJsRefs, jsAssetFileName } from '../lib/html-initial-js.js';
@@ -131,15 +133,47 @@ export async function auditLive(input: LiveAuditInput): Promise<LiveAuditReport>
   }
 
   // Run all checks in parallel — each is independent.
+  let initialBundles = '';
   const [tracking, ads, fonts, manifest, bundle, vh] = await Promise.all([
     checkNoTrackingLive(html),
     checkNoAdsLive(html),
     checkBrandFontsLive(html),
     checkManifestLive(html, input.liveUrl),
-    checkBundleSizeLive(html, input.liveUrl),
+    checkBundleSizeLive(html, input.liveUrl, (content) => {
+      initialBundles += `\n${content}`;
+    }),
     checkUnsafeVhLive(html, input.liveUrl),
   ]);
-  report.results.push(tracking, ads, fonts, manifest, bundle, vh);
+  const builtAds = matchAdNetworks(initialBundles);
+  const builtTrackers = matchTrackersInCode(initialBundles);
+  const builtPayments = matchPaymentsInContent(initialBundles);
+  report.results.push(
+    tracking,
+    ads,
+    fonts,
+    manifest,
+    bundle,
+    {
+      name: 'No ads (initial bundles)',
+      status: builtAds.length ? 'fail' : 'pass',
+      detail: builtAds.length ? `matched: ${builtAds.join(', ')}` : 'no ad networks detected',
+    },
+    {
+      name: 'No direct tracking (initial bundles)',
+      status: builtTrackers.length ? 'fail' : 'pass',
+      detail: builtTrackers.length
+        ? `matched: ${builtTrackers.join(', ')}`
+        : 'no trackers detected',
+    },
+    {
+      name: 'No payments (initial bundles)',
+      status: builtPayments.length ? 'fail' : 'pass',
+      detail: builtPayments.length
+        ? `matched: ${builtPayments.join(', ')}`
+        : 'no payment code detected',
+    },
+    vh,
+  );
   return report;
 }
 
@@ -250,7 +284,11 @@ export async function checkManifestLive(html: string, liveUrl: string): Promise<
   }
 }
 
-export async function checkBundleSizeLive(html: string, liveUrl: string): Promise<CheckResult> {
+export async function checkBundleSizeLive(
+  html: string,
+  liveUrl: string,
+  onContent?: (content: string) => void,
+): Promise<CheckResult> {
   // Same initial-load graph the source-side check uses: <script src>
   // plus <link rel="modulepreload">. Dynamic chunks are not in the HTML,
   // so a large lazy worker/wasm cannot fail the live 300 KB cap.
@@ -275,6 +313,7 @@ export async function checkBundleSizeLive(html: string, liveUrl: string): Promis
         return { name: 'Bundle size (live)', status: 'fail', detail: `${jsUrl} → ${res.status}` };
       }
       const body = await res.arrayBuffer();
+      onContent?.(new TextDecoder().decode(body));
       // Real gzip via the shared helper — same math the source-side
       // check uses, so live and source verdicts can never disagree on
       // a borderline app.

@@ -176,6 +176,8 @@ jobs:
       - name: Install the validator
         working-directory: ${{ runner.temp }}
         run: npm install --prefix fas-validator --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org @freeappstore/cli@0.4.79
+      - name: Fast source compliance check
+        run: '"$RUNNER_TEMP/fas-validator/node_modules/.bin/fas" check'
       - name: Resolve build target
         id: target
         run: '"$RUNNER_TEMP/fas-validator/node_modules/.bin/fas" build-target --app-id "${GITHUB_REPOSITORY##*/}" --github-output'

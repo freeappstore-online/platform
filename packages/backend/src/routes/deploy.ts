@@ -1,3 +1,4 @@
+import { checkArtifactFiles } from '@freeappstore/compliance/artifact';
 import { Hono } from 'hono';
 import { HttpError } from '../lib/auth.js';
 import { type OidcClaims, verifyGithubOidc } from '../lib/github-oidc.js';
@@ -713,6 +714,19 @@ deployRoutes.post('/deploys/:id/commit', async (c) => {
       409,
       `${missing.length} file(s) missing or incomplete, e.g. ${missing[0]![0]}`,
     );
+
+  // Check staged release bytes before making the route live. This is the
+  // authoritative gate; CLI and workflow checks only provide fast feedback.
+  const failedChecks = new Set<string>();
+  for (const path of Object.keys(files)) {
+    if (META_PATHS.has(path) || !/\.(?:html?|m?js|cjs|json)$/i.test(path)) continue;
+    const object = await bucket.get(`${prefix}${path}`);
+    if (!object) throw new HttpError(409, `artifact file disappeared: ${path}`);
+    const results = checkArtifactFiles(new Map([[path, await new Response(object.body).text()]]));
+    for (const result of results) if (result.status === 'fail') failedChecks.add(result.name);
+    if (failedChecks.size)
+      throw new HttpError(422, `compliance check failed: ${[...failedChecks].join(', ')}`);
+  }
 
   // One transaction: switch the route unless a newer deploy is already live (a
   // slower, older run must not replace it), and record the switch with it.

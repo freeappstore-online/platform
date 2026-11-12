@@ -60,10 +60,6 @@ export const publishCommand = new Command('publish')
   .description(
     'Publish this app. Provisions repo + hosting + DNS automatically. If provisioning fails, it fails loudly with the reason — there is no manual submission fallback.',
   )
-  .option(
-    '--skip-checks',
-    'Skip compliance checks (not recommended — provisioning may still reject the app).',
-  )
   .option('--name <id>', 'App id (lowercase, used as subdomain). Skips the prompt.')
   .option(
     '--category <name>',
@@ -82,7 +78,6 @@ export const publishCommand = new Command('publish')
   )
   .action(
     async (opts: {
-      skipChecks?: boolean;
       name?: string;
       category?: string;
       type?: string;
@@ -130,18 +125,15 @@ export const publishCommand = new Command('publish')
         process.exit(1);
       }
 
-      // Run compliance checks BEFORE prompts so a doomed submission fails
-      // fast. Hard fails block; warnings allow through. Bypass with
-      // --skip-checks if you really need to (admin review will still
-      // catch issues).
-      if (!opts.skipChecks) {
+      // Run compliance checks BEFORE prompts so a doomed submission fails fast.
+      // This is a local fast loop; the deploy API independently checks the built
+      // artifact before it can become live.
+      {
         process.stdout.write('Running compliance checks...\n\n');
         const results = await runChecks(process.cwd());
         const { failed } = renderCheckResults(results);
         if (failed > 0) {
-          process.stdout.write(
-            '\n⚠  Fix the failures above before publishing, or pass --skip-checks to bypass.\n',
-          );
+          process.stdout.write('\n⚠  Fix the failures above before publishing.\n');
           process.exit(1);
         }
         process.stdout.write('\n');

@@ -200,6 +200,16 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     expect([...store.objects.keys()].every((k) => k.startsWith('apps/alpha/'))).toBe(true);
   });
 
+  it('rejects tracking code in the uploaded artifact before route promotion', async () => {
+    const { session, committed } = await deploy('alpha', '101', {
+      'index.html': '<script src="/assets/app.js"></script>',
+      'assets/app.js': 'gtag("config", "G-123");',
+    });
+    expect(committed.status).toBe(422);
+    expect(release('alpha')).toBeNull();
+    expect(session.id).toBeTruthy();
+  });
+
   it('keeps the previous release for rollback and deletes older ones', async () => {
     const ids: string[] = [];
     for (let i = 0; i < 3; i++)
