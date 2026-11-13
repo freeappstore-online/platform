@@ -97,8 +97,9 @@ export function SiteNav({ user, onSignIn, onSignOut }: {
 
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-panel backdrop-blur-xl">
-      <div className="mx-auto flex h-12 max-w-5xl items-center gap-4 px-4 sm:px-6 lg:px-8">
-        <NavLink path="/" className="display-font text-sm font-bold tracking-tight text-ink no-underline">
+      <div className="mx-auto flex h-12 max-w-5xl items-center gap-2 sm:gap-4 px-4 sm:px-6 lg:px-8">
+        {/* Hidden on phones, where the row is full: Apps goes to the same place. */}
+        <NavLink path="/" className="hidden sm:block display-font text-sm font-bold tracking-tight text-ink no-underline">
           Console
         </NavLink>
         <nav className="flex flex-1 items-center gap-1">
@@ -114,7 +115,7 @@ export function SiteNav({ user, onSignIn, onSignOut }: {
             </NavLink>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {EXTERNAL.map((l) => (
             <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer" className="hidden sm:inline text-xs font-medium text-muted hover:text-ink no-underline">
               {l.label}
