@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { pickAppIcon } from '../lib/app-icon.js';
 import { APP_ID_RE, isReservedAppId } from '../lib/apps.js';
 import { HttpError, isAdmin, isAppOwner, requireConsoleUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
@@ -190,8 +191,7 @@ publishRoutes.post('/publish', async (c) => {
       id: body.name,
       name: body.name,
       category: body.category,
-      icon: '🚀',
-      iconBg: '#f3f4f6',
+      ...pickAppIcon(body.name, body.oneliner, body.category),
       description: body.oneliner,
       store,
       type: body.type,
