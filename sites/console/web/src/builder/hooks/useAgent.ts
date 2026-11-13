@@ -67,6 +67,10 @@ export function useAgent() {
   // Set just before loadHistory's setMessages so the D1-sync effect skips that
   // change — loading from the server shouldn't echo straight back to the server.
   const skipNextSyncRef = useRef(false);
+  // The request of the turn this view is following. Cleared on a project
+  // switch: the agent keeps building server-side, but this view stops following
+  // it, so its events can't land in the project now on screen (#589).
+  const streamAbortRef = useRef<AbortController | null>(null);
   // Throttle reloads so visibilitychange + focus (which often both fire on
   // return) don't double-hit the server.
   const lastLoadRef = useRef(0);
@@ -201,6 +205,10 @@ export function useAgent() {
   }, [loadHistory]);
 
   const resetUI = useCallback(() => {
+    streamAbortRef.current?.abort();
+    streamAbortRef.current = null;
+    isStreamingRef.current = false;
+    setIsStreaming(false);
     setMessages(DEFAULT_MSG);
     setQueuedMessages([]);
     setDeployState(null);
@@ -271,12 +279,16 @@ export function useAgent() {
     // start two queued turns during React's state-update window.
     isStreamingRef.current = true;
     setIsStreaming(true);
+    const ctrl = new AbortController();
+    streamAbortRef.current = ctrl;
+    const following = () => streamAbortRef.current === ctrl;
     setMessages((prev) => [...prev, { role: "user", content: message }, { role: "assistant", content: "" }]);
     let assistantText = "";
     let lastEventId: string | null = null;
 
     // Update the LAST assistant message in the array
     const updateAssistant = (content: string) => {
+      if (!following()) return;
       setMessages((prev) => {
         const updated = [...prev];
         for (let i = updated.length - 1; i >= 0; i--) {
@@ -290,6 +302,7 @@ export function useAgent() {
     };
 
     const handleStreamEvent = (evt: AgentStreamEvent) => {
+      if (!following()) return;
       switch (evt.type) {
         case "text":
           assistantText += evt.data;
@@ -372,7 +385,7 @@ export function useAgent() {
     const reconnectLive = async () => {
       const headers: Record<string, string> = { ...agentAuthHeaders() };
       if (lastEventId) headers["Last-Event-ID"] = lastEventId;
-      const res = await fetch(`${AGENT_URL}/session/${sessionId}/live`, { method: "GET", headers });
+      const res = await fetch(`${AGENT_URL}/session/${sessionId}/live`, { method: "GET", headers, signal: ctrl.signal });
       if (!res.ok) throw new Error(`Live reconnect failed (${res.status})`);
       await readAgentStream(res);
     };
@@ -382,6 +395,7 @@ export function useAgent() {
         method: "POST",
         headers: { "Content-Type": "application/json", ...agentAuthHeaders() },
         body: JSON.stringify({ message, aiConfig }),
+        signal: ctrl.signal,
       });
       if (!res.ok) {
         if (res.status === 409) {
@@ -405,6 +419,7 @@ export function useAgent() {
         new Notification("VibeCode", { body: "AI response ready", icon: "/icons/icon-192.png" });
       }
     } catch (err) {
+      if (!following()) return;
       const errMsg = (err as Error).message || String(err);
       const isTransient = errMsg.includes("reset") || errMsg.includes("network") || errMsg.includes("Failed to fetch") || errMsg.includes("aborted") || errMsg.includes("ECONNRESET");
       if (isTransient) {
@@ -414,6 +429,7 @@ export function useAgent() {
           await reconnectLive();
           if (!assistantText) updateAssistant("(No response)");
         } catch {
+          if (!following()) return;
           await loadHistory();
           updateAssistant(`${assistantText}\n\nConnection interrupted. Reopen this project to resume from the saved build state.`);
         }
@@ -421,8 +437,11 @@ export function useAgent() {
         updateAssistant(`Connection error: ${errMsg}`);
       }
     } finally {
-      isStreamingRef.current = false;
-      setIsStreaming(false);
+      if (following()) {
+        streamAbortRef.current = null;
+        isStreamingRef.current = false;
+        setIsStreaming(false);
+      }
     }
   }, [sessionId, subscribePush, projectsMgr, loadHistory]);
 
