@@ -9,7 +9,7 @@ vi.mock("../hooks/useAuth", () => ({ useAuth: () => ({ user: { id: "1", login: "
 vi.mock("../hooks/useSpeech", () => ({ useSpeech: () => ({ supported: false }) }));
 vi.mock("../lib/theme", () => ({ useTheme: () => ({ pref: "dark", set: () => {} }) }));
 vi.mock("../lib/text-size", () => ({ useTextSize: () => ({ size: "default", setSize: () => {} }) }));
-vi.mock("../lib/ai-keys", () => ({ PROVIDERS: [], getDefaultProvider: () => "openai", getDefaultModel: () => "gpt-4o" }));
+vi.mock("../lib/ai-keys", () => ({ PROVIDERS: [], MODEL_OPTIONS: {}, getDefaultProvider: () => "openai", getDefaultModel: () => "gpt-4o" }));
 vi.stubGlobal("window", {});
 
 describe("Profile", () => {

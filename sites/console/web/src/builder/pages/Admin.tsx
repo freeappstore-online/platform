@@ -39,10 +39,6 @@ type Tab = "overview" | "usage" | "apps" | "users" | "sessions" | "creators";
 interface Stats {
   apps: number;
   users: number;
-  creators: number;
-  traffic: {
-    fas: { totals: { requests: number; pageViews: number; visitors: number }; days: { sum?: { requests?: number } }[] } | null;
-  } | null;
 }
 
 interface AdminApp {
@@ -797,8 +793,6 @@ function OverviewTab() {
         setStats({
           apps: Number(data.apps || 0),
           users: Number(data.users || 0),
-          creators: 0,
-          traffic: null,
         }),
       )
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
@@ -808,23 +802,16 @@ function OverviewTab() {
   if (loading) return <p className="text-muted">Loading stats...</p>;
   if (error || !stats) return <AdminAccessError message={error || "No stats returned"} />;
 
-  const fasT = stats.traffic?.fas?.totals;
-
   return (
     <>
       <FailingDeploysPanel />
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+      {/* Only what /v1/admin/stats reports: a hardcoded "Creators 0" and "No
+          traffic data" read as real zeros (#596). Traffic is on the Usage tab. */}
+      <div className="grid grid-cols-2 gap-4 mb-8">
         <StatCard label="Apps" value={stats.apps} color="text-accent" />
         <StatCard label="Users" value={stats.users} color="text-(--pro)" />
-        <StatCard label="Creators" value={stats.creators} color="text-warning" />
-      </div>
-
-      {/* Traffic */}
-      <h2 className="text-lg font-bold mb-3">Traffic (30 days)</h2>
-      <div className="grid grid-cols-1 gap-4 mb-8">
-        <TrafficCard title="FreeAppStore" totals={fasT ?? null} days={stats.traffic?.fas?.days} />
       </div>
     </>
   );
@@ -995,64 +982,6 @@ function StatCard({ label, value, color }: { label: string; value: number; color
       <div className="text-sm font-medium text-muted">
         {label}
       </div>
-    </div>
-  );
-}
-
-function TrafficCard({
-  title,
-  totals,
-  days,
-}: {
-  title: string;
-  totals: { requests: number; pageViews: number; visitors: number } | null;
-  days: { sum?: { requests?: number } }[] | undefined;
-}) {
-  if (!totals)
-    return (
-      <div className="p-5 rounded-xl border bg-panel border-line">
-        <h3 className="font-bold mb-2">{title}</h3>
-        <p className="text-sm text-muted">
-          No traffic data
-        </p>
-      </div>
-    );
-
-  // Simple sparkline from daily data
-  const dailyRequests = (days || []).map((d) => d.sum?.requests || 0);
-  const max = Math.max(...dailyRequests, 1);
-
-  return (
-    <div className="p-5 rounded-xl border bg-panel border-line">
-      <h3 className="font-bold mb-3">{title}</h3>
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <div>
-          <div className="text-xl font-bold">{totals.visitors.toLocaleString()}</div>
-          <div className="text-xs text-muted">
-            Visitors
-          </div>
-        </div>
-        <div>
-          <div className="text-xl font-bold">{totals.pageViews.toLocaleString()}</div>
-          <div className="text-xs text-muted">
-            Page Views
-          </div>
-        </div>
-        <div>
-          <div className="text-xl font-bold">{formatNum(totals.requests)}</div>
-          <div className="text-xs text-muted">
-            Requests
-          </div>
-        </div>
-      </div>
-      {dailyRequests.length > 0 && (
-        <svg className="w-full h-12" viewBox={` 0 0 ${dailyRequests.length * 10} 48`} preserveAspectRatio="none" role="img" aria-label="Daily requests">
-          {dailyRequests.map((v, i) => {
-            const barHeight = Math.max((v / max) * 48, 2);
-            return <rect key={i} x={i * 10} y={48 - barHeight} width={9} height={barHeight} rx={2} className="fill-accent" />;
-          })}
-        </svg>
-      )}
     </div>
   );
 }
@@ -1563,17 +1492,17 @@ function UsersTab({ focusUserId, onClearFocus }: { focusUserId: string | null; o
 function CreatorsTab() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     adminFetchJson<Creator[]>(`${API_URL}/v1/admin/creators`)
       .then(setCreators)
-      .catch(() => {
-        /* best-effort */
-      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <p className="text-muted">Loading creators...</p>;
+  if (error) return <AdminAccessError message={error} />;
 
   return (
     <>
@@ -1685,10 +1614,4 @@ function toolArg(input: Record<string, unknown> | undefined): string {
   if (!input) return "";
   const value = input.path || input.id || input.name || input.url || input.pattern;
   return typeof value === "string" ? value : "";
-}
-
-function formatNum(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return n.toLocaleString();
 }

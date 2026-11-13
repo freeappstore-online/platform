@@ -40,6 +40,8 @@ export function WebhooksManager({ appId, getToken }: Props) {
         const data = await res.json() as { webhooks: Webhook[]; supported_events: string[] }
         setWebhooks(data.webhooks ?? [])
         setSupportedEvents(data.supported_events ?? [])
+      } else {
+        setError(`Failed to load webhooks (HTTP ${res.status})`)
       }
     } catch {
       setError('Failed to load webhooks')
@@ -69,6 +71,8 @@ export function WebhooksManager({ appId, getToken }: Props) {
       if (res.ok) {
         const data = await res.json() as { status: number }
         setTestResult({ id, ...data })
+      } else {
+        setError(`Webhook test failed (HTTP ${res.status})`)
       }
     } catch {
       setTestResult({ id, status: 0 })

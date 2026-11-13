@@ -26,6 +26,7 @@ export function LogsViewer({ appId, getToken }: Props) {
   const [limit, setLimit] = useState(50)
   const [buildMeta, setBuildMeta] = useState<Record<string, unknown> | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
+  const [error, setError] = useState('')
 
   const headers = useCallback((): Record<string, string> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' }
@@ -36,6 +37,9 @@ export function LogsViewer({ appId, getToken }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true)
+    // The expanded row is an index into the list being replaced.
+    setExpanded(null)
+    setError('')
     try {
       const params = new URLSearchParams({ limit: String(limit) })
       if (level !== 'all') params.set('level', level)
@@ -45,8 +49,10 @@ export function LogsViewer({ appId, getToken }: Props) {
         setLogs(data.logs ?? [])
         const withBuild = (data.logs ?? []).find(l => l.build)
         if (withBuild?.build) setBuildMeta(withBuild.build)
+      } else {
+        setError(`Failed to load logs (HTTP ${res.status})`)
       }
-    } catch {}
+    } catch { setError('Failed to load logs') }
     setLoading(false)
   }, [appId, level, limit, headers])
 
@@ -98,6 +104,8 @@ export function LogsViewer({ appId, getToken }: Props) {
 
       {loading ? (
         <p className="text-sm text-muted py-4">Loading logs...</p>
+      ) : error ? (
+        <p className="text-sm text-danger py-4">{error}</p>
       ) : logs.length === 0 ? (
         <p className="text-sm text-muted py-4">No logs found. Logs are captured automatically when users interact with your app.</p>
       ) : (

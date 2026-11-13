@@ -3,10 +3,10 @@ import { useState, useEffect, useCallback } from 'react'
 const API_BASE = 'https://api.freeappstore.online/v1'
 
 interface RoleAssignment {
-  user_id: string
-  role_name: string
-  granted_by: string
-  granted_at: string
+  userId: string
+  roleName: string
+  grantedBy: string | null
+  grantedAt: number
 }
 
 interface Props {
@@ -133,19 +133,19 @@ export function RolesManager({ appId, getToken }: Props) {
       ) : (
         <div className="mb-5 space-y-1.5">
           {roles.map((r) => {
-            const isOwner = r.role_name === 'owner'
-            const key = `${r.user_id}:${r.role_name}`
+            const isOwner = r.roleName === 'owner'
+            const key = `${r.userId}:${r.roleName}`
             return (
               <div
                 key={key}
                 className="flex items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2"
               >
                 <div className="min-w-0">
-                  <span className="text-sm font-medium text-[var(--ink)] truncate block">{r.user_id}</span>
+                  <span className="text-sm font-medium text-[var(--ink)] truncate block">{r.userId}</span>
                   <span className="text-xs text-[var(--muted)]">
-                    <span className="capitalize font-semibold">{r.role_name}</span>
-                    {r.granted_by && <> &middot; granted by {r.granted_by}</>}
-                    {r.granted_at && <> &middot; {new Date(r.granted_at).toLocaleDateString()}</>}
+                    <span className="capitalize font-semibold">{r.roleName}</span>
+                    {r.grantedBy && <> &middot; granted by {r.grantedBy}</>}
+                    {r.grantedAt && <> &middot; {new Date(r.grantedAt).toLocaleDateString()}</>}
                   </span>
                 </div>
                 {isOwner ? (
@@ -154,7 +154,7 @@ export function RolesManager({ appId, getToken }: Props) {
                   </span>
                 ) : (
                   <button
-                    onClick={() => handleRevoke(r.user_id, r.role_name)}
+                    onClick={() => handleRevoke(r.userId, r.roleName)}
                     disabled={revoking === key}
                     className="flex-shrink-0 rounded-lg border border-[var(--danger)] px-3 py-1.5 text-xs font-medium text-[var(--danger)] hover:bg-[var(--danger)] hover:text-white disabled:opacity-50 min-h-[32px]"
                   >
@@ -173,7 +173,7 @@ export function RolesManager({ appId, getToken }: Props) {
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
-            placeholder="User ID (GitHub login)"
+            placeholder="User ID (gh:12345, from their Settings page)"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
             className="flex-1 rounded-lg border border-[var(--line-strong)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--ink)] placeholder:text-[var(--muted)] min-h-[40px]"

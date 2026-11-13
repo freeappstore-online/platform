@@ -4,35 +4,12 @@ import { AISettings } from "../components/AISettings";
 import { useAuth } from "../hooks/useAuth";
 import { useSpeech } from "../hooks/useSpeech";
 import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from "../lib/push";
-import { PROVIDERS, getDefaultProvider, getDefaultModel, fetchVaultUsage, type VaultUsage } from "../lib/ai-keys";
+import { PROVIDERS, MODEL_OPTIONS, getDefaultProvider, getDefaultModel, fetchVaultUsage, type VaultUsage } from "../lib/ai-keys";
 import { useTheme } from "../lib/theme";
 import { useTextSize } from "../lib/text-size";
 import { getSession } from "../lib/api";
 import { AccountSettings } from "../../AccountSettings";
 import { BASE } from "../../SiteNav";
-
-const MODEL_OPTIONS: Record<string, { value: string; label: string }[]> = {
-  openrouter: [
-    { value: "anthropic/claude-sonnet-4", label: "Claude Sonnet 4" },
-    { value: "anthropic/claude-opus-4", label: "Claude Opus 4" },
-    { value: "openai/gpt-4.1", label: "GPT-4.1" },
-    { value: "openai/gpt-4o", label: "GPT-4o" },
-    { value: "google/gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-    { value: "deepseek/deepseek-chat-v3-0324", label: "DeepSeek V3" },
-  ],
-  anthropic: [
-    { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
-    { value: "claude-opus-4-6", label: "Claude Opus 4.6" },
-  ],
-  openai: [
-    { value: "gpt-4o", label: "GPT-4o" },
-    { value: "gpt-4o-mini", label: "GPT-4o Mini" },
-  ],
-  google: [
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  ],
-};
 
 function useNotificationState() {
   const [supported] = useState(() => "Notification" in window && "serviceWorker" in navigator && "PushManager" in window);

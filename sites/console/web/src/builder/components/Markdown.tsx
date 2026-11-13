@@ -138,78 +138,44 @@ export function Markdown({ text }: { text: string }) {
   return <>{elements}</>;
 }
 
-/** Parse inline markdown: **bold**, *italic*, `code`, [link](url) */
+// Whichever construct starts first wins, so a link or URL ahead of some bold
+// text is still a link (#596). Code comes first in the alternation so a `*`
+// inside a code span is not read as emphasis.
+const INLINE = /`([^`]+)`|\*\*(.+?)\*\*|\*(.+?)\*|\[(.+?)\]\((.+?)\)|(https?:\/\/[^\s<>]+)/gs;
+
+/** Parse inline markdown: **bold**, *italic*, `code`, [link](url), bare URLs */
 function inline(text: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
-  let remaining = text;
   let key = 0;
+  let last = 0;
 
-  while (remaining.length > 0) {
-    // Bold **text**
-    let match = remaining.match(/^(.*?)\*\*(.+?)\*\*(.*)/s);
-    if (match) {
-      if (match[1]) parts.push(<span key={key++}>{match[1]}</span>);
-      parts.push(<strong key={key++}>{match[2]}</strong>);
-      remaining = match[3];
-      continue;
-    }
-
-    // Italic *text*
-    match = remaining.match(/^(.*?)\*(.+?)\*(.*)/s);
-    if (match) {
-      if (match[1]) parts.push(<span key={key++}>{match[1]}</span>);
-      parts.push(<em key={key++}>{match[2]}</em>);
-      remaining = match[3];
-      continue;
-    }
-
-    // Inline code `text`
-    match = remaining.match(/^(.*?)`(.+?)`(.*)/s);
-    if (match) {
-      if (match[1]) parts.push(<span key={key++}>{match[1]}</span>);
+  for (const match of text.matchAll(INLINE)) {
+    if (match.index > last) parts.push(<span key={key++}>{text.slice(last, match.index)}</span>);
+    last = match.index + match[0].length;
+    const [, code, bold, italic, linkText, linkUrl, url] = match;
+    if (code !== undefined) {
       parts.push(
         <code
           key={key++}
           className="bg-panel border border-line rounded py-[0.1rem] px-[0.3rem] text-[0.82em] font-[monospace]"
         >
-          {match[2]}
+          {code}
         </code>,
       );
-      remaining = match[3];
-      continue;
-    }
-
-    // Link [text](url)
-    match = remaining.match(/^(.*?)\[(.+?)\]\((.+?)\)(.*)/s);
-    if (match) {
-      if (match[1]) parts.push(<span key={key++}>{match[1]}</span>);
-      const linkHref = /^https?:\/\//i.test(match[3]) ? match[3] : "#";
+    } else if (bold !== undefined) {
+      parts.push(<strong key={key++}>{bold}</strong>);
+    } else if (italic !== undefined) {
+      parts.push(<em key={key++}>{italic}</em>);
+    } else {
+      const href = url ?? (/^https?:\/\//i.test(linkUrl) ? linkUrl : "#");
       parts.push(
-        <a key={key++} href={linkHref} target="_blank" rel="noopener" className="text-accent underline">
-          {match[2]}
+        <a key={key++} href={href} target="_blank" rel="noopener" className="text-accent underline">
+          {url ?? linkText}
         </a>,
       );
-      remaining = match[4];
-      continue;
     }
-
-    // Plain URL
-    match = remaining.match(/^(.*?)(https?:\/\/[^\s<>]+)(.*)/s);
-    if (match) {
-      if (match[1]) parts.push(<span key={key++}>{match[1]}</span>);
-      parts.push(
-        <a key={key++} href={match[2]} target="_blank" rel="noopener" className="text-accent underline">
-          {match[2]}
-        </a>,
-      );
-      remaining = match[3];
-      continue;
-    }
-
-    // No more patterns — emit the rest
-    parts.push(<span key={key++}>{remaining}</span>);
-    break;
   }
+  if (last < text.length) parts.push(<span key={key++}>{text.slice(last)}</span>);
 
   return parts;
 }

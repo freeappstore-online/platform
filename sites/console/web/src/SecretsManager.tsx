@@ -13,7 +13,7 @@ interface AllowlistRule {
   injectKind: 'query' | 'header' | 'bearer'
   injectName: string
   secretName: string
-  methods: string
+  methods: string[]
   createdAt: number
 }
 
@@ -53,6 +53,9 @@ export function SecretsManager({ appId, getToken }: Props) {
         const data = await aRes.json() as { rules: AllowlistRule[] }
         setRules(data.rules ?? [])
       }
+      // An empty list must mean none are configured, not that the load failed (#596).
+      const failed = [sRes, aRes].find(r => !r.ok)
+      if (failed) setError(`Failed to load secrets and proxy rules (HTTP ${failed.status})`)
     } catch {
       setError('Failed to load secrets')
     } finally {
@@ -183,7 +186,7 @@ export function SecretsManager({ appId, getToken }: Props) {
             <div className="flex gap-2 mt-1 flex-wrap">
               <Tag>{r.injectKind === 'bearer' ? 'Bearer token' : `${r.injectKind}: ${r.injectName}`}</Tag>
               <Tag>secret: {r.secretName}</Tag>
-              <Tag>{r.methods}</Tag>
+              <Tag>{r.methods.join(', ')}</Tag>
             </div>
           </div>
         ))}

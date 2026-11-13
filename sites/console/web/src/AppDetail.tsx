@@ -26,8 +26,8 @@ interface Props {
 }
 
 interface AppAnalytics {
-  activeUsers30d: number
-  totalEvents: number
+  total_views: number
+  unique_paths: number
 }
 
 type AppTab = 'overview' | 'data'
@@ -47,11 +47,12 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
   useEffect(() => {
     const token = getToken()
     if (!token) { setLoading(false); return }
-    fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/analytics`, {
+    // /analytics is the tracking config; the numbers are under /analytics/stats (#596).
+    fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/analytics/stats?days=30`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : null)
-      .then(data => setAnalytics(data))
+      .then((data: { stats?: AppAnalytics } | null) => setAnalytics(data?.stats ?? null))
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [appId, getToken])
@@ -218,12 +219,12 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       {!loading && analytics && (
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl border border-line bg-panel p-4">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Active Users (30d)</p>
-            <p className="mt-1 display-font text-2xl font-bold text-ink">{analytics.activeUsers30d}</p>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Page Views (30d)</p>
+            <p className="mt-1 display-font text-2xl font-bold text-ink">{analytics.total_views.toLocaleString()}</p>
           </div>
           <div className="rounded-xl border border-line bg-panel p-4">
-            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Total Events</p>
-            <p className="mt-1 display-font text-2xl font-bold text-ink">{analytics.totalEvents}</p>
+            <p className="text-xs font-semibold text-muted uppercase tracking-wide">Pages Visited (30d)</p>
+            <p className="mt-1 display-font text-2xl font-bold text-ink">{analytics.unique_paths.toLocaleString()}</p>
           </div>
         </div>
       )}
@@ -549,7 +550,8 @@ function CodeHealth({ appId }: { appId: string }) {
   const [badgeError, setBadgeError] = useState(false)
 
   useEffect(() => {
-    fetch(`https://${appId}.freeappstore.online/.vcqa/report.json`)
+    // Through the API: the app's own host serves no CORS headers (#596).
+    fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/quality`)
       .then(r => r.ok ? r.json() : null)
       .then(data => setReport(data as VcqaReport | null))
       .catch(() => {})
