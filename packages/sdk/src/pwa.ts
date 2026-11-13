@@ -79,12 +79,11 @@ export function startPwa(options: PwaOptions = {}) {
   let controller = navigator.serviceWorker?.controller;
   const panel = document.createElement('aside');
   panel.setAttribute('aria-label', 'App installation and updates');
-  // Sticks to the bottom of the viewport: plainly appended, it sat below the
-  // fold on long pages and nobody saw that an update was waiting (#580). Sticky,
-  // not fixed: it keeps its place at the end of the page, so scrolling always
-  // uncovers whatever is under it.
+  // In the page flow, at the end of the body. An overlay (fixed or sticky) was
+  // tried for #580 and covered the app's own controls at narrow widths with
+  // enlarged text, which the notice itself asks the user to use first.
   panel.style.cssText =
-    'position:sticky;z-index:2147483647;bottom:max(1rem,env(safe-area-inset-bottom));margin:1rem;max-width:30rem;box-sizing:border-box;padding:1rem;background:Canvas;color:CanvasText;border:1px solid;overflow-wrap:anywhere;font:inherit';
+    'position:relative;margin:1rem;max-width:30rem;box-sizing:border-box;padding:1rem;padding-bottom:max(1rem,env(safe-area-inset-bottom));background:Canvas;color:CanvasText;border:1px solid;overflow-wrap:anywhere;font:inherit';
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   const action = document.createElement('button');
