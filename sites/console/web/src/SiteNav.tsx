@@ -60,6 +60,20 @@ function isAdmin(token: string): Promise<boolean> {
   return adminCheck.result
 }
 
+/** Whether the signed-in user is a platform admin. `user` is anything that
+ *  identifies them (login, token), or undefined when signed out. */
+export function useIsAdmin(user: string | undefined): boolean {
+  const [admin, setAdmin] = useState(false)
+  useEffect(() => {
+    const token = getSession()?.token
+    if (!user || !token) return
+    let live = true
+    isAdmin(token).then((yes) => { if (live) setAdmin(yes) })
+    return () => { live = false }
+  }, [user])
+  return admin
+}
+
 const EXTERNAL = [
   { href: 'https://freeappstore.online/docs', label: 'Docs' },
   { href: 'https://freeappstore.online', label: 'Store' },
@@ -74,15 +88,7 @@ export function SiteNav({ user, onSignIn, onSignOut }: {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const section = currentSection()
-  const [admin, setAdmin] = useState(false)
-
-  useEffect(() => {
-    const token = getSession()?.token
-    if (!user || !token) return
-    let live = true
-    isAdmin(token).then((yes) => { if (live) setAdmin(yes) })
-    return () => { live = false }
-  }, [user?.login])
+  const admin = useIsAdmin(user?.login)
 
   useEffect(() => {
     if (!menuOpen) return

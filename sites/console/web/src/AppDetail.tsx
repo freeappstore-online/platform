@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { RolesManager } from './RolesManager'
+import { useIsAdmin } from './SiteNav'
 import { SecretsManager } from './SecretsManager'
 import { WebhooksManager } from './WebhooksManager'
 import { LogsViewer } from './LogsViewer'
@@ -33,6 +34,7 @@ type AppTab = 'overview' | 'data'
 
 export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }: Props) {
   const [appTab, setAppTab] = useState<AppTab>('overview')
+  const admin = useIsAdmin(getToken() ?? undefined)
   const [analytics, setAnalytics] = useState<AppAnalytics | null>(null)
   const [deploy, setDeploy] = useState<AppDeployStatus | null>(null)
   const [deployError, setDeployError] = useState<string | null>(null)
@@ -101,7 +103,8 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       <div className="flex items-center gap-4">
         <button onClick={onBack} className="text-sm text-accent font-medium hover:underline min-h-[44px] flex items-center">&larr; Back</button>
         <div className="flex gap-1 ml-auto">
-          {(['overview', 'data'] as AppTab[]).map(t => (
+          {/* The data browser reads platform-admin endpoints; to an owner it showed "no data" (#591). */}
+          {admin && (['overview', 'data'] as AppTab[]).map(t => (
             <button
               key={t}
               onClick={() => setAppTab(t)}
@@ -373,6 +376,7 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
   const [tab, setTab] = useState<'kv' | 'collections' | 'counters'>('kv')
   const [entries, setEntries] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [expanded, setExpanded] = useState<number | null>(null)
   const [valueCache, setValueCache] = useState<Record<string, unknown>>({})
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -392,15 +396,17 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
     else if (tab === 'collections') url = `${API_BASE}/admin/collections?app=${appId}&limit=100`
     else url = `${API_BASE}/admin/counters?app=${appId}&limit=200`
 
+    setEntries([])
+    setError('')
     try {
       const res = await fetch(url, { headers: headers() })
       if (res.ok) {
         const data = await res.json() as Record<string, unknown>
         setEntries((data.entries ?? data.documents ?? data.counters ?? []) as Array<Record<string, unknown>>)
       } else {
-        setEntries([])
+        setError(`Couldn't load ${tab} data (HTTP ${res.status}).`)
       }
-    } catch { setEntries([]) }
+    } catch { setError(`Couldn't load ${tab} data.`) }
     setLoading(false)
   }, [appId, tab, headers])
 
@@ -409,9 +415,10 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
   const deleteItem = async (params: string) => {
     if (!confirm('Delete this item?')) return
     const base = API_BASE
-    await fetch(`${base}/admin/${tab === 'collections' ? 'collections' : tab}?${params}`, {
+    const res = await fetch(`${base}/admin/${tab === 'collections' ? 'collections' : tab}?${params}`, {
       method: 'DELETE', headers: headers(),
-    })
+    }).catch(() => null)
+    if (!res?.ok) { setError('Delete failed; the item is still there.'); return }
     load()
   }
 
@@ -437,7 +444,8 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
         <span className="text-xs text-muted ml-auto self-center">{entries.length} entries</span>
       </div>
 
-      {loading ? <p className="text-sm text-muted">Loading...</p> : entries.length === 0 ? (
+      {error && <p className="text-sm text-danger mb-3">{error}</p>}
+      {loading ? <p className="text-sm text-muted">Loading...</p> : error ? null : entries.length === 0 ? (
         <p className="text-sm text-muted">No {tab} data for this app.</p>
       ) : (
         <div className="rounded-xl border border-line overflow-hidden">

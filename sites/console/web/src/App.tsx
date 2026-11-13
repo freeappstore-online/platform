@@ -32,29 +32,29 @@ interface AppEntry {
 
 const API_BASE = 'https://api.freeappstore.online/v1'
 
+class LoadError extends Error {
+  status: number
+  constructor(status: number) {
+    super(`HTTP ${status}`)
+    this.status = status
+  }
+}
+
 async function fetchApps(token: string | null): Promise<AppEntry[]> {
   if (!token) return []
-  const endpoint = `${API_BASE}/apps/mine`
-  try {
-    const res = await fetch(endpoint, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) {
-      console.error(`[App] GET ${endpoint} failed: HTTP ${res.status}`)
-      return []
-    }
-    const data = (await res.json()) as { apps: { id: string; ownerLogin: string; createdAt: number; category?: string | null; oneliner?: string | null; store?: string | null }[] }
-    return (data.apps ?? []).map((a) => ({
-      id: a.id,
-      name: a.id,
-      createdAt: new Date(a.createdAt).toISOString(),
-      category: a.category,
-      description: a.oneliner,
-    })).sort((a, b) => a.id.localeCompare(b.id))
-  } catch (err) {
-    console.error(`[App] GET ${endpoint} threw:`, err)
-    return []
-  }
+  const res = await fetch(`${API_BASE}/apps/mine`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  // Thrown, not turned into an empty list: "no apps" must mean no apps (#591).
+  if (!res.ok) throw new LoadError(res.status)
+  const data = (await res.json()) as { apps: { id: string; ownerLogin: string; createdAt: number; category?: string | null; oneliner?: string | null; store?: string | null }[] }
+  return (data.apps ?? []).map((a) => ({
+    id: a.id,
+    name: a.id,
+    createdAt: new Date(a.createdAt).toISOString(),
+    category: a.category,
+    description: a.oneliner,
+  })).sort((a, b) => a.id.localeCompare(b.id))
 }
 
 interface Draft {
@@ -117,6 +117,7 @@ export default function App() {
   const [route, setRoute] = useState(parseRoute)
   const [apps, setApps] = useState<AppEntry[]>([])
   const [drafts, setDrafts] = useState<Draft[]>([])
+  const [appsError, setAppsError] = useState(false)
   // undefined until the first fetch resolves, so badges render nothing rather
   // than flashing "unavailable" on load.
   const [deployStatuses, setDeployStatuses] = useState<Record<string, DeployStatus> | undefined>(undefined)
@@ -138,16 +139,25 @@ export default function App() {
   const setView = useCallback((v: View) => navigate(v), [])
 
   const reloadApps = useCallback(async () => {
-    try { setApps(await fetchApps(fas.auth.token)) } catch {}
+    try {
+      setApps(await fetchApps(fas.auth.token))
+      setAppsError(false)
+    } catch (err) {
+      // The session was revoked or expired: back to the sign-in page.
+      if (err instanceof LoadError && err.status === 401) { fas.auth.signOut(); return }
+      setAppsError(true)
+    }
     try { setDrafts(await fetchDrafts(fas.auth.token)) } catch {}
     // One authenticated request covering every app the user owns, instead of
     // one unauthenticated GitHub call per badge (#32).
     try { setDeployStatuses(await fetchOwnedDeployStatuses(fas.auth.token)) } catch { setDeployStatuses({}) }
   }, [])
 
+  // On every visit to Apps, not once per sign-in: publishing or deploying a
+  // draft elsewhere in the console changes the list.
   useEffect(() => {
-    if (user) reloadApps()
-  }, [user, reloadApps])
+    if (user && view === 'dashboard') reloadApps()
+  }, [user, view, reloadApps])
 
   const openAppDetail = useCallback((id: string) => {
     navigate('app-detail', id)
@@ -181,7 +191,7 @@ export default function App() {
       <SiteNav user={user} onSignIn={() => fas.auth.signIn()} onSignOut={() => fas.auth.signOut()} />
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
         {view === 'dashboard' && (
-          <Dashboard user={user} apps={apps} drafts={drafts} deployStatuses={deployStatuses} onOpenApp={openAppDetail} onPublish={() => setView('publish')} />
+          <Dashboard user={user} apps={apps} drafts={drafts} error={appsError} onRetry={reloadApps} deployStatuses={deployStatuses} onOpenApp={openAppDetail} onPublish={() => setView('publish')} />
         )}
         {view === 'app-detail' && selectedAppId && (
           <AppDetail
@@ -225,7 +235,7 @@ function Landing() {
   )
 }
 
-function Dashboard({ user, apps, drafts, deployStatuses, onOpenApp, onPublish }: { user: User; apps: AppEntry[]; drafts: Draft[]; deployStatuses: Record<string, DeployStatus> | undefined; onOpenApp: (id: string) => void; onPublish: () => void }) {
+function Dashboard({ user, apps, drafts, error, onRetry, deployStatuses, onOpenApp, onPublish }: { user: User; apps: AppEntry[]; drafts: Draft[]; error: boolean; onRetry: () => void; deployStatuses: Record<string, DeployStatus> | undefined; onOpenApp: (id: string) => void; onPublish: () => void }) {
   return (
     <div className="space-y-8">
       <div className="rounded-2xl border border-line bg-panel p-6 shadow-[var(--shadow-card)]">
@@ -255,7 +265,15 @@ function Dashboard({ user, apps, drafts, deployStatuses, onOpenApp, onPublish }:
           </button>
         </div>
 
-        {apps.length === 0 ? (
+        {error ? (
+          <div className="rounded-2xl border border-dashed border-[var(--line-strong)] p-12 text-center">
+            <p className="text-ink font-semibold">Couldn't load your apps</p>
+            <p className="mt-1 text-sm text-muted">This was a connection or server problem, not an empty account.</p>
+            <button onClick={onRetry} className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90">
+              Retry
+            </button>
+          </div>
+        ) : apps.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--line-strong)] p-12 text-center">
             <p className="text-muted">
               No apps yet. Create your first app with{' '}

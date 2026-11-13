@@ -12,10 +12,16 @@ export function AccountSettings({ getToken, onSignedOut }: { getToken: () => str
 
   const signOutEverywhere = async () => {
     // Revokes every session of this account (all apps, all devices); then drop ours.
-    await fetch(`${API_URL}/v1/auth/logout`, {
+    setError('')
+    const res = await fetch(`${API_URL}/v1/auth/logout`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken() ?? ''}` },
-    }).catch(() => {})
+    }).catch(() => null)
+    // Signing out locally anyway would claim other devices were signed out (#591).
+    if (!res?.ok) {
+      setError('Could not sign out your other sessions. You are still signed in everywhere; please try again.')
+      return
+    }
     onSignedOut()
   }
 
