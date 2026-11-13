@@ -163,6 +163,10 @@ agentSessionRoutes.put('/agent/sessions/:id', async (c) => {
     body = null;
   }
   if (!body || typeof body !== 'object') return c.json({ error: 'invalid body' }, 400);
+  // The list returns null for an undeployed session's appId/appUrl and clients
+  // send it straight back: null means "not set", same as omitted (#595).
+  if (body.appId === null) delete body.appId;
+  if (body.appUrl === null) delete body.appUrl;
 
   if (
     body.name !== undefined &&
@@ -247,20 +251,23 @@ agentSessionRoutes.put('/agent/sessions/:id/messages', async (c) => {
   const sessionId = c.req.param('id')!;
   const body = await c.req.json<{ messages: unknown[] }>().catch(() => null);
 
-  if (!body?.messages) return c.json({ error: 'messages required' }, 400);
+  if (!Array.isArray(body?.messages)) return c.json({ error: 'messages array required' }, 400);
 
-  const messages = Array.isArray(body.messages) ? body.messages.slice(-MAX_MESSAGES) : [];
+  const messages = body.messages.slice(-MAX_MESSAGES);
   const json = JSON.stringify(messages);
   const bytes = byteLength(json);
   if (bytes > MAX_BODY_BYTES) return c.json({ error: 'messages too large (max 2MB)' }, 413);
   const full = await overQuota(c, user.id, sessionId, false, bytes);
   if (full) return full;
 
-  await c.env.DB.prepare(
+  const result = await c.env.DB.prepare(
     `UPDATE agent_sessions SET messages = ?, updated_at = ? WHERE session_id = ? AND user_id = ?`,
   )
     .bind(json, Date.now(), sessionId, user.id)
     .run();
+  // No row: the session was never created (or is someone else's). Saying ok
+  // here hid chat history that was never being saved (#595).
+  if (result.meta.changes === 0) return c.json({ error: 'session not found' }, 404);
 
   return c.json({ ok: true });
 });

@@ -204,6 +204,22 @@ describe('agent-sessions', () => {
     expect(update?.bound[1]).toBeNull(); // app_id omitted → preserved
   });
 
+  it('accepts the nulls the list returns, and refuses a non-array messages sync (#595)', async () => {
+    const db = fakeDB({ user });
+    const put = async (path: string, body: unknown) =>
+      app.request(
+        path,
+        {
+          method: 'PUT',
+          headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+        env(db),
+      );
+    expect((await put('/v1/agent/sessions/s4', { name: 'Renamed', appId: null, appUrl: null })).status).toBe(200);
+    expect((await put('/v1/agent/sessions/s4/messages', { messages: 'x' })).status).toBe(400);
+  });
+
   it('PUT /v1/agent/sessions/:id/messages updates messages', async () => {
     const db = fakeDB({ user });
     const res = await app.request(

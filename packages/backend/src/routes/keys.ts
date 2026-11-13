@@ -866,7 +866,7 @@ function renderKeysPage(opts: {
       html += '<span class="badge ' + (has ? 'badge-on' : 'badge-off') + '">' + (has ? 'configured' : 'not set') + '</span>';
       html += '</div>';
       if (has) {
-        html += '<p class="meta">Added ' + new Date(existingMap[p.id].created_at).toLocaleDateString() + '</p>';
+        html += '<p class="meta">Added ' + new Date(existingMap[p.id].createdAt).toLocaleDateString() + '</p>';
         html += '<div class="actions">';
         html += '<button class="btn btn-ghost" data-action="editKey" data-id="'+p.id+'">Update</button>';
         html += '<button class="btn btn-danger" data-action="deleteKey" data-id="'+p.id+'">Remove</button>';

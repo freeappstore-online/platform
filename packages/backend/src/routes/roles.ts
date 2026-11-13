@@ -52,7 +52,8 @@ rolesRoutes.get('/apps/:appId/roles', async (c) => {
 rolesRoutes.get('/apps/:appId/roles/:userId', async (c) => {
   const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
-  const targetUserId = c.req.param('userId');
+  // `me` is what the SDK's roles.myRoles() asks for (#595).
+  const targetUserId = c.req.param('userId') === 'me' ? user.id : c.req.param('userId');
 
   // Users can check their own roles; owners/admins can check anyone's
   if (targetUserId !== user.id) {

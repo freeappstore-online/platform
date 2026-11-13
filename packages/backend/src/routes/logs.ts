@@ -71,7 +71,13 @@ logsRoutes.post('/apps/:appId/logs', async (c) => {
     .filter(isLogEntry)
     .map((e) => {
       const msg = e.message.slice(0, MAX_ENTRY_SIZE);
-      const data = e.data ? JSON.stringify(e.data).slice(0, MAX_ENTRY_SIZE) : null;
+      // Cutting the JSON text mid-value would make it unreadable; oversized
+      // data is kept as a string holding its truncated text instead (#595).
+      const dataJson = e.data ? JSON.stringify(e.data) : null;
+      const data =
+        dataJson && dataJson.length > MAX_ENTRY_SIZE
+          ? JSON.stringify(dataJson.slice(0, MAX_ENTRY_SIZE))
+          : dataJson;
       const build = e.build ? JSON.stringify(e.build) : null;
       return {
         ts: e.ts,
@@ -177,7 +183,7 @@ logsRoutes.get('/apps/:appId/logs', async (c) => {
       level: r.level,
       category: r.category,
       message: r.message,
-      data: parseJsonObject(r.data) ?? undefined,
+      data: parseJson(r.data),
       userId: r.user_id,
       build: parseJsonObject(r.build_meta) ?? undefined,
     })),
@@ -205,3 +211,13 @@ logsRoutes.get('/apps/:appId/logs/build', async (c) => {
     ts: row.ts,
   });
 });
+
+/** Log data is any JSON value (the SDK types it `unknown`), not only an object. */
+function parseJson(value: unknown): unknown {
+  if (typeof value !== 'string') return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}

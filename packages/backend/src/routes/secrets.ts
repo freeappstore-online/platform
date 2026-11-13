@@ -426,7 +426,9 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       .bind(appId)
       .all<AllowlistRow>();
     const rules = (ruleRows.results ?? []).map(rowToRule);
-    const rule = pickRule(rules, upstreamUrl, c.req.method);
+    // Match the normalized URL, the one fetch will request: `%2e%2e` segments in
+    // the raw path would pass a path-scoped rule and then resolve outside it (#595).
+    const rule = pickRule(rules, parsedUpstream.href, c.req.method);
 
     // The app must declare every host it calls (#466): no rule, no request.
     if (!rule) {
