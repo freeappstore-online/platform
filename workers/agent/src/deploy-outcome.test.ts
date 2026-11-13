@@ -411,6 +411,17 @@ describe("the baseline follows what was pushed (#38)", () => {
     expect(sent[1]).toEqual(new Map([["web/src/util.ts", null]]));
   });
 
+  it("a push with nothing to send reports the last build's failure, not live (#592)", async () => {
+    pushMock.mockResolvedValue({ ok: true, skipped: true, message: "No changes to push." });
+    readMock.mockResolvedValue({ phase: "error", error: "Build failed at build" });
+    const { ctx } = makeCtx({ appId: "dict" });
+
+    const result = await executeInfraTool(pushCall, ctx);
+
+    expect(result).toContain("The last build FAILED");
+    expect(ctx.onDeployStatus).toHaveBeenLastCalledWith({ phase: "error", error: "Build failed at build" });
+  });
+
   it("leaves the baseline alone when the push didn't land", async () => {
     capturePushes({ ok: false, message: "Error: failed to update ref" });
     const { ctx } = makeCtx({ appId: "dict" });

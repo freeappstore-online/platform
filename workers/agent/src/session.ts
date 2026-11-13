@@ -1496,6 +1496,9 @@ export class AgentSession implements DurableObject {
 
     const session = await this.load();
     if (session.appId && session.appId !== appId) return reply({ error: "session already linked to a different app" }, 409);
+    // A running turn holds its own copy of the files and would write it back
+    // over the import (#592).
+    if (await this.activePendingTurn()) return reply({ error: "Cannot import while a build is in progress." }, 409);
 
     const isAdmin = session.ownerIsAdmin ?? false;
     if (!this.env.DB && !isAdmin) return reply({ error: "cannot verify app ownership right now" }, 503);

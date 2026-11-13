@@ -636,6 +636,13 @@ async function executePushUpdate(tc: ToolCall, ctx: ExecContext, id: string): Pr
   }
   advanceBaseline(ctx);
   if (result.skipped) {
+    // Nothing was pushed, so this is whatever the last build left: not "live"
+    // on top of a failed run (#592).
+    const last = await readDeployRun(id, ctx.env, ctx.config);
+    if (last?.phase === "error") {
+      await ctx.onDeployStatus(last);
+      return `${result.message} The last build FAILED:\n${last.error}\n${FIX_HINT}`;
+    }
     await ctx.onDeployStatus({ phase: "live", appUrl: `https://${id}.${ctx.config.domain}` });
     return result.message;
   }

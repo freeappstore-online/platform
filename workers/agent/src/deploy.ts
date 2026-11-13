@@ -91,6 +91,24 @@ async function createTreeItems(ghApi: ReturnType<typeof makeGhApi>, repo: string
   return items;
 }
 
+/** Drop deletions for paths the tree doesn't have. GitHub rejects the whole
+ *  tree (422 GitRPC::BadObjectState) for one, and the baseline can hold such a
+ *  path when the repo changed outside this session (#586). */
+async function dropDeletionsAlreadyGone(
+  ghApi: ReturnType<typeof makeGhApi>,
+  repo: string,
+  treeSha: string,
+  delta: FileDelta,
+): Promise<void> {
+  if (![...delta.values()].includes(null)) return;
+  const tree = (await ghApi(`/repos/${repo}/git/trees/${treeSha}?recursive=1`)) as GhResponse;
+  if (!Array.isArray(tree.tree) || tree.truncated) return;
+  const repoPaths = new Set(tree.tree.map((item: TreeItem) => item.path));
+  for (const [path, content] of delta) {
+    if (content === null && !repoPaths.has(path)) delta.delete(path);
+  }
+}
+
 export function computeFileDelta(files: Map<string, string>, baselineFiles: Map<string, string>): FileDelta {
   const delta: FileDelta = new Map();
   for (const [path, content] of files) {
@@ -250,7 +268,10 @@ export async function deployApp(
   if (buildCommitSha) {
     await waitForGitHubDeploy(deployConfig.id, env, config, onStatus, buildCommitSha);
   } else {
-    await onStatus({ phase: "live", appUrl: `https://${deployConfig.id}.${config.domain}` });
+    // Nothing was pushed, so this is whatever the last build left: not "live"
+    // on top of a failed run (#592).
+    const last = await readDeployRun(deployConfig.id, env, config);
+    await onStatus(last?.phase === "error" ? last : { phase: "live", appUrl: `https://${deployConfig.id}.${config.domain}` });
   }
 }
 
@@ -341,7 +362,7 @@ async function fetchCIFailureDetails(ghApi: ReturnType<typeof makeGhApi>, repo: 
       if (jobStatus === "failure" && !failedJobId) failedJobId = job.id;
     }
 
-    // The actual log output of the failed job: most useful info is at the end.
+    // The actual log output of the failed job, around the failing step.
     let logTail = "";
     if (failedJobId) {
       try {
@@ -350,8 +371,7 @@ async function fetchCIFailureDetails(ghApi: ReturnType<typeof makeGhApi>, repo: 
           redirect: "follow",
         });
         if (logRes.ok) {
-          const logText = await logRes.text();
-          logTail = logText.length > 1500 ? logText.slice(-1500) : logText;
+          logTail = failureExcerpt(await logRes.text());
         }
       } catch {
         // Log fetch failed — step summary is still useful
@@ -362,11 +382,24 @@ async function fetchCIFailureDetails(ghApi: ReturnType<typeof makeGhApi>, repo: 
     const lines = [`Build failed${failedAt ? ` at ${failedAt}` : ""} (run ${runId})`];
     if (keyLines.length) lines.push(...keyLines);
     lines.push(`Run: ${runUrl}`, "", ...stepLines);
-    if (logTail) lines.push("", "--- Failed job log (tail) ---", logTail);
+    if (logTail) lines.push("", "--- Failed job log ---", logTail);
     return lines.join("\n").slice(0, 4000);
   } catch {
     return `GitHub Actions deploy failed. Check: ${runUrl}`;
   }
+}
+
+/**
+ * The part of a failed job's log that shows the failure: up to and including
+ * the first `##[error]` line. The end of the log is post-job cleanup, never the
+ * failing step (#592).
+ */
+export function failureExcerpt(log: string, max = 1500): string {
+  const errorAt = log.indexOf("##[error]");
+  if (errorAt === -1) return log.slice(-max);
+  const lineEnd = log.indexOf("\n", errorAt);
+  const end = lineEnd === -1 ? log.length : lineEnd;
+  return log.slice(Math.max(0, end - max), end);
 }
 
 /** The last few error-looking lines of a GitHub Actions log, without timestamps. */
@@ -483,15 +516,24 @@ async function commitPatchToGitHub(repoId: string, files: FileDelta, message: st
   const ghApi = makeGhApi(token, config.agentName);
   const repo = `${config.org}/${repoId}`;
 
-  const ref = await ghApi(`/repos/${repo}/git/ref/heads/main`);
+  const ref = (await ghApi(`/repos/${repo}/git/ref/heads/main`)) as GhResponse;
   const parentSha = ref.object?.sha as string | undefined;
-  const treeItems = await createTreeItems(ghApi, repo, files);
+  // Only "no such ref" (404, or 409 on an empty repo) means there is no parent.
+  // Treating a 5xx or 403 as an empty repo ends in "Reference already exists".
+  const refStatus = apiStatus(ref, 404);
+  if (!parentSha && refStatus !== 404 && refStatus !== 409) {
+    throw new Error(`GitHub could not read ${repo} main (${refStatus}): ${ref.message || "unknown error"}`);
+  }
   let baseTree: string | undefined;
   if (parentSha) {
     const parentCommit = await ghApi(`/repos/${repo}/git/commits/${parentSha}`);
     if (!parentCommit.tree?.sha) throw new Error(`Failed to read parent tree for ${repo}: ${parentCommit.message || "unknown error"}`);
     baseTree = parentCommit.tree.sha;
+    await dropDeletionsAlreadyGone(ghApi, repo, parentCommit.tree.sha, files);
+    // Nothing left to commit: main already is what this patch asks for.
+    if (files.size === 0) return parentSha;
   }
+  const treeItems = await createTreeItems(ghApi, repo, files);
 
   const tree = await ghApi(`/repos/${repo}/git/trees`, "POST", {
     ...(baseTree ? { base_tree: baseTree } : {}),
@@ -540,25 +582,23 @@ export async function pushUpdate(
 
   const ref = await ghApi(`/repos/${repo}/git/ref/heads/main`);
   const parentSha = ref.object?.sha;
-  if (!parentSha) return { ok: false, message: `Error: could not find HEAD for ${repo}. Is the ${config.noun} deployed?` };
+  if (!parentSha) {
+    const status = apiStatus(ref, 404);
+    return {
+      ok: false,
+      message:
+        status === 404
+          ? `Error: could not find HEAD for ${repo}. Is the ${config.noun} deployed?`
+          : `Error: GitHub could not read ${repo} main (${status}): ${ref.message || "unknown"}`,
+    };
+  }
 
   const parentCommit = await ghApi(`/repos/${repo}/git/commits/${parentSha}`);
   if (!parentCommit.tree?.sha) return { ok: false, message: `Error: could not read parent commit tree for ${repo}.` };
 
-  // GitHub rejects the whole tree (422 GitRPC::BadObjectState) when it deletes
-  // a path the base tree doesn't have. The baseline can hold such a path when
-  // the repo changed outside this session, so drop deletions already done (#586).
-  if ([...delta.values()].includes(null)) {
-    const parentTree = (await ghApi(`/repos/${repo}/git/trees/${parentCommit.tree.sha}?recursive=1`)) as GhResponse;
-    if (Array.isArray(parentTree.tree) && !parentTree.truncated) {
-      const repoPaths = new Set(parentTree.tree.map((item: TreeItem) => item.path));
-      for (const [path, content] of delta) {
-        if (content === null && !repoPaths.has(path)) delta.delete(path);
-      }
-      if (delta.size === 0) {
-        return { ok: true, skipped: true, message: `No changes to push for ${repo}; the files to delete are already gone from main.` };
-      }
-    }
+  await dropDeletionsAlreadyGone(ghApi, repo, parentCommit.tree.sha, delta);
+  if (delta.size === 0) {
+    return { ok: true, skipped: true, message: `No changes to push for ${repo}; the files to delete are already gone from main.` };
   }
 
   let treeItems: TreeItem[];

@@ -11,7 +11,8 @@ export function makeGhApi(token: string, agentName: string) {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    const data = await response.json();
+    // An error page from GitHub's edge is not JSON; report it like any other failure.
+    const data = await response.json().catch(() => ({ message: `GitHub returned HTTP ${response.status}` }));
     if (data && typeof data === "object") {
       Object.defineProperty(data, "_httpStatus", { value: response.status, enumerable: false });
       return data;

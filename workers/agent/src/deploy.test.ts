@@ -5,6 +5,7 @@ import {
   DEPLOY_POLL_TIMEOUT_MS,
   type DeployStatus,
   deployApp,
+  failureExcerpt,
   keyErrorLines,
   pushUpdate,
   readDeployRun,
@@ -822,6 +823,16 @@ describe("deploy run polling (#11)", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("failureExcerpt ends at the failing step, not in the post-job cleanup (#592)", () => {
+    const cleanup = "Post job cleanup.\n".repeat(400);
+    const log = `${"setup line\n".repeat(400)}src/App.tsx(3,7): error TS2322: bad type\n##[error]Process completed with exit code 2.\n${cleanup}`;
+    const excerpt = failureExcerpt(log);
+    expect(excerpt.length).toBeLessThanOrEqual(1500);
+    expect(excerpt).toContain("error TS2322");
+    expect(excerpt.endsWith("##[error]Process completed with exit code 2.")).toBe(true);
+    expect(failureExcerpt("no marker here")).toBe("no marker here");
   });
 
   it("keyErrorLines keeps error lines, drops timestamps and the exit-code noise", () => {
