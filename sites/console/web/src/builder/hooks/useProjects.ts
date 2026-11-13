@@ -150,16 +150,14 @@ export function useProjects() {
     return () => ctrl.abort();
   }, [user?.id, reloadNonce, setCurrentId]);
 
-  const create = useCallback((name: string, appId?: string) => {
+  const create = useCallback((name: string) => {
     const id = crypto.randomUUID();
     const project: Project = {
       id,
       name,
       createdAt: new Date().toISOString(),
       updatedAt: Date.now(),
-      deployed: !!appId,
-      appId,
-      appUrl: appId ? `https://${appId}.freeappstore.online` : undefined,
+      deployed: false,
     };
     setProjects((prev) => [project, ...prev]);
     setCurrentId(id);

@@ -7,14 +7,15 @@ import { SettingsPanel } from "./SettingsPanel";
 import { CopyLogButton } from "./CopyLogButton";
 
 /** Desktop chat toolbar: back · project picker · tokens · copy log · settings · keys. */
-export function Toolbar({ agent, settings, settingsOpen, setSettingsOpen, onBackToConsole, onPickProject, onCreateProject }: {
+export function Toolbar({ agent, settings, settingsOpen, setSettingsOpen, onBackToConsole, onPickProject, onCreateProject, onOpenApp }: {
   agent: Agent;
   settings: StudioSettings;
   settingsOpen: boolean;
   setSettingsOpen: (v: boolean) => void;
   onBackToConsole: () => void;
   onPickProject: (id: string) => void;
-  onCreateProject: (name: string, appId?: string) => void;
+  onCreateProject: (name: string) => void;
+  onOpenApp: (appId: string) => void;
 }) {
   const iconBtn = "inline-flex min-h-10 items-center gap-1 rounded-control-sm border py-1 cursor-pointer text-ink";
   const keyClass = settings.keyStatus.color === "var(--success)" ? "text-success" : "text-warning";
@@ -50,7 +51,8 @@ export function Toolbar({ agent, settings, settingsOpen, setSettingsOpen, onBack
           projects={agent.projects}
           currentId={agent.currentProjectId}
           onSelect={(id) => onPickProject(id)}
-          onCreate={(name, appId) => onCreateProject(name, appId)}
+          onCreate={onCreateProject}
+          onOpenApp={onOpenApp}
           onClose={() => setPickerOpen(false)}
         />
       )}

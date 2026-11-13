@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import type { Project } from "../hooks/useProjects";
+import { API_URL, authHeaders } from "../lib/api";
 
 interface ProjectPickerProps {
   projects: Project[];
   currentId: string | null;
   onSelect: (id: string) => void;
-  onCreate: (name: string, appId?: string) => void;
+  onCreate: (name: string) => void;
+  /** Open a published app that has no project yet, importing its repo. */
+  onOpenApp: (appId: string) => void;
   onClose: () => void;
 }
 
@@ -13,19 +16,9 @@ interface OrgRepo {
   id: string;
   name: string;
   description: string;
-  url: string;
-  updatedAt: string;
 }
 
-// Platform/infra repos to exclude
-const EXCLUDED = new Set([
-  "freeappstore", "freegamestore", "admin", "sdk", "platform", "template-standalone",
-  "template-game-canvas", "template-game-cards",
-  "template-game-grid", "template-game-3d", "submissions", "create",
-  "ai", "vault", "ops", "brand",
-]);
-
-export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose }: ProjectPickerProps) {
+export function ProjectPicker({ projects, currentId, onSelect, onCreate, onOpenApp, onClose }: ProjectPickerProps) {
   const [orgRepos, setOrgRepos] = useState<OrgRepo[]>([]);
   const [loading, setLoading] = useState(true);
   const [newName, setNewName] = useState("");
@@ -39,23 +32,12 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
   useEffect(() => { if (searchOpen) searchRef.current?.focus(); }, [searchOpen]);
 
   useEffect(() => {
-    // Fetch ALL repos from the org via GitHub API (works for any creation method)
-    fetch("https://api.github.com/orgs/freeappstore-online/repos?per_page=100&sort=updated&direction=desc", {
-      headers: { Accept: "application/vnd.github+json" },
-    })
-      .then((r) => r.json())
-      .then((repos) => {
-        if (!Array.isArray(repos)) return;
-        const apps = repos
-          .filter((r: any) => !EXCLUDED.has(r.name) && !r.name.startsWith("template-"))
-          .map((r: any) => ({
-            id: r.name,
-            name: r.name,
-            description: r.description || "",
-            url: `https://${r.name}.freeappstore.online`,
-            updatedAt: r.pushed_at || "",
-          }));
-        setOrgRepos(apps);
+    // The user's own published apps. Not the org's repo list: that showed
+    // everyone's apps, and opening one made a session with no code (#590).
+    fetch(`${API_URL}/v1/apps/mine`, { headers: authHeaders() })
+      .then((r) => (r.ok ? r.json() : { apps: [] }))
+      .then((data: { apps?: { id: string; oneliner?: string | null }[] }) => {
+        setOrgRepos((data.apps ?? []).map((a) => ({ id: a.id, name: a.id, description: a.oneliner || "" })));
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -65,18 +47,10 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
   const q = search.toLowerCase();
   const localIds = new Set(projects.map((p) => p.appId).filter(Boolean));
   const filteredLocal = projects.filter((p) => !q || p.name.toLowerCase().includes(q) || p.appId?.toLowerCase().includes(q));
-  const orgOnly = orgRepos.filter((r) => !localIds.has(r.id) && !EXCLUDED.has(r.id) && (!q || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q)));
+  const orgOnly = orgRepos.filter((r) => !localIds.has(r.id) && (!q || r.name.toLowerCase().includes(q) || r.description.toLowerCase().includes(q)));
 
   function handleSelectOrg(repo: OrgRepo) {
-    // Create a new VibeCode session for this org repo
-    const existingProject = projects.find((p) => p.appId === repo.id);
-    if (existingProject) {
-      onSelect(existingProject.id);
-    } else {
-      // Create a VibeCode session linked to this repo
-      onCreate(repo.name, repo.id);
-      // The newly created project will be selected automatically
-    }
+    onOpenApp(repo.id);
     onClose();
   }
 
@@ -161,10 +135,10 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onClose
 
               {/* Org repos (not in local) */}
               {loading ? (
-                <div className="text-center py-4 text-sm text-muted">Loading apps from store...</div>
+                <div className="text-center py-4 text-sm text-muted">Loading your apps...</div>
               ) : orgOnly.length > 0 ? (
                 <div>
-                  <div className="text-xs font-semibold uppercase mb-1 px-1 text-muted tracking-[0.05em]">GitHub repos</div>
+                  <div className="text-xs font-semibold uppercase mb-1 px-1 text-muted tracking-[0.05em]">Your published apps</div>
                   {orgOnly.map((r) => (
                     <button key={r.id} onClick={() => handleSelectOrg(r)} className="w-full flex items-center gap-3 p-2.5 rounded-lg text-left mb-1 bg-transparent border-0 cursor-pointer text-ink">
                       <span className="w-2 h-2 rounded-full bg-accent shrink-0" />

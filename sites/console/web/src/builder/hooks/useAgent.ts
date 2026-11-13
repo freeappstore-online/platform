@@ -216,8 +216,8 @@ export function useAgent() {
     setTokensOut(0);
   }, []);
 
-  const createProject = useCallback((name: string, appId?: string) => {
-    const id = projectsMgr.create(name, appId);
+  const createProject = useCallback((name: string) => {
+    const id = projectsMgr.create(name);
     resetUI();
     return id;
   }, [projectsMgr, resetUI]);
@@ -256,10 +256,12 @@ export function useAgent() {
     if (pushAsked.current || !sessionId) return;
     if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) return;
     pushAsked.current = true;
-    const perm = await Notification.requestPermission();
-    if (perm !== "granted") return;
     try {
       const reg = await navigator.serviceWorker.ready;
+      // Permission granted but no subscription means the user turned push off
+      // in Settings; subscribing again here would undo that (#590).
+      if (Notification.permission === "granted" && !(await reg.pushManager.getSubscription())) return;
+      if ((await Notification.requestPermission()) !== "granted") return;
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),

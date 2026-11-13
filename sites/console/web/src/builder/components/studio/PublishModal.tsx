@@ -63,7 +63,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
       setResult(data);
       const steps: any[] = data?.admin?.steps || [];
       const audit = { pass: steps.filter((s) => s.status === "ok").length, fail: steps.filter((s) => s.status === "fail").length };
-      onPublished(data?.appUrl || `https://${appId}.freeappstore.online`, audit);
+      // A partly provisioned app is not live; the modal lists the failed steps.
+      if (audit.fail === 0) onPublished(data?.appUrl || `https://${appId}.freeappstore.online`, audit);
     } catch (err) {
       setError(String(err));
     } finally {

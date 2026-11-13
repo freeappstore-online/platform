@@ -36,7 +36,7 @@ describe("Toolbar", () => {
     const agent = { projects: [], tokensIn: 10, tokensOut: 20 } as unknown as Agent;
     const html = renderToStaticMarkup(<MemoryRouter><Toolbar agent={agent} settings={settings}
       settingsOpen={settingsOpen} setSettingsOpen={noop} onBackToConsole={noop}
-      onPickProject={noop} onCreateProject={noop} /></MemoryRouter>);
+      onPickProject={noop} onCreateProject={noop} onOpenApp={noop} /></MemoryRouter>);
     expect(html).toContain('aria-expanded="' + settingsOpen + '"');
     expect(html).toContain(settingsOpen ? "bg-(--accent-soft) border-accent" : "bg-transparent border-line");
     expect(html).toContain("Select project");

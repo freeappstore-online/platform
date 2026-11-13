@@ -9,7 +9,7 @@ const projects: Project[] = [
 ];
 describe("ProjectPicker", () => {
   it.each(["one", "two"])("highlights the current project %s on an opaque surface", (currentId) => {
-    const html = renderToStaticMarkup(<ProjectPicker projects={projects} currentId={currentId} onSelect={() => {}} onCreate={() => {}} onClose={() => {}} />);
+    const html = renderToStaticMarkup(<ProjectPicker projects={projects} currentId={currentId} onSelect={() => {}} onCreate={() => {}} onOpenApp={() => {}} onClose={() => {}} />);
     expect(html).toContain("bg-paper");
     expect(html).toContain("First");
     expect(html).toContain("Second");

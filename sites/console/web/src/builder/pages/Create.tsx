@@ -55,6 +55,17 @@ export function Create() {
   useEffect(() => {
     if (routeId && routeId !== agent.currentProjectId) agent.switchProject(routeId);
   }, [routeId]);
+  // A route id that is no project (the keys page links back by app slug; stale
+  // or mistyped links) would silently show the newest project under the wrong
+  // URL. Send it to the project bound to that app, else to the list (#590).
+  useEffect(() => {
+    if (!routeId || agent.projectsLoading || agent.projectsError) return;
+    if (agent.projects.some((p) => p.id === routeId)) return;
+    const bound = agent.projects.find((p) => p.appId === routeId);
+    navigate(bound ? `/app/${bound.id}` : "/", { replace: true });
+  }, [routeId, agent.projectsLoading, agent.projectsError, agent.projects]);
+  // The publish banner belongs to the project it was published from.
+  useEffect(() => { setPublishResult(null); }, [agent.currentProjectId]);
 
   // Auto-speak: when a turn finishes (streaming true→false) and auto-speak is
   // on, read the latest assistant message aloud.
@@ -239,7 +250,8 @@ export function Create() {
               settingsOpen={settingsOpen} setSettingsOpen={setSettingsOpen}
               onBackToConsole={() => navigate("/")}
               onPickProject={(id: string) => navigate(`/app/${id}`)}
-              onCreateProject={(name: string, appId?: string) => { const id = agent.createProject(name, appId); navigate(`/app/${id}`); }}
+              onCreateProject={(name: string) => { const id = agent.createProject(name); navigate(`/app/${id}`); }}
+              onOpenApp={(id: string) => navigate(`/?app=${encodeURIComponent(id)}`)}
             />
           </div>
           <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2 min-h-0">

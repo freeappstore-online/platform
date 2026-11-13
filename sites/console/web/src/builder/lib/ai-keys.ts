@@ -222,8 +222,7 @@ export function getDefaultProvider(): string {
   const stored = localStorage.getItem("fas_provider");
   // Fall back if the stored provider is no longer offered (e.g. legacy
   // "github" after we removed it from the dropdown).
-  if (stored && stored !== "openrouter" && PROVIDERS.some((p) => p.type === stored)) return stored;
-  if (stored === "openrouter" && getSavedKeys().openrouter) return stored;
+  if (stored && PROVIDERS.some((p) => p.type === stored)) return stored;
   return "anthropic";
 }
 
