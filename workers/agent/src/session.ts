@@ -35,6 +35,34 @@ interface ErrorEntry {
 }
 
 const MAX_MESSAGES = 200;
+/** Stored transcript size. The whole session is one storage value (2 MB limit)
+ *  that also holds up to 2 x 750 KB of files, and a write_file call carries the
+ *  file body. The model is sent at most 80k characters of history anyway (#599). */
+const MAX_MESSAGE_CHARS = 400_000;
+/** Follow-up rounds after an infra action: enough to read the build logs, fix
+ *  and redeploy, bounded so a failing build cannot loop (#599). */
+const MAX_FOLLOWUPS = 3;
+const EMPTY_REPLY_ERROR = "The model stopped without a reply. Send a message to continue.";
+
+/** How many of the oldest messages to drop to fit both caps. The newest is always kept. */
+export function excessMessages(messages: Message[]): number {
+  let drop = Math.max(0, messages.length - MAX_MESSAGES);
+  let chars = 0;
+  for (let i = messages.length - 1; i >= drop; i--) {
+    chars += JSON.stringify(messages[i]).length;
+    if (chars > MAX_MESSAGE_CHARS && i < messages.length - 1) {
+      drop = i + 1;
+      break;
+    }
+  }
+  return drop;
+}
+
+function capMessages(session: { messages: Message[] }): number {
+  const drop = excessMessages(session.messages);
+  if (drop > 0) session.messages = session.messages.slice(drop);
+  return drop;
+}
 /** Files a session tracks. Matches the import cap (IMPORT_MAX_FILES); storage
  *  is bounded by the import byte cap, not by this count. */
 const MAX_FILES = 200;
@@ -133,6 +161,8 @@ export interface PendingTurn {
   nudged?: boolean;
   infraQueue: ToolCall[];
   infraResults: { id: string; content: string }[];
+  /** Follow-up rounds already started in this turn. */
+  followups?: number;
   /** True once the main phase's messages are committed (mirrors the legacy path). */
   turnSaved: boolean;
   /** Date.now() at the last completed step. */
@@ -178,14 +208,26 @@ function turnEventsKey(turnId: string): string {
   return `turnEvents:${turnId}`;
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new StallError(message)), ms);
+/** Reject once nothing has progressed for `ms`. A step that keeps emitting
+ *  (a long streamed reply) is not stalled, however long it runs (#599). */
+function withIdleTimeout<T>(p: Promise<T>, ms: number, lastProgress: () => number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stalled = new Promise<never>((_, reject) => {
+    const check = () => {
+      const remaining = lastProgress() + ms - Date.now();
+      if (remaining <= 0) reject(new StallError(message));
+      else timer = setTimeout(check, remaining);
+    };
+    timer = setTimeout(check, ms);
   });
-  return Promise.race([p, timeout]).finally(() => {
-    if (timer !== null) clearTimeout(timer);
+  return Promise.race([p, stalled]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
   });
+}
+
+function scrubber(aiConfig: AIConfig): (s: string) => string {
+  const apiKey = aiConfig.apiKey;
+  return (s) => (apiKey && apiKey.length > 8 ? s.replaceAll(apiKey, "[REDACTED]") : s);
 }
 
 /** Extract a human-readable detail string from a deploy status event. */
@@ -213,6 +255,11 @@ export class AgentSession implements DurableObject {
   private session: SessionState | null = null;
   /** Alarm path: events emitted since the last flush to storage. */
   private eventBuffer: { turnId: string; events: TurnEvent[]; lastFlush: number } | null = null;
+  /** Date.now() at the running step's last emitted event. */
+  private lastProgressAt = 0;
+  /** Turns ended (stall, /reset) while a step was still in flight. That step
+   *  cannot be cancelled, so it must not write anything when it returns (#599). */
+  private abandonedTurns = new Set<string>();
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -444,29 +491,29 @@ export class AgentSession implements DurableObject {
     const session = await this.load();
     session.messages.push({ role: "user", content: message.slice(0, 50_000) });
     session.messages.push({ role: "assistant", content: `Error: ${errorText}` });
-    if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    capMessages(session);
     await this.save();
     await this.syncToD1();
   }
 
+  /** The 409 for a /chat that arrives while a turn is running, else null. */
+  private async turnInProgress(request: Request): Promise<Response | null> {
+    const active = await this.activePendingTurn();
+    if (!active) return null;
+    const session = await this.load();
+    return this.jsonWithLastEventId(
+      { error: "A build is already in progress.", turnId: active.turnId, status: this.computeDevStatus(session, true), liveUrl: "/live" },
+      409,
+      request,
+      active.turnId,
+      { "Retry-After": "2" },
+    );
+  }
+
   /** POST /chat — stream an agent turn via SSE */
   private async handleChat(request: Request): Promise<Response> {
-    const active = await this.activePendingTurn();
-    if (active) {
-      const session = await this.load();
-      return this.jsonWithLastEventId(
-        {
-          error: "A build is already in progress.",
-          turnId: active.turnId,
-          status: this.computeDevStatus(session, true),
-          liveUrl: "/live",
-        },
-        409,
-        request,
-        active?.turnId,
-        { "Retry-After": "2" },
-      );
-    }
+    const busy = await this.turnInProgress(request);
+    if (busy) return busy;
     // Validate before writing pendingTurn (early returns must not lock the session).
     const contentLength = parseInt(request.headers.get("Content-Length") || "0", 10);
     if (contentLength > 200_000) {
@@ -508,6 +555,12 @@ export class AgentSession implements DurableObject {
       if (this.applyArchetypeToEmptySession(session, requestedArchetype, requestedPreset)) await this.save();
     }
 
+    // Reading the body let other requests in: a second /chat may have started
+    // a turn since the first check (#599). Nothing from here to the pendingTurn
+    // write yields to another request.
+    const raced = await this.turnInProgress(request);
+    if (raced) return raced;
+
     if (this.env.ALARM_LOOP === "true") return this.startAlarmTurn(request, body);
 
     const session = await this.load();
@@ -515,7 +568,7 @@ export class AgentSession implements DurableObject {
     const baselineFiles = new Map(Object.entries(session.baselineFiles));
     const history = session.messages.slice();
     session.messages.push({ role: "user", content: body.message });
-    if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    capMessages(session);
     await this.save();
     await this.syncToD1();
 
@@ -646,7 +699,7 @@ export class AgentSession implements DurableObject {
     this.logTerminalError(result.terminalError, ctx.scrubKey);
     if (result.usage) addUsage(ctx.session.tokenUsage, result.usage);
     ctx.session.messages = [...ctx.history, ...result.newMessages];
-    if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
+    capMessages(ctx.session);
     if (ctx.session.errors.length > MAX_ERRORS) ctx.session.errors = ctx.session.errors.slice(-MAX_ERRORS);
     this.trimFileMap(ctx.files, ctx.baselineFiles);
     ctx.session.files = Object.fromEntries(ctx.files);
@@ -658,7 +711,7 @@ export class AgentSession implements DurableObject {
   private async appendLegacyFailure(ctx: LegacyTurnContext, err: unknown): Promise<void> {
     try {
       ctx.session.messages.push({ role: "assistant", content: `Error: ${ctx.scrubKey(String(err))}` });
-      if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
+      capMessages(ctx.session);
       await this.save();
     } catch {
       /* best effort */
@@ -696,7 +749,7 @@ export class AgentSession implements DurableObject {
 
     this.logTerminalError(followUp.terminalError, ctx.scrubKey);
     ctx.session.messages.push(...followUp.newMessages);
-    if (ctx.session.messages.length > MAX_MESSAGES) ctx.session.messages = ctx.session.messages.slice(-MAX_MESSAGES);
+    capMessages(ctx.session);
     ctx.session.files = Object.fromEntries(ctx.files);
 
     if (followUp.infraRequests.length > 0) {
@@ -830,9 +883,8 @@ export class AgentSession implements DurableObject {
     const session = await this.load();
     const history = session.messages.slice();
     session.messages.push({ role: "user", content: body.message });
-    if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    capMessages(session);
     await this.save();
-    await this.syncToD1();
 
     const now = Date.now();
     const pending: PendingTurn = {
@@ -861,6 +913,7 @@ export class AgentSession implements DurableObject {
     await this.state.storage.put(turnEventsKey(pending.turnId), { turnId: pending.turnId, nextSeq: 1, events: [] } satisfies TurnEventLog);
     await this.state.storage.delete("turnEvents"); // pre-#43 compatibility key; do not replay stale turns.
     await this.state.storage.setAlarm(now);
+    await this.syncToD1();
 
     const { readable, writable } = new TransformStream<Uint8Array>();
     // Not awaited: the relay lives as long as the client reads. If the client
@@ -974,9 +1027,9 @@ export class AgentSession implements DurableObject {
 
   /** Emits provider stream events plus session events (deploy_status). */
   private emitter(pending: PendingTurn): (event: TurnEvent) => Promise<void> {
-    const apiKey = pending.aiConfig.apiKey;
-    const scrub = (s: string) => (apiKey && apiKey.length > 8 ? s.replaceAll(apiKey, "[REDACTED]") : s);
+    const scrub = scrubber(pending.aiConfig);
     return async (event) => {
+      this.lastProgressAt = Date.now();
       const safe = event.type === "error" || event.type === "text" ? { ...event, data: scrub(event.data) } : event;
       if (!this.eventBuffer || this.eventBuffer.turnId !== pending.turnId) {
         this.eventBuffer = { turnId: pending.turnId, events: [], lastFlush: Date.now() };
@@ -1003,13 +1056,8 @@ export class AgentSession implements DurableObject {
 
   /** Write the current LLM phase's messages into session.messages. */
   private commitPhaseMessages(session: SessionState, pending: PendingTurn): void {
-    let all = [...session.messages.slice(0, pending.messagesCursor), ...pending.newMessages];
-    if (all.length > MAX_MESSAGES) {
-      const drop = all.length - MAX_MESSAGES;
-      all = all.slice(drop);
-      pending.messagesCursor = Math.max(0, pending.messagesCursor - drop);
-    }
-    session.messages = all;
+    session.messages = [...session.messages.slice(0, pending.messagesCursor), ...pending.newMessages];
+    pending.messagesCursor = Math.max(0, pending.messagesCursor - capMessages(session));
   }
 
   /** Alarm-path twin of trimFileMap: untrack in both, never push a deletion. */
@@ -1043,14 +1091,18 @@ export class AgentSession implements DurableObject {
     }
 
     let next: number | "done";
+    this.lastProgressAt = Date.now();
     try {
-      next = await withTimeout(
+      next = await withIdleTimeout(
         this.runTurnStep(session, pending),
         budget,
+        () => this.lastProgressAt,
         `Build stalled — no progress for >${budget / 1000}s (${pending.phase}, step ${pending.loopIndex})`,
       );
     } catch (err) {
+      if (this.abandonedTurns.has(pending.turnId)) return;
       if (err instanceof StallError) {
+        this.abandonedTurns.add(pending.turnId);
         await this.failTurn(pending, err.message, "alarm", true);
       } else if (pending.phase.startsWith("followup")) {
         // Follow-up failed — not critical, the infra action already completed.
@@ -1062,6 +1114,7 @@ export class AgentSession implements DurableObject {
       return;
     }
 
+    if (this.abandonedTurns.has(pending.turnId)) return;
     if (next === "done") {
       await this.completeTurn(pending);
       return;
@@ -1091,19 +1144,25 @@ export class AgentSession implements DurableObject {
       this.env,
       canPrepareFreshCapabilityPackages(session),
     );
+    if (this.abandonedTurns.has(pending.turnId)) return "done";
     addUsage(session.tokenUsage, counted.usage);
 
+    const scrub = scrubber(pending.aiConfig);
     switch (step.kind) {
       case "threw":
-        return this.finishLlmPhase(session, pending);
+        // The error event is already out; keep it in the transcript and the error log too (#599).
+        pending.newMessages.push({ role: "assistant", content: `Error: ${scrub(step.message)}` });
+        return this.finishLlmPhase(session, pending, scrub(step.message));
       case "stream_error":
-        pending.newMessages.push({ role: "assistant", content: step.message });
-        return this.finishLlmPhase(session, pending, step.message);
+        pending.newMessages.push({ role: "assistant", content: scrub(step.message) });
+        return this.finishLlmPhase(session, pending, scrub(step.message));
       case "rate_limited": {
         pending.retries++;
         if (pending.retries > MAX_RATE_LIMIT_RETRIES) {
-          await emit({ type: "error", data: "Rate limited after 3 retries. Wait a minute or switch to a BYOK provider (gear icon)." });
-          return this.finishLlmPhase(session, pending);
+          const message = "Rate limited after 3 retries. Wait a minute or switch to a BYOK provider (gear icon).";
+          await emit({ type: "error", data: message });
+          pending.newMessages.push({ role: "assistant", content: `Error: ${message}` });
+          return this.finishLlmPhase(session, pending, message);
         }
         const retryDelay = 5000 * pending.retries;
         await emit({
@@ -1130,6 +1189,11 @@ export class AgentSession implements DurableObject {
       if (stall === "give_up") {
         await emit({ type: "error", data: STALL_VISIBLE_ERROR });
         pending.newMessages.push({ role: "assistant", content: STALL_VISIBLE_ERROR });
+      } else if (step.appended.length === 0 && pending.phase === "main") {
+        // Nothing came back at all. A missing follow-up summary needs no notice.
+        await emit({ type: "error", data: EMPTY_REPLY_ERROR });
+        pending.newMessages.push({ role: "assistant", content: `Error: ${EMPTY_REPLY_ERROR}` });
+        return this.finishLlmPhase(session, pending, EMPTY_REPLY_ERROR);
       }
       this.commitPhaseMessages(session, pending);
       return this.finishLlmPhase(session, pending);
@@ -1197,6 +1261,7 @@ export class AgentSession implements DurableObject {
           isAdmin: session.ownerIsAdmin ?? false,
           deployStatus: session.deployStatus,
           onDeployStatus: async (status) => {
+            if (this.abandonedTurns.has(pending.turnId)) return;
             session.deployStatus = status;
             this.logDeploy(status.phase, deployStatusDetail(status));
             if (status.phase === "error") this.logError("deploy", status.error);
@@ -1208,6 +1273,7 @@ export class AgentSession implements DurableObject {
             }
           },
           onAppDeployed: async (id, name) => {
+            if (this.abandonedTurns.has(pending.turnId)) return;
             session.appId = id;
             session.appName = name;
             session.deployStatus = { phase: "provisioning", steps: [] };
@@ -1218,6 +1284,7 @@ export class AgentSession implements DurableObject {
       } catch (err) {
         toolResult = `Tool ${tc.name} threw an error: ${String(err)}`;
       }
+      if (this.abandonedTurns.has(pending.turnId)) return "done";
       session.files = Object.fromEntries(files);
       session.baselineFiles = Object.fromEntries(baselineFiles);
       await emit({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
@@ -1227,13 +1294,24 @@ export class AgentSession implements DurableObject {
 
     // All infra tools done: one tool_result message matching the assistant's calls.
     session.messages.push({ role: "tool_result", content: "", toolResults: pending.infraResults });
-    if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+    capMessages(session);
+    const hasError = pending.infraResults.some((r) => /error|fail|threw/i.test(r.content));
+    const followups = pending.followups ?? 0;
+    if (followups >= MAX_FOLLOWUPS) {
+      if (hasError) {
+        const notice = `Stopped after ${MAX_FOLLOWUPS} automatic attempts to fix this. Send a message to continue.`;
+        await emit({ type: "text", data: notice });
+        session.messages.push({ role: "assistant", content: notice });
+      }
+      await this.save();
+      await this.syncToD1();
+      return "done";
+    }
     await this.save();
     await this.syncToD1();
-    if (pending.phase === "followup-infra") return "done";
 
     // Follow-up: let the AI react to the infra results (retry on error, else summarise).
-    const hasError = pending.infraResults.some((r) => /error|fail|threw/i.test(r.content));
+    pending.followups = followups + 1;
     const followUpPrompt = hasError
       ? "The tool action above returned an error. Analyze the error, fix the issue if possible, and retry the action. Do not ask the user — just fix it."
       : "The action completed. Summarize the result briefly for the user.";
@@ -1260,8 +1338,7 @@ export class AgentSession implements DurableObject {
 
   /** End a turn with an error that is durable in session.errors and D1. */
   private async failTurn(pending: PendingTurn, message: string, source: string, stalled: boolean): Promise<void> {
-    const apiKey = pending.aiConfig.apiKey;
-    const safe = apiKey && apiKey.length > 8 ? message.replaceAll(apiKey, "[REDACTED]") : message;
+    const safe = scrubber(pending.aiConfig)(message);
     const session = await this.load();
     this.logError(source, safe);
     await this.emitter(pending)({ type: "error", data: safe });
@@ -1271,7 +1348,7 @@ export class AgentSession implements DurableObject {
     if (stalled || !pending.turnSaved) {
       if (pending.phase === "main" && !pending.turnSaved) this.commitPhaseMessages(session, pending);
       session.messages.push({ role: "assistant", content: `Error: ${safe}` });
-      if (session.messages.length > MAX_MESSAGES) session.messages = session.messages.slice(-MAX_MESSAGES);
+      capMessages(session);
     }
     await this.flushEvents();
     await this.clearPendingTurn(pending.turnId);
@@ -1525,6 +1602,8 @@ export class AgentSession implements DurableObject {
 
   /** POST /reset — start over */
   private async handleReset(request: Request): Promise<Response> {
+    const running = await this.state.storage.get<PendingTurn>("pendingTurn");
+    if (running) this.abandonedTurns.add(running.turnId);
     const latestTurnId = await this.state.storage.get<string>(LATEST_TURN_ID_KEY);
     await this.state.storage.delete([
       "pendingTurn",

@@ -9,7 +9,7 @@ import { runAgentStep, runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./
 import { computeFileDelta } from "./deploy";
 import { executeInfraTool } from "./infra-exec";
 import type { Message } from "./providers/types";
-import { AgentSession, INFRA_STALL_THRESHOLD_MS, type PendingTurn, STALL_THRESHOLD_MS } from "./session";
+import { AgentSession, excessMessages, INFRA_STALL_THRESHOLD_MS, type PendingTurn, STALL_THRESHOLD_MS } from "./session";
 
 vi.mock("./agent", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./agent")>();
@@ -503,6 +503,144 @@ describe("ALARM_LOOP=true: alarm()", () => {
     await session.fetch(new Request("https://agent/reset", { method: "POST", headers: { Authorization: "Bearer tok" } }));
     expect(store.has("pendingTurn")).toBe(false);
     expect(alarmAt()).toBeNull();
+  });
+});
+
+describe("turn-loop robustness (#599)", () => {
+  async function started(message?: string) {
+    const { state, store } = fakeState();
+    const { env, d1Writes } = fakeEnv();
+    const session = new AgentSession(state, env);
+    const res = await session.fetch(chatRequest(message));
+    await res.body?.cancel();
+    return { session, store, d1Writes };
+  }
+  const saved = (store: Map<string, unknown>) =>
+    store.get("session") as { messages: Message[]; errors: Array<{ source: string; message: string }> };
+
+  it("does not call a long reply stalled while it keeps streaming", async () => {
+    const { session, store } = await started();
+    vi.useFakeTimers();
+    scriptSteps(async (_files, emit) => {
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 60_000));
+        await emit({ type: "text", data: "more " });
+      }
+      return { kind: "final", appended: [assistant("a long answer")] };
+    });
+    let finished = false;
+    const running = session.alarm().then(() => {
+      finished = true;
+    });
+    await vi.advanceTimersByTimeAsync(300_000);
+    for (let i = 0; i < 50 && !finished; i++) await vi.advanceTimersByTimeAsync(1);
+    await running;
+
+    expect(saved(store).errors).toEqual([]);
+    expect(saved(store).messages.at(-1)).toEqual(assistant("a long answer"));
+  });
+
+  it("a step that returns after its turn stalled writes nothing", async () => {
+    const { session, store } = await started();
+    vi.useFakeTimers();
+    let release!: (o: StepOutcome) => void;
+    stepMock.mockImplementation(() => new Promise<StepOutcome>((r) => (release = r)));
+    let finished = false;
+    const running = session.alarm().then(() => {
+      finished = true;
+    });
+    await vi.advanceTimersByTimeAsync(STALL_THRESHOLD_MS + 10);
+    for (let i = 0; i < 50 && !finished; i++) await vi.advanceTimersByTimeAsync(1);
+    await running;
+    release({ kind: "final", appended: [assistant("too late")] });
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(saved(store).messages.at(-1)!.content).toMatch(/^Error: Build stalled/);
+    expect(store.has("pendingTurn")).toBe(false);
+  });
+
+  it("a step that returns after /reset does not bring the turn back", async () => {
+    const { session, store } = await started();
+    let release!: (o: StepOutcome) => void;
+    stepMock.mockImplementation(() => new Promise<StepOutcome>((r) => (release = r)));
+    const running = session.alarm();
+    await new Promise((r) => setTimeout(r, 5));
+    await session.fetch(new Request("https://agent/reset", { method: "POST", headers: { Authorization: "Bearer tok" } }));
+    release({ kind: "continue", appended: [assistant("from the old turn", [{ id: "w1", name: "write_file", input: {} }])] });
+    await running;
+
+    expect(store.has("pendingTurn")).toBe(false);
+    expect(saved(store).messages).toEqual([]);
+  });
+
+  it("keeps fixing after the model reads the build logs in a follow-up", async () => {
+    const { session, store } = await started();
+    const push = { id: "p1", name: "push_update", input: {} };
+    const logs = { id: "l1", name: "get_build_logs", input: {} };
+    const push2 = { id: "p2", name: "push_update", input: {} };
+    scriptSteps(
+      { kind: "infra", appended: [assistant("Pushing", [push])], infraRequests: [{ toolCall: push }] },
+      { kind: "infra", appended: [assistant("Checking logs", [logs])], infraRequests: [{ toolCall: logs }] },
+      { kind: "infra", appended: [assistant("Fixed, pushing again", [push2])], infraRequests: [{ toolCall: push2 }] },
+      { kind: "final", appended: [assistant("Fixed and live")] },
+    );
+    infraMock.mockResolvedValueOnce("Build failed").mockResolvedValueOnce("error TS2304 at App.tsx").mockResolvedValueOnce("Pushed. Live.");
+    await drain(session, store);
+
+    expect(stepMock).toHaveBeenCalledTimes(4);
+    expect(saved(store).messages.at(-1)).toEqual(assistant("Fixed and live"));
+  });
+
+  it("stops with a notice after the follow-up limit when the build still fails", async () => {
+    const { session, store } = await started();
+    let n = 0;
+    stepMock.mockImplementation(async () => {
+      const call = { id: `p${++n}`, name: "push_update", input: {} };
+      return { kind: "infra", appended: [assistant("Pushing", [call])], infraRequests: [{ toolCall: call }] };
+    });
+    infraMock.mockResolvedValue("Build failed");
+    await drain(session, store);
+
+    expect(stepMock).toHaveBeenCalledTimes(4); // main + 3 follow-ups
+    expect(store.has("pendingTurn")).toBe(false);
+    expect(saved(store).messages.at(-1)!.content).toMatch(/^Stopped after 3 automatic attempts/);
+  });
+
+  it("a thrown provider error stays in the transcript and the error log, without the key", async () => {
+    const { session, store, d1Writes } = await started();
+    scriptSteps({ kind: "threw", message: `TypeError: fetch failed for ${API_KEY}` });
+    await drain(session, store);
+
+    expect(saved(store).messages.at(-1)).toEqual({ role: "assistant", content: "Error: TypeError: fetch failed for [REDACTED]" });
+    expect(saved(store).errors.at(-1)).toMatchObject({ source: "agent-stream" });
+    expect(JSON.stringify(d1Writes)).not.toContain(API_KEY);
+  });
+
+  it("rate-limit exhaustion stays in the transcript and the error log", async () => {
+    const { session, store } = await started();
+    stepMock.mockResolvedValue({ kind: "rate_limited" });
+    await drain(session, store);
+
+    expect(saved(store).messages.at(-1)!.content).toMatch(/^Error: Rate limited after 3 retries/);
+    expect(saved(store).errors.at(-1)!.message).toMatch(/Rate limited/);
+  });
+
+  it("an empty reply is reported, not stored as an empty assistant message", async () => {
+    const { session, store } = await started();
+    scriptSteps({ kind: "final", appended: [] });
+    await drain(session, store);
+
+    const messages = saved(store).messages;
+    expect(messages.some((m) => m.role === "assistant" && !m.content)).toBe(false);
+    expect(messages.at(-1)!.content).toMatch(/^Error: The model stopped without a reply/);
+    expect(latestTurnLog(store).events.map((e: any) => e.type)).toContain("error");
+  });
+
+  it("caps the stored transcript by size as well as count", () => {
+    const big = (i: number): Message => ({ role: "user", content: `${i}`.padEnd(150_000, "x") });
+    expect(excessMessages([big(1), big(2), big(3), big(4)])).toBe(2);
+    expect(excessMessages([{ role: "user", content: "x".repeat(900_000) }])).toBe(0); // the newest is kept
+    expect(excessMessages(Array.from({ length: 205 }, () => ({ role: "user", content: "hi" }) as Message))).toBe(5);
   });
 });
 

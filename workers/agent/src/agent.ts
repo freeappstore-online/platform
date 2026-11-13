@@ -156,6 +156,8 @@ export function prepareTurn(
       i = next - 1;
     } else if (m.role === "tool_result") {
       // Orphaned tool_result without preceding tool_use — drop it
+    } else if (m.role === "assistant" && !m.content) {
+      // Empty assistant message stored before #599 — providers reject it
     } else {
       cleaned.push(m);
     }
@@ -203,7 +205,7 @@ export type StepOutcome =
   /** The provider streamed an error event: the turn ends with that error. */
   | { kind: "stream_error"; message: string }
   /** The provider call threw; an error event has already been emitted. */
-  | { kind: "threw" }
+  | { kind: "threw"; message: string }
   /** The model answered without tool calls: the turn is complete. */
   | { kind: "final"; appended: Message[] }
   /** File tools ran; loop again. */
@@ -248,7 +250,7 @@ export async function runAgentStep(
     }
   } catch (err) {
     await emit({ type: "error", data: String(err) });
-    return { kind: "threw" };
+    return { kind: "threw", message: String(err) };
   }
 
   const assistantMsg: Message = {
@@ -256,7 +258,8 @@ export async function runAgentStep(
     content: assistantText,
     toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
   };
-  if (toolCalls.length === 0) return { kind: "final", appended: [assistantMsg] };
+  // An empty reply is not a message: providers reject one in later history (#599).
+  if (toolCalls.length === 0) return { kind: "final", appended: assistantText ? [assistantMsg] : [] };
 
   // Separate file tools (execute now) from infra tools (execute in session)
   const fileToolCalls = toolCalls.filter((tc) => !INFRA_TOOLS.has(tc.name));

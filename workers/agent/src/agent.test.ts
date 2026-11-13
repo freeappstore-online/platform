@@ -11,6 +11,22 @@ import type { AIConfig, StreamEvent } from "./providers/types";
 const storeConfig = getConfig("apps");
 
 describe("prepareTurn tool history recovery", () => {
+  it("drops an empty assistant message stored by an earlier build (#599)", () => {
+    const prepared = prepareTurn(
+      aiConfig,
+      [
+        { role: "user", content: "Build it" },
+        { role: "assistant", content: "" },
+      ],
+      "Continue",
+      storeConfig,
+    );
+    expect(prepared.messages).toEqual([
+      { role: "user", content: "Build it" },
+      { role: "user", content: "Continue" },
+    ]);
+  });
+
   it("fills a missing result for each tool call id before continuing", () => {
     const prepared = prepareTurn(
       aiConfig,
