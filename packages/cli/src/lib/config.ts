@@ -18,7 +18,6 @@ export interface FasConfig {
    */
   session?: {
     token: string;
-    obtainedAt: number;
   };
 }
 
@@ -34,28 +33,27 @@ export function normalizeApiBase(s: string): string {
 }
 
 /**
- * fas session lifetime. MUST match SESSION_TTL_SECONDS in the backend
- * (packages/backend/src/lib/session.ts) — the backend signs the JWT's `exp`,
- * the CLI uses this only to warn the user *before* the server 401s.
- */
-export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-
-/**
- * Whole days until the stored session expires, computed from `obtainedAt`.
- * - `null` — no session, or a legacy config with no `obtainedAt` (can't tell;
- *   don't warn).
+ * Whole days until the stored session expires, read from the token's own `exp`
+ * claim (the token is `<base64url JSON payload>.<signature>`), so the CLI has
+ * no copy of the backend's lifetime to keep in step.
+ * - `null` — no session, or a token whose payload can't be read (don't warn).
  * - `<= 0` — already expired (the server will 401; the user must `fas login`).
  * Lets commands give an accurate "your session expired" message instead of the
  * misleading "not signed in" (which reads as a permissions problem).
  */
 export function sessionDaysRemaining(config: FasConfig): number | null {
-  const obtainedAt = config.session?.obtainedAt;
-  if (!config.session?.token || !obtainedAt) return null;
-  const msLeft = obtainedAt + SESSION_TTL_MS - Date.now();
+  const token = config.session?.token;
+  if (!token) return null;
+  let exp: unknown;
+  try {
+    exp = JSON.parse(Buffer.from(token.slice(0, token.lastIndexOf('.')), 'base64url').toString()).exp;
+  } catch {
+    return null;
+  }
+  if (typeof exp !== 'number') return null;
   // ceil so a token with 29.99 days left reads as "30 days", not "29" right
-  // after login. An already-expired token still yields <= 0 (ceil of a small
-  // negative is 0 or negative), which callers treat as "must re-login".
-  return Math.ceil(msLeft / (24 * 60 * 60 * 1000));
+  // after login. An already-expired token still yields <= 0.
+  return Math.ceil((exp * 1000 - Date.now()) / (24 * 60 * 60 * 1000));
 }
 
 /**

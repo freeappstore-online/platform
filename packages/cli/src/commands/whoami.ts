@@ -18,8 +18,8 @@ export const whoamiCommand = new Command('whoami')
 
 /**
  * The session line. sessionDaysRemaining() is null both when there's no
- * session token and when an older CLI saved one without a timestamp; only
- * the second is active (#283).
+ * session token and when the token's expiry can't be read; only the second
+ * is active (#283).
  */
 export function sessionStatus(config: FasConfig): string {
   if (!config.session?.token) return 'Session: none — run `fas login` to sign in to the API.';

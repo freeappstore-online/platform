@@ -192,7 +192,7 @@ describe('bearer', () => {
   it('sets the Authorization and Content-Type headers from the session token', () => {
     const headers = bearer({
       apiBase: 'https://x',
-      session: { token: 'tok-1', obtainedAt: 0 },
+      session: { token: 'tok-1' },
     });
     expect(headers).toEqual({
       Authorization: 'Bearer tok-1',

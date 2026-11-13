@@ -50,7 +50,7 @@ export async function runLogin(): Promise<{ login: string }> {
   await writeConfig({
     ...config,
     github: { login },
-    session: { token: sessionToken, obtainedAt: Date.now() },
+    session: { token: sessionToken },
   });
   process.stdout.write(
     `\n✓ Signed in as @${login}\n` +

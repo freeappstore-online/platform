@@ -2,12 +2,7 @@ import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  type FasConfig,
-  normalizeApiBase,
-  SESSION_TTL_MS,
-  sessionDaysRemaining,
-} from './config.js';
+import { type FasConfig, normalizeApiBase, sessionDaysRemaining } from './config.js';
 
 describe('normalizeApiBase', () => {
   it('leaves a clean URL alone', () => {
@@ -46,26 +41,28 @@ describe('sessionDaysRemaining', () => {
     expect(sessionDaysRemaining(base)).toBeNull();
   });
 
-  it('returns null for a legacy session with no obtainedAt (can not tell)', () => {
-    const cfg = { ...base, session: { token: 't' } } as unknown as FasConfig;
-    expect(sessionDaysRemaining(cfg)).toBeNull();
+  const DAY = 24 * 60 * 60 * 1000;
+  const expiringIn = (ms: number): FasConfig => {
+    const payload = { uid: 'u1', exp: Math.floor((Date.now() + ms) / 1000) };
+    const token = `${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
+    return { ...base, session: { token } };
+  };
+
+  it('returns null for a token whose payload cannot be read', () => {
+    expect(sessionDaysRemaining({ ...base, session: { token: 't' } })).toBeNull();
   });
 
-  it('returns ~30 for a fresh token', () => {
-    const cfg: FasConfig = { ...base, session: { token: 't', obtainedAt: Date.now() } };
-    expect(sessionDaysRemaining(cfg)).toBe(30);
+  it('reads the expiry from the token, not from when it was stored (#531)', () => {
+    expect(sessionDaysRemaining(expiringIn(30 * DAY))).toBe(30);
+    expect(sessionDaysRemaining(expiringIn(7 * DAY))).toBe(7);
   });
 
   it('is positive but small for a nearly-expired token', () => {
-    const obtainedAt = Date.now() - (SESSION_TTL_MS - 2 * 24 * 60 * 60 * 1000);
-    const cfg: FasConfig = { ...base, session: { token: 't', obtainedAt } };
-    expect(sessionDaysRemaining(cfg)).toBe(2);
+    expect(sessionDaysRemaining(expiringIn(2 * DAY - 60_000))).toBe(2);
   });
 
   it('is <= 0 for an expired token', () => {
-    const obtainedAt = Date.now() - (SESSION_TTL_MS + 24 * 60 * 60 * 1000);
-    const cfg: FasConfig = { ...base, session: { token: 't', obtainedAt } };
-    expect(sessionDaysRemaining(cfg)).toBeLessThanOrEqual(0);
+    expect(sessionDaysRemaining(expiringIn(-DAY))).toBeLessThanOrEqual(0);
   });
 });
 
@@ -109,7 +106,7 @@ describe('config file (#481, #520)', () => {
     const home = await freshHome();
     vi.stubEnv('FAS_API_BASE', 'https://attacker.example');
     const cfg = await import('./config.js');
-    await cfg.writeConfig({ ...(await cfg.readConfig()), session: { token: 't', obtainedAt: 1 } });
+    await cfg.writeConfig({ ...(await cfg.readConfig()), session: { token: 't' } });
     const onDisk = JSON.parse(await readFile(join(home, '.fas', 'config.json'), 'utf8'));
     expect(onDisk).not.toHaveProperty('apiBase');
     expect(JSON.stringify(onDisk)).not.toContain('attacker');
