@@ -99,9 +99,11 @@ export function PublishForm({ getToken }: Props) {
         headers: headers(),
         body: JSON.stringify(payload),
       })
-      const data = await res.json().catch(() => ({}))
+      // Validation errors come back as plain text, the rest as JSON.
+      const text = await res.text()
+      const data = (() => { try { return JSON.parse(text) } catch { return {} } })()
       if (!res.ok) {
-        setError(data.hint || data.error || `Publish failed (HTTP ${res.status})`)
+        setError(data.hint || data.error || text || `Publish failed (HTTP ${res.status})`)
       } else {
         setResult(data as PublishResult)
         refreshApps()

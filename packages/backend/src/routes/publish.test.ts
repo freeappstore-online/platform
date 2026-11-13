@@ -423,7 +423,7 @@ describe('POST /v1/publish', () => {
     expect(body.error).toBe('admin_provision_failed');
   });
 
-  it('returns 502 when admin returns 200 but a step failed (partial failure)', async () => {
+  it('reports the failed steps when admin answers 400 for a failed step (#594)', async () => {
     const token = await signSession('gh:1', SIGNING_KEY, { aud: 'console' });
     const partialResult = {
       steps: [
@@ -435,7 +435,7 @@ describe('POST /v1/publish', () => {
     };
     const admin = fakeAdmin({
       response: new Response(JSON.stringify(partialResult), {
-        status: 200,
+        status: 400,
         headers: { 'content-type': 'application/json' },
       }),
     });
@@ -449,7 +449,8 @@ describe('POST /v1/publish', () => {
       baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
     );
     expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string; failedSteps: Array<{ name: string }> };
+    const body = (await res.json()) as { error: string; hint: string; failedSteps: Array<{ name: string }> };
+    expect(body.hint).toBe('Hosting route: D1 error');
     expect(body.error).toBe('admin_provision_partial_failure');
     expect(body.failedSteps).toHaveLength(1);
     expect(body.failedSteps[0]!.name).toBe('Hosting route');

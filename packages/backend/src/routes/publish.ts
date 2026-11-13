@@ -206,17 +206,6 @@ publishRoutes.post('/publish', async (c) => {
   });
 
   const adminBodyText = await adminRes.text();
-  if (!adminRes.ok) {
-    return c.json(
-      {
-        error: 'admin_provision_failed',
-        status: adminRes.status,
-        body: adminBodyText,
-      },
-      502,
-    );
-  }
-
   let adminBody: unknown = adminBodyText;
   try {
     adminBody = JSON.parse(adminBodyText);
@@ -224,17 +213,28 @@ publishRoutes.post('/publish', async (c) => {
     // admin returned non-JSON (e.g. plain text); pass it through as-is.
   }
 
-  // Admin's /api/provision returns 200 even when individual steps fail —
-  // the response shape is { steps: [{ name, status: 'ok'|'skip'|'fail',
-  // detail }] }. A 200 with any step failed is a partial provisioning;
-  // surface that as 502 so the CLI can fall back to the Issue form.
+  // Admin's /api/provision answers { steps: [{ name, status: 'ok'|'skip'|'fail',
+  // detail }] } and a non-2xx status whenever a step failed. Look at the steps
+  // before the status: the step detail is the reason the user needs ("X is
+  // already claimed"), and checking the status first hid it (#594).
   const failedSteps = extractFailedSteps(adminBody);
   if (failedSteps.length > 0) {
     return c.json(
       {
         error: 'admin_provision_partial_failure',
+        hint: failedSteps.map((s) => (s.detail ? `${s.name}: ${s.detail}` : s.name)).join('; '),
         failedSteps,
         admin: adminBody,
+      },
+      502,
+    );
+  }
+  if (!adminRes.ok) {
+    return c.json(
+      {
+        error: 'admin_provision_failed',
+        status: adminRes.status,
+        body: adminBodyText,
       },
       502,
     );

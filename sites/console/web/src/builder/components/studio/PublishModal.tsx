@@ -135,14 +135,10 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
               <div>
                 <label className="text-xs font-semibold text-muted">Category</label>
                 <select name="category" className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink">
-                  <option value="utilities">Utilities</option>
-                  <option value="productivity">Productivity</option>
-                  <option value="learning">Learning</option>
-                  <option value="lifestyle">Lifestyle</option>
-                  <option value="finance">Finance</option>
-                  <option value="health">Health</option>
-                  <option value="creative">Creative</option>
-                  <option value="social">Social</option>
+                  {/* The backend's category names (/v1/publish); "health" alone was rejected (#594). */}
+                  {["Utilities", "Productivity", "Learning", "Lifestyle", "Finance", "Health & Fitness", "Creative", "Social"].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
               <div>
