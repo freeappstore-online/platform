@@ -449,7 +449,11 @@ describe('POST /v1/publish', () => {
       baseEnv(userLookupDB({ id: 'gh:1', github_login: 'me', avatar_url: null }), { ADMIN: admin }),
     );
     expect(res.status).toBe(502);
-    const body = (await res.json()) as { error: string; hint: string; failedSteps: Array<{ name: string }> };
+    const body = (await res.json()) as {
+      error: string;
+      hint: string;
+      failedSteps: Array<{ name: string }>;
+    };
     expect(body.hint).toBe('Hosting route: D1 error');
     expect(body.error).toBe('admin_provision_partial_failure');
     expect(body.failedSteps).toHaveLength(1);

@@ -216,7 +216,9 @@ describe('agent-sessions', () => {
         },
         env(db),
       );
-    expect((await put('/v1/agent/sessions/s4', { name: 'Renamed', appId: null, appUrl: null })).status).toBe(200);
+    expect(
+      (await put('/v1/agent/sessions/s4', { name: 'Renamed', appId: null, appUrl: null })).status,
+    ).toBe(200);
     expect((await put('/v1/agent/sessions/s4/messages', { messages: 'x' })).status).toBe(400);
   });
 
