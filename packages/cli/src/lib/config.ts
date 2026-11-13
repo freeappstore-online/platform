@@ -46,7 +46,9 @@ export function sessionDaysRemaining(config: FasConfig): number | null {
   if (!token) return null;
   let exp: unknown;
   try {
-    exp = JSON.parse(Buffer.from(token.slice(0, token.lastIndexOf('.')), 'base64url').toString()).exp;
+    exp = JSON.parse(
+      Buffer.from(token.slice(0, token.lastIndexOf('.')), 'base64url').toString(),
+    ).exp;
   } catch {
     return null;
   }
