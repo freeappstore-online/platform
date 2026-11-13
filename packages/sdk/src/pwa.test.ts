@@ -60,10 +60,10 @@ it('does not reload when a legacy autoUpdate worker or another tab activates', a
   expect(reload).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain('Reload when your work is saved');
 });
-it('shows the update notice fixed to the viewport, dismissible until the state changes (#580)', async () => {
+it('keeps the update notice stuck to the viewport bottom, dismissible until the state changes (#580)', async () => {
   const { serviceWorker } = await setup();
   const panel = document.body.querySelector('aside') as HTMLElement;
-  expect(panel.style.position).toBe('fixed');
+  expect(panel.style.position).toBe('sticky');
   expect(panel.hidden).toBe(false);
   const later = [...panel.querySelectorAll('button')].find((b) => b.textContent === 'Later');
   later?.click();

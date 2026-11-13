@@ -79,10 +79,12 @@ export function startPwa(options: PwaOptions = {}) {
   let controller = navigator.serviceWorker?.controller;
   const panel = document.createElement('aside');
   panel.setAttribute('aria-label', 'App installation and updates');
-  // Fixed to the viewport: appended in the page flow it sat below the fold on
-  // long pages, so nobody saw that an update was waiting (#580).
+  // Sticks to the bottom of the viewport: plainly appended, it sat below the
+  // fold on long pages and nobody saw that an update was waiting (#580). Sticky,
+  // not fixed: it keeps its place at the end of the page, so scrolling always
+  // uncovers whatever is under it.
   panel.style.cssText =
-    'position:fixed;z-index:2147483647;left:1rem;right:1rem;bottom:max(1rem,env(safe-area-inset-bottom));margin:0 auto;max-width:30rem;box-sizing:border-box;padding:1rem;background:Canvas;color:CanvasText;border:1px solid;overflow-wrap:anywhere;font:inherit';
+    'position:sticky;z-index:2147483647;bottom:max(1rem,env(safe-area-inset-bottom));margin:1rem;max-width:30rem;box-sizing:border-box;padding:1rem;background:Canvas;color:CanvasText;border:1px solid;overflow-wrap:anywhere;font:inherit';
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   const action = document.createElement('button');
