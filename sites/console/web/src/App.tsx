@@ -12,7 +12,7 @@ import {
   formatTimeAgo,
 } from './deploy-status'
 import { PublishForm } from './PublishForm'
-import { BASE, SiteNav } from './SiteNav'
+import { BASE, SiteNav, go } from './SiteNav'
 
 // Lazy — the builder is a large react-router island; keep it out of the console's
 // initial bundle and load it only when the user opens /build.
@@ -57,6 +57,23 @@ async function fetchApps(token: string | null): Promise<AppEntry[]> {
   }
 }
 
+interface Draft {
+  id: string
+  name: string
+}
+
+/** VibeCode sessions that were never deployed, so Apps lists everything the user owns (#588). */
+async function fetchDrafts(token: string | null): Promise<Draft[]> {
+  if (!token) return []
+  const res = await fetch(`${API_BASE}/agent/sessions?limit=100`, { headers: { Authorization: `Bearer ${token}` } })
+  if (!res.ok) return []
+  const data = (await res.json()) as { sessions: { id: string; name: string; deployed: boolean; updatedAt: number }[] }
+  return data.sessions
+    .filter((s) => !s.deployed)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map(({ id, name }) => ({ id, name }))
+}
+
 function parseRoute(): { view: View; appId: string | null } {
   let path = location.pathname.slice(BASE.length) || '/'
   // Settings is one page, in the builder (#587). The SDK still deep-links apps
@@ -99,6 +116,7 @@ export default function App() {
   const { user, loading } = useAuth(fas)
   const [route, setRoute] = useState(parseRoute)
   const [apps, setApps] = useState<AppEntry[]>([])
+  const [drafts, setDrafts] = useState<Draft[]>([])
   // undefined until the first fetch resolves, so badges render nothing rather
   // than flashing "unavailable" on load.
   const [deployStatuses, setDeployStatuses] = useState<Record<string, DeployStatus> | undefined>(undefined)
@@ -121,6 +139,7 @@ export default function App() {
 
   const reloadApps = useCallback(async () => {
     try { setApps(await fetchApps(fas.auth.token)) } catch {}
+    try { setDrafts(await fetchDrafts(fas.auth.token)) } catch {}
     // One authenticated request covering every app the user owns, instead of
     // one unauthenticated GitHub call per badge (#32).
     try { setDeployStatuses(await fetchOwnedDeployStatuses(fas.auth.token)) } catch { setDeployStatuses({}) }
@@ -162,7 +181,7 @@ export default function App() {
       <SiteNav user={user} onSignIn={() => fas.auth.signIn()} onSignOut={() => fas.auth.signOut()} />
       <main className="flex-1 mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
         {view === 'dashboard' && (
-          <Dashboard user={user} apps={apps} deployStatuses={deployStatuses} onOpenApp={openAppDetail} onPublish={() => setView('publish')} />
+          <Dashboard user={user} apps={apps} drafts={drafts} deployStatuses={deployStatuses} onOpenApp={openAppDetail} onPublish={() => setView('publish')} />
         )}
         {view === 'app-detail' && selectedAppId && (
           <AppDetail
@@ -206,7 +225,7 @@ function Landing() {
   )
 }
 
-function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user: User; apps: AppEntry[]; deployStatuses: Record<string, DeployStatus> | undefined; onOpenApp: (id: string) => void; onPublish: () => void }) {
+function Dashboard({ user, apps, drafts, deployStatuses, onOpenApp, onPublish }: { user: User; apps: AppEntry[]; drafts: Draft[]; deployStatuses: Record<string, DeployStatus> | undefined; onOpenApp: (id: string) => void; onPublish: () => void }) {
   return (
     <div className="space-y-8">
       <div className="rounded-2xl border border-line bg-panel p-6 shadow-[var(--shadow-card)]">
@@ -267,6 +286,25 @@ function Dashboard({ user, apps, deployStatuses, onOpenApp, onPublish }: { user:
           </div>
         )}
       </div>
+
+      {drafts.length > 0 && (
+        <div>
+          <h3 className="display-font text-xl font-bold text-ink mb-1">Drafts</h3>
+          <p className="text-sm text-muted mb-4">VibeCode projects that are not deployed yet. Open one to keep building.</p>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+            {drafts.map((d) => (
+              <button
+                key={d.id}
+                onClick={() => go(`/build/app/${d.id}`)}
+                className="text-left rounded-xl border border-dashed border-[var(--line-strong)] bg-panel p-4 hover:bg-panel-hover"
+              >
+                <span className="font-semibold text-ink block truncate">{d.name}</span>
+                <span className="mt-0.5 text-xs text-muted">Draft</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-line bg-panel p-6">
         <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Quick Links</h3>

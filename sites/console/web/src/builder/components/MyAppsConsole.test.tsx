@@ -8,7 +8,7 @@ vi.stubGlobal("localStorage", { getItem: () => null });
 describe("MyAppsConsole", () => {
   it("renders an empty app list", () => {
     const html = renderToStaticMarkup(<MyAppsConsole projects={[]} loading={false} error={false} onRetry={() => {}} currentId={null} onSelect={() => {}} onNewChat={() => {}} />);
-    expect(html).toContain("My Apps");
+    expect(html).toContain("Projects");
     expect(html).toContain("Build your first app");
     expect(html).not.toContain("style=");
   });

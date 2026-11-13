@@ -31,9 +31,9 @@ export function MyAppsConsole({ projects, loading, error, onRetry, currentId, on
   return (
     <div className="flex-1 overflow-y-auto overflow-x-hidden">
       <div className="container py-6 max-w-[720px]">
-        {/* Header — "My Apps" is a section label under the Free Apps brand, so keep it modest */}
+        {/* "Projects", not "My Apps": the console's Apps page is the list of apps (#588). */}
         <div className="flex items-center justify-between gap-2 mb-5">
-          <h1 className="text-lg font-bold text-ink">My Apps</h1>
+          <h1 className="text-lg font-bold text-ink">Projects</h1>
           <button
             onClick={onNewChat}
             title="New app"

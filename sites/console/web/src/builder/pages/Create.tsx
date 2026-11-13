@@ -212,7 +212,7 @@ export function Create() {
 
       {/* Mobile studio bar — single bar: back to apps · Code/Preview switch · settings */}
       <div className="flex md:hidden shrink-0 items-center gap-2 p-[0.4rem_0.5rem] border-b border-line bg-panel">
-        <button onClick={() => navigate("/")} title="Back to My Apps" aria-label="Back to My Apps" className="w-[40px] h-[40px] shrink-0 bg-transparent border border-line rounded-control-sm cursor-pointer text-ink text-[1.1rem] inline-flex items-center justify-center">
+        <button onClick={() => navigate("/")} title="Back to projects" aria-label="Back to projects" className="w-[40px] h-[40px] shrink-0 bg-transparent border border-line rounded-control-sm cursor-pointer text-ink text-[1.1rem] inline-flex items-center justify-center">
           &#8592;
         </button>
         <Segmented

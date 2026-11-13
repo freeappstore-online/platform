@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ThemeToggle } from '@freeappstore/sdk/ui'
+import { API_URL, getSession } from './builder/lib/api'
 
 // The console is served at console.freeappstore.online/ (no prefix) AND at
 // freeappstore.online/app/ (the storefront proxy strips /app server-side but the
@@ -45,6 +46,20 @@ function NavLink({ path, className, onNavigate, children }: { path: string; clas
   )
 }
 
+// The session user carries no role; /auth/me reports them live. One request per
+// session token, shared by every header mount.
+let adminCheck: { token: string; result: Promise<boolean> } | null = null
+function isAdmin(token: string): Promise<boolean> {
+  if (adminCheck?.token !== token) {
+    const result = fetch(`${API_URL}/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? (res.json() as Promise<{ roles?: string[] }>) : null))
+      .then((me) => !!me?.roles?.includes('admin'))
+      .catch(() => false)
+    adminCheck = { token, result }
+  }
+  return adminCheck.result
+}
+
 const EXTERNAL = [
   { href: 'https://freeappstore.online/docs', label: 'Docs' },
   { href: 'https://freeappstore.online', label: 'Store' },
@@ -59,6 +74,15 @@ export function SiteNav({ user, onSignIn, onSignOut }: {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const section = currentSection()
+  const [admin, setAdmin] = useState(false)
+
+  useEffect(() => {
+    const token = getSession()?.token
+    if (!user || !token) return
+    let live = true
+    isAdmin(token).then((yes) => { if (live) setAdmin(yes) })
+    return () => { live = false }
+  }, [user?.login])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -115,7 +139,7 @@ export function SiteNav({ user, onSignIn, onSignOut }: {
                 <div className="absolute right-0 mt-2 w-48 rounded-xl border border-line bg-paper py-1 shadow-lg">
                   <div className="truncate border-b border-line px-3 py-2 text-sm font-semibold text-ink">{user.login}</div>
                   <NavLink path="/build/profile" className={menuItem} onNavigate={() => setMenuOpen(false)}>Settings</NavLink>
-                  <NavLink path="/build/admin" className={menuItem} onNavigate={() => setMenuOpen(false)}>Admin</NavLink>
+                  {admin && <NavLink path="/build/admin" className={menuItem} onNavigate={() => setMenuOpen(false)}>Admin</NavLink>}
                   {EXTERNAL.map((l) => (
                     <a key={l.href} href={l.href} target="_blank" rel="noopener noreferrer" className={`${menuItem} sm:hidden`}>
                       {l.label}

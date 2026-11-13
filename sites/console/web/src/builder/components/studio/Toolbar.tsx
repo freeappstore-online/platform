@@ -25,7 +25,7 @@ export function Toolbar({ agent, settings, settingsOpen, setSettingsOpen, onBack
   return (
     <>
       <div className="flex items-center gap-1 shrink-0 py-[0.4rem] px-2 border-b border-line bg-panel text-[0.78rem] overflow-hidden">
-        <button onClick={onBackToConsole} title="Back to My Apps" aria-label="Back to My Apps" className={`${iconBtn} min-w-10 justify-center px-2 text-base border-line bg-transparent}`}>
+        <button onClick={onBackToConsole} title="Back to projects" aria-label="Back to projects" className={`${iconBtn} min-w-10 justify-center px-2 text-base border-line bg-transparent}`}>
           &#8592;
         </button>
         <button onClick={() => setPickerOpen(true)} className={`${iconBtn} justify-start max-w-[200px] min-w-0 overflow-hidden px-[0.6rem] text-[0.82rem] border-line bg-transparent}`}>
