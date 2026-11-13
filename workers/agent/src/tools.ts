@@ -229,6 +229,18 @@ export const INFRA_TOOLS = new Set([
 // Infra files the LLM must never overwrite. These are set by the template
 // and contain fields (packageManager, engines, monorepo config) that the
 // LLM consistently drops when rewriting them, breaking CI.
+/** Why a model-supplied path may not be written or deleted, or null if it may.
+ *  Segment-based: "./package.json" and "web//package.json" name locked files
+ *  just as well as the plain spelling does (#598). */
+function pathError(path: unknown): string | null {
+  if (typeof path !== "string" || !path) return "path is required";
+  const segments = path.split("/");
+  if (path.includes("\\") || segments.some((s) => s === "" || s === "." || s === "..") || segments[0] === ".github") {
+    return `path "${path}" is not allowed. Use a plain relative path: no "..", "./", "//", absolute paths, or .github/ files.`;
+  }
+  return null;
+}
+
 const LOCKED_FILES = new Set([
   "package.json",
   "web/package.json",
@@ -315,11 +327,11 @@ export async function executeTool(
     }
     case "write_file": {
       const path = input.path as string;
-      const content = input.content as string;
-      if (!path) return { id, content: "Error: path is required", isError: true };
-      if (path.includes("..") || path.startsWith("/") || path.startsWith(".github/")) {
-        return { id, content: `Error: path "${path}" is not allowed. No "..", absolute paths, or .github/ files.`, isError: true };
-      }
+      const content = input.content;
+      const invalid = pathError(path);
+      if (invalid) return { id, content: `Error: ${invalid}`, isError: true };
+      // A tool error the model can correct, not a TypeError that ends the turn.
+      if (typeof content !== "string") return { id, content: "Error: content is required and must be a string", isError: true };
       if (LOCKED_FILES.has(path)) {
         return {
           id,
@@ -347,10 +359,8 @@ export async function executeTool(
 
     case "delete_file": {
       const path = input.path as string;
-      if (!path) return { id, content: "Error: path is required", isError: true };
-      if (path.includes("..") || path.startsWith("/") || path.startsWith(".github/")) {
-        return { id, content: `Error: path "${path}" is not allowed.`, isError: true };
-      }
+      const invalid = pathError(path);
+      if (invalid) return { id, content: `Error: ${invalid}`, isError: true };
       if (LOCKED_FILES.has(path)) {
         return { id, content: `Error: "${path}" is a locked infrastructure file and cannot be deleted.`, isError: true };
       }

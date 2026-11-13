@@ -127,19 +127,23 @@ export function prepareTurn(
   for (let i = 0; i < trimmedHistory.length; i++) {
     const m = trimmedHistory[i];
     if (m.role === "assistant" && m.toolCalls?.length) {
-      // A stray user row can be persisted between the call and its result.
-      // Recover the next result group before the next tool-call message, then
-      // put it adjacent to its assistant message as provider APIs require.
-      let resultIndex = i + 1;
-      while (resultIndex < trimmedHistory.length) {
-        const candidate = trimmedHistory[resultIndex];
+      // Results can be spread over several rows before the next tool-call
+      // message: file-tool results and infra results are stored separately
+      // (#598), and a stray user row can sit between the call and its result.
+      // Gather them all into one row adjacent to the assistant message, as
+      // provider APIs require.
+      const results = new Map<string, ToolResult>();
+      const others: Message[] = [];
+      let next = i + 1;
+      for (; next < trimmedHistory.length; next++) {
+        const candidate = trimmedHistory[next];
         if (candidate.role === "assistant" && candidate.toolCalls?.length) break;
-        if (candidate.role === "tool_result") break;
-        resultIndex++;
+        if (candidate.role === "tool_result") {
+          for (const result of candidate.toolResults ?? []) results.set(result.id, result);
+        } else {
+          others.push(candidate);
+        }
       }
-      const resultMessage = trimmedHistory[resultIndex];
-      const existingResults = resultMessage?.role === "tool_result" ? (resultMessage.toolResults ?? []) : [];
-      const results = new Map(existingResults.map((result) => [result.id, result]));
       const toolResults = m.toolCalls!.map(
         (call) =>
           results.get(call.id) ?? {
@@ -148,12 +152,8 @@ export function prepareTurn(
             isError: true,
           },
       );
-      cleaned.push(m, { role: "tool_result", content: "", toolResults });
-      for (let between = i + 1; between < resultIndex; between++) {
-        if (trimmedHistory[between].role !== "tool_result") cleaned.push(trimmedHistory[between]);
-      }
-      i = resultMessage?.role === "tool_result" ? resultIndex : resultIndex - 1;
-      // else: orphaned tool_use — drop both
+      cleaned.push(m, { role: "tool_result", content: "", toolResults }, ...others);
+      i = next - 1;
     } else if (m.role === "tool_result") {
       // Orphaned tool_result without preceding tool_use — drop it
     } else {

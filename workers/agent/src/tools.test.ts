@@ -100,6 +100,25 @@ describe("executeTool — file tools", () => {
     expect(read.content).toBe("hello");
   });
 
+  it("rejects disguised locked paths and malformed arguments as tool errors (#598)", async () => {
+    const files = new Map<string, string>([["package.json", "{}"]]);
+    for (const path of [
+      "./package.json",
+      "web//package.json",
+      "web/./vite.config.ts",
+      "./.github/workflows/x.yml",
+      "a/../package.json",
+      "/etc/x",
+    ]) {
+      const write = await executeTool({ id: "1", name: "write_file", input: { path, content: "x" } }, files, appsConfig);
+      expect(write.isError, path).toBe(true);
+    }
+    expect((await executeTool({ id: "2", name: "delete_file", input: { path: "./package.json" } }, files, appsConfig)).isError).toBe(true);
+    expect((await executeTool({ id: "3", name: "write_file", input: { path: "web/src/a.ts" } }, files, appsConfig)).isError).toBe(true);
+    expect((await executeTool({ id: "4", name: "write_file", input: { path: 7, content: "x" } }, files, appsConfig)).isError).toBe(true);
+    expect([...files.keys()]).toEqual(["package.json"]);
+  });
+
   it("read_file errors on missing file", async () => {
     const files = new Map<string, string>();
     const result = await executeTool({ id: "1", name: "read_file", input: { path: "nope.txt" } }, files, appsConfig);

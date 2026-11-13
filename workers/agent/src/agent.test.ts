@@ -37,6 +37,34 @@ describe("prepareTurn tool history recovery", () => {
     expect(prepared.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool_result", "user", "user"]);
   });
 
+  it("keeps the infra result when file and infra results were stored as two rows (#598)", () => {
+    const prepared = prepareTurn(
+      aiConfig,
+      [
+        { role: "user", content: "Build it" },
+        {
+          role: "assistant",
+          content: "",
+          toolCalls: [
+            { id: "tu_write", name: "write_file", input: {} },
+            { id: "tu_deploy", name: "deploy", input: {} },
+          ],
+        },
+        { role: "tool_result", content: "", toolResults: [{ id: "tu_write", content: "Wrote web/src/App.tsx" }] },
+        { role: "tool_result", content: "", toolResults: [{ id: "tu_deploy", content: "Deploy FAILED: TS2322" }] },
+      ],
+      "Fix it",
+      storeConfig,
+    );
+
+    const rows = prepared.messages.filter((message) => message.role === "tool_result");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].toolResults).toEqual([
+      { id: "tu_write", content: "Wrote web/src/App.tsx" },
+      { id: "tu_deploy", content: "Deploy FAILED: TS2322" },
+    ]);
+  });
+
   it("preserves tool calls when the persisted result group is entirely missing", () => {
     const prepared = prepareTurn(
       aiConfig,
