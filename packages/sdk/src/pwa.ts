@@ -79,15 +79,23 @@ export function startPwa(options: PwaOptions = {}) {
   let controller = navigator.serviceWorker?.controller;
   const panel = document.createElement('aside');
   panel.setAttribute('aria-label', 'App installation and updates');
+  // Fixed to the viewport: appended in the page flow it sat below the fold on
+  // long pages, so nobody saw that an update was waiting (#580).
   panel.style.cssText =
-    'position:relative;margin:1rem;max-width:30rem;box-sizing:border-box;padding:1rem;padding-bottom:max(1rem,env(safe-area-inset-bottom));background:Canvas;color:CanvasText;border:1px solid;overflow-wrap:anywhere;font:inherit';
+    'position:fixed;z-index:2147483647;left:1rem;right:1rem;bottom:max(1rem,env(safe-area-inset-bottom));margin:0 auto;max-width:30rem;box-sizing:border-box;padding:1rem;background:Canvas;color:CanvasText;border:1px solid;overflow-wrap:anywhere;font:inherit';
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   const action = document.createElement('button');
   action.type = 'button';
   action.style.cssText = 'font:inherit;min-height:44px;max-width:100%;white-space:normal';
-  panel.append(status, action);
+  const later = document.createElement('button');
+  later.type = 'button';
+  later.textContent = 'Later';
+  later.style.cssText = `${action.style.cssText};margin-inline-start:0.5rem`;
+  panel.append(status, action, later);
   document.body.append(panel);
+  /** Hidden by the user until the next change of state. */
+  let dismissed = false;
   const busy = () => {
     try {
       return [...guards].some((guard) => guard());
@@ -98,7 +106,9 @@ export function startPwa(options: PwaOptions = {}) {
   function render() {
     if (disposed) return;
     const waiting = Boolean(registration?.waiting);
-    panel.hidden = !waiting && !activated && (navigator.onLine || !options.offlineFeatures?.length);
+    panel.hidden =
+      dismissed ||
+      (!waiting && !activated && (navigator.onLine || !options.offlineFeatures?.length));
     status.textContent = activated
       ? 'Update activated. Reload when your work is saved.'
       : waiting
@@ -139,6 +149,15 @@ export function startPwa(options: PwaOptions = {}) {
     if (activated) reload();
     else activate();
   };
+  later.onclick = () => {
+    dismissed = true;
+    render();
+  };
+  /** A change of state the user has not seen: show the panel again. */
+  const changedState = () => {
+    dismissed = false;
+    render();
+  };
   const changed = () => {
     // Also handles an old autoUpdate worker taking control. Never reload here.
     const next = navigator.serviceWorker.controller;
@@ -147,19 +166,26 @@ export function startPwa(options: PwaOptions = {}) {
       activating = false;
     }
     controller = next;
-    render();
+    changedState();
   };
   const watched = new Set<ServiceWorker>();
   const watch = () => {
     const worker = registration?.installing;
     if (worker && !watched.has(worker)) {
       watched.add(worker);
-      worker.addEventListener('statechange', render);
+      worker.addEventListener('statechange', changedState);
     }
     render();
   };
-  window.addEventListener('online', render);
-  window.addEventListener('offline', render);
+  // A long-lived tab or installed app otherwise only looks for a new build on
+  // navigation, so it can run an old one for days (#580).
+  const checkForUpdate = () => {
+    if (document.visibilityState === 'visible') registration?.update().catch(() => {});
+  };
+  document.addEventListener('visibilitychange', checkForUpdate);
+  const updateTimer = setInterval(checkForUpdate, 60 * 60 * 1000);
+  window.addEventListener('online', changedState);
+  window.addEventListener('offline', changedState);
   const beforeInstall = (event: Event) => {
     if (
       window.matchMedia?.('(display-mode: standalone)').matches ||
@@ -212,13 +238,15 @@ export function startPwa(options: PwaOptions = {}) {
         notifyInstall('unavailable');
       }
       panel.remove();
-      window.removeEventListener('online', render);
-      window.removeEventListener('offline', render);
+      document.removeEventListener('visibilitychange', checkForUpdate);
+      clearInterval(updateTimer);
+      window.removeEventListener('online', changedState);
+      window.removeEventListener('offline', changedState);
       window.removeEventListener('beforeinstallprompt', beforeInstall);
       window.removeEventListener('appinstalled', installed);
       navigator.serviceWorker?.removeEventListener('controllerchange', changed);
       registration?.removeEventListener('updatefound', watch);
-      for (const worker of watched) worker.removeEventListener('statechange', render);
+      for (const worker of watched) worker.removeEventListener('statechange', changedState);
     },
   };
 }

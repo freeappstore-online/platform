@@ -60,6 +60,29 @@ it('does not reload when a legacy autoUpdate worker or another tab activates', a
   expect(reload).not.toHaveBeenCalled();
   expect(document.body.textContent).toContain('Reload when your work is saved');
 });
+it('shows the update notice fixed to the viewport, dismissible until the state changes (#580)', async () => {
+  const { serviceWorker } = await setup();
+  const panel = document.body.querySelector('aside') as HTMLElement;
+  expect(panel.style.position).toBe('fixed');
+  expect(panel.hidden).toBe(false);
+  const later = [...panel.querySelectorAll('button')].find((b) => b.textContent === 'Later');
+  later?.click();
+  expect(panel.hidden).toBe(true);
+  Object.defineProperty(serviceWorker, 'controller', { value: {} });
+  serviceWorker.dispatchEvent(new Event('controllerchange'));
+  expect(panel.hidden).toBe(false);
+});
+it('checks for a new build when the tab becomes visible and stops after dispose (#580)', async () => {
+  const { pwa, serviceWorker } = await setup();
+  const registration = await (serviceWorker.register as ReturnType<typeof vi.fn>).mock.results[0]
+    ?.value;
+  registration.update = vi.fn().mockResolvedValue(undefined);
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(registration.update).toHaveBeenCalledOnce();
+  pwa.dispose();
+  document.dispatchEvent(new Event('visibilitychange'));
+  expect(registration.update).toHaveBeenCalledOnce();
+});
 it('blocks actions when a busy guard throws and cleans up listeners', async () => {
   const { pwa, serviceWorker } = await setup();
   const remove = pwa.addBusyGuard(() => {
