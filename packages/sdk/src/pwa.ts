@@ -99,6 +99,7 @@ export function startPwa(options: PwaOptions = {}) {
   let dismissed = false;
   /** The last click was refused by a busy guard. */
   let blocked = false;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
   const busy = () => {
     try {
       return [...guards].some((guard) => guard());
@@ -132,16 +133,33 @@ export function startPwa(options: PwaOptions = {}) {
     action.disabled = activating;
   }
   function activate() {
-    if (disposed || activating || busy() || !registration?.waiting) return false;
+    const worker = registration?.waiting;
+    if (disposed || activating || busy() || !worker) return false;
     activating = true;
     try {
-      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      worker.postMessage({ type: 'SKIP_WAITING' });
     } catch (error) {
       activating = false;
       options.onError?.(error);
       render();
       return false;
     }
+    // `controllerchange` never reaches a page the browser will not hand to the
+    // new worker, so follow the worker itself, and let the user retry if it
+    // stays put (#605).
+    const settle = () => {
+      if (!activating || worker.state === 'activating') return;
+      activated = worker.state === 'activated';
+      activating = false;
+      changedState();
+    };
+    worker.addEventListener('statechange', settle);
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => {
+      if (!activating) return;
+      activating = false;
+      render();
+    }, 10_000);
     render();
     return true;
   }
@@ -250,6 +268,7 @@ export function startPwa(options: PwaOptions = {}) {
       panel.remove();
       document.removeEventListener('visibilitychange', checkForUpdate);
       clearInterval(updateTimer);
+      clearTimeout(retryTimer);
       window.removeEventListener('online', changedState);
       window.removeEventListener('offline', changedState);
       window.removeEventListener('beforeinstallprompt', beforeInstall);

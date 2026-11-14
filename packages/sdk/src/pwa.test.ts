@@ -18,7 +18,7 @@ afterEach(() => {
 async function setup({ controller = {} as ServiceWorker | null } = {}) {
   const serviceWorker = new EventTarget() as ServiceWorkerContainer;
   Object.defineProperty(serviceWorker, 'controller', { value: controller, writable: true });
-  const waiting = { postMessage: vi.fn() };
+  const waiting = Object.assign(new EventTarget(), { postMessage: vi.fn(), state: 'installed' });
   const registration = Object.assign(new EventTarget(), { waiting, installing: null });
   Object.assign(serviceWorker, { register: vi.fn().mockResolvedValue(registration) });
   Object.defineProperty(navigator, 'serviceWorker', { value: serviceWorker, configurable: true });
@@ -62,6 +62,31 @@ it('offers a reload after an update activated from a page that started uncontrol
   expect(action?.disabled).toBe(false);
   expect(action?.textContent).toBe('Reload app');
   expect(pwa.reload()).toBe(true);
+});
+it('offers a reload when the worker activates without handing over this page (#605)', async () => {
+  const { pwa, waiting } = await setup({ controller: null });
+  const [action] = document.body.querySelectorAll('button');
+  expect(pwa.activate()).toBe(true);
+  waiting.state = 'activated';
+  waiting.dispatchEvent(new Event('statechange'));
+  expect(action?.disabled).toBe(false);
+  expect(action?.textContent).toBe('Reload app');
+});
+it('lets the user retry when the worker has not activated after 10 seconds (#605)', async () => {
+  vi.useFakeTimers();
+  try {
+    const { pwa, waiting } = await setup();
+    const [action] = document.body.querySelectorAll('button');
+    expect(pwa.activate()).toBe(true);
+    expect(action?.disabled).toBe(true);
+    vi.advanceTimersByTime(10_000);
+    expect(action?.disabled).toBe(false);
+    expect(action?.textContent).toBe('Activate update');
+    expect(pwa.activate()).toBe(true);
+    expect(waiting.postMessage).toHaveBeenCalledTimes(2);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it('says why a click did nothing while a busy guard is set (#602)', async () => {
   const { pwa, waiting } = await setup();

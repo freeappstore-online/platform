@@ -43,6 +43,9 @@ Neither a controller change nor another tab's activation reloads a page.
 A page that was hard-reloaded starts without a controlling worker; an update it
 activates is still followed by the reload offer. A click that a busy guard refuses
 tells the user to save or finish their work first.
+The notice also follows the activated worker's own state, since not every browser
+hands such a page to the new worker. If the worker has not activated after 10
+seconds, **Activate update** becomes usable again.
 
 Register guards for **every** workflow that has unsaved or active work:
 

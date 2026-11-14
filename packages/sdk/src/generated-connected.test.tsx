@@ -41,7 +41,7 @@ function compile(source: string, modules: Record<string, unknown>) {
 }
 
 beforeEach(() => {
-  waiting = { postMessage: vi.fn() };
+  waiting = Object.assign(new EventTarget(), { postMessage: vi.fn() });
   serviceWorker = Object.assign(new EventTarget(), {
     controller: {},
     register: vi
