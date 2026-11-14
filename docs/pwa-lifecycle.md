@@ -40,6 +40,9 @@ The SDK owns registration; `injectRegister` is disabled. `skipWaiting` is disabl
 even if an old config requested it. A waiting worker prompts the user to activate.
 After a different worker takes control, a separate button offers page reload.
 Neither a controller change nor another tab's activation reloads a page.
+A page that was hard-reloaded starts without a controlling worker; an update it
+activates is still followed by the reload offer. A click that a busy guard refuses
+tells the user to save or finish their work first.
 
 Register guards for **every** workflow that has unsaved or active work:
 

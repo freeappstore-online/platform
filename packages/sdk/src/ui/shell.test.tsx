@@ -120,6 +120,18 @@ describe('Shell', () => {
     expect(header.some((n) => n.type === TextSizeToggle)).toBe(false);
   });
 
+  it('keeps appearance buttons in the topbar for an app-owned profile route unless headerAppearance is false (#603)', async () => {
+    const { TextSizeToggle, ThemeToggle } = await import('./core.js');
+    const appearance = async (props: Record<string, unknown>) => {
+      const header = nodes(
+        (await renderShell({ profileHref: '/account', ...props })).find((n) => n.type === 'header'),
+      );
+      return [TextSizeToggle, ThemeToggle].map((toggle) => header.some((n) => n.type === toggle));
+    };
+    expect(await appearance({})).toEqual([true, true]);
+    expect(await appearance({ headerAppearance: false })).toEqual([false, false]);
+  });
+
   it('without requireAuth, renders the app to signed-out users with a profile link and appearance settings in Profile', async () => {
     const { SignInButton, ThemeToggle } = await import('./core.js');
     const tree = await renderShell();

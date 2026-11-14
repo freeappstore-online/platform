@@ -97,6 +97,8 @@ export function startPwa(options: PwaOptions = {}) {
   document.body.append(panel);
   /** Hidden by the user until the next change of state. */
   let dismissed = false;
+  /** The last click was refused by a busy guard. */
+  let blocked = false;
   const busy = () => {
     try {
       return [...guards].some((guard) => guard());
@@ -110,15 +112,17 @@ export function startPwa(options: PwaOptions = {}) {
     panel.hidden =
       dismissed ||
       (!waiting && !activated && (navigator.onLine || !options.offlineFeatures?.length));
-    status.textContent = activated
-      ? 'Update activated. Reload when your work is saved.'
-      : waiting
-        ? 'An update is ready. Save edits and finish recordings before updating.'
-        : navigator.onLine
-          ? ''
-          : options.offlineFeatures?.length
-            ? `Offline. Available: ${options.offlineFeatures.join(', ')}.`
-            : '';
+    status.textContent = blocked
+      ? 'Save or finish what you are doing, then try again.'
+      : activated
+        ? 'Update activated. Reload when your work is saved.'
+        : waiting
+          ? 'An update is ready. Save edits and finish recordings before updating.'
+          : navigator.onLine
+            ? ''
+            : options.offlineFeatures?.length
+              ? `Offline. Available: ${options.offlineFeatures.join(', ')}.`
+              : '';
     action.hidden = !waiting && !activated;
     action.textContent = activated
       ? 'Reload app'
@@ -147,7 +151,9 @@ export function startPwa(options: PwaOptions = {}) {
     return true;
   }
   action.onclick = () => {
-    if (activated) reload();
+    blocked = busy();
+    if (blocked) render();
+    else if (activated) reload();
     else activate();
   };
   later.onclick = () => {
@@ -157,12 +163,15 @@ export function startPwa(options: PwaOptions = {}) {
   /** A change of state the user has not seen: show the panel again. */
   const changedState = () => {
     dismissed = false;
+    blocked = false;
     render();
   };
   const changed = () => {
     // Also handles an old autoUpdate worker taking control. Never reload here.
     const next = navigator.serviceWorker.controller;
-    if (controller && next !== controller) {
+    // A hard-reloaded page starts with no controller; the update it asked for
+    // still counts, or `activating` would disable the button for good (#602).
+    if (activating || (controller && next !== controller)) {
       activated = true;
       activating = false;
     }

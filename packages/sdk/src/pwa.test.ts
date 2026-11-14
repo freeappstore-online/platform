@@ -15,10 +15,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
 });
-async function setup() {
+async function setup({ controller = {} as ServiceWorker | null } = {}) {
   const serviceWorker = new EventTarget() as ServiceWorkerContainer;
-  const oldController = {} as ServiceWorker;
-  Object.defineProperty(serviceWorker, 'controller', { value: oldController, writable: true });
+  Object.defineProperty(serviceWorker, 'controller', { value: controller, writable: true });
   const waiting = { postMessage: vi.fn() };
   const registration = Object.assign(new EventTarget(), { waiting, installing: null });
   Object.assign(serviceWorker, { register: vi.fn().mockResolvedValue(registration) });
@@ -52,6 +51,29 @@ it('defers activation with dirty forms and active recordings, and checks again b
   dirty = false;
   expect(pwa.reload()).toBe(true);
   expect(reload).toHaveBeenCalledOnce();
+});
+it('offers a reload after an update activated from a page that started uncontrolled (#602)', async () => {
+  const { pwa, serviceWorker } = await setup({ controller: null });
+  const [action] = document.body.querySelectorAll('button');
+  expect(pwa.activate()).toBe(true);
+  expect(action?.disabled).toBe(true);
+  Object.defineProperty(serviceWorker, 'controller', { value: {}, writable: true });
+  serviceWorker.dispatchEvent(new Event('controllerchange'));
+  expect(action?.disabled).toBe(false);
+  expect(action?.textContent).toBe('Reload app');
+  expect(pwa.reload()).toBe(true);
+});
+it('says why a click did nothing while a busy guard is set (#602)', async () => {
+  const { pwa, waiting } = await setup();
+  let dirty = true;
+  pwa.addBusyGuard(() => dirty);
+  const [action] = document.body.querySelectorAll('button');
+  action?.click();
+  expect(waiting.postMessage).not.toHaveBeenCalled();
+  expect(document.body.textContent).toContain('Save or finish what you are doing');
+  dirty = false;
+  action?.click();
+  expect(waiting.postMessage).toHaveBeenCalledOnce();
 });
 it('does not reload when a legacy autoUpdate worker or another tab activates', async () => {
   const { serviceWorker, reload } = await setup();

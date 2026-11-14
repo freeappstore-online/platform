@@ -83,6 +83,12 @@ export interface ShellProps {
   renderLoading?: () => ReactNode;
   requireAuth?: boolean;
   showThemeToggle?: boolean;
+  /**
+   * With an app-owned `profileHref`, show the text-size and theme buttons in
+   * the topbar. Set `false` when that profile page offers them itself, for
+   * example by rendering `ProfilePage`. Default `true`.
+   */
+  headerAppearance?: boolean;
 }
 
 function normalizeShellAppName(appName?: string) {
@@ -108,6 +114,7 @@ export function Shell({
   renderLoading,
   requireAuth = false,
   showThemeToggle = true,
+  headerAppearance = true,
 }: ShellProps) {
   const { user, loading } = useAuth(app);
   const [currentLocation, setCurrentLocation] = useCurrentLocation();
@@ -214,8 +221,8 @@ export function Shell({
           {navNode}
           <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2 [&>button]:min-h-[44px] [&>button]:min-w-[44px]">
             {/* Built-in Profile owns appearance settings. Custom profile routes retain header access. */}
-            {profileHref && <TextSizeToggle />}
-            {profileHref && showThemeToggle && <ThemeToggle />}
+            {profileHref && headerAppearance && <TextSizeToggle />}
+            {profileHref && headerAppearance && showThemeToggle && <ThemeToggle />}
             {headerActions ? (
               <div
                 data-fas-header-actions=""

@@ -99,6 +99,7 @@ gate is the optional sign-in gate.
 | `profileHref` | Optional app-owned profile route, e.g. `/account`, accessible in both auth states. Omit to use the built-in `/profile` page with GitHub/Google sign-in choices and account management. Avatar clicks navigate using `onNavigate` when supplied; modified clicks retain native behavior. A custom profile route must render its own signed-out and signed-in UI. |
 | `requireAuth` | Protect app content until sign-in; the topbar and profile route remain accessible. Default `false`. |
 | `showThemeToggle` | Default `true`. The topbar shows it while signed out. `ProfilePage` shows it while signed in. |
+| `headerAppearance` | Default `true`. With an app-owned `profileHref`, the topbar shows the text-size and theme buttons. Set `false` when that profile page offers them itself, for example by rendering `ProfilePage`. |
 | `renderError({ error, reset })` | Replace the error fallback. |
 | `renderLoading()` | Replace the loading spinner. |
 
