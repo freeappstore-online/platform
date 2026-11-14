@@ -3274,6 +3274,22 @@
           "reason": "Record a fresh GPS position when a sighting photo is captured."
         }
       ]
+    },
+    {
+      "id": "offline-translator",
+      "name": "offline-translator",
+      "category": "Utilities",
+      "icon": "📖",
+      "iconBg": "#e2e8f0",
+      "description": "Translate travel phrases on your device with quick cards and downloadable AI models.",
+      "appUrl": "https://offline-translator.freeappstore.online",
+      "repo": "freeappstore-online/offline-translator",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-14T14:22:52.197Z",
+      "creatorGithub": "vuthanhvannguyen2006-commits"
     }
   ]
 }
