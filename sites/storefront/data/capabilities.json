@@ -1,8 +1,8 @@
 {
   "platform": "fas",
   "name": "FreeAppStore",
-  "verifiedAt": "2026-10-29",
-  "commit": "8ffe0b2",
+  "verifiedAt": "2026-11-14",
+  "commit": "7af2838",
   "capabilities": {
     "static-hosting": {
       "status": "yes",
