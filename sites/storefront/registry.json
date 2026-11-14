@@ -3259,7 +3259,21 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-14T03:51:12.451Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        {
+          "name": "microphone",
+          "reason": "Optionally dictate a text note."
+        },
+        {
+          "name": "camera",
+          "reason": "Take a fresh photo of free items at your current location."
+        },
+        {
+          "name": "location",
+          "reason": "Record a fresh GPS position when a sighting photo is captured."
+        }
+      ]
     }
   ]
 }
