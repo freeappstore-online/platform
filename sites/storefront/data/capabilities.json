@@ -88,14 +88,14 @@
       ]
     },
     "file-storage": {
-      "status": "no",
-      "limits": null,
-      "note": "No upload API. Files can be kept in the browser (IndexedDB, file pickers); small data could go in KV or public collections (64 KiB cap).",
+      "status": "limited",
+      "limits": "JPEG/WebP photos only; 200,000 bytes; 640 px longest edge; 90-day expiry; 100 live photos/user/app; 20 uploads/user/day across apps; 10,000 live photos/app",
+      "note": "fas.photos compresses photos in the browser. The API validates format, dimensions and bytes and strips metadata; uploads are private by default with explicit public opt-in. No general-purpose file storage.",
       "evidence": [
-        "packages/backend/src/index.ts:85",
-        "packages/backend/wrangler.toml:65",
-        "sites/storefront/capabilities.html:52",
-        "docs/platform-limits.md:120"
+        "packages/sdk/src/photos.ts",
+        "packages/backend/src/routes/photos.ts",
+        "packages/backend/src/lib/photo-image.ts",
+        "packages/backend/config/uploads-lifecycle.json"
       ]
     },
     "email": {

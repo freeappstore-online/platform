@@ -329,3 +329,21 @@ Both official templates include the complete setup. Floating UI uses opaque
 
 
 The connected draft hook and example are a supported SDK recipe. The canonical generated connected template is not wired to this feature in #350; carry starter wiring and adoption into #352 rather than claiming existing generated templates changed.
+
+## Temporary photos (`fas.photos`)
+
+```ts
+const photo = await fas.photos.upload(file, { visibility: 'public' });
+// photo.url works in <img>; photo.expiresAt is an epoch timestamp in milliseconds.
+await fas.photos.delete(photo.id);
+```
+
+Omit `visibility` for private photos; use `fas.photos.download(id)` to retrieve
+those with authentication. `fas.photos.list()` returns your live photos.
+The SDK resizes to 640 px on the longest edge, re-encodes as JPEG (stripping
+metadata) and targets 100 KB or less. The server independently enforces a
+200,000-byte maximum, JPEG/WebP still images, dimensions and metadata stripping.
+Every upload expires after 90 days, including private photos. Upload quotas are
+20/user/day across all apps, 100 live/user/app and 10,000 live/app, with byte and
+app daily limits too. This is temporary photo storage, not durable file storage.
+See [the platform contract](../../docs/photo-uploads.md).

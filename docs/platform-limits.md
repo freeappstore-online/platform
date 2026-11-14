@@ -138,7 +138,7 @@ imports (`<link rel="modulepreload">` and ESM `import`). `import()`, `new Worker
 
 These features are not exposed by the FreeAppStore SDK. For a separate paid platform, see [ProAppStore](https://proappstore.online); its current plans and limits are defined there:
 
-- File uploads / R2 storage
+- General-purpose file uploads (small temporary photos are supported; see [Photo uploads](photo-uploads.md))
 - Server-side AI (Workers AI)
 - Arbitrary server-side cron / scheduled tasks (scheduled user push reminders are supported above)
 - Custom domains
@@ -160,3 +160,7 @@ Implementation and configuration define the limits:
 - `packages/compliance/src/lib/bundle-limits.ts`: initial JS and lazy-asset caps
 
 Browser APIs are a separate concern: see [Browser Capabilities](capabilities.md). A documented API can still require configured platform credentials, user sign-in, browser support, and permission.
+
+## Temporary photo uploads
+
+See [Photo uploads](photo-uploads.md): 640 px maximum edge, 200,000 bytes, JPEG/WebP only, 90-day retention, private by default.

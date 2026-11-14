@@ -13,6 +13,8 @@ export interface Env {
    * for the /v1/apps/:id/quality endpoint.
    */
   APPS_BUCKET?: R2Bucket;
+  /** Small user photos, automatically expired by a 90-day R2 lifecycle. */
+  UPLOADS?: R2Bucket;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;

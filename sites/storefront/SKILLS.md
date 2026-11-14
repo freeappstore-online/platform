@@ -1122,3 +1122,12 @@ Embed the badge in your README:
 ```markdown
 ![Code Quality](https://api.freeappstore.online/v1/apps/YOUR_APP_ID/quality/badge)
 ```
+
+## Small temporary photo uploads
+
+Use `fas.photos.upload(file, { visibility: 'public' })` for listing photos.
+Default visibility is private; use `download(id)` for authenticated private reads.
+The SDK resizes/re-encodes; the API caps JPEG/WebP at 640 px and 200,000 bytes,
+strips metadata and expires uploads after 90 days. Use the returned `expiresAt`
+to hide expired content. Do not store base64 photos in collections or KV.
+See `docs/photo-uploads.md` in the platform repository for quota details.

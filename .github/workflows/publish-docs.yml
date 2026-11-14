@@ -93,6 +93,7 @@ jobs:
             - CLI: cli.md
             - Publishing: publishing.md
             - Proxy & Keys: proxy-and-keys.md
+            - Temporary photos: photo-uploads.md
             - Limits: platform-limits.md
             - Browser Capabilities: capabilities.md
             - Permissions: permissions.md

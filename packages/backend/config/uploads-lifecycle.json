@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {
+      "id": "expire-photos-90-days",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "deleteObjectsTransition": { "condition": { "type": "Age", "maxAge": 7776000 } }
+    },
+    {
+      "id": "abort-incomplete-uploads",
+      "enabled": true,
+      "conditions": { "prefix": "" },
+      "abortMultipartUploadsTransition": { "condition": { "type": "Age", "maxAge": 86400 } }
+    }
+  ]
+}

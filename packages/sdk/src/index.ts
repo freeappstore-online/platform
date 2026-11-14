@@ -6,6 +6,7 @@ import { Friends } from './friends.js';
 import { Keys } from './keys.js';
 import { Kv } from './kv.js';
 import { Logger } from './logger.js';
+import { Photos } from './photos.js';
 import { ApiProxy } from './proxy.js';
 import { Push } from './push.js';
 import { Roles } from './roles.js';
@@ -50,6 +51,8 @@ export {
 export type { Collection, CollectionOptions, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
+export type { Photo } from './photos.js';
+export { PHOTO_LIMITS, Photos, preparePhoto } from './photos.js';
 export { ProxyNoGrantError } from './proxy.js';
 export type {
   PushIsSupported,
@@ -89,6 +92,7 @@ export class FreeAppStore {
   readonly webhooks: Webhooks;
   readonly friends: Friends;
   readonly push: Push;
+  readonly photos: Photos;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -105,6 +109,7 @@ export class FreeAppStore {
     this.webhooks = new Webhooks(opts.appId, apiBase, this.auth);
     this.friends = new Friends(opts.appId, apiBase, this.auth);
     this.push = new Push(opts.appId, apiBase, this.auth);
+    this.photos = new Photos(opts.appId, apiBase, this.auth);
   }
 }
 

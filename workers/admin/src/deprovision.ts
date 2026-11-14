@@ -116,6 +116,7 @@ export const APP_DATA_TABLES = [
   "kv",
   "counters",
   "documents",
+  "photos", // R2 objects become unreachable; the upload lifecycle removes them.
   "collection_settings",
   "data_room_documents",
   "data_room_members",

@@ -25,6 +25,7 @@ import { ideaBuildersRoutes } from './routes/idea-builders.js';
 import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
 import { logsRoutes } from './routes/logs.js';
+import { photoRoutes, prunePhotos } from './routes/photos.js';
 import { publishRoutes } from './routes/publish.js';
 import { pushRoutes } from './routes/push.js';
 import { qualityRoutes } from './routes/quality.js';
@@ -139,6 +140,7 @@ v1.route('/', qualityRoutes);
 v1.route('/', votesRoutes);
 v1.route('/', ideaBuildersRoutes);
 v1.route('/', pushRoutes);
+v1.route('/', photoRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;
@@ -148,7 +150,11 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     if (event.cron === '*/15 * * * *') {
       // Independent jobs: a failing uptime probe mustn't hold back reminders.
-      const jobs = await Promise.allSettled([runUptimeChecks(env), runPushDelivery(env)]);
+      const jobs = await Promise.allSettled([
+        runUptimeChecks(env),
+        runPushDelivery(env),
+        prunePhotos(env),
+      ]);
       for (const job of jobs)
         if (job.status === 'rejected') console.error('cron */15:', job.reason);
     } else if (event.cron === '0 4 * * *') {

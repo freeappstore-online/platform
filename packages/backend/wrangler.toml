@@ -102,3 +102,8 @@ service = "freeappstore-admin"
 #   COMP_KEY_GOOGLE          # platform-funded Google AI key for complimentary VibeCode grants
 #   VAPID_PRIVATE_KEY        # Web Push VAPID private key, base64url (fas.push, #145); managed as fas/VAPID_PRIVATE_KEY in ~/dev/ops
 #   CF_ANALYTICS_API_TOKEN   # CF API token with Account Analytics:Read; the analytics stats endpoints 503 without it
+
+# User photos only. Never apply upload expiry to deployed assets or backups.
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "fas-uploads"

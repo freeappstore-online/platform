@@ -65,6 +65,15 @@ jobs:
       # it to every consumer in inventory.yaml, including this Worker
       # (freeappstore-api). Re-place one: `ops push fas <KEY> wrangler freeappstore-api`.
 
+      - name: Ensure temporary photo bucket and retention
+        working-directory: packages/backend
+        run: |
+          pnpm exec wrangler r2 bucket info fas-uploads > /dev/null 2>&1 || pnpm exec wrangler r2 bucket create fas-uploads
+          pnpm exec wrangler r2 bucket lifecycle set fas-uploads --file config/uploads-lifecycle.json --force
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy Worker
         working-directory: packages/backend
         run: pnpm exec wrangler deploy
