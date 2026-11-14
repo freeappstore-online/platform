@@ -3244,6 +3244,22 @@
       "discoveryRequestedAt": "2026-11-12T09:28:54.759Z",
       "creatorGithub": "serge-ivo",
       "permissions": []
+    },
+    {
+      "id": "firewood",
+      "name": "firewood",
+      "category": "Utilities",
+      "icon": "📷",
+      "iconBg": "#e2e8f0",
+      "description": "Find and share free firewood nearby with photos, pickup pins, and collection updates.",
+      "appUrl": "https://firewood.freeappstore.online",
+      "repo": "freeappstore-online/firewood",
+      "hostedOn": "r2",
+      "type": "connected",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-14T03:51:12.451Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
