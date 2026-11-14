@@ -111,6 +111,7 @@ const DEVELOPER_DOCS = [
   'docs/publishing.md',
   'docs/proxy-and-keys.md',
   'docs/platform-limits.md',
+  'docs/photo-uploads.md',
   'docs/capabilities.md',
   'docs/permissions.md',
   'docs/architecture.md',
