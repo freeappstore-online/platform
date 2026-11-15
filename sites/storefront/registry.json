@@ -3304,9 +3304,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-15T16:45:22.770Z",
-      "creatorGithub": "Keneesha-Perera"
+      "creatorGithub": "Keneesha-Perera",
+      "discoveryDeliveryPending": "2487f022-eaf4-4606-b8b0-98fb1b88676a"
     }
   ]
 }
