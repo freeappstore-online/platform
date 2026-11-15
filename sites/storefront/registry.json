@@ -3289,7 +3289,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-14T14:22:52.197Z",
-      "creatorGithub": "vuthanhvannguyen2006-commits"
+      "creatorGithub": "vuthanhvannguyen2006-commits",
+      "permissions": []
     }
   ]
 }
