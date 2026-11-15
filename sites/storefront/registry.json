@@ -3291,6 +3291,22 @@
       "discoveryRequestedAt": "2026-11-14T14:22:52.197Z",
       "creatorGithub": "vuthanhvannguyen2006-commits",
       "permissions": []
+    },
+    {
+      "id": "teleprompter",
+      "name": "teleprompter",
+      "category": "Productivity",
+      "icon": "🎙️",
+      "iconBg": "#e0e7ff",
+      "description": "A simple, easy-to-use teleprompter for reading scripts while recording videos, giving presentations, or delivering speeches.",
+      "appUrl": "https://teleprompter.freeappstore.online",
+      "repo": "freeappstore-online/teleprompter",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-15T16:45:22.770Z",
+      "creatorGithub": "Keneesha-Perera"
     }
   ]
 }
