@@ -3306,7 +3306,13 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-15T16:45:22.770Z",
-      "creatorGithub": "Keneesha-Perera"
+      "creatorGithub": "Keneesha-Perera",
+      "permissions": [
+        {
+          "name": "clipboard",
+          "reason": "Allow users to paste scripts into the teleprompter."
+        }
+      ]
     }
   ]
 }
