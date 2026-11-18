@@ -3313,22 +3313,6 @@
           "reason": "Allow users to paste scripts into the teleprompter."
         }
       ]
-    },
-    {
-      "id": "e2e-canary-mwml9tp62x3g",
-      "name": "e2e-canary-mwml9tp62x3g",
-      "category": "Utilities",
-      "icon": "🧰",
-      "iconBg": "#e2e8f0",
-      "description": "Automated production platform e2e canary — auto-removed at end of run.",
-      "appUrl": "https://e2e-canary-mwml9tp62x3g.freeappstore.online",
-      "repo": "freeappstore-online/e2e-canary-mwml9tp62x3g",
-      "hostedOn": "r2",
-      "type": "standalone",
-      "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
-      "discoveryRequestedAt": "2026-11-18T20:44:06.959Z",
-      "creatorGithub": "serge-the-dev"
     }
   ]
 }
