@@ -101,10 +101,34 @@ jobs:
           oidc=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$DEPLOY_API" | jq -r .value)
           echo "::add-mask::$oidc"
-          session=$(curl -sS --fail-with-body -X POST "$DEPLOY_API/v1/deploys" \
-            -H "Authorization: Bearer $oidc" -H 'Content-Type: application/json' \
-            --data-binary @"$RUNNER_TEMP/manifest.json") \
-            || { echo "::error::deploy refused: $session"; exit 1; }
+          # A transient D1 overload can fail session allocation before any upload.
+          # Keep the SAME OIDC token: its unique jti permits at most one session.
+          # A replay (409), auth failure or any other 4xx must stop, never retry.
+          request_deploy_session() {
+            local body status attempt
+            body=$(mktemp "$RUNNER_TEMP/deploy-session.XXXXXX")
+            for attempt in 1 2 3 4; do
+              status=$(curl -sS --connect-timeout 15 --max-time 60 -o "$body" -w '%{http_code}' \
+                -X POST "$DEPLOY_API/v1/deploys" \
+                -H "Authorization: Bearer $oidc" -H 'Content-Type: application/json' \
+                --data-binary @"$RUNNER_TEMP/manifest.json") \
+                || { rm -f "$body"; echo "::error::deploy session transport failed" >&2; return 1; }
+              if [[ "$status" == 201 ]]; then
+                cat "$body"
+                rm -f "$body"
+                return 0
+              fi
+              if [[ ! "$status" =~ ^5[0-9][0-9]$ || "$attempt" -eq 4 ]]; then
+                echo "::error::deploy refused (HTTP $status)" >&2
+                cat "$body" >&2
+                rm -f "$body"
+                return 1
+              fi
+              echo "::warning::deploy API returned HTTP $status; retrying session allocation" >&2
+              sleep "$((attempt * 5))"
+            done
+          }
+          session=$(request_deploy_session)
           DEPLOY_TOKEN=$(jq -r .token <<<"$session")
           echo "::add-mask::$DEPLOY_TOKEN"
           DEPLOY_URL="$DEPLOY_API/v1/deploys/$(jq -r .id <<<"$session")"
