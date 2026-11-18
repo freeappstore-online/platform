@@ -106,7 +106,7 @@ export function SiteNav({ user, onSignIn, onSignOut }: {
       <div className="mx-auto flex min-h-12 max-w-5xl flex-wrap items-center gap-2 px-4 py-2 sm:flex-nowrap sm:gap-4 sm:px-6 sm:py-0 lg:px-8">
         {/* Keep the identity visible; primary navigation gets its own row on phones. */}
         <NavLink path="/" className="flex shrink-0 items-center gap-2 text-sm font-extrabold tracking-tight text-ink no-underline">
-          <img src={`${BASE}/favicon.svg`} alt="FreeAppStore" width={32} height={32} className="size-8" />
+          <img src={`${BASE}/favicon.svg?v=2026-11-18`} alt="FreeAppStore" width={32} height={32} className="size-8" />
           <span aria-hidden="true">Free<span className="text-accent">App</span>Store</span>
         </NavLink>
         <nav className="order-3 flex basis-full items-center justify-center gap-1 sm:order-none sm:flex-1 sm:basis-auto sm:justify-start">

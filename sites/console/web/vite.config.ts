@@ -23,6 +23,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
+        // Brand URLs carry a kit version; use their current precached bytes offline.
+        ignoreURLParametersMatching: [/^v$/, /^utm_/, /^fbclid$/],
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,wasm,json}'],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         runtimeCaching: [
@@ -43,8 +45,8 @@ export default defineConfig({
         background_color: "#ffffff", theme_color: "#2563eb",
         orientation: "any",
         icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-192.png?v=2026-11-18', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+          { src: 'icon-512.png?v=2026-11-18', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
     }),

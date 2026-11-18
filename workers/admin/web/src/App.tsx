@@ -99,7 +99,7 @@ function SignIn({
   return (
     <div className="min-h-[100dvh] flex items-center justify-center px-4">
       <div className="w-full max-w-sm text-center">
-        <img src="/favicon.svg" alt="" width={48} height={48} className="mx-auto mb-4 size-12" />
+        <img src="/favicon.svg?v=2026-11-18" alt="" width={48} height={48} className="mx-auto mb-4 size-12" />
         <h1 className="text-2xl font-extrabold tracking-tight text-ink">
           Free<span className="text-accent">App</span>Store
         </h1>
@@ -150,7 +150,7 @@ function Header({
             onClick={() => navigate('/')}
             className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-ink"
           >
-            <img src="/favicon.svg" alt="" width={32} height={32} className="size-8" />
+            <img src="/favicon.svg?v=2026-11-18" alt="" width={32} height={32} className="size-8" />
             <span>Free<span className="text-accent">App</span>Store</span>
           </Button>
           <nav className="hidden sm:flex items-center gap-1">
