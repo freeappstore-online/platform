@@ -213,6 +213,7 @@ function Landing() {
   return (
     <div className="flex min-h-[100dvh] items-center justify-center px-4">
       <div className="text-center max-w-md">
+        <img src={`${BASE}/favicon.svg`} alt="FreeAppStore" width={64} height={64} className="mx-auto mb-4 size-16" />
         <h1 className="display-font text-4xl font-bold text-ink">Creator Console</h1>
         <p className="mt-4 text-muted text-lg">
           Sign in with GitHub to manage your apps on FreeAppStore.

@@ -312,7 +312,7 @@ or a colour-scheme media query.
 | Allowed to vary | Example |
 |---|---|
 | `--accent`, `--accent-hover`, `--accent-soft` | Blue vs purple vs emerald |
-| Brand mark SVG | Lightning bolt vs envelope vs gamepad |
+| Brand mark SVG | App grid vs web window vs gamepad vs agent nodes |
 | Brand name + tagline | "FreeAppStore / Trusted Web Apps" |
 | Nav link items | Apps, Games, About, Pricing, Docs |
 | OG image / favicon | Per-store icon |

@@ -99,9 +99,11 @@ function SignIn({
   return (
     <div className="min-h-[100dvh] flex items-center justify-center px-4">
       <div className="w-full max-w-sm text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">
-          FAS Admin
+        <img src="/favicon.svg" alt="" width={48} height={48} className="mx-auto mb-4 size-12" />
+        <h1 className="text-2xl font-extrabold tracking-tight text-ink">
+          Free<span className="text-accent">App</span>Store
         </h1>
+        <p className="mt-1 text-sm text-muted">Admin</p>
         <p className="mt-3 text-sm text-muted">
           Sign in with a FreeAppStore admin account.
         </p>
@@ -146,9 +148,10 @@ function Header({
         <div className="flex items-center gap-6">
           <Button
             onClick={() => navigate('/')}
-            className="text-lg font-bold tracking-tight text-ink"
+            className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-ink"
           >
-            FAS Admin
+            <img src="/favicon.svg" alt="" width={32} height={32} className="size-8" />
+            <span>Free<span className="text-accent">App</span>Store</span>
           </Button>
           <nav className="hidden sm:flex items-center gap-1">
             <NavLink

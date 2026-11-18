@@ -1,0 +1,13 @@
+{
+  "version": "2026-11-18",
+  "id": "fas",
+  "name": "FreeAppStore",
+  "prefix": "Free",
+  "noun": "App",
+  "family": "apps",
+  "accent": "#2563eb",
+  "darkAccent": "#60a5fa",
+  "gradient": "#3b82f6",
+  "ink": "#ffffff",
+  "domain": "freeappstore.online"
+}

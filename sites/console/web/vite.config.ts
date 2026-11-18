@@ -37,10 +37,10 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: "FAS Creator Console", short_name: "Console",
+        name: "FreeAppStore Creator Console", short_name: "Console",
         description: "Creator Console for FreeAppStore",
         start_url: '/app/', scope: '/app/', display: 'standalone',
-        background_color: "#000000", theme_color: "#000000",
+        background_color: "#ffffff", theme_color: "#2563eb",
         orientation: "any",
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },

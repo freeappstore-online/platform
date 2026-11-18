@@ -9,7 +9,7 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.svg', 'icon.svg', 'apple-touch-icon.png'],
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,json}'],
         // Admin data is dynamic + FAS-session-gated — never let the SW
@@ -24,7 +24,7 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         background_color: '#0b0d12',
-        theme_color: '#0b0d12',
+        theme_color: '#2563eb',
         orientation: 'any',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
