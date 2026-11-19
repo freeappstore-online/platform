@@ -3313,6 +3313,22 @@
           "reason": "Allow users to paste scripts into the teleprompter."
         }
       ]
+    },
+    {
+      "id": "digital-business-card",
+      "name": "digital-business-card",
+      "category": "Productivity",
+      "icon": "📋",
+      "iconBg": "#e0e7ff",
+      "description": "Free digital business card with QR and vCard",
+      "appUrl": "https://digital-business-card.freeappstore.online",
+      "repo": "freeappstore-online/digital-business-card",
+      "hostedOn": "r2",
+      "type": "connected",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-19T03:07:23.306Z",
+      "creatorGithub": "Zhe-Design333"
     }
   ]
 }
