@@ -3326,9 +3326,10 @@
       "hostedOn": "r2",
       "type": "connected",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-19T03:07:23.306Z",
-      "creatorGithub": "Zhe-Design333"
+      "creatorGithub": "Zhe-Design333",
+      "discoveryDeliveryPending": "f7fc65f0-0065-4a3a-b6b8-587e40204126"
     }
   ]
 }
