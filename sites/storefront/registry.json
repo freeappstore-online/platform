@@ -3345,7 +3345,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-20T08:16:12.767Z",
-      "creatorGithub": "abid8195"
+      "creatorGithub": "abid8195",
+      "permissions": []
     }
   ]
 }
