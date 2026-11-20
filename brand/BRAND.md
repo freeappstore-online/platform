@@ -1,24 +1,52 @@
-# FreeAppStore identity
+# FreeAppStore brand
 
-The canonical eight-store family kit is maintained in `stores/brand` beside the platform repositories. This repository vendors its generated exports in `brand/assets/fas/`; `brand.json` records the identity and version. Regenerate upstream, then copy the exports to the storefront, creator console, and admin public assets together. Do not hand-edit generated SVGs or PNGs.
+Kit version **2026-11-18**. Canonical source: [`serge-ivo/stores-workspace` `brand/`](https://github.com/serge-ivo/stores-workspace/tree/main/brand). This repo vendors the exact FAS export in [`brand/assets/`](assets/).
 
-## Platform identity
+## Identity
 
-- Name: **FreeAppStore**, one PascalCase word, with **App** accented.
-- Mark: the shared rounded-square **app grid** icon, never a letter monogram.
-- Wordmark: **Manrope 800**. Display headings may use Fraunces; the logo does not.
-- Accent: `#2563eb` in light mode, `#60a5fa` in dark mode. Use existing UI tokens.
-- Header: local `favicon.svg` at 32 × 32 next to the wordmark. A decorative mark has empty alt text; the link must retain the full store name. Keep 8px between icon and wordmark.
-- Social card: `og-image.png` (1200 × 630). Browser icon: `favicon.svg`, with 16px/32px PNG fallbacks. Apple touch icon: 180px. PWA: 192px/512px full-bleed PNGs, suitable for maskable use.
-- Exported wordmarks are outlined vectors and need no installed fonts. Use `wordmark-light.svg` on light backgrounds and `wordmark-dark.svg` on dark backgrounds. `mark-mono.svg` inherits `currentColor`.
+- **Name:** FreeAppStore, one PascalCase word, with **App** in the accent colour.
+- **Symbol:** offset tiles, shared with ProAppStore. Never a letter monogram.
+- **Wordmark:** Manrope 800. The exported wordmarks are outlined vectors and need no installed fonts.
+- **Colours:** accent `#2563eb`; `#60a5fa` on dark surfaces; icon gradient `#3b82f6`.
+- **Typography:** Manrope for UI, Fraunces for editorial headings. The logo never uses Fraunces.
 
-Individual apps and games retain their own names and icons. This kit identifies the platform; it is not a template for replacing product identities. UI components, themes and accessibility follow the existing design system and SDK guidance.
+## Assets
+
+| File | Use |
+| --- | --- |
+| `favicon.svg` | Browser icon and header icon |
+| `mark.svg` / `mark-mono.svg` | Transparent symbol, in colour or `currentColor` |
+| `wordmark-light.svg` / `wordmark-dark.svg` | Full wordmark for light or dark backgrounds |
+| `icon-{16,32,48,64,128,180,192,512}.png` | PNG fallbacks (16/32) and PWA icons (192/512) |
+| `apple-touch-icon.png` | Apple touch icon, 180px |
+| `og-image.svg` / `og-image.png` | Social card, 1200 × 630 |
+| `brand.json` | Kit version and identity values |
+
+## Usage rules
+
+- In a header, show the icon at 28–40px (FAS uses 32px, 8px from the wordmark) with the full name accessible.
+- A decorative image beside the name takes `alt=""`. A symbol-only link needs the full name as its accessible label.
+- The 192px and 512px PNGs are opaque, full-bleed maskable icons. Do not use them as a square header badge.
+- Never redraw, abbreviate or space the name, and never hand-edit an exported SVG or PNG.
+- Individual apps and games keep their own names and icons. This kit identifies the platform only.
+
+## Where it ships
+
+Each deployable surface carries its own copy, so none depends on another origin for its identity:
+
+- `sites/storefront/` (freeappstore.online)
+- `sites/console/web/public/` (creator console)
+- `workers/admin/web/public/` (admin; also `icon.svg`, a copy of `favicon.svg`)
+
+Each holds `favicon.svg`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `og-image.png` and a public `brand.json` that makes the deployed revision inspectable.
+
+Reference them with `?v=2026-11-18`. The storefront caches image paths immutably, so new bytes at an unversioned URL can leave the old logo visible.
+
+## Store-specific notes
 
 App layout and ownership follow the [composable starter contract](../docs/composable-starter-contract.md): start from the SDK Shell, keep app-owned layout choices, and use the shared profile page and theme controls.
 
-## UI tokens
-
-Use the canonical tokens from [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md), including their light and dark values. Keep platform identity assets separate from app-owned accent choices.
+Use the canonical UI tokens from [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md), including their light and dark values. Keep platform identity assets separate from app-owned accent choices.
 
 | Token | Purpose |
 | --- | --- |
@@ -29,8 +57,10 @@ Use the canonical tokens from [DESIGN-SYSTEM.md](../DESIGN-SYSTEM.md), including
 | `--panel` | Card and panel surfaces |
 | `--line` | Borders and dividers |
 
-## Distribution
+## Updating
 
-The canonical exports are copied to `sites/storefront/`, `sites/console/web/public/` and `workers/admin/web/public/`. Public `brand.json` files make the deployed revision inspectable. Assets are local to each deployable surface, so admin and creator experiences do not depend on the storefront origin for their identity.
-
-Version public identity references with `?v=2026-11-18` (the kit version). The storefront caches image paths immutably; changing bytes at an unversioned URL can leave the old logo visible. Update header, favicon, touch icon, PWA manifest icon and social-image references together when the kit changes.
+1. Change the master in the workspace kit and regenerate it there.
+2. Copy the FAS export to `brand/assets/` and to the three surfaces above.
+3. Bump the `?v=` parameter on header, favicon, touch icon, PWA manifest and social-image references together.
+4. Run `python3 brand/check-copies.py` in the workspace.
+5. Land through this repo's normal `main` workflow.

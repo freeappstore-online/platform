@@ -63,13 +63,15 @@ platform/
 │   └── platform-limits.md # maintained server-enforced limits
 ├── workers/        # admin, agent, host, mcp (independent projects)
 ├── sites/          # storefront and creator console
-├── brand/          # shared identity and design conventions
+├── brand/          # brand guide (BRAND.md) and the vendored kit (assets/)
 ├── ops/            # operational docs and scripts
 ├── examples/
 │   └── rooms-demo/  # minimal SDK consumer
 └── scripts/
     └── e2e-local.mjs  # CI integration test against wrangler dev
 ```
+
+The FreeAppStore name, symbol, colours and logo files are documented in the [brand guide](./brand/BRAND.md).
 
 ## Contributing
 
