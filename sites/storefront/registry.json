@@ -3330,6 +3330,22 @@
       "discoveryRequestedAt": "2026-11-19T03:07:23.306Z",
       "creatorGithub": "Zhe-Design333",
       "permissions": []
+    },
+    {
+      "id": "turfup",
+      "name": "turfup",
+      "category": "Health & Fitness",
+      "icon": "💪",
+      "iconBg": "#dcfce7",
+      "description": "Log each turf session",
+      "appUrl": "https://turfup.freeappstore.online",
+      "repo": "freeappstore-online/turfup",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-20T08:16:12.767Z",
+      "creatorGithub": "abid8195"
     }
   ]
 }
