@@ -3346,8 +3346,7 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-20T08:16:12.767Z",
       "creatorGithub": "abid8195",
-      "permissions": [],
-      "discoveryDeliveryPending": "45f0377c-f337-4f4a-b15f-7a21e55cc6d2"
+      "permissions": []
     }
   ]
 }
