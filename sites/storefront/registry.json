@@ -3347,6 +3347,22 @@
       "discoveryRequestedAt": "2026-11-20T08:16:12.767Z",
       "creatorGithub": "abid8195",
       "permissions": []
+    },
+    {
+      "id": "run",
+      "name": "run",
+      "category": "Health & Fitness",
+      "icon": "🎓",
+      "iconBg": "#dcfce7",
+      "description": "Beginner running coach: guided 5K and 10K plans, GPS route, pace and splits. Private, on your device.",
+      "appUrl": "https://run.freeappstore.online",
+      "repo": "freeappstore-online/run",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-22T23:47:28.951Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
