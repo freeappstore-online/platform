@@ -1,0 +1,41 @@
+# XcodeGen spec: the source of truth for FreeAppStore.xcodeproj. Regenerate with `xcodegen generate`.
+name: FreeAppStore
+options:
+  createIntermediateGroups: true
+  # Explicit so the generated LastUpgradeCheck does not follow XcodeGen's default (2.47 changed it).
+  xcodeVersion: "16.0"
+  developmentLanguage: en
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+targets:
+  FreeAppStore:
+    type: application
+    platform: iOS
+    sources: [FreeAppStore]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FAS_BUNDLE_ID)
+        INFOPLIST_FILE: FreeAppStore/Info.plist
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+  FreeAppStoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [FreeAppStoreTests]
+    dependencies:
+      - target: FreeAppStore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(FAS_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1"
+schemes:
+  FreeAppStore:
+    build:
+      targets:
+        FreeAppStore: all
+        FreeAppStoreTests: [test]
+    test:
+      targets: [FreeAppStoreTests]

@@ -14,3 +14,6 @@ playwright-report/
 screencheck-out/
 test-results/
 .playwright-mcp/
+
+# xcodebuild -derivedDataPath used by ios/ and .github/workflows/ios.yml (#617)
+/build/ios/
