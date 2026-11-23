@@ -10,6 +10,7 @@ val releaseVersion = Properties().apply {
 }
 val buildNumber = (System.getenv("ANDROID_BUILD_NUMBER") ?: releaseVersion.getProperty("versionCode")).toInt()
 require(buildNumber in 1..2_100_000_000) { "Android versionCode is out of range" }
+val uploadStore = System.getenv("ANDROID_UPLOAD_KEYSTORE_PATH")
 android {
     namespace = "online.freeappstore.companion"
     compileSdk = 36
@@ -21,9 +22,18 @@ android {
         versionName = releaseVersion.getProperty("versionName")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    // No release signing yet: signed builds and Play publishing need secrets and a listing (their own issue).
+    // Release builds are signed with the FAS upload key; scripts/build-android-release.sh restores it (#651).
+    signingConfigs {
+        if (!uploadStore.isNullOrBlank()) create("upload") {
+            storeFile = file(uploadStore)
+            storePassword = System.getenv("ANDROID_UPLOAD_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("ANDROID_UPLOAD_KEY_ALIAS")
+            keyPassword = System.getenv("ANDROID_UPLOAD_KEY_PASSWORD")
+        }
+    }
     buildTypes {
         release {
+            if (!uploadStore.isNullOrBlank()) signingConfig = signingConfigs.getByName("upload")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
@@ -34,6 +44,14 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+}
+// A release task must never quietly produce an unsigned artifact or use a debug key.
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && it.name in listOf("assembleRelease", "bundleRelease", "packageRelease", "signReleaseBundle") }) {
+        require(!uploadStore.isNullOrBlank() && listOf("ANDROID_UPLOAD_KEYSTORE_PASSWORD", "ANDROID_UPLOAD_KEY_ALIAS", "ANDROID_UPLOAD_KEY_PASSWORD").all { !System.getenv(it).isNullOrBlank() }) {
+            "Release signing is required. Use scripts/build-android-release.sh with FAS upload credentials."
+        }
+    }
 }
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2025.10.00")

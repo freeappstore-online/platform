@@ -1,16 +1,36 @@
 name: Android Companion
 
-# Builds, unit-tests and lints the FAS Android companion, then runs the instrumented CompanionTest on an
-# emulator. Ported from proappstore-online/platform's android.yml without the release signing, Play publishing
-# and runner router: signed builds need secrets and a Play listing, and get their own issue (#621).
+# Builds, unit-tests and lints the FAS Android companion, runs the instrumented CompanionTest on an emulator and,
+# on main, builds a signed release APK + AAB and optionally uploads it to Google Play. Ported from
+# proappstore-online/platform's android.yml without the runner router (#621, #651). The release job is skipped
+# until the repo-level upload-key secrets exist (android/README.md, Release). The Play track defaults to internal.
 on:
-  push: { branches: [main], paths: ['android/**', '.github/workflows/android.yml'] }
-  pull_request: { paths: ['android/**', '.github/workflows/android.yml'] }
+  push:
+    branches: [main]
+    paths: ['android/**', 'scripts/*android*', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['android/**', 'scripts/*android*', '.github/workflows/android.yml']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Upload to Google Play after building and signing
+        type: boolean
+        default: false
+      track:
+        description: Google Play target track
+        type: choice
+        options: [internal, production]
+        default: internal
+      status:
+        description: Draft for initial setup; completed for a ready release
+        type: choice
+        options: [draft, completed]
+        default: draft
 permissions: { contents: read }
+# Never cancel a main run midway: its release job may be committing a Play edit.
 concurrency:
   group: android-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build:
@@ -71,3 +91,91 @@ jobs:
         with:
           name: freeappstore-android-connected
           path: android/app/build/reports/androidTests/
+
+  # Job-level `if` cannot read secrets, so this job checks for the upload-key secrets and the release job is
+  # skipped cleanly while they are absent. The repo is private: they must be repo-level secrets, not org secrets.
+  release-gate:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+          ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$ANDROID_UPLOAD_KEYSTORE_BASE64" && -n "$ANDROID_UPLOAD_KEYSTORE_PASSWORD" && -n "$ANDROID_UPLOAD_KEY_ALIAS" && -n "$ANDROID_UPLOAD_KEY_PASSWORD" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::Android release skipped: the ANDROID_UPLOAD_* repo secrets are not set (android/README.md, Release).'
+          fi
+
+  release:
+    needs: [build, release-gate]
+    if: needs.release-gate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+      ANDROID_UPLOAD_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_PASSWORD }}
+      ANDROID_UPLOAD_KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+      ANDROID_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+      GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+      PUBLISH_PLAY: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || github.event_name == 'push' && vars.ANDROID_PLAY_PUBLISH_ENABLED == 'true' }}
+      PLAY_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.track || vars.ANDROID_PLAY_TRACK || 'internal' }}
+      PLAY_STATUS: ${{ github.event_name == 'workflow_dispatch' && inputs.status || 'completed' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-36'
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Choose a monotonic Android version code
+        shell: bash
+        run: |
+          minimum=$(sed -n 's/^versionCode=//p' android/version.properties)
+          [[ "$minimum" =~ ^[1-9][0-9]*$ ]] || exit 1
+          if (( GITHUB_RUN_NUMBER > minimum )); then minimum=$GITHUB_RUN_NUMBER; fi
+          if [[ "$PUBLISH_PLAY" == 'true' ]]; then
+            version_code=$(node scripts/android-play-release.mjs next-code "$minimum")
+          else
+            version_code=$minimum
+          fi
+          echo "ANDROID_BUILD_NUMBER=$version_code" >> "$GITHUB_ENV"
+      - name: Build and verify signed APK and AAB
+        run: bash scripts/build-android-release.sh
+      - name: Keep signed artifacts and R8 mapping
+        uses: actions/upload-artifact@v4
+        with:
+          name: freeappstore-android-release-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/mapping/release/mapping.txt
+            android/app/build/outputs/release/release.json
+            android/signing/upload-certificate.pem
+      - name: Publish and verify Google Play track
+        if: env.PUBLISH_PLAY == 'true'
+        run: node scripts/android-play-release.mjs publish android/app/build/outputs/bundle/release/app-release.aab "$ANDROID_BUILD_NUMBER" "$PLAY_TRACK" "$PLAY_STATUS"
+      - name: Release result
+        if: success()
+        shell: bash
+        run: |
+          echo "Signed APK and AAB: versionCode=$ANDROID_BUILD_NUMBER, commit=$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$PUBLISH_PLAY" == 'true' ]]; then
+            echo "Google Play track verified: $PLAY_TRACK ($PLAY_STATUS). Store review/availability is separate." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Google Play upload was not requested. Signed artifacts are ready for the first manual Play Console upload.' >> "$GITHUB_STEP_SUMMARY"
+          fi
