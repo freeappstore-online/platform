@@ -3,6 +3,8 @@ import {
   assessAsset,
   assessRoot,
   assessUnknownHost,
+  burstApps,
+  burstTargets,
   hasCrossOriginIsolation,
   localScriptSrc,
   verifyAppHost,
@@ -148,5 +150,53 @@ describe('app-host release check (#308)', () => {
     expect(result.failures.some((line) => line.includes('console'))).toBe(true);
     expect(result.failures.some((line) => line.includes('language'))).toBe(true);
     expect(result.failures.some((line) => line.startsWith('unknown host'))).toBe(false);
+  });
+
+  it('bursts run first, then apps spread across the registry (#643)', () => {
+    const ids = ['a', 'b', 'c', 'run', 'd', 'e', 'f', 'g', 'h'];
+    expect(burstTargets(ids, 4)).toEqual(['run', 'a', 'c', 'f']);
+    expect(burstTargets(['a', 'b'], 6)).toEqual(['a', 'b']);
+    expect(burstTargets([], 6)).toEqual([]);
+  });
+
+  it('sends each burst concurrently and fails on any 5xx in it (#643)', async () => {
+    let open = 0;
+    let peak = 0;
+    let n = 0;
+    const failures = await burstApps(['run'], {
+      requests: 8,
+      fetch: async () => {
+        open += 1;
+        peak = Math.max(peak, open);
+        await new Promise((r) => setTimeout(r, 5));
+        open -= 1;
+        n += 1;
+        return n % 4 === 0 ? page('error code: 1101', 500) : page(html(''));
+      },
+    });
+    expect(peak).toBe(8);
+    expect(failures).toEqual(['burst run https://run.freeappstore.online/: 2/8 failed: HTTP 500']);
+  });
+
+  it('fails the release when only overlapping requests crash, as in #639', async () => {
+    // A single request per root passes; the second of two in flight throws 1101.
+    let inFlight = 0;
+    const result = await verifyAppHost({
+      fetch: async (url: string) => {
+        const target = String(url);
+        if (!/^https:\/\/(language|math)\./.test(target)) return routed(target);
+        inFlight += 1;
+        const crashed = inFlight > 1;
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight -= 1;
+        return crashed ? page('error code: 1101', 500) : routed(target);
+      },
+      concurrency: 1,
+      log: () => {},
+    });
+    expect(result.ok).toBe(false);
+    expect(result.burstedApps).toEqual(['language', 'math', 'wasm']);
+    expect(result.failures.every((line) => line.startsWith('burst '))).toBe(true);
+    expect(result.failures.some((line) => line.startsWith('burst language'))).toBe(true);
   });
 });

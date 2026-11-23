@@ -4,6 +4,12 @@
  * every public app root must answer, representative JS assets must load, the
  * console must load, an unknown host must 404, and the API must be healthy.
  * Default apps must not gain COOP/COEP.
+ *
+ * Bursts (#643): one request per app never sees a bug that needs overlapping
+ * requests (the shared registry promise that threw 1101 on about half of app
+ * roots, #639), so `run` and a spread of other apps also get a concurrent
+ * burst, and any 5xx fails the check. `--burst-only` runs just the bursts
+ * (status-probe.yml).
  */
 import { pathToFileURL } from 'node:url';
 
@@ -15,6 +21,8 @@ const DEFAULTS = {
   representativeAssets: 3,
   concurrency: 8,
   timeoutMs: 15000,
+  burstApps: 6,
+  burstRequests: 8,
 };
 
 export function workerFailure(status, body) {
@@ -102,6 +110,50 @@ async function mapPool(items, limit, fn) {
 
 function appIdOf(app) {
   return typeof app?.id === 'string' ? app.id : '';
+}
+
+/** `run` first, then apps spread evenly across the registry, `count` in all. */
+export function burstTargets(ids, count) {
+  const others = ids.filter((id) => id && id !== 'run');
+  const picked = ids.includes('run') ? ['run'] : [];
+  const want = Math.min(count - picked.length, others.length);
+  for (let i = 0; i < want; i += 1) picked.push(others[Math.floor((i * others.length) / want)]);
+  return picked;
+}
+
+/** `requests` concurrent GETs of each app root, one app at a time. Any 5xx, 1101 body or network error fails it. */
+export async function burstApps(ids, options = {}) {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const requests = options.requests ?? DEFAULTS.burstRequests;
+  const timeoutMs = options.timeoutMs ?? DEFAULTS.timeoutMs;
+  const failures = [];
+  for (const id of ids) {
+    const url = `https://${id}.freeappstore.online/`;
+    const reasons = await Promise.all(
+      Array.from({ length: requests }, async () => {
+        try {
+          const { status, body } = await readResponse(fetchImpl, url, timeoutMs);
+          return workerFailure(status, body);
+        } catch (error) {
+          return error instanceof Error ? error.message : String(error);
+        }
+      }),
+    );
+    const failed = reasons.filter(Boolean);
+    if (failed.length) {
+      failures.push(
+        `burst ${id} ${url}: ${failed.length}/${requests} failed: ${[...new Set(failed)].join(', ')}`,
+      );
+    }
+  }
+  return failures;
+}
+
+async function registryIds(fetchImpl, registryUrl, timeoutMs) {
+  const { status, body } = await readResponse(fetchImpl, registryUrl, timeoutMs);
+  if (status !== 200) throw new Error(`registry HTTP ${status}`);
+  const apps = JSON.parse(body).apps;
+  return Array.isArray(apps) ? apps.map(appIdOf).filter(Boolean) : [];
 }
 
 export async function verifyAppHost(options = {}) {
@@ -211,7 +263,16 @@ export async function verifyAppHost(options = {}) {
     }
   }
 
-  const summary = `checked ${apps.length} app roots, ${sample.length} js assets, console, unknown host, api health; ${failures.length} failures`;
+  const bursted = burstTargets(apps.map(appIdOf), options.burstApps ?? DEFAULTS.burstApps);
+  for (const failure of await burstApps(bursted, {
+    fetch: fetchImpl,
+    requests: options.burstRequests,
+    timeoutMs,
+  })) {
+    failures.push(failure);
+  }
+
+  const summary = `checked ${apps.length} app roots, ${sample.length} js assets, bursts on ${bursted.length} apps, console, unknown host, api health; ${failures.length} failures`;
   log(summary);
   return {
     ok: failures.length === 0,
@@ -219,11 +280,21 @@ export async function verifyAppHost(options = {}) {
     summary,
     checkedRoots: apps.length,
     checkedAssets: sample.length,
+    burstedApps: bursted,
   };
 }
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isDirectRun) {
+if (isDirectRun && process.argv.includes('--burst-only')) {
+  const ids = await registryIds(globalThis.fetch, DEFAULTS.registryUrl, DEFAULTS.timeoutMs);
+  const targets = burstTargets(ids, DEFAULTS.burstApps);
+  const failures = await burstApps(targets);
+  for (const failure of failures) console.error(`::error::${failure}`);
+  console.log(
+    `bursts of ${DEFAULTS.burstRequests} on ${targets.join(', ')}: ${failures.length} failures`,
+  );
+  process.exit(failures.length === 0 && targets.length > 0 ? 0 : 1);
+} else if (isDirectRun) {
   const result = await verifyAppHost();
   for (const failure of result.failures) console.error(failure);
   process.exit(result.ok ? 0 : 1);

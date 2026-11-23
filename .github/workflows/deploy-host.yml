@@ -67,6 +67,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy
+        id: deploy
         run: pnpm exec wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -74,8 +75,10 @@ jobs:
 
       # A successful upload is not recovery. This hits the live host: every
       # public app root, representative JS assets, the console, an unknown
-      # host's 404, API health, and default-off COOP/COEP.
+      # host's 404, API health, default-off COOP/COEP, and concurrent bursts
+      # across several apps (any 5xx fails; #639 only showed under overlap).
       - name: Verify live app host
+        id: verify
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
@@ -87,3 +90,16 @@ jobs:
             sleep 10
           done
           exit 1
+
+      # A release that fails the live check goes back to the previous Worker
+      # version, and the run stays red (#643). D1 migrations are not reverted:
+      # they are additive, and the previous version ran before them.
+      - name: Roll back to the previous version
+        if: failure() && steps.deploy.outcome == 'success' && steps.verify.outcome == 'failure'
+        run: |
+          set -euo pipefail
+          pnpm exec wrangler rollback --yes --message "deploy-host run ${{ github.run_id }} failed live verification"
+          echo "::error::live verification failed; rolled freeappstore-host back to the previous version"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
