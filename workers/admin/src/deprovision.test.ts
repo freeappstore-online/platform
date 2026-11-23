@@ -263,6 +263,8 @@ describe("deleteHostRoute", () => {
       "audit_results",
       "app_owner_transfers",
       "agent_sessions",
+      // Revoked by the native_revoke_on_app_delete trigger when the apps row goes (0051).
+      "native_grants",
     ]);
     expect(tables.filter((t) => !handled.has(t))).toEqual([]);
   });

@@ -177,7 +177,7 @@ describe.skipIf(!hasSqlite)('cross-store and revocation (#495)', () => {
   });
 
   it('POST /v1/auth/logout revokes every earlier session, in every app', async () => {
-    const { db, env } = seededEnv();
+    const { env } = seededEnv();
     const appToken = await signSession('gh:1', KEY, { aud: 'chess' });
     const consoleToken = await signSession('gh:1', KEY, { aud: 'console' });
     const me = (t: string) =>

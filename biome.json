@@ -11,7 +11,9 @@
       "!workers",
       "!sites",
       "!brand",
-      "!ops"
+      "!ops",
+      "!ios",
+      "!android"
     ]
   },
   "formatter": {
