@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkAndBump, dayKey, type ProxyUsageStore } from './proxy-rate-limit.js';
+import { checkAndBump, dayKey, type ProxyUsageStore, pruneUsage } from './proxy-rate-limit.js';
+import { hasSqlite, sqliteD1 } from './sqlite-d1.testutil.js';
 
 function fakeStore(initial: Record<string, number> = {}): ProxyUsageStore & {
   data: Record<string, number>;
@@ -147,5 +148,18 @@ describe('checkAndBump', () => {
     });
     expect(ok).toEqual({ allowed: true, count: 100, wrote: true });
     expect(store.data[`${APP}|${DAY}`]).toBe(100);
+  });
+});
+
+describe('pruneUsage (#635)', () => {
+  it.skipIf(!hasSqlite)('keeps today and yesterday, drops older days', async () => {
+    const { db, d1 } = sqliteD1();
+    const now = Date.UTC(2026, 10, 23, 3);
+    for (const day of ['2026-11-21', '2026-11-22', '2026-11-23']) {
+      db.prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, 1)').run('a', day);
+    }
+    await pruneUsage(d1, now);
+    const days = db.prepare('SELECT day FROM app_proxy_usage ORDER BY day').all();
+    expect(days.map((r) => (r as { day: string }).day)).toEqual(['2026-11-22', '2026-11-23']);
   });
 });

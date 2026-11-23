@@ -5,6 +5,7 @@ import { HttpError, hasInternalToken } from './lib/auth.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { pruneNativeData } from './lib/native-companion.js';
 import { isAllowedOrigin } from './lib/origins.js';
+import { pruneUsage } from './lib/proxy-rate-limit.js';
 import { runPushDelivery } from './lib/push-delivery.js';
 import { publicStatusReport, runStatusChecks } from './lib/status.js';
 import { checkUrl, TARGETS } from './lib/uptime.js';
@@ -176,6 +177,7 @@ export default {
       console.log(
         `log-prune: deleted=${result.meta?.changes ?? 0} (cutoff=${new Date(cutoff).toISOString()})`,
       );
+      await pruneUsage(env.DB, Date.now()).catch((e) => console.error('pruneUsage:', e));
       // Prune expired magic-link tokens (replay prevention table).
       const nowEpoch = Math.floor(Date.now() / 1000);
       await env.DB.prepare('DELETE FROM consumed_tokens WHERE expires_at < ?')

@@ -76,6 +76,14 @@ export function dayKey(nowMs: number): string {
   return new Date(nowMs).toISOString().slice(0, 10);
 }
 
+/** Drop counters older than yesterday (UTC): every reader only checks today (#635). */
+export async function pruneUsage(db: D1Database, nowMs: number): Promise<void> {
+  await db
+    .prepare('DELETE FROM app_proxy_usage WHERE day < ?')
+    .bind(dayKey(nowMs - 24 * 60 * 60 * 1000))
+    .run();
+}
+
 export interface CheckOptions {
   appId: string;
   /** Hard cap for the day. */

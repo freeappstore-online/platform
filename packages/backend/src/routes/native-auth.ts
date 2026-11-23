@@ -99,12 +99,30 @@ nativeAuthRoutes.get('/native/auth/authorize', async (c) => {
       'Connection expired. Start again from the FreeAppStore app on your phone.',
     );
   }
-  const nonce = nativeRandom();
-  await c.env.DB.prepare(
-    'UPDATE native_pairings SET browser_hash = ? WHERE id = ? AND approved = 0 AND user_id IS NULL',
-  )
-    .bind(await nativeHash(nonce), id)
-    .run();
+  // The first browser to open the link owns this pairing; only it may reopen it (#634).
+  const [cookieId, cookieNonce] = (getCookie(c, COOKIE) ?? '').split('.');
+  let nonce: string;
+  if (
+    pairing.browser_hash &&
+    cookieId === id &&
+    isHex64(cookieNonce) &&
+    (await nativeHash(cookieNonce)) === pairing.browser_hash
+  ) {
+    nonce = cookieNonce;
+  } else {
+    nonce = nativeRandom();
+    const bound = await c.env.DB.prepare(
+      'UPDATE native_pairings SET browser_hash = ? WHERE id = ? AND approved = 0 AND user_id IS NULL AND browser_hash IS NULL',
+    )
+      .bind(await nativeHash(nonce), id)
+      .run();
+    if (!bound.meta.changes) {
+      throw new HttpError(
+        403,
+        'This connection was opened in another browser. Start again from the FreeAppStore app on your phone.',
+      );
+    }
+  }
   setCookie(c, COOKIE, `${id}.${nonce}`, {
     secure: true,
     httpOnly: true,

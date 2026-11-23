@@ -250,6 +250,25 @@ describe.skipIf(!hasSqlite)('FAS native companion', () => {
     ).toBe(403);
   });
 
+  it('binds a pairing to the first browser that opens it; only that browser may reopen it (#634)', async () => {
+    const p = await pairing();
+    // Same browser reloads: same nonce, so the PKCE challenge and later sign-in still match.
+    const reload = await request(`/native/auth/authorize?id=${p.id}`, 'GET', undefined, undefined, {
+      Cookie: p.cookie,
+    });
+    expect(reload.status).toBe(200);
+    expect(reload.headers.get('Set-Cookie')!.split(';')[0]).toBe(p.cookie);
+    // Anyone else holding the link is refused, with or without a cookie of their own.
+    const other = await request(`/native/auth/authorize?id=${p.id}`);
+    expect(other.status).toBe(403);
+    const forged = await request(`/native/auth/authorize?id=${p.id}`, 'GET', undefined, undefined, {
+      Cookie: `${p.cookie.split('=')[0]}=${p.id}.${'c'.repeat(64)}`,
+    });
+    expect(forged.status).toBe(403);
+    // The owner's browser still completes the flow.
+    await authorize(p);
+  });
+
   it('a deleted account cannot finish pairing', async () => {
     const p = await pairing();
     const code = await signIn(p, 'gh:9');
