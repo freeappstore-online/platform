@@ -45,17 +45,18 @@ export async function checkUrl(url: string, now: () => number = Date.now): Promi
  * outage — it's a hosting-platform property — so we drop it. Health of the
  * API is implicit: if this cron runs and inserts rows, the API is up.
  *
- * Worth deduplicating once the registry is fetched from a remote URL.
+ * Worth deduplicating once the registry is fetched from a remote URL. Every
+ * entry must be a live registry app: a removed app answers 404, which counts
+ * as up and checks nothing (chess and puzzle did, until 2026-11-23).
  */
 export const TARGETS: Array<{ id: string; url: string }> = [
   { id: 'freeappstore', url: 'https://freeappstore.online' },
-  { id: 'chess', url: 'https://chess.freeappstore.online' },
   { id: 'language', url: 'https://language.freeappstore.online' },
   { id: 'math', url: 'https://math.freeappstore.online' },
   { id: 'quiz', url: 'https://quiz.freeappstore.online' },
   { id: 'books', url: 'https://books.freeappstore.online' },
   { id: 'music', url: 'https://music.freeappstore.online' },
-  { id: 'puzzle', url: 'https://puzzle.freeappstore.online' },
+  { id: 'run', url: 'https://run.freeappstore.online' },
 ];
 
 /**

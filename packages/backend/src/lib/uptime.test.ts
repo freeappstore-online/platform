@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { burstCheck, burstSample, checkUrl } from './uptime.js';
+import { burstCheck, burstSample, checkUrl, TARGETS } from './uptime.js';
 
 describe('checkUrl', () => {
   let originalFetch: typeof fetch;
@@ -102,5 +103,18 @@ describe('burstCheck (#642)', () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe(500);
     expect(result.error).toBe('3/6 failed: http 500');
+  });
+});
+
+describe('TARGETS', () => {
+  it('lists only live registry apps (a removed app answers 404, which counts as up)', () => {
+    const registry = JSON.parse(
+      readFileSync(new URL('../../../../sites/storefront/registry.json', import.meta.url), 'utf8'),
+    ) as { apps: { id: string }[] };
+    const ids = new Set(registry.apps.map((a) => a.id));
+    const missing = TARGETS.filter((t) => t.id !== 'freeappstore' && !ids.has(t.id)).map(
+      (t) => t.id,
+    );
+    expect(missing).toEqual([]);
   });
 });
