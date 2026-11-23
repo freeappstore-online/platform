@@ -3363,6 +3363,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-22T23:47:28.951Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "rewired",
+      "name": "rewired",
+      "category": "Health & Fitness",
+      "icon": "💪",
+      "iconBg": "#dcfce7",
+      "description": "Break cravings on demand with instant physical and mental detour exercised",
+      "appUrl": "https://rewired.freeappstore.online",
+      "repo": "freeappstore-online/rewired",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-23T14:43:18.883Z",
+      "creatorGithub": "Halfian"
     }
   ]
 }
