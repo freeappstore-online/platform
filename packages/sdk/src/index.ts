@@ -6,6 +6,7 @@ import { Friends } from './friends.js';
 import { Keys } from './keys.js';
 import { Kv } from './kv.js';
 import { Logger } from './logger.js';
+import { Native } from './native.js';
 import { Photos } from './photos.js';
 import { ApiProxy } from './proxy.js';
 import { Push } from './push.js';
@@ -51,6 +52,7 @@ export {
 export type { Collection, CollectionOptions, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
+export type { NativeCursor, NativePoint, NativeStatus } from './native.js';
 export type { Photo } from './photos.js';
 export { PHOTO_LIMITS, Photos, preparePhoto } from './photos.js';
 export { ProxyNoGrantError } from './proxy.js';
@@ -93,6 +95,7 @@ export class FreeAppStore {
   readonly friends: Friends;
   readonly push: Push;
   readonly photos: Photos;
+  readonly native: Native;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -110,6 +113,7 @@ export class FreeAppStore {
     this.friends = new Friends(opts.appId, apiBase, this.auth);
     this.push = new Push(opts.appId, apiBase, this.auth);
     this.photos = new Photos(opts.appId, apiBase, this.auth);
+    this.native = new Native(opts.appId, apiBase, this.auth);
   }
 }
 

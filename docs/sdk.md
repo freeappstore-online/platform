@@ -382,6 +382,26 @@ For race-safe private per-account editing, see the [connected data example](http
 
 Durable room-restricted records use the backend's authenticated data-room endpoints documented in [data rooms](https://github.com/freeappstore-online/platform/blob/main/docs/data-rooms.md); the SDK does not yet wrap those endpoints. These private endpoints are separate from public collections and realtime room broadcasts. Membership is enforced by the backend for each request.
 
+## Phone companion locations (`fas.native`)
+
+The FreeAppStore phone app (iOS, [native companion](native-companion.md)) keeps recording location with the phone locked and shares it with apps the user turns on. Only reviewed apps can receive it (today: Run), only for the signed-in user, and only through that app's own session. Points are kept for 7 days.
+
+```ts
+const s = await fas.native.status();   // { available, enabled, lastPointAt }
+if (s.available && !s.enabled) location.href = fas.native.setupUrl; // freeappstore://native/apps/<appId>
+
+// Everything recorded since the activity started (paged, recording order):
+let cursor = { after: startedAt, afterId: '' };
+let more = true;
+while (more) {
+  const page = await fas.native.locations(cursor);  // up to 500 per call
+  for (const p of page.points) addPoint(p);          // { id, at, lat, lng, accuracy }
+  ({ cursor, more } = page);
+}
+```
+
+The cursor orders by recording time, not arrival. The phone uploads when it has signal, so a point can land behind a cursor you already read past: to cover a time window, re-read it from its start and dedupe by `id`. Other apps get `available: false`; a console or other-app session gets 403.
+
 ## Temporary photos
 
 Use `fas.photos.upload(file)` for private photos, or explicitly pass

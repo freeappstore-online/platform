@@ -272,6 +272,7 @@ const fas = initApp({ appId: 'my-app' })
 // fas.friends  — platform-level friend relationships
 // fas.proxy    — secret-injecting API proxy
 // fas.push     — scheduled push-notification reminders
+// fas.native   — locked-phone locations from the FreeAppStore phone app (reviewed apps only)
 ```
 
 The `appId` must match the subdomain (e.g. `'timer'` for `timer.freeappstore.online`).

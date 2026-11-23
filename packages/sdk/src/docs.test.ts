@@ -112,6 +112,7 @@ const DEVELOPER_DOCS = [
   'docs/proxy-and-keys.md',
   'docs/platform-limits.md',
   'docs/photo-uploads.md',
+  'docs/native-companion.md',
   'docs/capabilities.md',
   'docs/permissions.md',
   'docs/architecture.md',
