@@ -62,3 +62,11 @@ browser pages on the API origin, opened by the phone.
   **Open** goes to the app in the browser; the first time for each app it shows how to add it to the Home
   Screen (Share → Add to Home Screen), with **Don't show this again**. Apps on the recipient list get **Use with
   companion**, which opens the same disclosure as the Sharing tab. Browsing never creates a grant.
+
+## On the phone (Android)
+
+- `android/` is the Android port (package `online.freeappstore.companion`) with the same pairing, per-app consent,
+  Pause all, per-app pause and upload queue. It has no on-device sharing history yet.
+- Its **Store** tab lists `https://freeappstore.online/registry.json` (cached, revalidated, fetched without
+  credentials). **Open** goes to the app at `?install=1`. The host then adds `/.fas/install.js`, which shows an
+  **Install** button when Chrome offers to install the app. Without the parameter, apps are served unchanged.
