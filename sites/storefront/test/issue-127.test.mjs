@@ -47,6 +47,15 @@ test("issue #127: fixture is CSP-clean and the esm.sh exception is route-scoped"
     const fixtureBlock = headers.match(/^\/audit-fixture\/\*\n((?:  .+\n)+)/m)?.[1] || "";
     assert.match(fixtureBlock, /^  ! Content-Security-Policy$/m);
     assert.match(fixtureBlock, /^  ! Content-Security-Policy-Report-Only$/m);
+    // #647: upgrade-insecure-requests is enforced but never sent report-only
+    // (browsers log a console error for it there).
+    assert.match(globalCsp, /upgrade-insecure-requests/);
+    const reportOnly = [...headers.matchAll(/^  Content-Security-Policy-Report-Only: (.+)$/gm)].map((m) => m[1]);
+    assert.equal(reportOnly.length, 2);
+    for (const policy of reportOnly) {
+      assert.doesNotMatch(policy, /upgrade-insecure-requests/);
+      assert.match(policy, /report-uri \/v1\/csp-report/);
+    }
 
     const fixture = readFileSync(join(dist, "audit-fixture", "index.html"), "utf8");
     assert.match(fixture, /<link\b[^>]+href="\.\/fixture\.css"/i);

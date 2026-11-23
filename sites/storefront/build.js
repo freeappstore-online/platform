@@ -1373,6 +1373,10 @@ const fixtureCsp = csp
   // The fixture is audited inside the same-origin /quality dashboard.
   .replace("frame-ancestors 'none'", "frame-ancestors 'self'");
 
+// Browsers reject upgrade-insecure-requests in a report-only policy and log a
+// console error on every page (#647), so the report-only copies omit it.
+const reportOnly = (policy) => policy.replace('upgrade-insecure-requests; ', '');
+
 fs.writeFileSync(path.join(DIST, '_headers'), [
   '/*',
   '  X-Frame-Options: DENY',
@@ -1385,7 +1389,7 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
   // handled by functions/v1/csp-report.js.
   '  Reporting-Endpoints: csp-endpoint="/v1/csp-report"',
   `  Content-Security-Policy: ${csp}`,
-  `  Content-Security-Policy-Report-Only: ${csp}`,
+  `  Content-Security-Policy-Report-Only: ${reportOnly(csp)}`,
   '',
   '# The fixture deliberately imports the published reporter. This exception',
   '# is route-scoped; no production storefront page can load esm.sh scripts.',
@@ -1395,7 +1399,7 @@ fs.writeFileSync(path.join(DIST, '_headers'), [
   '  ! Content-Security-Policy',
   '  ! Content-Security-Policy-Report-Only',
   `  Content-Security-Policy: ${fixtureCsp}`,
-  `  Content-Security-Policy-Report-Only: ${fixtureCsp}`,
+  `  Content-Security-Policy-Report-Only: ${reportOnly(fixtureCsp)}`,
   '',
   '# Immutable cache for content-addressed assets. CSS uses a hash in its',
   '# filename, so these exact paths change whenever their contents change.',
