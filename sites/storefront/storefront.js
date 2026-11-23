@@ -2,6 +2,7 @@
  * FreeAppStore storefront interactions:
  *   - category filter bar
  *   - sort tabs (Newest / Most popular)
+ *   - pinned mobile toolbar: results restart under it when the query changes
  *   - vote buttons (heart pill on each card)
  *   - split-pane preview with device mode (desktop / tablet / mobile)
  *   - ?app=<id> deep link
@@ -140,6 +141,24 @@
     } catch (e) {
       applySort('newest');
     }
+  })();
+
+  // ---------- Pinned mobile toolbar (#610) ----------
+  // On mobile the search/sort/category toolbar is position: sticky. When it is
+  // pinned and the person searches, sorts or filters, bring the list back to
+  // its first result instead of leaving them deep in a list that just changed.
+  (function () {
+    var toolbar = document.querySelector('.apps-toolbar');
+    var section = document.getElementById('apps');
+    if (!toolbar || !section) return;
+    function restartList() {
+      if (getComputedStyle(toolbar).position !== 'sticky') return;
+      if (section.getBoundingClientRect().top < 0) section.scrollIntoView({ block: 'start' });
+    }
+    toolbar.addEventListener('input', restartList);
+    toolbar.addEventListener('click', function (e) {
+      if (e.target.closest('.filter-btn')) restartList();
+    });
   })();
 
   // ---------- Vote counts (load on page open, populate data-votes + counts) ----------

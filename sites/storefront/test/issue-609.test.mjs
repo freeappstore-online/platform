@@ -61,3 +61,18 @@ test("closed mobile drawer is hidden so it cannot widen the page", () => {
   assert.match(css, /header nav \{[^}]*transform: translateX\(100%\);[^}]*visibility: hidden;/);
   assert.match(css, /header nav\.open \{[^}]*visibility: visible;/);
 });
+
+test("#610: home has no intro copy; h1 and live count are screen-reader only", () => {
+  const home = read("templates/index.html");
+  assert.doesNotMatch(home, /catalog-intro|Find your next everyday app/);
+  assert.match(home, /<h1 class="sr-only">/);
+  assert.match(home, /class="apps-count sr-only" id="apps-count" role="status"/);
+});
+
+test("#610: mobile search/sort toolbar is pinned and restarts the list on change", () => {
+  const css = read("style.css");
+  assert.match(css, /\.apps-section \.apps-toolbar \{\s*position: sticky;\s*top: 0;/);
+  const js = read("storefront.js");
+  assert.match(js, /toolbar\.addEventListener\('input', restartList\)/);
+  assert.match(js, /section\.scrollIntoView\(\{ block: 'start' \}\)/);
+});

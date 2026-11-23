@@ -71,11 +71,7 @@
 
 
   <main class="container">
-    <div class="catalog-intro">
-      <p class="catalog-eyebrow">Free forever. Open source.</p>
-      <h1>Find your next everyday app.</h1>
-      <p>Everyday apps, rebuilt for the web. Nothing to download, no ads, no trials, no subscriptions. <a href="/about">Why they're free</a></p>
-    </div>
+    <h1 class="sr-only">FreeAppStore: free everyday web apps</h1>
     <section class="apps-section" id="apps">
       <div class="apps-toolbar">
         <div class="input-wrap" id="searchInputWrap">
@@ -98,7 +94,7 @@
           <button class="filter-btn active" type="button" data-sort="newest" aria-pressed="true">Newest</button>
           <button class="filter-btn" type="button" data-sort="popular" aria-pressed="false">Most popular</button>
         </div>
-        <div class="apps-count" id="apps-count" role="status">{{APPS_COUNT}} apps</div>
+        <div class="apps-count sr-only" id="apps-count" role="status">{{APPS_COUNT}} apps</div>
       </div>
       <p id="vote-status" class="meta" role="status" hidden></p>
 

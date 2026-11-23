@@ -789,6 +789,22 @@ footer .container {
   .nav-overlay.open { display: block; }
 
   .hero { padding: 3.5rem 0 2.5rem; }
+
+  /* Home (#610): search + sort + categories stay pinned while the list scrolls.
+   * `.apps-section` prefix: the base toolbar rules come later in this file. */
+  .apps-section { padding-top: 0; }
+  .apps-section .apps-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    gap: 0.5rem;
+    margin: 0 -1.5rem 1rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--paper);
+    border-bottom: 1px solid var(--line);
+  }
+  .apps-section .apps-toolbar .search-input { padding-block: 0.7rem; }
+  .apps-section .apps-toolbar .filter-btn { min-height: 36px; padding-block: 0.3rem; }
   .apps-grid { grid-template-columns: 1fr; }
 }
 
@@ -1116,10 +1132,6 @@ footer .container {
 
 /* Catalogue introduction and browsing controls. Keep categories on their
    own row so they never squeeze search into a narrow column. */
-.catalog-intro { padding-top: 2.5rem; }
-.catalog-eyebrow { color: var(--accent); font-size: 0.8rem; font-weight: 700; margin-bottom: 0.5rem; }
-.catalog-intro h1 { font-family: var(--font-display); font-size: clamp(1.8rem, 4vw, 2.75rem); line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 0.75rem; }
-.catalog-intro > p:last-child { color: var(--muted); max-width: 60ch; }
 .apps-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
