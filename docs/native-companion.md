@@ -66,7 +66,12 @@ browser pages on the API origin, opened by the phone.
 ## On the phone (Android)
 
 - `android/` is the Android port (package `online.freeappstore.companion`) with the same pairing, per-app consent,
-  Pause all, per-app pause and upload queue. It has no on-device sharing history yet.
+  Pause all, per-app pause and upload queue, in three tabs: Store, Sharing and Settings (#649).
+- Like iOS, it keeps a 30-day on-device history (`share_events`, `share_points`) in the backup-excluded queue
+  database for the Sharing control room (per-app state, shared time today, upload queue, sync health, device
+  status), the per-app session timeline and the activity log. It is never uploaded, and it is cleared by **Clear
+  sharing history** (the upload queue stays) and by **Disconnect this phone**. Reconnecting the same account after an
+  expiry keeps it. Tracks are drawn on a plain Compose canvas: no map SDK, no tiles, no map provider sees them.
 - Its **Store** tab lists `https://freeappstore.online/registry.json` (cached, revalidated, fetched without
   credentials). **Open** goes to the app at `?install=1`. The host then adds `/.fas/install.js`, which shows an
   **Install** button when Chrome offers to install the app. Without the parameter, apps are served unchanged.

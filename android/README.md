@@ -8,6 +8,11 @@ tools. Protocol and deep links: [docs/native-companion.md](../docs/native-compan
   `freeappstore://native/connected`), per-app disclosure and consent, background location foreground service with
   Pause all, per-app pause, a private SQLite upload queue and a Keystore-protected device credential.
   `freeappstore://native/apps/<id>` opens that app's disclosure; it never grants anything by itself.
+  The control room (ported from PAS #638, #649) shows per-app state, shared time today, last upload, waiting to
+  upload, sync health and this phone's location, battery and recorder status, an overview track and a per-app
+  session timeline drawn with Compose `Canvas` (no map tiles), and an activity log, all from a 30-day on-device
+  history that never leaves the phone.
+- **Settings tab:** account, location permission, expiry note and Reconnect, Clear sharing history, Disconnect, About.
 - **Store tab:** the public catalogue from `https://freeappstore.online/registry.json`, cached on the phone and
   revalidated with `If-None-Match` by a credential-free client that refuses redirects (`FasApi` stays limited to
   `/v1/native/`). Featured, Yours, category rows, search, All apps and an app page. Icons are the registry's emoji on
