@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { runAudit } from './lib/audit.js';
 import { HttpError, hasInternalToken } from './lib/auth.js';
 import { backupD1ToR2 } from './lib/backup.js';
+import { pruneNativeData } from './lib/native-companion.js';
 import { isAllowedOrigin } from './lib/origins.js';
 import { runPushDelivery } from './lib/push-delivery.js';
 import { publicStatusReport, runStatusChecks } from './lib/status.js';
@@ -25,6 +26,8 @@ import { ideaBuildersRoutes } from './routes/idea-builders.js';
 import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
 import { logsRoutes } from './routes/logs.js';
+import { nativeRoutes } from './routes/native.js';
+import { nativeAuthRoutes } from './routes/native-auth.js';
 import { photoRoutes, prunePhotos } from './routes/photos.js';
 import { publishRoutes } from './routes/publish.js';
 import { pushRoutes } from './routes/push.js';
@@ -141,6 +144,8 @@ v1.route('/', votesRoutes);
 v1.route('/', ideaBuildersRoutes);
 v1.route('/', pushRoutes);
 v1.route('/', photoRoutes);
+v1.route('/', nativeAuthRoutes);
+v1.route('/', nativeRoutes);
 app.route('/v1', v1);
 
 const HEALTH_RETENTION_DAYS = 30;
@@ -154,6 +159,7 @@ export default {
         runUptimeChecks(env),
         runPushDelivery(env),
         prunePhotos(env),
+        pruneNativeData(env.DB, Date.now()),
       ]);
       for (const job of jobs)
         if (job.status === 'rejected') console.error('cron */15:', job.reason);

@@ -70,6 +70,9 @@ const FIRST_PARTY_RETURNS: Record<string, (url: URL) => boolean> = {
   keys: (u) => u.origin === 'https://api.freeappstore.online' && u.pathname === '/v1/keys',
   // The OAuth callback and nothing else (workers/mcp/src/auth-handler.ts).
   mcp: (u) => u.origin === 'https://mcp.freeappstore.online' && u.pathname === '/callback',
+  // Native companion pairing (#616): the callback page on the API origin and nothing else.
+  native: (u) =>
+    u.origin === 'https://api.freeappstore.online' && u.pathname === '/v1/native/auth/callback',
 };
 
 function isLocalhost(url: URL): boolean {
