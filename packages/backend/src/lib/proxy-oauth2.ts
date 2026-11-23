@@ -1,9 +1,13 @@
 /**
  * OAuth2 client_credentials token cache for the proxy.
  *
- * Worker global memory (per-isolate) with deduplication of concurrent
- * refreshes. Tokens are cached for (expires_in - 60s) to avoid using
- * a token that's about to expire.
+ * Worker global memory (per-isolate). Tokens are cached for
+ * (expires_in - 60s) to avoid using a token that's about to expire.
+ *
+ * Only plain data is shared across requests. Concurrent refreshes are NOT
+ * deduplicated through a shared in-flight promise: Workers drop a promise's
+ * settlement in any request other than the one that created it, so a second
+ * awaiter throws once the first request ends (1101, #639, #641).
  */
 
 interface CachedToken {
@@ -14,12 +18,9 @@ interface CachedToken {
 // Per-isolate in-memory cache keyed by "appId:secretName"
 const tokenCache = new Map<string, CachedToken>();
 
-// Dedup concurrent refreshes: only one inflight token request per cache key
-const inflightRefresh = new Map<string, Promise<string>>();
-
 /**
  * Get a valid OAuth2 access token, refreshing if expired or missing.
- * Uses worker memory cache with concurrent-request deduplication.
+ * Uses the worker memory cache; a cache miss refreshes in this request.
  */
 export async function getOAuth2Token(opts: {
   cacheKey: string;
@@ -35,28 +36,17 @@ export async function getOAuth2Token(opts: {
     return cached.accessToken;
   }
 
-  // Deduplicate concurrent refreshes
-  const existing = inflightRefresh.get(cacheKey);
-  if (existing) return existing;
-
-  const promise = refreshToken(tokenUrl, clientId, clientSecret)
-    .then(({ accessToken, expiresIn }) => {
-      // Cache with 60s safety margin, minimum 10s to avoid tight refresh loops
-      const ttlSeconds = Math.max(10, expiresIn - 60);
-      const expiresAt = Date.now() + ttlSeconds * 1000;
-      tokenCache.set(cacheKey, { accessToken, expiresAt });
-      inflightRefresh.delete(cacheKey);
-      return accessToken;
-    })
-    .catch((err) => {
-      // Clear stale cache and inflight on failure so next request retries
-      tokenCache.delete(cacheKey);
-      inflightRefresh.delete(cacheKey);
-      throw err;
-    });
-
-  inflightRefresh.set(cacheKey, promise);
-  return promise;
+  try {
+    const { accessToken, expiresIn } = await refreshToken(tokenUrl, clientId, clientSecret);
+    // Cache with 60s safety margin, minimum 10s to avoid tight refresh loops
+    const ttlSeconds = Math.max(10, expiresIn - 60);
+    tokenCache.set(cacheKey, { accessToken, expiresAt: Date.now() + ttlSeconds * 1000 });
+    return accessToken;
+  } catch (err) {
+    // Clear the stale cache on failure so the next request retries
+    tokenCache.delete(cacheKey);
+    throw err;
+  }
 }
 
 async function refreshToken(

@@ -42,6 +42,10 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # No in-flight promise shared across Worker requests (1101, #639, #641).
+      - name: Worker shared-state guard
+        run: node scripts/check-worker-state.mjs
+
       - name: Typecheck
         run: pnpm -r typecheck
 
