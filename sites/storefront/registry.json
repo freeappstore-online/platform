@@ -3363,6 +3363,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-22T23:47:28.951Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "pitstop-chaitanya",
+      "name": "pitstop-chaitanya",
+      "category": "Utilities",
+      "icon": "🧰",
+      "iconBg": "#e2e8f0",
+      "description": "Log fuel, running costs, reminders and car problems - made for your phone.",
+      "appUrl": "https://pitstop-chaitanya.freeappstore.online",
+      "repo": "freeappstore-online/pitstop-chaitanya",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-23T07:10:55.307Z",
+      "creatorGithub": "Chaitanya932000"
     }
   ]
 }
