@@ -10,6 +10,9 @@ struct SettingsView: View {
     @State private var disconnectPrompt = false
     @State private var clearHistoryPrompt = false
 
+    /// The console's account deletion flow (#653): app stores require deletion to start from inside the app.
+    static let deleteAccountLink = "https://freeappstore.online/app/settings?delete-account=1"
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -54,6 +57,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         Button("Manage account") { open("https://freeappstore.online/app/") }
+        Button("Delete account") { open(Self.deleteAccountLink) }
         Button("Clear sharing history") { clearHistoryPrompt = true }
         Button("Disconnect this phone") { disconnectPrompt = true }.disabled(model.busy)
     }
