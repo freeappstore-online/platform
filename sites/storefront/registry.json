@@ -3385,8 +3385,7 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-23T14:43:18.883Z",
       "creatorGithub": "Halfian",
-      "permissions": [],
-      "discoveryDeliveryPending": "a3d35f6c-a075-40e4-8591-dc9d12405537"
+      "permissions": []
     }
   ]
 }
