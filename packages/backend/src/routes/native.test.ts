@@ -281,6 +281,23 @@ describe.skipIf(!hasSqlite)('FAS native companion', () => {
     expect(rows('SELECT * FROM native_devices')).toHaveLength(0);
   });
 
+  it('caps a streamed body without a Content-Length instead of buffering all of it', async () => {
+    let pulled = 0;
+    const large = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (++pulled > 1000) controller.close();
+        else controller.enqueue(new Uint8Array(1024).fill(32));
+      },
+    });
+    const response = await app.request(
+      `${API}/v1/native/auth/complete`,
+      { method: 'POST', body: large, duplex: 'half' } as RequestInit,
+      env,
+    );
+    expect(response.status).toBe(413);
+    expect(pulled).toBeLessThan(10);
+  });
+
   it('stores only explicitly granted, post-consent points and makes retries idempotent', async () => {
     const d = await device();
     const g = await grant(d.token);

@@ -78,8 +78,26 @@ export async function nativeBody(
   if (Number(c.req.header('content-length') ?? 0) > max) {
     throw new HttpError(413, 'Request is too large.');
   }
-  const bytes = await c.req.arrayBuffer();
-  if (bytes.byteLength > max) throw new HttpError(413, 'Request is too large.');
+  // Count streamed bytes too: a chunked body has no Content-Length.
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  const reader = c.req.raw.body?.getReader();
+  for (;;) {
+    const chunk = await reader?.read();
+    if (!chunk || chunk.done) break;
+    size += chunk.value.byteLength;
+    if (size > max) {
+      await reader!.cancel();
+      throw new HttpError(413, 'Request is too large.');
+    }
+    chunks.push(chunk.value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   let body: unknown;
   try {
     body = JSON.parse(new TextDecoder().decode(bytes));
