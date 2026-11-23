@@ -24,11 +24,18 @@ final class InstallGuideTests: XCTestCase {
 
     func testDontShowAgainCoversEveryApp() {
         let guide = InstallGuide(defaults: defaults)
-        guide.setOff(true)
+        guide.opened("run", dontShowAgain: true)
         XCTAssertFalse(guide.shouldShow("run"))
         XCTAssertFalse(guide.shouldShow("language"))
-        guide.setOff(false)
-        XCTAssertTrue(guide.shouldShow("run"))
+    }
+
+    /// The toggle alone saves nothing: Cancel after turning it on leaves the guide on for every app.
+    func testDontShowAgainPersistsOnlyOnOpen() {
+        let guide = InstallGuide(defaults: defaults)
+        guide.opened("run", dontShowAgain: false)
+        XCTAssertNil(defaults.object(forKey: InstallGuide.offKey))
+        XCTAssertFalse(guide.shouldShow("run"))
+        XCTAssertTrue(guide.shouldShow("language"))
     }
 
     func testSurvivesClearingTheCompanionStore() throws {

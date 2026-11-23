@@ -11,13 +11,16 @@ struct InstallGuide {
 
     func shouldShow(_ appId: String) -> Bool { !defaults.bool(forKey: Self.offKey) && !seen.contains(appId) }
     func markSeen(_ appId: String) { if !seen.contains(appId) { defaults.set(seen + [appId], forKey: Self.seenKey) } }
-    /// "Don't show this again", for every app.
-    func setOff(_ off: Bool) { defaults.set(off, forKey: Self.offKey) }
+    /// Open from the guide. "Don't show this again" (for every app) is saved only here, never on Cancel.
+    func opened(_ appId: String, dontShowAgain: Bool) {
+        markSeen(appId)
+        if dontShowAgain { defaults.set(true, forKey: Self.offKey) }
+    }
 
     private var seen: [String] { defaults.stringArray(forKey: Self.seenKey) ?? [] }
 }
 
-/// Share → Add to Home Screen, then Open. Cancel does not mark the app as seen, so the guide shows again next time.
+/// Share → Add to Home Screen, then Open. Cancel saves nothing: the guide shows again next time.
 struct InstallGuideSheet: View {
     let app: CatalogueApp
     let guide: InstallGuide
@@ -40,9 +43,8 @@ struct InstallGuideSheet: View {
                     step(2, "square.and.arrow.up", "Tap Share in the toolbar. On newer iOS, it may be under •••.")
                     step(3, "plus.app", "Choose Add to Home Screen, then Add.")
                     Toggle("Don't show this again", isOn: $dontShow)
-                        .onChange(of: dontShow) { _, off in guide.setOff(off) }
                     Button {
-                        guide.markSeen(app.id)
+                        guide.opened(app.id, dontShowAgain: dontShow)
                         dismiss()
                         open()
                     } label: {
