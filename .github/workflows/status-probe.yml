@@ -4,6 +4,12 @@ name: Status probe
 # real deployed services and the cross-service /status aggregator, so token drift
 # or a downed dependency surfaces as a failed run + notification BEFORE a creator
 # hits it during `fas publish`. No mocks — these are the production endpoints.
+#
+# GitHub runs this schedule far less often than */15 (about every 5 h on
+# 2026-11-23), so the reliable concurrency probe is the backend's own */15
+# Worker cron (#642): it bursts `run` plus a rotating sample of apps and records
+# failures in D1. This workflow reads them back from /v1/uptime (last 6 h) and
+# a failed run opens or updates one `uptime-failure` issue, deduplicated.
 
 on:
   schedule:
@@ -12,6 +18,9 @@ on:
 
 permissions:
   contents: read
+  actions: read   # the notify job names the failed step
+  checks: read    # and reads its ::error:: annotations
+  issues: write   # to open / comment on the uptime-failure issue
 
 concurrency:
   group: status-probe
@@ -20,7 +29,14 @@ concurrency:
 jobs:
   probe:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
       - name: Backend /health
         run: |
           CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://api.freeappstore.online/health)
@@ -86,3 +102,83 @@ jobs:
             echo '::error::SKILLS.md contains a token pattern (lines above)'; exit 1
           fi
           echo "✓ no token patterns in SKILLS.md"
+
+      # The Worker cron's bursts (#642): any failure in the last 6 h, and proof
+      # that the cron still runs (a burst:run row within the last hour).
+      - name: Worker cron burst probes (/v1/uptime)
+        run: |
+          set -euo pipefail
+          JSON=$(curl -sS --fail --max-time 20 https://api.freeappstore.online/v1/uptime)
+          echo "$JSON" | jq -r '.recentFailures[] | "::error::uptime failure: \(.target) \(.url) — \(.error // "no error text") at \(.checkedAt / 1000 | floor | todate)"'
+          LAST=$(echo "$JSON" | jq -r '[.targets[] | select(.target == "burst:run") | .checkedAt][0] // 0')
+          AGE_MIN=$(( ($(date +%s) * 1000 - LAST) / 60000 ))
+          echo "last Worker cron burst: ${AGE_MIN} min ago; failures in last 6 h: $(echo "$JSON" | jq '.recentFailures | length')"
+          [ "$AGE_MIN" -le 60 ] || { echo "::error::the */15 uptime cron has not recorded a burst for ${AGE_MIN} min"; exit 1; }
+          [ "$(echo "$JSON" | jq '.recentFailures | length')" = "0" ]
+
+      # The same overlap from outside Cloudflare (#642), whenever GitHub runs this.
+      - name: Live app bursts
+        run: node scripts/verify-app-host.mjs --burst-only
+
+  notify:
+    needs: probe
+    if: always() && needs.probe.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Same approach as prod-smoke.yml: one open labelled issue; a repeat of
+      # the same failed steps is suppressed for 6 h, a change always posts.
+      - name: Open / update the uptime-failure issue
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          PROBE_RESULT: ${{ needs.probe.result }}
+        with:
+          script: |
+            const label = 'uptime-failure'
+            const repo = { owner: context.repo.owner, repo: context.repo.repo }
+            const runUrl = `https://github.com/${repo.owner}/${repo.repo}/actions/runs/${context.runId}`
+            const REPEAT_AFTER_MS = 6 * 60 * 60 * 1000
+
+            const failedSteps = []
+            const errors = []
+            try {
+              const { data } = await github.rest.actions.listJobsForWorkflowRun({ ...repo, run_id: context.runId })
+              for (const job of data.jobs ?? []) {
+                if (job.name === 'notify') continue
+                for (const step of job.steps ?? []) if (step.conclusion === 'failure') failedSteps.push(step.name)
+                const checkRunId = Number(String(job.check_run_url ?? '').split('/').pop())
+                if (!Number.isFinite(checkRunId)) continue
+                const { data: ann } = await github.rest.checks.listAnnotations({ ...repo, check_run_id: checkRunId })
+                for (const a of ann ?? []) if (a.annotation_level === 'failure' && a.message) errors.push(a.message.trim())
+              }
+            } catch (err) {
+              core.warning(`could not collect failure detail: ${err.message}`)
+            }
+
+            const signature = [process.env.PROBE_RESULT, ...failedSteps].join(' | ')
+            const marker = `<!-- uptime-failure-sig: ${require('node:crypto').createHash('sha256').update(signature).digest('hex').slice(0, 32)} -->`
+            const body = [
+              `Status probe **${process.env.PROBE_RESULT}** at ${new Date().toISOString()}.`,
+              failedSteps.length ? `**Failed step:** ${failedSteps.join(', ')}` : '_No failed step recorded; the runner may never have started._',
+              errors.length ? '```\n' + errors.join('\n').slice(0, 2000) + '\n```' : '',
+              `See run: ${runUrl}`,
+              'Worker cron history: `SELECT * FROM health_checks WHERE ok = 0 ORDER BY checked_at DESC LIMIT 50` (D1 `fas`), or GET https://api.freeappstore.online/v1/uptime.',
+              marker,
+            ].filter(Boolean).join('\n\n')
+
+            const { data: open } = await github.rest.issues.listForRepo({ ...repo, labels: label, state: 'open' })
+            if (open.length === 0) {
+              const { data: created } = await github.rest.issues.create({ ...repo, title: 'uptime failing', labels: [label], body })
+              core.info(`opened #${created.number}`)
+              return
+            }
+            const issue = open[0]
+            const page = Math.max(1, Math.ceil((issue.comments ?? 0) / 100))
+            const { data: comments } = await github.rest.issues.listComments({ ...repo, issue_number: issue.number, per_page: 100, page })
+            const last = comments.at(-1) ?? { body: issue.body, created_at: issue.created_at }
+            if (last.body?.includes(marker) && Date.now() - new Date(last.created_at).getTime() < REPEAT_AFTER_MS) {
+              core.info(`same failure as #${issue.number} posted <6 h ago; not re-commenting`)
+              return
+            }
+            await github.rest.issues.createComment({ ...repo, issue_number: issue.number, body })
+            core.info(`commented on #${issue.number}`)

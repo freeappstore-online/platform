@@ -140,3 +140,50 @@ describe('GET /v1/uptime', () => {
     expect(t.checked_at).toBeUndefined();
   });
 });
+
+describe('GET /v1/uptime recentFailures (#642)', () => {
+  it('lists failed checks from the last 6 hours', async () => {
+    const binds: unknown[][] = [];
+    const failed: HealthCheckRow = {
+      target: 'burst:run',
+      url: 'https://run.freeappstore.online/',
+      ok: 0,
+      status: 500,
+      duration_ms: 40,
+      error: '3/6 failed: http 500',
+      checked_at: 1700000000000,
+    };
+    const db = {
+      prepare: (sql: string) => {
+        const stmt: Partial<D1PreparedStatement> = {
+          bind: (...args: unknown[]) => {
+            binds.push(args);
+            return stmt as D1PreparedStatement;
+          },
+          all: async <T>() =>
+            ({
+              results: (sql.includes('ok = 0') ? [failed] : []) as unknown as T[],
+              success: true,
+              meta: {},
+            }) as unknown as D1Result<T>,
+        };
+        return stmt as D1PreparedStatement;
+      },
+    } as unknown as D1Database;
+    const before = Date.now();
+    const res = await app.request('/v1/uptime', {}, baseEnv(db));
+    const body = (await res.json()) as { recentFailures: Array<Record<string, unknown>> };
+    expect(body.recentFailures).toEqual([
+      {
+        target: 'burst:run',
+        url: 'https://run.freeappstore.online/',
+        status: 500,
+        error: '3/6 failed: http 500',
+        checkedAt: 1700000000000,
+      },
+    ]);
+    const since = (binds[0]![0] as number) + 6 * 60 * 60 * 1000;
+    expect(since).toBeGreaterThanOrEqual(before);
+    expect(since).toBeLessThanOrEqual(Date.now());
+  });
+});

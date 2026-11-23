@@ -57,3 +57,39 @@ export const TARGETS: Array<{ id: string; url: string }> = [
   { id: 'music', url: 'https://music.freeappstore.online' },
   { id: 'puzzle', url: 'https://puzzle.freeappstore.online' },
 ];
+
+/**
+ * Concurrency-aware probe (#642). The 1101 outage of 2026-11-23 (#639) needed
+ * overlapping requests in one isolate, so one request per target never saw it.
+ * Each tick sends a concurrent burst to `run` plus a rotating sample of live
+ * apps. Workers keep at most 6 connections open per invocation, so 6 is the
+ * real overlap a burst can create; the sample stays small because the 15-minute
+ * cron shares the 50-subrequest free-plan cap with push delivery.
+ */
+const BURST_REQUESTS = 6;
+const BURST_SAMPLE = 4;
+const ALWAYS_BURST = 'run';
+
+/** `run` plus `size` app ids, rotating through the sorted list one window per tick. */
+export function burstSample(ids: string[], tick: number, size = BURST_SAMPLE): string[] {
+  const pool = [...new Set(ids)].filter((id) => id && id !== ALWAYS_BURST).sort();
+  if (pool.length <= size) return [ALWAYS_BURST, ...pool];
+  const start = (tick * size) % pool.length;
+  return [
+    ALWAYS_BURST,
+    ...Array.from({ length: size }, (_, i) => pool[(start + i) % pool.length]!),
+  ];
+}
+
+/** `requests` concurrent checks of one URL, folded into one result: any failure fails it. */
+export async function burstCheck(url: string, requests = BURST_REQUESTS): Promise<CheckResult> {
+  const results = await Promise.all(Array.from({ length: requests }, () => checkUrl(url)));
+  const failed = results.filter((r) => !r.ok);
+  const errors = [...new Set(failed.map((r) => r.error))].join(', ');
+  return {
+    ok: failed.length === 0,
+    status: (failed[0] ?? results[0])?.status ?? null,
+    durationMs: Math.max(...results.map((r) => r.durationMs)),
+    error: failed.length ? `${failed.length}/${requests} failed: ${errors}` : null,
+  };
+}

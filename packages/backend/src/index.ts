@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { runAudit } from './lib/audit.js';
+import { fetchRegistry, runAudit } from './lib/audit.js';
 import { HttpError, hasInternalToken } from './lib/auth.js';
 import { backupD1ToR2 } from './lib/backup.js';
 import { pruneNativeData } from './lib/native-companion.js';
@@ -8,7 +8,7 @@ import { isAllowedOrigin } from './lib/origins.js';
 import { pruneUsage } from './lib/proxy-rate-limit.js';
 import { runPushDelivery } from './lib/push-delivery.js';
 import { publicStatusReport, runStatusChecks } from './lib/status.js';
-import { checkUrl, TARGETS } from './lib/uptime.js';
+import { burstCheck, burstSample, checkUrl, TARGETS } from './lib/uptime.js';
 import { agentSessionRoutes } from './routes/agent-sessions.js';
 import { analyticsRoutes } from './routes/analytics.js';
 import { appsRoutes } from './routes/apps.js';
@@ -207,6 +207,15 @@ async function runUptimeChecks(env: Env): Promise<void> {
       return { id, url, ...r, checkedAt: now };
     }),
   );
+
+  // Concurrent bursts (#642), one app at a time so each burst's requests overlap.
+  const ids = await fetchRegistry('apps')
+    .then((apps) => apps.map((a) => a.id))
+    .catch(() => [] as string[]);
+  for (const app of burstSample(ids, Math.floor(now / (15 * 60_000)))) {
+    const url = `https://${app}.freeappstore.online/`;
+    results.push({ id: `burst:${app}`, url, ...(await burstCheck(url)), checkedAt: now });
+  }
 
   const stmt = env.DB.prepare(
     `INSERT INTO health_checks (target, url, ok, status, duration_ms, error, checked_at)

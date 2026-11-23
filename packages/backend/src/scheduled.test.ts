@@ -94,6 +94,34 @@ describe('scheduled() — */15 cron (uptime checks)', () => {
     expect(okValues).toContain(1); // success rows
     expect(okValues).toContain(0); // the rejected one
   });
+  it('bursts run plus a sample of registry apps and records burst:<id> rows (#642)', async () => {
+    const hits = new Map<string, number>();
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      hits.set(url, (hits.get(url) ?? 0) + 1);
+      if (url.endsWith('/registry.json')) {
+        return Response.json({ apps: [{ id: 'timer' }, { id: 'run' }] });
+      }
+      if (url === 'https://timer.freeappstore.online/' && hits.get(url) === 3) {
+        return new Response('error code: 1101', { status: 500 });
+      }
+      return new Response('ok', { status: 200 });
+    });
+    const calls: DBCall[] = [];
+    const env = baseEnv(fakeDB({ onPrepare: (c) => calls.push(c) }));
+    await worker.scheduled({ cron: '*/15 * * * *' } as ScheduledEvent, env, fakeCtx);
+
+    expect(hits.get('https://run.freeappstore.online/')).toBe(6);
+    expect(hits.get('https://timer.freeappstore.online/')).toBe(6);
+    const rows = calls.find((c) => c.sql.startsWith('INSERT INTO health_checks'))!.binds;
+    const burst = Object.fromEntries(
+      rows.filter((b) => String(b[0]).startsWith('burst:')).map((b) => [b[0], b]),
+    );
+    expect(Object.keys(burst).sort()).toEqual(['burst:run', 'burst:timer']);
+    expect(burst['burst:run']![2]).toBe(1);
+    expect(burst['burst:timer']!.slice(2, 4)).toEqual([0, 500]);
+    expect(burst['burst:timer']![5]).toBe('1/6 failed: http 500');
+  });
 });
 
 describe('scheduled() — 0 4 cron (daily backup)', () => {
