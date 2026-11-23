@@ -160,14 +160,25 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
 struct ContentView: View {
     @ObservedObject var model: CompanionModel
     @ObservedObject var collector: LocationCollector
+    @ObservedObject var catalogue: CatalogueStore
     @Environment(\.scenePhase) private var phase
-    @State var tab = Tab.sharing
+    @State private var tab: Tab
 
-    /// The Storefront tab (its own issue) goes first, ahead of Sharing.
-    enum Tab { case sharing, settings }
+    enum Tab { case store, sharing, settings }
+
+    /// Without `tab`: Sharing when any app has a grant, otherwise Store.
+    init(model: CompanionModel, collector: LocationCollector, catalogue: CatalogueStore, tab: Tab? = nil) {
+        self.model = model
+        self.collector = collector
+        self.catalogue = catalogue
+        _tab = State(initialValue: tab ?? (model.apps.contains(where: model.enabled) ? .sharing : .store))
+    }
 
     var body: some View {
         TabView(selection: $tab) {
+            StorefrontView(model: model, catalogue: catalogue)
+                .tabItem { Label("Store", systemImage: "square.grid.2x2") }
+                .tag(Tab.store)
             SharingDashboardView(model: model, collector: collector)
                 .tabItem { Label("Sharing", systemImage: "location.circle") }
                 .tag(Tab.sharing)
@@ -176,7 +187,10 @@ struct ContentView: View {
                 .tag(Tab.settings)
         }
         .onChange(of: phase, initial: true) { _, phase in
-            if phase == .active { model.becameActive() } else { model.resignActive() }
+            if phase == .active {
+                model.becameActive()
+                Task { await catalogue.refresh() }
+            } else { model.resignActive() }
         }
         .onOpenURL { model.handle($0) }
         .sheet(item: $model.consent) { app in disclosure(app) }

@@ -57,3 +57,8 @@ browser pages on the API origin, opened by the phone.
   history** or **Disconnect this phone**.
 - The sharing map draws that history from the phone. Map backgrounds come from Apple Maps, so Apple receives the
   map area you view; your shared track is not sent to Apple or to FreeAppStore when you view it.
+- The **Store** tab lists every public FAS app from `https://freeappstore.online/registry.json`, fetched
+  without credentials (conditional GET, cached on the phone so it works offline, kept across disconnect).
+  **Open** goes to the app in the browser; the first time for each app it shows how to add it to the Home
+  Screen (Share → Add to Home Screen), with **Don't show this again**. Apps on the recipient list get **Use with
+  companion**, which opens the same disclosure as the Sharing tab. Browsing never creates a grant.

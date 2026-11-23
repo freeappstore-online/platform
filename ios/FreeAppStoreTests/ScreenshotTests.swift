@@ -70,6 +70,8 @@ final class ScreenshotTests: XCTestCase {
         }
         let model = CompanionModel(repository: CompanionRepository(local: local, secure: secure, api: FasApi(configuration: configuration)))
         model.becameActive() // syncs against the stub
+        let catalogue = CatalogueStore(directory: directory.appendingPathComponent("catalogue")) // the live registry
+        await catalogue.refresh()
         try await Task.sleep(for: .seconds(2))
         // Then a few more fixes that have not synced yet.
         for k in 0..<4 {
@@ -79,13 +81,13 @@ final class ScreenshotTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         for style in [UIUserInterfaceStyle.light, .dark] {
             let name = style == .dark ? "dark" : "light"
-            for tab in [ContentView.Tab.sharing, .settings] {
+            for tab in [ContentView.Tab.store, .sharing, .settings] {
                 let window = UIWindow(windowScene: scene)
                 window.overrideUserInterfaceStyle = style
-                window.rootViewController = UIHostingController(rootView: ContentView(model: model, collector: model.collector, tab: tab))
+                window.rootViewController = UIHostingController(rootView: ContentView(model: model, collector: model.collector, catalogue: catalogue, tab: tab))
                 window.makeKeyAndVisible()
                 try await Task.sleep(for: .seconds(3))
-                try save(window, to: "\(output)/\(tab == .sharing ? "sharing" : "settings")-\(name).png")
+                try save(window, to: "\(output)/\(tab)-\(name).png")
                 window.isHidden = true
             }
             // #623: Run's detail with its session expanded.
@@ -107,6 +109,15 @@ final class ScreenshotTests: XCTestCase {
             try await Task.sleep(for: .seconds(2))
             try save(log, to: "\(output)/activity-\(name).png")
             log.isHidden = true
+            // #620: Run's store page, with Use with companion.
+            let storeRun = try XCTUnwrap(catalogue.apps.first { $0.id == "run" })
+            let page = UIWindow(windowScene: scene)
+            page.overrideUserInterfaceStyle = style
+            page.rootViewController = UIHostingController(rootView: NavigationStack { AppDetailView(app: storeRun, model: model, open: { _ in }) })
+            page.makeKeyAndVisible()
+            try await Task.sleep(for: .seconds(2))
+            try save(page, to: "\(output)/store-run-\(name).png")
+            page.isHidden = true
             // The whole dashboard, past the fold.
             let tall = UIWindow(windowScene: scene)
             tall.frame = CGRect(x: 0, y: 0, width: scene.screen.bounds.width, height: 1_900)

@@ -6,13 +6,14 @@ struct FreeAppStoreApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
-        WindowGroup { ContentView(model: delegate.model, collector: delegate.model.collector) }
+        WindowGroup { ContentView(model: delegate.model, collector: delegate.model.collector, catalogue: delegate.catalogue) }
     }
 }
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
     let model = CompanionModel()
+    let catalogue = CatalogueStore()
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // A relaunch after iOS terminated the app arrives with launchOptions[.location] (significant-change
