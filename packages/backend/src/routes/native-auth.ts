@@ -208,10 +208,13 @@ nativeAuthRoutes.post('/native/auth/complete', async (c) => {
   const id = nativeRandom();
   const token = `ndev_${nativeRandom()}`;
   const now = Date.now();
-  await c.env.DB.prepare(
-    'INSERT INTO native_devices (id, user_id, label, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+  // No foreign key to users: an account deleted since sign-in gets no device.
+  const inserted = await c.env.DB.prepare(
+    `INSERT INTO native_devices (id, user_id, label, token_hash, created_at, expires_at)
+     SELECT ?, id, ?, ?, ?, ? FROM users WHERE id = ?`,
   )
-    .bind(id, consumed.user_id, consumed.label, await nativeHash(token), now, now + DEVICE_MS)
+    .bind(id, consumed.label, await nativeHash(token), now, now + DEVICE_MS, consumed.user_id)
     .run();
+  if (!inserted.meta.changes) throw new HttpError(401, 'Account no longer exists.');
   return c.json({ token, deviceId: id });
 });

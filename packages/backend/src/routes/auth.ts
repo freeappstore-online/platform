@@ -1002,8 +1002,10 @@ authRoutes.delete('/auth/me', async (c) => {
       db.prepare('DELETE FROM idea_builders WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM agent_sessions WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(user.id),
-      // Cascades to the device's grants and points.
+      // Cascades to the device's grants and points. A pairing holds the user id
+      // too, and no foreign key removes it.
       db.prepare('DELETE FROM native_devices WHERE user_id = ?').bind(user.id),
+      db.prepare('DELETE FROM native_pairings WHERE user_id = ?').bind(user.id),
       db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
     ]);
     return c.json({ ok: true });

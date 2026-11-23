@@ -262,6 +262,25 @@ describe.skipIf(!hasSqlite)('FAS native companion', () => {
     ).toBe(401);
   });
 
+  it('account deletion drops a pending pairing, so it never yields a device credential', async () => {
+    const p = await pairing();
+    await authorize(p);
+    const del = await request('/auth/me', 'DELETE', undefined, await appToken('gh:1', 'console'));
+    expect(del.status).toBe(200);
+    expect(rows('SELECT * FROM native_pairings')).toHaveLength(0);
+    expect(
+      (await request('/native/auth/complete', 'POST', { id: p.id, verifier: p.verifier })).status,
+    ).toBe(403);
+    // A pairing consumed just before the deletion lands still issues nothing.
+    const q = await pairing();
+    await authorize(q, 'gh:2');
+    db.exec("DELETE FROM users WHERE id = 'gh:2'");
+    expect(
+      (await request('/native/auth/complete', 'POST', { id: q.id, verifier: q.verifier })).status,
+    ).toBe(401);
+    expect(rows('SELECT * FROM native_devices')).toHaveLength(0);
+  });
+
   it('stores only explicitly granted, post-consent points and makes retries idempotent', async () => {
     const d = await device();
     const g = await grant(d.token);

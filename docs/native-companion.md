@@ -42,7 +42,7 @@ browser pages on the API origin, opened by the phone.
 - Points are kept 7 days, then pruned by the `*/15` cron.
 - Turning an app off deletes its grant and every point under it.
 - Disconnecting the phone deletes the device, its grants and points.
-- Deleting your account (`DELETE /v1/auth/me`) deletes your devices.
+- Deleting your account (`DELETE /v1/auth/me`) deletes your devices and any pairing in progress.
 - An app changing owner or being deleted revokes its grants.
 - Device credentials expire after 90 days.
 

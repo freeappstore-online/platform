@@ -30,7 +30,7 @@ an app like Run cannot keep recording a route. No supported web API fixes that.
    - An app reads its users' points only with a session delivered to that app
      (`aud` = app id). Console, cross-store and other-app sessions are refused.
    - No foreign keys to `users`/`apps` (FAS convention); account deletion clears
-     `native_devices` explicitly, and device → grants → points cascade.
+     `native_devices` and `native_pairings` explicitly, and device → grants → points cascade.
    - Recipients are a curated list in `packages/backend/src/lib/native-companion.ts`.
      First: Run.
    - Rate limits reuse `app_proxy_usage` daily counters: 30 pairings per IP,
