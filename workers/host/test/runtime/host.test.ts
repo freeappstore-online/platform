@@ -381,3 +381,80 @@ describe('host: fallback discovery respects app robots directives', () => {
     }
   });
 });
+
+// #621: the Android companion opens apps at /?install=1.
+describe("install handoff: /.fas/install.js and ?install=1", () => {
+  const PWA_HTML =
+    '<!doctype html><html><head><meta charset="utf-8"><link rel="manifest" href="/manifest.json"><title>PWA</title></head><body><div id="root"></div></body></html>';
+  const TAG = '<script src="/.fas/install.js" defer></script>';
+
+  beforeAll(async () => {
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT OR REPLACE INTO routes (slug, zone, r2_prefix, store, hosted_on, created_at, updated_at) VALUES ('pwa', 'freeappstore.online', 'apps/pwa', 'apps', 'r2', ?, ?)",
+    )
+      .bind(now, now)
+      .run();
+    await env.APPS.put("apps/pwa/index.html", PWA_HTML);
+  });
+
+  it("serves the script on every app host, HEAD without a body", async () => {
+    const res = await get("https://pwa.freeappstore.online/.fas/install.js");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=3600");
+    expect(await res.text()).toContain("beforeinstallprompt");
+    const head = await get("https://dict.freeappstore.online/.fas/install.js", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+  });
+
+  it("still 404s the script on a host with no app", async () => {
+    expect((await get("https://nobody.freeappstore.online/.fas/install.js")).status).toBe(404);
+  });
+
+  it("injects the tag immediately before </head> only with ?install=1", async () => {
+    const res = await get("https://pwa.freeappstore.online/?install=1");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("etag")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("content-security-policy")).toBeTruthy();
+    expect(await res.text()).toBe(PWA_HTML.replace("</head>", `${TAG}</head>`));
+  });
+
+  it("leaves the HTML byte-identical, with its ETag and cache, without the parameter", async () => {
+    for (const path of ["/", "/?install=0", "/?install", "/?other=1"]) {
+      const res = await get(`https://pwa.freeappstore.online${path}`);
+      expect(await res.text(), path).toBe(PWA_HTML);
+      expect(res.headers.get("etag"), path).toBeTruthy();
+      expect(res.headers.get("cache-control"), path).toBe("public, max-age=60, must-revalidate");
+    }
+  });
+
+  it("never answers 304 to the install variant, so a cached plain page cannot stand in for it", async () => {
+    const plain = await get("https://pwa.freeappstore.online/");
+    const etag = plain.headers.get("etag")!;
+    await plain.body?.cancel();
+    expect((await get("https://pwa.freeappstore.online/", { headers: { "if-none-match": etag } })).status).toBe(304);
+    const install = await get("https://pwa.freeappstore.online/?install=1", { headers: { "if-none-match": etag } });
+    expect(install.status).toBe(200);
+    expect(await install.text()).toContain(TAG);
+  });
+
+  it("injects on a client-side route, at the end of a document with no <head>, and not into assets", async () => {
+    expect(await (await get("https://pwa.freeappstore.online/runs/42?install=1")).text()).toContain(`${TAG}</head>`);
+    expect(await (await get("https://dict.freeappstore.online/?install=1")).text()).toBe(`${INDEX_HTML}${TAG}`);
+    expect(await (await get("https://dict.freeappstore.online/assets/app.js?install=1")).text()).toBe(APP_JS);
+  });
+
+  it("injects once alongside the public metadata, and HEAD has no body", async () => {
+    await env.APPS.put("apps/seo/index.html", "<!doctype html><html><head><title>SEO</title></head><body>App</body></html>");
+    const body = await (await get("https://seo.freeappstore.online/?install=1")).text();
+    expect(body.match(/\/\.fas\/install\.js/g)).toHaveLength(1);
+    expect(body).toContain('<link rel="canonical" href="https://seo.freeappstore.online/">');
+    expect(body.indexOf(TAG)).toBeLessThan(body.indexOf("</head>"));
+    const head = await get("https://pwa.freeappstore.online/?install=1", { method: "HEAD" });
+    expect(head.status).toBe(200);
+    expect(await head.text()).toBe("");
+  });
+});

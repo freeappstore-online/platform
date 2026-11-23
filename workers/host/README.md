@@ -24,6 +24,7 @@ broken JS bundles or images don't silently serve HTML).
 
 - `src/index.ts` — Worker entry; request → response pipeline
 - `src/host.ts` — `resolveRoute()`, `r2KeyFor()`, `contentType()` (testable units)
+- `src/install-handoff.ts` — `/.fas/install.js` and its `?install=1` injection (#621)
 - `migrations/0001_create_routes.sql` — D1 schema for the routes table
 - `migrations/0002_cross_origin_isolated.sql` — per-app COOP/COEP opt-in flag (#286)
 - `wrangler.toml` — bindings + route pattern
@@ -45,6 +46,16 @@ by default**. An app opts in with `"crossOriginIsolated": true` in `fas.json`;
 `fas publish` stores that on the D1 `routes` row (`cross_origin_isolated = 1`)
 and this Worker sends the headers only for that app. See
 [Browser Capabilities](../../docs/capabilities.md#cross-origin-isolation).
+
+## Install handoff (`?install=1`)
+
+The Android companion opens an app at `https://<app>.freeappstore.online/?install=1` (#621).
+Only then does the HTML response get `<script src="/.fas/install.js" defer></script>`
+before `</head>` (with no ETag and `no-store`); without the parameter the bytes are
+exactly what R2 holds. `/.fas/install.js` (`src/install-handoff.ts`) is served on every
+app host, same-origin so an app's own CSP cannot block it. It removes `install=1` from
+the address and, when the browser offers `beforeinstallprompt`, shows an
+**Install <short_name>** bar in a closed shadow root. Otherwise it shows nothing.
 
 ## Secrets needed
 

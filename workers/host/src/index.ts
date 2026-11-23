@@ -24,7 +24,8 @@ import {
   sitemapXmlFor,
 } from "./host";
 
-import { injectMetadata, isMonitoringFixture, publicApp } from "./seo";
+import { INSTALL_SCRIPT_PATH, injectInstallScript, installScriptResponse, wantsInstall } from "./install-handoff";
+import { injectMetadata, isMonitoringFixture, type PublicApp, publicApp } from "./seo";
 
 /**
  * Platform-infra subdomains: NOT apps. The wildcard route catches them just
@@ -135,7 +136,10 @@ export default {
     // Serve from R2 if the slug is registered in D1.
     const route = await resolveRoute(env.DB, host);
     if (route) {
-      const response = await serve(env.APPS, route, url, req.method, req.headers.get("if-none-match"), ctx);
+      const response =
+        url.pathname === INSTALL_SCRIPT_PATH
+          ? installScriptResponse(req.method, policyFor(route))
+          : await serve(env.APPS, route, url, req.method, req.headers.get("if-none-match"), ctx);
       if (!isMonitoringFixture(route)) return response;
       // Keep canaries functional and crawlable so crawlers can observe noindex.
       const headers = new Headers(response.headers);
@@ -248,18 +252,34 @@ async function serve(
   const ct = servedKey === key ? contentType(key) : "text/html; charset=utf-8";
   // htmlCache is the short, revalidating policy; only hashed assets are immutable.
   const shortCache = ct.startsWith("text/html") || !isImmutablePath(url.pathname);
+  // Only the root resolves `app` (crawl files returned above).
+  const rewrite = ct.startsWith("text/html") ? htmlRewrite(url, app) : undefined;
 
   // 304 Not Modified: skip the body transfer when the browser already has
   // a fresh copy. Saves bandwidth on every refresh of every asset. The
   // R2 object metadata fetch still happens, but the body stream isn't read.
-  if (!(app && isRoot && ct.startsWith("text/html")) && etagsMatch(ifNoneMatch, obj.httpEtag)) {
+  if (!rewrite && etagsMatch(ifNoneMatch, obj.httpEtag)) {
     const headers = securityHeaders({ htmlCache: shortCache, ...policy });
     headers.set("etag", obj.httpEtag);
     return new Response(null, { status: 304, headers });
   }
 
   const response = respond(obj, ct, method, shortCache, policy);
-  return app && isRoot && ct.startsWith("text/html") ? injectMetadata(response, app) : response;
+  return rewrite ? rewrite(response) : response;
+}
+
+/**
+ * HTML the Worker rewrites, which therefore differs from the R2 object and
+ * never answers 304: the public root's metadata, and the install bar for
+ * companion visits (`?install=1`, #621). Undefined leaves the bytes as stored.
+ */
+function htmlRewrite(url: URL, app: PublicApp | undefined): ((response: Response) => Response) | undefined {
+  const install = wantsInstall(url);
+  if (!app && !install) return undefined;
+  return (response) => {
+    const described = app ? injectMetadata(response, app) : response;
+    return install ? injectInstallScript(described) : described;
+  };
 }
 
 async function appCrawlResponse(
