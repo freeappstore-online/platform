@@ -30,6 +30,7 @@ import { checkPermissions } from './checks/permissions.js';
 import { checkMaskableIcon } from './checks/pwa-maskable-icon.js';
 import { checkPwaMeta } from './checks/pwa-meta.js';
 import { checkPwaOffline } from './checks/pwa-offline.js';
+import { checkSdkUiStyles } from './checks/sdk-ui-styles.js';
 import { checkStoreLink } from './checks/store-link.js';
 import { checkTextSelectable } from './checks/text-selectable.js';
 import { checkUnsafeVh } from './checks/unsafe-vh.js';
@@ -86,6 +87,7 @@ export {
   checkPermissions,
   checkPwaMeta,
   checkPwaOffline,
+  checkSdkUiStyles,
   checkStoreLink,
   checkTextSelectable,
   checkUnsafeVh,
@@ -134,6 +136,7 @@ async function runChecksOn(source: FileSource): Promise<CheckResult[]> {
     checkPwaOffline(source),
     checkManifest(source),
     checkMaskableIcon(source),
+    checkSdkUiStyles(source),
     checkStoreLink(source),
     checkTextSelectable(source),
     checkDarkMode(source),

@@ -102,6 +102,7 @@ describe('failing-app fixture', () => {
       'No scroll (games only)',
       'Opaque surfaces',
       'PWA maskable icon',
+      'SDK UI styles compiled',
       'Text selectable',
     ]);
   });
