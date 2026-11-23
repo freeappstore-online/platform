@@ -3363,6 +3363,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-22T23:47:28.951Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "e2e-canary-mwsyzgvrog35",
+      "name": "e2e-canary-mwsyzgvrog35",
+      "category": "Utilities",
+      "icon": "🧰",
+      "iconBg": "#e2e8f0",
+      "description": "Automated production platform e2e canary — auto-removed at end of run.",
+      "appUrl": "https://e2e-canary-mwsyzgvrog35.freeappstore.online",
+      "repo": "freeappstore-online/e2e-canary-mwsyzgvrog35",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-23T07:54:29.530Z",
+      "creatorGithub": "serge-the-dev"
     }
   ]
 }
