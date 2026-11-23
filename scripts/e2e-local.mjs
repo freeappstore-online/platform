@@ -50,8 +50,10 @@ async function hmac(data, key) {
 }
 
 async function mintSession(uid) {
+  // An app session, as the auth flow delivers one to APP_ID; app routes refuse a token without aud.
   const payload = {
     uid,
+    aud: APP_ID,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
