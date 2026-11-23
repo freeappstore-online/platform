@@ -32,17 +32,24 @@ class CompanionRepository(val local: LocalStore, private val secure: SecureStore
     suspend fun finishSignIn(): Boolean = withContext(Dispatchers.IO) { operations.withLock {
         val state = secure.read()
         if (!state.has("pairId")) return@withLock false
-        val result = try {
-            api.request("POST", "/native/auth/complete", body = JSONObject().put("id", state.getString("pairId")).put("verifier", state.getString("verifier")))
-        } catch (e: ApiFailure) {
-            // 403 expired or unknown, 409 already used: this pairing can never finish. Forget it, so the next open is a
-            // plain Sign in instead of the same error and a dead pairing code.
-            if (e.status == 403 || e.status == 409) secure.clear()
+        // The exchange works once (a second try is 409), so the credential is kept with the pairing until
+        // `/native/me` answers: a network drop between the two calls no longer loses it.
+        val credential = state.optString("issued").ifBlank {
+            val result = try {
+                api.request("POST", "/native/auth/complete", body = JSONObject().put("id", state.getString("pairId")).put("verifier", state.getString("verifier")))
+            } catch (e: ApiFailure) {
+                // 403 expired or unknown, 409 already used: this pairing can never finish. Forget it, so the next open is a
+                // plain Sign in instead of the same error and a dead pairing code.
+                if (e.status == 403 || e.status == 409) secure.clear()
+                throw e
+            }
+            if (result.optBoolean("pending")) return@withLock false
+            result.getString("token").also { secure.write(JSONObject(state.toString()).put("issued", it)) }
+        }
+        val me = try { api.request("GET", "/native/me", credential) } catch (e: ApiFailure) {
+            if (e.status == 401) secure.clear() // the issued credential is dead: start again
             throw e
         }
-        if (result.optBoolean("pending")) return@withLock false
-        val credential = result.getString("token")
-        val me = api.request("GET", "/native/me", credential)
         val userId = me.getJSONObject("user").getString("id")
         // Pairing never adopts a previous installation/account's queue or grants. The same account after an expiry
         // keeps the on-device history (#638).

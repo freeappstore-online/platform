@@ -416,6 +416,33 @@ class CompanionTest {
         secure.clear()
     }
 
+    /** The one-time exchange's credential survives a failed `/native/me`, so the retry does not hit 409. */
+    @Test fun theIssuedCredentialSurvivesAFailedMe() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val secure = SecureStore(context)
+        val calls = mutableListOf<String>()
+        var meFails = true
+        val api = object : FasApi() {
+            override fun request(method: String, path: String, token: String?, body: JSONObject?): JSONObject {
+                calls += path
+                return when (path) {
+                    "/native/auth/complete" -> JSONObject().put("token", "ndev_once")
+                    else -> if (meFails) throw java.io.IOException("offline") else JSONObject()
+                        .put("user", JSONObject().put("id", "u1").put("name", "Sam")).put("apps", JSONArray())
+                }
+            }
+        }
+        val repository = CompanionRepository(LocalStore(context), secure, api)
+        secure.write(JSONObject().put("pairId", "abcdef0123").put("verifier", "00"))
+        assertTrue(runCatching { repository.finishSignIn() }.isFailure)
+        assertNull(repository.token())
+        meFails = false
+        assertTrue(repository.finishSignIn())
+        assertEquals(listOf("/native/auth/complete", "/native/me", "/native/me"), calls)
+        assertEquals("ndev_once", repository.token())
+        repository.local.clear(); secure.clear()
+    }
+
     // On-device sharing history (#649), ported from PAS (iOS LocalStoreTests).
     @Test fun enqueueWritesHistoryPerAppAndAcknowledgeKeepsIt() {
         val local = store()
