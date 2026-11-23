@@ -1274,6 +1274,7 @@ const sitemapEntries = [
   `  <url><loc>https://freeappstore.online/ideas</loc><priority>0.8</priority></url>`,
   `  <url><loc>https://freeappstore.online/privacy</loc><priority>0.5</priority></url>`,
   `  <url><loc>https://freeappstore.online/terms</loc><priority>0.5</priority></url>`,
+  `  <url><loc>https://freeappstore.online/delete-account</loc><priority>0.5</priority></url>`,
   ...apps.map(app =>
     `  <url><loc>https://freeappstore.online/apps/${app.id}</loc><priority>0.9</priority></url>`
   ),
@@ -1322,6 +1323,7 @@ const filesToCopy = [
   'contribute.html',
   'privacy.html',
   'terms.html',
+  'delete-account.html',
   'build-with-ai.html',
   'pricing.html',
   'get-started.html',

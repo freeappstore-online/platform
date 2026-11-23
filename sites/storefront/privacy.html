@@ -34,7 +34,7 @@
       <p>What stays on your device, what platform features store, and what you control.</p>
     </div>
     <div class="page-content">
-      <p class="legal-date">Last updated: October 22, 2026</p>
+      <p class="legal-date">Last updated: November 24, 2026</p>
       <h2>Using apps without an account</h2>
       <p>Standalone apps can save progress in localStorage or IndexedDB on your device. Clearing browser storage removes that local copy. Features that fetch information, sync data, or call external services require network requests; an app being free does not mean all of its data stays on your device.</p>
       <h2>Accounts and connected apps</h2>
@@ -51,12 +51,37 @@
       <h2>Analytics, diagnostics, and infrastructure</h2>
       <p>The storefront can use Cloudflare Web Analytics when its beacon is configured. App analytics settings can also load Cloudflare analytics or creator-configured third-party tags. What those services receive depends on the app's configuration. The platform's compliance checks reject known tracking SDKs in submitted source, but that is not a promise that every network request or configured integration collects no data.</p>
       <p>The platform processes operational information needed to serve requests, investigate errors, measure app quality, and prevent abuse. SDK error logs can be uploaded to the platform and are pruned after seven days by the scheduled cleanup. Hosting, authentication, fonts, avatars, email, analytics, AI, and other requested integrations involve service providers such as Cloudflare, GitHub, and Google Fonts. Request metadata can be processed by those providers.</p>
+      <h2 id="companion">FreeAppStore companion apps (Android and iPhone)</h2>
+      <p>The FreeAppStore companion apps for Android and iPhone share your location with the FreeAppStore apps you turn on, including while your phone is locked. Connecting the companion signs you in with GitHub or Google, which creates a FreeAppStore account if you do not have one.</p>
+      <h3>What is collected</h3>
+      <ul>
+        <li><strong>Precise location</strong> (latitude, longitude, accuracy and time), only for apps you turn on, and only after the companion shows that app's disclosure and you agree. Collection continues in the background, with the phone locked or the app closed, only if you allow background location. Nothing is collected while no app is on, or while sharing is paused.</li>
+        <li><strong>A device label</strong> sent when you connect the phone: the manufacturer and model on Android, or the device type and iOS version on iPhone. It is shown on the connection page and in the companion.</li>
+        <li><strong>Account identifiers</strong>: your FreeAppStore account and profile from the sign-in provider (see Accounts and connected apps above), and a device credential that expires after 90 days.</li>
+      </ul>
+      <h3>Who receives it</h3>
+      <p>Location goes only to the apps you turn on in the companion. The current list is Run, which uses it to record runs and walks. An app reads your points only through your own signed-in session in that app, and only your points. FreeAppStore gives an app's creator no way to read your location outside the app. What the app does with the points is described in its disclosure: Run adds them only to an activity you are recording, and runs you save stay in Run until you delete them.</p>
+      <p>The companion does not use advertising or analytics SDKs, and we do not sell or share your location for advertising. All traffic goes over HTTPS to api.freeappstore.online. The Store tab loads the public app list without your credentials. On iPhone, the sharing map uses Apple Maps for backgrounds, so Apple receives the map area you view, not your track.</p>
+      <h3>How long it is kept</h3>
+      <ul>
+        <li><strong>On FreeAppStore</strong>: location points are kept 7 days, then deleted by a cleanup job that runs every 15 minutes. They are not included in database backups.</li>
+        <li><strong>Upload queue on the phone</strong>: points waiting to upload are dropped after 7 days.</li>
+        <li><strong>Sharing history on the phone</strong>: a 30-day history of what you shared, for your own map, timeline and activity log. It is never uploaded and is excluded from device backups.</li>
+      </ul>
+      <h3>Turning it off and deleting it</h3>
+      <ul>
+        <li><strong>Turn off an app</strong> in the companion: deletes that app's permission and all of its points on FreeAppStore.</li>
+        <li><strong>Disconnect this phone</strong>: deletes the device, its permissions and all of its points on FreeAppStore, and the sharing history on the phone.</li>
+        <li><strong>Clear sharing history</strong>: deletes the history on the phone.</li>
+        <li><strong>Delete your account</strong>: deletes every connected phone, its permissions and points, along with your other account data. See <a href="/delete-account">Delete your account</a>.</li>
+      </ul>
+      <p>Pausing stops new collection, or new sharing with one app, without deleting anything. Uninstalling the companion removes everything it stored on the phone.</p>
       <h2>Managing and deleting data</h2>
-      <p>Use an app's controls to manage its content and permissions. Signing out clears the local session; it does not delete the server account. The SDK profile menu supports account deletion, which removes the account's keys, per-user storage, owned documents, friendships, roles, logs, push subscriptions, and reminder schedules from the active database. Published apps and shared counters are retained. Clearing browser storage only removes local data, and copies may remain in operational backups.</p>
+      <p>Use an app's controls to manage its content and permissions. Signing out clears the local session; it does not delete the server account. You can delete your account from its settings at <a href="/app/settings?delete-account=1">freeappstore.online/app/settings</a> (the SDK profile menu links there). It removes the account's keys, per-user storage, owned documents, friendships, roles, logs, push subscriptions, reminder schedules, and connected companion phones from the active database. Published apps and shared counters are retained. Clearing browser storage only removes local data, and copies may remain in operational backups. <a href="/delete-account">Delete your account</a> explains what is deleted and how to ask us if you cannot sign in.</p>
       <h2>Children and age-restricted features</h2>
       <p>The platform's date-of-birth flow rejects ages under 13. Individual apps can have stricter age requirements. We do not claim that every app or feature is suitable for every age.</p>
       <h2>Changes and contact</h2>
-      <p>This page describes the platform's current features and will be updated as they change. For questions, use the contact options on our <a href="https://github.com/freeappstore-online">GitHub organization</a>. Do not include secrets or private personal information in public issues.</p>
+      <p>This page describes the platform's current features and will be updated as they change. For privacy questions and requests, email <a href="mailto:support@freeappstore.online">support@freeappstore.online</a>. Do not include secrets or private personal information in public GitHub issues.</p>
     </div>
   </main>
   {{FOOTER}}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Delete Your Account — FreeAppStore</title>
+  <meta name="description" content="How to delete your FreeAppStore account, including the FreeAppStore companion apps for Android and iPhone, and what is deleted." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Delete Your Account — FreeAppStore" />
+  <meta property="og:description" content="How to delete your FreeAppStore account, including the FreeAppStore companion apps for Android and iPhone, and what is deleted." />
+  <meta property="og:url" content="https://freeappstore.online/delete-account" />
+  <meta property="og:image" content="https://freeappstore.online/og-image.png?v=2026-11-18" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="FreeAppStore: everyday apps, rebuilt for the web. Nothing to download, no ads, no trials, no subscriptions." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="canonical" href="https://freeappstore.online/delete-account" />
+  <link rel="icon" href="/favicon.svg?v=2026-11-18" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2026-11-18" />
+  {{SETTINGS_BOOTSTRAP}}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{STYLE_CSS_URL}}" />
+</head>
+<body>
+
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="page-header">
+      <h1>Delete your account</h1>
+      <p>How to delete your FreeAppStore account, and what happens to your data.</p>
+    </div>
+    <div class="page-content">
+      <p class="legal-date">Last updated: November 24, 2026</p>
+      <p>This page covers the FreeAppStore account used by freeappstore.online, the apps published on it, and the FreeAppStore companion apps for Android and iPhone. The developer is FreeAppStore. One account covers all of them, so deleting it applies everywhere.</p>
+      <h2>Delete it yourself</h2>
+      <ol>
+        <li>Open <a href="/app/settings?delete-account=1">freeappstore.online/app/settings?delete-account=1</a> in any browser. You do not need the companion app installed.</li>
+        <li>Sign in with the same method you used before (GitHub, Google, Apple or email link).</li>
+        <li>Choose <strong>Delete account</strong> and confirm twice.</li>
+      </ol>
+      <p>Deletion takes effect immediately and cannot be undone. It also signs you out of every app and phone.</p>
+      <h2>If you cannot sign in</h2>
+      <p>Email <a href="mailto:support@freeappstore.online?subject=Delete%20my%20account">support@freeappstore.online</a> from the email address on your account, with the subject "Delete my account". If you signed in with GitHub, include your GitHub username. We may ask you to confirm that the account is yours before deleting it.</p>
+      <h2>What is deleted</h2>
+      <ul>
+        <li>Your account and profile (login, name, avatar, email, date of birth if given).</li>
+        <li>Data apps saved for you: per-user storage, documents you own, roles, friendships, and app logs.</li>
+        <li>API keys in your key vault, push subscriptions and reminder schedules, votes and idea claims, and your VibeCode build sessions.</li>
+        <li>Photos you uploaded, removed by a cleanup job that runs every 15 minutes.</li>
+        <li><strong>Companion apps:</strong> every connected phone, its per-app location permissions, and all location points stored on FreeAppStore, plus any connection in progress.</li>
+      </ul>
+      <h2>What is kept, and for how long</h2>
+      <ul>
+        <li><strong>Apps you published</strong> and their public GitHub repositories stay online. Unpublish them first if you want them removed. Shared counters in apps are also kept, as they are not tied to you.</li>
+        <li><strong>Backups:</strong> companion location data is never included in backups. The daily database backup does include other account records, such as your profile, per-user storage, documents, roles, friendships and logs, so copies can remain there after deletion. These backups do not yet have a fixed retention period.</li>
+        <li><strong>On your phone:</strong> the companion's 30-day sharing history stays on the phone and is never uploaded. Remove it with <strong>Disconnect this phone</strong> or <strong>Clear sharing history</strong>, or by uninstalling the app.</li>
+      </ul>
+      <h2>Delete only companion data</h2>
+      <p>To stop sharing without deleting your account, open the companion app and turn off an app, which deletes that app's location points on FreeAppStore, or choose <strong>Disconnect this phone</strong>, which deletes the phone's connection and all of its points. Location points are kept on FreeAppStore for 7 days at most in any case. See the <a href="/privacy#companion">privacy policy</a> for details.</p>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+</body>
+</html>
