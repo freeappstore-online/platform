@@ -152,8 +152,7 @@ header .container {
 }
 
 /* Header icon buttons (40px square, outlined) */
-.theme-toggle,
-.settings-link {
+.theme-toggle {
   width: 40px;
   height: 40px;
   border-radius: 12px;
@@ -170,8 +169,7 @@ header .container {
   font-family: inherit;
 }
 
-.theme-toggle:hover,
-.settings-link:hover {
+.theme-toggle:hover {
   background: var(--panel-alt);
   border-color: var(--line-strong);
 }
@@ -214,26 +212,25 @@ header .container {
 .btn-primary:hover { background: var(--accent-hover); text-decoration: none; color: #fff; }
 .btn-primary:active { transform: translateY(1px); }
 
-/* Promote auth.js's Sign-in link to the same blue pill in the storefront header. */
-.header-right .nav-signin {
+/* auth.js's single account button: avatar when signed in, person icon otherwise. */
+.nav-profile {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent);
-  color: #fff;
-  font-weight: 500;
-  font-size: 0.95rem;
-  border-radius: 12px;
-  padding: 0.6rem 1.25rem;
+  overflow: hidden;
+  font-weight: 700;
   text-decoration: none;
-  box-shadow: var(--shadow);
-  transition: background 0.15s ease;
+  transition: border-color 0.15s ease;
 }
-.header-right .nav-signin:hover {
-  background: var(--accent-hover);
-  color: #fff;
-  text-decoration: none;
-}
+.nav-profile:hover { border-color: var(--accent); text-decoration: none; }
+.nav-profile svg { width: 18px; height: 18px; }
+.nav-profile .nav-avatar { width: 100%; height: 100%; }
 
 nav {
   display: flex;
@@ -255,29 +252,8 @@ nav a.active { color: var(--ink); }
 nav a.pro-link { color: var(--pro); }
 nav a.pro-link:hover { color: var(--pro); opacity: 0.8; }
 
-/* User avatar in nav */
-.nav-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  cursor: pointer;
-  transition: border-color 0.15s;
-  vertical-align: middle;
-}
-.nav-avatar:hover { border-color: var(--accent); }
-.nav-signin {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
-  cursor: pointer;
-  border: none;
-  background: none;
-  font-family: inherit;
-  padding: 0;
-}
-.nav-signin:hover { text-decoration: underline; }
+/* User avatar inside .nav-profile */
+.nav-avatar { display: block; border-radius: 50%; object-fit: cover; }
 
 /* Footer */
 footer {
@@ -786,10 +762,13 @@ footer .container {
     gap: 0.15rem;
     z-index: 100;
     transform: translateX(100%);
-    transition: transform 0.2s ease;
+    visibility: hidden;
+    /* Hidden once the slide-out ends, so the closed drawer can't leak a shadow,
+     * widen the page on iOS, or take keyboard focus. Opening shows it at once. */
+    transition: transform 0.2s ease, visibility 0s linear 0.2s;
     box-shadow: -4px 0 20px rgba(0,0,0,0.1);
   }
-  header nav.open { transform: translateX(0); }
+  header nav.open { transform: translateX(0); visibility: visible; transition: transform 0.2s ease; }
 
   header nav a {
     display: block;
@@ -1578,7 +1557,7 @@ footer .container {
   .app-card.compact { padding: 0.75rem 0.85rem; gap: 0.7rem; }
   .app-card.compact .app-icon { width: 38px; height: 38px; border-radius: 10px; }
 
-  /* Tighten the storefront header on small viewports so brand + theme + Sign In
+  /* Tighten the storefront header on small viewports so brand + profile button
    * fit on one row alongside auth.js's hamburger button. */
   .brand-tag { display: none; }
   header .container { gap: 0.5rem; padding-inline: 1rem; }
@@ -1587,15 +1566,9 @@ footer .container {
   .brand-mark { width: 32px; height: 32px; }
 
 
-  .header-right { gap: 0.4rem; flex-wrap: nowrap; flex-shrink: 0; }
-  .header-right .settings-link { width: 32px; height: 32px; border-radius: 10px; }
+  .header-right { gap: 0.4rem; flex-wrap: nowrap; flex-shrink: 0; margin-left: auto; }
   .nav-toggle { min-width: 32px; min-height: 36px; }
   .theme-toggle { width: 36px; height: 36px; border-radius: 10px; }
-  .header-right .nav-signin {
-    padding: 0.45rem 0.65rem;
-    font-size: 0.88rem;
-    border-radius: 10px;
-  }
 }
 
 /* Iframe-load-failed state in the preview pane */
@@ -1887,7 +1860,8 @@ footer .container {
  * selector — never inline. */
 .app-hero { display: flex; align-items: center; gap: 1.5rem; padding: 2rem 0 3rem; }
 .app-hero-icon { width: 80px; height: 80px; border-radius: 1.25rem; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; flex-shrink: 0; }
-.app-hero h1 { margin-bottom: 0.25rem; }
+.app-hero > div:last-child { min-width: 0; }
+.app-hero h1 { margin-bottom: 0.25rem; overflow-wrap: anywhere; }
 .app-hero .tag { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); background: var(--accent-soft, #eff6ff); padding: 0.2rem 0.6rem; border-radius: 4px; display: inline-block; }
 .app-meta-item { text-align: center; }
 .app-meta-item .label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
@@ -2475,14 +2449,14 @@ pre[class*="language-"] {
 .idea::before { content: "Build idea: "; font-weight: 600; font-style: normal; }
 .section-note { font-size: 0.9rem; color: var(--muted); margin-bottom: 1.5rem; max-width: 40rem; }
 
-/* ── Settings link in header (base shared with .theme-toggle above) ── */
-.settings-link svg { width: 18px; height: 18px; }
-.settings-link.active { border-color: var(--accent); color: var(--accent); }
-
-/* ── Settings page ───────────────────────────────────────────── */
-.settings-page { padding: 2rem 0 4rem; max-width: 640px; }
+/* ── Profile page (account + appearance settings) ─────────────── */
+.settings-page { padding-block: 2rem 4rem; max-width: 640px; }
 .settings-page h1 { font-family: var(--font-display); font-size: 1.75rem; margin: 0 0 0.25rem; }
 .settings-section { margin-top: 2rem; }
+.profile-account { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.profile-user { display: flex; align-items: center; gap: 0.75rem; min-width: 0; overflow-wrap: anywhere; }
+.profile-avatar { width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .settings-section h2 { font-size: 1rem; font-weight: 700; margin: 0 0 1rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
 .setting-row {
   display: flex;
@@ -2528,6 +2502,7 @@ pre[class*="language-"] {
 
 @media (max-width: 480px) {
   .setting-row { align-items: stretch; flex-direction: column; gap: 0.75rem; }
+  .setting-info { flex-basis: auto; }
   .setting-control { width: 100%; justify-content: stretch; }
   .setting-option { flex: 1 1 5rem; justify-content: center; }
 }

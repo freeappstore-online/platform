@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Settings — FreeAppStore</title>
-  <meta name="description" content="Customize your FreeAppStore experience — theme, text size, and more." />
+  <title>Profile — FreeAppStore</title>
+  <meta name="description" content="Your FreeAppStore account and preferences — sign in, theme, text size." />
   <link rel="icon" href="/favicon.svg?v=2026-11-18" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2026-11-18" />
   <link rel="manifest" href="/manifest.json" />
@@ -23,11 +23,16 @@
 
 
   <main class="container settings-page">
-    <h1>Settings</h1>
-    <p class="lede">Customize your FreeAppStore experience. Changes are saved automatically.</p>
+    <h1>Profile</h1>
+
+    <section class="settings-section">
+      <h2>Account</h2>
+      <div id="profileAccount" class="profile-account"></div>
+    </section>
 
     <section class="settings-section">
       <h2>Appearance</h2>
+      <p class="setting-desc">Saved on this device automatically.</p>
 
       <div class="setting-row">
         <div class="setting-info">

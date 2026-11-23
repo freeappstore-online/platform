@@ -921,17 +921,17 @@ indexHtml = indexHtml
 indexHtml = replaceStylesheetUrls(indexHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'index.html'), indexHtml);
 
-// --- Settings page ---
-const settingsTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'settings.html'), 'utf8'));
-let settingsHtml = injectSettingsBootstrap(settingsTemplate, 'templates/settings.html').replace('__CF_BEACON__', CF_BEACON_SNIPPET);
+// --- Profile page (account + appearance settings) ---
+const profileTemplate = injectPartials(fs.readFileSync(path.join(ROOT, 'templates', 'profile.html'), 'utf8'));
+let profileHtml = injectSettingsBootstrap(profileTemplate, 'templates/profile.html').replace('__CF_BEACON__', CF_BEACON_SNIPPET);
 for (const [k, v] of Object.entries(sriHashes)) {
-  settingsHtml = settingsHtml.replaceAll(`{{SRI_${k}}}`, v);
+  profileHtml = profileHtml.replaceAll(`{{SRI_${k}}}`, v);
 }
 for (const [k, v] of Object.entries(contentVersions)) {
-  settingsHtml = settingsHtml.replaceAll(`{{VER_${k}}}`, v);
+  profileHtml = profileHtml.replaceAll(`{{VER_${k}}}`, v);
 }
-settingsHtml = replaceStylesheetUrls(settingsHtml, stylesheetUrls);
-fs.writeFileSync(path.join(DIST, 'settings.html'), settingsHtml);
+profileHtml = replaceStylesheetUrls(profileHtml, stylesheetUrls);
+fs.writeFileSync(path.join(DIST, 'profile.html'), profileHtml);
 
 // --- Quality Dashboard ---
 // Embeds both the local apps registry and the cross-store games registry

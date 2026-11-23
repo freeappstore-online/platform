@@ -3,7 +3,9 @@
  *    to avoid flash; this handles non-storefront pages that lack the preload).
  *  - Injects a moon/sun theme-toggle button into the header on pages that
  *    don't already have one (the storefront ships it in the template).
- *  - Adds avatar or sign-in link to <span id="navAuth">.
+ *  - Adds one profile button (avatar, or a person icon when signed out) to
+ *    <span id="navAuth">; both open /profile.
+ *  - Renders the Account section of /profile (#profileAccount).
  *  - Adds hamburger menu button + overlay for mobile nav. */
 
 (function () {
@@ -51,21 +53,14 @@
     if (preferDark) document.documentElement.dataset.theme = "dark";
   } catch (e) {}
 
-  // ── Settings link (inject on pages without a pre-built header-right) ──
+  // ── Account button slot (inject on pages without a pre-built header-right) ──
   if (!document.querySelector('.header-right')) {
     var headerC = document.querySelector('header .container');
     if (headerC) {
       var hr = document.createElement('div');
       hr.className = 'header-right';
-      var sl = document.createElement('a');
-      sl.href = '/settings';
-      sl.className = 'settings-link';
-      sl.setAttribute('aria-label', 'Settings');
-      sl.title = 'Settings';
-      sl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
       var navAuth = document.createElement('span');
       navAuth.id = 'navAuth';
-      hr.appendChild(sl);
       hr.appendChild(navAuth);
       headerC.appendChild(hr);
     }
@@ -147,6 +142,7 @@
   // ── Auth avatar ──
   var el = document.getElementById("navAuth");
   if (!el) return;
+  var account = document.getElementById("profileAccount");
 
   // Check localStorage for cached session (same key as @freeappstore/sdk)
   var session = null;
@@ -227,37 +223,89 @@
     showSignIn();
   }
 
+  function startSignIn(e) {
+    if (e) e.preventDefault();
+    var url = new URL("/v1/auth/github/start", API);
+    url.searchParams.set("app_id", "store");
+    url.searchParams.set("return_to", window.location.href);
+    var state = clientState();
+    if (state) url.searchParams.set("client_state", state);
+    window.location.href = url.toString();
+  }
+
   function showUser(user) {
     var a = document.createElement("a");
-    a.href = "https://freeappstore.online/app/";
+    a.href = "/profile";
+    a.className = "nav-profile";
     a.title = user.login || "Profile";
+    a.setAttribute("aria-label", "Profile");
     if (user.avatarUrl) {
       var img = document.createElement("img");
       img.className = "nav-avatar";
       img.src = user.avatarUrl;
-      img.alt = user.login || "";
+      img.alt = "";
       a.appendChild(img);
     } else {
-      a.textContent = user.login || "Profile";
-      a.className = "nav-signin";
+      a.textContent = (user.login || "?").charAt(0).toUpperCase();
     }
     el.appendChild(a);
+    if (account) showAccountUser(user);
   }
 
   function showSignIn() {
     var link = document.createElement("a");
-    link.className = "nav-signin";
-    link.textContent = "Sign in";
-    link.href = "#";
-    link.onclick = function (e) {
-      e.preventDefault();
-      var url = new URL("/v1/auth/github/start", API);
-      url.searchParams.set("app_id", "store");
-      url.searchParams.set("return_to", window.location.href);
-      var state = clientState();
-      if (state) url.searchParams.set("client_state", state);
-      window.location.href = url.toString();
-    };
+    link.href = "/profile";
+    link.className = "nav-profile";
+    link.title = "Sign in";
+    link.setAttribute("aria-label", "Sign in");
+    link.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>';
     el.appendChild(link);
+    if (account) showAccountSignIn();
+  }
+
+  function showAccountUser(user) {
+    var row = document.createElement("div");
+    row.className = "profile-user";
+    if (user.avatarUrl) {
+      var img = document.createElement("img");
+      img.className = "profile-avatar";
+      img.src = user.avatarUrl;
+      img.alt = "";
+      row.appendChild(img);
+    }
+    var name = document.createElement("strong");
+    name.textContent = user.login || "Signed in";
+    row.appendChild(name);
+    var actions = document.createElement("div");
+    actions.className = "profile-actions";
+    var consoleLink = document.createElement("a");
+    consoleLink.className = "btn-primary";
+    consoleLink.href = "/app/";
+    consoleLink.textContent = "Creator Console";
+    var signOut = document.createElement("button");
+    signOut.type = "button";
+    signOut.className = "setting-option";
+    signOut.textContent = "Sign out";
+    signOut.addEventListener("click", function () {
+      try { localStorage.removeItem("fas:session"); } catch (e) {}
+      el.replaceChildren();
+      account.replaceChildren();
+      showSignIn();
+    });
+    actions.appendChild(consoleLink);
+    actions.appendChild(signOut);
+    account.replaceChildren(row, actions);
+  }
+
+  function showAccountSignIn() {
+    var desc = document.createElement("p");
+    desc.className = "setting-desc";
+    desc.textContent = "Sign in to like apps and use the Creator Console.";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-primary";
+    btn.textContent = "Sign in with GitHub";
+    btn.addEventListener("click", startSignIn);
+    account.replaceChildren(desc, btn);
   }
 })();

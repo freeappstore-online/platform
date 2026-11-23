@@ -40,7 +40,7 @@ async function authCallback(hash, response = { ok: true, status: 200, json: asyn
   const avatar = node();
   const calls = [], stored = [], cleared = [];
   runInNewContext(readFileSync(new URL('./auth.js', import.meta.url), 'utf8'), {
-    document: { querySelectorAll: () => [], querySelector: selector => selector === '.header-right' ? node() : null, getElementById: () => avatar, createElement: node, documentElement: node() },
+    document: { querySelectorAll: () => [], querySelector: selector => selector === '.header-right' ? node() : null, getElementById: id => id === 'navAuth' ? avatar : null, createElement: node, documentElement: node() },
     window: { location: { hash, pathname: '/', search: '' }, confirm },
     history: { replaceState: (...args) => cleared.push(args) },
     localStorage: { getItem: key => key === 'fas:session' ? session : key === 'fas:auth-state' ? pending : null, setItem: (...args) => stored.push(args), removeItem() {} },
@@ -161,7 +161,7 @@ describe("auth.js security", () => {
 
   it("does not use innerHTML with user data", () => {
     // Every HTML assignment must be a complete static string literal.
-    // This allows the settings SVG without allowing concatenated user data.
+    // This allows the profile-icon SVG without allowing concatenated user data.
     const assignments = [...authJs.matchAll(/\.innerHTML\s*=\s*([^\n]+)/g)];
     assert.ok(assignments.length > 0);
     for (const [, value] of assignments) {
@@ -189,26 +189,27 @@ describe("OAuth and cached-session regressions", () => {
       assert.equal(result.cleared.length, 1);
       assert.equal(result.calls.length, 0);
       assert.equal(result.stored.length, 0);
-      assert.equal(result.avatar.children[0].textContent, 'Sign in');
+      assert.equal(result.avatar.children[0].title, 'Sign in');
     }
   });
   it("does not cache a user from a failed authentication response", async () => {
     const result = await authCallback('#fas_session=valid-token', { ok: false, status: 401, json: async () => ({ id: '1' }) });
     assert.equal(result.stored.length, 0);
-    assert.equal(result.avatar.children[0].textContent, 'Sign in');
+    assert.equal(result.avatar.children[0].title, 'Sign in');
   });
   it("uses Bearer auth, clears the callback, and renders user data as text", async () => {
     const result = await authCallback('#fas_session=valid-token');
     assert.equal(result.calls[0][1].headers.Authorization, 'Bearer valid-token');
     assert.equal(result.cleared.length, 1);
     assert.equal(result.stored.length, 1);
-    assert.equal(result.avatar.children[0].textContent, '<img src=x onerror=alert(1)>');
+    assert.equal(result.avatar.children[0].title, '<img src=x onerror=alert(1)>');
+    assert.equal(result.avatar.children[0].textContent, '<');
     assert.equal(result.avatar.children[0].innerHTML, '');
   });
   it("rejects unsafe cached tokens before fetch", async () => {
     const result = await authCallback('', undefined, JSON.stringify({ token: 'bad\r\nheader', user: { id: '1' } }));
     assert.equal(result.calls.length, 0);
-    assert.equal(result.avatar.children[0].textContent, 'Sign in');
+    assert.equal(result.avatar.children[0].title, 'Sign in');
   });
 });
 

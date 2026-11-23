@@ -136,7 +136,7 @@ test("built pages provide the shared skip link and focusable main destination", 
   try {
     const pages = [
       join(tmpDist, "index.html"),
-      join(tmpDist, "settings.html"),
+      join(tmpDist, "profile.html"),
       join(tmpDist, "quality.html"),
       join(tmpDist, "ai", "codex.html"),
       join(tmpDist, "apps", `${registry.apps[0].id}.html`),
