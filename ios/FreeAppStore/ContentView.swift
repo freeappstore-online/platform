@@ -12,34 +12,53 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
 
     @Published private(set) var signedIn = false
     @Published private(set) var name = ""
+    @Published private(set) var deviceLabel = ""
     @Published private(set) var apps: [ConnectedApp] = []
     @Published private(set) var blocked: Set<String> = []
+    @Published private(set) var pausedApps: Set<String> = []
     @Published private(set) var paused = true
     @Published private(set) var queued = 0
     @Published private(set) var message = ""
     @Published private(set) var pairingCode = ""
     @Published private(set) var lastSync: Int64 = 0
+    @Published private(set) var lastSyncAttempt: Int64 = 0
+    @Published private(set) var lastSyncError = ""
+    @Published private(set) var events: [ShareEvent] = []
+    @Published private(set) var pendingByApp: [String: Int] = [:]
+    @Published private(set) var lastUploadByApp: [String: Int64] = [:]
     @Published private(set) var busy = false
     @Published var consent: ConnectedApp?
     private var error = ""
     private var authSession: ASWebAuthenticationSession?
     private var refreshTask: Task<Void, Never>?
 
-    override init() {
+    override convenience init() {
         let local: LocalStore
         do { local = try LocalStore() } catch { fatalError("FreeAppStore could not open its storage.") }
-        repository = CompanionRepository(local: local)
+        self.init(repository: CompanionRepository(local: local))
+    }
+
+    /// Tests pass a repository with a temporary store and a stubbed API.
+    init(repository: CompanionRepository) {
+        self.repository = repository
         collector = LocationCollector(repository: repository)
         super.init()
+        if repository.token() != nil { try? local.seedIfEmpty() }
         refresh()
     }
 
     func enabled(_ app: ConnectedApp) -> Bool { app.grantId != nil && !blocked.contains(app.id) }
+    /// Enabled, not paused for this app, and Pause all is off.
+    func sharing(_ app: ConnectedApp) -> Bool { enabled(app) && !pausedApps.contains(app.id) && !paused }
 
     func refresh() {
         signedIn = repository.token() != nil
-        name = local.userName; apps = local.apps(); blocked = local.blocked(); paused = local.paused
+        name = local.userName; deviceLabel = local.deviceLabel; apps = local.apps(); blocked = local.blocked(); pausedApps = local.pausedApps(); paused = local.paused
         queued = (try? local.count()) ?? 0; lastSync = local.lastSync; pairingCode = repository.pairingCode()
+        lastSyncAttempt = local.lastSyncAttempt; lastSyncError = local.lastSyncError
+        events = (try? local.events()) ?? []
+        pendingByApp = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, (try? local.pendingCount($0.id)) ?? 0) })
+        lastUploadByApp = apps.reduce(into: [:]) { $0[$1.id] = (try? local.lastUpload($1.id)) ?? nil }
         message = error.isEmpty ? local.message : error
     }
 
@@ -116,115 +135,51 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         refresh(); collector.evaluate()
     }
 
+    /// Local only: the queue, and so pending uploads, are kept.
+    func clearHistory() {
+        do { try local.clearHistory() } catch { self.error = error.localizedDescription }
+        refresh()
+    }
+
+    /// Local writes, not `act`: pausing works offline and instantly.
+    func pause(_ app: ConnectedApp) {
+        do { try local.pause(app.id) } catch { self.error = error.localizedDescription }
+        refresh(); collector.evaluate()
+    }
+    func resume(_ app: ConnectedApp) {
+        do { try local.resume(app.id) } catch { self.error = error.localizedDescription }
+        refresh(); collector.evaluate()
+    }
+
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first ?? ASPresentationAnchor()
     }
 }
 
+/// The tab shell. Sheets, deep links and the scene phase live here so they work from every tab.
 struct ContentView: View {
     @ObservedObject var model: CompanionModel
     @ObservedObject var collector: LocationCollector
     @Environment(\.scenePhase) private var phase
-    @Environment(\.openURL) private var openURL
-    @State private var disconnectPrompt = false
+    @State var tab = Tab.sharing
+
+    /// The Storefront tab (its own issue) goes first, ahead of Sharing.
+    enum Tab { case sharing, settings }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("FreeAppStore").font(.largeTitle.bold())
-                Text("Your apps, connected to your phone")
-                if !model.signedIn { signIn } else { account }
-                if model.busy { ProgressView().frame(maxWidth: .infinity) }
-                if !model.message.isEmpty { Text(model.message).foregroundStyle(.red) }
-                Button("How your data is used") { open("https://docs.freeappstore.online/native-companion/") }
-            }
-            .padding(24)
+        TabView(selection: $tab) {
+            SharingDashboardView(model: model, collector: collector)
+                .tabItem { Label("Sharing", systemImage: "location.circle") }
+                .tag(Tab.sharing)
+            SettingsView(model: model, collector: collector)
+                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(Tab.settings)
         }
-        .tint(Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.77, green: 0.71, blue: 0.99, alpha: 1) : UIColor(red: 0.43, green: 0.16, blue: 0.85, alpha: 1) }))
         .onChange(of: phase, initial: true) { _, phase in
             if phase == .active { model.becameActive() } else { model.resignActive() }
         }
         .onOpenURL { model.handle($0) }
         .sheet(item: $model.consent) { app in disclosure(app) }
-        .alert("Disconnect this phone?", isPresented: $disconnectPrompt) {
-            Button("Disconnect", role: .destructive) { model.disconnect() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Stops location sharing and deletes this phone’s pending updates and platform location copies. Saved rides in your apps are separate. An internet connection is needed to finish.")
-        }
-    }
-
-    @ViewBuilder private var signIn: some View {
-        Text("Enable background features for the FAS apps you use. You stay in control of what each app can access.")
-        Button("Sign in to FreeAppStore") { model.connect() }.buttonStyle(.borderedProminent).disabled(model.busy)
-        if !model.pairingCode.isEmpty { Text("Match this code in your browser: \(model.pairingCode)") }
-    }
-
-    @ViewBuilder private var account: some View {
-        Text(model.name).font(.headline)
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(status).font(.title3.bold())
-                permission
-                if model.paused {
-                    Button("Resume location") { model.setPaused(false) }
-                        .buttonStyle(.borderedProminent).disabled(model.busy || !model.apps.contains(where: model.enabled))
-                } else {
-                    Button("Pause all") { model.setPaused(true) }.buttonStyle(.bordered)
-                }
-                Text("\(model.queued) updates waiting to sync").font(.subheadline)
-                if model.lastSync > 0 {
-                    Text("Last sync: \(Date(timeIntervalSince1970: Double(model.lastSync) / 1000).formatted(date: .omitted, time: .shortened))").font(.footnote)
-                }
-                Button("Sync now") { model.sync() }.disabled(model.busy)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        Text("App permissions").font(.title3.bold())
-        if model.apps.isEmpty { Text("No supported native features are available for your apps yet.") }
-        ForEach(model.apps) { app in
-            GroupBox {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(app.name).font(.headline)
-                    Text("Background location").font(.subheadline)
-                    Text(model.enabled(app) ? "Enabled" : "Off").foregroundStyle(.tint)
-                    if model.blocked.contains(app.id) {
-                        Text("Disabled on this phone. Server revocation will finish when connected.").font(.footnote)
-                    }
-                    Button(model.enabled(app) ? "Disable" : "Enable") {
-                        if model.enabled(app) { model.disable(app) } else { model.consent = app }
-                    }.disabled(model.busy)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        Button("Manage account") { open("https://freeappstore.online/app/") }
-        Button("Disconnect this phone") { disconnectPrompt = true }.disabled(model.busy)
-    }
-
-    private var status: String {
-        if model.paused { return "Location paused" }
-        if !collector.permitted { return "Location permission needed" }
-        return collector.running ? "Location sharing is on" : "Location is not running"
-    }
-
-    @ViewBuilder private var permission: some View {
-        switch collector.authorization {
-        case .notDetermined:
-            Text("FreeAppStore records your route for the apps you enable, including while your phone is locked. Choose Allow While Using App with Precise Location on.").font(.footnote)
-            Button("Set up location") { collector.requestWhenInUse() }
-        case .denied, .restricted:
-            Text("Location access is off for FreeAppStore.").font(.footnote)
-            Button("Open Settings") { open(UIApplication.openSettingsURLString) }
-        default:
-            if !collector.fullAccuracy {
-                Text("Turn on Precise Location in Settings. Approximate location is never used to record routes.").font(.footnote)
-                Button("Use precise location") { collector.requestFullAccuracy() }
-                Button("Open Settings") { open(UIApplication.openSettingsURLString) }
-            } else if collector.authorization == .authorizedWhenInUse {
-                Button("Keep recording after restarts") { collector.requestAlways() }
-            }
-        }
     }
 
     private func disclosure(_ app: ConnectedApp) -> some View {
@@ -238,6 +193,14 @@ struct ContentView: View {
         .padding(24)
         .presentationDetents([.medium, .large])
     }
+}
 
-    private func open(_ link: String) { if let url = URL(string: link) { openURL(url) } }
+/// Busy spinner and the last error, shown at the top of each tab.
+struct StatusMessages: View {
+    @ObservedObject var model: CompanionModel
+
+    var body: some View {
+        if model.busy { ProgressView().frame(maxWidth: .infinity) }
+        if !model.message.isEmpty { Text(model.message).foregroundStyle(.red) }
+    }
 }

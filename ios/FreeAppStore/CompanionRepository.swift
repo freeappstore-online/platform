@@ -26,7 +26,7 @@ actor CompanionRepository {
 
     nonisolated func token() -> String? {
         do { return try secure.read()["token"].flatMap { $0.isEmpty ? nil : $0 } } catch {
-            try? local.setPaused(true)
+            try? local.setPaused(true, stopped: "unlock_failed")
             local.message = "The device connection could not be unlocked. Reconnect your account."
             return nil
         }
@@ -80,7 +80,8 @@ actor CompanionRepository {
             _ = try await api.request("PUT", "/native/apps/\(app.id)/location", token: credential,
                                       body: json(["version": app.version, "enabled": true]))
             try updateMe(try await api.request("GET", "/native/me", token: credential))
-            try local.unblock(app.id); try local.setPaused(false); local.message = ""
+            try local.unblock(app.id); try local.record(.enabled, appId: app.id)
+            try local.resume(app.id); try local.setPaused(false); local.message = ""
         }
     }
 
@@ -102,6 +103,7 @@ actor CompanionRepository {
     func sync() async throws {
         try await exclusive { [self] in
             guard let credential = token() else { return }
+            var uploading = false, partial = false
             do {
                 let blocked = local.blocked()
                 for id in blocked { _ = try await api.request("DELETE", "/native/apps/\(id)/location", token: credential) }
@@ -111,15 +113,28 @@ actor CompanionRepository {
                 for _ in 0..<10 {
                     let batch = try local.pending()
                     if batch.isEmpty { break }
+                    uploading = true
                     let result = try await api.request("POST", "/native/locations", token: credential, body: try JSONEncoder().encode(["points": batch]))
                     let ids = result["acknowledged"] as? [String] ?? []
-                    guard Set(ids) == Set(batch.map(\.id)) else { throw CompanionError("Upload was not fully acknowledged. Device copy retained.") }
+                    guard Set(ids) == Set(batch.map(\.id)) else {
+                        partial = true
+                        throw CompanionError("Upload was not fully acknowledged. Device copy retained.")
+                    }
                     try local.acknowledge(ids)
                 }
-                local.lastSync = Self.now(); local.message = ""
+                local.lastSync = Self.now(); local.lastSyncAttempt = local.lastSync; local.message = ""; local.lastSyncError = ""
+                try? local.syncSucceeded()
             } catch {
-                if let failure = error as? ApiFailure, failure.status == 401 { try? local.setPaused(true) }
+                if let failure = error as? ApiFailure, failure.status == 401 { try? local.setPaused(true, stopped: "signed_out") }
                 local.message = (error as? ApiFailure)?.message ?? "Waiting to sync. Location stays on this phone."
+                local.lastSyncAttempt = Self.now(); local.lastSyncError = error.localizedDescription
+                // Activity log: status (0 = network) plus the server's `error` text only.
+                let status = (error as? ApiFailure)?.status ?? (error is URLError ? 0 : nil)
+                if (try? local.syncFailed(status.map { "\($0) \(error.localizedDescription)" } ?? error.localizedDescription)) == true {
+                    if status == 429 { try? local.record(.quota, detail: "429") }
+                    if uploading, let status, status == 400 || status == 413 { try? local.record(.uploadRejected, detail: "\(status)") }
+                    if partial { try? local.record(.uploadRejected, detail: "partial_ack") }
+                }
                 throw error
             }
         }
@@ -129,6 +144,7 @@ actor CompanionRepository {
         let user = me["user"] as? [String: Any]
         guard let id = user?["id"] as? String, id == (try secure.read())["userId"] else { throw CompanionError("Account changed. Reconnect this device.") }
         local.userName = user?["name"] as? String ?? ""
+        local.deviceLabel = (me["device"] as? [String: Any])?["label"] as? String ?? ""
         try local.saveApps(try JSONSerialization.data(withJSONObject: me["apps"] as? [Any] ?? []))
     }
 

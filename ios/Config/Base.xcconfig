@@ -4,4 +4,6 @@ FAS_BUNDLE_ID = online.freeappstore.companion
 IPHONEOS_DEPLOYMENT_TARGET = 17.0
 SWIFT_VERSION = 5.0
 
+#include "Version.xcconfig"
+
 #include? "Local.xcconfig"

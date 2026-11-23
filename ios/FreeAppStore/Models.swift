@@ -39,6 +39,25 @@ struct TrackPoint: Codable, Equatable {
     func with(grants: [String]) -> TrackPoint { TrackPoint(id: id, at: at, lat: lat, lng: lng, accuracy: accuracy, grants: grants) }
 }
 
+/// One row of the on-device sharing record (#621). `appId` nil = device-wide. `detail` is a short code, never
+/// coordinates or response bodies.
+struct ShareEvent: Equatable {
+    enum Kind: String, CaseIterable {
+        case enabled, disabled, paused, resumed
+        case pausedAll = "paused_all", resumedAll = "resumed_all", stopped
+        case grantLost = "grant_lost", historyCleared = "history_cleared"
+        // Activity log only (#624).
+        case syncFailed = "sync_failed", syncRecovered = "sync_recovered", uploadRejected = "upload_rejected", quota
+        case permission, queueFull = "queue_full", grantRestored = "grant_restored"
+    }
+
+    let id: Int64
+    let at: Int64
+    let appId: String?
+    let kind: Kind
+    let detail: String
+}
+
 /// A local failure whose text is shown to the user as is.
 struct CompanionError: LocalizedError {
     let message: String

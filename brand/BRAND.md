@@ -37,6 +37,7 @@ Each deployable surface carries its own copy, so none depends on another origin 
 - `sites/storefront/` (freeappstore.online)
 - `sites/console/web/public/` (creator console)
 - `workers/admin/web/public/` (admin; also `icon.svg`, a copy of `favicon.svg`)
+- `ios/FreeAppStore/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` (iOS companion app icon): the maskable composition behind `icon-512.png`, rendered at 1024×1024 by the kit's `generate.py` and flattened to opaque RGB. It is a render, not a byte copy.
 
 Each holds `favicon.svg`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `icon-192.png`, `icon-512.png`, `og-image.png` and a public `brand.json` that makes the deployed revision inspectable.
 

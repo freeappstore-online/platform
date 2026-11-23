@@ -9,11 +9,15 @@ final class LocationCollector: NSObject, ObservableObject, CLLocationManagerDele
     @Published private(set) var authorization: CLAuthorizationStatus
     @Published private(set) var fullAccuracy: Bool
     @Published private(set) var running = false
+    /// Time and place of the last accepted fix, in memory only: the map's live dot. Never a second location
+    /// source (no MapKit user location).
+    @Published private(set) var lastFixAt: Date?
+    @Published private(set) var lastFix: CLLocationCoordinate2D?
 
     private let manager = CLLocationManager()
     private let repository: CompanionRepository
     private var local: LocalStore { repository.local }
-    private var lastFixAt: Int64 = 0
+    private var lastAcceptedAt: Int64 = 0
     private var lastSyncAttempt = Date.distantPast
 
     init(repository: CompanionRepository) {
@@ -39,7 +43,7 @@ final class LocationCollector: NSObject, ObservableObject, CLLocationManagerDele
     }
 
     private func recipients(at: Int64) -> [String] {
-        LocationPolicy.recipients(local.apps(), blocked: local.blocked(), at: at)
+        LocationPolicy.recipients(local.apps(), blocked: local.excluded(), at: at)
     }
 
     /// Starts or stops collection to match the current rules. Called on launch (including a relaunch for a
@@ -68,9 +72,24 @@ final class LocationCollector: NSObject, ObservableObject, CLLocationManagerDele
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         MainActor.assumeIsolated {
+            let old = (authorization, fullAccuracy)
             authorization = self.manager.authorizationStatus
             fullAccuracy = self.manager.accuracyAuthorization == .fullAccuracy
+            // Activity log: changes only, never the first report.
+            if old.0 != authorization { try? local.record(.permission, detail: "\(Self.name(old.0))→\(Self.name(authorization))") }
+            if old.1 != fullAccuracy { try? local.record(.permission, detail: fullAccuracy ? "approximate→precise" : "precise→approximate") }
             evaluate()
+        }
+    }
+
+    private static func name(_ status: CLAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "notDetermined"
+        case .authorizedWhenInUse: "whenInUse"
+        case .authorizedAlways: "always"
+        case .denied: "denied"
+        case .restricted: "restricted"
+        @unknown default: "unknown"
         }
     }
 
@@ -89,12 +108,13 @@ final class LocationCollector: NSObject, ObservableObject, CLLocationManagerDele
             let at = Int64(location.timestamp.timeIntervalSince1970 * 1000)
             let point = TrackPoint(id: UUID().uuidString, at: at, lat: location.coordinate.latitude, lng: location.coordinate.longitude,
                                    accuracy: location.horizontalAccuracy, grants: recipients(at: at))
-            guard LocationPolicy.valid(point, now: CompanionRepository.now(), lastFixAt: lastFixAt) else { continue }
-            lastFixAt = point.at
+            guard LocationPolicy.valid(point, now: CompanionRepository.now(), lastFixAt: lastAcceptedAt) else { continue }
+            lastAcceptedAt = point.at
+            lastFixAt = location.timestamp; lastFix = location.coordinate
             do {
                 try local.enqueue(point) // Re-filters recipients against current consent before insert.
             } catch {
-                try? local.setPaused(true)
+                try? local.setPaused(true, stopped: "storage_failed")
                 local.message = "Could not save location on this phone. Collection paused."
                 evaluate()
                 return
