@@ -263,7 +263,7 @@ private fun DeviceCard(state: CompanionState, permissions: () -> Unit) {
             Labeled("Location permission", Format.permission[state.permission] ?: state.permission)
             if (state.permission == "approximate") Text("Approximate location never records routes. Choose Precise location.", style = MaterialTheme.typography.bodySmall, color = Orange)
             if (state.permission != "always") {
-                Text("Recording with the screen off needs precise location, allowed all the time.", style = MaterialTheme.typography.bodySmall)
+                Text("Recording with the screen off needs Precise location and “${state.backgroundOption}”.", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = permissions, enabled = !state.busy) { Text("Set up location") }
             }
             Labeled("Location services", if (state.locationOn) "On" else "Off")

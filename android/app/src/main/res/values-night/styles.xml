@@ -1,0 +1,8 @@
+<resources>
+    <!-- Dark window and status bar before Compose draws (#657). Mirrors values/styles.xml. -->
+    <style name="Theme.FreeAppStore" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>

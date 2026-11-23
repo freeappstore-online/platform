@@ -45,6 +45,8 @@ data class CompanionState(
     val lastFix: LiveFix? = null, val version: String = "",
     /** The device connection expired or was revoked (#638); [expiresInDays] is set only in its last 7 days. */
     val expired: Boolean = false, val expiresInDays: Int? = null,
+    /** The system's label for background location access (`backgroundPermissionOptionLabel`), localised (#650). */
+    val backgroundOption: String = "Allow all the time",
 )
 
 data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false)
@@ -114,7 +116,8 @@ class MainActivity : ComponentActivity() {
                     consent, { consent = it }, initialTab)
                 if (permissionExplanation) AlertDialog(onDismissRequest = { permissionExplanation = false },
                     title = { Text("Allow background location") },
-                    text = { Text("FreeAppStore collects precise location to automatically record routes for apps you enable, even when FreeAppStore and those apps are closed. Updates go to FreeAppStore and only your enabled apps. Choose Precise location, then Allow all the time on the next settings screen. You can pause or revoke access here.") },
+                    // Google's prominent-disclosure template (#650), and the system's own name for the option.
+                    text = { Text("FreeAppStore collects location data to enable route recording for apps you enable, even when the app is closed or not in use. Updates go to FreeAppStore and only your enabled apps. On the next screen, choose Precise location, then “${state.backgroundOption}”. You can pause or revoke access here.") },
                     confirmButton = { TextButton(onClick = { permissionExplanation = false; requestLocation() }) { Text("Continue") } },
                     dismissButton = { TextButton(onClick = { permissionExplanation = false }) { Text("Not now") } })
             }
@@ -127,6 +130,7 @@ class MainActivity : ComponentActivity() {
         refreshJob = lifecycleScope.launch {
             try { graph.repository.finishSignIn(); if (graph.repository.token() != null) graph.repository.sync() }
             catch (e: Exception) { if (e is CancellationException) throw e; if (!DeviceConnection.expired(e)) error = e.message ?: "Could not connect." }
+            graph.scheduleUploads() // pairing finished, or the sync found the connection expired
             refresh(); maybeStart(); showLinkedDisclosure()
             while (isActive) { delay(2_000); refresh() }
         }
@@ -165,7 +169,7 @@ class MainActivity : ComponentActivity() {
             powerSave = power.isPowerSaveMode, batteryOptimized = !power.isIgnoringBatteryOptimizations(packageName),
             lastFix = LocationService.lastFix,
             version = packageManager.getPackageInfo(packageName, 0).let { "${it.versionName} (${it.longVersionCode})" },
-            expired = local.expired,
+            expired = local.expired, backgroundOption = backgroundOption(),
             expiresInDays = if (signedIn) DeviceConnection.expiresInDays(local.deviceExpiresAt, System.currentTimeMillis()) else null)
         if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
     }
@@ -186,7 +190,7 @@ class MainActivity : ComponentActivity() {
                 if (e is CancellationException) throw e
                 if (!DeviceConnection.expired(e)) error = e.message ?: "Please try again." // the expired card says it
             }
-            finally { working = false; refresh() }
+            finally { working = false; graph.scheduleUploads(); refresh() } // Disconnect and expiry cancel the upload work
         }
     }
     private fun maybeStart() {
@@ -209,6 +213,9 @@ class MainActivity : ComponentActivity() {
             else -> maybeStart()
         }
     }
+    /** The localised name of the "Allow all the time" option (API 30+); API 29 shows that label in its own prompt. */
+    private fun backgroundOption(): String =
+        if (Build.VERSION.SDK_INT >= 30) packageManager.backgroundPermissionOptionLabel.toString() else "Allow all the time"
     private fun open(url: String) {
         try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (_: RuntimeException) { error = "No browser is available to open $url." }
     }
@@ -293,6 +300,8 @@ internal fun StatusMessages(state: CompanionState) {
     if (state.message.isNotBlank()) Text(state.message, color = MaterialTheme.colorScheme.error)
 }
 
+internal const val DELETE_ACCOUNT_URL = "https://freeappstore.online/app/settings?delete-account=1"
+
 /** Account, permissions, history and About. */
 @Composable
 private fun SettingsScreen(
@@ -316,10 +325,12 @@ private fun SettingsScreen(
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Labeled("Location permission", Format.permission[state.permission] ?: state.permission)
                     if (state.permission != "always") TextButton(onClick = permissions, enabled = !state.busy) { Text("Set up location") }
-                    else Text("Precise location is allowed all the time.", style = MaterialTheme.typography.bodySmall)
+                    else Text("Precise location is set to “${state.backgroundOption}”.", style = MaterialTheme.typography.bodySmall)
                 }
             }
             TextButton(onClick = account) { Text("Manage account") }
+            // Play account deletion (#653): the console's delete flow, after sign-in on the web.
+            TextButton(onClick = { openUrl(DELETE_ACCOUNT_URL) }) { Text("Delete account", color = MaterialTheme.colorScheme.error) }
             TextButton(onClick = { clearPrompt = true }) { Text("Clear sharing history") }
             TextButton(onClick = { disconnectPrompt = true }, enabled = !state.busy) { Text("Disconnect this phone") }
         } else Button(onClick = connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }

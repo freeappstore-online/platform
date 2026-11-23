@@ -242,6 +242,27 @@ class CompanionTest {
         compose.onNodeWithText("Reconnect").assertDoesNotExist()
     }
 
+    // Google Play readiness (#650, #653, #657)
+    @Test fun settingsOffersDeleteAccountBesideDisconnect() {
+        val opened = mutableListOf<String>()
+        screen(CompanionState(signedIn = true, name = "Alex"), CompanionActions(open = { opened += it }), tab = Tab.SETTINGS)
+        compose.onNodeWithText("Disconnect this phone").assertExists()
+        compose.onNodeWithText("Delete account").performScrollTo().performClick()
+        assertEquals(listOf("https://freeappstore.online/app/settings?delete-account=1"), opened)
+    }
+    @Test fun permissionCopyUsesTheSystemsOptionLabel() {
+        screen(CompanionState(signedIn = true, permission = "always", backgroundOption = "Allow always"), tab = Tab.SETTINGS)
+        compose.onNodeWithText("Precise location is set to “Allow always”.").assertExists()
+    }
+    @Test fun uploadWorkIsScheduledOnlyWhilePaired() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        fun states() = androidx.work.WorkManager.getInstance(context).getWorkInfosForUniqueWork(UploadWorker.NAME).get().map { it.state }
+        UploadWorker.schedule(context, paired = true)
+        assertEquals(listOf(androidx.work.WorkInfo.State.ENQUEUED), states())
+        UploadWorker.schedule(context, paired = false)
+        assertTrue(states().all { it == androidx.work.WorkInfo.State.CANCELLED })
+    }
+
     /** Answers like the server: `status(path)` decides per call; 200 paths get a usable body. */
     private class Server(var status: (String) -> Int) : FasApi() {
         val seen = mutableListOf<String>()

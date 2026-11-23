@@ -36,9 +36,10 @@ class LocationService : Service(), LocationListenerCompat {
         if (!allowed(this) || !graph.repository.collecting()) { stopSelf(); return START_NOT_STICKY }
         try {
             startForeground(1, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-        } catch (_: IllegalStateException) {
+        } catch (_: RuntimeException) {
             // Android 12+ refuses a foreground start from the background (ForegroundServiceStartNotAllowedException),
-            // which is what a START_STICKY restart after the process was killed is. Opening FreeAppStore starts it again.
+            // which is what a START_STICKY restart after the process was killed is. Android 14+ throws SecurityException
+            // when location was revoked between allowed() and here. Opening FreeAppStore starts it again.
             graph.local.message = "Android stopped location sharing in the background. Open FreeAppStore to resume."
             stopSelf(); return START_NOT_STICKY
         }
