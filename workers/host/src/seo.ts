@@ -13,31 +13,25 @@ export interface PublicApp {
   status?: string;
 }
 
+// Only plain data is shared across requests. An in-flight promise must not be:
+// Workers drop its settlement in any request other than the one that created
+// it, so a second awaiter throws once the first request ends (1101, #639).
 let cached: { apps: PublicApp[]; expires: number } | undefined;
-let loading: Promise<PublicApp[]> | undefined;
 
 /** Only approved public storefront entries qualify, never a provisioning route alone. */
 export async function publicApp(route: Route): Promise<PublicApp | undefined> {
   if (isMonitoringFixture(route)) return undefined;
-  if (!cached || cached.expires <= Date.now()) {
-    loading ??= (async () => {
-      try {
-        const response = await fetch("https://freeappstore.online/registry.json", { signal: AbortSignal.timeout(2000) });
-        if (!response.ok) return [];
-        const data = (await response.json()) as { apps?: PublicApp[] };
-        if (!Array.isArray(data.apps)) return [];
-        cached = { apps: data.apps, expires: Date.now() + 60_000 };
-        return data.apps;
-      } catch {
-        return [];
-      } finally {
-        loading = undefined;
-      }
-    })();
-    const apps = await loading;
-    return eligible(apps, route);
+  if (cached && cached.expires > Date.now()) return eligible(cached.apps, route);
+  try {
+    const response = await fetch("https://freeappstore.online/registry.json", { signal: AbortSignal.timeout(2000) });
+    if (!response.ok) return undefined;
+    const data = (await response.json()) as { apps?: PublicApp[] };
+    if (!Array.isArray(data.apps)) return undefined;
+    cached = { apps: data.apps, expires: Date.now() + 60_000 };
+    return eligible(data.apps, route);
+  } catch {
+    return undefined;
   }
-  return eligible(cached.apps, route);
 }
 
 function eligible(apps: PublicApp[], route: Route): PublicApp | undefined {
