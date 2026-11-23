@@ -15,7 +15,6 @@ import {
  * token expires ≤30 days after the deploy anyway; the cutoff only shortens the
  * window. Delete the `legacy` branches once it has passed.
  */
-export const LEGACY_AUD_CUTOFF = Date.UTC(2026, 10, 20); // 2026-11-20T00:00:00Z
 
 export interface CurrentUser {
   id: string;
@@ -130,7 +129,7 @@ export async function requireUser<E extends { Bindings: Env }>(
  * A session that may touch `appId`'s data (#495): one delivered to that app,
  * or a first-party (`console`) one. A session delivered to another app is
  * refused, so an XSS in — or a malicious — app A cannot read app B's kv.
- * Legacy tokens pass until LEGACY_AUD_CUTOFF.
+ * A legacy (pre-#495) token is 401 so the client signs in again; its grace ended 2026-11-20 (#525).
  */
 export async function requireAppUser<E extends { Bindings: Env }>(
   c: Context<E>,
@@ -138,10 +137,7 @@ export async function requireAppUser<E extends { Bindings: Env }>(
 ): Promise<CurrentUser> {
   const user = await requireUser(c);
   if (user.aud === appId || user.aud === CONSOLE_AUD) return user;
-  if (user.aud === LEGACY_AUD) {
-    if (Date.now() < LEGACY_AUD_CUTOFF) return user;
-    throw new HttpError(401, 'session_reissue_required');
-  }
+  if (user.aud === LEGACY_AUD) throw new HttpError(401, 'session_reissue_required');
   throw new HttpError(403, 'wrong_audience');
 }
 

@@ -8,7 +8,7 @@
  *   console — first-party               (aud: console)
  *   legacy  — minted before #495        (no aud)
  *
- *   app-data route  → app ✓, console ✓, legacy ✓ (until the cutoff), other 403
+ *   app-data route  → app ✓, console ✓, legacy 401, other 403
  *   console route   → console ✓, app 403, other 403, legacy 401
  *
  * "✓" means the guard let it through: no 401, and no 403 except the proxy's
@@ -18,7 +18,6 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
-import { LEGACY_AUD_CUTOFF } from './auth.js';
 import { signPayload, signSession } from './session.js';
 import { hasSqlite, sqliteD1 } from './sqlite-d1.testutil.js';
 
@@ -126,7 +125,7 @@ afterEach(() => vi.useRealTimers());
 
 describe.skipIf(!hasSqlite)('route audience matrix (#495)', () => {
   describe.each(APP_DATA)('app-data %s %s', (method, path) => {
-    it.each(['app', 'console', 'legacy'] as const)('lets a %s token through', async (kind) => {
+    it.each(['app', 'console'] as const)('lets a %s token through', async (kind) => {
       const r = await call([method, path], kind);
       expect(passedAuth(r), `${r.status} ${r.text}`).toBe(true);
     });
@@ -160,9 +159,7 @@ describe.skipIf(!hasSqlite)('route audience matrix (#495)', () => {
     });
   });
 
-  it('refuses a legacy token on app-data routes after the cutoff', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(LEGACY_AUD_CUTOFF + 1000);
+  it('refuses a legacy token on app-data routes (grace ended 2026-11-20, #525)', async () => {
     const r = await call(['GET', '/v1/apps/chess/kv'], 'legacy');
     expect(r.status).toBe(401);
     expect(r.text).toContain('session_reissue_required');
