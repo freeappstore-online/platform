@@ -61,11 +61,3 @@ final class CatalogueStore: ObservableObject {
         stale = false
     }
 }
-
-/// Redirects are refused, as in FasApi: the catalogue comes only from its fixed URL.
-private final class RefuseRedirects: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
-    }
-}

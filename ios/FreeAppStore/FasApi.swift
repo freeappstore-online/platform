@@ -8,18 +8,17 @@ struct ApiFailure: LocalizedError {
 
 /// Only the platform origin receives the narrow native credential; redirects are refused. Ported from the PAS iOS
 /// companion (proappstore-online/platform ios/), itself a port of the PAS Android client.
-final class FasApi: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+final class FasApi: Sendable {
     static let ORIGIN = "https://api.freeappstore.online"
-    private var session: URLSession!
+    private let session: URLSession
 
     /// `configuration` exists for tests (a URLProtocol stub); the origin is fixed.
     init(configuration: URLSessionConfiguration = .ephemeral) {
-        super.init()
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 20
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
-        session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+        session = URLSession(configuration: configuration, delegate: RefuseRedirects(), delegateQueue: nil)
     }
 
     /// The only URLs a request may target: `/v1/native/*` on the fixed origin. Nil for any other path.
@@ -45,7 +44,10 @@ final class FasApi: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
         }
         return result
     }
+}
 
+/// Refuses every redirect, so a session only ever talks to the URL it was given: FasApi's origin, the catalogue's file.
+final class RefuseRedirects: NSObject, URLSessionTaskDelegate {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         completionHandler(nil)
