@@ -3362,7 +3362,13 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-22T23:47:28.951Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        {
+          "name": "location",
+          "reason": "Records your running route, distance and pace while the app is open."
+        }
+      ]
     },
     {
       "id": "rewired",
@@ -3378,7 +3384,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-23T14:43:18.883Z",
-      "creatorGithub": "Halfian"
+      "creatorGithub": "Halfian",
+      "permissions": []
     }
   ]
 }
