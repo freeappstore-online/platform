@@ -11,7 +11,7 @@ object ActivityText {
         ShareEvent.Kind.QUOTA, ShareEvent.Kind.PERMISSION, ShareEvent.Kind.QUEUE_FULL, ShareEvent.Kind.EXPIRED -> Category.PROBLEM
     }
 
-    private val permissionNames = mapOf("denied" to "Not allowed", "approximate" to "Approximate only", "whenInUse" to "While using the app", "always" to "All the time")
+    val permissionNames = mapOf("denied" to "Not allowed", "approximate" to "Approximate only", "whenInUse" to "While using the app", "always" to "All the time")
 
     /** `appName` is the app's display name, or null for device-wide events. */
     fun sentence(event: ShareEvent, appName: String?): String {

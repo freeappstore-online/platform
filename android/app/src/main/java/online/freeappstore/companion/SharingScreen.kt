@@ -83,7 +83,7 @@ internal object Format {
         ShareEvent.Kind.EXPIRED -> "connection expired"
         else -> kind.raw
     }
-    val permission = mapOf("" to "Not set", "denied" to "Not allowed", "approximate" to "Approximate only", "whenInUse" to "While using the app", "always" to "All the time")
+    val permission = mapOf("" to "Not set") + ActivityText.permissionNames
 }
 
 @Composable

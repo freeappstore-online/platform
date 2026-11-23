@@ -87,12 +87,15 @@ class LocationService : Service(), LocationListenerCompat {
                     val retained = point.copy(grants = point.grants.filter { it in current })
                     if (retained.grants.isNotEmpty()) graph.local.enqueue(retained)
                 }
-            } catch (_: Exception) {
-                graph.local.stop("storage_failed"); graph.local.message = "Could not save location on this phone. Collection paused."; stopSelf()
+            } catch (e: Exception) {
+                // A full queue says so (LocalStore.enqueue); anything else is a storage failure.
+                val full = runCatching { graph.local.count() >= LocationPolicy.MAX_QUEUE }.getOrDefault(false)
+                graph.local.stop("storage_failed")
+                graph.local.message = if (full) e.message ?: "" else "Could not save location on this phone. Collection paused."
+                stopSelf()
             }
         }
     }
-    override fun onProviderDisabled(provider: String) { graph.local.message = "Location is switched off. Waiting for a GPS signal." }
     override fun onDestroy() {
         manager.removeUpdates(this); scope.cancel(); running = false
         stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy()

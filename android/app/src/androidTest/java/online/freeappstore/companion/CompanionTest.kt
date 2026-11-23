@@ -480,6 +480,15 @@ class CompanionTest {
         assertEquals(2, local.events().size)
         local.clear(); local.close()
     }
+    @Test fun perAppHistoryReadsUseTheIndexAndUpgradeIsRepeatable() {
+        val local = store()
+        local.onUpgrade(local.writableDatabase, 2, 3) // a version-2 install, and running it again changes nothing
+        for (sql in listOf("SELECT COUNT(*) FROM share_points WHERE app_id = ? AND sent_at IS NULL", "SELECT MAX(sent_at) FROM share_points WHERE app_id = ?")) {
+            val plan = local.readableDatabase.rawQuery("EXPLAIN QUERY PLAN $sql", arrayOf("walk")).use { c -> buildList { while (c.moveToNext()) add(c.getString(3)) } }
+            assertTrue(plan.toString(), plan.any { "share_points_app_sent" in it })
+        }
+        local.clear(); local.close()
+    }
     @Test fun pauseAllAndAForcedStopAreRecordedOnce() {
         val local = store()
         local.paused = true; local.paused = true; local.paused = false

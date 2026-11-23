@@ -111,4 +111,9 @@ class SharingViewsTest {
         assertEquals("0 min", Format.duration(59_000))
         assertEquals("1 h 12 min", Format.duration(72 * 60_000L))
     }
+
+    @Test fun settingsAndActivityNameLocationAccessAlike() {
+        assertEquals("Not set", Format.permission[""])
+        ActivityText.permissionNames.forEach { (raw, name) -> assertEquals(name, Format.permission[raw]) }
+    }
 }

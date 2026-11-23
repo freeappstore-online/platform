@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.*
+import java.io.IOException
 
 data class CompanionState(
     val signedIn: Boolean = false, val name: String = "", val apps: List<ConnectedApp> = emptyList(),
@@ -78,6 +79,7 @@ class MainActivity : ComponentActivity() {
     private var permissionExplanation by mutableStateOf(false)
     private var linkedApp: String? = null
     private var refreshJob: Job? = null
+    private val version by lazy { packageManager.getPackageInfo(packageName, 0).let { "${it.versionName} (${it.longVersionCode})" } }
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh(); maybeStart() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
@@ -128,8 +130,8 @@ class MainActivity : ComponentActivity() {
         refresh(); maybeStart(); refreshCatalogue()
         refreshJob?.cancel()
         refreshJob = lifecycleScope.launch {
-            try { graph.repository.finishSignIn(); if (graph.repository.token() != null) graph.repository.sync() }
-            catch (e: Exception) { if (e is CancellationException) throw e; if (!DeviceConnection.expired(e)) error = e.message ?: "Could not connect." }
+            try { graph.repository.finishSignIn(); if (graph.repository.token() != null) graph.repository.sync(); error = "" }
+            catch (e: Exception) { if (e is CancellationException) throw e; if (!DeviceConnection.expired(e)) error = failure(e, "Could not connect.") }
             graph.scheduleUploads() // pairing finished, or the sync found the connection expired
             refresh(); maybeStart(); showLinkedDisclosure()
             while (isActive) { delay(2_000); refresh() }
@@ -168,7 +170,7 @@ class MainActivity : ComponentActivity() {
             locationOn = getSystemService(LocationManager::class.java).isLocationEnabled,
             powerSave = power.isPowerSaveMode, batteryOptimized = !power.isIgnoringBatteryOptimizations(packageName),
             lastFix = LocationService.lastFix,
-            version = packageManager.getPackageInfo(packageName, 0).let { "${it.versionName} (${it.longVersionCode})" },
+            version = version,
             expired = local.expired, backgroundOption = backgroundOption(),
             expiresInDays = if (signedIn) DeviceConnection.expiresInDays(local.deviceExpiresAt, System.currentTimeMillis()) else null)
         if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
@@ -188,11 +190,14 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try { action() } catch (e: Exception) {
                 if (e is CancellationException) throw e
-                if (!DeviceConnection.expired(e)) error = e.message ?: "Please try again." // the expired card says it
+                if (!DeviceConnection.expired(e)) error = failure(e, "Please try again.") // the expired card says it
             }
             finally { working = false; graph.scheduleUploads(); refresh() } // Disconnect and expiry cancel the upload work
         }
     }
+    /** Network failures get a plain sentence, not the exception's text (host names, errno). */
+    private fun failure(e: Exception, fallback: String) =
+        if (e is IOException) "Can't reach FreeAppStore. Check your connection and try again." else e.message ?: fallback
     private fun maybeStart() {
         if (!LocationService.allowed(this) || !graph.repository.collecting()) return
         val prompt = getSharedPreferences("native-permission-prompts", MODE_PRIVATE)
@@ -241,6 +246,7 @@ internal fun FasScreen(
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     var sharingPage by remember { mutableStateOf<SharingPage>(SharingPage.Dashboard) }
     val openApp = { app: ConnectedApp -> actions.open(companionAppUrl(app, catalogue.apps)) }
+    val granted = state.apps.filter { it.grantId != null }
     BackHandler(enabled = tab == Tab.SHARING && sharingPage != SharingPage.Dashboard) {
         sharingPage = (sharingPage as? SharingPage.Activity)?.from ?: SharingPage.Dashboard
     }
@@ -257,7 +263,6 @@ internal fun FasScreen(
                 Tab.STORE -> StoreScreen(state, catalogue, actions, askConsent)
                 Tab.SHARING -> when (val page = sharingPage) {
                     SharingPage.Dashboard -> {
-                        val granted = state.apps.filter { it.grantId != null }
                         val tracks = rememberTracks(granted, state, SharingTimeline.today(state.now), actions.loadTracks)
                         SharingDashboard(state, tracks, actions.connect, askConsent, actions.disable, actions.pauseApp, actions.resumeApp,
                             actions.pause, actions.resume, actions.permissions, actions.sync, openApp,
@@ -267,7 +272,6 @@ internal fun FasScreen(
                     SharingPage.Map -> Column(Modifier.padding(horizontal = 16.dp).fillMaxSize()) {
                         BackRow("Sharing") { sharingPage = SharingPage.Dashboard }
                         Text("Today", style = MaterialTheme.typography.headlineMedium)
-                        val granted = state.apps.filter { it.grantId != null }
                         TrackMap(rememberTracks(granted, state, SharingTimeline.today(state.now), actions.loadTracks), state.liveFix(), interactive = true,
                             modifier = Modifier.fillMaxSize().padding(bottom = 8.dp))
                     }

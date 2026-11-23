@@ -13,19 +13,22 @@ import org.json.JSONObject
  * (a 30-day copy of what was shared with each app). Both are in the same backup-excluded database as the queue and
  * never leave the phone.
  */
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 2) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 3) {
     private val prefs = context.getSharedPreferences("native-settings", Context.MODE_PRIVATE)
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE points(id TEXT PRIMARY KEY, at INTEGER NOT NULL, payload TEXT NOT NULL)")
         db.execSQL("CREATE INDEX points_at ON points(at)")
         createHistory(db)
     }
-    override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) { if (old < 2) createHistory(db) }
+    /** Every step is `IF NOT EXISTS`: version 2 added the history, version 3 its `(app_id, sent_at)` index. */
+    override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) = createHistory(db)
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS share_events(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, app_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '')")
         db.execSQL("CREATE INDEX IF NOT EXISTS share_events_app_at ON share_events(app_id, at)")
         db.execSQL("CREATE TABLE IF NOT EXISTS share_points(app_id TEXT NOT NULL, point_id TEXT NOT NULL, at INTEGER NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL, accuracy REAL NOT NULL, sent_at INTEGER, PRIMARY KEY(app_id, point_id))")
         db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_at ON share_points(app_id, at)")
+        // pendingCount and lastUpload run on every screen refresh; without it each scans the app's whole history.
+        db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_sent ON share_points(app_id, sent_at)")
     }
 
     /** Pause all. A change is recorded as `paused_all` / `resumed_all`; a forced stop goes through [stop]. */
