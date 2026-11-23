@@ -127,6 +127,28 @@ final class FasApiTests: XCTestCase {
         }
     }
 
+    /// #659: the exchange is single use, so a failed `/native/me` right after it keeps the credential, and the next
+    /// try finishes without exchanging again (which would be a 409).
+    func testCredentialSurvivesAFailedMeAfterTheExchange() async throws {
+        try secure.write(["pairId": String(repeating: "a", count: 64), "verifier": String(repeating: "b", count: 64)])
+        let repository = CompanionRepository(local: local, secure: secure, api: api)
+        StubProtocol.handler = { request in
+            request.url!.path == "/v1/native/auth/complete" ? .init(json: ["token": "ndev_new", "deviceId": "d1"]) : .init(offline: true)
+        }
+        do { _ = try await repository.finishSignIn(); XCTFail("must fail offline") } catch {}
+        XCTAssertNil(repository.token())
+        XCTAssertEqual(repository.pairingCode(), "AAAAAAAA")
+        StubProtocol.handler = { [me] request in
+            request.url!.path == "/v1/native/auth/complete" ? .init(status: 409, json: ["error": "Connection already used. Start again."]) : .init(json: me)
+        }
+        let finished = try await repository.finishSignIn()
+        XCTAssertTrue(finished)
+        XCTAssertEqual(repository.token(), "ndev_new")
+        XCTAssertEqual(try secure.read(), ["token": "ndev_new", "userId": "u1"])
+        XCTAssertEqual(StubProtocol.seen.map(\.url!.path), ["/v1/native/auth/complete", "/v1/native/me", "/v1/native/me"])
+        XCTAssertEqual(StubProtocol.seen.last?.value(forHTTPHeaderField: "Authorization"), "Bearer ndev_new")
+    }
+
     func testFullAcknowledgementEmptiesTheQueue() async throws {
         let repository = try await connected()
         respond(locations: .init(json: ["acknowledged": ["a", "b"]]))

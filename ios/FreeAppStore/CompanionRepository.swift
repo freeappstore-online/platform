@@ -59,17 +59,28 @@ actor CompanionRepository {
         try await exclusive { [self] in
             let state = try secure.read()
             guard let pairId = state["pairId"], let verifier = state["verifier"] else { return false }
-            let result: [String: Any]
-            do {
-                result = try await api.request("POST", "/native/auth/complete", body: json(["id": pairId, "verifier": verifier]))
-            } catch let failure as ApiFailure where [400, 403, 409].contains(failure.status) {
-                // Expired, invalid or already used: this proof can never succeed. Only a proof is stored in this state.
-                try secure.clear()
+            // The exchange is single use, so its credential is kept with the proof until `/native/me` succeeds: a
+            // network failure in between must not lose it to a 409 on the next try.
+            let credential: String
+            if let saved = state["credential"] { credential = saved } else {
+                let result: [String: Any]
+                do {
+                    result = try await api.request("POST", "/native/auth/complete", body: json(["id": pairId, "verifier": verifier]))
+                } catch let failure as ApiFailure where [400, 403, 409].contains(failure.status) {
+                    // Expired, invalid or already used: this proof can never succeed. Only a proof is stored in this state.
+                    try secure.clear()
+                    throw failure
+                }
+                if result["pending"] as? Bool == true { return false }
+                guard let token = result["token"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
+                try secure.write(["pairId": pairId, "verifier": verifier, "credential": token])
+                credential = token
+            }
+            let me: [String: Any]
+            do { me = try await api.request("GET", "/native/me", token: credential) } catch let failure as ApiFailure where failure.status == 401 {
+                try secure.clear() // revoked before it was confirmed: start again
                 throw failure
             }
-            if result["pending"] as? Bool == true { return false }
-            guard let credential = result["token"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
-            let me = try await api.request("GET", "/native/me", token: credential)
             guard let userId = (me["user"] as? [String: Any])?["id"] as? String else { throw CompanionError("Unexpected response from FreeAppStore.") }
             // Pairing never adopts a previous installation/account's queue or grants. The same account after an
             // expiry keeps the on-device history (#638).

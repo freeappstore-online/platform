@@ -70,7 +70,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         lastSyncAttempt = local.lastSyncAttempt; lastSyncError = local.lastSyncError
         events = (try? local.events()) ?? []
         pendingByApp = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, (try? local.pendingCount($0.id)) ?? 0) })
-        lastUploadByApp = apps.reduce(into: [:]) { $0[$1.id] = (try? local.lastUpload($1.id)) ?? nil }
+        lastUploadByApp = apps.reduce(into: [:]) { $0[$1.id] = try? local.lastUpload($1.id) }
         message = error.isEmpty ? local.message : error
     }
 
@@ -132,7 +132,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         session.prefersEphemeralWebBrowserSession = true
         session.presentationContextProvider = self
         authSession = session
-        session.start()
+        guard session.start() else { throw CompanionError("Could not open the FreeAppStore sign-in page. Try again.") }
     }
 
     func completeSignIn() { act { [self] in _ = try await repository.finishSignIn() } }
@@ -230,7 +230,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Enable location for \(app.name)?").font(.title2.bold())
             Text(app.disclosure)
-            Button("Enable for \(app.name)") { model.consent = nil; model.enable(app) }.buttonStyle(.borderedProminent)
+            Button("Enable for \(app.name)") { model.consent = nil; model.enable(app) }.buttonStyle(.borderedProminent).disabled(model.busy)
             Button("Cancel") { model.consent = nil }
             Spacer()
         }

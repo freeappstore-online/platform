@@ -256,7 +256,7 @@ struct SharingDashboardView: View {
                 if state == .turningOff {
                     Text("Disabled on this phone. Server revocation will finish when connected.").font(.footnote)
                 }
-                LabeledContent("Shared today", value: duration(shared))
+                LabeledContent("Shared today", value: AppSharingView.duration(shared))
                 LabeledContent("Last upload", value: model.lastUploadByApp[app.id].map(relative) ?? "None yet")
                 LabeledContent("Waiting to upload", value: "\(model.pendingByApp[app.id] ?? 0)")
                 if model.enabled(app) {
@@ -337,6 +337,4 @@ struct SharingDashboardView: View {
     private func relative(_ ms: Int64) -> String {
         Date(timeIntervalSince1970: Double(ms) / 1000).formatted(.relative(presentation: .named))
     }
-
-    private func duration(_ ms: Int64) -> String { AppSharingView.duration(ms) }
 }
