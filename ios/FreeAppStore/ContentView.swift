@@ -11,6 +11,10 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     private var local: LocalStore { repository.local }
 
     @Published private(set) var signedIn = false
+    /// The device connection expired or was revoked (#638): history stays readable, Reconnect pairs again.
+    @Published private(set) var expired = false
+    /// Days until the connection expires, only when under 7 (#638).
+    @Published private(set) var expiresInDays: Int?
     @Published private(set) var name = ""
     @Published private(set) var deviceLabel = ""
     @Published private(set) var apps: [ConnectedApp] = []
@@ -47,16 +51,20 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         refresh()
     }
 
-    func enabled(_ app: ConnectedApp) -> Bool { app.grantId != nil && !blocked.contains(app.id) }
+    /// An expired connection's grants are gone on the server: nothing is enabled until the user re-enables it.
+    func enabled(_ app: ConnectedApp) -> Bool { !expired && app.grantId != nil && !blocked.contains(app.id) }
     /// Enabled, not paused for this app, and Pause all is off.
     func sharing(_ app: ConnectedApp) -> Bool { enabled(app) && !pausedApps.contains(app.id) && !paused }
     /// The app's state chip; `running` is the collector's.
     func state(_ app: ConnectedApp, running: Bool) -> SharingState {
-        SharingState.of(granted: app.grantId != nil, blocked: blocked.contains(app.id), appPaused: pausedApps.contains(app.id), pausedAll: paused, running: running)
+        if expired { return .expired }
+        return SharingState.of(granted: app.grantId != nil, blocked: blocked.contains(app.id), appPaused: pausedApps.contains(app.id), pausedAll: paused, running: running)
     }
 
     func refresh() {
         signedIn = repository.token() != nil
+        expired = local.expired
+        expiresInDays = signedIn ? CompanionRepository.expiresInDays(local.deviceExpiresAt) : nil
         name = local.userName; deviceLabel = local.deviceLabel; apps = local.apps(); blocked = local.blocked(); pausedApps = local.pausedApps(); paused = local.paused
         queued = (try? local.count()) ?? 0; lastSync = local.lastSync; pairingCode = repository.pairingCode()
         lastSyncAttempt = local.lastSyncAttempt; lastSyncError = local.lastSyncError
@@ -95,25 +103,36 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         if busy { return }
         busy = true; error = ""
         Task {
-            do { try await action() } catch { self.error = error.localizedDescription }
+            do { try await action() }
+            catch let failure as ApiFailure where failure.status == 401 {} // the expired card says it
+            catch { self.error = error.localizedDescription }
             busy = false; refresh(); collector.evaluate()
         }
     }
 
-    func connect() {
+    func connect() { act { [self] in try await pair() } }
+
+    /// Pairs again without wiping the history (#638): after an expiry, or early from the Settings warning.
+    func reconnect() {
         act { [self] in
-            let label = "\(UIDevice.current.model) (iOS \(UIDevice.current.systemVersion))"
-            let url = try await repository.startSignIn(label: label)
-            refresh()
-            let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "freeappstore") { [weak self] _, _ in
-                // Callback or cancel: the exchange itself decides whether the browser approved.
-                Task { @MainActor in self?.completeSignIn() }
-            }
-            session.prefersEphemeralWebBrowserSession = true
-            session.presentationContextProvider = self
-            authSession = session
-            session.start()
+            try await repository.renew()
+            refresh(); collector.evaluate()
+            try await pair()
         }
+    }
+
+    private func pair() async throws {
+        let label = "\(UIDevice.current.model) (iOS \(UIDevice.current.systemVersion))"
+        let url = try await repository.startSignIn(label: label)
+        refresh()
+        let session = ASWebAuthenticationSession(url: url, callbackURLScheme: "freeappstore") { [weak self] _, _ in
+            // Callback or cancel: the exchange itself decides whether the browser approved.
+            Task { @MainActor in self?.completeSignIn() }
+        }
+        session.prefersEphemeralWebBrowserSession = true
+        session.presentationContextProvider = self
+        authSession = session
+        session.start()
     }
 
     func completeSignIn() { act { [self] in _ = try await repository.finishSignIn() } }
@@ -177,12 +196,12 @@ struct ContentView: View {
 
     enum Tab { case store, sharing, settings }
 
-    /// Without `tab`: Sharing when any app has a grant, otherwise Store.
+    /// Without `tab`: Sharing when any app has a grant or the connection expired, otherwise Store.
     init(model: CompanionModel, collector: LocationCollector, catalogue: CatalogueStore, tab: Tab? = nil) {
         self.model = model
         self.collector = collector
         self.catalogue = catalogue
-        _tab = State(initialValue: tab ?? (model.apps.contains(where: model.enabled) ? .sharing : .store))
+        _tab = State(initialValue: tab ?? (model.expired || model.apps.contains(where: model.enabled) ? .sharing : .store))
     }
 
     var body: some View {
@@ -227,5 +246,24 @@ struct StatusMessages: View {
     var body: some View {
         if model.busy { ProgressView().frame(maxWidth: .infinity) }
         if !model.message.isEmpty { Text(model.message).foregroundStyle(.red) }
+    }
+}
+
+/// The expired connection (#638): one way back that keeps the history.
+struct ExpiredCard: View {
+    @ObservedObject var model: CompanionModel
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Connection expired", systemImage: "link.badge.plus").font(.title3.bold())
+                Text("This phone is no longer connected to FreeAppStore, so location sharing has stopped. Your sharing history stays on this phone. Reconnect, then turn sharing back on for each app.")
+                    .font(.subheadline)
+                Button("Reconnect") { model.reconnect() }.buttonStyle(.borderedProminent).disabled(model.busy)
+                if !model.pairingCode.isEmpty { Text("Match this code in your browser: \(model.pairingCode)").font(.footnote) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .contain)
     }
 }

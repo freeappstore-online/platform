@@ -215,6 +215,128 @@ class CompanionTest {
         store.clear(); assertFalse(store.read().has("token"))
     }
 
+    // Connection expired (#638)
+    @Test fun anExpiredConnectionShowsReconnectInsteadOfSignIn() {
+        var reconnects = 0
+        screen(CompanionState(expired = true, apps = listOf(run.copy(grantId = "old"))), CompanionActions(reconnect = { reconnects++ }))
+        compose.onNodeWithText("Connection expired").assertIsDisplayed()
+        compose.onNodeWithText("Sign in to FreeAppStore").assertDoesNotExist()
+        compose.onNodeWithText("Disable").assertDoesNotExist()
+        compose.onNodeWithText("Reconnect").performClick()
+        assertEquals(1, reconnects)
+    }
+    @Test fun theExpiryNoteShowsOnlyWhenSet() {
+        var reconnects = 0
+        screen(CompanionState(signedIn = true, apps = listOf(run), expiresInDays = 3), CompanionActions(reconnect = { reconnects++ }))
+        compose.onNodeWithText("Connection renews when you reconnect — expires in 3 days").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Reconnect").performScrollTo().performClick()
+        assertEquals(1, reconnects)
+    }
+    @Test fun noExpiryNoteWithMoreThanAWeekLeft() {
+        screen(CompanionState(signedIn = true, apps = listOf(run)))
+        compose.onNodeWithText("Reconnect").assertDoesNotExist()
+    }
+
+    /** Answers like the server: `status(path)` decides per call; 200 paths get a usable body. */
+    private class Server(var status: (String) -> Int) : FasApi() {
+        val seen = mutableListOf<String>()
+        override fun request(method: String, path: String, token: String?, body: JSONObject?): JSONObject {
+            seen += "$method $path"
+            when (val code = status(path)) {
+                0 -> throw java.io.IOException("offline")
+                200 -> return when (path) {
+                    "/native/me" -> JSONObject().put("user", JSONObject().put("id", "u1").put("name", "Alex"))
+                        .put("device", JSONObject().put("id", "d1").put("label", "Pixel").put("expiresAt", 123L))
+                        .put("apps", JSONArray().put(JSONObject().put("id", "run").put("name", "Run").put("purpose", "Routes").put("disclosure", "D").put("version", "1")
+                            .put("grant", if (token == "ndev_new") JSONObject.NULL else JSONObject().put("id", "run-g").put("consent_at", 1))))
+                    "/native/auth/complete" -> JSONObject().put("token", "ndev_new")
+                    "/native/locations" -> JSONObject().put("acknowledged", JSONArray(body!!.getJSONArray("points").let { a -> (0 until a.length()).map { a.getJSONObject(it).getString("id") } }))
+                    else -> JSONObject()
+                }
+                else -> throw ApiFailure(code, "Device connection expired or was disconnected.")
+            }
+        }
+    }
+    private fun connected(server: Server): CompanionRepository {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val local = store()
+        SecureStore(context).write(JSONObject().put("token", "ndev_old").put("userId", "u1"))
+        local.enqueue(TrackPoint("p", System.currentTimeMillis(), 1.0, 2.0, 5f, listOf("run-g")))
+        return CompanionRepository(local, SecureStore(context), server)
+    }
+    @Test fun a401FromAnyDeviceCallExpiresTheConnection() = kotlinx.coroutines.runBlocking {
+        for (failing in listOf("/native/me", "/native/locations")) {
+            val repository = connected(Server { if (it == failing) 401 else 200 })
+            assertTrue(runCatching { repository.sync() }.isFailure)
+            assertTrue(failing, repository.local.expired)
+            assertEquals("u1", repository.local.expiredUser)
+            assertNull(repository.token())
+            assertFalse("collection stops", repository.collecting())
+            assertEquals("", repository.local.message)
+            // A late fix is not queued.
+            repository.local.enqueue(TrackPoint("late", System.currentTimeMillis(), 1.0, 2.0, 5f, listOf("run-g")))
+            assertEquals(1, repository.local.count())
+            repository.local.clear(); repository.local.close()
+        }
+        val repository = connected(Server { if (it.startsWith("/native/apps/")) 401 else 200 })
+        assertTrue(runCatching { repository.enable(repository.local.apps().first()) }.isFailure)
+        assertTrue(repository.local.expired)
+        repository.local.clear(); repository.local.close(); SecureStore(ApplicationProvider.getApplicationContext()).clear()
+    }
+    @Test fun networkErrors429And5xxNeverExpire() = kotlinx.coroutines.runBlocking {
+        for (status in listOf(0, 429, 500, 503)) {
+            val repository = connected(Server { if (it == "/native/me") status else 200 })
+            assertTrue(runCatching { repository.sync() }.isFailure)
+            assertFalse("$status", repository.local.expired)
+            assertEquals("ndev_old", repository.token())
+            assertEquals(1, repository.local.count())
+            repository.local.clear(); repository.local.close()
+        }
+        SecureStore(ApplicationProvider.getApplicationContext()).clear()
+    }
+    @Test fun expiredSurvivesARelaunchAndReconnectClearsTheQueueAndGrants() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val server = Server { if (it == "/native/me") 401 else 200 }
+        val first = connected(server)
+        assertTrue(runCatching { first.sync() }.isFailure)
+        first.local.close()
+        // Relaunch: new store and repository instances.
+        val local = LocalStore(context)
+        val repository = CompanionRepository(local, SecureStore(context), server)
+        assertTrue(local.expired); assertNull(repository.token()); assertEquals(1, local.count())
+        // Reconnect: the same pairing flow.
+        server.status = { 200 }
+        SecureStore(context).write(JSONObject().put("pairId", "abcdef0123").put("verifier", "00"))
+        assertTrue(repository.finishSignIn())
+        assertEquals("ndev_new", repository.token())
+        assertFalse(local.expired)
+        assertEquals(0, local.count())
+        assertNull("the old device's grant is gone", local.apps().single().grantId)
+        assertEquals(123L, local.deviceExpiresAt)
+        local.clear(); local.close(); SecureStore(context).clear()
+    }
+    @Test fun renewingEarlyUploadsFirst() = kotlinx.coroutines.runBlocking {
+        val server = Server { 200 }
+        val repository = connected(server)
+        repository.renew()
+        assertEquals(listOf("GET /native/me", "POST /native/locations"), server.seen)
+        assertTrue(repository.local.expired); assertNull(repository.token()); assertEquals(0, repository.local.count())
+        repository.local.clear(); repository.local.close()
+    }
+    @Test fun disconnectStillWipesEverything() = kotlinx.coroutines.runBlocking {
+        for (expire in listOf(false, true)) {
+            val server = Server { 200 }
+            val repository = connected(server)
+            if (expire) { server.status = { 401 }; runCatching { repository.sync() }; server.status = { 200 } }
+            repository.disconnect()
+            assertFalse(repository.local.expired)
+            assertEquals(0, repository.local.count())
+            assertEquals(emptyList<ConnectedApp>(), repository.local.apps())
+            assertNull(repository.token())
+            repository.local.close()
+        }
+    }
+
     /** A pairing the server calls expired (403) or used (409) is forgotten; a pending one or a network error keeps it. */
     @Test fun aDeadPairingIsForgottenSoSignInStartsClean() = kotlinx.coroutines.runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()

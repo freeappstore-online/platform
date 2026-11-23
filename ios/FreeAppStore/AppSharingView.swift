@@ -163,6 +163,7 @@ struct AppSharingView: View {
         case .disabled: "turned off"
         case .grantLost: "revoked by FreeAppStore"
         case .historyCleared: "history cleared"
+        case .expired: "connection expired"
         default: end.rawValue
         }
     }

@@ -26,6 +26,14 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
     var userName: String
         get() = prefs.getString("userName", "") ?: ""
         set(value) { prefs.edit().putString("userName", value).apply() }
+    /** `device.expiresAt` from `GET /native/me`, 0 until known. */
+    var deviceExpiresAt: Long
+        get() = prefs.getLong("deviceExpiresAt", 0)
+        set(value) { prefs.edit().putLong("deviceExpiresAt", value).apply() }
+    /** The account whose device connection expired or was revoked (#638), null while connected. Survives relaunch; only `clear()` resets it. */
+    val expiredUser: String? get() = prefs.getString("expiredUser", null)
+    val expired: Boolean get() = expiredUser != null
+    @Synchronized fun markExpired(userId: String) { check(prefs.edit().putString("expiredUser", userId).commit()) }
     @Synchronized fun blocked(): Set<String> = prefs.getStringSet("blocked", emptySet())!!.toSet()
     @Synchronized fun block(appId: String) {
         val next = blocked() + appId
@@ -64,7 +72,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
     @Synchronized fun enqueue(point: TrackPoint) {
         val allowed = LocationPolicy.recipients(apps(), excluded(), point.at).toSet()
         val retained = point.copy(grants = point.grants.filter { it in allowed })
-        if (paused || retained.grants.isEmpty()) return
+        if (paused || expired || retained.grants.isEmpty()) return
         check(count() < LocationPolicy.MAX_QUEUE) { "Device storage queue is full. Connect to upload before resuming." }
         writableDatabase.insertOrThrow("points", null, ContentValues().apply {
             put("id", retained.id); put("at", retained.at); put("payload", retained.json().toString())
@@ -79,6 +87,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
     }
     @Synchronized fun expire(now: Long) { writableDatabase.delete("points", "at < ?", arrayOf((now - LocationPolicy.RETENTION_MS).toString())) }
     @Synchronized fun count(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM points", null).use { it.moveToFirst(); it.getInt(0) }
+    /** Disconnect and pairing, including Reconnect after an expiry: this app keeps no sharing history, so everything here goes. */
     @Synchronized fun clear() { writableDatabase.delete("points", null, null); check(prefs.edit().clear().commit()) }
 }
 

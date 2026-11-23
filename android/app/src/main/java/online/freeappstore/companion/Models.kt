@@ -6,6 +6,19 @@ data class ConnectedApp(
 )
 data class TrackPoint(val id: String, val at: Long, val lat: Double, val lng: Double, val accuracy: Float, val grants: List<String>)
 
+/** The device connection's lifetime (#638). Pure, so the rules are unit-tested. */
+object DeviceConnection {
+    /** Only a 401 means the credential expired or was revoked. Network errors, 429 and 5xx never do. */
+    fun expired(e: Throwable): Boolean = e is ApiFailure && e.status == 401
+    private const val DAY_MS = 24L * 60 * 60 * 1000
+    /** The days left when `device.expiresAt` is under 7 days away, else null. */
+    fun expiresInDays(expiresAt: Long, now: Long): Int? {
+        val left = expiresAt - now
+        if (expiresAt <= 0 || left <= 0 || left >= 7 * DAY_MS) return null
+        return ((left + DAY_MS - 1) / DAY_MS).toInt()
+    }
+}
+
 object LocationPolicy {
     const val RETENTION_MS = 7L * 24 * 60 * 60 * 1000
     const val MAX_QUEUE = 60_000

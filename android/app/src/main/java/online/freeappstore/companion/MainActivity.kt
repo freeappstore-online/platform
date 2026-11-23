@@ -31,15 +31,18 @@ data class CompanionState(
     val blocked: Set<String> = emptySet(), val paused: Boolean = true, val running: Boolean = false,
     val permissions: Boolean = false, val queued: Int = 0, val message: String = "", val busy: Boolean = false,
     val pairingCode: String = "", val lastSync: Long = 0, val pausedApps: Set<String> = emptySet(),
+    /** The device connection expired or was revoked (#638); [expiresInDays] is set only in its last 7 days. */
+    val expired: Boolean = false, val expiresInDays: Int? = null,
 ) {
-    fun enabled(app: ConnectedApp) = app.grantId != null && app.id !in blocked
+    /** An expired connection's grants are gone on the server: nothing is enabled until the user re-enables it. */
+    fun enabled(app: ConnectedApp) = !expired && app.grantId != null && app.id !in blocked
 }
 
 data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false)
 
 /** Everything the screens can ask for. Defaults are no-ops so tests pass only what they check. */
 data class CompanionActions(
-    val connect: () -> Unit = {}, val enable: (ConnectedApp) -> Unit = {}, val disable: (ConnectedApp) -> Unit = {},
+    val connect: () -> Unit = {}, val reconnect: () -> Unit = {}, val enable: (ConnectedApp) -> Unit = {}, val disable: (ConnectedApp) -> Unit = {},
     val pauseApp: (ConnectedApp) -> Unit = {}, val resumeApp: (ConnectedApp) -> Unit = {},
     val pause: () -> Unit = {}, val resume: () -> Unit = {}, val permissions: () -> Unit = {}, val sync: () -> Unit = {},
     val disconnect: () -> Unit = {}, val privacy: () -> Unit = {}, val account: () -> Unit = {},
@@ -65,6 +68,8 @@ class MainActivity : ComponentActivity() {
         refresh()
         val actions = CompanionActions(
             connect = { act { open(graph.repository.startSignIn()) } },
+            // Pairs again without the expired path's wipe (#638): after an expiry, or early from the expiry note.
+            reconnect = { act { graph.repository.renew(); stopService(Intent(this@MainActivity, LocationService::class.java)); open(graph.repository.startSignIn()) } },
             enable = { app -> act { graph.repository.enable(app); refresh(); if (LocationService.allowed(this@MainActivity)) maybeStart() else permissionExplanation = true } },
             disable = { app -> act { graph.repository.disable(app) } },
             // Local writes, not `act`: pausing works offline and instantly.
@@ -81,7 +86,7 @@ class MainActivity : ComponentActivity() {
             refreshCatalogue = ::refreshCatalogue,
         )
         // Sharing first when any app already shares, otherwise the Store.
-        val startOnStore = state.apps.none(state::enabled)
+        val startOnStore = !state.expired && state.apps.none(state::enabled)
         setContent {
             val colors = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xFF60A5FA)) else lightColorScheme(primary = Color(0xFF2563EB))
             MaterialTheme(colorScheme = colors) {
@@ -101,7 +106,7 @@ class MainActivity : ComponentActivity() {
         refreshJob?.cancel()
         refreshJob = lifecycleScope.launch {
             try { graph.repository.finishSignIn(); if (graph.repository.token() != null) graph.repository.sync() }
-            catch (e: Exception) { if (e !is CancellationException) error = e.message ?: "Could not connect." else throw e }
+            catch (e: Exception) { if (e is CancellationException) throw e; if (!DeviceConnection.expired(e)) error = e.message ?: "Could not connect." }
             refresh(); maybeStart(); showLinkedDisclosure()
             while (isActive) { delay(2_000); refresh() }
         }
@@ -121,9 +126,13 @@ class MainActivity : ComponentActivity() {
         state.apps.find { it.id == id && !state.enabled(it) }?.let { consent = it }
     }
     private fun refresh() {
-        state = CompanionState(graph.repository.token() != null, graph.local.userName, graph.local.apps(), graph.local.blocked(),
+        val signedIn = graph.repository.token() != null
+        state = CompanionState(signedIn, graph.local.userName, graph.local.apps(), graph.local.blocked(),
             graph.local.paused, LocationService.running, LocationService.allowed(this), graph.local.count(), graph.local.message,
-            pairingCode = graph.repository.pairingCode(), lastSync = graph.local.lastSync, pausedApps = graph.local.pausedApps())
+            pairingCode = graph.repository.pairingCode(), lastSync = graph.local.lastSync, pausedApps = graph.local.pausedApps(),
+            expired = graph.local.expired,
+            expiresInDays = if (signedIn) DeviceConnection.expiresInDays(graph.local.deviceExpiresAt, System.currentTimeMillis()) else null)
+        if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
     }
     /** Foreground only: no background budget is spent on the catalogue. */
     private fun refreshCatalogue() {
@@ -138,7 +147,10 @@ class MainActivity : ComponentActivity() {
         if (working) return
         working = true; error = ""
         lifecycleScope.launch {
-            try { action() } catch (e: Exception) { if (e is CancellationException) throw e; error = e.message ?: "Please try again." }
+            try { action() } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                if (!DeviceConnection.expired(e)) error = e.message ?: "Please try again." // the expired card says it
+            }
             finally { working = false; refresh() }
         }
     }
@@ -208,7 +220,17 @@ internal fun CompanionScreen(state: CompanionState, actions: CompanionActions, a
         Spacer(Modifier.height(8.dp))
         Text("FreeAppStore", style = MaterialTheme.typography.headlineLarge)
         Text("Your apps, connected to your phone", style = MaterialTheme.typography.bodyLarge)
-        if (!state.signedIn) {
+        if (state.expired) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Connection expired", style = MaterialTheme.typography.titleLarge)
+                    Text("This phone is no longer connected to FreeAppStore, so location sharing has stopped. Reconnect, then turn sharing back on for each app.")
+                    Button(onClick = actions.reconnect, enabled = !state.busy) { Text("Reconnect") }
+                    if (state.pairingCode.isNotBlank()) Text("Match this code in your browser: ${state.pairingCode}", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            TextButton(onClick = { disconnectPrompt = true }, enabled = !state.busy) { Text("Disconnect this phone") }
+        } else if (!state.signedIn) {
             Text("Enable background features for the FAS apps you use. You stay in control of what each app can access.")
             Button(onClick = actions.connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }
             if (state.pairingCode.isNotBlank()) Text("Match this code in your browser: ${state.pairingCode}")
@@ -248,6 +270,10 @@ internal fun CompanionScreen(state: CompanionState, actions: CompanionActions, a
                         if (state.paused && enabled && appPaused) Text("All sharing is paused. Resume location to continue.", style = MaterialTheme.typography.bodySmall)
                     }
                 }
+            }
+            state.expiresInDays?.let { days ->
+                Text("Connection renews when you reconnect — expires in $days day${if (days == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = actions.reconnect, enabled = !state.busy) { Text("Reconnect") }
             }
             TextButton(onClick = actions.account) { Text("Manage account") }
             TextButton(onClick = { disconnectPrompt = true }, enabled = !state.busy) { Text("Disconnect this phone") }
