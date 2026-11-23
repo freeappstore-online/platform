@@ -26,7 +26,10 @@ describe("publicApp", () => {
   });
 
   it("serves a fresh cache without fetching and retries after a failure", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(new Response("no", { status: 503 })).mockResolvedValue(json({ apps: [run] }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("no", { status: 503 }))
+      .mockResolvedValue(json({ apps: [run] }));
     vi.stubGlobal("fetch", fetchMock);
     const publicApp = await load();
     expect(await publicApp(route)).toBeUndefined();
