@@ -3401,7 +3401,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-24T13:20:33.838Z",
-      "creatorGithub": "Abrarcancode67"
+      "creatorGithub": "Abrarcancode67",
+      "permissions": []
     }
   ]
 }
