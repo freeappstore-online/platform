@@ -7744,7 +7744,7 @@
       "caveats": "Cost sharing between riders needs payouts to drivers, which PAS does not offer.",
       "fasApps": [],
       "pasApps": [
-        "loopride"
+        "rideshare"
       ],
       "requires": [
         "auth",
