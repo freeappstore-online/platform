@@ -140,6 +140,12 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
             check(prefs.edit().putString("apps", apps.toString()).commit())
         }
     }
+    /** One app's grant from `PUT …/location`, in the stored `/native/me` shape, ahead of the next `/native/me` (#660). */
+    @Synchronized fun saveGrant(appId: String, grant: JSONObject) {
+        val apps = JSONArray(prefs.getString("apps", "[]"))
+        for (i in 0 until apps.length()) apps.getJSONObject(i).takeIf { it.getString("id") == appId }?.put("grant", grant)
+        saveApps(apps)
+    }
     @Synchronized fun enqueue(point: TrackPoint) {
         val apps = apps()
         val allowed = LocationPolicy.recipients(apps, excluded(), point.at).toSet()

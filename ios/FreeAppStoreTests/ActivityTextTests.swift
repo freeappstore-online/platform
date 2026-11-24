@@ -26,7 +26,7 @@ final class ActivityTextTests: XCTestCase {
             (.quota, "429", nil, "Upload limit reached (429)"),
             (.permission, "precise→approximate", nil, "Precise Location turned off: recording stopped"),
             (.permission, "whenInUse→denied", nil, "Location permission changed: While Using → Denied"),
-            (.queueFull, "", nil, "Storage queue full: recording stopped until uploads catch up"),
+            (.queueFull, "", nil, "Storage queue full: sharing paused. Resume all once updates have synced"),
             (.expired, "", nil, "Connection to FreeAppStore expired: sharing stopped"),
             (.expired, "renew", nil, "Reconnecting to FreeAppStore: sharing stopped until you re-enable apps"),
         ]

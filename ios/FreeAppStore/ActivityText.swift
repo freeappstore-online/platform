@@ -52,7 +52,7 @@ enum ActivityText {
                 let sides = event.detail.components(separatedBy: "→").map { names[$0] ?? $0 }
                 return "Location permission changed: \(sides.joined(separator: " → "))"
             }
-        case .queueFull: return "Storage queue full: recording stopped until uploads catch up"
+        case .queueFull: return "Storage queue full: sharing paused. Resume all once updates have synced"
         case .expired:
             return event.detail == "renew"
                 ? "Reconnecting to FreeAppStore: sharing stopped until you re-enable apps"

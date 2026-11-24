@@ -149,6 +149,26 @@ final class FasApiTests: XCTestCase {
         XCTAssertEqual(StubProtocol.seen.last?.value(forHTTPHeaderField: "Authorization"), "Bearer ndev_new")
     }
 
+    /// #660: re-enabling an app that is still turning off keeps the new grant when `/native/me` fails after the PUT.
+    func testReEnablingWhileTurningOffSurvivesAFailedMe() async throws {
+        let repository = try await connected()
+        try local.block("ski")
+        StubProtocol.handler = { request in
+            switch request.httpMethod! {
+            case "PUT": return .init(json: ["grant": ["id": "g2", "app_id": "ski", "consent_at": 2, "contract_version": "v", "publisher_id": "p"]])
+            case "DELETE": return .init(json: ["revoked": true])
+            default: return .init(offline: true)
+            }
+        }
+        try await repository.enable(local.apps()[0])
+        XCTAssertEqual(StubProtocol.seen.map { "\($0.httpMethod!) \($0.url!.path)" },
+                       ["DELETE /v1/native/apps/ski/location", "PUT /v1/native/apps/ski/location", "GET /v1/native/me"])
+        XCTAssertEqual(local.blocked(), [])
+        XCTAssertEqual(local.apps().first?.grantId, "g2")
+        XCTAssertFalse(try local.events().contains { $0.kind == .grantLost })
+        XCTAssertEqual(try local.events().last?.kind, .enabled)
+    }
+
     func testFullAcknowledgementEmptiesTheQueue() async throws {
         let repository = try await connected()
         respond(locations: .init(json: ["acknowledged": ["a", "b"]]))

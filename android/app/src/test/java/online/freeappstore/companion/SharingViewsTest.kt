@@ -62,7 +62,7 @@ class SharingViewsTest {
             Triple(UPLOAD_REJECTED, "partial_ack", "Upload not fully acknowledged: the copy on this phone was kept"),
             Triple(QUOTA, "429", "Upload limit reached (429)"),
             Triple(PERMISSION, "always→approximate", "Precise location turned off: recording stopped"),
-            Triple(QUEUE_FULL, "", "Storage queue full: recording stopped until uploads catch up"),
+            Triple(QUEUE_FULL, "", "Storage queue full: sharing paused. Resume all once updates have synced"),
             Triple(EXPIRED, "", "Connection to FreeAppStore expired: sharing stopped"),
         )
         assertEquals(ShareEvent.Kind.entries.toSet(), table.map { it.first }.toSet())

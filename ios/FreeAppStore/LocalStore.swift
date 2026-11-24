@@ -174,6 +174,14 @@ final class LocalStore: @unchecked Sendable {
         return (try? JSONDecoder().decode([ConnectedApp].self, from: raw)) ?? []
     }
 
+    /// One app's grant from `PUT …/location`, in the stored `/native/me` shape, ahead of the next `/native/me` (#660).
+    func saveGrant(_ appId: String, _ grant: [String: Any]) throws {
+        let raw = setting("apps")?.data(using: .utf8) ?? Data("[]".utf8)
+        var apps = (try JSONSerialization.jsonObject(with: raw) as? [[String: Any]]) ?? []
+        for i in apps.indices where apps[i]["id"] as? String == appId { apps[i]["grant"] = grant }
+        try saveApps(try JSONSerialization.data(withJSONObject: apps))
+    }
+
     /// The `apps` array of `GET /native/me`, stored as received. A held grant that the server dropped or
     /// replaced (publisher change, disclosure revision, app-account deletion) is recorded as `grant_lost`.
     func saveApps(_ json: Data) throws {

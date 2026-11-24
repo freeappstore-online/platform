@@ -52,7 +52,7 @@ object ActivityText {
                     else -> "Location permission changed: " + sides.joinToString(" → ") { permissionNames[it] ?: it }
                 }
             }
-            ShareEvent.Kind.QUEUE_FULL -> "Storage queue full: recording stopped until uploads catch up"
+            ShareEvent.Kind.QUEUE_FULL -> "Storage queue full: sharing paused. Resume all once updates have synced"
             ShareEvent.Kind.EXPIRED -> if (event.detail == "renew") "Reconnecting to FreeAppStore: sharing stopped until you re-enable apps"
                 else "Connection to FreeAppStore expired: sharing stopped"
         }

@@ -443,6 +443,33 @@ class CompanionTest {
         repository.local.clear(); secure.clear()
     }
 
+    /** #660: re-enabling an app that is still turning off keeps the new grant when `/native/me` fails after the PUT. */
+    @Test fun reEnablingWhileTurningOffSurvivesAFailedMe() = kotlinx.coroutines.runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val secure = SecureStore(context)
+        val local = store() // walk and run granted
+        secure.write(JSONObject().put("token", "ndev_test").put("userId", "u1"))
+        local.block("walk")
+        val calls = mutableListOf<String>()
+        val api = object : FasApi() {
+            override fun request(method: String, path: String, token: String?, body: JSONObject?): JSONObject {
+                calls += "$method $path"
+                return when (method) {
+                    "PUT" -> JSONObject().put("grant", JSONObject().put("id", "walk-2").put("consent_at", 2))
+                    "DELETE" -> JSONObject().put("revoked", true)
+                    else -> throw java.io.IOException("offline")
+                }
+            }
+        }
+        CompanionRepository(local, secure, api).enable(local.apps().first { it.id == "walk" })
+        assertEquals(listOf("DELETE /native/apps/walk/location", "PUT /native/apps/walk/location", "GET /native/me"), calls)
+        assertEquals(emptySet<String>(), local.blocked())
+        assertEquals("walk-2", local.apps().first { it.id == "walk" }.grantId)
+        assertFalse(local.events().any { it.kind == ShareEvent.Kind.GRANT_LOST })
+        assertEquals(ShareEvent.Kind.ENABLED, local.events().last().kind)
+        local.clear(); local.close(); secure.clear()
+    }
+
     // On-device sharing history (#649), ported from PAS (iOS LocalStoreTests).
     @Test fun enqueueWritesHistoryPerAppAndAcknowledgeKeepsIt() {
         val local = store()

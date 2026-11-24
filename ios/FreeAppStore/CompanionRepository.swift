@@ -96,10 +96,14 @@ actor CompanionRepository {
             guard let credential = token() else { throw CompanionError("Sign in first.") }
             // Finish any queued revocation before granting a new epoch.
             if local.blocked().contains(app.id) { _ = try await device("DELETE", "/native/apps/\(app.id)/location", credential) }
-            _ = try await device("PUT", "/native/apps/\(app.id)/location", credential, body: json(["version": app.version, "enabled": true]))
-            try updateMe(try await device("GET", "/native/me", credential))
+            let put = try await device("PUT", "/native/apps/\(app.id)/location", credential, body: json(["version": app.version, "enabled": true]))
+            // The server has the grant now, so the phone does too (#660): left blocked until `/native/me` answered,
+            // the next sync would revoke it. Saved while still blocked, so the replaced grant is not logged as lost.
+            guard let grant = put["grant"] as? [String: Any] else { throw CompanionError("Unexpected response. Try again.") }
+            try local.saveGrant(app.id, grant)
             try local.unblock(app.id); try local.record(.enabled, appId: app.id)
             try local.resume(app.id); try local.setPaused(false); local.message = ""
+            do { try updateMe(try await device("GET", "/native/me", credential)) } catch is URLError {} // a refresh only; the next sync repeats it
         }
     }
 

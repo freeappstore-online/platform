@@ -68,10 +68,13 @@ class CompanionRepository(val local: LocalStore, private val secure: SecureStore
         val credential = token() ?: error("Sign in first.")
         // Finish any queued revocation before granting a new epoch.
         if (app.id in local.blocked()) device("DELETE", "/native/apps/${app.id}/location", credential)
-        device("PUT", "/native/apps/${app.id}/location", credential, JSONObject().put("version", app.version).put("enabled", true))
-        updateMe(device("GET", "/native/me", credential))
+        val grant = device("PUT", "/native/apps/${app.id}/location", credential, JSONObject().put("version", app.version).put("enabled", true)).getJSONObject("grant")
+        // The server has the grant now, so the phone does too (#660): left blocked until `/native/me` answered, the
+        // next sync would revoke it. Saved while still blocked, so the replaced grant is not logged as lost.
+        local.saveGrant(app.id, grant)
         local.unblock(app.id); local.record(ShareEvent.Kind.ENABLED, app.id)
         local.resume(app.id); local.paused = false; local.message = ""
+        try { updateMe(device("GET", "/native/me", credential)) } catch (_: IOException) { } // a refresh only; the next sync repeats it
     } }
     suspend fun disable(app: ConnectedApp) = withContext(Dispatchers.IO) {
         local.block(app.id) // Immediate, durable local stop even without network; recipient removed from the queue.
