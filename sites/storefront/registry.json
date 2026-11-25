@@ -3432,9 +3432,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T21:21:40.331Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "discoveryDeliveryPending": "08de0464-fe97-4bf5-be4e-676799bc5fd8"
     },
     {
       "id": "mandarinflash",
