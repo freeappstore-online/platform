@@ -3418,8 +3418,7 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T20:30:24.307Z",
-      "creatorGithub": "serge-ivo",
-      "discoveryDeliveryPending": "5e51b040-be05-4096-b01b-b3fc24e6b466"
+      "creatorGithub": "serge-ivo"
     },
     {
       "id": "grocery-price-tracker",
