@@ -56,13 +56,15 @@ platform/
 │   ├── sdk/         # @freeappstore/sdk (browser-first, ESM)
 │   ├── compliance/  # @freeappstore/compliance (CI + local checks)
 │   ├── backend/     # API Worker + D1 + Durable Objects
-│   ├── quality/     # quality reporter and scanner
+│   ├── quality/     # viewport quality reporter
 │   ├── kb-host/     # docs and app knowledge-base host
 │   └── e2e/         # live browser tests
 ├── docs/
 │   └── platform-limits.md # maintained server-enforced limits
 ├── workers/        # admin, agent, host, mcp (independent projects)
 ├── sites/          # storefront and creator console
+├── ios/            # native companion app (Swift)
+├── android/        # native companion app (Kotlin)
 ├── brand/          # brand guide (BRAND.md) and the vendored kit (assets/)
 ├── ops/            # operational docs
 ├── examples/

@@ -26,7 +26,7 @@ fas/platform/
 ├── packages/cli         @freeappstore/cli
 ├── packages/sdk         @freeappstore/sdk
 ├── packages/compliance  Compliance checks
-├── packages/quality     VCQA quality scanner
+├── packages/quality     Viewport quality reporter (apps post fit/scroll metrics to /quality)
 ├── packages/kb-host     Docs + KB host worker — docs/kb.freeappstore.online
 ├── packages/e2e         End-to-end tests
 ├── workers/admin        Provisioning + moderation — admin.freeappstore.online
@@ -35,8 +35,10 @@ fas/platform/
 ├── workers/mcp          MCP server — mcp.freeappstore.online
 ├── sites/storefront     Static storefront and public guides — freeappstore.online
 ├── sites/console        Creator portal + VibeCode builder (/app/build) — freeappstore.online/app/ (proxied)
+├── ios/                 Native companion app (Swift) — see native-companion.md
+├── android/             Native companion app (Kotlin) — see native-companion.md
 ├── brand/               Brand assets + BRAND.md / SKILLS.md
-└── ops/                 Ops docs (DR, infra, submission) + scripts
+└── ops/                 Ops docs (DR, infra, submission)
 ```
 
 > `workers/*` and `sites/*` are self-contained projects (own `package.json` +
@@ -51,6 +53,7 @@ fas/platform/
 | API | api.freeappstore.online | freeappstore-api |
 | Host | *.freeappstore.online | freeappstore-host |
 | Admin | admin.freeappstore.online | freeappstore-admin |
+| VibeCode agent | agent.freeappstore.online | freeappstore-agent |
 | Console | freeappstore.online/app/ | R2 via host (Path B), proxied from apex `/app/*` |
 | VibeCode builder | freeappstore.online/app/build | Console app (create.* 301s here) |
 | Docs | docs.freeappstore.online | freeappstore-kb-host |
@@ -72,13 +75,17 @@ with `backend /v1/publish`). The storefront also lives in `sites/storefront` in 
 
 ## App hosting (Path B)
 
-Apps deploy to R2 via GitHub Actions, not CF Pages:
+Apps deploy to R2 via GitHub Actions, not CF Pages. The full flow is in
+[Publishing → Deploy flow](publishing.md#deploy-flow):
 
-1. `git push` triggers `.github/workflows/deploy.yml`
-2. Builds with `pnpm build`
-3. Uploads `web/dist/` to `fas-apps` R2 bucket at `apps/<id>/`
-4. Host Worker reads D1 `routes` table, streams from R2. `routes.cross_origin_isolated`
-   (default 0) opts an app into COOP/COEP; see [Capabilities](capabilities.md#cross-origin-isolation).
+1. `git push` runs the app's `.github/workflows/deploy.yml`, which calls the platform's
+   pinned `app-deploy.yml`
+2. That workflow builds the app, then uploads the artifact keylessly (GitHub OIDC) through
+   `api.freeappstore.online` into the `fas-apps` R2 bucket as a new release
+3. Once every file is in, the backend switches the D1 `routes` row to that release
+4. Host Worker reads the `routes` row and serves `<r2_prefix>/.r/<release>/` from R2.
+   `routes.cross_origin_isolated` (default 0) opts an app into COOP/COEP; see
+   [Capabilities](capabilities.md#cross-origin-isolation).
 
 ## Auth flow
 
@@ -90,27 +97,43 @@ Apps deploy to R2 via GitHub Actions, not CF Pages:
 
 All data lives in a single D1 database (`fas`):
 
+Tables, from `packages/backend/migrations/` (and `workers/host/migrations/` for `routes`):
+
 - `users` -- identity + session (GitHub, Google, Apple, Email)
+- `auth_codes` -- one-time codes for `response_mode=code` session delivery
+- `consumed_tokens` -- magic link replay prevention
 - `kv` -- per-user, per-app key-value pairs
 - `counters` -- app-wide atomic counters
 - `documents` -- document store (collections)
+- `collection_settings` -- which collections are shared beyond their document owners
+- `data_rooms`, `data_room_members`, `data_room_documents` -- authorized shared data rooms
+- `app_rooms` -- live realtime rooms per app, for the rooms-per-app cap
+- `photos` -- photo uploads (R2 objects, quota accounting)
 - `apps` -- app registry + ownership
+- `app_owner_transfers` -- admin ownership-transfer audit trail
+- `unpublished_apps` -- previous owner of an unpublished app whose id is still blocked
+- `app_votes` -- store votes, one per user per app
+- `idea_builders` -- "I'm building this" claims on the App ideas page
 - `app_roles` -- per-app RBAC
 - `app_secrets` -- encrypted developer API keys
-- `app_proxy_allowlist` -- proxy URL rules
-- `proxy_oauth2` -- proxy OAuth2 token state
+- `app_proxy_allowlist` -- proxy URL rules (including OAuth2 client-credentials injection)
+- `app_proxy_usage` -- per-app daily proxy request counter
 - `user_api_keys` -- encrypted user key vault
 - `key_providers` -- supported key vault providers
+- `complimentary_grants` -- platform-funded AI grants for VibeCode
 - `app_webhooks` -- per-app webhook subscriptions
 - `webhook_deliveries` -- webhook delivery log
 - `friendships` -- platform-level social graph
 - `app_logs` -- client-side app logs (7-day retention)
-- `consumed_tokens` -- magic link replay prevention
+- `error_log` -- backend handler exceptions
 - `app_analytics` -- visitor analytics
 - `health_checks` -- uptime check results
 - `audit_results` -- compliance audit results
-- `agent_sessions` -- VibeCode sessions, messages, deploy state, deploy logs, and errors
+- `agent_sessions` -- VibeCode sessions, messages, deploy state, deploy logs, errors and AI usage
 - `push_subscriptions`, `push_schedules` -- user devices and scheduled reminders
+- `app_repositories`, `app_deploys`, `app_deploy_limits` -- keyless deploy repo pins, uploads and per-app limits
+- `routes` -- host routing: subdomain -> R2 prefix and live release
+- `native_devices`, `native_pairings`, `native_grants`, `native_locations` -- native companion devices, pairing, per-app grants and location points
 - `fleet_audit_reads` -- one row per read of `GET /v1/audit/apps`, for its hourly limit (#552)
 
 ## Fleet audit endpoint
