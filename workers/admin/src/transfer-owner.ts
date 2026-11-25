@@ -1,10 +1,9 @@
 /** Admin compare-and-set app ownership transfer (#274). */
 
+import { APP_ID_RE } from "../../../packages/backend/src/lib/apps";
 import type { AuthResult } from "./auth";
 import type { GhFn } from "./publish";
 
-/** FreeAppStore app ids; same as packages/backend/src/lib/apps.ts APP_ID_RE (#279). */
-export const APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
 /** GitHub login: 1–39 of [A-Za-z0-9-], not starting or ending with a hyphen. */
 const LOGIN_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/;
 const REASON_MAX = 500;

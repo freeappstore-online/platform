@@ -12,7 +12,7 @@ import { FAS_APP_ROWS } from './auth.js';
  * App ids: 2-31 chars, a lowercase letter first, a letter or digit last,
  * lowercase letters, digits and hyphens between. They become DNS labels
  * (<id>.freeappstore.online), which can't end with a hyphen. Vendored into
- * the CLI, console, admin and agent; apps.test.ts keeps the copies equal (#279).
+ * the CLI and console; scripts/app-id-rule.test.ts keeps the copies equal (#279).
  */
 export const APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
 

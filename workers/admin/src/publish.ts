@@ -13,8 +13,8 @@
 //
 // FAS admin now serves only the FreeAppStore.
 
+import { APP_ID_RE } from "../../../packages/backend/src/lib/apps";
 import { isReservedAppId } from "../../../packages/backend/src/lib/reserved-app-ids";
-import { APP_ID_RE } from "./transfer-owner";
 
 export type Store = "apps";
 

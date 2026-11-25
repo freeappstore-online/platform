@@ -83,7 +83,7 @@ const WRITE = { readOnlyHint: false, destructiveHint: false, openWorldHint: fals
 /** Writes that can overwrite existing content. */
 const OVERWRITE = { readOnlyHint: false, destructiveHint: true, openWorldHint: false } as const;
 
-// sessionPrefix, auditLog, decodeUid are in lib.ts for testability.
+// sessionPrefix, auditLog are in lib.ts for testability.
 
 export interface McpProps extends Record<string, unknown> {
   userId?: string;

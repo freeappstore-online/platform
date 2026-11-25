@@ -32,7 +32,6 @@ import { injectMetadata, isMonitoringFixture, type PublicApp, publicApp } from "
  * like apps, but they're dispatched explicitly:
  *
  *  - `service` → Worker-to-Worker via service binding (zero public hop)
- *  - `proxy`   → fetch() to a specific URL (for separately-hosted infra)
  *  - `redirect`→ 301/302 to a different URL
  *  - `gone`    → clean 404 for subdomains with no web target
  *
@@ -45,7 +44,6 @@ import { injectMetadata, isMonitoringFixture, type PublicApp, publicApp } from "
  */
 type PlatformDispatch =
   | { type: "service"; binding: keyof Env }
-  | { type: "proxy"; target: string }
   | { type: "redirect"; to: string; status?: 301 | 302 }
   | { type: "gone"; message: string };
 
@@ -75,9 +73,7 @@ const PLATFORM_SUBDOMAINS: Record<string, PlatformDispatch> = {
   // `publish.freeappstore.online` (freeappstore-publisher) was DECOMMISSIONED
   // 2026-06-30. Its provisioning now lives on the platform backend at
   // api.freeappstore.online/v1/publish (session-auth → admin Worker), which the
-  // create site's /publish page calls. The old subdomain is inert; if a stray
-  // bookmark needs catching, add a `publish` redirect entry here pointing at
-  // https://create.freeappstore.online/publish.
+  // console's /app/publish page calls. The old subdomain is inert.
   //
   // `console` serves from R2 via a D1 routes row (apps/console) — it is NOT here,
   // it falls through to resolveRoute(). Its user-facing URL is freeappstore.online/app/.
@@ -113,7 +109,6 @@ export default {
     const dot = cleaned.indexOf(".");
     const slug = dot > 0 ? cleaned.slice(0, dot) : "";
 
-    // Platform-infra subdomains short-circuit before app routing.
     // Platform-infra subdomains short-circuit before app routing.
     // Only applies to freeappstore.online zone — custom domains skip this.
     const zone = dot > 0 ? cleaned.slice(dot + 1) : "";
@@ -155,7 +150,7 @@ export default {
 /**
  * Dispatch a request whose hostname matches a known platform-infra subdomain
  * (api, docs, create, etc.). The mapping decides whether to use a
- * service binding (zero public hop), a fetch-proxy to an explicit URL, or
+ * service binding (zero public hop), a redirect, or
  * fail loudly because the subdomain is intentionally unmapped.
  */
 async function dispatchPlatform(req: Request, env: Env, slug: string, host: string): Promise<Response> {
@@ -172,9 +167,6 @@ async function dispatchPlatform(req: Request, env: Env, slug: string, host: stri
     }
     return await target.fetch(req);
   }
-  if (mapping.type === "proxy") {
-    return await proxyTo(req, mapping.target);
-  }
   if (mapping.type === "redirect") {
     return Response.redirect(`${mapping.to}${url.pathname}${url.search}`, mapping.status ?? 301);
   }
@@ -183,24 +175,6 @@ async function dispatchPlatform(req: Request, env: Env, slug: string, host: stri
   return new Response(`${mapping.message}\n`, {
     status: 404,
     headers: { "content-type": "text/plain; charset=utf-8" },
-  });
-}
-
-/**
- * Forward a request to an external origin, keeping the path and query. The
- * origin is not us: credentials the client sent to `*.freeappstore.online`
- * (session cookies, bearer tokens) must not travel with it (#459).
- */
-export async function proxyTo(req: Request, target: string): Promise<Response> {
-  const url = new URL(req.url);
-  const headers = new Headers(req.headers);
-  headers.delete("host");
-  headers.delete("authorization");
-  headers.delete("cookie");
-  return await fetch(`${target}${url.pathname}${url.search}`, {
-    method: req.method,
-    headers,
-    body: req.body,
   });
 }
 

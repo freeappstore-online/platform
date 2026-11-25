@@ -1,5 +1,6 @@
 /** Execute infra tools server-side. Extracted from session.ts to keep it manageable. */
 
+import { APP_ID_RE } from "../../../packages/backend/src/lib/apps";
 import { isReservedAppId } from "../../../packages/backend/src/lib/reserved-app-ids";
 import { runSourcePreflight } from "../../../packages/compliance/src/checks/source-preflight";
 import type { CheckResult } from "../../../packages/compliance/src/types";
@@ -13,17 +14,15 @@ import type { ToolCall } from "./providers/types";
 import { fetchUrlDenied } from "./ssrf";
 import { substituteAppName } from "./template";
 
-// FreeAppStore's app-id rule, vendored from packages/backend/src/lib/apps.ts
-// APP_ID_RE (a root test keeps the copies equal, #279). The backend, the
-// storefront listing, unpublish and admin transfer all use it, so an id the
-// agent deployed outside it went live but couldn't be listed or managed.
-// Games publish through FreeGameStore, which keeps its own rule.
-export const FAS_APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
+// FreeAppStore ids use the backend's APP_ID_RE (#279): the storefront listing,
+// unpublish and admin transfer all use it, so an id the agent deployed outside
+// it went live but couldn't be listed or managed. Games publish through
+// FreeGameStore, which keeps its own rule.
 const FAS_APP_ID_MAX = 31;
 const GAME_ID_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
 function isValidId(config: { store: string }, id: string): boolean {
-  return config.store === "apps" ? FAS_APP_ID_RE.test(id) : GAME_ID_RE.test(id) && id.length <= 58;
+  return config.store === "apps" ? APP_ID_RE.test(id) : GAME_ID_RE.test(id) && id.length <= 58;
 }
 
 function idRuleText(config: { store: string }): string {

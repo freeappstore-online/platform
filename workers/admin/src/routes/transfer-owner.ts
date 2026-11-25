@@ -1,6 +1,7 @@
+import { APP_ID_RE } from "../../../../packages/backend/src/lib/apps";
 import { json } from "../http";
 import { ghApi, STORE_CONFIG } from "../publish";
-import { APP_ID_RE, actorLogin, listOwnerTransfers, moveRepoAccess, parseTransferBody, transferAppOwner } from "../transfer-owner";
+import { actorLogin, listOwnerTransfers, moveRepoAccess, parseTransferBody, transferAppOwner } from "../transfer-owner";
 import type { RouteHandler } from "./types";
 
 const PATH = "/api/apps/transfer-owner";

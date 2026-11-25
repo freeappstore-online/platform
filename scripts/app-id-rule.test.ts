@@ -5,15 +5,13 @@ import { APP_ID_RE } from '../packages/backend/src/lib/apps.js';
 
 const ROOT = join(import.meta.dirname, '..');
 
-// #279: one app-id rule. Workers and sites can't import the backend, so each
-// keeps a copy; an agent-deployed id outside the backend's rule went live but
+// #279: one app-id rule. The CLI (published on its own) and the console site
+// can't import the backend, so each keeps a copy (the workers import it); an agent-deployed id outside the backend's rule went live but
 // couldn't be listed, unpublished or transferred.
 const COPIES = [
   'packages/cli/src/lib/app-id.ts',
   'sites/console/web/src/PublishForm.tsx',
   'sites/console/web/src/builder/components/studio/PublishModal.tsx',
-  'workers/admin/src/transfer-owner.ts',
-  'workers/agent/src/infra-exec.ts',
 ];
 
 describe('APP_ID_RE', () => {

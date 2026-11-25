@@ -4,7 +4,6 @@
 
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { proxyTo } from "../../src/index";
 
 const INDEX_HTML = "<!doctype html><title>Dict</title>";
 const APP_JS = "console.log('dict')";
@@ -276,18 +275,6 @@ describe("reserved platform subdomains", () => {
       expect(res.status).toBe(404);
       expect(await res.text()).toContain("no app registered");
     }
-  });
-
-  it("strips Authorization and Cookie before forwarding to a proxied origin", async () => {
-    const req = new Request("https://x.freeappstore.online/report?app=dict", {
-      headers: { authorization: "Bearer secret", cookie: "fas_session=secret", "x-custom": "kept" },
-    });
-    const res = await proxyTo(req, "https://example.pages.dev");
-    const echoed = await res.json<{ outbound: string; method: string; headers: Record<string, string> }>();
-    expect(echoed.outbound).toBe("https://example.pages.dev/report?app=dict");
-    expect(echoed.headers.authorization).toBeUndefined();
-    expect(echoed.headers.cookie).toBeUndefined();
-    expect(echoed.headers["x-custom"]).toBe("kept");
   });
 
   it("301s the retired create.* builder to the console, keeping the path", async () => {
