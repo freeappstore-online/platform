@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, migration, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -619,5 +620,32 @@ describe('keys routes', () => {
         expect(res.status, `${host} ${route}`).toBe(403);
       }
     }
+  });
+});
+
+describe.skipIf(!hasSqlite)('migration 0052 (#675)', () => {
+  it('drops the Stripe provider and every stored Stripe key, and nothing else', () => {
+    const { db } = sqliteD1({ before: '0052' });
+    const key = db.prepare(
+      "INSERT INTO user_api_keys (user_id, provider, key_ciphertext, dek_wrapped, iv) VALUES ('gh:1', ?, x'00', x'00', x'00')",
+    );
+    key.run('stripe');
+    key.run('openai');
+    db.exec(migration('0052_drop_stripe_key_provider.sql'));
+    expect(db.prepare('SELECT provider FROM user_api_keys').all()).toEqual([
+      { provider: 'openai' },
+    ]);
+    const ids = (
+      db.prepare('SELECT id FROM key_providers ORDER BY id').all() as { id: string }[]
+    ).map((r) => r.id);
+    expect(ids).toEqual([
+      'anthropic',
+      'elevenlabs',
+      'google-ai',
+      'openai',
+      'openrouter',
+      'replicate',
+      'stability',
+    ]);
   });
 });

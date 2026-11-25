@@ -63,7 +63,7 @@ AI provider hosts are blocked from app secrets -- use the user key vault.
 
 | Limit | Value |
 |-------|-------|
-| Providers | 8 (OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs, Stripe) |
+| Providers | 7 (OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs) |
 | Keys per user | 1 per provider |
 | User-key proxy requests | 1,000/day per user across all apps |
 | Key size | 500 chars |
