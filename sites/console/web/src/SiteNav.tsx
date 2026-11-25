@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { ThemeToggle } from '@freeappstore/sdk/ui'
-import { API_URL, getSession } from './builder/lib/api'
+import { API_URL, authHeaders, getSession } from './builder/lib/api'
 
 // The console is served at console.freeappstore.online/ (no prefix) AND at
 // freeappstore.online/app/ (the storefront proxy strips /app server-side but the
@@ -51,7 +51,7 @@ function NavLink({ path, className, onNavigate, children }: { path: string; clas
 let adminCheck: { token: string; result: Promise<boolean> } | null = null
 function isAdmin(token: string): Promise<boolean> {
   if (adminCheck?.token !== token) {
-    const result = fetch(`${API_URL}/v1/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+    const result = fetch(`${API_URL}/v1/auth/me`, { headers: authHeaders(token) })
       .then((res) => (res.ok ? (res.json() as Promise<{ roles?: string[] }>) : null))
       .then((me) => !!me?.roles?.includes('admin'))
       .catch(() => false)

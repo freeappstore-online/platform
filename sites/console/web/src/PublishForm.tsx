@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, type FormEvent } from 'react'
+import { API_URL, authHeaders } from './builder/lib/api'
 import { pushCommands, summarizeSteps } from './deploy-status'
 
-const API = 'https://api.freeappstore.online/v1'
 
 // Categories accepted by the backend's /v1/publish validator: a copy of
 // VALID_CATEGORIES in packages/backend/src/lib/apps.ts, kept equal by
@@ -60,15 +60,10 @@ export function PublishForm({ getToken }: Props) {
   const [idError, setIdError] = useState<string | null>(null)
   const [idValue, setIdValue] = useState('')
 
-  const headers = useCallback((): Record<string, string> => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' }
-    const token = getToken()
-    if (token) h.Authorization = `Bearer ${token}`
-    return h
-  }, [getToken])
+  const headers = useCallback(() => authHeaders(getToken()), [getToken])
 
   const refreshApps = useCallback(() => {
-    fetch(`${API}/apps/mine`, { headers: headers() })
+    fetch(`${API_URL}/v1/apps/mine`, { headers: headers() })
       .then((r) => (r.ok ? r.json() : { apps: [] }))
       .then((data) => setApps(data.apps ?? []))
       .catch(() => setApps([]))
@@ -95,7 +90,7 @@ export function PublishForm({ getToken }: Props) {
       demo: null,
     }
     try {
-      const res = await fetch(`${API}/publish`, {
+      const res = await fetch(`${API_URL}/v1/publish`, {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify(payload),

@@ -3,7 +3,7 @@
  * Local keys are a legacy fallback for offline/pre-vault users and will be migrated up.
  */
 
-import { getSession, API_URL } from "./api";
+import { authHeaders, getSession, API_URL } from "./api";
 
 export interface ProviderConfig {
   type: string;
@@ -111,11 +111,8 @@ export function fromVaultProvider(type: string): string {
   return type === "google-ai" ? "google" : type;
 }
 
-function authHeaders(): Record<string, string> {
-  const s = getSession();
-  return s?.token
-    ? { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json", Accept: "application/json" }
-    : { "Content-Type": "application/json", Accept: "application/json" };
+function vaultHeaders(): Record<string, string> {
+  return { ...authHeaders(), Accept: "application/json" };
 }
 
 export async function fetchVaultStatus(): Promise<VaultKeyStatus[]> {
@@ -125,7 +122,7 @@ export async function fetchVaultStatus(): Promise<VaultKeyStatus[]> {
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
     const res = await fetch(`${API_URL}/v1/keys/status`, {
-      headers: authHeaders(),
+      headers: vaultHeaders(),
       signal: ctrl.signal,
     });
     if (!res.ok) return [];
@@ -142,7 +139,7 @@ export async function saveKeyToVault(provider: string, value: string, label?: st
   try {
     const res = await fetch(`${API_URL}/v1/keys/${toVaultProvider(provider)}`, {
       method: "PUT",
-      headers: authHeaders(),
+      headers: vaultHeaders(),
       body: JSON.stringify({ value, label }),
     });
     return await res.json() as { ok: boolean; error?: string };
@@ -155,7 +152,7 @@ export async function deleteKeyFromVault(provider: string): Promise<{ ok: boolea
   try {
     const res = await fetch(`${API_URL}/v1/keys/${toVaultProvider(provider)}`, {
       method: "DELETE",
-      headers: authHeaders(),
+      headers: vaultHeaders(),
     });
     return await res.json() as { ok: boolean };
   } catch {
@@ -178,7 +175,7 @@ export async function fetchVaultUsage(): Promise<VaultUsage | null> {
   const timer = setTimeout(() => ctrl.abort(), 5000);
   try {
     const res = await fetch(`${API_URL}/v1/keys/usage`, {
-      headers: authHeaders(),
+      headers: vaultHeaders(),
       signal: ctrl.signal,
     });
     if (!res.ok) return null;

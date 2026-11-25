@@ -12,7 +12,7 @@
  * quota and an app that has never deployed both rendered as nothing at all.
  */
 
-export const API_BASE = 'https://api.freeappstore.online/v1'
+import { API_URL, authHeaders } from './builder/lib/api'
 
 /** One app's latest deploy, as the backend proxy returns it. */
 export interface DeployStatus {
@@ -154,8 +154,8 @@ export async function fetchOwnedDeployStatuses(
 ): Promise<Record<string, DeployStatus>> {
   if (!token) return {}
   try {
-    const res = await fetchImpl(`${API_BASE}/apps/deploy-status`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const res = await fetchImpl(`${API_URL}/v1/apps/deploy-status`, {
+      headers: authHeaders(token),
     })
     if (!res.ok) return {}
     const data = (await res.json()) as { statuses?: Record<string, DeployStatus> }
@@ -181,8 +181,8 @@ export async function fetchAppDeployStatus(
 ): Promise<AppDeployResult> {
   if (!token) return { state: 'error', message: 'Sign in to see deploy history.' }
   try {
-    const res = await fetchImpl(`${API_BASE}/apps/${encodeURIComponent(appId)}/deploy-status`, {
-      headers: { Authorization: `Bearer ${token}` },
+    const res = await fetchImpl(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/deploy-status`, {
+      headers: authHeaders(token),
     })
     if (res.status === 403) return { state: 'error', message: "You don't have access to this app's deploys." }
     if (res.status === 404) return { state: 'error', message: 'This app is not registered.' }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { API_URL, authHeaders } from './builder/lib/api'
 import { RolesManager } from './RolesManager'
 import { useIsAdmin } from './SiteNav'
 import { SecretsManager } from './SecretsManager'
@@ -13,8 +14,6 @@ import {
   formatTimeAgo,
   formatTimestamp,
 } from './deploy-status'
-
-const API_BASE = 'https://api.freeappstore.online/v1'
 
 interface Props {
   appId: string
@@ -48,8 +47,8 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
     const token = getToken()
     if (!token) { setLoading(false); return }
     // /analytics is the tracking config; the numbers are under /analytics/stats (#596).
-    fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/analytics/stats?days=30`, {
-      headers: { Authorization: `Bearer ${token}` },
+    fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/analytics/stats?days=30`, {
+      headers: authHeaders(token),
     })
       .then(r => r.ok ? r.json() : null)
       .then((data: { stats?: AppAnalytics } | null) => setAnalytics(data?.stats ?? null))
@@ -82,7 +81,7 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
     const token = getToken()
     if (!token) return
     let cancelled = false
-    fetch(`${API_BASE}/agent/sessions?limit=50`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${API_URL}/v1/agent/sessions?limit=50`, { headers: authHeaders(token) })
       .then(r => r.ok ? r.json() : null)
       .then((data: { sessions?: { appId: string | null; updatedAt?: number; deployState?: { phase?: string; error?: string } | null }[] } | null) => {
         if (cancelled || !data?.sessions) return
@@ -382,20 +381,15 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
   const [valueCache, setValueCache] = useState<Record<string, unknown>>({})
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
 
-  const headers = useCallback((): Record<string, string> => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' }
-    const token = getToken()
-    if (token) h.Authorization = `Bearer ${token}`
-    return h
-  }, [getToken])
+  const headers = useCallback(() => authHeaders(getToken()), [getToken])
 
   const load = useCallback(async () => {
     setLoading(true)
     setExpanded(null)
     let url = ''
-    if (tab === 'kv') url = `${API_BASE}/admin/kv?app=${appId}&limit=100`
-    else if (tab === 'collections') url = `${API_BASE}/admin/collections?app=${appId}&limit=100`
-    else url = `${API_BASE}/admin/counters?app=${appId}&limit=200`
+    if (tab === 'kv') url = `${API_URL}/v1/admin/kv?app=${appId}&limit=100`
+    else if (tab === 'collections') url = `${API_URL}/v1/admin/collections?app=${appId}&limit=100`
+    else url = `${API_URL}/v1/admin/counters?app=${appId}&limit=200`
 
     setEntries([])
     setError('')
@@ -415,8 +409,7 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
 
   const deleteItem = async (params: string) => {
     if (!confirm('Delete this item?')) return
-    const base = API_BASE
-    const res = await fetch(`${base}/admin/${tab === 'collections' ? 'collections' : tab}?${params}`, {
+    const res = await fetch(`${API_URL}/v1/admin/${tab === 'collections' ? 'collections' : tab}?${params}`, {
       method: 'DELETE', headers: headers(),
     }).catch(() => null)
     if (!res?.ok) { setError('Delete failed; the item is still there.'); return }
@@ -426,8 +419,7 @@ function AppDataView({ appId, getToken }: { appId: string; getToken: () => strin
   const loadKvValue = async (user: string, key: string) => {
     const cacheKey = `${user}:${key}`
     if (valueCache[cacheKey]) return
-    const base = API_BASE
-    const res = await fetch(`${base}/admin/kv/value?app=${appId}&user=${user}&key=${encodeURIComponent(key)}`, { headers: headers() })
+    const res = await fetch(`${API_URL}/v1/admin/kv/value?app=${appId}&user=${user}&key=${encodeURIComponent(key)}`, { headers: headers() })
     if (res.ok) {
       const data = await res.json() as { value: unknown }
       setValueCache(prev => ({ ...prev, [cacheKey]: data.value }))
@@ -551,7 +543,7 @@ function CodeHealth({ appId }: { appId: string }) {
 
   useEffect(() => {
     // Through the API: the app's own host serves no CORS headers (#596).
-    fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/quality`)
+    fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/quality`)
       .then(r => r.ok ? r.json() : null)
       .then(data => setReport(data as VcqaReport | null))
       .catch(() => {})

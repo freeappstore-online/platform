@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { API_URL, authHeaders } from './builder/lib/api'
 
-const API_BASE = 'https://api.freeappstore.online/v1'
 
 interface RoleAssignment {
   userId: string
@@ -37,8 +37,8 @@ export function RolesManager({ appId, getToken }: Props) {
     const token = getToken()
     if (!token) { setLoading(false); return }
     try {
-      const res = await fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/roles`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/roles`, {
+        headers: authHeaders(token),
       })
       if (!res.ok) throw new Error(`Failed to load roles (${res.status})`)
       const data = (await res.json()) as { roles: RoleAssignment[] }
@@ -62,9 +62,9 @@ export function RolesManager({ appId, getToken }: Props) {
     setSubmitting(true)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/roles`, {
+      const res = await fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/roles`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: authHeaders(token),
         body: JSON.stringify({ userId: userId.trim(), role }),
       })
       if (!res.ok) {
@@ -88,9 +88,9 @@ export function RolesManager({ appId, getToken }: Props) {
     setRevoking(key)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE}/apps/${encodeURIComponent(appId)}/roles`, {
+      const res = await fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/roles`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: authHeaders(token),
         body: JSON.stringify({ userId: targetUserId, role: roleName }),
       })
       if (!res.ok) {

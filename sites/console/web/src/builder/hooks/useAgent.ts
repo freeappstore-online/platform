@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { AGENT_URL, API_URL, getSession } from "../lib/api";
+import { AGENT_URL, API_URL, authHeaders, getSession } from "../lib/api";
 import { VAPID_PUBLIC_KEY, urlBase64ToUint8Array } from "../lib/push";
 import {
   addQueuedMessage,
@@ -38,11 +38,6 @@ export interface AIConfig {
 interface AgentStreamEvent {
   type: string;
   data: string;
-}
-
-function agentAuthHeaders(): Record<string, string> {
-  const s = getSession();
-  return s?.token ? { Authorization: `Bearer ${s.token}` } : {};
 }
 
 const DEFAULT_MSG: ChatMessage[] = [{ role: "system", content: "Describe the app you want to build." }];
@@ -92,7 +87,7 @@ export function useAgent() {
       if (!s?.token) return;
       fetch(`${API_URL}/v1/agent/sessions/${sessionId}/messages`, {
         method: "PUT",
-        headers: { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json" },
+        headers: authHeaders(s.token),
         body: JSON.stringify({ messages: messages.slice(-300) }),
       }).catch(() => { /* error UI is future work */ });
     }, 500);
@@ -111,7 +106,7 @@ export function useAgent() {
       if (!s?.token) return;
       fetch(`${API_URL}/v1/agent/sessions/${sid}/messages`, {
         method: "PUT",
-        headers: { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json" },
+        headers: authHeaders(s.token),
         body: JSON.stringify({ messages: msgs.slice(-300) }),
         keepalive: true,
       }).catch(() => {});
@@ -140,7 +135,7 @@ export function useAgent() {
     let d1Ok = false;
     try {
       // 1. Durable Object — authoritative + freshest.
-      const doRes = await fetch(`${AGENT_URL}/session/${sessionId}/history`, { headers: agentAuthHeaders() });
+      const doRes = await fetch(`${AGENT_URL}/session/${sessionId}/history`, { headers: authHeaders() });
       if (doRes.ok) {
         doOk = true;
         const data = await doRes.json();
@@ -162,7 +157,7 @@ export function useAgent() {
         }
       }
       // 2. D1 fallback — survives DO eviction.
-      const d1Res = await fetch(`${API_URL}/v1/agent/sessions/${sessionId}`, { headers: { Authorization: `Bearer ${s.token}` } });
+      const d1Res = await fetch(`${API_URL}/v1/agent/sessions/${sessionId}`, { headers: authHeaders(s.token) });
       if (d1Res.ok) {
         d1Ok = true;
         const data = (await d1Res.json()) as { session?: { messages?: ChatMessage[]; deployState?: DeployState | null } };
@@ -240,7 +235,7 @@ export function useAgent() {
     const id = crypto.randomUUID();
     const res = await fetch(`${AGENT_URL}/session/${id}/import`, {
       method: "POST",
-      headers: { ...agentAuthHeaders(), "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ appId }),
     });
     const data = (await res.json().catch(() => ({}))) as { error?: string; appUrl?: string; appName?: string };
@@ -268,7 +263,7 @@ export function useAgent() {
       });
       await fetch(`${AGENT_URL}/session/${sessionId}/push-subscribe`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...agentAuthHeaders() },
+        headers: authHeaders(),
         body: JSON.stringify(sub.toJSON()),
       });
     } catch { /* push subscription failed — continue without */ }
@@ -385,7 +380,7 @@ export function useAgent() {
     };
 
     const reconnectLive = async () => {
-      const headers: Record<string, string> = { ...agentAuthHeaders() };
+      const headers = authHeaders();
       if (lastEventId) headers["Last-Event-ID"] = lastEventId;
       const res = await fetch(`${AGENT_URL}/session/${sessionId}/live`, { method: "GET", headers, signal: ctrl.signal });
       if (!res.ok) throw new Error(`Live reconnect failed (${res.status})`);
@@ -395,7 +390,7 @@ export function useAgent() {
     try {
       const res = await fetch(`${AGENT_URL}/session/${sessionId}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...agentAuthHeaders() },
+        headers: authHeaders(),
         body: JSON.stringify({ message, aiConfig }),
         signal: ctrl.signal,
       });

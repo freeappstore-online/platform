@@ -1,8 +1,7 @@
 import { useCallback, useState } from "react";
-import { getSession } from "../../lib/api";
+import { API_URL, authHeaders } from "../../lib/api";
 import { summarizeSteps } from "../../../deploy-status";
 
-const PUBLISH_API = "https://api.freeappstore.online/v1";
 
 export interface PublishAudit {
   pass: number;
@@ -42,13 +41,9 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
       demo: null,
     };
     try {
-      const session = getSession();
-      const res = await fetch(`${PUBLISH_API}/publish`, {
+      const res = await fetch(`${API_URL}/v1/publish`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
-        },
+        headers: authHeaders(),
         body: JSON.stringify(body),
       });
       // The endpoint returns plain text on validation errors and JSON on

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { API_URL, authHeaders } from './builder/lib/api'
 
-const API = 'https://api.freeappstore.online/v1'
 
 interface Secret {
   name: string
@@ -30,20 +30,15 @@ export function SecretsManager({ appId, getToken }: Props) {
   const [showAddSecret, setShowAddSecret] = useState(false)
   const [showAddRule, setShowAddRule] = useState(false)
 
-  const headers = useCallback((): Record<string, string> => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' }
-    const token = getToken()
-    if (token) h.Authorization = `Bearer ${token}`
-    return h
-  }, [getToken])
+  const headers = useCallback(() => authHeaders(getToken()), [getToken])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const [sRes, aRes] = await Promise.all([
-        fetch(`${API}/apps/${appId}/secrets`, { headers: headers() }),
-        fetch(`${API}/apps/${appId}/allowlist`, { headers: headers() }),
+        fetch(`${API_URL}/v1/apps/${appId}/secrets`, { headers: headers() }),
+        fetch(`${API_URL}/v1/apps/${appId}/allowlist`, { headers: headers() }),
       ])
       if (sRes.ok) {
         const data = await sRes.json() as { secrets: Secret[] }
@@ -67,7 +62,7 @@ export function SecretsManager({ appId, getToken }: Props) {
 
   const deleteSecret = async (name: string) => {
     if (!confirm(`Delete secret "${name}"? Any proxy rules using it will stop working.`)) return
-    const res = await fetch(`${API}/apps/${appId}/secrets/${name}`, {
+    const res = await fetch(`${API_URL}/v1/apps/${appId}/secrets/${name}`, {
       method: 'DELETE', headers: headers(),
     })
     if (res.ok) load()
@@ -76,7 +71,7 @@ export function SecretsManager({ appId, getToken }: Props) {
 
   const deleteRule = async (pattern: string) => {
     if (!confirm(`Remove allowlist rule for "${pattern}"?`)) return
-    const res = await fetch(`${API}/apps/${appId}/allowlist`, {
+    const res = await fetch(`${API_URL}/v1/apps/${appId}/allowlist`, {
       method: 'DELETE', headers: headers(),
       body: JSON.stringify({ pattern }),
     })
@@ -219,7 +214,7 @@ function AddSecretForm({ appId, headers, onDone, onError }: {
     setSaving(true)
     onError('')
     try {
-      const res = await fetch(`${API}/apps/${appId}/secrets/${name}`, {
+      const res = await fetch(`${API_URL}/v1/apps/${appId}/secrets/${name}`, {
         method: 'PUT', headers: headers(),
         body: JSON.stringify({ value }),
       })
@@ -289,7 +284,7 @@ function AddRuleForm({ appId, secrets, headers, onDone, onError }: {
     setSaving(true)
     onError('')
     try {
-      const res = await fetch(`${API}/apps/${appId}/allowlist`, {
+      const res = await fetch(`${API_URL}/v1/apps/${appId}/allowlist`, {
         method: 'PUT', headers: headers(),
         body: JSON.stringify({
           pattern, injectKind, injectName,

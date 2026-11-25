@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { API_URL, authHeaders } from './builder/lib/api'
 
-const API = 'https://api.freeappstore.online/v1'
 
 interface Webhook {
   id: string
@@ -24,18 +24,13 @@ export function WebhooksManager({ appId, getToken }: Props) {
   const [testing, setTesting] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ id: string; status: number } | null>(null)
 
-  const headers = useCallback((): Record<string, string> => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' }
-    const token = getToken()
-    if (token) h.Authorization = `Bearer ${token}`
-    return h
-  }, [getToken])
+  const headers = useCallback(() => authHeaders(getToken()), [getToken])
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API}/apps/${appId}/webhooks`, { headers: headers() })
+      const res = await fetch(`${API_URL}/v1/apps/${appId}/webhooks`, { headers: headers() })
       if (res.ok) {
         const data = await res.json() as { webhooks: Webhook[]; supported_events: string[] }
         setWebhooks(data.webhooks ?? [])
@@ -54,7 +49,7 @@ export function WebhooksManager({ appId, getToken }: Props) {
 
   const deleteWebhook = async (id: string) => {
     if (!confirm('Remove this webhook?')) return
-    const res = await fetch(`${API}/apps/${appId}/webhooks/${id}`, {
+    const res = await fetch(`${API_URL}/v1/apps/${appId}/webhooks/${id}`, {
       method: 'DELETE', headers: headers(),
     })
     if (res.ok) load()
@@ -65,7 +60,7 @@ export function WebhooksManager({ appId, getToken }: Props) {
     setTesting(id)
     setTestResult(null)
     try {
-      const res = await fetch(`${API}/apps/${appId}/webhooks/${id}/test`, {
+      const res = await fetch(`${API_URL}/v1/apps/${appId}/webhooks/${id}/test`, {
         method: 'POST', headers: headers(),
       })
       if (res.ok) {
@@ -180,7 +175,7 @@ function AddWebhookForm({ appId, events, headers, onDone, onError }: {
     setSaving(true)
     onError('')
     try {
-      const res = await fetch(`${API}/apps/${appId}/webhooks`, {
+      const res = await fetch(`${API_URL}/v1/apps/${appId}/webhooks`, {
         method: 'POST', headers: headers(),
         body: JSON.stringify({ event, url }),
       })

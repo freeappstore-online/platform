@@ -11,6 +11,7 @@ import {
   fetchOwnedDeployStatuses,
   formatTimeAgo,
 } from './deploy-status'
+import { API_URL, authHeaders } from './builder/lib/api'
 import { PublishForm } from './PublishForm'
 import { BASE, SiteNav, go } from './SiteNav'
 
@@ -30,8 +31,6 @@ interface AppEntry {
   description?: string | null
 }
 
-const API_BASE = 'https://api.freeappstore.online/v1'
-
 class LoadError extends Error {
   status: number
   constructor(status: number) {
@@ -42,9 +41,7 @@ class LoadError extends Error {
 
 async function fetchApps(token: string | null): Promise<AppEntry[]> {
   if (!token) return []
-  const res = await fetch(`${API_BASE}/apps/mine`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const res = await fetch(`${API_URL}/v1/apps/mine`, { headers: authHeaders(token) })
   // Thrown, not turned into an empty list: "no apps" must mean no apps (#591).
   if (!res.ok) throw new LoadError(res.status)
   const data = (await res.json()) as { apps: { id: string; ownerLogin: string; createdAt: number; category?: string | null; oneliner?: string | null; store?: string | null }[] }
@@ -65,7 +62,7 @@ interface Draft {
 /** VibeCode sessions that were never deployed, so Apps lists everything the user owns (#588). */
 async function fetchDrafts(token: string | null): Promise<Draft[]> {
   if (!token) return []
-  const res = await fetch(`${API_BASE}/agent/sessions?limit=100`, { headers: { Authorization: `Bearer ${token}` } })
+  const res = await fetch(`${API_URL}/v1/agent/sessions?limit=100`, { headers: authHeaders(token) })
   if (!res.ok) return []
   const data = (await res.json()) as { sessions: { id: string; name: string; deployed: boolean; updatedAt: number }[] }
   return data.sessions

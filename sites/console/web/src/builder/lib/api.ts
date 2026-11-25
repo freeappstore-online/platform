@@ -26,11 +26,10 @@ export function getSession(): Session | null {
   }
 }
 
-/** JSON request headers, with the session's bearer token when signed in. */
-export function authHeaders(): Record<string, string> {
-  const s = getSession();
-  return s?.token
-    ? { Authorization: `Bearer ${s.token}`, "Content-Type": "application/json" }
+/** JSON request headers, with a bearer token (default: this browser's session) when there is one. */
+export function authHeaders(token: string | null | undefined = getSession()?.token): Record<string, string> {
+  return token
+    ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
     : { "Content-Type": "application/json" };
 }
 
@@ -76,7 +75,7 @@ export async function handleAuthCallback(): Promise<Session | null> {
   const startedHere = claimClientState(state);
 
   const res = await fetch(`${API_URL}/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(token),
   });
   if (!res.ok) return null;
 

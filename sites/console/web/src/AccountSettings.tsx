@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { API_URL } from './builder/lib/api'
+import { API_URL, authHeaders } from './builder/lib/api'
 
 /**
  * Account actions need a first-party (console) session (#495): the SDK sends
@@ -15,7 +15,7 @@ export function AccountSettings({ getToken, onSignedOut }: { getToken: () => str
     setError('')
     const res = await fetch(`${API_URL}/v1/auth/logout`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+      headers: authHeaders(getToken()),
     }).catch(() => null)
     // Signing out locally anyway would claim other devices were signed out (#591).
     if (!res?.ok) {
@@ -33,7 +33,7 @@ export function AccountSettings({ getToken, onSignedOut }: { getToken: () => str
     try {
       const res = await fetch(`${API_URL}/v1/auth/me`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+        headers: authHeaders(getToken()),
       })
       if (!res.ok) throw new Error(String(res.status))
       onSignedOut()

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import { API_URL, authHeaders } from './builder/lib/api'
 
-const API = 'https://api.freeappstore.online/v1'
 
 interface LogEntry {
   ts: number
@@ -28,12 +28,7 @@ export function LogsViewer({ appId, getToken }: Props) {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [error, setError] = useState('')
 
-  const headers = useCallback((): Record<string, string> => {
-    const h: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' }
-    const token = getToken()
-    if (token) h.Authorization = `Bearer ${token}`
-    return h
-  }, [getToken])
+  const headers = useCallback(() => ({ ...authHeaders(getToken()), Accept: 'application/json' }), [getToken])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -43,7 +38,7 @@ export function LogsViewer({ appId, getToken }: Props) {
     try {
       const params = new URLSearchParams({ limit: String(limit) })
       if (level !== 'all') params.set('level', level)
-      const res = await fetch(`${API}/apps/${appId}/logs?${params}`, { headers: headers() })
+      const res = await fetch(`${API_URL}/v1/apps/${appId}/logs?${params}`, { headers: headers() })
       if (res.ok) {
         const data = await res.json() as { logs: LogEntry[] }
         setLogs(data.logs ?? [])
