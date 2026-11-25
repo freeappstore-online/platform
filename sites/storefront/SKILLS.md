@@ -1110,10 +1110,9 @@ Direct creators and users to the right place:
 
 | Need | Where |
 |------|-------|
-| **Developer questions** | [GitHub Discussions](https://github.com/freegamestore-online/freegamestore/discussions) (games) or [GitHub Discussions](https://github.com/freeappstore-online/platform (`sites/storefront`)/discussions) (apps) |
-| **Bug reports** | Open an issue on the game/app's GitHub repo |
-| **Feature ideas** | Discussions → Ideas category |
-| **Creator applications** | [Submissions repo](https://github.com/freeappstore-online/submissions/issues/new) |
+| **Developer questions, platform bugs, feature ideas** | [Open an issue in the submissions repo](https://github.com/freeappstore-online/submissions/issues/new/choose) |
+| **Bug reports in one app** | Open an issue on the app's GitHub repo |
+| **Publishing** | Self-service, no application: `fas publish` or https://freeappstore.online/app/publish |
 | **Platform docs** | This file (SKILLS.md) |
 
 Do NOT send users to email, Slack, Discord, or any external service. All support is on GitHub.
