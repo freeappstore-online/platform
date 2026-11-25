@@ -512,7 +512,20 @@ async function initializeEmptyRepo(
 
 /** Commit a file patch via the Git Data API. Existing repos always use
  *  base_tree so unmentioned platform-owned files survive. */
-async function commitPatchToGitHub(repoId: string, files: FileDelta, message: string, token: string, config: StoreConfig): Promise<string> {
+/**
+ * Commit `files` (null = delete) to the repo's main branch with the Git Data
+ * API and return the new commit sha. Deletions main no longer has are dropped
+ * from `files` first; if nothing is left, main's sha is returned unchanged.
+ * Without `requireParent`, a repo with no main gets a root commit.
+ */
+async function commitPatchToGitHub(
+  repoId: string,
+  files: FileDelta,
+  message: string,
+  token: string,
+  config: StoreConfig,
+  { requireParent = false } = {},
+): Promise<string> {
   const ghApi = makeGhApi(token, config.agentName);
   const repo = `${config.org}/${repoId}`;
 
@@ -524,6 +537,7 @@ async function commitPatchToGitHub(repoId: string, files: FileDelta, message: st
   if (!parentSha && refStatus !== 404 && refStatus !== 409) {
     throw new Error(`GitHub could not read ${repo} main (${refStatus}): ${ref.message || "unknown error"}`);
   }
+  if (!parentSha && requireParent) throw new Error(`could not find HEAD for ${repo}. Is the ${config.noun} deployed?`);
   let baseTree: string | undefined;
   if (parentSha) {
     const parentCommit = await ghApi(`/repos/${repo}/git/commits/${parentSha}`);
@@ -539,14 +553,14 @@ async function commitPatchToGitHub(repoId: string, files: FileDelta, message: st
     ...(baseTree ? { base_tree: baseTree } : {}),
     tree: treeItems,
   });
-  if (!tree.sha) throw new Error(`Failed to create tree: ${tree.message || "unknown error"}`);
+  if (!tree.sha) throw new Error(`Failed to create tree for ${repo}: ${tree.message || "unknown error"}`);
 
   const commit = await ghApi(`/repos/${repo}/git/commits`, "POST", {
     message,
     tree: tree.sha,
     parents: parentSha ? [parentSha] : [],
   });
-  if (!commit.sha) throw new Error(`Failed to create commit: ${commit.message || "unknown error"}`);
+  if (!commit.sha) throw new Error(`Failed to create commit for ${repo}: ${commit.message || "unknown error"}`);
 
   const refUpdate = parentSha
     ? await ghApi(`/repos/${repo}/git/refs/heads/main`, "PATCH", { sha: commit.sha })
@@ -569,7 +583,6 @@ export async function pushUpdate(
   env: DeployEnv,
   config: StoreConfig,
 ): Promise<PushUpdateResult> {
-  const ghApi = makeGhApi(env.GITHUB_TOKEN, config.agentName);
   const repo = `${config.org}/${appId}`;
   const delta = computeFileDelta(files, baselineFiles);
   if (delta.size === 0) {
@@ -580,56 +593,21 @@ export async function pushUpdate(
     };
   }
 
-  const ref = await ghApi(`/repos/${repo}/git/ref/heads/main`);
-  const parentSha = ref.object?.sha;
-  if (!parentSha) {
-    const status = apiStatus(ref, 404);
-    return {
-      ok: false,
-      message:
-        status === 404
-          ? `Error: could not find HEAD for ${repo}. Is the ${config.noun} deployed?`
-          : `Error: GitHub could not read ${repo} main (${status}): ${ref.message || "unknown"}`,
-    };
+  let commitSha: string;
+  try {
+    commitSha = await commitPatchToGitHub(appId, delta, commitMessage, env.GITHUB_TOKEN, config, { requireParent: true });
+  } catch (e) {
+    return { ok: false, message: `Error: ${e instanceof Error ? e.message : String(e)}` };
   }
-
-  const parentCommit = await ghApi(`/repos/${repo}/git/commits/${parentSha}`);
-  if (!parentCommit.tree?.sha) return { ok: false, message: `Error: could not read parent commit tree for ${repo}.` };
-
-  await dropDeletionsAlreadyGone(ghApi, repo, parentCommit.tree.sha, delta);
+  // commitPatchToGitHub dropped deletions main no longer has; nothing else was left.
   if (delta.size === 0) {
     return { ok: true, skipped: true, message: `No changes to push for ${repo}; the files to delete are already gone from main.` };
   }
 
-  let treeItems: TreeItem[];
-  try {
-    treeItems = await createTreeItems(ghApi, repo, delta);
-  } catch (e) {
-    return { ok: false, message: `Error: ${e instanceof Error ? e.message : String(e)}` };
-  }
-
-  const tree = await ghApi(`/repos/${repo}/git/trees`, "POST", {
-    base_tree: parentCommit.tree.sha,
-    tree: treeItems,
-  });
-  if (!tree.sha) return { ok: false, message: `Error: failed to create tree for ${repo}: ${tree.message || "unknown"}` };
-
-  const commit = await ghApi(`/repos/${repo}/git/commits`, "POST", {
-    message: commitMessage,
-    tree: tree.sha,
-    parents: [parentSha],
-  });
-  if (!commit.sha) return { ok: false, message: `Error: failed to create commit for ${repo}: ${commit.message || "unknown"}` };
-
-  const refUpdate = await ghApi(`/repos/${repo}/git/refs/heads/main`, "PATCH", {
-    sha: commit.sha,
-  });
-  if (!refUpdate.ref) return { ok: false, message: `Error: failed to update ref for ${repo}: ${refUpdate.message || "unknown"}` };
-
   return {
     ok: true,
-    message: `Pushed update to ${repo} (${commit.sha.slice(0, 7)}): ${deltaDetail(delta)}. GitHub Actions will deploy to R2.`,
-    commitSha: commit.sha,
+    message: `Pushed update to ${repo} (${commitSha.slice(0, 7)}): ${deltaDetail(delta)}. GitHub Actions will deploy to R2.`,
+    commitSha,
   };
 }
 

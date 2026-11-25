@@ -372,7 +372,7 @@ describe("baseline/delta deploy protection", () => {
       const rejected = await pushUpdate("my-app", files, base, "Update app", mockEnv, appsConfig);
       expect(rejected).toEqual({
         ok: false,
-        message: "Error: failed to create tree for freeappstore-online/my-app: GitRPC::BadObjectState",
+        message: "Error: Failed to create tree for freeappstore-online/my-app: GitRPC::BadObjectState",
       });
     } finally {
       globalThis.fetch = originalFetch;
