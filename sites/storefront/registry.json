@@ -3403,6 +3403,22 @@
       "discoveryRequestedAt": "2026-11-24T13:20:33.838Z",
       "creatorGithub": "Abrarcancode67",
       "permissions": []
+    },
+    {
+      "id": "radio",
+      "name": "radio",
+      "category": "Discovery",
+      "icon": "🌍",
+      "iconBg": "#cffafe",
+      "description": "Live internet radio: 30,000+ stations from 237 countries, plus ad-free SomaFM.",
+      "appUrl": "https://radio.freeappstore.online",
+      "repo": "freeappstore-online/radio",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-25T20:30:24.307Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
