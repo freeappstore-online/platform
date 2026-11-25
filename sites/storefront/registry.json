@@ -3419,6 +3419,22 @@
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-25T20:30:24.307Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "grocery-price-tracker",
+      "name": "grocery-price-tracker",
+      "category": "Utilities",
+      "icon": "🛒",
+      "iconBg": "#e2e8f0",
+      "description": "Track grocery prices and compare your purchases privately",
+      "appUrl": "https://grocery-price-tracker.freeappstore.online",
+      "repo": "freeappstore-online/grocery-price-tracker",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-25T21:21:40.331Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
