@@ -142,7 +142,7 @@ the workflow deliberately, preserving their build layout and app-owned configura
 
 ## Executable reference follow-up (#407)
 
-The connected-data reference now shares the actual connected starter component. The
+The MCP `connected-data` reference now shares the actual connected starter component. The
 complete Shell example includes every referenced screen; its notification demo does
 not claim a save occurred. Optional PWA, realtime and media modules and the main API
 fragments are checked against SDK types alongside storage, backup and forms.

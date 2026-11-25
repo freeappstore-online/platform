@@ -381,7 +381,7 @@ Record and file operations resolve transaction-start failures through `StorageRe
 
 ## Connected data example
 
-For race-safe private per-account editing, see the [connected data example](https://github.com/freeappstore-online/platform/tree/main/examples/connected-data) and `useConnectedKvDraft` from `@freeappstore/sdk/hooks`. It guards initial loading, preserves dirty edits, supports retry/save status, and isolates requests on app, record, account, and sign-out changes. Gate only the private-data feature; leave public browsing available. If an app owns its profile route, render `AccountSection` so GitHub and Google choices remain available.
+For race-safe private per-account editing, see the `ConnectedDraft` component that `fas init <app-id> --template connected` generates (`web/src/components/ConnectedDraft.tsx`; the MCP `sdk_reference` feature `connected-data` returns the same component) and `useConnectedKvDraft` from `@freeappstore/sdk/hooks`. It guards initial loading, preserves dirty edits, supports retry/save status, and isolates requests on app, record, account, and sign-out changes. Gate only the private-data feature; leave public browsing available. If an app owns its profile route, render `AccountSection` so GitHub and Google choices remain available.
 
 #350 ships the SDK hook and standalone example. The canonical generated connected template remains unchanged; carry its wiring and adoption into #352. Planning Poker's app-owned remediation is tracked in [Planning Poker #1](https://github.com/freeappstore-online/planning-poker/issues/1). No room or user data was read or changed.
 
