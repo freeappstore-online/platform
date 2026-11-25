@@ -66,35 +66,40 @@ jobs:
           # 200 or a redirect to the index is fine; only a 5xx/timeout is a failure.
           case "$CODE" in 2*|3*) : ;; *) echo '::error::docs site unhealthy'; exit 1 ;; esac
 
-      # The storefront registries are data in other repos, not admin Worker code,
-      # so they are checked here rather than in the admin test suite (#51).
+      # The store registries are storefront data, not admin Worker code, so they
+      # are checked here rather than in the admin test suite (#51). FAS: the
+      # checked-out sites/storefront/registry.json; FGS: its platform repo (#670).
       - name: Store registries (apps + games)
         run: |
           FAIL=0
           for ENTRY in \
-            "freeappstore-online/freeappstore apps" \
-            "freegamestore-online/freegamestore games"; do
+            "sites/storefront/registry.json apps" \
+            "https://raw.githubusercontent.com/freegamestore-online/platform/main/sites/freegamestore/registry.json games"; do
             set -- $ENTRY
-            URL="https://raw.githubusercontent.com/$1/main/registry.json"
-            CODE=$(curl -sS -o registry.json -w '%{http_code}' --max-time 20 "$URL")
-            if [ "$CODE" != "200" ]; then
-              echo "::error::$1 registry.json → HTTP $CODE"; FAIL=1; continue
-            fi
+            case "$1" in
+              https://*)
+                CODE=$(curl -sS -o registry.json -w '%{http_code}' --max-time 20 "$1")
+                if [ "$CODE" != "200" ]; then
+                  echo "::error::$1 → HTTP $CODE"; FAIL=1; continue
+                fi ;;
+              *) cp "$1" registry.json ;;
+            esac
             if ! jq -e --arg k "$2" '.[$k] | type == "array" and length > 0' registry.json > /dev/null; then
-              echo "::error::$1 registry.json has no non-empty .$2 array"; FAIL=1; continue
+              echo "::error::$1 has no non-empty .$2 array"; FAIL=1; continue
             fi
             MISSING=$(jq -r --arg k "$2" '[.[$k][] | select((.id | not) or (.name | not))] | length' registry.json)
             DUPES=$(jq -r --arg k "$2" '[.[$k][].id] | group_by(.) | map(select(length > 1) | .[0]) | join(", ")' registry.json)
             COUNT=$(jq -r --arg k "$2" '.[$k] | length' registry.json)
             echo "$1 → $COUNT $2, $MISSING missing id/name, duplicate ids: ${DUPES:-none}"
-            [ "$MISSING" = "0" ] || { echo "::error::$1 registry.json: $MISSING $2 entries missing id or name"; FAIL=1; }
-            [ -z "$DUPES" ] || { echo "::error::$1 registry.json: duplicate ids: $DUPES"; FAIL=1; }
+            [ "$MISSING" = "0" ] || { echo "::error::$1: $MISSING $2 entries missing id or name"; FAIL=1; }
+            [ -z "$DUPES" ] || { echo "::error::$1: duplicate ids: $DUPES"; FAIL=1; }
           done
           exit $FAIL
 
+      # The live guide (source: sites/storefront/SKILLS.md), as served.
       - name: SKILLS.md has no secrets
         run: |
-          URL=https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/SKILLS.md
+          URL=https://freeappstore.online/skills.md
           CODE=$(curl -sS -o SKILLS.md -w '%{http_code}' --max-time 20 "$URL")
           echo "SKILLS.md → $CODE"
           [ "$CODE" = "200" ] || { echo "::error::SKILLS.md → HTTP $CODE"; exit 1; }
