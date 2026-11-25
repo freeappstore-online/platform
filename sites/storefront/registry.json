@@ -3450,8 +3450,7 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T21:36:47.997Z",
-      "creatorGithub": "serge-ivo",
-      "discoveryDeliveryPending": "39529fbc-4a38-4c5b-97ab-daa94933eee7"
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
