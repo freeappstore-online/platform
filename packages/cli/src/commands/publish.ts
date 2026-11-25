@@ -20,8 +20,8 @@ const APP_DEPLOY_WORKFLOW_PATH = APP_DEPLOY_WORKFLOW.split('@')[0];
 import { yellow } from '../lib/style.js';
 import { renderCheckResults } from './check.js';
 
-// Must match the dropdown options in
-// freeappstore-online/submissions/.github/ISSUE_TEMPLATE/app-submission.yml
+// The categories /v1/publish accepts: a copy of VALID_CATEGORIES in
+// packages/backend/src/lib/apps.ts, kept equal by scripts/categories.test.ts.
 const CATEGORIES = [
   'Learning',
   'Strategy',
@@ -29,8 +29,10 @@ const CATEGORIES = [
   'Brain Training',
   'Social',
   'Productivity',
+  'Lifestyle',
   'Health & Fitness',
   'Finance',
+  'Creative',
   'News & Weather',
   'Utilities',
   'Other (specify in description)',

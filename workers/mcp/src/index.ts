@@ -7,6 +7,7 @@ import { z } from "zod";
 import { isFilePath, isPublicRepo, isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
 import { getDeployStatus } from "./deploy-status.js";
 import { createAppProblems, preflightUpdate } from "./preflight.js";
+import { VALID_CATEGORIES } from "../../../packages/backend/src/lib/apps";
 import { scaffoldRepo } from "./scaffold.js";
 import { AuthHandler } from "./auth-handler.js";
 import { sessionPrefix, ownsSession, auditLog } from "./lib.js";
@@ -300,7 +301,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         annotations: WRITE,
         inputSchema: {
           app_id: z.string().describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
-          category: z.string().describe("Learning, Strategy, Discovery, Brain Training, Social, Productivity, Health & Fitness, Finance, News & Weather, Utilities, or Other"),
+          category: z.string().describe(`One of: ${VALID_CATEGORIES.join(", ")}`),
           oneliner: z.string().describe("One-line description shown in the store"),
           type: z.enum(["standalone", "connected"]).optional().describe("standalone (no backend, default) or connected (uses the SDK: auth/kv/rooms/etc.)"),
           description: z.string().optional().describe("Longer description (defaults to the oneliner)"),

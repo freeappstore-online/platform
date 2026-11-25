@@ -3,12 +3,13 @@ import { pushCommands, summarizeSteps } from './deploy-status'
 
 const API = 'https://api.freeappstore.online/v1'
 
-// Categories accepted by the backend's /v1/publish validator. Keep in sync with
-// packages/backend/src/routes/publish.ts VALID_CATEGORIES.
+// Categories accepted by the backend's /v1/publish validator: a copy of
+// VALID_CATEGORIES in packages/backend/src/lib/apps.ts, kept equal by
+// scripts/categories.test.ts.
 const CATEGORIES = [
   'Learning', 'Strategy', 'Discovery', 'Brain Training', 'Social',
-  'Productivity', 'Health & Fitness', 'Finance', 'News & Weather',
-  'Utilities', 'Other (specify in description)',
+  'Productivity', 'Lifestyle', 'Health & Fitness', 'Finance', 'Creative',
+  'News & Weather', 'Utilities', 'Other (specify in description)',
 ] as const
 
 interface MyApp {

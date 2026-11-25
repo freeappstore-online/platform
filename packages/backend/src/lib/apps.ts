@@ -17,6 +17,27 @@ export const APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
 
 export { isReservedAppId, RESERVED_APP_IDS } from './reserved-app-ids.js';
 
+/**
+ * Store categories /v1/publish accepts (case-insensitive). The MCP worker
+ * imports this list; the CLI and console keep copies, which
+ * scripts/categories.test.ts keeps equal to it (#679).
+ */
+export const VALID_CATEGORIES = [
+  'Learning',
+  'Strategy',
+  'Discovery',
+  'Brain Training',
+  'Social',
+  'Productivity',
+  'Lifestyle',
+  'Health & Fitness',
+  'Finance',
+  'Creative',
+  'News & Weather',
+  'Utilities',
+  'Other (specify in description)',
+] as const;
+
 /** True iff `appId` is well-formed and exists in the apps registry. */
 export async function appExists(env: Env, appId: string): Promise<boolean> {
   if (!APP_ID_RE.test(appId)) return false;

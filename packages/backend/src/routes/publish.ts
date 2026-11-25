@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { pickAppIcon } from '../lib/app-icon.js';
-import { APP_ID_RE, isReservedAppId } from '../lib/apps.js';
+import { APP_ID_RE, isReservedAppId, VALID_CATEGORIES } from '../lib/apps.js';
 import { HttpError, isAdmin, isAppOwner, requireConsoleUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
@@ -34,22 +34,6 @@ interface PublishBody {
 // GitHub username rules: 1–39 chars, alphanumeric or single hyphens (not
 // leading/trailing/doubled).
 const GITHUB_LOGIN_RE = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i;
-
-const VALID_CATEGORIES = [
-  'Learning',
-  'Strategy',
-  'Discovery',
-  'Brain Training',
-  'Social',
-  'Productivity',
-  'Lifestyle',
-  'Health & Fitness',
-  'Finance',
-  'Creative',
-  'News & Weather',
-  'Utilities',
-  'Other (specify in description)',
-] as const;
 
 const STORE_DOMAIN = {
   apps: { domain: 'freeappstore.online', org: 'freeappstore-online' },

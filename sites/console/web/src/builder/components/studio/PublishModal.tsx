@@ -135,8 +135,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
               <div>
                 <label className="text-xs font-semibold text-muted">Category</label>
                 <select name="category" className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink">
-                  {/* The backend's category names (/v1/publish); "health" alone was rejected (#594). */}
-                  {["Utilities", "Productivity", "Learning", "Lifestyle", "Finance", "Health & Fitness", "Creative", "Social"].map((c) => (
+                  {/* The backend's category names (/v1/publish), kept equal by scripts/categories.test.ts (#594, #679). */}
+                  {["Learning", "Strategy", "Discovery", "Brain Training", "Social", "Productivity", "Lifestyle", "Health & Fitness", "Finance", "Creative", "News & Weather", "Utilities", "Other (specify in description)"].map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
