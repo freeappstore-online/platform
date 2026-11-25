@@ -29,7 +29,7 @@ After the first successful code push and deploy, live at `https://my-app.freeapp
 
 | Command | What it does |
 |---|---|
-| `fas` | Launch the interactive TUI (when stdout is a TTY). Falls back to `--help` otherwise. |
+| `fas` | Print help. |
 | `fas login` | Sign in with GitHub via the device-authorization flow. Token cached at `~/.fas/config.json` (`0600`). |
 | `fas logout` | Clear the cached session. |
 | `fas whoami` | Print the currently signed-in GitHub login. |

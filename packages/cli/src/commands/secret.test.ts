@@ -3,13 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  bearer,
-  dieFromHttp,
-  rejectSecretPositionals,
-  resolveAppIdOrExit,
-  resolveSecretValue,
-} from './secret.js';
+import { bearer, dieFromHttp, resolveAppIdOrExit } from '../lib/session.js';
+import { rejectSecretPositionals, resolveSecretValue } from './secret.js';
 
 afterEach(() => vi.restoreAllMocks());
 

@@ -1,8 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { Command } from 'commander';
-import { isValidAppId } from '../lib/app-id.js';
 import { readConfig } from '../lib/config.js';
+import { resolveAppIdOrExit } from '../lib/session.js';
 import { bold, cyan, dim, green, red, yellow } from '../lib/style.js';
 
 // Grade → color mapping
@@ -40,52 +38,12 @@ interface QualityReport {
   appName?: string;
 }
 
-/**
- * Detect the app-id from the current directory.
- *
- * Strategy:
- *   1. package.json "name" field (strip leading scope)
- *   2. CLAUDE.md content — look for `<something>.freeappstore.online`
- *   3. Directory basename
- */
-async function detectAppId(): Promise<string | null> {
-  // Try package.json name
-  try {
-    const raw = await readFile(join(process.cwd(), 'package.json'), 'utf8');
-    const pkg = JSON.parse(raw) as { name?: string };
-    if (pkg.name) {
-      // Strip npm scope: @freeappstore/timer → timer
-      const bare = pkg.name.replace(/^@[^/]+\//, '');
-      if (isValidAppId(bare)) return bare;
-    }
-  } catch {
-    // no package.json, continue
-  }
-
-  // Try CLAUDE.md for subdomain
-  try {
-    const md = await readFile(join(process.cwd(), 'CLAUDE.md'), 'utf8');
-    const m = /([a-z][a-z0-9-]{1,30})\.freeappstore\.online/.exec(md);
-    if (m?.[1]) return m[1];
-  } catch {
-    // no CLAUDE.md, continue
-  }
-
-  return null;
-}
-
 export const qualityCommand = new Command('quality')
   .argument('[app-id]', 'App id (detected from current directory if omitted)')
   .description('Show VCQA code quality report for an app.')
   .option('--json', 'Output raw JSON instead of formatted summary.')
   .action(async (appIdArg?: string, opts?: { json?: boolean }) => {
-    const appId = appIdArg ?? (await detectAppId());
-    if (!appId) {
-      process.stdout.write(
-        '✗ Could not detect app-id. Pass it as an argument: fas quality <app-id>\n',
-      );
-      process.exit(1);
-    }
+    const appId = await resolveAppIdOrExit(appIdArg);
 
     const config = await readConfig();
     const url = `${config.apiBase}/v1/apps/${encodeURIComponent(appId)}/quality`;

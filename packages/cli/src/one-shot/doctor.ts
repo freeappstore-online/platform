@@ -15,8 +15,7 @@ export interface CheckResult {
 
 /**
  * Runs every local + remote health check, in parallel where it's safe to.
- * Returns the full result list. The CLI's `fas doctor` and the TUI's
- * Doctor screen both render this same data.
+ * Returns the full result list; `fas doctor` renders it via appDoctor.
  */
 export async function runDoctor(
   options: { offline?: boolean; root?: string } = {},

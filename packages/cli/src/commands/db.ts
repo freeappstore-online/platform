@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { bearer, dieFromHttp, requireSession, resolveAppIdOrExit } from './secret.js';
+import { bearer, dieFromHttp, requireSession, resolveAppIdOrExit } from '../lib/session.js';
 
 async function setShared(collection: string, shared: boolean, app: string | undefined) {
   const cfg = await requireSession();

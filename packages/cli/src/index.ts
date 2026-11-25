@@ -60,17 +60,10 @@ program.addCommand(qualityCommand);
 program.addCommand(adminCommand);
 program.addCommand(migrateCommand);
 
-// `fas` with no subcommand → launch the TUI when stdout is a TTY.
-// Subcommands keep their normal one-shot behavior, scriptable for CI / agents.
+// `fas` with no subcommand → print help.
 async function main(): Promise<void> {
   if (process.argv.length === 2) {
-    if (!process.stdout.isTTY) {
-      // Piped output (CI, redirects). Show help instead of TUI.
-      program.outputHelp();
-      return;
-    }
-    const { startTui } = await import('./tui/start.js');
-    await startTui();
+    program.outputHelp();
     return;
   }
   await program.parseAsync();

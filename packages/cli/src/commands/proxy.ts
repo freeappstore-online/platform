@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { bearer, dieFromHttp, requireSession, resolveAppIdOrExit } from './secret.js';
+import { bearer, dieFromHttp, requireSession, resolveAppIdOrExit } from '../lib/session.js';
 
 interface AllowlistRule {
   pattern: string;

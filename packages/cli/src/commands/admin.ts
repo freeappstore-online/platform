@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { isValidAppId } from '../lib/app-id.js';
 import { normalizeApiBase } from '../lib/config.js';
-import { requireSession } from './secret.js';
+import { requireSession } from '../lib/session.js';
 
 /**
  * Admin worker origin for a platform API base.

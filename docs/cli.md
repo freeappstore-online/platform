@@ -16,7 +16,7 @@ Fresh app scaffolds include the versioned `pwa` capability. Existing apps can us
 
 | Command | Description |
 |---------|-------------|
-| `fas` | Launch the interactive TUI (when stdout is a TTY) |
+| `fas` | Print help |
 | `fas login` | Sign in with GitHub (device-flow auth) |
 | `fas logout` | Clear cached session |
 | `fas whoami` | Print current GitHub login |
