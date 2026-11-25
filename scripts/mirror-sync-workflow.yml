@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   actions: write
+  issues: write
 concurrency:
   group: accepted-template-sync
   cancel-in-progress: false
@@ -93,3 +94,18 @@ jobs:
             done
           done
           echo "Mirror accepted: $sha"
+      - name: Report repeated sync failures
+        # A scheduled sync that keeps failing must not go unnoticed (#668): after
+        # three failed runs in a row, open one issue in this mirror (never more
+        # than one at a time).
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title='Accepted starter sync is failing'
+          previous=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow sync-template.yml --status completed --limit 2 --json conclusion --jq '[.[] | select(.conclusion == "failure")] | length')
+          if [ "$previous" -lt 2 ]; then exit 0; fi
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number --jq length)
+          if [ "$open" -gt 0 ]; then exit 0; fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "The last three runs of sync-template.yml failed; the latest is $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. This mirror no longer tracks freeappstore-online/platform releases/starter.json. See the platform CONTRIBUTING.md section on updating the external app starter repositories (manual adoption, TEMPLATE_SYNC_TOKEN)."
