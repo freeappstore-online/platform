@@ -33,6 +33,9 @@ jobs:
       - name: Typecheck
         working-directory: packages/kb-host
         run: pnpm exec tsc --noEmit
+      - name: Test
+        working-directory: packages/kb-host
+        run: pnpm test
       # Runtime Worker secrets are not set here. They live SOPS-encrypted in
       # ~/dev/ops (serge-ivo/ops); `ops put fas <KEY>` stores a value and pushes
       # it to every consumer in inventory.yaml, including this Worker

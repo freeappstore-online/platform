@@ -89,3 +89,83 @@ describe('PUT /_ingest (#494)', () => {
     expect(ingest).not.toMatch(/!==\s*env\.KB_INGEST_TOKEN/);
   });
 });
+
+describe('GET serving (#687)', () => {
+  function bucket(files: Record<string, string>) {
+    return {
+      KB_R2: {
+        get: async (key: string) =>
+          key in files ? { body: files[key], httpEtag: `"etag-${key}"` } : null,
+      } as unknown as R2Bucket,
+      KB_INGEST_TOKEN: 't',
+    } as Env;
+  }
+  const get = (url: string, e: Env, headers: Record<string, string> = {}) =>
+    worker.fetch(new Request(url, { headers, redirect: 'manual' }), e);
+
+  it('serves an app page with its content type and an html cache policy', async () => {
+    const res = await get(
+      'https://kb.freeappstore.online/timer/',
+      bucket({ 'timer/index.html': '<h1>t</h1>' }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(res.headers.get('cache-control')).toBe('public, max-age=60, must-revalidate');
+    expect(res.headers.get('etag')).toBe('"etag-timer/index.html"');
+    expect(await res.text()).toBe('<h1>t</h1>');
+  });
+
+  it('serves platform docs from the platform prefix on the docs host', async () => {
+    const res = await get(
+      'https://docs.freeappstore.online/sdk/',
+      bucket({ 'platform/sdk/index.html': 'sdk' }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('sdk');
+  });
+
+  it('301s docs.freeappstore.online/platform/* to the unprefixed path', async () => {
+    const e = bucket({});
+    const deep = await get('https://docs.freeappstore.online/platform/sdk/?x=1', e);
+    expect(deep.status).toBe(301);
+    expect(deep.headers.get('location')).toBe('https://docs.freeappstore.online/sdk/?x=1');
+    const bare = await get('https://docs.freeappstore.online/platform', e);
+    expect(bare.status).toBe(301);
+    expect(bare.headers.get('location')).toBe('https://docs.freeappstore.online/');
+  });
+
+  it("answers a missing page with the app's own 404.html, else a plain 404", async () => {
+    const withCustom = await get(
+      'https://kb.freeappstore.online/timer/nope/',
+      bucket({ 'timer/404.html': 'custom' }),
+    );
+    expect(withCustom.status).toBe(404);
+    expect(withCustom.headers.get('content-type')).toBe('text/html; charset=utf-8');
+    expect(await withCustom.text()).toBe('custom');
+
+    const plain = await get('https://kb.freeappstore.online/timer/nope/', bucket({}));
+    expect(plain.status).toBe(404);
+    expect(await plain.text()).toBe('Not found');
+  });
+
+  it('answers 304 when If-None-Match matches the object etag', async () => {
+    const e = bucket({ 'timer/assets/app.css': 'body{}' });
+    const res = await get('https://kb.freeappstore.online/timer/assets/app.css', e, {
+      'if-none-match': '"etag-timer/assets/app.css"',
+    });
+    expect(res.status).toBe(304);
+    expect(res.headers.get('etag')).toBe('"etag-timer/assets/app.css"');
+    const fresh = await get('https://kb.freeappstore.online/timer/assets/app.css', e);
+    expect(fresh.status).toBe(200);
+    expect(fresh.headers.get('cache-control')).toBe('public, max-age=86400');
+  });
+
+  it('404s the bare KB host and refuses other methods', async () => {
+    expect((await get('https://kb.freeappstore.online/', bucket({}))).status).toBe(404);
+    const post = await worker.fetch(
+      new Request('https://kb.freeappstore.online/timer/', { method: 'POST' }),
+      bucket({}),
+    );
+    expect(post.status).toBe(405);
+  });
+});
