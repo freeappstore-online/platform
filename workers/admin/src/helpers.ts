@@ -7,8 +7,8 @@ export interface Env {
   CI_TOKEN: string;
   /** Provisioning control-plane token shared with the FAS backend
    *  (freeappstore-api). Authenticates server-to-server calls (backend ->
-   *  /api/provision via service binding, admin -> backend analytics, admin's
-   *  own /api/unpublish self-call) that carry no CF Access JWT. Managed from
+   *  /api/provision via service binding, admin -> backend analytics) that
+   *  carry no CF Access JWT. Managed from
    *  the private SOPS secrets repo and synced on rotation/touch. */
   ADMIN_PROVISION_TOKEN?: string;
   /** Test/dev-only bypass for direct local worker calls. Never set in prod. */

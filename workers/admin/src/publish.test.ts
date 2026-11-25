@@ -85,7 +85,6 @@ function baseEnv(overrides?: Record<string, unknown>) {
     CF_API_TOKEN: "cftoken",
     GITHUB_TOKEN: "ghtoken",
     FAS_ZONE_ID: "zone1",
-    FGS_ZONE_ID: "zone2",
     DB: fakeDB(),
     // Default to absent so existing assertions keep exercising the
     // "no backend binding" path; tests that care override them.

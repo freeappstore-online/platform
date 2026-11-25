@@ -34,7 +34,6 @@ const fakeEnv = {
   CF_API_TOKEN: "fake-cf-token",
   GITHUB_TOKEN: "fake-gh-token",
   FAS_ZONE_ID: "fake-fas-zone",
-  FGS_ZONE_ID: "fake-fgs-zone",
   BACKEND_FAS: undefined as Fetcher | undefined,
   ADMIN_PROVISION_TOKEN: undefined as string | undefined,
 };

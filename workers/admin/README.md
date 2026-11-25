@@ -1,26 +1,22 @@
 # freeappstore-admin
 
-The Cloudflare Worker that handles **provisioning** for [FreeAppStore](https://freeappstore.online/contribute.html) and [FreeGameStore](https://freegamestore.online). When a creator runs `fas publish`, this worker creates the GitHub repo, the R2 hosting route, the DNS record, the custom subdomain, and the storefront registry entry — atomically, in one call.
+The Cloudflare Worker that handles **provisioning** for [FreeAppStore](https://freeappstore.online) apps (FreeGameStore runs its own admin). When a creator runs `fas publish` or publishes from the console, the backend's `/v1/publish` calls this worker, which creates the GitHub repo, the R2 hosting route and the storefront registry entry in one call.
 
 Lives at `admin.freeappstore.online`. Humans sign in with the normal FAS GitHub OAuth session; the api worker reaches it over a service binding and authenticates with the shared internal token.
 
 ## What it does
 
-`POST /api/provision` — given an app/game id, name, category, store ('apps' | 'games'), creates:
+`POST /api/provision` — given an app id, name, category, icon and `store: "apps"` (`src/publish.ts` `handlePublish`):
 
 | Step | Action |
 |---|---|
-| 1. GitHub repo | `POST /orgs/<org>/repos` (empty repo, `auto_init: false`) so the user's `fas init` substitutions are the canonical first commit. |
-| 2. R2 hosting route | Inserts row in D1 `routes` table — host worker serves app content from R2. |
-| 3. Custom domain | `<id>.freeappstore.online` or `.freegamestore.online`. |
-| 4. DNS CNAME | `<id>` pointing to the host worker on the right zone. |
-| 5. Store registry | Appends entry to the storefront repo's `registry.json` (so the storefront listing page picks it up on next build). |
+| 1. GitHub repo | `POST /orgs/freeappstore-online/repos` (empty repo, `auto_init: false`) so the creator's `fas init` output is the first commit. An existing repo is reused only by its recorded owner. |
+| 1b. Collaborator | Gives `creatorGithub` push access to the repo. |
+| 2. Hosting route | Upserts the D1 `routes` row the host worker reads; `<id>.freeappstore.online` is served by the wildcard host route, so no per-app DNS record or custom domain is created. |
+| 3. Store registry | Adds the entry to `sites/storefront/registry.json` in this repo. Skipped if step 2 failed, so the storefront never lists a dead link. |
+| 4. CF Web Analytics | Mints (or reuses) the RUM site for the subdomain and stores its token in the backend's `app_analytics` over the `BACKEND_FAS` binding. Non-fatal. |
 
-If step 2 or 3 fails, step 5 is skipped to avoid leaving dead-link entries on the storefront.
-
-`GET /api/status?store=apps|games` — fast registry read, used by the dashboard. With `?detail=true`, hits CF API per-app for live deployment status.
-
-`GET /docs` — public-facing API reference (the page rendered at `admin.freeappstore.online/docs`).
+`POST /api/deprovision` is the inverse (`src/deprovision.ts`): registry entry, host route, R2 objects, any leftover per-app DNS records, then archives the repo (or deletes it with `deleteRepo: true`).
 
 ## Which APIs live here vs the backend
 
@@ -29,10 +25,9 @@ The rule: **this worker owns provisioning and anything that needs its privileged
 | Route module (`src/routes/`) | Paths | Belongs here? |
 |---|---|---|
 | `ping.ts` | `GET /api/ping` | Yes — backend `/status` probe of the service-binding auth path. |
-| `provision.ts` | `POST /api/provision` | Yes — creates repos, routes, DNS, registry entries. |
-| `deprovision.ts` | `POST /api/unpublish`, `POST /api/deprovision` | Yes — the inverse of provision. |
+| `provision.ts` | `POST /api/provision` | Yes — creates repos, host routes, registry entries. |
+| `deprovision.ts` | `POST /api/deprovision` | Yes — the inverse of provision. |
 | `transfer-owner.ts` | `POST /api/apps/transfer-owner`, `GET /api/apps/transfer-owner?app_id=` | Yes — compare-and-set owner change on the shared `apps` row, plus the audit read. Admin session only (a service token is not enough). |
-| `dns.ts` | `POST /api/fix-dns` | Yes — needs the CF DNS token. |
 | `reports.ts` | `PUT /api/test-report` (CI), `GET /test-report` | Yes — CI upload with `X-CI-Token`. |
 | `apps.ts` | `/api/apps/all`, `/api/apps/deploy-status`, `/api/apps/:id/{deploy-status,health,sessions}` | Yes for deploy-status (uses the org GitHub token; the backend proxies it to creators). The rest are admin-console reads. |
 | `ai-keys-proxy.ts` | `/api/ai-keys/*`, `/api/ai-grants*` | Transitional — a thin proxy to backend `/v1/internal/keys/*`. |
@@ -114,7 +109,7 @@ npx wrangler dev                       # local Worker; uses .dev.vars for secret
 
 ## Deploy
 
-Push to `main`. The `.github/workflows/deploy.yml` workflow runs tests, then `wrangler deploy`, then a smoke test against `/docs`. Requires org-level secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+Push to `main`. `.github/workflows/deploy-admin.yml` (repo root) runs the unit and runtime tests, builds the SPA, applies the D1 migrations, then `wrangler deploy`. Requires the secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
 Manual deploy if needed: `pnpm exec wrangler deploy`.
 

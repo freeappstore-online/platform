@@ -147,7 +147,6 @@ describe("handlePublish → CF Web Analytics outcomes", () => {
     CF_API_TOKEN: "cf",
     GITHUB_TOKEN: "gh",
     FAS_ZONE_ID: "zone1",
-    FGS_ZONE_ID: "zone2",
     DB: fakeDB(),
   };
   const analytics = (steps: Array<{ name: string; status: string; detail?: string }>) => steps.find((s) => s.name === "CF Web Analytics");

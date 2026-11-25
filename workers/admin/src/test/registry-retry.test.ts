@@ -28,7 +28,6 @@ const config: any = {
   registryPath: "sites/storefront/registry.json",
   registryKey: "apps",
   developer: "FreeAppStore",
-  templateRepo: "template-standalone",
   zoneIdFromEnv: () => "",
 };
 

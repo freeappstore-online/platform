@@ -13,7 +13,6 @@ import { appsRoutes } from "../routes/apps";
 import { contentProxyRoutes } from "../routes/content-proxy";
 import { creatorsRoutes } from "../routes/creators";
 import { deprovisionRoutes } from "../routes/deprovision";
-import { dnsRoutes } from "../routes/dns";
 import { pingRoutes } from "../routes/ping";
 import { provisionRoutes } from "../routes/provision";
 import { reportsRoutes } from "../routes/reports";
@@ -143,11 +142,13 @@ describe("routes/provision", () => {
 });
 
 describe("routes/deprovision", () => {
-  it("requires id and store on both endpoints", async () => {
-    for (const path of ["/api/unpublish", "/api/deprovision"]) {
-      const res = await call(deprovisionRoutes, path, post({ id: "x" }));
-      expect(res!.status).toBe(400);
-    }
+  it("requires id and store", async () => {
+    const res = await call(deprovisionRoutes, "/api/deprovision", post({ id: "x" }));
+    expect(res!.status).toBe(400);
+  });
+
+  it("no longer serves the removed /api/unpublish", async () => {
+    expect(await call(deprovisionRoutes, "/api/unpublish", post({ id: "x", store: "apps" }))).toBeNull();
   });
 
   it("ignores non-POST", async () => {
@@ -157,9 +158,7 @@ describe("routes/deprovision", () => {
   it("answers 400, not 500, to a malformed body on every write endpoint", async () => {
     const bad: RequestInit = { method: "POST", body: "{bad", headers: { "Content-Type": "application/json" } };
     const cases: Array<[RouteHandler, string]> = [
-      [deprovisionRoutes, "/api/unpublish"],
       [deprovisionRoutes, "/api/deprovision"],
-      [dnsRoutes, "/api/fix-dns"],
       [provisionRoutes, "/api/provision"],
     ];
     for (const [handler, path] of cases) {
@@ -341,36 +340,6 @@ describe("routes/reports", () => {
     const res = await call(reportsRoutes, "/test-report", {}, env({ CREATORS: fakeKV({ "report:test-report:latest": "<h1>ok</h1>" }) }));
     expect(res!.headers.get("Content-Type")).toContain("text/html");
     expect(await res!.text()).toBe("<h1>ok</h1>");
-  });
-});
-
-describe("routes/dns", () => {
-  it("creates the CNAME on the store's zone and upserts the host route", async () => {
-    const cfCalls: string[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
-        cfCalls.push(String(input));
-        return new Response(JSON.stringify({ success: true }));
-      }),
-    );
-    const runs: unknown[][] = [];
-    const res = await call(dnsRoutes, "/api/fix-dns", post({ id: "timer", store: "apps" }), env({ DB: fakeDB({ runs }) }));
-    const out = (await res!.json()) as { ok: boolean; steps: Array<{ name: string; status: string }> };
-    expect(out.ok).toBe(true);
-    expect(cfCalls).toEqual(["https://api.cloudflare.com/client/v4/zones/zone-fas/dns_records"]);
-    expect(runs[0]!.slice(0, 4)).toEqual(["timer", "freeappstore.online", "apps/timer", "apps"]);
-  });
-
-  it("reports a CNAME failure without throwing", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response(JSON.stringify({ success: false, errors: [{ message: "record exists" }] }))),
-    );
-    const res = await call(dnsRoutes, "/api/fix-dns", post({ id: "timer", store: "games" }));
-    const out = (await res!.json()) as { ok: boolean; steps: Array<{ name: string; status: string; detail: string }> };
-    expect(out.ok).toBe(false);
-    expect(out.steps[0]).toMatchObject({ name: "CNAME", status: "fail", detail: "record exists" });
   });
 });
 

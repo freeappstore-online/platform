@@ -62,7 +62,6 @@ function baseEnv(overrides?: Partial<DeprovisionEnv>): DeprovisionEnv {
     CF_API_TOKEN: "cf",
     GITHUB_TOKEN: "gh",
     FAS_ZONE_ID: "zone-fas",
-    FGS_ZONE_ID: "zone-fgs",
     DB: fakeDB(),
     BACKEND_FAS: undefined,
     ADMIN_PROVISION_TOKEN: undefined,

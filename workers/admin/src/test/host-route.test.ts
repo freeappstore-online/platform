@@ -12,7 +12,6 @@ const config = {
   registryPath: "sites/storefront/registry.json",
   registryKey: "apps",
   developer: "FreeAppStore",
-  templateRepo: "template-standalone",
   zoneIdFromEnv: () => "zone-id",
 };
 
@@ -57,7 +56,6 @@ const env = (db: any) =>
     CF_API_TOKEN: "x",
     GITHUB_TOKEN: "x",
     FAS_ZONE_ID: "x",
-    FGS_ZONE_ID: "x",
     DB: db,
   }) as any;
 

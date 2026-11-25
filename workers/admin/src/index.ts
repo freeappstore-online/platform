@@ -10,7 +10,6 @@ import { appsRoutes } from "./routes/apps";
 import { contentProxyRoutes } from "./routes/content-proxy";
 import { creatorsRoutes } from "./routes/creators";
 import { deprovisionRoutes } from "./routes/deprovision";
-import { dnsRoutes } from "./routes/dns";
 import { pingRoutes } from "./routes/ping";
 import { provisionRoutes } from "./routes/provision";
 import { reportsRoutes } from "./routes/reports";
@@ -32,7 +31,6 @@ const ROUTES: RouteHandler[] = [
   statsRoutes,
   creatorsRoutes,
   reportsRoutes,
-  dnsRoutes,
   transferOwnerRoutes,
   appsRoutes,
   agentSessionsRoutes,

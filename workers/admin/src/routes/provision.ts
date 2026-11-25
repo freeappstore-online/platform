@@ -29,7 +29,6 @@ export const provisionRoutes: RouteHandler = async ({ request, env, url, auth })
       CF_API_TOKEN: env.CF_API_TOKEN,
       GITHUB_TOKEN: env.GITHUB_TOKEN,
       FAS_ZONE_ID: env.FAS_ZONE_ID,
-      FGS_ZONE_ID: env.FGS_ZONE_ID,
       DB: env.DB,
       // Required by the CF Web Analytics step to persist the minted
       // site_tag back into the FAS backend's app_analytics table. Omitting

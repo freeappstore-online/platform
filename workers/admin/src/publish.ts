@@ -23,7 +23,6 @@ export interface PublishEnv {
   CF_API_TOKEN: string;
   GITHUB_TOKEN: string;
   FAS_ZONE_ID: string;
-  FGS_ZONE_ID: string;
   /** D1 binding for the `routes` table that freeappstore-host reads to map
    *  Host header → R2 prefix. */
   DB?: D1Database;
@@ -84,7 +83,6 @@ export interface StoreConfig {
   registryPath: string;
   registryKey: string;
   developer: string;
-  templateRepo: string;
   /** Resolves the CF zone id for DNS at request time. We can't put the id in
    * here statically because it lives in env vars. */
   zoneIdFromEnv: (env: PublishEnv) => string | undefined;
@@ -98,7 +96,6 @@ export const STORE_CONFIG: Record<Store, StoreConfig> = {
     registryPath: "sites/storefront/registry.json",
     registryKey: "apps",
     developer: "FreeAppStore",
-    templateRepo: "template-standalone",
     zoneIdFromEnv: (env) => env.FAS_ZONE_ID,
   },
 };
