@@ -48,6 +48,7 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 |------|-------------|
 | `agent_build` | Hand a prompt to the VibeCode agent; it writes the code and deploys it |
 | `agent_status` | Poll an agent_build session for progress and live URL |
+| `agent_activity` | Read your conversation with the build agent for a session you own: prompts, replies, tool actions |
 
 ### Read (no auth required)
 
@@ -66,6 +67,7 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 | `app_logs` | Owner | Recent errors, warnings, SDK calls, build info |
 | `platform_guide` | None | Fetch full SKILLS.md platform guide, followed by the current app-building rules |
 | `sdk_reference` | None | SDK reference. Start with `shell` (the standard app frame), then `components`; also auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui |
+| `mcp_audit_log` | FAS token | Your recent MCP audit events (writes, dry-runs, denials), newest first |
 
 ## Workflow Recipes
 
@@ -139,6 +141,7 @@ Expected tool flow:
 **Agent** (auth + usable AI provider connection):
 - Trigger VibeCode agent builds
 - Poll agent build status
+- Read your agent build conversation
 
 **Not supported via MCP:**
 - Deleting apps or repos
@@ -150,19 +153,16 @@ Expected tool flow:
 
 ## Authentication
 
-The MCP server supports two auth methods:
-
-1. **OAuth 2.1** (automatic via `mcp-remote`) — recommended. The OAuth flow redirects to GitHub sign-in and provisions a scoped access token.
-2. **Bearer token** — pass a FAS session token directly via `Authorization: Bearer <token>`. It must be a first-party session (`aud: console`: CLI `fas login`, console or storefront sign-in); a token an app received is scoped to that app and is refused by the tools' routes.
+The MCP server authenticates with **OAuth 2.1** (automatic via `mcp-remote`). The OAuth flow redirects to FreeAppStore sign-in and provisions a scoped MCP access token. A raw FAS session token is not accepted as a Bearer token; connect through OAuth.
 
 Write tools (`create_app`, `update_files`) additionally verify app ownership via the backend `/v1/apps/mine` endpoint. Agent tools (`agent_build`) require a usable AI key in your vault or a supported platform-configured provider connection. The selected provider controls availability and charges.
 
 ## Security
 
 - **Scoped tokens**: write tools verify ownership per-app, not blanket write access.
-- **Read-only mode**: send `X-FAS-Read-Only: true` header or `?read_only=1` query param to block all write tools (`create_app`, `update_files`, `agent_build`). Useful for CI, auditing, or browse-only integrations.
+- **Read-only mode**: server-wide only. When the Worker runs with `MCP_READ_ONLY=1`, every non-read tool (`create_app`, `update_files`, `agent_build`) is refused for all users. There is no per-session read-only switch; to keep a client to reads, grant it only the `read` scope.
 - **Dry-run**: pass `dry_run: true` to `create_app` or `update_files` to validate inputs, check ownership, and preview what would happen — without executing.
-- **Audit logging**: all write tool calls emit structured JSON logs (tool, userId, timestamp, params) to CF Worker logs / Logpush.
+- **Audit logging**: `create_app`, `update_files` and `agent_build` record each success, dry-run, error and denial (including scope and read-only denials) as a redacted event in KV, keyed to your account and kept for 90 days. Read your own events with the `mcp_audit_log` tool.
 - **Session isolation**: `agent_build` sessions are namespaced per user; you cannot read or target another user's session.
 - **No generic shell/API proxy**: every tool has a specific, bounded purpose.
 - **OAuth rate limiting**: token endpoint returns 429 on abuse.

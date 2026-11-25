@@ -38,6 +38,20 @@ Streamable HTTP transport at `https://mcp.freeappstore.online/mcp`
 | `sdk_reference` | None | SDK docs. Start with `shell` (the standard app frame), then `components` (every UI component); also auth, KV, counters, collections, rooms, proxy, keys, push, hooks |
 | `platform_guide` | None | Fetch full SKILLS.md, followed by the current app-building rules |
 | `list_apps` | FAS token | List your published apps |
+| `app_logs` | Owner | Recent errors, warnings, SDK calls, build info |
+| `list_files` | None | List files in a public app repo |
+| `read_file` | None | Read one file from a public app repo |
+| `create_app` | FAS token | Provision repo + hosting + listing and scaffold the starter (`dry_run` supported) |
+| `update_files` | Owner | Write/overwrite files in an app you own; auto-redeploys (`dry_run` supported) |
+| `agent_build` | FAS token + AI key | Hand a prompt to the VibeCode agent, which writes and deploys the app |
+| `agent_status` | Own session | Poll an `agent_build` session for progress and live URL |
+| `agent_activity` | Own session | Read your conversation with the build agent for a session |
+| `mcp_audit_log` | FAS token | Your recent MCP audit events (writes, dry-runs, denials), newest first |
+
+`MCP_READ_ONLY=1` refuses every non-read tool server-wide. `create_app`, `update_files` and
+`agent_build` record redacted audit events per user in `OAUTH_KV` (90-day TTL, `src/safety.ts`),
+read back with `mcp_audit_log`. The write tools and authenticated GitHub reads need the
+`GITHUB_TOKEN` secret.
 
 ### Building apps: the Shell comes first
 

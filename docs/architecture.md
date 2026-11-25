@@ -32,7 +32,7 @@ fas/platform/
 ├── workers/admin        Provisioning + moderation — admin.freeappstore.online
 ├── workers/agent        VibeCode AI app builder
 ├── workers/host         R2 host worker — *.freeappstore.online
-├── workers/mcp          MCP server (12 tools) — mcp.freeappstore.online
+├── workers/mcp          MCP server — mcp.freeappstore.online
 ├── sites/storefront     Static storefront and public guides — freeappstore.online
 ├── sites/console        Creator portal + VibeCode builder (/app/build) — freeappstore.online/app/ (proxied)
 ├── brand/               Brand assets + BRAND.md / SKILLS.md
