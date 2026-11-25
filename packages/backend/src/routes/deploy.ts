@@ -639,7 +639,7 @@ deployRoutes.post('/deploys', async (c) => {
 
 deployRoutes.put('/deploys/:id/files/*', async (c) => {
   const id = c.req.param('id');
-  const { row, files } = await openDeploy(c.env, id, c.req.header('Authorization'));
+  const { row, files, stored } = await openDeploy(c.env, id, c.req.header('Authorization'));
   const marker = `/deploys/${id}/files/`;
   const pathname = new URL(c.req.url).pathname;
   let path: string;
@@ -650,6 +650,9 @@ deployRoutes.put('/deploys/:id/files/*', async (c) => {
   }
   const expected = files[path];
   if (expected === undefined) throw new HttpError(400, `${path} is not in the manifest`);
+  // Commit skips scanning reused paths, so their bytes may only come from /reuse (#716).
+  if (stored.reuse.includes(path))
+    throw new HttpError(400, `${path} is reused from the live release; it is not uploaded`);
   if (Number(c.req.header('Content-Length')) !== expected)
     throw new HttpError(400, `${path}: Content-Length must be ${expected}`);
 
@@ -701,7 +704,11 @@ deployRoutes.post('/deploys/:id/reuse', async (c) => {
 
 deployRoutes.post('/deploys/:id/commit', async (c) => {
   const id = c.req.param('id');
-  const { row, files } = await openDeploy(c.env, id, c.req.header('Authorization'));
+  const {
+    row,
+    files,
+    stored: manifest,
+  } = await openDeploy(c.env, id, c.req.header('Authorization'));
   const bucket = bucketOf(c.env);
   const prefix = releasePrefix(row.app_id, id);
 
@@ -723,19 +730,46 @@ deployRoutes.post('/deploys/:id/commit', async (c) => {
 
   // Check staged release bytes before making the route live. This is the
   // authoritative gate; CLI and workflow checks only provide fast feedback.
-  const failedChecks = new Set<string>();
-  let serviceWorker = false;
-  for (const path of Object.keys(files)) {
-    if (META_PATHS.has(path) || !/\.(?:html?|m?js|cjs|json)$/i.test(path)) continue;
+  // Reused files are byte-identical to the live release, which passed this gate
+  // when it was committed, so only this session's uploads are scanned: reading
+  // every file of a 12k-page app in one request hung the commit (#716).
+  const reused = new Set(manifest.reuse);
+  const scanned = Object.keys(files).filter(
+    (path) =>
+      !META_PATHS.has(path) && !reused.has(path) && /\.(?:html?|m?js|cjs|json)$/i.test(path),
+  );
+  const read = async (path: string) => {
     const object = await bucket.get(`${prefix}${path}`);
     if (!object) throw new HttpError(409, `artifact file disappeared: ${path}`);
-    const text = await new Response(object.body).text();
+    return new Response(object.body).text();
+  };
+  // A Worker runs six subrequests at a time; read that many files at once.
+  const inParallel = (paths: string[], each: (path: string, text: string) => void) => {
+    const queue = [...paths];
+    return Promise.all(
+      Array.from({ length: 6 }, async () => {
+        for (let path = queue.shift(); path !== undefined; path = queue.shift())
+          each(path, await read(path));
+      }),
+    );
+  };
+  const failedChecks = new Set<string>();
+  let serviceWorker = false;
+  await inParallel(scanned, (path, text) => {
     serviceWorker ||= registersServiceWorker(path, text);
-    const results = checkArtifactFiles(new Map([[path, text]]));
-    for (const result of results) if (result.status === 'fail') failedChecks.add(result.name);
-    if (failedChecks.size)
-      throw new HttpError(422, `compliance check failed: ${[...failedChecks].join(', ')}`);
-  }
+    for (const result of checkArtifactFiles(new Map([[path, text]])))
+      if (result.status === 'fail') failedChecks.add(result.name);
+  });
+  if (failedChecks.size)
+    throw new HttpError(422, `compliance check failed: ${[...failedChecks].join(', ')}`);
+  // The registration can sit in an unchanged bundle; look there only if needed.
+  if (!serviceWorker)
+    await inParallel(
+      [...reused].filter((path) => /\.(?:m?js|cjs)$/i.test(path) || path === 'index.html'),
+      (path, text) => {
+        serviceWorker ||= registersServiceWorker(path, text);
+      },
+    );
   if (!serviceWorker)
     throw new HttpError(
       422,

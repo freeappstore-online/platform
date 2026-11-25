@@ -480,6 +480,42 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
       expect(at('index.html')).toBe(`${SW}<a>`);
     });
 
+    it('commit scans only uploaded files; a reused bundle can carry the worker registration (#716)', async () => {
+      const app = 'navigator.serviceWorker.register("/sw.js");render();';
+      await deployDelta(
+        { 'index.html': '<main>v1</main>', 'app.js': app, 'page.html': 'p' },
+        { 'index.html': hex('a'), 'app.js': hex('b'), 'page.html': hex('c') },
+      );
+      const reads: string[] = [];
+      const get = store.bucket.get.bind(store.bucket);
+      store.bucket.get = (async (key: string) => {
+        reads.push(key);
+        return get(key);
+      }) as R2Bucket['get'];
+      const second = await deployDelta(
+        { 'index.html': '<main>v2</main>', 'app.js': app, 'page.html': 'p' },
+        { 'index.html': hex('d'), 'app.js': hex('b'), 'page.html': hex('c') },
+      );
+      expect(second.session.reuse.sort()).toEqual(['app.js', 'page.html']);
+      expect(second.committed.status).toBe(200);
+      const prefix = `apps/alpha/.r/${second.session.id}/`;
+      const scannedAtCommit = reads
+        .filter((k) => k.startsWith(prefix))
+        .map((k) => k.slice(prefix.length));
+      // index.html (uploaded) is scanned; app.js is read only for the worker
+      // registration; the reused page.html is never re-read.
+      expect(scannedAtCommit.sort()).toEqual(['app.js', 'index.html']);
+    });
+
+    it('refuses an upload to a path reused from the live release', async () => {
+      await deployDelta({ 'index.html': `${SW}aaa` }, { 'index.html': hex('a') });
+      const s = (await (
+        await openDelta('alpha', '101', { 'index.html': `${SW}aaa` }, { 'index.html': hex('a') })
+      ).json()) as Session;
+      expect(s.reuse).toEqual(['index.html']);
+      expect((await put(s.id, s.token, 'index.html', `${SW}bbb`)).status).toBe(400);
+    });
+
     it('a same-size file with a different hash is uploaded again', async () => {
       await deployDelta({ 'index.html': 'aaa' }, { 'index.html': hex('a') });
       const res = await openDelta(
