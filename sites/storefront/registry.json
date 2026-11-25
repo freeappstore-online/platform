@@ -3435,6 +3435,22 @@
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-25T21:21:40.331Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "mandarinflash",
+      "name": "mandarinflash",
+      "category": "Learning",
+      "icon": "🎙️",
+      "iconBg": "#dbeafe",
+      "description": "Mandarin association flash cards: tone pairs, homophones, look-alikes, and near-sounds.",
+      "appUrl": "https://mandarinflash.freeappstore.online",
+      "repo": "freeappstore-online/mandarinflash",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-25T21:36:47.997Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
