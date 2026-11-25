@@ -4,6 +4,16 @@ import { matchTrackersInCode } from './checks/no-tracking.js';
 import { stripCommentsForExt } from './lib/strip.js';
 import type { CheckResult } from './types.js';
 
+/**
+ * Every FAS app must register a service worker (the PWA mandate `pwa-offline`
+ * checks in source). True when one shipped file makes the call; the caller
+ * requires it from at least one file of the artifact.
+ */
+export function registersServiceWorker(path: string, content: string): boolean {
+  const ext = path.slice(path.lastIndexOf('.')).toLowerCase();
+  return /\bserviceWorker\s*\.\s*register\s*\(/.test(stripCommentsForExt(content, ext));
+}
+
 /** Inspect the text actually shipped in a built app, without filesystem access. */
 export function checkArtifactFiles(files: ReadonlyMap<string, string>): CheckResult[] {
   const ads: string[] = [];

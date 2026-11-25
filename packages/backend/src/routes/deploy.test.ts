@@ -26,6 +26,8 @@ const b64url = (bytes: Uint8Array) =>
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 const b64json = (o: unknown) => b64url(new TextEncoder().encode(JSON.stringify(o)));
+// The commit gate requires a shipped service worker registration (#666).
+const SW = '<script>navigator.serviceWorker.register("/sw.js")</script>';
 
 let priv: CryptoKey;
 let jwk: JsonWebKey;
@@ -186,7 +188,7 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
 
   it('uploads under the app release prefix, then switches the route atomically', async () => {
     const { session, committed } = await deploy('alpha', '101', {
-      'index.html': '<script src="/assets/a.js"></script>',
+      'index.html': `${SW}<script src="/assets/a.js"></script>`,
       'assets/a.js': 'x',
       'my photo.png': 'p',
       '.vcqa/report.json': '{}',
@@ -198,6 +200,16 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     expect(store.objects.has(`apps/alpha/.r/${session.id}/my photo.png`)).toBe(true);
     expect(store.objects.has('apps/alpha/.vcqa/report.json')).toBe(true);
     expect([...store.objects.keys()].every((k) => k.startsWith('apps/alpha/'))).toBe(true);
+  });
+
+  it('rejects an artifact that never registers a service worker', async () => {
+    const { committed } = await deploy('alpha', '101', {
+      'index.html': '<script src="/assets/app.js"></script>',
+      'assets/app.js': '// navigator.serviceWorker.register("/sw.js")\nrender();',
+    });
+    expect(committed.status).toBe(422);
+    expect(await committed.text()).toMatch(/Service worker/);
+    expect(release('alpha')).toBeNull();
   });
 
   it('rejects tracking code in the uploaded artifact before route promotion', async () => {
@@ -213,7 +225,7 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
   it('keeps the previous release for rollback and deletes older ones', async () => {
     const ids: string[] = [];
     for (let i = 0; i < 3; i++)
-      ids.push((await deploy('alpha', '101', { 'index.html': `v${i}` })).session.id);
+      ids.push((await deploy('alpha', '101', { 'index.html': `${SW}v${i}` })).session.id);
     expect(release('alpha')).toBe(ids[2]);
     const has = (id: string) => store.objects.has(`apps/alpha/.r/${id}/index.html`);
     // Within the grace a page cached before the switch can still load v0.
@@ -247,16 +259,16 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
 
   describe('repository A can never write app B', () => {
     beforeEach(async () => {
-      await deploy('alpha', '101', { 'index.html': 'a' });
-      await deploy('beta', '202', { 'index.html': 'b' });
+      await deploy('alpha', '101', { 'index.html': `${SW}a` });
+      await deploy('beta', '202', { 'index.html': `${SW}b` });
     });
 
     it('a repo renamed to B still deploys only to the app its id is pinned to', async () => {
-      const { session } = await deploy('beta', '101', { 'index.html': 'evil' });
+      const { session } = await deploy('beta', '101', { 'index.html': `${SW}evil` });
       expect(session.app_id).toBe('alpha');
       expect(
         new TextDecoder().decode(store.objects.get(`apps/beta/.r/${release('beta')}/index.html`)),
-      ).toBe('b');
+      ).toBe(`${SW}b`);
     });
 
     it('a recreated or reused repo name with a different repository_id is refused', async () => {
@@ -448,7 +460,7 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     }
 
     it('uploads everything the first time, then only what changed', async () => {
-      const v1 = { 'index.html': '<a>', 'big.pdf': 'x'.repeat(50), 'a.js': 'one' };
+      const v1 = { 'index.html': `${SW}<a>`, 'big.pdf': 'x'.repeat(50), 'a.js': 'one' };
       const h1 = { 'index.html': hex('a'), 'big.pdf': hex('b'), 'a.js': hex('c') };
       const first = await deployDelta(v1, h1);
       expect(first.session.reuse).toEqual([]);
@@ -465,7 +477,7 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
         new TextDecoder().decode(store.objects.get(`apps/alpha/.r/${second.session.id}/${path}`));
       expect(at('big.pdf')).toBe('x'.repeat(50));
       expect(at('a.js')).toBe('two');
-      expect(at('index.html')).toBe('<a>');
+      expect(at('index.html')).toBe(`${SW}<a>`);
     });
 
     it('a same-size file with a different hash is uploaded again', async () => {
@@ -483,13 +495,13 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
 
     it('will not copy a path that is not on the reuse list, nor leave the release incomplete', async () => {
       await deployDelta(
-        { 'index.html': 'aaa', 'b.js': 'bbb' },
+        { 'index.html': `${SW}aaa`, 'b.js': 'bbb' },
         { 'index.html': hex('a'), 'b.js': hex('b') },
       );
       const res = await openDelta(
         'alpha',
         '101',
-        { 'index.html': 'aaa', 'b.js': 'ccc' },
+        { 'index.html': `${SW}aaa`, 'b.js': 'ccc' },
         { 'index.html': hex('a'), 'b.js': hex('c') },
       );
       const s = (await res.json()) as Session;
@@ -538,7 +550,9 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     });
 
     it('still serves a client that sends no hashes (the pinned fleet workflow)', async () => {
-      const { session, committed } = await deploy('alpha', '101', { 'index.html': 'old client' });
+      const { session, committed } = await deploy('alpha', '101', {
+        'index.html': `${SW}old client`,
+      });
       expect(committed.status).toBe(200);
       expect(session).not.toHaveProperty('missing');
     });
@@ -546,7 +560,7 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
     it('prunes the stored manifest with its release', async () => {
       const ids: string[] = [];
       for (let i = 0; i < 3; i++) {
-        const files = { 'index.html': `v${i}` };
+        const files = { 'index.html': `${SW}v${i}` };
         ids.push((await deployDelta(files, { 'index.html': hex(String(i)) })).session.id);
       }
       expect(store.objects.has(`apps/alpha/.d/${ids[0]}.json`)).toBe(true);
@@ -656,12 +670,15 @@ describe.skipIf(!hasSqlite)('keyless deploys (/v1/deploys)', () => {
   });
 
   it('an older run that commits after a newer one cannot replace it', async () => {
-    const older = (await (await open(await oidc('alpha', '101'), { 'index.html': 3 })).json()) as {
+    const old = `${SW}old`;
+    const older = (await (
+      await open(await oidc('alpha', '101'), { 'index.html': old.length })
+    ).json()) as {
       id: string;
       token: string;
     };
-    await put(older.id, older.token, 'index.html', 'old');
-    const { session } = await deploy('alpha', '101', { 'index.html': 'new' });
+    await put(older.id, older.token, 'index.html', old);
+    const { session } = await deploy('alpha', '101', { 'index.html': `${SW}new` });
     expect((await commit(older.id, older.token)).status).toBe(409);
     expect(release('alpha')).toBe(session.id);
   });

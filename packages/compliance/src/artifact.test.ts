@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkArtifactFiles } from './artifact.js';
+import { checkArtifactFiles, registersServiceWorker } from './artifact.js';
 
 describe('built artifact compliance', () => {
   it('detects trackers and ads embedded in built JavaScript', () => {
@@ -20,5 +20,22 @@ describe('built artifact compliance', () => {
         (r) => r.status === 'pass',
       ),
     ).toBe(true);
+  });
+});
+
+describe('service worker registration', () => {
+  it('finds a minified registration call', () => {
+    expect(
+      registersServiceWorker('assets/i.js', 'navigator.serviceWorker.register(e,{scope:"/"})'),
+    ).toBe(true);
+  });
+
+  it('ignores a call that is only commented out', () => {
+    expect(
+      registersServiceWorker('assets/i.js', '// navigator.serviceWorker.register("/sw.js")'),
+    ).toBe(false);
+    expect(registersServiceWorker('index.html', '<!-- serviceWorker.register("/sw.js") -->')).toBe(
+      false,
+    );
   });
 });
