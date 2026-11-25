@@ -696,10 +696,13 @@ import {
 | `ListRow` | Clickable list row with icon/title/subtitle/trailing | `icon`, `title`, `subtitle`, `trailing`, `onClick` |
 | `ErrorBoundary` | Catches render errors, shows fallback | `children`, `fallback` |
 | `KeyPrompt` | Prompt when app needs a user's API key | `app`, `provider`, `providerName`, `message` |
+| `StatusBar` | Narrow bottom strip: "Save to home screen" in a browser tab, the app's address once installed. Rendered by `Shell` | -- |
 | `Footer` | PWA footer with safe-area padding (standalone only) | `text` (default: "Part of FreeAppStore") |
 | `BuildInfo` | Debug overlay (Alt+click or 5-tap to reveal) | `version`, `commit`, `buildDate`, `extra` |
 
-**Footer behavior:** Only renders when the app is installed to the home screen (PWA standalone mode). Hidden in regular browser tabs where the browser provides its own bottom chrome. This prevents iPhone users from accidentally triggering Siri when tapping near the bottom of the screen. The Footer adds `env(safe-area-inset-bottom)` padding automatically to keep content out of the home indicator zone. Footer is opt-in; Shell does not include it automatically. Shell pads the frame with the bottom safe area either way. Import `Footer` explicitly when an app chooses store attribution. Use `useStandalone()` hook if you need to detect standalone mode in custom layouts.
+**Status bar behavior:** `Shell` ends with a narrow status bar (SDK 0.19.0+). In a browser tab it says **Save to home screen** and opens the browser's install prompt, or the steps for that device (iPhone/iPad: Share → Add to Home Screen). Installed to the home screen, it shows the app's address (e.g. `timer.freeappstore.online`) as a link that opens the app in a browser tab. It pads for the home indicator. Keep it in normal apps; pass `statusBar={false}` only for a full-bleed canvas or an app with its own bottom bar, and render `StatusBar` below `main` in a custom frame.
+
+**Footer behavior:** Only renders when the app is installed to the home screen (PWA standalone mode). Hidden in regular browser tabs where the browser provides its own bottom chrome. This prevents iPhone users from accidentally triggering Siri when tapping near the bottom of the screen. The Footer adds `env(safe-area-inset-bottom)` padding automatically to keep content out of the home indicator zone. Footer is opt-in; Shell does not include it automatically. Shell's status bar (or, with `statusBar={false}`, the frame) pads for the bottom safe area. Import `Footer` explicitly when an app chooses store attribution. Use `useStandalone()` hook if you need to detect standalone mode in custom layouts.
 
 ### Hooks
 
@@ -714,7 +717,7 @@ import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
 
 ### When to use Shell vs individual components
 
-- **Supported default:** Use `Shell` with `nav` for primary screens. It handles the topbar, navigation, auth gate, theme, error boundary and toasts. It does not add a footer. Both `fas init` presets start inside it.
+- **Supported default:** Use `Shell` with `nav` for primary screens. It handles the topbar, navigation, auth gate, theme, error boundary, toasts and the bottom status bar (Save to home screen / app address). It does not add store attribution. Both `fas init` presets start inside it.
 - **Custom navigation:** Keep `Shell` and pass `renderNav`, use the exported `NavBar`, or replace the frame under the composable starter contract. A sidebar or bottom nav is allowed. Detail routes stay off `nav`.
 - **Older apps** with a local shell or `FasShell` without `nav`: move to `Shell` with `nav`, or keep a custom frame that meets the contract. See https://docs.freeappstore.online/ui/#migrating-to-the-shell
 

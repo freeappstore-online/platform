@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { useAuth } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
-import { Spinner } from './components.js';
+import { Spinner, StatusBar } from './components.js';
 import { Avatar, TextSizeToggle, ThemeToggle } from './core.js';
 import { activeHref, NavBar, type NavItem } from './navbar.js';
 import {
@@ -89,6 +89,11 @@ export interface ShellProps {
    * example by rendering `ProfilePage`. Default `true`.
    */
   headerAppearance?: boolean;
+  /**
+   * The narrow strip at the bottom of the app: "Save to home screen" in a
+   * browser tab, the app's address once installed. Default `true`.
+   */
+  statusBar?: boolean;
 }
 
 function normalizeShellAppName(appName?: string) {
@@ -97,7 +102,7 @@ function normalizeShellAppName(appName?: string) {
 
 /**
  * Full wrapper: skip link, sticky topbar with main navigation, offline banner,
- * main content (error boundary + Suspense), toast region, safe-area padding. Optional auth
+ * main content (error boundary + Suspense), toast region, bottom status bar, safe-area padding. Optional auth
  * gate. On client-side navigation (`onNavigate`) it scrolls to the top (or back
  * to where the route was left) and moves focus to the new screen's heading.
  */
@@ -115,6 +120,7 @@ export function Shell({
   requireAuth = false,
   showThemeToggle = true,
   headerAppearance = true,
+  statusBar = true,
 }: ShellProps) {
   const { user, loading } = useAuth(app);
   const [currentLocation, setCurrentLocation] = useCurrentLocation();
@@ -208,7 +214,10 @@ export function Shell({
 
   return (
     <ToastProvider>
-      <div className="min-h-[100dvh] flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
+      {/* The status bar pads for the bottom safe area itself. */}
+      <div
+        className={`min-h-[100dvh] flex flex-col${statusBar ? '' : ' pb-[env(safe-area-inset-bottom,0px)]'}`}
+      >
         <SkipLink mainRef={mainRef} />
         <header className="flex flex-wrap items-center justify-between gap-2 p-[0.5rem_1rem] border-b border-line bg-panel sticky top-0 z-[50]">
           <div className="min-w-0 flex-[1_1_auto]">
@@ -287,6 +296,7 @@ export function Shell({
             </Suspense>
           </ShellErrorBoundary>
         </main>
+        {statusBar && <StatusBar />}
       </div>
     </ToastProvider>
   );

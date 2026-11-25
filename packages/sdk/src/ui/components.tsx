@@ -6,8 +6,10 @@ import {
   useId,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import type { FreeAppStore } from '../index.js';
+import { getPwaInstallState, requestPwaInstall, subscribePwaInstall } from '../pwa.js';
 
 // ---------------------------------------------------------------------------
 // Spinner
@@ -774,22 +776,102 @@ export function Footer({ text }: FooterProps) {
  * to home screen). Use this for app-specific installed-mode behavior.
  */
 export function useStandalone(): boolean {
-  const [standalone, setStandalone] = useState(false);
+  // Read synchronously so an installed app never flashes browser-only UI.
+  const [standalone, setStandalone] = useState(isStandalone);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const mq = window.matchMedia('(display-mode: standalone)');
-    const check = () => {
-      setStandalone(
-        mq.matches || (navigator as unknown as { standalone?: boolean }).standalone === true,
-      );
-    };
+    const check = () => setStandalone(isStandalone());
     check();
     mq.addEventListener('change', check);
     return () => mq.removeEventListener('change', check);
   }, []);
 
   return standalone;
+}
+
+function isStandalone(): boolean {
+  if (typeof window === 'undefined') return false;
+  return (
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    (navigator as unknown as { standalone?: boolean }).standalone === true
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StatusBar
+// ---------------------------------------------------------------------------
+
+function installSteps(): string {
+  const ua = navigator.userAgent;
+  // iPadOS reports a Mac user agent; touch points tell them apart.
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1))
+    return 'In Safari, tap Share, then Add to Home Screen, then Add.';
+  if (/Android/.test(ua))
+    return 'Open the browser menu (⋮), then tap Install app or Add to Home screen.';
+  return 'Use your browser’s Install app or Add to Home Screen option, or open this address on your phone and add it there.';
+}
+
+/**
+ * A narrow strip at the very bottom of the app. In a browser tab it offers
+ * "Save to home screen" (the browser's install prompt where one exists, else
+ * the steps for this device). Installed to the home screen, it shows the app's
+ * address as a link that opens it in a browser tab. It pads for the bottom
+ * safe area itself. `Shell` renders it by default (`statusBar={false}` opts out).
+ */
+export function StatusBar() {
+  const standalone = useStandalone();
+  const installState = useSyncExternalStore(
+    subscribePwaInstall,
+    getPwaInstallState,
+    () => 'unavailable',
+  );
+  const [stepsOpen, setStepsOpen] = useState(false);
+  if (typeof window === 'undefined') return null;
+  const { host, origin } = window.location;
+  const className =
+    'text-[0.7rem] leading-none text-muted no-underline bg-transparent border-0 p-[0.4rem_0.75rem] rounded cursor-pointer font-[inherit] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
+
+  return (
+    <>
+      <footer
+        data-fas-status-bar=""
+        className="sticky bottom-0 z-[40] flex justify-center border-t border-line bg-panel pb-[env(safe-area-inset-bottom,0px)]"
+      >
+        {standalone ? (
+          <a href={`${origin}/`} target="_blank" rel="noopener noreferrer" className={className}>
+            {host}
+          </a>
+        ) : (
+          <button
+            type="button"
+            className={className}
+            disabled={installState === 'prompting'}
+            onClick={() => {
+              if (installState !== 'available') {
+                setStepsOpen(true);
+                return;
+              }
+              void requestPwaInstall().then(
+                (opened) => opened || setStepsOpen(true),
+                () => setStepsOpen(true),
+              );
+            }}
+          >
+            Save to home screen
+          </button>
+        )}
+      </footer>
+      {/* Outside the sticky footer so the dialog is not confined to its stacking context. */}
+      <Modal open={stepsOpen} onClose={() => setStepsOpen(false)} title="Save to home screen">
+        <p className="m-0 text-ink">{installSteps()}</p>
+        <p className="mt-3 mb-0 text-muted text-[0.85rem]">
+          Then open {host} from your home screen like any other app.
+        </p>
+      </Modal>
+    </>
+  );
 }
 
 export function KeyPrompt({ app, provider, providerName, message }: KeyPromptProps) {

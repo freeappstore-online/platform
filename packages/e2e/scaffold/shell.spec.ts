@@ -172,8 +172,9 @@ test('fresh scaffold: public screens, feature-level sign-in and Profile preferen
       ),
     ).toBeVisible();
   }
-  // The standard Shell does not add platform attribution bars.
-  await expect(page.getByRole('contentinfo')).toHaveCount(0);
+  // The standard Shell ends with a status bar offering installation, not store attribution.
+  await expect(page.getByRole('contentinfo').getByRole('button')).toHaveText('Save to home screen');
+  await expect(page.getByRole('link', { name: 'Part of FreeAppStore' })).toHaveCount(0);
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
   await page.keyboard.press('Enter');
@@ -308,7 +309,7 @@ function BrowserProbe() {
 });
 
 for (const mode of ['ios', 'display-mode'] as const) {
-  test(`installed app (${mode}) keeps the frame free of platform attribution bars`, async ({
+  test(`installed app (${mode}) shows its address in the status bar, not store attribution`, async ({
     page,
   }) => {
     // Chromium cannot install a PWA in this context. Emulate the documented
@@ -343,9 +344,12 @@ for (const mode of ['ios', 'display-mode'] as const) {
     );
     await page.goto('/');
     await landmarks(page);
-    await expect(page.getByRole('contentinfo')).toHaveCount(0);
+    const address = page.getByRole('contentinfo').getByRole('link');
+    await expect(address).toHaveText(new URL(page.url()).host);
+    await expect(address).toHaveAttribute('target', '_blank');
     await expect(page.getByRole('link', { name: 'Part of FreeAppStore' })).toHaveCount(0);
-    const frame = page.getByRole('main').locator('..');
+    // The status bar owns the bottom safe area.
+    const frame = page.getByRole('contentinfo');
     await expect(frame).toHaveClass(/pb-\[env\(safe-area-inset-bottom,0px\)\]/);
     // Check the compiled Tailwind rule so a missing utility cannot pass
     // merely because desktop safe-area insets default to zero.
@@ -406,7 +410,7 @@ test('published SDK still supports an explicitly chosen Footer (#332)', async ({
       );
     });
     await page.goto('/');
-    await expect(page.locator('footer')).toHaveCount(1);
+    await expect(page.locator('footer:not([data-fas-status-bar])')).toHaveCount(1);
     await expect(page.getByRole('link', { name: 'App-chosen attribution' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Part of FreeAppStore' })).toHaveCount(0);
   } finally {

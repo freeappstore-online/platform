@@ -67,7 +67,7 @@ const SHARED_FILES: Record<string, string> = {
   "dependencies": {
     "react": "^19",
     "react-dom": "^19",
-    "@freeappstore/sdk": "^0.16.39"
+    "@freeappstore/sdk": "^0.19.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1",
@@ -417,6 +417,8 @@ export default function App() {
     setPath(window.location.pathname);
   };
 
+  // Shell's bottom status bar says "Save to home screen" in a browser tab and
+  // shows this app's address once installed. statusBar={false} removes it.
   return (
     <Shell app={fas} appName={"APPNAME_JS"} nav={NAV} onNavigate={navigate}>
       <div className="mx-auto w-full max-w-3xl p-4 sm:p-8">

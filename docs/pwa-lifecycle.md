@@ -121,6 +121,17 @@ does not prove installation succeeded. Installed/unsupported browsers do not get
 nonfunctional button. Browser-specific manual installation remains available through
 the browser's own menu.
 
+## Status bar: save to home screen
+
+Requires SDK `0.19.0` or later (#718). `Shell` ends with a narrow status bar. In a browser tab it
+says **Save to home screen**: a tap opens the browser's install prompt when the runtime holds an
+offer, otherwise a short dialog with the steps for that device (iPhone/iPad: Share → Add to Home
+Screen; Android: browser menu → Install app). Once the app runs from the home screen, the bar shows
+the app's address (for example `timer.freeappstore.online`) as a link that opens it in a browser
+tab, so people can find, share, or reinstall it. The bar pads for the home indicator. Pass
+`statusBar={false}` to `Shell` to remove it; custom frames can render `StatusBar` from
+`@freeappstore/sdk/ui` below `main`.
+
 Custom frames can subscribe to `subscribePwaInstall`, read `getPwaInstallState()` and
 invoke `requestPwaInstall()` from `@freeappstore/sdk/pwa` on a user click. These use the
 existing controller; do not call `startPwa` again from Profile or each screen.

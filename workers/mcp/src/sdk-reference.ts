@@ -105,6 +105,7 @@ function Tags() {
 | \`renderNav(ctx)\` | Replace the built-in navbar. |
 | \`requireAuth\` | Show a sign-in screen until the user signs in. Default false. |
 | \`showThemeToggle\` | Default true. |
+| \`statusBar\` | Default true. Bottom strip: "Save to home screen" in a browser tab, the app's address once installed. \`false\` removes it. |
 | \`renderError(ctx)\` / \`renderLoading()\` | Replace the error / loading fallback. |
 
 FreeAppStore is free: there is no paid tier, subscription or upgrade screen. The only gate is
@@ -165,6 +166,7 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 **API keys and info**
 - \`KeyPrompt\` — app, provider, providerName?, message? (asks the user to add a key to their vault)
 - \`BuildInfo\` — version?, commit?, buildDate?, extra?
+- \`StatusBar\` — no props. Narrow bottom strip: "Save to home screen" in a browser tab, the app's address once installed. Shell renders it by default; \`statusBar={false}\` on Shell removes it. Keep it in normal apps.
 - \`Footer\` — text? (opt-in; Shell does NOT include it automatically)
 
 **Routing** (keep pathname, query and hash; these do not replace the app's router)

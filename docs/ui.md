@@ -31,7 +31,7 @@ import {
   // API keys
   KeyPrompt,
   // Info
-  BuildInfo, Footer,
+  BuildInfo, StatusBar, Footer,
 } from '@freeappstore/sdk/ui';
 ```
 
@@ -81,7 +81,8 @@ What you get, with nothing to enable:
 | **Tab titles** | A `title` on a nav item becomes the tab title on its route; `useDocumentTitle()` in a screen overrides it. |
 | **Skip link** | "Skip to content", the first focusable element, hidden until focused. |
 | **Route changes** | With `onNavigate`: forward navigation follows a fragment target or scrolls to the top; back/forward restores the position. Without a fragment, focus moves to the screen's `PageHeader` (else `<main>`). |
-| **Bottom safe area** | Padding for the home indicator, without a platform attribution bar in browser or installed mode. |
+| **Status bar** | A narrow strip at the very bottom. In a browser tab it says **Save to home screen** and opens the browser's install prompt, or the steps for that device. Installed to the home screen, it shows the app's address (`timer.freeappstore.online`), which opens the app in a browser tab. It pads for the home indicator. `statusBar={false}` removes it. |
+| **Bottom safe area** | Padding for the home indicator: the status bar's, or the frame's own with `statusBar={false}`. No platform attribution bar in browser or installed mode. |
 
 FreeAppStore is free, so there is no subscription or upgrade screen: the only
 gate is the optional sign-in gate.
@@ -99,6 +100,7 @@ gate is the optional sign-in gate.
 | `profileHref` | Optional app-owned profile route, e.g. `/account`, accessible in both auth states. Omit to use the built-in `/profile` page with GitHub/Google sign-in choices and account management. Avatar clicks navigate using `onNavigate` when supplied; modified clicks retain native behavior. A custom profile route must render its own signed-out and signed-in UI. |
 | `requireAuth` | Protect app content until sign-in; the topbar and profile route remain accessible. Default `false`. |
 | `showThemeToggle` | Default `true`. The topbar shows it while signed out. `ProfilePage` shows it while signed in. |
+| `statusBar` | Default `true`. The bottom strip: **Save to home screen** in a browser tab, the app's address once installed. Set `false` for a full-bleed canvas or an app with its own bottom bar. |
 | `headerAppearance` | Default `true`. With an app-owned `profileHref`, the topbar shows the text-size and theme buttons. Set `false` when that profile page offers them itself, for example by rendering `ProfilePage`. |
 | `renderError({ error, reset })` | Replace the error fallback. |
 | `renderLoading()` | Replace the loading spinner. |
@@ -206,6 +208,7 @@ uses:
 - `useRouteChangeEffects(location, mainRef, true)` for focus and scroll on client-side moves.
 - `AccountSection` for identity. Signed out, it offers GitHub and Google and an avatar link to the profile. Signed in, the avatar and name link to the profile. Pass `children` for app-specific settings. The avatar never calls sign-in.
 - `ProfilePage` accepts `children` after its built-in account sections when the app keeps the built-in profile route.
+- `StatusBar` as the last child of the frame, below `main`, so people can save the app to their home screen and see its address once installed. It pads for the bottom safe area itself.
 - `Footer` stays the opt-in attribution. Neither `Shell` nor `AccountSection` mounts it.
 
 **Router integration.** Pass the router's navigate function as `onNavigate` on
@@ -358,6 +361,7 @@ or `maximum-scale` on the document.
 | Component | Props | Description |
 |-----------|-------|-------------|
 | `BuildInfo` | -- | Shows SDK version and build metadata |
+| `StatusBar` | -- | Bottom strip: "Save to home screen" in a browser tab, the app's address once installed. `Shell` renders it unless `statusBar={false}` |
 | `Footer` | `text` | Optional store attribution footer for installed apps; never added by `Shell` |
 
 ## Hooks (from `@freeappstore/sdk/ui`)

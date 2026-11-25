@@ -109,7 +109,7 @@ describe("getTemplateFiles", () => {
       const files = getTemplateFiles(appsConfig, archetype, "connected");
       const app = files["web/src/App.tsx"];
       const draft = files["web/src/components/ConnectedDraft.tsx"];
-      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.16.39"');
+      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.19.0"');
       expect(files["fas-capabilities/cloud-data.md"]).toContain("Room-restricted");
       expect(draft).toContain("useConnectedKvDraft");
       expect(draft).toContain("draft.retry");
@@ -276,8 +276,8 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
     const range = JSON.parse(files["web/package.json"]!).dependencies["@freeappstore/sdk"] as string;
     const [major, minor, patch] = range.replace(/^\^/, "").split(".").map(Number);
     expect(major).toBe(0);
-    expect(minor).toBe(16);
-    expect(patch).toBeGreaterThanOrEqual(15);
+    expect(minor).toBe(19);
+    expect(patch).toBeGreaterThanOrEqual(0);
   });
 
   it("wires the shared PWA runtime, safe config, install icons and zoom", () => {
@@ -326,7 +326,7 @@ describe("connected preset (#368)", () => {
     expect(files["web/src/App.tsx"]).toContain("<ConnectedDraft app={fas} />");
     expect(files["web/src/App.tsx"]).not.toContain("requireAuth");
     expect(files["web/src/components/ConnectedDraft.tsx"]).toContain("if (!draft.user)");
-    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.16.39");
+    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.19.0");
   });
 
   it("does not change the standalone template", () => {

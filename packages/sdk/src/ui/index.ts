@@ -28,6 +28,7 @@ export {
   ProgressBar,
   SearchInput,
   Spinner,
+  StatusBar,
   Tabs,
   useStandalone,
 } from './components.js';

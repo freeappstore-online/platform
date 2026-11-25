@@ -444,9 +444,9 @@ describe('profile review regressions (#338)', () => {
   });
 });
 
-describe('optional store footer (#331)', () => {
+describe('status bar (#718) and optional store footer (#331)', () => {
   it.each(['browser', 'standalone', 'ios'] as const)(
-    'keeps the %s shell free of attribution and preserves bottom safe-area padding',
+    'gives the %s shell a status bar, no store attribution, and bottom safe-area padding',
     async (mode) => {
       vi.spyOn(window, 'matchMedia').mockImplementation(
         (query) =>
@@ -467,9 +467,31 @@ describe('optional store footer (#331)', () => {
         </Shell>,
       );
       expect($('main')?.textContent).toContain('App content');
-      expect($('footer, [role="contentinfo"]')).toBeNull();
       expect($('a[href="https://freeappstore.online"]')).toBeNull();
       expect(container.textContent).not.toContain('Part of FreeAppStore');
+      const bar = $('footer[data-fas-status-bar]');
+      expect(bar?.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true);
+      if (mode === 'browser') {
+        expect(bar?.querySelector('button')?.textContent).toBe('Save to home screen');
+        expect(bar?.querySelector('a')).toBeNull();
+        // No install prompt in this browser: the button explains the steps.
+        await act(async () => bar?.querySelector('button')?.click());
+        expect($('[role="dialog"]')?.textContent).toContain('Add to Home Screen');
+        expect($('[role="dialog"]')?.textContent).toContain(location.host);
+      } else {
+        expect(bar?.querySelector('a')?.textContent).toBe(location.host);
+        expect(bar?.querySelector('a')?.getAttribute('href')).toBe(`${location.origin}/`);
+        expect(bar?.querySelector('a')?.getAttribute('target')).toBe('_blank');
+        expect(bar?.querySelector('button')).toBeNull();
+      }
+
+      // Opting out leaves the frame itself padding for the safe area.
+      await mount(
+        <Shell app={app} statusBar={false}>
+          <p>App content</p>
+        </Shell>,
+      );
+      expect($('footer, [role="contentinfo"]')).toBeNull();
       const frame = $('main')?.parentElement;
       expect(frame?.classList.contains('pb-[env(safe-area-inset-bottom,0px)]')).toBe(true);
 
