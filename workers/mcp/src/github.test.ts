@@ -156,7 +156,15 @@ describe("listRepoFiles", () => {
   });
 
   it("lists blob paths", async () => {
-    stub({ status: 200, body: { object: { sha: "h" } } }, { tree: [{ type: "blob", path: "a.ts" }, { type: "tree", path: "web" }] });
+    stub(
+      { status: 200, body: { object: { sha: "h" } } },
+      {
+        tree: [
+          { type: "blob", path: "a.ts" },
+          { type: "tree", path: "web" },
+        ],
+      },
+    );
     expect(await listRepoFiles("org", "app", "t")).toEqual(["a.ts"]);
   });
 });

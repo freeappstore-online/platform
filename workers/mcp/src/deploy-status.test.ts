@@ -17,7 +17,14 @@ function stub(steps: Step[]) {
 }
 
 const publicRepo = { status: 200, body: { private: false } };
-const run = { name: "Deploy", conclusion: "failure", status: "completed", updated_at: "2026-11-07T00:00:00Z", html_url: "https://github.com/o/a/actions/runs/1", head_sha: "abcdef123456" };
+const run = {
+  name: "Deploy",
+  conclusion: "failure",
+  status: "completed",
+  updated_at: "2026-11-07T00:00:00Z",
+  html_url: "https://github.com/o/a/actions/runs/1",
+  head_sha: "abcdef123456",
+};
 
 describe("getDeployStatus (#453)", () => {
   it("authenticates with the server token and returns the runs", async () => {
@@ -29,7 +36,18 @@ describe("getDeployStatus (#453)", () => {
   });
 
   it("reports a rate limit with the retry time and the public Actions URL", async () => {
-    stub([publicRepo, { status: 403, body: { message: "API rate limit exceeded for 1.2.3.4" }, headers: { "x-ratelimit-remaining": "0", "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 120), "x-github-request-id": "REQ1" } }]);
+    stub([
+      publicRepo,
+      {
+        status: 403,
+        body: { message: "API rate limit exceeded for 1.2.3.4" },
+        headers: {
+          "x-ratelimit-remaining": "0",
+          "x-ratelimit-reset": String(Math.floor(Date.now() / 1000) + 120),
+          "x-github-request-id": "REQ1",
+        },
+      },
+    ]);
     const result = (await getDeployStatus("o", "a", "t")) as { error: string };
     expect(result.error).toMatch(/rate limit reached; retry in about 1\d\ds/);
     expect(result.error).toContain("https://github.com/o/a/actions");
@@ -42,7 +60,10 @@ describe("getDeployStatus (#453)", () => {
   });
 
   it("tells a permission denial apart from a rate limit", async () => {
-    stub([publicRepo, { status: 403, body: { message: "Resource not accessible by integration" }, headers: { "x-ratelimit-remaining": "4000" } }]);
+    stub([
+      publicRepo,
+      { status: 403, body: { message: "Resource not accessible by integration" }, headers: { "x-ratelimit-remaining": "4000" } },
+    ]);
     const { error } = (await getDeployStatus("o", "a", "t")) as { error: string };
     expect(error).toContain("permission denied: Resource not accessible by integration");
     expect(error).not.toMatch(/rate limit/);

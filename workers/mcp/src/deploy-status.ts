@@ -72,7 +72,14 @@ export async function getDeployStatus(org: string, appId: string, token?: string
     const res = await ghGet(`${repoUrl}/actions/runs?per_page=5`, token);
     if (!res.ok) return { error: await describeFailure(res, actionsUrl) };
     const data = (await res.json()) as {
-      workflow_runs?: Array<{ name: string; conclusion: string | null; status: string; updated_at: string; html_url: string; head_sha: string }>;
+      workflow_runs?: Array<{
+        name: string;
+        conclusion: string | null;
+        status: string;
+        updated_at: string;
+        html_url: string;
+        head_sha: string;
+      }>;
     };
     return {
       runs: (data.workflow_runs ?? []).map((r) => ({

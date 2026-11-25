@@ -10,8 +10,7 @@ const upstream = (req: Request) =>
     },
   });
 const handler = withOriginCheck<object>((req) => upstream(req));
-const call = (init: RequestInit) =>
-  handler(new Request("https://mcp.freeappstore.online/mcp", init), {}, {} as ExecutionContext);
+const call = (init: RequestInit) => handler(new Request("https://mcp.freeappstore.online/mcp", init), {}, {} as ExecutionContext);
 
 describe("isAllowedBrowserOrigin (#524)", () => {
   it.each([

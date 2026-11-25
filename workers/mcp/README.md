@@ -87,9 +87,10 @@ Sign-in is OAuth 2.1 to MCP clients and a PKCE `response_mode=code` login agains
 ## Development
 
 ```bash
-npm install
-npm run dev    # local dev server
-npm run deploy # deploy to CF Workers
+pnpm install
+pnpm dev       # local dev server
+pnpm lint && pnpm typecheck && pnpm test
+# deploy: push to main (.github/workflows/deploy-mcp.yml)
 ```
 
 ## License

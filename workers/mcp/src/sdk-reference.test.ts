@@ -30,7 +30,10 @@ function sdkUiExports(): string[] {
   const names: string[] = [];
   for (const [, block] of src.matchAll(/^export \{([^}]+)\} from/gm)) {
     for (const part of block.split(",")) {
-      const name = part.trim().split(/\s+as\s+/).pop();
+      const name = part
+        .trim()
+        .split(/\s+as\s+/)
+        .pop();
       if (name) names.push(name);
     }
   }
@@ -54,9 +57,13 @@ describe("the build hand-off (every create-app path returns it)", () => {
   });
 
   it("the checker rejects guidance without nav, and a local shell", () => {
-    expect(teachesShellWithNav('<FasShell app={fas} appName="My App" requireAuth>{children}</FasShell> from "@freeappstore/sdk/ui"')).toBe(false);
+    expect(teachesShellWithNav('<FasShell app={fas} appName="My App" requireAuth>{children}</FasShell> from "@freeappstore/sdk/ui"')).toBe(
+      false,
+    );
     expect(teachesShellWithNav('<Shell app={fas} appName="My App">…</Shell> <nav aria-label="Main"> @freeappstore/sdk/ui')).toBe(false);
-    expect(teachesShellWithNav('import { Shell } from "./components/Shell"; <Shell app={fas} nav={NAV}> <nav aria-label="Main">')).toBe(false);
+    expect(teachesShellWithNav('import { Shell } from "./components/Shell"; <Shell app={fas} nav={NAV}> <nav aria-label="Main">')).toBe(
+      false,
+    );
   });
 });
 
@@ -88,7 +95,17 @@ describe("sdk_reference", () => {
   it("'shell' answers how to add navigation and covers the resilience layer and props", () => {
     const shell = getSdkReference("shell");
     expect(shell).toContain("### How do I add navigation?");
-    for (const term of ["onNavigate", "renderNav", "PageHeader", "useToast", "useDocumentTitle", "useOnline", "renderError", "renderLoading", "requireAuth"]) {
+    for (const term of [
+      "onNavigate",
+      "renderNav",
+      "PageHeader",
+      "useToast",
+      "useDocumentTitle",
+      "useOnline",
+      "renderError",
+      "renderLoading",
+      "requireAuth",
+    ]) {
       expect(shell, term).toContain(term);
     }
     expect(shell).toMatch(/no paid tier, subscription or upgrade screen/);
@@ -104,7 +121,10 @@ describe("sdk_reference", () => {
   it("the 'ui' import only names real exports, and shows Shell with nav instead of requireAuth", () => {
     const ui = getSdkReference("ui");
     const block = /import \{([^}]+)\} from '@freeappstore\/sdk\/ui'/.exec(ui)?.[1] ?? "";
-    const imported = block.split(",").map((n) => n.trim()).filter(Boolean);
+    const imported = block
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean);
     const exports = new Set(sdkUiExports());
     expect(imported.filter((n) => !exports.has(n))).toEqual([]);
     expect(ui).toMatch(/<Shell app=\{fas\} appName="My App" nav=\{NAV\}/);

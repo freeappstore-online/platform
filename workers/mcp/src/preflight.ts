@@ -25,7 +25,8 @@ export async function preflightUpdate(appId: string, changes: FileChange[], repo
   // The deploy workflow is platform-generated: overwriting it with one that cannot deploy keylessly breaks every later push.
   for (const change of changes) {
     if (!WORKFLOWS.has(change.path)) continue;
-    for (const problem of workflowDeployProblems(change.content)) failures.push(`${change.path} ${problem}; keep the generated workflow (\`fas publish --update-workflow\` regenerates it)`);
+    for (const problem of workflowDeployProblems(change.content))
+      failures.push(`${change.path} ${problem}; keep the generated workflow (\`fas publish --update-workflow\` regenerates it)`);
   }
 
   const overlay = new Map(changes.map((c) => [c.path, c.content]));
@@ -54,16 +55,17 @@ export async function preflightUpdate(appId: string, changes: FileChange[], repo
 /** Reasons an app id cannot be created, checked before anything is provisioned. */
 export function createAppProblems(appId: string): string[] {
   const problems: string[] = [];
-  if (!APP_ID_RE.test(appId)) problems.push("app_id must be 2-31 characters: lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen");
+  if (!APP_ID_RE.test(appId))
+    problems.push(
+      "app_id must be 2-31 characters: lowercase letters, digits and hyphens, starting with a letter and not ending with a hyphen",
+    );
   if (appId.startsWith("free") || appId.startsWith("pro")) problems.push("app_id must not start with 'free' or 'pro'");
   if (isReservedAppId(appId)) problems.push(`"${appId}" is reserved for the platform`);
   return problems;
 }
 
 /** What `create_app` should do given what an existing repository already holds. */
-export type ScaffoldPlan =
-  | { action: "scaffold"; skip: Set<string> }
-  | { action: "already-scaffolded" };
+export type ScaffoldPlan = { action: "scaffold"; skip: Set<string> } | { action: "already-scaffolded" };
 
 /**
  * A repo with the deploy workflow was scaffolded already: refuse to overwrite it.

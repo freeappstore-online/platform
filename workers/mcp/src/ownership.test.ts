@@ -7,25 +7,37 @@ afterEach(() => {
 
 describe("ownsApp", () => {
   it("returns owned=true when the app is in /v1/apps/mine", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [{ id: "calendar" }] }))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ apps: [{ id: "calendar" }] }))),
+    );
 
     await expect(ownsApp("https://api.example", "token", "calendar")).resolves.toEqual({ owned: true });
   });
 
   it("returns owned=false only for a confirmed non-owned app", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [{ id: "notes" }] }))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ apps: [{ id: "notes" }] }))),
+    );
 
     await expect(ownsApp("https://api.example", "token", "calendar")).resolves.toEqual({ owned: false });
   });
 
   it("does not count a game with the same id as an owned app", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ apps: [{ id: "chess", store: "games" }] }))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ apps: [{ id: "chess", store: "games" }] }))),
+    );
 
     await expect(ownsApp("https://api.example", "token", "chess")).resolves.toEqual({ owned: false });
   });
 
   it("propagates 401 instead of returning false ownership", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })),
+    );
 
     const result = await ownsApp("https://api.example", "token", "calendar");
 
@@ -34,7 +46,10 @@ describe("ownsApp", () => {
   });
 
   it("propagates 500 instead of returning false ownership", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => new Response("backend failure", { status: 500 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("backend failure", { status: 500 })),
+    );
 
     const result = await ownsApp("https://api.example", "token", "calendar");
 
@@ -43,9 +58,12 @@ describe("ownsApp", () => {
   });
 
   it("propagates network errors instead of returning false ownership", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("network unavailable");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network unavailable");
+      }),
+    );
 
     const result = await ownsApp("https://api.example", "token", "calendar");
 
@@ -55,7 +73,7 @@ describe("ownsApp", () => {
 
   it("keeps non-ownership as a non-error caller response", () => {
     expect(ownershipGateText("calendar", { owned: false })).toBe(
-      'You don\'t own "calendar" (or it isn\'t published). Only the owner can update it.',
+      "You don't own \"calendar\" (or it isn't published). Only the owner can update it.",
     );
   });
 });

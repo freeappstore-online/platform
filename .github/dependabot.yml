@@ -8,7 +8,7 @@
 # One entry per manifest, because these are eight independent installs, not one
 # workspace: pnpm-workspace.yaml covers `packages/*` and `examples/*` only, and
 # every worker, the console and storefront sites and the two web builds carry their own lockfile.
-# Dependabot does not discover them recursively. workers/mcp is npm, not pnpm.
+# Dependabot does not discover them recursively.
 #
 # Grouped so a week's worth of dev-tooling bumps arrives as one reviewable PR per
 # tree instead of thirty. Production dependencies stay ungrouped: those are the
@@ -48,7 +48,7 @@ updates:
       - dependency-name: '@modelcontextprotocol/sdk'
       # agents 0.24 (#83) needs zod ^4 and adds @modelcontextprotocol/client +
       # /server 2.0.0 as peers (themselves zod ^4.2). Under zod 3 and
-      # legacy-peer-deps the wrangler build can't resolve them. That's the
+      # without auto-installed peers the wrangler build can't resolve them. That's the
       # deliberate agents + SDK + zod upgrade described above, not a bump.
       # Patch releases still come through.
       - dependency-name: agents

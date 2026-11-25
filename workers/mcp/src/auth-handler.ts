@@ -190,11 +190,7 @@ async function fetchMe(apiBase: string, session: string): Promise<{ id: string; 
 
 /** Trade the one-time code for the session, server to server. The verifier is
  *  the credential here — the code alone is not redeemable. */
-async function exchangeCode(
-  apiBase: string,
-  code: string,
-  codeVerifier: string,
-): Promise<string | null> {
+async function exchangeCode(apiBase: string, code: string, codeVerifier: string): Promise<string | null> {
   const res = await fetch(`${apiBase}/v1/auth/session/exchange`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": "freeappstore-mcp" },
@@ -235,14 +231,7 @@ function flowCookie(url: string, nonce: string, value: string): string {
 }
 
 function clearFlowCookie(url: string, nonce: string): string {
-  return [
-    `${cookieName(url, nonce)}=`,
-    "Path=/",
-    "HttpOnly",
-    "SameSite=Lax",
-    ...(isSecure(url) ? ["Secure"] : []),
-    "Max-Age=0",
-  ].join("; ");
+  return [`${cookieName(url, nonce)}=`, "Path=/", "HttpOnly", "SameSite=Lax", ...(isSecure(url) ? ["Secure"] : []), "Max-Age=0"].join("; ");
 }
 
 function readFlowCookie(req: Request, url: string, nonce: string): string | null {

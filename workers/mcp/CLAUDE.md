@@ -3,11 +3,11 @@
 Remote MCP server for AI agents to interact with the FreeAppStore platform.
 
 - Endpoint: `mcp.freeappstore.online/mcp`
-- Dev: `npm install && npm run dev`
+- Dev: `pnpm install && pnpm dev`
 - Deps: `@modelcontextprotocol/sdk` is pinned to the exact version `agents` depends on, so the
   tree holds ONE copy (two copies make `FasMcpAgent.server` fail to type-check). When bumping
-  `agents`, re-pin the SDK to match. `.npmrc` sets `legacy-peer-deps` because `agents` declares
-  react/ai-sdk peers a Worker never needs; `npm ci` reads it too, so local and CI resolve alike.
+  `agents`, re-pin the SDK to match. `pnpm-workspace.yaml` sets `autoInstallPeers: false` because
+  `agents` declares react/ai-sdk peers a Worker never needs.
 - Deploy: `git push origin main` (auto-deploys via GitHub Actions)
 
 ## Tools
@@ -53,7 +53,7 @@ When the SDK's UI exports or Shell props change, update `sdk-reference.ts`;
 **Every tool is registered with `server.registerTool` and carries a `title` plus explicit
 `readOnlyHint` / `destructiveHint` / `openWorldHint` booleans** (presets `READ`, `WRITE`,
 `OVERWRITE` in `src/index.ts`). The Claude Connectors Directory and the ChatGPT Apps Directory
-reject tools without them (#539), and `npm run test:runtime` fails the build if one is missing.
+reject tools without them (#539), and `pnpm test:runtime` fails the build if one is missing.
 Keep descriptions factual — say what the tool does, never instruct the model how to behave;
 build guidance belongs in the returned content.
 

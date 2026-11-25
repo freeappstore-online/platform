@@ -8,15 +8,18 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --write src/",
     "test:runtime": "node scripts/test-runtime.mjs"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.15",
     "@cloudflare/workers-types": "^5.20261012.1",
     "@types/node": "^25.9.9",
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.3",
     "vite": "^8.3.4",
-    "vitest": "^5.0.4",
-    "wrangler": "^4.149.0"
+    "vitest": "^4.1.12",
+    "wrangler": "^4.157.0"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "^0.8.1",

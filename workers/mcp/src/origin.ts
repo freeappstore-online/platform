@@ -7,20 +7,18 @@
 type FetchHandler<E> = (request: Request, env: E, ctx: ExecutionContext) => Promise<Response> | Response;
 
 /** First-party sites, plus Claude's web client. */
-const ALLOWED_ORIGINS = new Set([
-  "https://freeappstore.online",
-  "https://console.freeappstore.online",
-  "https://claude.ai",
-]);
+const ALLOWED_ORIGINS = new Set(["https://freeappstore.online", "https://console.freeappstore.online", "https://claude.ai"]);
 
 export function isAllowedBrowserOrigin(origin: string): boolean {
   if (ALLOWED_ORIGINS.has(origin)) return true;
   try {
     const url = new URL(origin);
     // Local MCP clients and inspectors, on any port.
-    return (url.protocol === "http:" || url.protocol === "https:") &&
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
       (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
-      origin === url.origin;
+      origin === url.origin
+    );
   } catch {
     return false;
   }

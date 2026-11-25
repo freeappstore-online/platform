@@ -54,10 +54,20 @@ describe("audit log order", () => {
   function fakeKv() {
     const store = new Map<string, string>();
     return {
-      async put(key: string, value: string) { store.set(key, value); },
-      async get(key: string) { return store.get(key) ?? null; },
+      async put(key: string, value: string) {
+        store.set(key, value);
+      },
+      async get(key: string) {
+        return store.get(key) ?? null;
+      },
       async list({ prefix, limit }: { prefix: string; limit: number }) {
-        return { keys: [...store.keys()].filter((k) => k.startsWith(prefix)).sort().slice(0, limit).map((name) => ({ name })) };
+        return {
+          keys: [...store.keys()]
+            .filter((k) => k.startsWith(prefix))
+            .sort()
+            .slice(0, limit)
+            .map((name) => ({ name })),
+        };
       },
     } as unknown as KVNamespace;
   }

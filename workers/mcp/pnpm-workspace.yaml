@@ -1,0 +1,7 @@
+# Own pnpm root, outside the monorepo workspace (see workers/README.md).
+# agents declares react/ai-sdk peers a Worker never needs; don't install them.
+autoInstallPeers: false
+ignoredBuiltDependencies:
+  - esbuild
+  - sharp
+  - workerd

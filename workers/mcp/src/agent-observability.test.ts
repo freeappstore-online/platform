@@ -49,11 +49,15 @@ describe("MCP agent activity formatting", () => {
   });
 
   it("bounds the requested history and describes missing outcomes honestly", () => {
-    const rendered = formatAgentActivity("session", [
-      { role: "assistant", toolCalls: [{ id: "missing", name: "create_app" }] },
-      { role: "tool_result", content: "", toolResults: [] },
-      { role: "user", content: "next" },
-    ], 2);
+    const rendered = formatAgentActivity(
+      "session",
+      [
+        { role: "assistant", toolCalls: [{ id: "missing", name: "create_app" }] },
+        { role: "tool_result", content: "", toolResults: [] },
+        { role: "user", content: "next" },
+      ],
+      2,
+    );
 
     expect(rendered).toContain("3 messages, showing 2");
     expect(rendered).toContain("No result details recorded.");

@@ -199,4 +199,4 @@ export async function readRepoFile(org: string, repo: string, token: string | un
   return b64 === null ? null : b64ToText(b64);
 }
 
-export { textToB64, b64ToText };
+export { b64ToText, textToB64 };

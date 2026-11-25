@@ -18,8 +18,8 @@ with its own `package.json`, lockfile, `tsconfig`, `biome.json`, and tests. They
 are deliberately outside `pnpm-workspace.yaml`'s globs, and `workers/` is excluded
 from the root `biome.json`.
 
-- `agent/` and `host/` carry their own `pnpm-workspace.yaml` (root marker) so a
-  nested `pnpm install` resolves against themselves, not this repo's workspace.
+- `agent/`, `host/` and `mcp/` carry their own `pnpm-workspace.yaml` (root marker)
+  so a nested `pnpm install` resolves against themselves, not this repo's workspace.
 - `admin/` + `admin/web/` are two independent projects (two lockfiles), so their
   installs use `pnpm install --ignore-workspace`.
 
@@ -29,9 +29,14 @@ Run from inside each worker dir (e.g. `cd workers/host`):
 
 ```bash
 pnpm install --frozen-lockfile        # admin: add --ignore-workspace
-pnpm test
+pnpm lint && pnpm run typecheck && pnpm test
 pnpm exec wrangler deploy             # needs CLOUDFLARE_API_TOKEN / _ACCOUNT_ID
 ```
 
+All four use TypeScript 5.9, Biome 2 and Vitest 4 (`@cloudflare/vitest-pool-workers`,
+which runs the runtime suites, does not support Vitest 5 yet; the root packages use 5).
+
 CI deploys each independently via `.github/workflows/deploy-{admin,agent,host,mcp}.yml`,
-path-filtered on `workers/<name>/**`, reusing this repo's `CLOUDFLARE_API_TOKEN`.
+path-filtered on `workers/<name>/**` plus the shared source each imports, reusing this
+repo's `CLOUDFLARE_API_TOKEN`. Every deploy runs lint, typecheck and the unit tests
+first (plus the runtime suite), the same steps `ci.yml`'s `worker-tests` job runs.

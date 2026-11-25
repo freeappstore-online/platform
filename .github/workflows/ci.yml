@@ -98,8 +98,8 @@ jobs:
             install: pnpm install --frozen-lockfile
             lint: true
           - worker: mcp
-            install: npm ci
-            lint: false
+            install: pnpm install --frozen-lockfile
+            lint: true
     defaults:
       run:
         working-directory: workers/${{ matrix.worker }}

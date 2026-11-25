@@ -18,7 +18,8 @@ on:
     branches: [main]
     paths:
       - 'workers/admin/**'
-      # The shared reserved-app-id list (#515) is imported from the backend.
+      # The shared app-id rule and reserved-app-id list (#515) are imported from the backend.
+      - 'packages/backend/src/lib/apps.ts'
       - 'packages/backend/src/lib/reserved-app-ids.ts'
       - '.github/workflows/deploy-admin.yml'
   workflow_dispatch:
@@ -45,6 +46,12 @@ jobs:
 
       - name: Install (worker)
         run: pnpm install --frozen-lockfile --ignore-workspace
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm run typecheck
 
       - name: Tests
         run: pnpm test

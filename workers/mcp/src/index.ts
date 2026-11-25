@@ -1,22 +1,22 @@
-import { MAX_TOOL_INPUT_ELEMENTS, withBoundedBody } from "./request-limits.js";
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
-import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
-import { McpAgent } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpAgent } from "agents/mcp";
 import { z } from "zod";
-import { isFilePath, isPublicRepo, isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
-import { getDeployStatus } from "./deploy-status.js";
-import { createAppProblems, preflightUpdate } from "./preflight.js";
 import { VALID_CATEGORIES } from "../../../packages/backend/src/lib/apps";
-import { scaffoldRepo } from "./scaffold.js";
-import { AuthHandler } from "./auth-handler.js";
-import { sessionPrefix, ownsSession, auditLog } from "./lib.js";
-import { ownsApp, ownershipGateText } from "./ownership.js";
-import { withOriginCheck } from "./origin.js";
-import { type RateLimiter, withRateLimit } from "./ratelimit.js";
-import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
-import { BUILD_HANDOFF_BLOCK, getSdkReference, SDK_REFERENCE_FEATURES, withBuildHandoff } from "./sdk-reference.js";
 import { formatAgentActivity, formatAgentStatus } from "./agent-observability.js";
+import { AuthHandler } from "./auth-handler.js";
+import { getDeployStatus } from "./deploy-status.js";
+import { isFilePath, isPublicRepo, isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
+import { auditLog, ownsSession, sessionPrefix } from "./lib.js";
+import { MCP_ACCESS_TOKEN_TTL_SECONDS } from "./oauth-config.js";
+import { withOriginCheck } from "./origin.js";
+import { ownershipGateText, ownsApp } from "./ownership.js";
+import { createAppProblems, preflightUpdate } from "./preflight.js";
+import { type RateLimiter, withRateLimit } from "./ratelimit.js";
+import { MAX_TOOL_INPUT_ELEMENTS, withBoundedBody } from "./request-limits.js";
+import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
+import { scaffoldRepo } from "./scaffold.js";
+import { BUILD_HANDOFF_BLOCK, getSdkReference, SDK_REFERENCE_FEATURES, withBuildHandoff } from "./sdk-reference.js";
 
 interface Env {
   API_BASE: string;
@@ -62,7 +62,11 @@ async function fasPost(apiBase: string, path: string, token: string, body: unkno
   });
   const text = await res.text();
   let json: any = {};
-  try { json = text ? JSON.parse(text) : {}; } catch { json = { raw: text }; }
+  try {
+    json = text ? JSON.parse(text) : {};
+  } catch {
+    json = { raw: text };
+  }
   if (!res.ok) return { error: json.error ?? `API ${res.status}`, detail: json.detail ?? json.body ?? text, status: res.status };
   return json;
 }
@@ -72,7 +76,8 @@ const toolError = (text: string) => ({ ...txt(text), isError: true });
 
 const NOT_SIGNED_IN = "Not signed in to FreeAppStore. Reconnect the FreeAppStore connector, sign in, then retry.";
 const NO_GITHUB_TOKEN = "Write tools are disabled (server missing GITHUB_TOKEN).";
-const badAppId = (appId: string) => toolError(`Invalid app_id "${appId}": use the app's id as it appears in its URL, e.g. 'timer' for timer.freeappstore.online.`);
+const badAppId = (appId: string) =>
+  toolError(`Invalid app_id "${appId}": use the app's id as it appears in its URL, e.g. 'timer' for timer.freeappstore.online.`);
 
 // Every tool carries a title and all three hints as explicit booleans: the
 // Claude Connectors Directory and the ChatGPT Apps Directory both reject tools
@@ -93,13 +98,14 @@ export interface McpProps extends Record<string, unknown> {
   scopes?: string[] | null;
 }
 
-
-
 export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
-  server = new McpServer({
-    name: "FreeAppStore",
-    version: "0.2.0",
-  }, { maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS });
+  server = new McpServer(
+    {
+      name: "FreeAppStore",
+      version: "0.2.0",
+    },
+    { maxToolInputElements: MAX_TOOL_INPUT_ELEMENTS },
+  );
 
   // The OAuth provider only routes authenticated requests to this handler, so
   // props (set in completeAuthorization) are always present for tool calls.
@@ -122,7 +128,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "mcp_audit_log",
       {
         title: "Read my audit log",
-        description: "Read your recent MCP audit events for this account — every write/dry-run/denied tool action, newest first. User-scoped.",
+        description:
+          "Read your recent MCP audit events for this account — every write/dry-run/denied tool action, newest first. User-scoped.",
         annotations: READ,
         inputSchema: { limit: z.number().int().min(1).max(200).optional().describe("Max events to return (default 50)") },
       },
@@ -153,11 +160,9 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         // The endpoint lists games too; those live on FreeGameStore.
         const apps = (data.apps ?? []).filter((a) => (a.store ?? "apps") === "apps");
         if (apps.length === 0) return txt("No apps published yet.");
-        const lines = apps.map(
-          (a) => `- **${a.id}** (${a.category}) — ${a.oneliner}\n  Live: ${a.appUrl} | Repo: ${a.repoUrl}`
-        );
+        const lines = apps.map((a) => `- **${a.id}** (${a.category}) — ${a.oneliner}\n  Live: ${a.appUrl} | Repo: ${a.repoUrl}`);
         return txt(`${apps.length} app(s):\n\n${lines.join("\n")}`);
-      }
+      },
     );
 
     // ── deploy_status ──────────────────────────────────────────
@@ -175,10 +180,11 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const runs = result.runs;
         if (runs.length === 0) return txt(`No workflow runs found for ${app_id}.`);
         const lines = runs.map(
-          (r) => `- ${r.status === "success" ? "✅" : r.status === "failure" ? "❌" : "⏳"} ${r.name} (${r.sha}) — ${r.updatedAt}\n  ${r.url}`
+          (r) =>
+            `- ${r.status === "success" ? "✅" : r.status === "failure" ? "❌" : "⏳"} ${r.name} (${r.sha}) — ${r.updatedAt}\n  ${r.url}`,
         );
         return txt(`Deploy history for **${app_id}**:\n\n${lines.join("\n")}`);
-      }
+      },
     );
 
     // ── app_info ───────────────────────────────────────────────
@@ -208,15 +214,17 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           status = `Unreachable (${e instanceof Error ? e.message : String(e)})`;
         }
 
-        return txt([
-          `**${app_id}**`,
-          `Status: ${status}`,
-          `Live: ${liveUrl}`,
-          `Repo: ${repoUrl}`,
-          `Listing: ${listingUrl}`,
-          `Deploy: push to main auto-deploys via GitHub Actions → R2`,
-        ].join("\n"));
-      }
+        return txt(
+          [
+            `**${app_id}**`,
+            `Status: ${status}`,
+            `Live: ${liveUrl}`,
+            `Repo: ${repoUrl}`,
+            `Listing: ${listingUrl}`,
+            `Deploy: push to main auto-deploys via GitHub Actions → R2`,
+          ].join("\n"),
+        );
+      },
     );
 
     // ── app_logs ──────────────────────────────────────────────
@@ -240,26 +248,34 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (level) params.set("level", level);
         params.set("limit", String(limit ?? 50));
         const data = (await fasApi(this.env.API_BASE, `/v1/apps/${encodeURIComponent(app_id)}/logs?${params}`, token)) as {
-          logs?: Array<{ ts: number; level: string; category: string; message: string; data?: unknown; userId: string; build?: Record<string, unknown> }>;
+          logs?: Array<{
+            ts: number;
+            level: string;
+            category: string;
+            message: string;
+            data?: unknown;
+            userId: string;
+            build?: Record<string, unknown>;
+          }>;
           error?: string;
         };
         if (data.error) return toolError(`Could not read logs for ${app_id}: ${data.error}`);
         const logs = data.logs ?? [];
         if (logs.length === 0) return txt(`No logs found for ${app_id}.`);
-        const lines = logs.map(l => {
+        const lines = logs.map((l) => {
           const time = new Date(l.ts).toISOString().slice(11, 23);
           const data = l.data ? ` ${JSON.stringify(l.data).slice(0, 300)}` : "";
           return `${time} [${l.level.toUpperCase().padEnd(5)}] ${l.category}: ${l.message}${data}`;
         });
         // Include build info if present
-        const buildEntry = logs.find(l => l.build);
+        const buildEntry = logs.find((l) => l.build);
         let buildInfo = "";
         if (buildEntry?.build) {
           const b = buildEntry.build;
           buildInfo = `\n\n**Build:** ${b.appVersion ?? "?"} (${(b.commitSha as string)?.slice(0, 7) ?? "?"}) built ${b.buildDate ?? "?"} | SDK ${b.sdkVersion ?? "?"} | ${b.viewport ?? "?"}`;
         }
         return txt(`Logs for **${app_id}** (${logs.length} entries):${buildInfo}\n\n\`\`\`\n${lines.join("\n")}\n\`\`\``);
-      }
+      },
     );
 
     // ── platform_guide ─────────────────────────────────────────
@@ -267,17 +283,22 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "platform_guide",
       {
         title: "Get the platform guide",
-        description: "Return the FreeAppStore platform guide (SKILLS.md): how apps are structured, built, checked and published, followed by the current app-building conventions.",
+        description:
+          "Return the FreeAppStore platform guide (SKILLS.md): how apps are structured, built, checked and published, followed by the current app-building conventions.",
         annotations: READ,
         inputSchema: {},
       },
       async () => {
         const res = await tryFetch("https://freeappstore.online/skills.md");
         if (typeof res === "string" || !res.ok) {
-          return txt(withBuildHandoff(`Could not fetch the full guide (${typeof res === "string" ? res : `HTTP ${res.status}`}); it is at https://freeappstore.online/skills.md.`));
+          return txt(
+            withBuildHandoff(
+              `Could not fetch the full guide (${typeof res === "string" ? res : `HTTP ${res.status}`}); it is at https://freeappstore.online/skills.md.`,
+            ),
+          );
         }
         return txt(withBuildHandoff(await res.text()));
-      }
+      },
     );
 
     // ── sdk_reference ──────────────────────────────────────────
@@ -285,9 +306,15 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "sdk_reference",
       {
         title: "Look up the SDK reference",
-        description: "Return reference documentation for @freeappstore/sdk, for one feature or all of them: shell (app frame and navigation), components (every UI component and its props), auth, KV, counters, collections, rooms, proxy, keys, push reminders, hooks and free APIs.",
+        description:
+          "Return reference documentation for @freeappstore/sdk, for one feature or all of them: shell (app frame and navigation), components (every UI component and its props), auth, KV, counters, collections, rooms, proxy, keys, push reminders, hooks and free APIs.",
         annotations: READ,
-        inputSchema: { feature: z.enum(["all", ...SDK_REFERENCE_FEATURES]).optional().describe("Feature to look up, or 'all' for the full reference. 'shell' and 'components' cover app layout.") },
+        inputSchema: {
+          feature: z
+            .enum(["all", ...SDK_REFERENCE_FEATURES])
+            .optional()
+            .describe("Feature to look up, or 'all' for the full reference. 'shell' and 'components' cover app layout."),
+        },
       },
       async ({ feature }) => txt(getSdkReference(feature)),
     );
@@ -297,15 +324,24 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "create_app",
       {
         title: "Create and publish an app",
-        description: "Create and publish a new FreeAppStore app: provisions its GitHub repo, hosting and store listing (the same steps as `fas publish`), then scaffolds the current starter and pushes it. The first build rejects the untouched starter screen, so the app goes live only after `update_files` replaces it and a deploy succeeds (watch with `deploy_status`). The new app is public. If a run fails midway, call create_app again with the same app_id to resume. dry_run=true validates the inputs without creating anything.",
+        description:
+          "Create and publish a new FreeAppStore app: provisions its GitHub repo, hosting and store listing (the same steps as `fas publish`), then scaffolds the current starter and pushes it. The first build rejects the untouched starter screen, so the app goes live only after `update_files` replaces it and a deploy succeeds (watch with `deploy_status`). The new app is public. If a run fails midway, call create_app again with the same app_id to resume. dry_run=true validates the inputs without creating anything.",
         annotations: WRITE,
         inputSchema: {
-          app_id: z.string().describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
+          app_id: z
+            .string()
+            .describe("App slug: lowercase letters/numbers/hyphens, no 'free'/'pro' prefix. Becomes <app_id>.freeappstore.online"),
           category: z.string().describe(`One of: ${VALID_CATEGORIES.join(", ")}`),
           oneliner: z.string().describe("One-line description shown in the store"),
-          type: z.enum(["standalone", "connected"]).optional().describe("standalone (no backend, default) or connected (uses the SDK: auth/kv/rooms/etc.)"),
+          type: z
+            .enum(["standalone", "connected"])
+            .optional()
+            .describe("standalone (no backend, default) or connected (uses the SDK: auth/kv/rooms/etc.)"),
           description: z.string().optional().describe("Longer description (defaults to the oneliner)"),
-          dry_run: z.boolean().optional().describe("If true, validate inputs and return what would happen without actually creating the app"),
+          dry_run: z
+            .boolean()
+            .optional()
+            .describe("If true, validate inputs and return what would happen without actually creating the app"),
         },
       },
       async ({ app_id, category, oneliner, type, description, dry_run }) => {
@@ -322,43 +358,61 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           await audit(this.safety(), { tool: "create_app", action: "dry_run", input: { app_id, category, kind } });
           return txt(
             `[DRY RUN] Would create **${app_id}** (${kind}):\n` +
-            `- Provision: GitHub repo \`${this.env.GITHUB_ORG}/${app_id}\` + R2 hosting + store listing\n` +
-            `- Scaffold: the current ${kind} starter, generated like \`fas init\` (identity set to ${app_id})\n` +
-            `- Deploy: push to main → GitHub Actions. The first build rejects the untouched starter screen, so it stays red until update_files replaces it; the app is live only after a green deploy\n` +
-            `- Build: wrap web/src/App.tsx in <Shell app={fas} nav={NAV}> with a nav item per screen, then write the screens\n` +
-            `- Category: ${category}\n- Oneliner: ${oneliner}\n\nNo changes made. Remove dry_run to execute.\n\n${BUILD_HANDOFF_BLOCK}`,
+              `- Provision: GitHub repo \`${this.env.GITHUB_ORG}/${app_id}\` + R2 hosting + store listing\n` +
+              `- Scaffold: the current ${kind} starter, generated like \`fas init\` (identity set to ${app_id})\n` +
+              `- Deploy: push to main → GitHub Actions. The first build rejects the untouched starter screen, so it stays red until update_files replaces it; the app is live only after a green deploy\n` +
+              `- Build: wrap web/src/App.tsx in <Shell app={fas} nav={NAV}> with a nav item per screen, then write the screens\n` +
+              `- Category: ${category}\n- Oneliner: ${oneliner}\n\nNo changes made. Remove dry_run to execute.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         }
         // 1. Provision via the same backend endpoint `fas publish` uses. It is idempotent for the
         //    app's own owner, so calling create_app again resumes a run that failed midway.
         const prov = (await fasPost(this.env.API_BASE, "/v1/publish", token, {
-          name: app_id, store: "apps", category, type: kind, oneliner, description: description || oneliner,
+          name: app_id,
+          store: "apps",
+          category,
+          type: kind,
+          oneliner,
+          description: description || oneliner,
         })) as { error?: string; detail?: string; appUrl?: string; repoUrl?: string };
-        if (prov.error) return toolError(`Provision failed: ${prov.error}${prov.detail ? ` — ${typeof prov.detail === "string" ? prov.detail : JSON.stringify(prov.detail)}` : ""}`);
+        if (prov.error)
+          return toolError(
+            `Provision failed: ${prov.error}${prov.detail ? ` — ${typeof prov.detail === "string" ? prov.detail : JSON.stringify(prov.detail)}` : ""}`,
+          );
         // 2. Scaffold the current starter and push it (only what the repo does not have yet).
         try {
           const outcome = await scaffoldRepo(
             {
               listFiles: () => listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN),
-              push: (files) => pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN!, files, `Initial ${app_id} — scaffolded via MCP`),
+              push: (files) =>
+                pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN!, files, `Initial ${app_id} — scaffolded via MCP`),
             },
             app_id,
             kind,
           );
           if (outcome.status === "already-scaffolded") {
-            return txt(`**${app_id}** already exists and has its deploy workflow, so nothing was overwritten. Use \`update_files\` to change it and \`deploy_status\` to watch it.`);
+            return txt(
+              `**${app_id}** already exists and has its deploy workflow, so nothing was overwritten. Use \`update_files\` to change it and \`deploy_status\` to watch it.`,
+            );
           }
           const resumed = outcome.resumed ? " (resumed: files already in the repo were kept)" : "";
-          await audit(this.safety(), { tool: "create_app", action: "success", input: { app_id, category, kind }, result: { url: `https://${app_id}.freeappstore.online` } });
+          await audit(this.safety(), {
+            tool: "create_app",
+            action: "success",
+            input: { app_id, category, kind },
+            result: { url: `https://${app_id}.freeappstore.online` },
+          });
           return txt(
             `Created **${app_id}** (${kind})${resumed}. It is NOT live yet.\n` +
-            `The first build runs the starter-UI gate and will fail until update_files replaces the starter screen (web/src/App.tsx); the app is live at https://${app_id}.freeappstore.online only after a green deploy.\n` +
-            `Repo: https://github.com/${this.env.GITHUB_ORG}/${app_id}\n` +
-            `Listing (appears after the first successful deploy): https://freeappstore.online/apps/${app_id}\n\n` +
-            `Scaffolded ${outcome.fileCount} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.\n\n${BUILD_HANDOFF_BLOCK}`,
+              `The first build runs the starter-UI gate and will fail until update_files replaces the starter screen (web/src/App.tsx); the app is live at https://${app_id}.freeappstore.online only after a green deploy.\n` +
+              `Repo: https://github.com/${this.env.GITHUB_ORG}/${app_id}\n` +
+              `Listing (appears after the first successful deploy): https://freeappstore.online/apps/${app_id}\n\n` +
+              `Scaffolded ${outcome.fileCount} files. Next: \`list_files\`/\`read_file\` to inspect, \`update_files\` to build it out, \`deploy_status\` to watch it deploy.\n\n${BUILD_HANDOFF_BLOCK}`,
           );
         } catch (e) {
-          return toolError(`Provisioned the repo + hosting, but the scaffold failed: ${String(e)}\nNothing is lost: call create_app again with the same app_id to resume the scaffold.`);
+          return toolError(
+            `Provisioned the repo + hosting, but the scaffold failed: ${String(e)}\nNothing is lost: call create_app again with the same app_id to resume the scaffold.`,
+          );
         }
       },
     );
@@ -376,7 +430,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!isRepoName(app_id)) return badAppId(app_id);
         let files: string[];
         try {
-          if (!(await isPublicRepo(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN))) return txt(`No files found for ${app_id} (repo empty or not found).`);
+          if (!(await isPublicRepo(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN)))
+            return txt(`No files found for ${app_id} (repo empty or not found).`);
           files = await listRepoFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN);
         } catch (e) {
           return toolError(`Could not list ${app_id}'s files: ${String(e)}. Check the app_id, or retry shortly if GitHub is failing.`);
@@ -393,19 +448,24 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         title: "Read an app file",
         description: "Read one file's contents from a FreeAppStore app's repository (e.g. web/src/App.tsx).",
         annotations: READ,
-        inputSchema: { app_id: z.string().describe("App ID"), path: z.string().describe("File path relative to repo root, e.g. web/src/App.tsx") },
+        inputSchema: {
+          app_id: z.string().describe("App ID"),
+          path: z.string().describe("File path relative to repo root, e.g. web/src/App.tsx"),
+        },
       },
       async ({ app_id, path }) => {
         if (!isRepoName(app_id)) return badAppId(app_id);
         if (!isFilePath(path)) return toolError(`Invalid path "${path}": use a path relative to the repo root, e.g. web/src/App.tsx.`);
         let content: string | null;
         try {
-          if (!(await isPublicRepo(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN))) return toolError(`No app repository ${app_id}. Check the app_id.`);
+          if (!(await isPublicRepo(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN)))
+            return toolError(`No app repository ${app_id}. Check the app_id.`);
           content = await readRepoFile(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, path);
         } catch (e) {
           return toolError(`Could not read ${path} from ${app_id}: ${String(e)}. Retry shortly.`);
         }
-        if (content === null) return toolError(`Could not read ${path} from ${app_id}: no such file. Use list_files to see the repo's paths.`);
+        if (content === null)
+          return toolError(`Could not read ${path} from ${app_id}: no such file. Use list_files to see the repo's paths.`);
         return txt(`\`\`\`\n${content}\n\`\`\``);
       },
     );
@@ -415,11 +475,19 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "agent_build",
       {
         title: "Build with the VibeCode agent",
-        description: "Send a plain-English build request to FreeAppStore's VibeCode agent, which writes the code and deploys the app. It uses the AI key stored in your FreeAppStore key vault for the chosen provider. Runs in the background and returns a session_id to check with agent_status. Continuing a session can change files of that session's existing app.",
+        description:
+          "Send a plain-English build request to FreeAppStore's VibeCode agent, which writes the code and deploys the app. It uses the AI key stored in your FreeAppStore key vault for the chosen provider. Runs in the background and returns a session_id to check with agent_status. Continuing a session can change files of that session's existing app.",
         annotations: OVERWRITE,
         inputSchema: {
-          prompt: z.string().describe("What to build, in plain English. Include a desired app id, e.g. 'Build a dice roller and deploy it as dice-roller'."),
-          provider: z.enum(["anthropic", "openai", "openrouter", "google"]).optional().describe("Which vaulted AI key to use (default anthropic). Must be a provider you have a key for."),
+          prompt: z
+            .string()
+            .describe(
+              "What to build, in plain English. Include a desired app id, e.g. 'Build a dice roller and deploy it as dice-roller'.",
+            ),
+          provider: z
+            .enum(["anthropic", "openai", "openrouter", "google"])
+            .optional()
+            .describe("Which vaulted AI key to use (default anthropic). Must be a provider you have a key for."),
           model: z.string().optional().describe("Model id (defaults per provider, e.g. claude-sonnet-4-6)"),
           session_id: z.string().optional().describe("Continue an existing build session"),
         },
@@ -441,13 +509,13 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         // you can't target another user's session id. The rest is sanitized even
         // when the prefix matches: it is a URL path segment.
         const prefix = await sessionPrefix(this.props.userId);
-        const rest = (session_id?.startsWith(prefix) ? session_id.slice(prefix.length) : session_id ?? "")
+        const rest = (session_id?.startsWith(prefix) ? session_id.slice(prefix.length) : (session_id ?? ""))
           .replace(/[^a-zA-Z0-9_-]/g, "")
           .slice(0, 40);
         const sid = prefix + (rest || crypto.randomUUID().slice(0, 12));
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 110_000); // cap; build continues server-side
-        let phases: string[] = [];
+        const phases: string[] = [];
         let appId: string | null = null;
         let timedOut = false;
         let engineError: string | null = null;
@@ -456,7 +524,10 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           const res = await fetch(`${this.env.AGENT_BASE}/session/${sid}/chat`, {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ message: prompt, aiConfig: { provider: prov, model: model ?? defaultModel[prov] ?? "claude-sonnet-4-6" } }),
+            body: JSON.stringify({
+              message: prompt,
+              aiConfig: { provider: prov, model: model ?? defaultModel[prov] ?? "claude-sonnet-4-6" },
+            }),
             signal: ctrl.signal,
           });
           if (!res.ok || !res.body) {
@@ -478,11 +549,19 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
               try {
                 const ev = JSON.parse(line.slice(6));
                 if (ev.type === "deploy" && ev.data) {
-                  try { const d = JSON.parse(ev.data); if (d.phase) phases.push(d.phase); if (d.appId) appId = d.appId; } catch { /* */ }
+                  try {
+                    const d = JSON.parse(ev.data);
+                    if (d.phase) phases.push(d.phase);
+                    if (d.appId) appId = d.appId;
+                  } catch {
+                    /* */
+                  }
                 }
                 if (ev.type === "error" && typeof ev.data === "string") engineError = ev.data.slice(0, 1000);
                 if (ev.appId) appId = ev.appId;
-              } catch { /* */ }
+              } catch {
+                /* */
+              }
             }
           }
         } catch (err) {
@@ -493,16 +572,27 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
           }
         }
         clearTimeout(timer);
-        await audit(this.safety(), { tool: "agent_build", action: engineError || transportError ? "error" : "success", input: { provider: prov }, result: { session: sid } });
-        if (engineError) return toolError(`Agent turn failed (session \`${sid}\`): ${engineError}\nCheck agent_status before retrying; the session may contain partial work.`);
-        if (transportError) return toolError(`Could not confirm the agent turn result (session \`${sid}\`): ${transportError.slice(0, 500)}\nCheck agent_status before retrying.`);
+        await audit(this.safety(), {
+          tool: "agent_build",
+          action: engineError || transportError ? "error" : "success",
+          input: { provider: prov },
+          result: { session: sid },
+        });
+        if (engineError)
+          return toolError(
+            `Agent turn failed (session \`${sid}\`): ${engineError}\nCheck agent_status before retrying; the session may contain partial work.`,
+          );
+        if (transportError)
+          return toolError(
+            `Could not confirm the agent turn result (session \`${sid}\`): ${transportError.slice(0, 500)}\nCheck agent_status before retrying.`,
+          );
         const last = phases[phases.length - 1];
         const liveLine = appId ? `Live (when built): https://${appId}.freeappstore.online` : "";
         return txt(
           `${timedOut ? "⏳ Agent still building" : "✓ Agent turn finished"} (session \`${sid}\`).\n` +
-          (appId ? `App: **${appId}**\n` : "") +
-          (last ? `Last deploy phase: ${last}\n` : "") +
-          `${liveLine}\n\nPoll \`agent_status\` with session_id="${sid}" for progress + the live URL.`,
+            (appId ? `App: **${appId}**\n` : "") +
+            (last ? `Last deploy phase: ${last}\n` : "") +
+            `${liveLine}\n\nPoll \`agent_status\` with session_id="${sid}" for progress + the live URL.`,
         );
       },
     );
@@ -512,7 +602,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "agent_status",
       {
         title: "Check a VibeCode build",
-        description: "Check a VibeCode agent build session (started with agent_build): active, deploying, failed, or idle status, app id, deploy phase, and live URL once ready.",
+        description:
+          "Check a VibeCode agent build session (started with agent_build): active, deploying, failed, or idle status, app id, deploy phase, and live URL once ready.",
         annotations: READ,
         inputSchema: { session_id: z.string().describe("The session_id returned by agent_build") },
       },
@@ -521,13 +612,18 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!token) return txt(NOT_SIGNED_IN);
         // Only let callers read sessions in their own namespace.
         if (!(await ownsSession(this.props.userId, session_id)))
-          return txt("That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.");
+          return txt(
+            "That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.",
+          );
         const res = await tryFetch(`${this.env.AGENT_BASE}/session/${session_id}/status`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (typeof res === "string") return toolError(`Could not reach the VibeCode agent (${res}). Retry shortly.`);
         if (res.status === 404) return toolError(`No session "${session_id}" found. Use the session_id returned by agent_build.`);
-        if (!res.ok) return toolError(`Could not read the status of session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`);
+        if (!res.ok)
+          return toolError(
+            `Could not read the status of session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`,
+          );
         const s = (await res.json()) as Parameters<typeof formatAgentStatus>[1];
         return txt(formatAgentStatus(session_id, s));
       },
@@ -538,7 +634,8 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "agent_activity",
       {
         title: "Read a VibeCode session",
-        description: "Read your VibeCode conversation with the build agent for a session: your prompts, the agent's replies, and its tool actions (file writes, compliance checks, deploys). Scoped to sessions you own — the backend rejects others. Get a session_id from agent_build, or from the Console URL /create/<id>.",
+        description:
+          "Read your VibeCode conversation with the build agent for a session: your prompts, the agent's replies, and its tool actions (file writes, compliance checks, deploys). Scoped to sessions you own — the backend rejects others. Get a session_id from agent_build, or from the Console URL /create/<id>.",
         annotations: READ,
         inputSchema: {
           session_id: z.string().describe("Session id — from agent_build, or the Console /create/<id> URL"),
@@ -549,14 +646,17 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         const token = this.props.token;
         if (!token) return txt(NOT_SIGNED_IN);
         if (!(await ownsSession(this.props.userId, session_id)))
-          return txt("That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.");
+          return txt(
+            "That session isn't one of yours — agent sessions are scoped to your account. Use the session_id returned by agent_build.",
+          );
         const res = await tryFetch(`${this.env.AGENT_BASE}/session/${encodeURIComponent(session_id)}/history`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (typeof res === "string") return toolError(`Could not reach the VibeCode agent (${res}). Retry shortly.`);
         if (res.status === 403) return txt("That session isn't yours — agent sessions are scoped to your account.");
         if (res.status === 404 || res.status === 400) return txt(`No session "${session_id}" found.`);
-        if (!res.ok) return toolError(`Could not read session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`);
+        if (!res.ok)
+          return toolError(`Could not read session ${session_id}: the VibeCode agent answered HTTP ${res.status}. Retry shortly.`);
         const data = (await res.json()) as {
           messages?: Array<{
             role: string;
@@ -578,11 +678,14 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       "update_files",
       {
         title: "Update app files",
-        description: "Write or overwrite files in the repository of an app you own, each with its full new contents. The push deploys to <app_id>.freeappstore.online in about 30–60 seconds. dry_run=true checks ownership and lists the files without pushing.",
+        description:
+          "Write or overwrite files in the repository of an app you own, each with its full new contents. The push deploys to <app_id>.freeappstore.online in about 30–60 seconds. dry_run=true checks ownership and lists the files without pushing.",
         annotations: OVERWRITE,
         inputSchema: {
           app_id: z.string().describe("App ID (must be one you published)"),
-          files: z.array(z.object({ path: z.string(), content: z.string() })).describe("Files to write — each with the FULL new content. Paths relative to repo root, e.g. web/src/App.tsx"),
+          files: z
+            .array(z.object({ path: z.string(), content: z.string() }))
+            .describe("Files to write — each with the FULL new content. Paths relative to repo root, e.g. web/src/App.tsx"),
           message: z.string().optional().describe("Commit message"),
           dry_run: z.boolean().optional().describe("If true, validate ownership and list files that would be written without pushing"),
         },
@@ -595,7 +698,10 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         if (!this.env.GITHUB_TOKEN) return toolError(NO_GITHUB_TOKEN);
         if (!files?.length) return toolError("No files provided: pass at least one { path, content }.");
         const badPaths = files.map((f) => f.path).filter((p) => !isFilePath(p));
-        if (badPaths.length) return toolError(`Invalid path(s): ${badPaths.join(", ")}. Use paths relative to the repo root (no leading "/", "..", or ".git/"), e.g. web/src/App.tsx.`);
+        if (badPaths.length)
+          return toolError(
+            `Invalid path(s): ${badPaths.join(", ")}. Use paths relative to the repo root (no leading "/", "..", or ".git/"), e.g. web/src/App.tsx.`,
+          );
         const ownershipFailure = ownershipGateText(app_id, await ownsApp(this.env.API_BASE, token, app_id));
         if (ownershipFailure) return toolError(ownershipFailure);
         auditLog("update_files", this.props.userId, { app_id, fileCount: files.length, dry_run: !!dry_run });
@@ -615,26 +721,41 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         }
         const findings = failures.map((f) => `- ${f}`).join("\n");
         if (dry_run) {
-          await audit(this.safety(), { tool: "update_files", action: "dry_run", input: { app_id, fileCount: files.length, preflightFailures: failures.length } });
+          await audit(this.safety(), {
+            tool: "update_files",
+            action: "dry_run",
+            input: { app_id, fileCount: files.length, preflightFailures: failures.length },
+          });
           const listing = files.map((f) => `- ${f.path} (${f.content.length} chars)`).join("\n");
           return txt(
             `[DRY RUN] Would push ${files.length} file(s) to **${app_id}**:\n${listing}\n\n` +
-            `Commit: ${message || `Update ${app_id} via MCP`}\n` +
-            `Ownership: verified. Preflight: ${failures.length ? `WOULD BLOCK the push:\n${findings}` : "passed."}\n` +
-            `No changes made. Remove dry_run to execute.`,
+              `Commit: ${message || `Update ${app_id} via MCP`}\n` +
+              `Ownership: verified. Preflight: ${failures.length ? `WOULD BLOCK the push:\n${findings}` : "passed."}\n` +
+              `No changes made. Remove dry_run to execute.`,
           );
         }
         if (failures.length) {
-          await audit(this.safety(), { tool: "update_files", action: "denied", input: { app_id, fileCount: files.length, preflightFailures: failures.length } });
-          return toolError(`Push to **${app_id}** refused: it would leave the app unable to build or deploy.\n${findings}\nFix these in the same update_files call, then push again.`);
+          await audit(this.safety(), {
+            tool: "update_files",
+            action: "denied",
+            input: { app_id, fileCount: files.length, preflightFailures: failures.length },
+          });
+          return toolError(
+            `Push to **${app_id}** refused: it would leave the app unable to build or deploy.\n${findings}\nFix these in the same update_files call, then push again.`,
+          );
         }
-        const map = new Map(
-          files.map((f) => [f.path, { content: textToB64(f.content), encoding: "base64" as const }]),
-        );
+        const map = new Map(files.map((f) => [f.path, { content: textToB64(f.content), encoding: "base64" as const }]));
         try {
           const sha = await pushFiles(this.env.GITHUB_ORG, app_id, this.env.GITHUB_TOKEN, map, message || `Update ${app_id} via MCP`);
-          await audit(this.safety(), { tool: "update_files", action: "success", input: { app_id, fileCount: files.length }, result: { sha: sha.slice(0, 7) } });
-          return txt(`Pushed ${files.length} file(s) to **${app_id}** (${sha.slice(0, 7)}). Auto-deploying to https://${app_id}.freeappstore.online (~30-60s). Use deploy_status to watch.`);
+          await audit(this.safety(), {
+            tool: "update_files",
+            action: "success",
+            input: { app_id, fileCount: files.length },
+            result: { sha: sha.slice(0, 7) },
+          });
+          return txt(
+            `Pushed ${files.length} file(s) to **${app_id}** (${sha.slice(0, 7)}). Auto-deploying to https://${app_id}.freeappstore.online (~30-60s). Use deploy_status to watch.`,
+          );
         } catch (e) {
           return toolError(`Push to ${app_id} failed: ${String(e)}. Nothing was deployed; retry the same update_files call.`);
         }

@@ -39,9 +39,7 @@ const DEFAULT_SCOPES: McpScope[] = ["read", "write", "runtime"];
 export function parseScopes(value: string | string[] | null | undefined): McpScope[] {
   if (!value) return [...DEFAULT_SCOPES];
   const parts = Array.isArray(value) ? value : value.split(/[,\s]+/);
-  const scopes = parts.filter((part): part is McpScope =>
-    (MCP_SCOPES as readonly string[]).includes(part),
-  );
+  const scopes = parts.filter((part): part is McpScope => (MCP_SCOPES as readonly string[]).includes(part));
   return scopes.length > 0 ? Array.from(new Set(scopes)) : [...DEFAULT_SCOPES];
 }
 
@@ -73,7 +71,10 @@ export async function requirePermission(
       scopes: ctx.scopes ?? null,
       input,
     });
-    return { ...text(`Error: ${tool} requires MCP scope "${scope}". Reconnect with that scope or use a token that allows it.`), isError: true };
+    return {
+      ...text(`Error: ${tool} requires MCP scope "${scope}". Reconnect with that scope or use a token that allows it.`),
+      isError: true,
+    };
   }
   return null;
 }
@@ -109,11 +110,9 @@ export async function audit(ctx: SafetyContext, event: Record<string, unknown>):
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
   const key = auditKey(ctx.subject, nowMs, crypto.randomUUID());
-  await ctx.env.OAUTH_KV.put(
-    key,
-    JSON.stringify({ time: now, subject: ctx.subject, ...(redact(event) as Record<string, unknown>) }),
-    { expirationTtl: 90 * 86_400 },
-  );
+  await ctx.env.OAUTH_KV.put(key, JSON.stringify({ time: now, subject: ctx.subject, ...(redact(event) as Record<string, unknown>) }), {
+    expirationTtl: 90 * 86_400,
+  });
 }
 
 /** Read the authenticated user's recent audit events, newest first. */
@@ -122,16 +121,15 @@ export async function listAuditEvents(ctx: SafetyContext, limit = 50): Promise<u
   const safeLimit = Math.max(1, Math.min(200, limit));
   const listed = await ctx.env.OAUTH_KV.list({ prefix: `${AUDIT_PREFIX}:${ctx.subject}:`, limit: safeLimit });
   const rows = await Promise.all(
-    listed.keys
-      .map(async (key) => {
-        const raw = await ctx.env.OAUTH_KV?.get(key.name);
-        if (!raw) return null;
-        try {
-          return JSON.parse(raw) as unknown;
-        } catch {
-          return { raw };
-        }
-      }),
+    listed.keys.map(async (key) => {
+      const raw = await ctx.env.OAUTH_KV?.get(key.name);
+      if (!raw) return null;
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        return { raw };
+      }
+    }),
   );
   return rows.filter((row) => row !== null);
 }

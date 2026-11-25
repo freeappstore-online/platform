@@ -397,7 +397,7 @@ export function getSdkReference(feature?: string): string {
   const selected =
     !feature || feature === "all"
       ? Object.values(SECTIONS).join("\n\n")
-      : (SECTIONS as Record<string, string>)[feature] ?? `Unknown feature: ${feature}`;
+      : ((SECTIONS as Record<string, string>)[feature] ?? `Unknown feature: ${feature}`);
   return `# @freeappstore/sdk Reference\n\n${selected}`;
 }
 

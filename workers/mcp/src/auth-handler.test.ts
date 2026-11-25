@@ -7,7 +7,7 @@
  */
 
 import type { AuthRequest, CompleteAuthorizationOptions } from "@cloudflare/workers-oauth-provider";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AuthHandler } from "./auth-handler.js";
 import { s256Challenge, sha256Hex } from "./pkce.js";
 
@@ -66,10 +66,7 @@ function makeEnv(overrides: { parseThrows?: boolean } = {}) {
 const ME_OK = () => Response.json({ id: "gh:2824906", aud: "console", login: "serge" });
 
 /** Stub the FAS backend: the code exchange and /v1/auth/me. Records every call. */
-function stubExchange(
-  respond: () => Response | Promise<Response>,
-  me: () => Response | Promise<Response> = ME_OK,
-) {
+function stubExchange(respond: () => Response | Promise<Response>, me: () => Response | Promise<Response> = ME_OK) {
   const calls: { url: string; body: { code?: string; code_verifier?: string } }[] = [];
   const meCalls: { url: string; authorization: string | null }[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -140,7 +137,12 @@ describe("GET /callback", () => {
   it("answers 502 with a retry hint, not a bare 500, when FreeAppStore is unreachable", async () => {
     const { env, completeAuthorization } = makeEnv();
     const flow = await startFlow(env);
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("network down"); }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("network down");
+      }),
+    );
     const res = await callback(env, callbackUrl(flow), flow.cookie);
     expect(res.status).toBe(502);
     expect(await res.text()).toMatch(/try connecting again/);
