@@ -135,7 +135,7 @@ The Worker:
 ## CLI
 
 ```
-fas secret set OPENWEATHER_KEY abc123 --app weather
+fas secret set OPENWEATHER_KEY --from-env OPENWEATHER_KEY --app weather
 fas secret list --app weather
 fas secret rm OPENWEATHER_KEY --app weather
 

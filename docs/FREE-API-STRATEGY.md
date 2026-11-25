@@ -72,7 +72,7 @@ Developer registers their own API key. Platform encrypts it, injects it server-s
 - AI provider hosts blocked (use Model 3 instead)
 
 **Developer experience:**
-1. `fas secret set WEATHER_KEY sk-...` (or use Console UI)
+1. `fas secret set WEATHER_KEY --from-env WEATHER_KEY` (or use Console UI)
 2. `fas allowlist add https://api.openweathermap.org/ --inject query:appid --secret WEATHER_KEY`
 3. App code: `fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London')`
 

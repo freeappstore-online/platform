@@ -22,9 +22,10 @@ Fresh app scaffolds include the versioned `pwa` capability. Existing apps can us
 | `fas whoami` | Print current GitHub login |
 | `fas doctor` | App health and verification status; `--offline`, `--json`, `--verify`, `--artifact` |
 | `fas init <id>` | Scaffold a new app from a template |
+| `fas add <capability...>` | Add bundled first-party capabilities without overwriting edits (see [below](#optional-first-party-capabilities)) |
 | `fas check` | Run compliance checks |
 | `fas build-target [--artifact] [--app-id <id>]` | Validate selected app entry, identity, build and release output |
-| `fas publish` | Provision repo + hosting + DNS and publish |
+| `fas publish` | Provision repo + hosting route + storefront entry |
 | `fas list` | List your published apps |
 | `fas logs <id>` | Show recent deploy runs (GitHub Actions) |
 | `fas secret set\|list\|rm` | Manage app API keys |
@@ -32,6 +33,7 @@ Fresh app scaffolds include the versioned `pwa` capability. Existing apps can us
 | `fas db share\|unshare\|list` | Choose which `fas.collections` collections other users can read |
 | `fas screencheck` | Responsive layout test across viewports |
 | `fas quality [id]` | VCQA code quality report |
+| `fas migrate tailwind-tokens` | Rewrite long-hand Tailwind CSS-variable utilities to token utilities; dry-run unless `--write` |
 | `fas admin transfer-owner` | Admin-only ownership transfer (compare-and-set) |
 
 ## `fas login`
@@ -169,9 +171,12 @@ Shows recent GitHub Actions deploy runs. Status, timestamps, and links to failed
 
 Manage server-side encrypted API keys.
 
+The value is never a command-line argument (it would land in shell history and the process list); a positional value is refused.
+
 ```bash
-fas secret set OPENWEATHER_KEY sk-abc123
-fas secret set OPENWEATHER_KEY sk-abc123 --app my-app
+fas secret set OPENWEATHER_KEY --from-env OPENWEATHER_KEY
+printf '%s' "$OPENWEATHER_KEY" | fas secret set OPENWEATHER_KEY --app my-app
+fas secret set OPENWEATHER_KEY                  # hidden interactive prompt
 fas secret list
 fas secret list --json
 fas secret rm OPENWEATHER_KEY

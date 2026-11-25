@@ -13,7 +13,7 @@
       "source-map-js": "^1.2.2"
     }
   },
-  "repository": { "type": "git", "url": "git+https://github.com/freeappstore-online/console.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/freeappstore-online/platform.git", "directory": "sites/console" },
   "scripts": {
     "dev": "pnpm --filter @fas-console/web dev",
     "build": "pnpm --filter @fas-console/web build",

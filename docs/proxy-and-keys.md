@@ -8,7 +8,7 @@ For APIs that need a **developer-owned** API key (weather, geocoding, etc.). The
 
 ### How it works
 
-1. Developer stores a secret: `fas secret set OPENWEATHER_KEY abc123`
+1. Developer stores a secret: `fas secret set OPENWEATHER_KEY --from-env OPENWEATHER_KEY`
 2. Developer creates an allowlist rule: `fas proxy allow "https://api.openweathermap.org/" --secret OPENWEATHER_KEY --inject "query:appid"`
 3. App calls the proxy: `fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London')`
 4. Platform Worker decrypts the key, injects it into the request, forwards to the upstream API, returns the response

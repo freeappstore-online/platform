@@ -65,7 +65,7 @@ That's it. No `npm publish`. No `npm login`. No npm token request. No local buil
 **Same pattern across the family:**
 
 - App / game repos auto-deploy to R2 via GitHub Actions on push to `main` — never `wrangler pages deploy` manually.
-- The backend Worker (`packages/backend`) is the one exception: it's not on a push-trigger workflow, so `wrangler deploy` is the right command. Check `.github/workflows/` first to confirm before running anything that ends in "deploy" or "publish".
+- Platform Workers and sites (`packages/backend`, `workers/*`, `sites/*`) deploy the same way: each has a path-filtered `.github/workflows/deploy-*.yml` that runs on push to `main`. Never `wrangler deploy` them by hand.
 
 **As an AI agent:** if a user asks "how do I publish the SDK", the answer is the three commands in the Release flow box above. Do not suggest `npm publish`. Do not ask for an npm token.
 
@@ -91,24 +91,24 @@ Anyone can publish. Provisioning is self-service; there is no application or app
 |---|---|---|
 | **Domain** | freeappstore.online | freegamestore.online |
 | **GitHub org** | freeappstore-online | freegamestore-online |
-| **Store repo** | freeappstore-online/platform (`sites/storefront`) | freegamestore-online/freegamestore |
-| **Registry file** | `sites/storefront/registry.json` in platform repo | `registry.json` in store repo |
-| **Templates** | template-standalone | template-game-canvas, template-game-cards, template-game-grid, template-game-3d |
+| **Store repo** | freeappstore-online/platform (`sites/storefront`) | freegamestore-online/platform (`sites/freegamestore`) |
+| **Registry file** | `sites/storefront/registry.json` in platform repo | `sites/freegamestore/registry.json` in platform repo |
+| **Templates** | template-standalone, template-connected | template-game-{canvas, 3d, grid, cards, phaser, kaplay, pixi, babylon, excalibur, littlejs} |
 | **SDK (connected apps)** | `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice) | — |
 | **Accent color** | Blue (#2563eb) | Emerald (#10b981) |
 | **Logo** | Free **Apps** | Free **Games** |
 | **Admin** | admin.freeappstore.online | admin.freegamestore.online |
 | **Publish** | freeappstore.online/app/publish | publish.freegamestore.online |
 | **Local path** | ~/dev/fas/ | ~/dev/fgs/ |
-| **Storefront repo** | ~/dev/stores/fas/platform/sites/storefront/ | ~/dev/fgs/freegamestore/ |
+| **Storefront repo** | ~/dev/stores/fas/platform/sites/storefront/ | ~/dev/stores/fgs/platform/sites/freegamestore/ |
 
 ## Workspace Layout
 
-Each app/game is its own GitHub repo. Clone whichever ones you work on flat under `~/dev/fas/` (or `~/dev/fgs/`):
+Each app/game is its own GitHub repo. Clone whichever ones you work on flat under `~/dev/fas/` (or `~/dev/fgs/`). Each storefront lives in its store's `platform` repo (`sites/storefront`, `sites/freegamestore`), not in a repo of its own:
 
 ```
 ~/dev/fas/                       ~/dev/fgs/
-  freeappstore/   (storefront)     freegamestore/   (storefront)
+  platform/       (storefront)     platform/        (storefront)
   timer/                           chess/
   notes/                           tetris/
   calculator/                      racing/
@@ -482,7 +482,7 @@ For APIs that need a key, the proxy encrypts and injects it server-side. Two mod
 
 **Developer key** (all users share one key):
 ```tsx
-// Developer sets key via Console or CLI: fas secret set WEATHER_KEY sk-...
+// Developer sets key via Console or CLI: fas secret set WEATHER_KEY --from-env WEATHER_KEY
 const weather = await fas.proxy.fetch('api.openweathermap.org/data/2.5/weather?q=London')
 const data = await weather.json()
 ```
@@ -556,7 +556,7 @@ Apps need three kinds of external values. Each has a different storage path:
 | Kind | Examples | Where it goes | Reaches browser? |
 |------|----------|--------------|-----------------|
 | **Public identifiers** | OAuth client IDs, Firebase config, Stripe publishable keys, Google Maps browser key | **R2 deploy env vars** (`VITE_*` prefix) set in GitHub repo Settings > Secrets & Variables > Variables | Yes (build-time injection, origin-restricted server-side) |
-| **Quota-bearing API keys** | OpenWeather, Last.fm, CoinGecko, any key where abuse = $ | **App-secret proxy** via `fas secret set NAME value` + allowlist rule | No (injected server-side by proxy) |
+| **Quota-bearing API keys** | OpenWeather, Last.fm, CoinGecko, any key where abuse = $ | **App-secret proxy** via `fas secret set NAME --from-env VAR` (or stdin / prompt) + allowlist rule | No (injected server-side by proxy) |
 | **User-owned secrets** | OpenAI key, Anthropic key | **User key vault** via `fas.keys.manage()` | No (encrypted at rest, injected by proxy) |
 | **Actual secrets** | OAuth client secrets, signing keys, admin tokens | **Platform-level wrangler secrets** (managed by admin, never in app code) | No |
 
@@ -993,9 +993,17 @@ npm i -g @freeappstore/cli
 | `fas init <id>` | Scaffold from template (`--template standalone\|connected`) |
 | `fas check` | Run compliance checks (brand, bundle size, PWA, tracking, license) |
 | `fas screencheck` | Build + viewport test in real Chromium (portrait + landscape) |
-| `fas publish` | Provision repo + hosting + DNS + store listing. Flags: `--name`, `--category`, `--type`, `--oneliner`, `--demo`, `--yes` |
+| `fas publish` | Provision repo + hosting route + store listing. Flags: `--name`, `--category`, `--type`, `--oneliner`, `--demo`, `--yes` |
 | `fas list` | List your published apps (`--json` for machine output) |
+| `fas logs <id>` | Recent deploy runs (GitHub Actions) |
 | `fas doctor` | Health check: Node, git, pnpm, auth, API reachability |
+| `fas add <capability...>` | Add bundled first-party capabilities (`pwa`, `persistence`, `realtime`, …) without overwriting edits |
+| `fas build-target` | Validate the app entry, identity and build/deploy target from `fas.json` |
+| `fas secret set\|list\|rm` | Manage server-side encrypted API keys. Pass the value with `--from-env VAR`, stdin, or the hidden prompt — never as an argument |
+| `fas proxy allow\|list\|deny` | Manage the proxy URL allowlist |
+| `fas db share\|unshare\|list` | Choose which collections other users can read |
+| `fas quality [id]` | Quality report for an app |
+| `fas migrate tailwind-tokens` | Codemod long-hand Tailwind CSS-variable utilities to token utilities (dry-run unless `--write`) |
 
 The command is `fas init`, not `fas create`. If you see `fas create` in old docs, it's outdated.
 

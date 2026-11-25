@@ -27,7 +27,7 @@ Dev or user brings their own API key. Platform stores it encrypted (AES-256-GCM 
 
 | Integration | How | Status |
 |---|---|---|
-| **App-developer secrets** | Dev registers key via `fas secret set NAME value` + allowlist rule | **Live** |
+| **App-developer secrets** | Dev registers key via `fas secret set NAME --from-env VAR` + allowlist rule | **Live** |
 | **User API keys** (OpenAI, Anthropic, etc.) | User adds key at `/v1/keys`, app calls `fas.proxy.fetch()` | **Live** |
 | Any REST API | `fas.proxy.fetch(url)` | **Live** |
 
