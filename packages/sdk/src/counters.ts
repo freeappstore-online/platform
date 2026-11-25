@@ -1,4 +1,4 @@
-import type { Auth } from './auth.js';
+import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 /**
  * Shared atomic counters — not user-scoped.
@@ -10,7 +10,7 @@ export class Counters {
   constructor(
     private readonly appId: string,
     private readonly apiBase: string,
-    private readonly auth: Auth,
+    private readonly auth: SessionAuth,
   ) {}
 
   /** Get all counters (or filter by prefix). Public — no auth required. */
@@ -39,24 +39,15 @@ export class Counters {
    * A negative amount needs the app owner or a privileged app role (403 otherwise).
    */
   async increment(key: string, amount = 1): Promise<number> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/counters/${encodeURIComponent(key)}`,
       this.apiBase,
     );
-    const response = await fetch(url, {
+    const response = await authedFetch(this.auth, url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ increment: amount }),
     });
-    if (response.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
     if (!response.ok) throw new Error(`counters.increment failed: ${response.status}`);
     const data = (await response.json()) as { value: number };
     return data.value;

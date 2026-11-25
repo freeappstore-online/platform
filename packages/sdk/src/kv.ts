@@ -1,4 +1,4 @@
-import type { Auth } from './auth.js';
+import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 /**
  * Per-user key-value store, scoped to (appId, userId).
@@ -27,28 +27,20 @@ export class Kv {
   constructor(
     private readonly appId: string,
     private readonly apiBase: string,
-    private readonly auth: Auth,
+    private readonly auth: SessionAuth,
   ) {}
 
   /** List all keys for this user. Optionally filter by prefix. */
   async list(opts?: { prefix?: string; signal?: AbortSignal }): Promise<string[]> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/kv`, this.apiBase);
     if (opts?.prefix) url.searchParams.set('prefix', opts.prefix);
-    const listResponse = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-      ...(opts?.signal && { signal: opts.signal }),
-    });
-    if (listResponse.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
+    const listResponse = await authedFetch(
+      this.auth,
+      url,
+      opts?.signal ? { signal: opts.signal } : {},
+    );
     if (!listResponse.ok) throw new Error(`kv.list failed: ${listResponse.status}`);
-    let keys = (await listResponse.json()) as string[];
-    // Client-side prefix filter as fallback if server doesn't support it yet
-    if (opts?.prefix) keys = keys.filter((k) => k.startsWith(opts.prefix!));
-    return keys;
+    return (await listResponse.json()) as string[];
   }
 
   /** Fetch multiple keys in parallel. Returns a Map of found key-value pairs (skips failures and missing keys). */
@@ -111,21 +103,14 @@ export class Kv {
     body?: string,
     signal?: AbortSignal,
   ): Promise<Response> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/kv/${encodeURIComponent(key)}`,
       this.apiBase,
     );
-    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-    if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const init: RequestInit = { method, headers, ...(signal && { signal }) };
-    if (body !== undefined) init.body = body;
-    const kvResponse = await fetch(url, init);
-    if (kvResponse.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
-    return kvResponse;
+    return authedFetch(this.auth, url, {
+      method,
+      ...(signal && { signal }),
+      ...(body !== undefined && { headers: { 'Content-Type': 'application/json' }, body }),
+    });
   }
 }

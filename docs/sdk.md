@@ -324,13 +324,14 @@ It shows the notification on each push and focuses (or opens) the app when tappe
 
 ## Webhooks (`fas.webhooks`)
 
-Outbound webhook subscriptions. HMAC-SHA256 signed.
+Outbound webhook subscriptions. HMAC-SHA256 signed. Register a webhook (and get its signing
+secret) in the Creator Console under your app's **Webhooks**; the API refuses registration from an
+app session. From the app, the owner can list, test and delete them:
 
 ```ts
 const { webhooks, supported_events } = await fas.webhooks.list();
-const { id, secret } = await fas.webhooks.create('kv.changed', 'https://example.com/hook');
-const result = await fas.webhooks.test(id);
-await fas.webhooks.delete(id);
+const { status } = await fas.webhooks.test(webhooks[0].id); // the receiver's HTTP status
+await fas.webhooks.delete(webhooks[0].id);
 ```
 
 **Limits:** 5 webhooks per app, 12 event types. Management requires app ownership. Read `supported_events` from `list()` rather than inventing event names.
@@ -349,6 +350,10 @@ const entries = fas.log.entries();
 await fas.log.flush();   // send to server
 fas.log.clear();
 ```
+
+While signed in, entries upload in batches every 30 seconds. A batch the server rejects outright
+(for example 400 or 404) is skipped so it can't hold up later entries; after the daily cap (429)
+uploads pause until midnight UTC; other failures retry on the next tick.
 
 ## App shell
 

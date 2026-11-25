@@ -1,7 +1,4 @@
-interface AuthLike {
-  token: string | null;
-  handleUnauthorized(requestToken?: string): void;
-}
+import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 export interface Friend {
   userId: string;
@@ -39,22 +36,14 @@ export class Friends {
   constructor(
     readonly _appId: string,
     private readonly apiBase: string,
-    private readonly auth: AuthLike,
+    private readonly auth: SessionAuth,
   ) {}
 
   /** List friends by status. Defaults to accepted friends. */
   async list(status?: 'accepted' | 'pending_incoming' | 'pending_outgoing'): Promise<Friend[]> {
-    const token = this.auth.token;
-    if (!token) return [];
     const qs = status ? `?status=${status}` : '';
-    const res = await fetch(`${this.apiBase}/v1/friends${qs}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.status === 401) {
-      this.auth.handleUnauthorized(token);
-      return [];
-    }
-    if (!res.ok) return [];
+    const res = await authedFetch(this.auth, `${this.apiBase}/v1/friends${qs}`).catch(() => null);
+    if (!res?.ok) return [];
     const data = (await res.json()) as { friends: Friend[] };
     return data.friends;
   }
@@ -66,17 +55,11 @@ export class Friends {
 
   /** Send a friend request. Returns status and whether it was auto-accepted (mutual). */
   async request(userId: string): Promise<{ status: string; autoAccepted: boolean }> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
-    const res = await fetch(`${this.apiBase}/v1/friends/request`, {
+    const res = await authedFetch(this.auth, `${this.apiBase}/v1/friends/request`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId }),
     });
-    if (res.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       throw new Error(data.error ?? `request failed: ${res.status}`);
@@ -86,17 +69,15 @@ export class Friends {
 
   /** Respond to a friend request or block a user. */
   async respond(userId: string, action: 'accept' | 'decline' | 'block'): Promise<void> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
-    const res = await fetch(`${this.apiBase}/v1/friends/${encodeURIComponent(userId)}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    });
-    if (res.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
+    const res = await authedFetch(
+      this.auth,
+      `${this.apiBase}/v1/friends/${encodeURIComponent(userId)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      },
+    );
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       throw new Error(data.error ?? `respond failed: ${res.status}`);
@@ -105,16 +86,11 @@ export class Friends {
 
   /** Remove a friend, cancel outgoing request, or unblock. */
   async remove(userId: string): Promise<void> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
-    const res = await fetch(`${this.apiBase}/v1/friends/${encodeURIComponent(userId)}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
+    const res = await authedFetch(
+      this.auth,
+      `${this.apiBase}/v1/friends/${encodeURIComponent(userId)}`,
+      { method: 'DELETE' },
+    );
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       throw new Error(data.error ?? `remove failed: ${res.status}`);
@@ -134,24 +110,22 @@ export class Friends {
 
   /** Check the friendship status with a specific user. */
   async check(userId: string): Promise<FriendshipStatus> {
-    const token = this.auth.token;
-    if (!token) return 'none';
-    const res = await fetch(`${this.apiBase}/v1/friends/check/${encodeURIComponent(userId)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return 'none';
+    const res = await authedFetch(
+      this.auth,
+      `${this.apiBase}/v1/friends/check/${encodeURIComponent(userId)}`,
+    ).catch(() => null);
+    if (!res?.ok) return 'none';
     const data = (await res.json()) as { status: FriendshipStatus };
     return data.status;
   }
 
   /** Search users by GitHub login. Returns users with their friendship status. */
   async search(query: string): Promise<FriendSearchResult[]> {
-    const token = this.auth.token;
-    if (!token) return [];
-    const res = await fetch(`${this.apiBase}/v1/friends/search?q=${encodeURIComponent(query)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) return [];
+    const res = await authedFetch(
+      this.auth,
+      `${this.apiBase}/v1/friends/search?q=${encodeURIComponent(query)}`,
+    ).catch(() => null);
+    if (!res?.ok) return [];
     const data = (await res.json()) as { users: FriendSearchResult[] };
     return data.users;
   }

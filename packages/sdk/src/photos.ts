@@ -1,4 +1,5 @@
 import type { Auth } from './auth.js';
+import { authedFetch } from './authed-fetch.js';
 
 export const PHOTO_LIMITS = { maxBytes: 200_000, maxEdge: 640, retentionDays: 90 } as const;
 export interface Photo {
@@ -89,20 +90,15 @@ export class Photos {
     return { ...photo, url: new URL(photo.url, this.apiBase).href };
   }
 
-  private async request(suffix: string, init: RequestInit): Promise<Response> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
-    const response = await fetch(
+  private async request(
+    suffix: string,
+    init: Parameters<typeof authedFetch>[2],
+  ): Promise<Response> {
+    const response = await authedFetch(
+      this.auth,
       `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/photos${suffix}`,
-      {
-        ...init,
-        headers: { ...init.headers, Authorization: `Bearer ${token}` },
-      },
+      init,
     );
-    if (response.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
     if (!response.ok)
       throw new Error((await response.text()) || `Photo request failed (${response.status}).`);
     return response;

@@ -1,4 +1,4 @@
-import type { Auth } from './auth.js';
+import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 /**
  * App transactional email via the platform's Cloudflare Email Service integration.
@@ -14,7 +14,7 @@ export class Email {
   constructor(
     private readonly appId: string,
     private readonly apiBase: string,
-    private readonly auth: Auth,
+    private readonly auth: SessionAuth,
   ) {}
 
   /**
@@ -25,20 +25,15 @@ export class Email {
    * @param opts - email body (at least one of html or text required)
    */
   async send(to: string, subject: string, opts: { html?: string; text?: string }): Promise<void> {
-    if (!this.auth.token) {
-      throw new Error('email.send: not signed in. Call fas.auth.signIn() first.');
-    }
     if (!opts.html && !opts.text) {
       throw new Error('email.send: at least one of html or text is required.');
     }
-    const res = await fetch(
+    const res = await authedFetch(
+      this.auth,
       `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/email/send`,
       {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.auth.token}`,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to, subject, ...opts }),
       },
     );

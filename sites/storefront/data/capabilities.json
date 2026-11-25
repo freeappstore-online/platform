@@ -184,7 +184,7 @@
       "limits": "5 webhooks per app, HMAC-SHA256 signed",
       "note": "Only friend events (requested, accepted, removed, blocked) and manual tests are actually sent. The other 8 listed events (kv, collection, counter, role, user) never fire.",
       "evidence": [
-        "packages/sdk/src/webhooks.ts:25",
+        "packages/sdk/src/webhooks.ts:29",
         "packages/backend/src/routes/webhooks.ts:16",
         "packages/backend/src/routes/webhooks.ts:156",
         "packages/backend/src/routes/webhooks.ts:196",

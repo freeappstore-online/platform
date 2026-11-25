@@ -83,4 +83,71 @@ describe('Logger upload watermark', () => {
     const second = (bodies(fetchMock)[1]!.entries as { message: string }[]).map((e) => e.message);
     expect(second[0]).toBe('m50');
   });
+
+  it('skips a permanently rejected batch so later entries still upload', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('unknown app', { status: 404 }));
+    const log = new Logger('app4', 'https://api.test', auth);
+    log.clear();
+
+    log.info('rejected');
+    await log.flush(); // 404 → batch skipped, not retried
+    log.info('next');
+    await log.flush();
+    log.destroy();
+
+    const sent = bodies(fetchMock).map((b) =>
+      (b.entries as { message: string }[]).map((e) => e.message),
+    );
+    expect(sent).toEqual([['rejected'], ['next']]);
+  });
+
+  it('pauses uploads until the next UTC day after a 429', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-11-26T15:00:00Z'));
+      fetchMock.mockResolvedValueOnce(new Response('daily cap', { status: 429 }));
+      const log = new Logger('app5', 'https://api.test', auth);
+      log.clear();
+
+      log.info('capped');
+      await log.flush(); // 429 → paused
+      await log.flush(); // still paused: no request
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(new Date('2026-11-27T00:00:01Z'));
+      await log.flush(); // new UTC day → the same batch goes out
+      log.destroy();
+
+      const sent = bodies(fetchMock).map((b) =>
+        (b.entries as { message: string }[]).map((e) => e.message),
+      );
+      expect(sent).toEqual([['capped'], ['capped']]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops the session on a 401 and keeps the batch for after sign-in', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 401 }));
+    const session = {
+      token: 'stale' as string | null,
+      handleUnauthorized: vi.fn(() => {
+        session.token = null;
+      }),
+    };
+    const log = new Logger('app6', 'https://api.test', session as unknown as Auth);
+    log.clear();
+
+    log.info('kept');
+    await log.flush();
+    expect(session.handleUnauthorized).toHaveBeenCalledWith('stale');
+    await log.flush(); // signed out: nothing sent
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    session.token = 'fresh';
+    await log.flush();
+    log.destroy();
+    const last = bodies(fetchMock).at(-1)!.entries as { message: string }[];
+    expect(last.map((e) => e.message)).toEqual(['kept']);
+  });
 });

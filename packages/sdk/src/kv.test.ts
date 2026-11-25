@@ -82,3 +82,13 @@ describe('Kv.get behavior', () => {
     await expect(k.get('foo')).rejects.toThrow(/500/);
   });
 });
+
+describe('Kv.list', () => {
+  it('sends the prefix to the server and returns its keys as-is', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(['a:1', 'a:2'])));
+    const k = new Kv('demo', 'https://api.example', fakeAuth('tok'));
+    expect(await k.list({ prefix: 'a:' })).toEqual(['a:1', 'a:2']);
+    const url = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]![0] as URL;
+    expect(url.searchParams.get('prefix')).toBe('a:');
+  });
+});

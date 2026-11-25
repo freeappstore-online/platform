@@ -1,4 +1,5 @@
 import type { Auth } from './auth.js';
+import { authedFetch } from './authed-fetch.js';
 
 /**
  * Platform logger -- captures errors, SDK API calls, and custom events.
@@ -42,7 +43,7 @@ export interface BuildMeta {
 
 // Must track package.json version — bumped on release. Guarded by version.test.ts
 // so a forgotten bump fails CI instead of silently misattributing telemetry.
-export const SDK_VERSION = '0.17.2';
+export const SDK_VERSION = '0.18.0';
 const MEMORY_LIMIT = 200;
 const STORAGE_LIMIT = 500;
 const STORAGE_KEY_PREFIX = 'fas_logs:';
@@ -59,6 +60,9 @@ export class Logger {
   // exactly once without disturbing the recent()/entries() view held in `buffer`.
   private uploadedThrough = 0;
   private evicted = 0;
+  // After a 429 (the per-user daily row cap) uploads pause until the cap
+  // resets at the next UTC midnight.
+  private pausedUntil = 0;
 
   constructor(
     private readonly appId: string,
@@ -259,7 +263,7 @@ export class Logger {
   private uploading: Promise<void> | null = null;
 
   private async doUploadBatch(): Promise<void> {
-    if (!this.auth.token) return;
+    if (!this.auth.token || Date.now() < this.pausedUntil) return;
 
     // Send the oldest not-yet-uploaded entries (a watermark over the stream),
     // so each entry uploads exactly once instead of re-sending the tail every
@@ -271,20 +275,30 @@ export class Logger {
     const batch = this.buffer.slice(startIdx, startIdx + UPLOAD_BATCH_SIZE);
     if (batch.length === 0) return;
     try {
-      const res = await fetch(`${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/logs`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${this.auth.token}`,
-          'Content-Type': 'application/json',
+      const res = await authedFetch(
+        this.auth,
+        `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/logs`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries: batch }),
         },
-        body: JSON.stringify({ entries: batch }),
-      });
-      // On failure leave the watermark untouched and retry next interval.
-      if (!res.ok) return;
+      );
+      if (res.status === 429) {
+        const midnight = new Date();
+        midnight.setUTCHours(24, 0, 0, 0);
+        this.pausedUntil = midnight.getTime();
+        return;
+      }
+      // Transient failures (5xx, 408) keep the watermark and retry next
+      // interval. Any other refusal (400, 404 unknown app, ...) is permanent
+      // for this batch: skip it so it can't block every later entry.
+      if (res.status >= 500 || res.status === 408) return;
       this.uploadedThrough = evicted + startIdx + batch.length;
       this.saveToStorage();
     } catch {
-      // Network failure, watermark unchanged — will retry next interval
+      // Network failure or 401 (session dropped): watermark unchanged — will
+      // retry next interval once signed in.
     }
   }
 

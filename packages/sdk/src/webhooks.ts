@@ -1,8 +1,13 @@
-import type { Auth } from './auth.js';
+import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 /**
- * Outbound webhook management. Devs register URLs to receive HTTP POST
- * when events fire (user.first_visit, kv.changed, collection.created, etc.).
+ * Outbound webhook management for the app owner. Devs register URLs to
+ * receive HTTP POST when events fire (user.first_visit, kv.changed,
+ * collection.created, etc.).
+ *
+ * Registering a webhook is an app setting, so it is console-only (Creator
+ * Console → app → Webhooks; the API rejects app sessions, #495). From the app
+ * the owner can list, test and delete them.
  *
  * The platform signs each delivery with HMAC-SHA256 using a per-webhook
  * secret (returned at registration time). Receivers verify the signature
@@ -19,59 +24,38 @@ export interface Webhook {
 
 export interface WebhookTestResult {
   status: number;
-  body: string;
 }
 
 export class Webhooks {
   constructor(
     private readonly appId: string,
     private readonly apiBase: string,
-    private readonly auth: Auth,
+    private readonly auth: SessionAuth,
   ) {}
 
-  private headers(): Record<string, string> {
-    const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.auth.token) h.Authorization = `Bearer ${this.auth.token}`;
-    return h;
+  private url(suffix = ''): string {
+    return `${this.apiBase}/v1/apps/${encodeURIComponent(this.appId)}/webhooks${suffix}`;
   }
 
   /** List all webhooks for this app + supported events. */
   async list(): Promise<{ webhooks: Webhook[]; supported_events: string[] }> {
-    const res = await fetch(`${this.apiBase}/v1/apps/${this.appId}/webhooks`, {
-      headers: this.headers(),
-    });
+    const res = await authedFetch(this.auth, this.url());
     if (!res.ok) throw new Error(`webhooks.list failed: ${res.status}`);
     return res.json() as Promise<{ webhooks: Webhook[]; supported_events: string[] }>;
   }
 
-  /** Register a new webhook. Returns the webhook ID and signing secret. */
-  async create(event: string, url: string): Promise<{ id: string; secret: string }> {
-    const res = await fetch(`${this.apiBase}/v1/apps/${this.appId}/webhooks`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify({ event, url }),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      throw new Error(`webhooks.create failed: ${data.error ?? res.statusText}`);
-    }
-    return res.json() as Promise<{ id: string; secret: string }>;
-  }
-
   /** Delete a webhook by ID. */
   async delete(id: string): Promise<void> {
-    const res = await fetch(`${this.apiBase}/v1/apps/${this.appId}/webhooks/${id}`, {
+    const res = await authedFetch(this.auth, this.url(`/${encodeURIComponent(id)}`), {
       method: 'DELETE',
-      headers: this.headers(),
     });
     if (!res.ok) throw new Error(`webhooks.delete failed: ${res.status}`);
   }
 
-  /** Send a test event to a webhook. Returns the HTTP status and response body. */
+  /** Send a test event to a webhook. Returns the HTTP status the receiver answered with. */
   async test(id: string): Promise<WebhookTestResult> {
-    const res = await fetch(`${this.apiBase}/v1/apps/${this.appId}/webhooks/${id}/test`, {
+    const res = await authedFetch(this.auth, this.url(`/${encodeURIComponent(id)}/test`), {
       method: 'POST',
-      headers: this.headers(),
     });
     if (!res.ok) throw new Error(`webhooks.test failed: ${res.status}`);
     return res.json() as Promise<WebhookTestResult>;

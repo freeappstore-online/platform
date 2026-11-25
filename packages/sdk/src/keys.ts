@@ -1,4 +1,4 @@
-import type { Auth } from './auth.js';
+import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 /**
  * User API Key management. Keys are stored encrypted on the platform and
@@ -12,7 +12,7 @@ export class Keys {
   constructor(
     private readonly appId: string,
     private readonly apiBase: string,
-    private readonly auth: Auth,
+    private readonly auth: SessionAuth,
   ) {}
 
   /**
@@ -35,6 +35,7 @@ export class Keys {
   /**
    * Check which providers the current user has keys configured for.
    * Useful for showing "configure your API key" prompts in the app.
+   * Returns `[]` when signed out or when the check fails.
    */
   async status(): Promise<
     Array<{
@@ -44,11 +45,10 @@ export class Keys {
       lastUsedAt?: number | null;
     }>
   > {
-    if (!this.auth.token) return [];
-    const res = await fetch(`${this.apiBase}/v1/keys/status`, {
-      headers: { Authorization: `Bearer ${this.auth.token}`, Accept: 'application/json' },
-    });
-    if (!res.ok) return [];
+    const res = await authedFetch(this.auth, `${this.apiBase}/v1/keys/status`, {
+      headers: { Accept: 'application/json' },
+    }).catch(() => null);
+    if (!res?.ok) return [];
     const data = (await res.json()) as {
       keys: Array<{
         provider: string;

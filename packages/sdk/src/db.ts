@@ -1,4 +1,5 @@
 import type { Auth } from './auth.js';
+import { authedFetch } from './authed-fetch.js';
 
 export interface GeoBBox {
   latMin: number;
@@ -88,24 +89,15 @@ export class Collection {
 
   /** Create a new document. Auth required. Returns the document with its generated `id`. */
   async create<T extends Record<string, unknown>>(doc: T): Promise<T & { id: string }> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/db/${encodeURIComponent(this.name)}`,
       this.apiBase,
     );
-    const response = await fetch(url, {
+    const response = await authedFetch(this.auth, url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(doc),
     });
-    if (response.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
     if (!response.ok) {
       const text = await response.text();
       throw new Error(`db.create failed (${response.status}): ${text}`);
@@ -157,24 +149,15 @@ export class Collection {
     id: string,
     patch: Partial<T>,
   ): Promise<T & { id: string }> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/db/${encodeURIComponent(this.name)}/${encodeURIComponent(id)}`,
       this.apiBase,
     );
-    const response = await fetch(url, {
+    const response = await authedFetch(this.auth, url, {
       method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
-    if (response.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
     if (!response.ok) {
       const text = await response.text();
       throw new Error(`db.update failed (${response.status}): ${text}`);
@@ -184,20 +167,11 @@ export class Collection {
 
   /** Delete a document. Auth required, owner only. */
   async delete(id: string): Promise<void> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
     const url = new URL(
       `/v1/apps/${encodeURIComponent(this.appId)}/db/${encodeURIComponent(this.name)}/${encodeURIComponent(id)}`,
       this.apiBase,
     );
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (response.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
+    const response = await authedFetch(this.auth, url, { method: 'DELETE' });
     if (!response.ok && response.status !== 404) {
       const text = await response.text();
       throw new Error(`db.delete failed (${response.status}): ${text}`);

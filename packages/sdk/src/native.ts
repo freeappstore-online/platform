@@ -1,4 +1,5 @@
 import type { Auth } from './auth.js';
+import { authedFetch } from './authed-fetch.js';
 
 /** Companion state for the signed-in user, as this app sees it. */
 export interface NativeStatus {
@@ -71,15 +72,9 @@ export class Native {
   }
 
   private async get(path: string, params?: Record<string, string>): Promise<unknown> {
-    const token = this.auth.token;
-    if (!token) throw new Error('Not signed in.');
     const url = new URL(`/v1/apps/${encodeURIComponent(this.appId)}/native/${path}`, this.apiBase);
     for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, v);
-    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (response.status === 401) {
-      this.auth.handleUnauthorized(token);
-      throw new Error('Not signed in.');
-    }
+    const response = await authedFetch(this.auth, url);
     if (!response.ok) throw new Error(`native.${path} failed: ${response.status}`);
     return response.json();
   }
