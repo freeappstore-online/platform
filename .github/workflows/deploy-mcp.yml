@@ -16,7 +16,16 @@ on:
     branches: [main]
     paths:
       - 'workers/mcp/**'
+      # Shared source the worker bundles (#667): app-id rules, compliance
+      # preflight, and the starter scaffold (incl. the app-deploy.yml pin).
+      - 'packages/backend/src/lib/apps.ts'
+      - 'packages/backend/src/lib/reserved-app-ids.ts'
+      - 'packages/compliance/src/**'
       - 'packages/cli/src/lib/developer-recipes.ts'
+      - 'packages/cli/src/lib/capability-definitions.ts'
+      - 'packages/cli/src/lib/starter-dependencies.ts'
+      - 'packages/cli/src/lib/starter-foundation.ts'
+      - 'packages/cli/src/lib/starter-presets.ts'
       - '.github/workflows/deploy-mcp.yml'
   workflow_dispatch:
 
