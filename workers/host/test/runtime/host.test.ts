@@ -146,6 +146,9 @@ describe("serving an app: D1 routes row → R2 object", () => {
 
     const asset = await get("https://dict.freeappstore.online/assets/missing.js");
     expect(asset.status).toBe(404);
+    expect(await asset.text()).toBe(
+      "Not Found: dict.freeappstore.online has no asset at /assets/missing.js.\n",
+    );
   });
 
   it("answers 304 to a matching If-None-Match, and HEAD without a body", async () => {

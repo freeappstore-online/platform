@@ -219,7 +219,7 @@ async function serve(
   const isRoot = url.pathname === "/" || url.pathname === "/index.html";
   const isCrawl = url.pathname === "/robots.txt" || url.pathname === "/sitemap.xml";
   if (isCrawl && isMonitoringFixture(route)) {
-    if (url.pathname === "/sitemap.xml") return notFound(url.pathname, route.slug);
+    if (url.pathname === "/sitemap.xml") return notFound(url.hostname, url.pathname);
     return new Response(method === "HEAD" ? null : "User-agent: *\nAllow: /\n", {
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
@@ -242,7 +242,7 @@ async function serve(
     if (obj) servedKey = fallbackKey;
   }
 
-  if (!obj) return notFound(url.pathname, route.slug);
+  if (!obj) return notFound(url.hostname, url.pathname);
 
   // Resolve MIME from the KEY (the file we actually served), not the URL
   // pathname. They differ when the URL is `/` or ends with `/` — r2KeyFor
@@ -321,7 +321,7 @@ async function appCrawlResponse(
   }
   const ready = root && !noindex && canonical === `${url.origin}/`;
   if (!ready) {
-    if (url.pathname === "/sitemap.xml") return notFound(url.pathname, route.slug);
+    if (url.pathname === "/sitemap.xml") return notFound(url.hostname, url.pathname);
     return new Response(method === "HEAD" ? null : root ? "User-agent: *\nAllow: /\n" : "User-agent: *\nDisallow: /\n", {
       headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" },
     });
@@ -354,10 +354,8 @@ function respond(obj: R2ObjectBody, ct: string, method: string, shortCache: bool
   return new Response(method === "HEAD" ? null : obj.body, { headers });
 }
 
-function notFound(host: string, slug?: string): Response {
-  const body = slug
-    ? `Not Found: ${slug}.${host.split(".").slice(1).join(".")} has no asset at this path.\n`
-    : `Not Found: no app registered at ${host}.\n`;
+function notFound(host: string, path?: string): Response {
+  const body = path ? `Not Found: ${host} has no asset at ${path}.\n` : `Not Found: no app registered at ${host}.\n`;
   return new Response(body, {
     status: 404,
     headers: { "content-type": "text/plain; charset=utf-8" },
