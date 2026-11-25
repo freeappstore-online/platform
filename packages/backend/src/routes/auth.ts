@@ -3,7 +3,6 @@ import type { Context } from 'hono';
 import { Hono } from 'hono';
 import {
   FAS_APP_ROWS,
-  HttpError,
   isAdminLogin,
   isAdminUserId,
   requireConsoleUser,
@@ -894,25 +893,20 @@ authRoutes.post('/auth/session/exchange', async (c) => {
 });
 
 authRoutes.get('/auth/me', async (c) => {
-  try {
-    const user = await requireUser(c);
-    // Report roles live, not the token's sign-in snapshot: the admin Worker and
-    // the agent gate on these. requireUser already blanks githubLogin for
-    // non-GitHub identities, so only real GitHub logins match owners/admins.
-    const live = await computeRoles(
-      user.id,
-      user.githubLogin,
-      c.env,
-      user.githubLogin ? 'github' : 'none',
-    );
-    const roles = [
-      ...new Set([...user.roles.filter((r) => r !== 'admin' && r !== 'creator'), ...live.roles]),
-    ];
-    return c.json({ ...user, ...scopeRolesToAudience(user.aud, roles, live.appRoles) });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireUser(c);
+  // Report roles live, not the token's sign-in snapshot: the admin Worker and
+  // the agent gate on these. requireUser already blanks githubLogin for
+  // non-GitHub identities, so only real GitHub logins match owners/admins.
+  const live = await computeRoles(
+    user.id,
+    user.githubLogin,
+    c.env,
+    user.githubLogin ? 'github' : 'none',
+  );
+  const roles = [
+    ...new Set([...user.roles.filter((r) => r !== 'admin' && r !== 'creator'), ...live.roles]),
+  ];
+  return c.json({ ...user, ...scopeRolesToAudience(user.aud, roles, live.appRoles) });
 });
 
 /**
@@ -923,16 +917,11 @@ authRoutes.get('/auth/me', async (c) => {
  * revocation by `sid` exists.
  */
 authRoutes.post('/auth/logout', async (c) => {
-  try {
-    const user = await requireConsoleUser(c);
-    await c.env.DB.prepare('UPDATE users SET sessions_valid_after = ? WHERE id = ?')
-      .bind(Math.floor(Date.now() / 1000), user.id)
-      .run();
-    return c.json({ ok: true });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
+  await c.env.DB.prepare('UPDATE users SET sessions_valid_after = ? WHERE id = ?')
+    .bind(Math.floor(Date.now() / 1000), user.id)
+    .run();
+  return c.json({ ok: true });
 });
 
 /**
@@ -942,34 +931,29 @@ authRoutes.post('/auth/logout', async (c) => {
  * requirements check the returned DOB themselves).
  */
 authRoutes.patch('/auth/me/date-of-birth', async (c) => {
-  try {
-    const user = await requireUser(c);
-    if (user.dateOfBirth) {
-      return c.json({ error: 'date of birth already set' }, 409);
-    }
-    const body = (await c.req.json().catch(() => null)) as { dateOfBirth?: unknown } | null;
-    const dob = typeof body?.dateOfBirth === 'string' ? body.dateOfBirth : '';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
-      return c.json({ error: 'dateOfBirth must be YYYY-MM-DD' }, 400);
-    }
-    const age = ageFromDob(dob);
-    if (age == null) {
-      return c.json({ error: 'invalid date' }, 400);
-    }
-    if (age < 13) {
-      return c.json({ error: 'must be at least 13' }, 400);
-    }
-    if (age > 120) {
-      return c.json({ error: 'invalid date' }, 400);
-    }
-    await c.env.DB.prepare('UPDATE users SET date_of_birth = ? WHERE id = ?')
-      .bind(dob, user.id)
-      .run();
-    return c.json({ ...user, dateOfBirth: dob });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  const user = await requireUser(c);
+  if (user.dateOfBirth) {
+    return c.json({ error: 'date of birth already set' }, 409);
   }
+  const body = (await c.req.json().catch(() => null)) as { dateOfBirth?: unknown } | null;
+  const dob = typeof body?.dateOfBirth === 'string' ? body.dateOfBirth : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+    return c.json({ error: 'dateOfBirth must be YYYY-MM-DD' }, 400);
+  }
+  const age = ageFromDob(dob);
+  if (age == null) {
+    return c.json({ error: 'invalid date' }, 400);
+  }
+  if (age < 13) {
+    return c.json({ error: 'must be at least 13' }, 400);
+  }
+  if (age > 120) {
+    return c.json({ error: 'invalid date' }, 400);
+  }
+  await c.env.DB.prepare('UPDATE users SET date_of_birth = ? WHERE id = ?')
+    .bind(dob, user.id)
+    .run();
+  return c.json({ ...user, dateOfBirth: dob });
 });
 
 /**
@@ -987,33 +971,28 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
  * app-shared counters.
  */
 authRoutes.delete('/auth/me', async (c) => {
-  try {
-    const user = await requireConsoleUser(c);
-    const db = c.env.DB;
-    await db.batch([
-      db.prepare('DELETE FROM user_api_keys WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM kv WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM friendships WHERE user_a = ? OR user_b = ?').bind(user.id, user.id),
-      db.prepare('DELETE FROM app_roles WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM documents WHERE owner_id = ?').bind(user.id),
-      db.prepare('DELETE FROM app_logs WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM push_schedules WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM app_votes WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM idea_builders WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM agent_sessions WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(user.id),
-      // Cascades to the device's grants and points. A pairing holds the user id
-      // too, and no foreign key removes it.
-      db.prepare('DELETE FROM native_devices WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM native_pairings WHERE user_id = ?').bind(user.id),
-      db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
-    ]);
-    return c.json({ ok: true });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
+  const db = c.env.DB;
+  await db.batch([
+    db.prepare('DELETE FROM user_api_keys WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM kv WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM friendships WHERE user_a = ? OR user_b = ?').bind(user.id, user.id),
+    db.prepare('DELETE FROM app_roles WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM documents WHERE owner_id = ?').bind(user.id),
+    db.prepare('DELETE FROM app_logs WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM push_schedules WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM app_votes WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM idea_builders WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM agent_sessions WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM complimentary_grants WHERE user_id = ?').bind(user.id),
+    // Cascades to the device's grants and points. A pairing holds the user id
+    // too, and no foreign key removes it.
+    db.prepare('DELETE FROM native_devices WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM native_pairings WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
+  ]);
+  return c.json({ ok: true });
 });
 
 /**

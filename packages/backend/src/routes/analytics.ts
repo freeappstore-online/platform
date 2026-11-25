@@ -68,71 +68,53 @@ async function loadRow(c: Ctx, appId: string): Promise<AnalyticsRow | null> {
     .first<AnalyticsRow>();
 }
 
-function wrap(handler: (c: Ctx) => Promise<Response>) {
-  return async (c: Ctx) => {
-    try {
-      return await handler(c);
-    } catch (err) {
-      if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-      throw err;
-    }
-  };
-}
-
 // -----------------------------------------------------------------------------
 // Owner-protected: read + write analytics config
 // -----------------------------------------------------------------------------
 
-analyticsRoutes.get(
-  '/apps/:appId/analytics',
-  wrap(async (c) => {
-    const appId = c.req.param('appId')!;
-    await requireConsoleAppOwner(c, appId);
-    const row = await loadRow(c, appId);
-    return c.json(rowToJson(row));
-  }),
-);
+analyticsRoutes.get('/apps/:appId/analytics', async (c) => {
+  const appId = c.req.param('appId')!;
+  await requireConsoleAppOwner(c, appId);
+  const row = await loadRow(c, appId);
+  return c.json(rowToJson(row));
+});
 
-analyticsRoutes.put(
-  '/apps/:appId/analytics',
-  wrap(async (c) => {
-    const appId = c.req.param('appId')!;
-    await requireConsoleAppOwner(c, appId);
-    let body: AnalyticsBody;
-    try {
-      body = (await c.req.json()) as AnalyticsBody;
-    } catch {
-      throw new HttpError(400, 'invalid json');
-    }
+analyticsRoutes.put('/apps/:appId/analytics', async (c) => {
+  const appId = c.req.param('appId')!;
+  await requireConsoleAppOwner(c, appId);
+  let body: AnalyticsBody;
+  try {
+    body = (await c.req.json()) as AnalyticsBody;
+  } catch {
+    throw new HttpError(400, 'invalid json');
+  }
 
-    const ga4 = normalize(body.ga4);
-    const plausible = normalize(body.plausible);
-    const customHead = normalize(body.custom_head);
+  const ga4 = normalize(body.ga4);
+  const plausible = normalize(body.plausible);
+  const customHead = normalize(body.custom_head);
 
-    if (ga4 && !GA4_RE.test(ga4)) throw new HttpError(400, 'invalid ga4 measurement id');
-    if (plausible && !DOMAIN_RE.test(plausible))
-      throw new HttpError(400, 'invalid plausible domain');
-    if (customHead && customHead.length > CUSTOM_HEAD_MAX)
-      throw new HttpError(400, `custom_head exceeds ${CUSTOM_HEAD_MAX} bytes`);
+  if (ga4 && !GA4_RE.test(ga4)) throw new HttpError(400, 'invalid ga4 measurement id');
+  if (plausible && !DOMAIN_RE.test(plausible)) throw new HttpError(400, 'invalid plausible domain');
+  if (customHead && customHead.length > CUSTOM_HEAD_MAX)
+    throw new HttpError(400, `custom_head exceeds ${CUSTOM_HEAD_MAX} bytes`);
 
-    // Preserve cf_beacon_token (admin-managed, not settable from this endpoint)
-    const existing = await loadRow(c, appId);
-    await c.env.DB.prepare(
-      `INSERT INTO app_analytics (app_id, cf_beacon_token, ga4, plausible, custom_head, updated_at)
+  // Preserve cf_beacon_token (admin-managed, not settable from this endpoint)
+  const existing = await loadRow(c, appId);
+  await c.env.DB.prepare(
+    `INSERT INTO app_analytics (app_id, cf_beacon_token, ga4, plausible, custom_head, updated_at)
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(app_id) DO UPDATE SET
          ga4 = excluded.ga4,
          plausible = excluded.plausible,
          custom_head = excluded.custom_head,
          updated_at = excluded.updated_at`,
-    )
-      .bind(appId, existing?.cf_beacon_token ?? null, ga4, plausible, customHead, Date.now())
-      .run();
+  )
+    .bind(appId, existing?.cf_beacon_token ?? null, ga4, plausible, customHead, Date.now())
+    .run();
 
-    const fresh = await loadRow(c, appId);
-    return c.json(rowToJson(fresh));
-  }),
-);
+  const fresh = await loadRow(c, appId);
+  return c.json(rowToJson(fresh));
+});
 
 function normalize(v: string | null | undefined): string | null {
   if (v == null) return null;
@@ -249,138 +231,130 @@ async function cfAnalyticsSql<T = Record<string, unknown>>(
 // endpoint below: the dashboard list needs only three small KPIs, and fetching
 // the full six-query report once per card made opening a large creator account
 // scale linearly with its app count.
-analyticsRoutes.get(
-  '/analytics/summary',
-  wrap(async (c) => {
-    const user = await requireConsoleUser(c);
-    const days = Math.min(
-      STATS_DAYS_MAX,
-      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
-    );
-    const owned = await c.env.DB.prepare(
-      `SELECT id FROM apps WHERE owner_id = ? AND ${FAS_APP_ROWS}`,
-    )
-      .bind(user.id)
-      .all<OwnedAppRow>();
-    // IDs originate in the apps table but retain the public app-id constraint
-    // before they are embedded in the Analytics Engine SQL literal list.
-    const appIds = (owned.results ?? []).map((row) => row.id).filter((id) => APP_ID_RE.test(id));
-    const summaries: Record<
-      string,
-      { total_views: number; unique_paths: number; top_country: string | null }
-    > = {};
-    for (const appId of appIds)
-      summaries[appId] = { total_views: 0, unique_paths: 0, top_country: null };
-    if (appIds.length === 0) return c.json({ days, summaries });
+analyticsRoutes.get('/analytics/summary', async (c) => {
+  const user = await requireConsoleUser(c);
+  const days = Math.min(
+    STATS_DAYS_MAX,
+    Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+  );
+  const owned = await c.env.DB.prepare(`SELECT id FROM apps WHERE owner_id = ? AND ${FAS_APP_ROWS}`)
+    .bind(user.id)
+    .all<OwnedAppRow>();
+  // IDs originate in the apps table but retain the public app-id constraint
+  // before they are embedded in the Analytics Engine SQL literal list.
+  const appIds = (owned.results ?? []).map((row) => row.id).filter((id) => APP_ID_RE.test(id));
+  const summaries: Record<
+    string,
+    { total_views: number; unique_paths: number; top_country: string | null }
+  > = {};
+  for (const appId of appIds)
+    summaries[appId] = { total_views: 0, unique_paths: 0, top_country: null };
+  if (appIds.length === 0) return c.json({ days, summaries });
 
-    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
-    const ids = appIds.map((id) => `'${id}'`).join(', ');
-    const where = `WHERE index1 IN (${ids}) AND blob2 = 'pageview' AND ${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
-    const totalsQ = `SELECT index1 AS appId, SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS unique_paths FROM ${STATS_DATASET} ${where} GROUP BY appId`;
-    // Analytics Engine speaks ClickHouse SQL; LIMIT 1 BY gives one top country
-    // per owned app without loading a country list per card into the browser.
-    const countriesQ = `SELECT index1 AS appId, blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY appId, country ORDER BY appId, views DESC LIMIT 1 BY appId`;
-    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
-    try {
-      const [totals, countries] = await Promise.all([
-        cfAnalyticsSql<SummaryRow>(env, totalsQ),
-        cfAnalyticsSql<SummaryRow>(env, countriesQ),
-      ]);
-      for (const row of totals) {
-        const summary = summaries[row.appId];
-        if (summary) {
-          summary.total_views = Number(row.views) || 0;
-          summary.unique_paths = Number(row.unique_paths) || 0;
-        }
+  const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+  const ids = appIds.map((id) => `'${id}'`).join(', ');
+  const where = `WHERE index1 IN (${ids}) AND blob2 = 'pageview' AND ${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+  const totalsQ = `SELECT index1 AS appId, SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS unique_paths FROM ${STATS_DATASET} ${where} GROUP BY appId`;
+  // Analytics Engine speaks ClickHouse SQL; LIMIT 1 BY gives one top country
+  // per owned app without loading a country list per card into the browser.
+  const countriesQ = `SELECT index1 AS appId, blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY appId, country ORDER BY appId, views DESC LIMIT 1 BY appId`;
+  const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+  try {
+    const [totals, countries] = await Promise.all([
+      cfAnalyticsSql<SummaryRow>(env, totalsQ),
+      cfAnalyticsSql<SummaryRow>(env, countriesQ),
+    ]);
+    for (const row of totals) {
+      const summary = summaries[row.appId];
+      if (summary) {
+        summary.total_views = Number(row.views) || 0;
+        summary.unique_paths = Number(row.unique_paths) || 0;
       }
-      for (const row of countries) {
-        const summary = summaries[row.appId];
-        if (summary) summary.top_country = row.country || null;
-      }
-      return c.json({ days, summaries });
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(502, err instanceof Error ? err.message : 'summary query failed');
     }
-  }),
-);
-
-analyticsRoutes.get(
-  '/apps/:appId/analytics/stats',
-  wrap(async (c) => {
-    const appId = c.req.param('appId')!;
-    await requireConsoleAppOwner(c, appId);
-    const days = Math.min(
-      STATS_DAYS_MAX,
-      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
-    );
-    // `?kind=` filters which event kind the stats describe. Defaults to
-    // 'pageview' so existing dashboard consumers keep working. Validated
-    // against the same regex the ingest endpoint uses so we can't be
-    // tricked into SQL-injecting through the WHERE clause.
-    const kindParam = (c.req.query('kind') ?? 'pageview').trim().toLowerCase();
-    if (!EVENT_KIND_RE.test(kindParam)) throw new HttpError(400, 'invalid kind');
-    // `?path=` narrows the whole stats response to a single page path —
-    // powers the path-drill-down view. It is embedded in the SQL literal, so
-    // it is allowlisted rather than escaped: printable ASCII, 1-256 chars
-    // (the ingest endpoint's PATH_MAX), and never a quote or backslash —
-    // doubling quotes alone let `x\' OR 1=1 --` close the literal (#488).
-    // Empty / omitted = no path filter, dashboard shows aggregate.
-    const pathParam = c.req.query('path') ?? '';
-    if (pathParam && !isSafeStatsPath(pathParam)) throw new HttpError(400, 'invalid path');
-    const pathClause = pathParam ? ` AND blob3 = '${pathParam}'` : '';
-    // `?bucket=hour|day` controls the series granularity. When omitted, we
-    // auto-pick: days=1 → hour (24 points, useful for spike investigation),
-    // days≥2 → day (saner for week / month / quarter views). Forcing hour
-    // on a 90-day window is allowed but returns 2160 points — UI's call.
-    const bucketParam = (c.req.query('bucket') ?? '').trim().toLowerCase();
-    const bucket: 'hour' | 'day' =
-      bucketParam === 'hour' || bucketParam === 'day' ? bucketParam : days <= 1 ? 'hour' : 'day';
-    const seriesGroup = bucket === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
-    // Effective event time: prefer the client-recorded `t` stored in
-    // doubles[1] (for offline-replayed events), fall back to the server
-    // timestamp for events written before doubles[1] existed.
-    // ClickHouse-flavoured SQL accepted by CF Analytics Engine.
-    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
-    const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
-    // Quote-safe: appId + kindParam are regex-validated. pathClause has
-    // its embedded single quotes doubled per SQL convention. STATS_DATASET
-    // is a constant.
-    const where = `WHERE index1 = '${appId}' AND blob2 = '${kindParam}'${pathClause} AND ${sinceClause}`;
-
-    const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS uniq_paths FROM ${STATS_DATASET} ${where}`;
-    const seriesQ = `SELECT ${seriesGroup}(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY t ORDER BY t ASC`;
-    const pathsQ = `SELECT blob3 AS path, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY path ORDER BY views DESC LIMIT 10`;
-    const refsQ = `SELECT blob4 AS referrer, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob4 != '' GROUP BY referrer ORDER BY views DESC LIMIT 10`;
-    const ctyQ = `SELECT blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY country ORDER BY views DESC LIMIT 10`;
-    const devQ = `SELECT blob6 AS device, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY device`;
-
-    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
-    try {
-      const [totals, series, paths, refs, ctys, devs] = await Promise.all([
-        cfAnalyticsSql<{ views: number; uniq_paths: number }>(env, totalsQ),
-        cfAnalyticsSql<{ t: string; views: number }>(env, seriesQ),
-        cfAnalyticsSql<{ path: string; views: number }>(env, pathsQ),
-        cfAnalyticsSql<{ referrer: string; views: number }>(env, refsQ),
-        cfAnalyticsSql<{ country: string; views: number }>(env, ctyQ),
-        cfAnalyticsSql<{ device: string; views: number }>(env, devQ),
-      ]);
-      const body: StatsRow = {
-        total_views: Number(totals[0]?.views ?? 0),
-        unique_paths: Number(totals[0]?.uniq_paths ?? 0),
-        series: series.map((r) => ({ t: r.t, views: Number(r.views) })),
-        top_paths: paths.map((r) => ({ path: r.path, views: Number(r.views) })),
-        top_referrers: refs.map((r) => ({ referrer: r.referrer, views: Number(r.views) })),
-        top_countries: ctys.map((r) => ({ country: r.country, views: Number(r.views) })),
-        device_split: devs.map((r) => ({ device: r.device, views: Number(r.views) })),
-      };
-      return c.json({ appId, days, kind: kindParam, bucket, path: pathParam || null, stats: body });
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(502, err instanceof Error ? err.message : 'stats query failed');
+    for (const row of countries) {
+      const summary = summaries[row.appId];
+      if (summary) summary.top_country = row.country || null;
     }
-  }),
-);
+    return c.json({ days, summaries });
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw new HttpError(502, err instanceof Error ? err.message : 'summary query failed');
+  }
+});
+
+analyticsRoutes.get('/apps/:appId/analytics/stats', async (c) => {
+  const appId = c.req.param('appId')!;
+  await requireConsoleAppOwner(c, appId);
+  const days = Math.min(
+    STATS_DAYS_MAX,
+    Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+  );
+  // `?kind=` filters which event kind the stats describe. Defaults to
+  // 'pageview' so existing dashboard consumers keep working. Validated
+  // against the same regex the ingest endpoint uses so we can't be
+  // tricked into SQL-injecting through the WHERE clause.
+  const kindParam = (c.req.query('kind') ?? 'pageview').trim().toLowerCase();
+  if (!EVENT_KIND_RE.test(kindParam)) throw new HttpError(400, 'invalid kind');
+  // `?path=` narrows the whole stats response to a single page path —
+  // powers the path-drill-down view. It is embedded in the SQL literal, so
+  // it is allowlisted rather than escaped: printable ASCII, 1-256 chars
+  // (the ingest endpoint's PATH_MAX), and never a quote or backslash —
+  // doubling quotes alone let `x\' OR 1=1 --` close the literal (#488).
+  // Empty / omitted = no path filter, dashboard shows aggregate.
+  const pathParam = c.req.query('path') ?? '';
+  if (pathParam && !isSafeStatsPath(pathParam)) throw new HttpError(400, 'invalid path');
+  const pathClause = pathParam ? ` AND blob3 = '${pathParam}'` : '';
+  // `?bucket=hour|day` controls the series granularity. When omitted, we
+  // auto-pick: days=1 → hour (24 points, useful for spike investigation),
+  // days≥2 → day (saner for week / month / quarter views). Forcing hour
+  // on a 90-day window is allowed but returns 2160 points — UI's call.
+  const bucketParam = (c.req.query('bucket') ?? '').trim().toLowerCase();
+  const bucket: 'hour' | 'day' =
+    bucketParam === 'hour' || bucketParam === 'day' ? bucketParam : days <= 1 ? 'hour' : 'day';
+  const seriesGroup = bucket === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
+  // Effective event time: prefer the client-recorded `t` stored in
+  // doubles[1] (for offline-replayed events), fall back to the server
+  // timestamp for events written before doubles[1] existed.
+  // ClickHouse-flavoured SQL accepted by CF Analytics Engine.
+  const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+  const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+  // Quote-safe: appId + kindParam are regex-validated. pathClause has
+  // its embedded single quotes doubled per SQL convention. STATS_DATASET
+  // is a constant.
+  const where = `WHERE index1 = '${appId}' AND blob2 = '${kindParam}'${pathClause} AND ${sinceClause}`;
+
+  const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS uniq_paths FROM ${STATS_DATASET} ${where}`;
+  const seriesQ = `SELECT ${seriesGroup}(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY t ORDER BY t ASC`;
+  const pathsQ = `SELECT blob3 AS path, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY path ORDER BY views DESC LIMIT 10`;
+  const refsQ = `SELECT blob4 AS referrer, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob4 != '' GROUP BY referrer ORDER BY views DESC LIMIT 10`;
+  const ctyQ = `SELECT blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY country ORDER BY views DESC LIMIT 10`;
+  const devQ = `SELECT blob6 AS device, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY device`;
+
+  const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+  try {
+    const [totals, series, paths, refs, ctys, devs] = await Promise.all([
+      cfAnalyticsSql<{ views: number; uniq_paths: number }>(env, totalsQ),
+      cfAnalyticsSql<{ t: string; views: number }>(env, seriesQ),
+      cfAnalyticsSql<{ path: string; views: number }>(env, pathsQ),
+      cfAnalyticsSql<{ referrer: string; views: number }>(env, refsQ),
+      cfAnalyticsSql<{ country: string; views: number }>(env, ctyQ),
+      cfAnalyticsSql<{ device: string; views: number }>(env, devQ),
+    ]);
+    const body: StatsRow = {
+      total_views: Number(totals[0]?.views ?? 0),
+      unique_paths: Number(totals[0]?.uniq_paths ?? 0),
+      series: series.map((r) => ({ t: r.t, views: Number(r.views) })),
+      top_paths: paths.map((r) => ({ path: r.path, views: Number(r.views) })),
+      top_referrers: refs.map((r) => ({ referrer: r.referrer, views: Number(r.views) })),
+      top_countries: ctys.map((r) => ({ country: r.country, views: Number(r.views) })),
+      device_split: devs.map((r) => ({ device: r.device, views: Number(r.views) })),
+    };
+    return c.json({ appId, days, kind: kindParam, bucket, path: pathParam || null, stats: body });
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw new HttpError(502, err instanceof Error ? err.message : 'stats query failed');
+  }
+});
 
 // -----------------------------------------------------------------------------
 // Custom events index: lists the distinct event kinds that have fired for
@@ -390,35 +364,32 @@ analyticsRoutes.get(
 // the actual custom events.
 // -----------------------------------------------------------------------------
 
-analyticsRoutes.get(
-  '/apps/:appId/analytics/events',
-  wrap(async (c) => {
-    const appId = c.req.param('appId')!;
-    await requireConsoleAppOwner(c, appId);
-    const days = Math.min(
-      STATS_DAYS_MAX,
-      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
-    );
-    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
-    const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
-    const where = `WHERE index1 = '${appId}' AND blob2 != 'pageview' AND ${sinceClause}`;
+analyticsRoutes.get('/apps/:appId/analytics/events', async (c) => {
+  const appId = c.req.param('appId')!;
+  await requireConsoleAppOwner(c, appId);
+  const days = Math.min(
+    STATS_DAYS_MAX,
+    Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+  );
+  const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+  const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+  const where = `WHERE index1 = '${appId}' AND blob2 != 'pageview' AND ${sinceClause}`;
 
-    // Top 20 event kinds by count. 20 is plenty for any sensible app —
-    // creators with more than ~5 event kinds are usually over-instrumenting.
-    const kindsQ = `SELECT blob2 AS kind, SUM(_sample_interval) AS count FROM ${STATS_DATASET} ${where} GROUP BY kind ORDER BY count DESC LIMIT 20`;
+  // Top 20 event kinds by count. 20 is plenty for any sensible app —
+  // creators with more than ~5 event kinds are usually over-instrumenting.
+  const kindsQ = `SELECT blob2 AS kind, SUM(_sample_interval) AS count FROM ${STATS_DATASET} ${where} GROUP BY kind ORDER BY count DESC LIMIT 20`;
 
-    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
-    try {
-      const rows = await cfAnalyticsSql<{ kind: string; count: number }>(env, kindsQ);
-      const events = rows.map((r) => ({ kind: r.kind, count: Number(r.count) }));
-      const total = events.reduce((sum, e) => sum + e.count, 0);
-      return c.json({ appId, days, total_events: total, events });
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(502, err instanceof Error ? err.message : 'events query failed');
-    }
-  }),
-);
+  const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+  try {
+    const rows = await cfAnalyticsSql<{ kind: string; count: number }>(env, kindsQ);
+    const events = rows.map((r) => ({ kind: r.kind, count: Number(r.count) }));
+    const total = events.reduce((sum, e) => sum + e.count, 0);
+    return c.json({ appId, days, total_events: total, events });
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw new HttpError(502, err instanceof Error ? err.message : 'events query failed');
+  }
+});
 
 // -----------------------------------------------------------------------------
 // Live view: visitors active in the last 5 minutes. Cheap query — no
@@ -427,40 +398,37 @@ analyticsRoutes.get(
 // hottest paths in the last 5 minutes, and a small recency feed.
 // -----------------------------------------------------------------------------
 
-analyticsRoutes.get(
-  '/apps/:appId/analytics/live',
-  wrap(async (c) => {
-    const appId = c.req.param('appId')!;
-    await requireConsoleAppOwner(c, appId);
-    // Use server-write timestamp here (not the effectiveTime two-stage
-    // expression) — offline-replayed events legitimately *are* recent
-    // network arrivals even if their client-side `t` is older. The whole
-    // point of "live" is "things hitting our edge right now."
-    const since = `timestamp > NOW() - INTERVAL '5' MINUTE`;
-    const where = `WHERE index1 = '${appId}' AND blob2 = 'pageview' AND ${since}`;
+analyticsRoutes.get('/apps/:appId/analytics/live', async (c) => {
+  const appId = c.req.param('appId')!;
+  await requireConsoleAppOwner(c, appId);
+  // Use server-write timestamp here (not the effectiveTime two-stage
+  // expression) — offline-replayed events legitimately *are* recent
+  // network arrivals even if their client-side `t` is older. The whole
+  // point of "live" is "things hitting our edge right now."
+  const since = `timestamp > NOW() - INTERVAL '5' MINUTE`;
+  const where = `WHERE index1 = '${appId}' AND blob2 = 'pageview' AND ${since}`;
 
-    const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS uniq_paths FROM ${STATS_DATASET} ${where}`;
-    const pathsQ = `SELECT blob3 AS path, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY path ORDER BY views DESC LIMIT 5`;
+  const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS uniq_paths FROM ${STATS_DATASET} ${where}`;
+  const pathsQ = `SELECT blob3 AS path, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY path ORDER BY views DESC LIMIT 5`;
 
-    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
-    try {
-      const [totals, paths] = await Promise.all([
-        cfAnalyticsSql<{ views: number; uniq_paths: number }>(env, totalsQ),
-        cfAnalyticsSql<{ path: string; views: number }>(env, pathsQ),
-      ]);
-      return c.json({
-        appId,
-        window_minutes: 5,
-        views: Number(totals[0]?.views ?? 0),
-        unique_paths: Number(totals[0]?.uniq_paths ?? 0),
-        top_paths: paths.map((r) => ({ path: r.path, views: Number(r.views) })),
-      });
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(502, err instanceof Error ? err.message : 'live query failed');
-    }
-  }),
-);
+  const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+  try {
+    const [totals, paths] = await Promise.all([
+      cfAnalyticsSql<{ views: number; uniq_paths: number }>(env, totalsQ),
+      cfAnalyticsSql<{ path: string; views: number }>(env, pathsQ),
+    ]);
+    return c.json({
+      appId,
+      window_minutes: 5,
+      views: Number(totals[0]?.views ?? 0),
+      unique_paths: Number(totals[0]?.uniq_paths ?? 0),
+      top_paths: paths.map((r) => ({ path: r.path, views: Number(r.views) })),
+    });
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw new HttpError(502, err instanceof Error ? err.message : 'live query failed');
+  }
+});
 
 // -----------------------------------------------------------------------------
 // Admin platform aggregate — cross-app totals + top apps + top countries +
@@ -470,62 +438,59 @@ analyticsRoutes.get(
 // filter so the GROUP BY can roll up across the whole platform.
 // -----------------------------------------------------------------------------
 
-analyticsRoutes.get(
-  '/analytics/admin/platform',
-  wrap(async (c) => {
-    await requireAdmin(c);
-    const days = Math.min(
-      STATS_DAYS_MAX,
-      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
-    );
-    const bucketParam = (c.req.query('bucket') ?? '').trim().toLowerCase();
-    const bucket: 'hour' | 'day' =
-      bucketParam === 'hour' || bucketParam === 'day' ? bucketParam : days <= 1 ? 'hour' : 'day';
-    const seriesGroup = bucket === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
-    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
-    // Note: no `index1 = '<appId>'` filter here. We aggregate across every
-    // app on this backend's dataset. blob1 carries the appId so GROUP BY
-    // blob1 surfaces the top apps without an index scan.
-    const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
-    const where = `WHERE blob2 = 'pageview' AND ${sinceClause}`;
+analyticsRoutes.get('/analytics/admin/platform', async (c) => {
+  await requireAdmin(c);
+  const days = Math.min(
+    STATS_DAYS_MAX,
+    Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+  );
+  const bucketParam = (c.req.query('bucket') ?? '').trim().toLowerCase();
+  const bucket: 'hour' | 'day' =
+    bucketParam === 'hour' || bucketParam === 'day' ? bucketParam : days <= 1 ? 'hour' : 'day';
+  const seriesGroup = bucket === 'hour' ? 'toStartOfHour' : 'toStartOfDay';
+  const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+  // Note: no `index1 = '<appId>'` filter here. We aggregate across every
+  // app on this backend's dataset. blob1 carries the appId so GROUP BY
+  // blob1 surfaces the top apps without an index scan.
+  const sinceClause = `${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+  const where = `WHERE blob2 = 'pageview' AND ${sinceClause}`;
 
-    const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob1) AS active_apps FROM ${STATS_DATASET} ${where}`;
-    const seriesQ = `SELECT ${seriesGroup}(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY t ORDER BY t ASC`;
-    const topAppsQ = `SELECT blob1 AS app, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY app ORDER BY views DESC LIMIT 20`;
-    const topCtyQ = `SELECT blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY country ORDER BY views DESC LIMIT 10`;
-    const devQ = `SELECT blob6 AS device, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY device`;
-    // Total custom events (all non-pageview kinds) — a small headline number
-    // that says "is anyone actually using the SDK?" without paying for the
-    // full per-kind breakdown.
-    const customQ = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE blob2 != 'pageview' AND ${sinceClause}`;
+  const totalsQ = `SELECT SUM(_sample_interval) AS views, COUNT(DISTINCT blob1) AS active_apps FROM ${STATS_DATASET} ${where}`;
+  const seriesQ = `SELECT ${seriesGroup}(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY t ORDER BY t ASC`;
+  const topAppsQ = `SELECT blob1 AS app, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY app ORDER BY views DESC LIMIT 20`;
+  const topCtyQ = `SELECT blob5 AS country, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} AND blob5 != '' GROUP BY country ORDER BY views DESC LIMIT 10`;
+  const devQ = `SELECT blob6 AS device, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY device`;
+  // Total custom events (all non-pageview kinds) — a small headline number
+  // that says "is anyone actually using the SDK?" without paying for the
+  // full per-kind breakdown.
+  const customQ = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE blob2 != 'pageview' AND ${sinceClause}`;
 
-    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
-    try {
-      const [totals, series, topApps, topCtys, devs, custom] = await Promise.all([
-        cfAnalyticsSql<{ views: number; active_apps: number }>(env, totalsQ),
-        cfAnalyticsSql<{ t: string; views: number }>(env, seriesQ),
-        cfAnalyticsSql<{ app: string; views: number }>(env, topAppsQ),
-        cfAnalyticsSql<{ country: string; views: number }>(env, topCtyQ),
-        cfAnalyticsSql<{ device: string; views: number }>(env, devQ),
-        cfAnalyticsSql<{ c: number }>(env, customQ),
-      ]);
-      return c.json({
-        days,
-        bucket,
-        total_views: Number(totals[0]?.views ?? 0),
-        active_apps: Number(totals[0]?.active_apps ?? 0),
-        custom_events: Number(custom[0]?.c ?? 0),
-        series: series.map((r) => ({ t: r.t, views: Number(r.views) })),
-        top_apps: topApps.map((r) => ({ app: r.app, views: Number(r.views) })),
-        top_countries: topCtys.map((r) => ({ country: r.country, views: Number(r.views) })),
-        device_split: devs.map((r) => ({ device: r.device, views: Number(r.views) })),
-      });
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(502, err instanceof Error ? err.message : 'platform stats failed');
-    }
-  }),
-);
+  const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+  try {
+    const [totals, series, topApps, topCtys, devs, custom] = await Promise.all([
+      cfAnalyticsSql<{ views: number; active_apps: number }>(env, totalsQ),
+      cfAnalyticsSql<{ t: string; views: number }>(env, seriesQ),
+      cfAnalyticsSql<{ app: string; views: number }>(env, topAppsQ),
+      cfAnalyticsSql<{ country: string; views: number }>(env, topCtyQ),
+      cfAnalyticsSql<{ device: string; views: number }>(env, devQ),
+      cfAnalyticsSql<{ c: number }>(env, customQ),
+    ]);
+    return c.json({
+      days,
+      bucket,
+      total_views: Number(totals[0]?.views ?? 0),
+      active_apps: Number(totals[0]?.active_apps ?? 0),
+      custom_events: Number(custom[0]?.c ?? 0),
+      series: series.map((r) => ({ t: r.t, views: Number(r.views) })),
+      top_apps: topApps.map((r) => ({ app: r.app, views: Number(r.views) })),
+      top_countries: topCtys.map((r) => ({ country: r.country, views: Number(r.views) })),
+      device_split: devs.map((r) => ({ device: r.device, views: Number(r.views) })),
+    });
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw new HttpError(502, err instanceof Error ? err.message : 'platform stats failed');
+  }
+});
 
 // -----------------------------------------------------------------------------
 // Admin cross-app usage (#271) — one row per published app, so the admin
@@ -632,36 +597,33 @@ export function buildAdminUsage(
   };
 }
 
-analyticsRoutes.get(
-  '/analytics/admin/apps',
-  wrap(async (c) => {
-    await requireAdmin(c);
-    const days = Math.min(
-      STATS_DAYS_MAX,
-      Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
-    );
-    const registered = await c.env.DB.prepare(
-      "SELECT id, owner_login FROM apps WHERE store = 'apps' ORDER BY id",
-    ).all<{ id: string; owner_login: string }>();
-    const apps = (registered.results ?? []).filter((a) => APP_ID_RE.test(a.id));
+analyticsRoutes.get('/analytics/admin/apps', async (c) => {
+  await requireAdmin(c);
+  const days = Math.min(
+    STATS_DAYS_MAX,
+    Math.max(1, Number(c.req.query('days') ?? STATS_DAYS_DEFAULT) | 0),
+  );
+  const registered = await c.env.DB.prepare(
+    "SELECT id, owner_login FROM apps WHERE store = 'apps' ORDER BY id",
+  ).all<{ id: string; owner_login: string }>();
+  const apps = (registered.results ?? []).filter((a) => APP_ID_RE.test(a.id));
 
-    const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
-    const where = `WHERE blob2 = 'pageview' AND ${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
-    const totalsQ = `SELECT index1 AS appId, SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS unique_paths FROM ${STATS_DATASET} ${where} GROUP BY appId LIMIT 10000`;
-    const seriesQ = `SELECT index1 AS appId, toStartOfDay(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY appId, t LIMIT 10000`;
-    const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
-    try {
-      const [totals, series] = await Promise.all([
-        cfAnalyticsSql<{ appId: string; views: number; unique_paths: number }>(env, totalsQ),
-        cfAnalyticsSql<{ appId: string; t: string; views: number }>(env, seriesQ),
-      ]);
-      return c.json(buildAdminUsage(apps, totals, series, days, Date.now()));
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(502, err instanceof Error ? err.message : 'usage query failed');
-    }
-  }),
-);
+  const effectiveTime = `if(length(doubles) > 1, fromUnixTimestamp64Milli(toInt64(double2)), timestamp)`;
+  const where = `WHERE blob2 = 'pageview' AND ${effectiveTime} > NOW() - INTERVAL '${days}' DAY`;
+  const totalsQ = `SELECT index1 AS appId, SUM(_sample_interval) AS views, COUNT(DISTINCT blob3) AS unique_paths FROM ${STATS_DATASET} ${where} GROUP BY appId LIMIT 10000`;
+  const seriesQ = `SELECT index1 AS appId, toStartOfDay(${effectiveTime}) AS t, SUM(_sample_interval) AS views FROM ${STATS_DATASET} ${where} GROUP BY appId, t LIMIT 10000`;
+  const env = c.env as Env & { CF_ACCOUNT_ID?: string; CF_ANALYTICS_API_TOKEN?: string };
+  try {
+    const [totals, series] = await Promise.all([
+      cfAnalyticsSql<{ appId: string; views: number; unique_paths: number }>(env, totalsQ),
+      cfAnalyticsSql<{ appId: string; t: string; views: number }>(env, seriesQ),
+    ]);
+    return c.json(buildAdminUsage(apps, totals, series, days, Date.now()));
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw new HttpError(502, err instanceof Error ? err.message : 'usage query failed');
+  }
+});
 
 // -----------------------------------------------------------------------------
 // Diagnostics — what's blocking analytics from showing data for this app.
@@ -670,71 +632,68 @@ analyticsRoutes.get(
 // degrade the verdict to "unknown" rather than failing the request.
 // -----------------------------------------------------------------------------
 
-analyticsRoutes.get(
-  '/apps/:appId/analytics/diagnostics',
-  wrap(async (c) => {
-    const appId = c.req.param('appId')!;
-    await requireConsoleAppOwner(c, appId);
+analyticsRoutes.get('/apps/:appId/analytics/diagnostics', async (c) => {
+  const appId = c.req.param('appId')!;
+  await requireConsoleAppOwner(c, appId);
 
-    const env = c.env as Env & {
-      ANALYTICS?: AnalyticsEngineDataset;
-      CF_ACCOUNT_ID?: string;
-      CF_ANALYTICS_API_TOKEN?: string;
-    };
+  const env = c.env as Env & {
+    ANALYTICS?: AnalyticsEngineDataset;
+    CF_ACCOUNT_ID?: string;
+    CF_ANALYTICS_API_TOKEN?: string;
+  };
 
-    // 1. BYO/auto config wired?
-    const row = await loadRow(c, appId);
-    const cfBeaconConfigured = !!(row?.cf_beacon_token && CF_TOKEN_RE.test(row.cf_beacon_token));
-    const byoConfigured = !!(row?.ga4 || row?.plausible || row?.custom_head);
+  // 1. BYO/auto config wired?
+  const row = await loadRow(c, appId);
+  const cfBeaconConfigured = !!(row?.cf_beacon_token && CF_TOKEN_RE.test(row.cf_beacon_token));
+  const byoConfigured = !!(row?.ga4 || row?.plausible || row?.custom_head);
 
-    // 2. Dataset binding wired in wrangler?
-    const datasetBound = !!env.ANALYTICS;
+  // 2. Dataset binding wired in wrangler?
+  const datasetBound = !!env.ANALYTICS;
 
-    // 3. Stats query path works? (CF API token + account id)
-    const statsQueryable = !!(env.CF_ACCOUNT_ID && env.CF_ANALYTICS_API_TOKEN);
+  // 3. Stats query path works? (CF API token + account id)
+  const statsQueryable = !!(env.CF_ACCOUNT_ID && env.CF_ANALYTICS_API_TOKEN);
 
-    // 4. Any events ever received for this app? Wide window — 90 days —
-    //    so we don't keep saying "no data" if traffic happened weeks ago.
-    let eventsEver = false;
-    let eventsLast24h = 0;
-    if (datasetBound && statsQueryable) {
-      try {
-        const q = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE index1 = '${appId}' AND timestamp > NOW() - INTERVAL '90' DAY`;
-        const rows = await cfAnalyticsSql<{ c: number }>(env, q);
-        eventsEver = Number(rows[0]?.c ?? 0) > 0;
+  // 4. Any events ever received for this app? Wide window — 90 days —
+  //    so we don't keep saying "no data" if traffic happened weeks ago.
+  let eventsEver = false;
+  let eventsLast24h = 0;
+  if (datasetBound && statsQueryable) {
+    try {
+      const q = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE index1 = '${appId}' AND timestamp > NOW() - INTERVAL '90' DAY`;
+      const rows = await cfAnalyticsSql<{ c: number }>(env, q);
+      eventsEver = Number(rows[0]?.c ?? 0) > 0;
 
-        const q24 = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE index1 = '${appId}' AND blob2 = 'pageview' AND timestamp > NOW() - INTERVAL '1' DAY`;
-        const rows24 = await cfAnalyticsSql<{ c: number }>(env, q24);
-        eventsLast24h = Number(rows24[0]?.c ?? 0);
-      } catch {
-        // Best-effort; treat as unknown.
-      }
+      const q24 = `SELECT SUM(_sample_interval) AS c FROM ${STATS_DATASET} WHERE index1 = '${appId}' AND blob2 = 'pageview' AND timestamp > NOW() - INTERVAL '1' DAY`;
+      const rows24 = await cfAnalyticsSql<{ c: number }>(env, q24);
+      eventsLast24h = Number(rows24[0]?.c ?? 0);
+    } catch {
+      // Best-effort; treat as unknown.
     }
+  }
 
-    // 5. Verdict — what should the dashboard tell the creator to do next?
-    // Worst-actionable-thing-first. The UI renders the first non-ok item.
-    let verdict: 'ok' | 'never_seen_event' | 'no_dataset_binding' | 'no_stats_query' | 'silent_24h';
-    if (!datasetBound) verdict = 'no_dataset_binding';
-    else if (!statsQueryable) verdict = 'no_stats_query';
-    else if (!eventsEver) verdict = 'never_seen_event';
-    else if (eventsLast24h === 0) verdict = 'silent_24h';
-    else verdict = 'ok';
+  // 5. Verdict — what should the dashboard tell the creator to do next?
+  // Worst-actionable-thing-first. The UI renders the first non-ok item.
+  let verdict: 'ok' | 'never_seen_event' | 'no_dataset_binding' | 'no_stats_query' | 'silent_24h';
+  if (!datasetBound) verdict = 'no_dataset_binding';
+  else if (!statsQueryable) verdict = 'no_stats_query';
+  else if (!eventsEver) verdict = 'never_seen_event';
+  else if (eventsLast24h === 0) verdict = 'silent_24h';
+  else verdict = 'ok';
 
-    return c.json({
-      appId,
-      verdict,
-      checks: {
-        cf_beacon_configured: cfBeaconConfigured,
-        byo_tag_configured: byoConfigured,
-        dataset_bound: datasetBound,
-        stats_queryable: statsQueryable,
-        events_ever: eventsEver,
-        events_last_24h: eventsLast24h,
-      },
-      loader_url: `https://api.freeappstore.online/v1/analytics.js?app=${appId}`,
-    });
-  }),
-);
+  return c.json({
+    appId,
+    verdict,
+    checks: {
+      cf_beacon_configured: cfBeaconConfigured,
+      byo_tag_configured: byoConfigured,
+      dataset_bound: datasetBound,
+      stats_queryable: statsQueryable,
+      events_ever: eventsEver,
+      events_last_24h: eventsLast24h,
+    },
+    loader_url: `https://api.freeappstore.online/v1/analytics.js?app=${appId}`,
+  });
+});
 
 // -----------------------------------------------------------------------------
 // Event ingest: every page load from the platform loader script sends a

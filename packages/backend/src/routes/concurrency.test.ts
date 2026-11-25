@@ -58,7 +58,7 @@ describe.skipIf(!hasSqlite)('caps under concurrency (#277)', () => {
     for (let i = 0; i < 999; i++) ins.run('timer', `c${i}`, now);
     const statuses = await race(
       d1,
-      /SELECT COUNT\(\*\) AS cnt FROM counters/,
+      /INSERT INTO counters/,
       20,
       (i) => new Request(url(`/counters/new${i}`), { method: 'POST', headers: auth }),
     );

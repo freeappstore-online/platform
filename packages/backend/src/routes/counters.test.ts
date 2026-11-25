@@ -9,7 +9,6 @@ function fakeDB(opts: {
   user?: Record<string, unknown> | null;
   counters?: Record<string, number>;
   counterCount?: number;
-  counterExists?: boolean;
 }) {
   return {
     prepare: (sql: string) => {
@@ -18,13 +17,14 @@ function fakeDB(opts: {
         first: async () => {
           if (trimmed.includes('FROM apps')) return { ok: 1 };
           if (trimmed.includes('FROM users')) return opts.user ?? null;
-          if (trimmed.includes('SELECT value FROM counters')) {
+          if (
+            trimmed.includes('SELECT value FROM counters') ||
+            trimmed.includes('RETURNING value')
+          ) {
             const key = Object.keys(opts.counters ?? {})[0];
             return key ? { value: opts.counters![key] } : null;
           }
           if (trimmed.includes('COUNT(*)')) return { cnt: opts.counterCount ?? 0 };
-          if (trimmed.includes('SELECT 1 FROM counters'))
-            return opts.counterExists ? { 1: 1 } : null;
           return null;
         },
         all: async () => {
@@ -255,5 +255,37 @@ describe.skipIf(!hasSqlite)('decrements are owner / privileged-role only (#492)'
     expect(await bump('gh:1', -10)).toBe(200);
     expect(await bump('gh:3', -5)).toBe(200);
     expect(likes()).toBe(85);
+  });
+});
+
+describe.skipIf(!hasSqlite)('increment at the per-app cap (#676)', () => {
+  it('returns the new value of an existing key and refuses a new one', async () => {
+    const { db, d1 } = sqliteD1();
+    const now = Date.now();
+    db.prepare(
+      "INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES ('gh:1', 1, 'alice', NULL, 0)",
+    ).run();
+    db.prepare("INSERT INTO apps (id, owner_login, created_at) VALUES ('timer', 'alice', 0)").run();
+    const ins = db.prepare(
+      "INSERT INTO counters (app_id, key, value, updated_at) VALUES ('timer', ?, 1, ?)",
+    );
+    for (let i = 0; i < 1000; i++) ins.run(`c${i}`, now);
+    const bump = async (key: string) =>
+      app.request(
+        `/v1/apps/timer/counters/${key}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${await signSession('gh:1', SIGNING_KEY, { aud: 'timer' })}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ increment: 4 }),
+        },
+        env(d1),
+      );
+    const existing = await bump('c7');
+    expect(existing.status).toBe(200);
+    expect(await existing.json()).toEqual({ value: 5 });
+    expect((await bump('new')).status).toBe(413);
   });
 });

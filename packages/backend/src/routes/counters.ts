@@ -1,12 +1,6 @@
 import { Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import {
-  type CurrentUser,
-  FAS_APP_ROWS,
-  HttpError,
-  isAppOwner,
-  requireAppUser,
-} from '../lib/auth.js';
+import { type CurrentUser, FAS_APP_ROWS, isAppOwner, requireAppUser } from '../lib/auth.js';
 import { likePrefix } from '../lib/like.js';
 import type { Env } from '../types.js';
 
@@ -84,70 +78,44 @@ async function mayDecrement(
 
 /** Increment (or decrement) a counter. Requires auth. */
 counterRoutes.post('/apps/:appId/counters/:key', async (c) => {
-  try {
-    const { appId, key } = c.req.param();
-    const user = await requireAppUser(c, appId);
-    // Require a real app — otherwise rotating the id resets the per-app cap.
-    const appRow = APP_ID_RE.test(appId)
-      ? await c.env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
-          .bind(appId)
-          .first<{ owner_id: string | null }>()
-      : null;
-    if (!appRow) return c.text('unknown app', 404);
+  const { appId, key } = c.req.param();
+  const user = await requireAppUser(c, appId);
+  // Require a real app — otherwise rotating the id resets the per-app cap.
+  const appRow = APP_ID_RE.test(appId)
+    ? await c.env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
+        .bind(appId)
+        .first<{ owner_id: string | null }>()
+    : null;
+  if (!appRow) return c.text('unknown app', 404);
 
-    if (key.length > MAX_KEY_LENGTH) {
-      return c.text(`counter key exceeds ${MAX_KEY_LENGTH} chars`, 400);
-    }
-
-    const body = await c.req.json<{ increment?: number } | null>().catch(() => null);
-    const increment = body?.increment ?? 1;
-
-    if (!Number.isInteger(increment) || Math.abs(increment) > MAX_INCREMENT) {
-      return c.text(
-        `increment must be integer between -${MAX_INCREMENT} and +${MAX_INCREMENT}`,
-        400,
-      );
-    }
-    if (increment < 0 && !(await mayDecrement(c.env, user, appId, appRow.owner_id))) {
-      return c.text('decrementing requires the app owner or a privileged app role', 403);
-    }
-
-    // Check counter limit
-    const count = await c.env.DB.prepare('SELECT COUNT(*) AS cnt FROM counters WHERE app_id = ?')
-      .bind(appId)
-      .first<{ cnt: number }>();
-    if ((count?.cnt ?? 0) >= MAX_COUNTERS_PER_APP) {
-      // Only enforce if this is a new key
-      const exists = await c.env.DB.prepare('SELECT 1 FROM counters WHERE app_id = ? AND key = ?')
-        .bind(appId, key)
-        .first();
-      if (!exists) {
-        return c.text(`max ${MAX_COUNTERS_PER_APP} counters per app`, 413);
-      }
-    }
-
-    // The write re-checks the cap in the same statement (#277), so parallel
-    // new keys that all passed the count above can't exceed it.
-    const write = await c.env.DB.prepare(
-      `INSERT INTO counters (app_id, key, value, updated_at)
-       SELECT ?, ?, ?, ?
-       WHERE (SELECT COUNT(*) FROM counters WHERE app_id = ? AND key <> ?) < ?
-       ON CONFLICT(app_id, key) DO UPDATE SET
-         value = counters.value + excluded.value,
-         updated_at = excluded.updated_at`,
-    )
-      .bind(appId, key, increment, Date.now(), appId, key, MAX_COUNTERS_PER_APP)
-      .run();
-    if (!write.meta.changes) return c.text(`max ${MAX_COUNTERS_PER_APP} counters per app`, 413);
-
-    // Return new value
-    const row = await c.env.DB.prepare('SELECT value FROM counters WHERE app_id = ? AND key = ?')
-      .bind(appId, key)
-      .first<{ value: number }>();
-
-    return c.json({ value: row?.value ?? increment });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  if (key.length > MAX_KEY_LENGTH) {
+    return c.text(`counter key exceeds ${MAX_KEY_LENGTH} chars`, 400);
   }
+
+  const body = await c.req.json<{ increment?: number } | null>().catch(() => null);
+  const increment = body?.increment ?? 1;
+
+  if (!Number.isInteger(increment) || Math.abs(increment) > MAX_INCREMENT) {
+    return c.text(`increment must be integer between -${MAX_INCREMENT} and +${MAX_INCREMENT}`, 400);
+  }
+  if (increment < 0 && !(await mayDecrement(c.env, user, appId, appRow.owner_id))) {
+    return c.text('decrementing requires the app owner or a privileged app role', 403);
+  }
+
+  // The cap is checked in the same statement as the write (#277), so parallel
+  // new keys can't exceed it; an existing key never counts against it.
+  const row = await c.env.DB.prepare(
+    `INSERT INTO counters (app_id, key, value, updated_at)
+     SELECT ?, ?, ?, ?
+     WHERE (SELECT COUNT(*) FROM counters WHERE app_id = ? AND key <> ?) < ?
+     ON CONFLICT(app_id, key) DO UPDATE SET
+       value = counters.value + excluded.value,
+       updated_at = excluded.updated_at
+     RETURNING value`,
+  )
+    .bind(appId, key, increment, Date.now(), appId, key, MAX_COUNTERS_PER_APP)
+    .first<{ value: number }>();
+  if (!row) return c.text(`max ${MAX_COUNTERS_PER_APP} counters per app`, 413);
+
+  return c.json({ value: row.value });
 });

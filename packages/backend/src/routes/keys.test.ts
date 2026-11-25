@@ -242,20 +242,6 @@ describe('keys routes', () => {
     );
   });
 
-  it('GET /v1/keys returns JSON when Accept: application/json', async () => {
-    const keys = [{ provider: 'openai', label: null, created_at: 1000, last_used_at: null }];
-    const res = await app.request(
-      '/v1/keys',
-      {
-        headers: { Authorization: await authHeader(), Accept: 'application/json' },
-      },
-      env(fakeDB({ user, keys })),
-    );
-    expect(res.status).toBe(200);
-    const data = (await res.json()) as { keys: unknown[] };
-    expect(data.keys).toHaveLength(1);
-  });
-
   it('GET /v1/keys HTML mode does not let ?provider break out of the inline script (XSS)', async () => {
     const payload = '</script><script>alert(1)</script>';
     const res = await app.request(

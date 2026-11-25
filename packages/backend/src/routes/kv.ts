@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
-import { HttpError, requireAppUser } from '../lib/auth.js';
+import { requireAppUser } from '../lib/auth.js';
 import { likePrefix } from '../lib/like.js';
 import { checkKvWrite, KV_LIMITS } from '../lib/quota.js';
 import type { Env } from '../types.js';
@@ -9,50 +9,40 @@ export const kvRoutes = new Hono<{ Bindings: Env }>();
 
 /** List all keys for the current user in this app. Optional ?prefix= filter. */
 kvRoutes.get('/apps/:appId/kv', async (c) => {
-  try {
-    const user = await requireAppUser(c, c.req.param('appId'));
-    const { appId } = c.req.param();
-    const prefix = c.req.query('prefix');
+  const user = await requireAppUser(c, c.req.param('appId'));
+  const { appId } = c.req.param();
+  const prefix = c.req.query('prefix');
 
-    let query: string;
-    let bindings: unknown[];
-    if (prefix) {
-      // ESCAPE is required: without it a prefix of "score_" also matches "scoreX".
-      query =
-        "SELECT key FROM kv WHERE app_id = ? AND user_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key";
-      bindings = [appId, user.id, likePrefix(prefix)];
-    } else {
-      query = 'SELECT key FROM kv WHERE app_id = ? AND user_id = ? ORDER BY key';
-      bindings = [appId, user.id];
-    }
-
-    const { results } = await c.env.DB.prepare(query)
-      .bind(...bindings)
-      .all<{ key: string }>();
-    return c.json(results.map((r) => r.key));
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  let query: string;
+  let bindings: unknown[];
+  if (prefix) {
+    // ESCAPE is required: without it a prefix of "score_" also matches "scoreX".
+    query =
+      "SELECT key FROM kv WHERE app_id = ? AND user_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key";
+    bindings = [appId, user.id, likePrefix(prefix)];
+  } else {
+    query = 'SELECT key FROM kv WHERE app_id = ? AND user_id = ? ORDER BY key';
+    bindings = [appId, user.id];
   }
+
+  const { results } = await c.env.DB.prepare(query)
+    .bind(...bindings)
+    .all<{ key: string }>();
+  return c.json(results.map((r) => r.key));
 });
 
 kvRoutes.get('/apps/:appId/kv/:key', async (c) => {
-  try {
-    const user = await requireAppUser(c, c.req.param('appId'));
-    const { appId, key } = c.req.param();
-    const row = await c.env.DB.prepare(
-      'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
-    )
-      .bind(appId, user.id, key)
-      .first<{ value: unknown }>();
-    if (!row) return c.text('not found', 404);
-    return new Response(toBytes(row.value), {
-      headers: { 'content-type': 'application/json' },
-    });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireAppUser(c, c.req.param('appId'));
+  const { appId, key } = c.req.param();
+  const row = await c.env.DB.prepare(
+    'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
+  )
+    .bind(appId, user.id, key)
+    .first<{ value: unknown }>();
+  if (!row) return c.text('not found', 404);
+  return new Response(toBytes(row.value), {
+    headers: { 'content-type': 'application/json' },
+  });
 });
 
 /**
@@ -69,103 +59,93 @@ export function toBytes(value: unknown): Uint8Array {
 }
 
 kvRoutes.put('/apps/:appId/kv/:key', async (c) => {
-  try {
-    const user = await requireAppUser(c, c.req.param('appId'));
-    const { appId, key } = c.req.param();
-    if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
-    // Cap key length: keys are stored but not metered against the value quota,
-    // so an unbounded key would bypass the per-user byte cap.
-    if (key.length > 512) return c.text('key too long (max 512 chars)', 400);
-    const body = await c.req.arrayBuffer();
-    if (body.byteLength === 0) {
-      // An empty body would store 0 bytes; subsequent kv.get() on the SDK
-      // side calls res.json() which throws on an empty response. Reject
-      // here so we never end up in that state.
-      return c.text('empty values are not allowed; use DELETE to remove a key', 400);
-    }
-
-    const quota = async () => {
-      const row = await c.env.DB.prepare(
-        `SELECT
-           COALESCE(SUM(value_size_bytes), 0) AS total,
-           COUNT(*) AS keys,
-           COALESCE(SUM(CASE WHEN key = ? THEN 1 ELSE 0 END), 0) AS key_exists,
-           COALESCE(SUM(CASE WHEN key = ? THEN value_size_bytes ELSE 0 END), 0) AS existing
-         FROM kv WHERE app_id = ? AND user_id = ?`,
-      )
-        .bind(key, key, appId, user.id)
-        .first<{ total: number; keys: number; key_exists: number; existing: number }>();
-      return checkKvWrite(
-        {
-          totalBytes: row?.total ?? 0,
-          keyCount: row?.keys ?? 0,
-          existingKeyBytes: row?.existing ?? 0,
-          keyExists: (row?.key_exists ?? 0) > 0,
-        },
-        body.byteLength,
-        KV_LIMITS,
-      );
-    };
-    const check = await quota();
-    if (!check.ok) return c.text(check.reason, 413);
-
-    // The write re-checks both caps in the same statement (#277): parallel
-    // writes each passing the read above can't take the user past them.
-    const write = await c.env.DB.prepare(
-      `INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at)
-       SELECT ?, ?, ?, ?, ?, ?
-       WHERE (SELECT COALESCE(SUM(value_size_bytes), 0) FROM kv
-              WHERE app_id = ? AND user_id = ? AND key <> ?) + ? <= ?
-         AND (SELECT COUNT(*) FROM kv
-              WHERE app_id = ? AND user_id = ? AND key <> ?) < ?
-       ON CONFLICT(app_id, user_id, key) DO UPDATE SET
-         value = excluded.value,
-         value_size_bytes = excluded.value_size_bytes,
-         updated_at = excluded.updated_at`,
-    )
-      .bind(
-        appId,
-        user.id,
-        key,
-        body,
-        body.byteLength,
-        Date.now(),
-        appId,
-        user.id,
-        key,
-        body.byteLength,
-        KV_LIMITS.maxTotalBytesPerUser,
-        appId,
-        user.id,
-        key,
-        KV_LIMITS.maxKeysPerUser,
-      )
-      .run();
-    if (!write.meta.changes) {
-      const now = await quota();
-      return c.text(now.ok ? 'per-user kv quota exceeded' : now.reason, 413);
-    }
-
-    return c.body(null, 204);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  const user = await requireAppUser(c, c.req.param('appId'));
+  const { appId, key } = c.req.param();
+  if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
+  // Cap key length: keys are stored but not metered against the value quota,
+  // so an unbounded key would bypass the per-user byte cap.
+  if (key.length > 512) return c.text('key too long (max 512 chars)', 400);
+  const body = await c.req.arrayBuffer();
+  if (body.byteLength === 0) {
+    // An empty body would store 0 bytes; subsequent kv.get() on the SDK
+    // side calls res.json() which throws on an empty response. Reject
+    // here so we never end up in that state.
+    return c.text('empty values are not allowed; use DELETE to remove a key', 400);
   }
+
+  const quota = async () => {
+    const row = await c.env.DB.prepare(
+      `SELECT
+         COALESCE(SUM(value_size_bytes), 0) AS total,
+         COUNT(*) AS keys,
+         COALESCE(SUM(CASE WHEN key = ? THEN 1 ELSE 0 END), 0) AS key_exists,
+         COALESCE(SUM(CASE WHEN key = ? THEN value_size_bytes ELSE 0 END), 0) AS existing
+       FROM kv WHERE app_id = ? AND user_id = ?`,
+    )
+      .bind(key, key, appId, user.id)
+      .first<{ total: number; keys: number; key_exists: number; existing: number }>();
+    return checkKvWrite(
+      {
+        totalBytes: row?.total ?? 0,
+        keyCount: row?.keys ?? 0,
+        existingKeyBytes: row?.existing ?? 0,
+        keyExists: (row?.key_exists ?? 0) > 0,
+      },
+      body.byteLength,
+      KV_LIMITS,
+    );
+  };
+  const check = await quota();
+  if (!check.ok) return c.text(check.reason, 413);
+
+  // The write re-checks both caps in the same statement (#277): parallel
+  // writes each passing the read above can't take the user past them.
+  const write = await c.env.DB.prepare(
+    `INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at)
+     SELECT ?, ?, ?, ?, ?, ?
+     WHERE (SELECT COALESCE(SUM(value_size_bytes), 0) FROM kv
+            WHERE app_id = ? AND user_id = ? AND key <> ?) + ? <= ?
+       AND (SELECT COUNT(*) FROM kv
+            WHERE app_id = ? AND user_id = ? AND key <> ?) < ?
+     ON CONFLICT(app_id, user_id, key) DO UPDATE SET
+       value = excluded.value,
+       value_size_bytes = excluded.value_size_bytes,
+       updated_at = excluded.updated_at`,
+  )
+    .bind(
+      appId,
+      user.id,
+      key,
+      body,
+      body.byteLength,
+      Date.now(),
+      appId,
+      user.id,
+      key,
+      body.byteLength,
+      KV_LIMITS.maxTotalBytesPerUser,
+      appId,
+      user.id,
+      key,
+      KV_LIMITS.maxKeysPerUser,
+    )
+    .run();
+  if (!write.meta.changes) {
+    const now = await quota();
+    return c.text(now.ok ? 'per-user kv quota exceeded' : now.reason, 413);
+  }
+
+  return c.body(null, 204);
 });
 
 kvRoutes.delete('/apps/:appId/kv/:key', async (c) => {
-  try {
-    const user = await requireAppUser(c, c.req.param('appId'));
-    const { appId, key } = c.req.param();
-    const result = await c.env.DB.prepare(
-      'DELETE FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
-    )
-      .bind(appId, user.id, key)
-      .run();
-    if (result.meta.changes === 0) return c.text('not found', 404);
-    return c.body(null, 204);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireAppUser(c, c.req.param('appId'));
+  const { appId, key } = c.req.param();
+  const result = await c.env.DB.prepare(
+    'DELETE FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
+  )
+    .bind(appId, user.id, key)
+    .run();
+  if (result.meta.changes === 0) return c.text('not found', 404);
+  return c.body(null, 204);
 });

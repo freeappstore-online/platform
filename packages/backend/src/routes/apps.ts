@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { assertAppOwner, FAS_APP_ROWS, HttpError, requireConsoleUser } from '../lib/auth.js';
+import { assertAppOwner, FAS_APP_ROWS, requireConsoleUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const appsRoutes = new Hono<{ Bindings: Env }>();
@@ -30,13 +30,7 @@ const STORE_DOMAIN: Record<string, { domain: string; org: string }> = {
  * build them.
  */
 appsRoutes.get('/apps/mine', async (c) => {
-  let user: Awaited<ReturnType<typeof requireConsoleUser>> | null = null;
-  try {
-    user = await requireConsoleUser(c);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
 
   try {
     const result = await c.env.DB.prepare(
@@ -146,13 +140,7 @@ async function adminFetch(env: Env, path: string): Promise<Response | null> {
  * into a public map of every app's CI health.
  */
 appsRoutes.get('/apps/deploy-status', async (c) => {
-  let user: Awaited<ReturnType<typeof requireConsoleUser>>;
-  try {
-    user = await requireConsoleUser(c);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
 
   const owned = await c.env.DB.prepare(`SELECT id FROM apps WHERE owner_id = ? AND ${FAS_APP_ROWS}`)
     .bind(user.id)
@@ -175,21 +163,10 @@ appsRoutes.get('/apps/deploy-status', async (c) => {
 
 /** Latest deploy plus recent runs for one app the caller owns. */
 appsRoutes.get('/apps/:id/deploy-status', async (c) => {
-  let user: Awaited<ReturnType<typeof requireConsoleUser>>;
-  try {
-    user = await requireConsoleUser(c);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
 
   const appId = c.req.param('id');
-  try {
-    await assertAppOwner(c.env, user, appId);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 403);
-    throw err;
-  }
+  await assertAppOwner(c.env, user, appId);
 
   const res = await adminFetch(c.env, `/api/apps/${encodeURIComponent(appId)}/deploy-status`);
   if (!res) return c.json({ error: 'deploy status is unavailable' }, 503);

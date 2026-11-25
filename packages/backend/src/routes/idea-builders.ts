@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { HttpError, requireConsoleUser } from '../lib/auth.js';
+import { requireConsoleUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 /**
@@ -37,34 +37,29 @@ async function countFor(db: D1Database, ideaId: string): Promise<number> {
  * { mine: { [ideaId]: true } } — personal state, never publicly cached.
  */
 ideaBuildersRoutes.get('/store/idea-builders', async (c) => {
-  try {
-    const since = activeSince();
-    const { results } = await c.env.DB.prepare(
-      'SELECT idea_id, COUNT(*) AS count FROM idea_builders WHERE created_at > ? GROUP BY idea_id',
-    )
-      .bind(since)
-      .all<{ idea_id: string; count: number }>();
-    const builders: Record<string, number> = {};
-    for (const row of results ?? []) builders[row.idea_id] = row.count;
-    if (!c.req.header('authorization')) {
-      c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
-      return c.json({ builders });
-    }
-    const user = await requireConsoleUser(c);
-    const { results: mineRows } = await c.env.DB.prepare(
-      'SELECT idea_id FROM idea_builders WHERE user_id = ? AND created_at > ?',
-    )
-      .bind(user.id, since)
-      .all<{ idea_id: string }>();
-    const mine: Record<string, true> = {};
-    for (const row of mineRows ?? []) mine[row.idea_id] = true;
-    c.header('Cache-Control', 'private, no-store');
-    c.header('Vary', 'Authorization');
-    return c.json({ builders, mine });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  const since = activeSince();
+  const { results } = await c.env.DB.prepare(
+    'SELECT idea_id, COUNT(*) AS count FROM idea_builders WHERE created_at > ? GROUP BY idea_id',
+  )
+    .bind(since)
+    .all<{ idea_id: string; count: number }>();
+  const builders: Record<string, number> = {};
+  for (const row of results ?? []) builders[row.idea_id] = row.count;
+  if (!c.req.header('authorization')) {
+    c.header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
+    return c.json({ builders });
   }
+  const user = await requireConsoleUser(c);
+  const { results: mineRows } = await c.env.DB.prepare(
+    'SELECT idea_id FROM idea_builders WHERE user_id = ? AND created_at > ?',
+  )
+    .bind(user.id, since)
+    .all<{ idea_id: string }>();
+  const mine: Record<string, true> = {};
+  for (const row of mineRows ?? []) mine[row.idea_id] = true;
+  c.header('Cache-Control', 'private, no-store');
+  c.header('Vary', 'Authorization');
+  return c.json({ builders, mine });
 });
 
 /**
@@ -72,60 +67,50 @@ ideaBuildersRoutes.get('/store/idea-builders', async (c) => {
  * Returns { building: true, count }.
  */
 ideaBuildersRoutes.post('/store/ideas/:ideaId/builder', async (c) => {
-  try {
-    const user = await requireConsoleUser(c);
-    const { ideaId } = c.req.param();
-    if (!IDEA_ID_RE.test(ideaId)) return c.json({ error: 'bad idea id' }, 400);
-    const now = Math.floor(Date.now() / 1000);
-    const since = activeSince();
+  const user = await requireConsoleUser(c);
+  const { ideaId } = c.req.param();
+  if (!IDEA_ID_RE.test(ideaId)) return c.json({ error: 'bad idea id' }, 400);
+  const now = Math.floor(Date.now() / 1000);
+  const since = activeSince();
 
-    const existing = await c.env.DB.prepare(
-      'SELECT created_at FROM idea_builders WHERE idea_id = ? AND user_id = ?',
+  const existing = await c.env.DB.prepare(
+    'SELECT created_at FROM idea_builders WHERE idea_id = ? AND user_id = ?',
+  )
+    .bind(ideaId, user.id)
+    .first<{ created_at: number }>();
+  const alreadyActive = existing != null && existing.created_at > since;
+  if (!alreadyActive) {
+    const mine = await c.env.DB.prepare(
+      'SELECT SUM(created_at > ?) AS active, SUM(created_at > ?) AS recent FROM idea_builders WHERE user_id = ?',
     )
-      .bind(ideaId, user.id)
-      .first<{ created_at: number }>();
-    const alreadyActive = existing != null && existing.created_at > since;
-    if (!alreadyActive) {
-      const mine = await c.env.DB.prepare(
-        'SELECT SUM(created_at > ?) AS active, SUM(created_at > ?) AS recent FROM idea_builders WHERE user_id = ?',
-      )
-        .bind(since, now - RATE_LIMIT_WINDOW_S, user.id)
-        .first<{ active: number | null; recent: number | null }>();
-      if ((mine?.recent ?? 0) >= RATE_LIMIT_MAX) {
-        return c.json({ error: 'Too many claims at once. Try again in a minute.' }, 429);
-      }
-      if ((mine?.active ?? 0) >= MAX_ACTIVE_CLAIMS) {
-        return c.json(
-          { error: `You're building ${MAX_ACTIVE_CLAIMS} ideas already. Drop one first.` },
-          409,
-        );
-      }
+      .bind(since, now - RATE_LIMIT_WINDOW_S, user.id)
+      .first<{ active: number | null; recent: number | null }>();
+    if ((mine?.recent ?? 0) >= RATE_LIMIT_MAX) {
+      return c.json({ error: 'Too many claims at once. Try again in a minute.' }, 429);
     }
-
-    await c.env.DB.prepare(
-      'INSERT INTO idea_builders (idea_id, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT(idea_id, user_id) DO UPDATE SET created_at = excluded.created_at',
-    )
-      .bind(ideaId, user.id, now)
-      .run();
-    return c.json({ building: true, count: await countFor(c.env.DB, ideaId) });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+    if ((mine?.active ?? 0) >= MAX_ACTIVE_CLAIMS) {
+      return c.json(
+        { error: `You're building ${MAX_ACTIVE_CLAIMS} ideas already. Drop one first.` },
+        409,
+      );
+    }
   }
+
+  await c.env.DB.prepare(
+    'INSERT INTO idea_builders (idea_id, user_id, created_at) VALUES (?, ?, ?) ON CONFLICT(idea_id, user_id) DO UPDATE SET created_at = excluded.created_at',
+  )
+    .bind(ideaId, user.id, now)
+    .run();
+  return c.json({ building: true, count: await countFor(c.env.DB, ideaId) });
 });
 
 /** DELETE /v1/store/ideas/:ideaId/builder — drop a claim (idempotent). */
 ideaBuildersRoutes.delete('/store/ideas/:ideaId/builder', async (c) => {
-  try {
-    const user = await requireConsoleUser(c);
-    const { ideaId } = c.req.param();
-    if (!IDEA_ID_RE.test(ideaId)) return c.json({ error: 'bad idea id' }, 400);
-    await c.env.DB.prepare('DELETE FROM idea_builders WHERE idea_id = ? AND user_id = ?')
-      .bind(ideaId, user.id)
-      .run();
-    return c.json({ building: false, count: await countFor(c.env.DB, ideaId) });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
+  const { ideaId } = c.req.param();
+  if (!IDEA_ID_RE.test(ideaId)) return c.json({ error: 'bad idea id' }, 400);
+  await c.env.DB.prepare('DELETE FROM idea_builders WHERE idea_id = ? AND user_id = ?')
+    .bind(ideaId, user.id)
+    .run();
+  return c.json({ building: false, count: await countFor(c.env.DB, ideaId) });
 });

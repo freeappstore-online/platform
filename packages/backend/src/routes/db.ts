@@ -125,120 +125,107 @@ export const dbRoutes = new Hono<{ Bindings: Env }>();
 
 /** Create a document. Auth required. */
 dbRoutes.post('/apps/:appId/db/:collection', async (c) => {
-  try {
-    const user = await requireAppUser(c, c.req.param('appId'));
-    const { appId, collection } = c.req.param();
+  const user = await requireAppUser(c, c.req.param('appId'));
+  const { appId, collection } = c.req.param();
 
-    const colErr = validateCollection(collection);
-    if (colErr) return c.text(colErr, 400);
-    if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
+  const colErr = validateCollection(collection);
+  if (colErr) return c.text(colErr, 400);
+  if (!(await appExists(c.env, appId))) return c.text('unknown app', 404);
 
-    const body = await c.req.text();
-    // Measure UTF-8 bytes: D1 stores TEXT as UTF-8, so `body.length` (UTF-16
-    // code units) under-counts multibyte content and lets the cap be exceeded.
-    if (new TextEncoder().encode(body).length > MAX_DOC_BYTES) {
-      return c.text(`document exceeds ${MAX_DOC_BYTES} bytes`, 413);
-    }
-
-    // Validate JSON
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(body) as Record<string, unknown>;
-    } catch {
-      return c.text('invalid JSON', 400);
-    }
-    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-      return c.text('document must be a JSON object', 400);
-    }
-
-    // Check collection document limit
-    const count = await c.env.DB.prepare(
-      'SELECT COUNT(*) AS cnt, COALESCE(SUM(owner_id = ?), 0) AS mine FROM documents WHERE app_id = ? AND collection = ?',
-    )
-      .bind(user.id, appId, collection)
-      .first<{ cnt: number; mine: number }>();
-    if ((count?.cnt ?? 0) >= MAX_DOCS_PER_COLLECTION) {
-      return c.text(`max ${MAX_DOCS_PER_COLLECTION} documents per collection`, 413);
-    }
-    if ((count?.mine ?? 0) >= MAX_DOCS_PER_USER_PER_COLLECTION) {
-      return c.text(
-        `max ${MAX_DOCS_PER_USER_PER_COLLECTION} of your documents per collection`,
-        413,
-      );
-    }
-    // A first document creates the collection: bound how many an app can have.
-    if (!count?.cnt) {
-      const names = await c.env.DB.prepare(
-        'SELECT COUNT(*) AS n FROM (SELECT DISTINCT collection FROM documents WHERE app_id = ?)',
-      )
-        .bind(appId)
-        .first<{ n: number }>();
-      if ((names?.n ?? 0) >= MAX_COLLECTIONS_PER_APP) {
-        return c.text(`max ${MAX_COLLECTIONS_PER_APP} collections per app`, 413);
-      }
-    }
-
-    const id = generateId();
-    const now = Date.now();
-
-    // Re-check the cap in the insert itself (#277): parallel creates that all
-    // passed the count above can't take a collection past it.
-    const write = await c.env.DB.prepare(
-      `INSERT INTO documents (app_id, collection, id, data, owner_id, visibility, created_at, updated_at)
-       SELECT ?, ?, ?, ?, ?, 'public', ?, ?
-       WHERE (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ?) < ?
-         AND (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ? AND owner_id = ?) < ?`,
-    )
-      .bind(
-        appId,
-        collection,
-        id,
-        body,
-        user.id,
-        now,
-        now,
-        appId,
-        collection,
-        MAX_DOCS_PER_COLLECTION,
-        appId,
-        collection,
-        user.id,
-        MAX_DOCS_PER_USER_PER_COLLECTION,
-      )
-      .run();
-    if (!write.meta.changes) {
-      return c.text(`max ${MAX_DOCS_PER_COLLECTION} documents per collection`, 413);
-    }
-
-    // `id` last: a client-supplied `data.id` must not shadow the server id in
-    // the response (the row is stored under the generated id).
-    return c.json({ ...data, id }, 201);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  const body = await c.req.text();
+  // Measure UTF-8 bytes: D1 stores TEXT as UTF-8, so `body.length` (UTF-16
+  // code units) under-counts multibyte content and lets the cap be exceeded.
+  if (new TextEncoder().encode(body).length > MAX_DOC_BYTES) {
+    return c.text(`document exceeds ${MAX_DOC_BYTES} bytes`, 413);
   }
+
+  // Validate JSON
+  let data: Record<string, unknown>;
+  try {
+    data = JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return c.text('invalid JSON', 400);
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+    return c.text('document must be a JSON object', 400);
+  }
+
+  // Check collection document limit
+  const count = await c.env.DB.prepare(
+    'SELECT COUNT(*) AS cnt, COALESCE(SUM(owner_id = ?), 0) AS mine FROM documents WHERE app_id = ? AND collection = ?',
+  )
+    .bind(user.id, appId, collection)
+    .first<{ cnt: number; mine: number }>();
+  if ((count?.cnt ?? 0) >= MAX_DOCS_PER_COLLECTION) {
+    return c.text(`max ${MAX_DOCS_PER_COLLECTION} documents per collection`, 413);
+  }
+  if ((count?.mine ?? 0) >= MAX_DOCS_PER_USER_PER_COLLECTION) {
+    return c.text(`max ${MAX_DOCS_PER_USER_PER_COLLECTION} of your documents per collection`, 413);
+  }
+  // A first document creates the collection: bound how many an app can have.
+  if (!count?.cnt) {
+    const names = await c.env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM (SELECT DISTINCT collection FROM documents WHERE app_id = ?)',
+    )
+      .bind(appId)
+      .first<{ n: number }>();
+    if ((names?.n ?? 0) >= MAX_COLLECTIONS_PER_APP) {
+      return c.text(`max ${MAX_COLLECTIONS_PER_APP} collections per app`, 413);
+    }
+  }
+
+  const id = generateId();
+  const now = Date.now();
+
+  // Re-check the cap in the insert itself (#277): parallel creates that all
+  // passed the count above can't take a collection past it.
+  const write = await c.env.DB.prepare(
+    `INSERT INTO documents (app_id, collection, id, data, owner_id, visibility, created_at, updated_at)
+     SELECT ?, ?, ?, ?, ?, 'public', ?, ?
+     WHERE (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ?) < ?
+       AND (SELECT COUNT(*) FROM documents WHERE app_id = ? AND collection = ? AND owner_id = ?) < ?`,
+  )
+    .bind(
+      appId,
+      collection,
+      id,
+      body,
+      user.id,
+      now,
+      now,
+      appId,
+      collection,
+      MAX_DOCS_PER_COLLECTION,
+      appId,
+      collection,
+      user.id,
+      MAX_DOCS_PER_USER_PER_COLLECTION,
+    )
+    .run();
+  if (!write.meta.changes) {
+    return c.text(`max ${MAX_DOCS_PER_COLLECTION} documents per collection`, 413);
+  }
+
+  // `id` last: a client-supplied `data.id` must not shadow the server id in
+  // the response (the row is stored under the generated id).
+  return c.json({ ...data, id }, 201);
 });
 
 /** List/query documents. Owner-only unless the collection is shared. */
 dbRoutes.get('/apps/:appId/db/:collection', async (c) => {
-  try {
-    const { appId, collection } = c.req.param();
+  const { appId, collection } = c.req.param();
 
-    const colErr = validateCollection(collection);
-    if (colErr) return c.text(colErr, 400);
+  const colErr = validateCollection(collection);
+  if (colErr) return c.text(colErr, 400);
 
-    const { viewer, shared } = await readAccess(c, appId, collection);
-    const owner = c.req.query('owner');
-    // `?owner=` filters to the caller's own documents; naming anyone else would
-    // enumerate what that user wrote across the app.
-    if (owner && owner !== viewer?.id) {
-      return c.text('owner filter is limited to your own documents', viewer ? 403 : 401);
-    }
-    return await listDocuments(c, appId, collection, viewer, shared ? owner : viewer?.id);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  const { viewer, shared } = await readAccess(c, appId, collection);
+  const owner = c.req.query('owner');
+  // `?owner=` filters to the caller's own documents; naming anyone else would
+  // enumerate what that user wrote across the app.
+  if (owner && owner !== viewer?.id) {
+    return c.text('owner filter is limited to your own documents', viewer ? 403 : 401);
   }
+  return await listDocuments(c, appId, collection, viewer, shared ? owner : viewer?.id);
 });
 
 async function listDocuments(
@@ -307,142 +294,127 @@ async function listDocuments(
 
 /** Get a single document. Owner-only unless the collection is shared. */
 dbRoutes.get('/apps/:appId/db/:collection/:id', async (c) => {
-  try {
-    const { appId, collection, id } = c.req.param();
+  const { appId, collection, id } = c.req.param();
 
-    const colErr = validateCollection(collection);
-    if (colErr) return c.text(colErr, 400);
+  const colErr = validateCollection(collection);
+  if (colErr) return c.text(colErr, 400);
 
-    const { viewer, shared } = await readAccess(c, appId, collection);
+  const { viewer, shared } = await readAccess(c, appId, collection);
 
-    const row = await c.env.DB.prepare(
-      'SELECT id, data, owner_id, created_at, updated_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
-    )
-      .bind(appId, collection, id)
-      .first<{
-        id: string;
-        data: string;
-        owner_id: string;
-        created_at: number;
-        updated_at: number;
-      }>();
+  const row = await c.env.DB.prepare(
+    'SELECT id, data, owner_id, created_at, updated_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
+  )
+    .bind(appId, collection, id)
+    .first<{
+      id: string;
+      data: string;
+      owner_id: string;
+      created_at: number;
+      updated_at: number;
+    }>();
 
-    // Someone else's document in a private collection looks like a missing one.
-    if (!row || (!shared && row.owner_id !== viewer?.id)) return c.text('not found', 404);
+  // Someone else's document in a private collection looks like a missing one.
+  if (!row || (!shared && row.owner_id !== viewer?.id)) return c.text('not found', 404);
 
-    return c.json(
-      withDocumentMeta(
-        row.id,
-        JSON.parse(row.data) as Record<string, unknown>,
-        { ownerId: row.owner_id, createdAt: row.created_at, updatedAt: row.updated_at },
-        viewer?.id ?? null,
-      ),
-    );
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  return c.json(
+    withDocumentMeta(
+      row.id,
+      JSON.parse(row.data) as Record<string, unknown>,
+      { ownerId: row.owner_id, createdAt: row.created_at, updatedAt: row.updated_at },
+      viewer?.id ?? null,
+    ),
+  );
 });
 
 /** Update a document. Auth required, owner only. */
 dbRoutes.put('/apps/:appId/db/:collection/:id', async (c) => {
-  try {
-    const user = await requireAppUser(c, c.req.param('appId'));
-    const { appId, collection, id } = c.req.param();
+  const user = await requireAppUser(c, c.req.param('appId'));
+  const { appId, collection, id } = c.req.param();
 
-    const colErr = validateCollection(collection);
-    if (colErr) return c.text(colErr, 400);
+  const colErr = validateCollection(collection);
+  if (colErr) return c.text(colErr, 400);
 
-    const body = await c.req.text();
-    if (new TextEncoder().encode(body).length > MAX_DOC_BYTES) {
-      return c.text(`document exceeds ${MAX_DOC_BYTES} bytes`, 413);
-    }
-
-    let patch: Record<string, unknown>;
-    try {
-      patch = JSON.parse(body) as Record<string, unknown>;
-    } catch {
-      return c.text('invalid JSON', 400);
-    }
-    if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
-      return c.text('patch must be a JSON object', 400);
-    }
-
-    // Read-merge-write as compare-and-set (#277): the UPDATE only applies if
-    // the document is still what we merged into. If a concurrent PUT changed
-    // it first, re-read and merge again, so neither patch is lost.
-    let existing: { data: string; owner_id: string; created_at: number } | null = null;
-    let merged: Record<string, unknown> = {};
-    let now = 0;
-    for (let attempt = 0; ; attempt++) {
-      existing = await c.env.DB.prepare(
-        'SELECT data, owner_id, created_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
-      )
-        .bind(appId, collection, id)
-        .first<{ data: string; owner_id: string; created_at: number }>();
-
-      if (!existing) return c.text('not found', 404);
-      if (existing.owner_id !== user.id) return c.text('forbidden', 403);
-
-      const existingData = JSON.parse(existing.data) as Record<string, unknown>;
-      merged = { ...existingData, ...patch };
-      const mergedJson = JSON.stringify(merged);
-
-      if (new TextEncoder().encode(mergedJson).length > MAX_DOC_BYTES) {
-        return c.text(`merged document exceeds ${MAX_DOC_BYTES} bytes`, 413);
-      }
-
-      now = Date.now();
-      const write = await c.env.DB.prepare(
-        'UPDATE documents SET data = ?, updated_at = ? WHERE app_id = ? AND collection = ? AND id = ? AND data = ?',
-      )
-        .bind(mergedJson, now, appId, collection, id, existing.data)
-        .run();
-      if (write.meta.changes) break;
-      if (attempt === 4) return c.text('document is being updated concurrently; retry', 409);
-    }
-
-    return c.json(
-      withDocumentMeta(
-        id,
-        merged,
-        { ownerId: existing.owner_id, createdAt: existing.created_at, updatedAt: now },
-        user.id,
-      ),
-    );
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+  const body = await c.req.text();
+  if (new TextEncoder().encode(body).length > MAX_DOC_BYTES) {
+    return c.text(`document exceeds ${MAX_DOC_BYTES} bytes`, 413);
   }
-});
 
-/** Delete a document. Auth required, owner only. */
-dbRoutes.delete('/apps/:appId/db/:collection/:id', async (c) => {
+  let patch: Record<string, unknown>;
   try {
-    const user = await requireAppUser(c, c.req.param('appId'));
-    const { appId, collection, id } = c.req.param();
+    patch = JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return c.text('invalid JSON', 400);
+  }
+  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+    return c.text('patch must be a JSON object', 400);
+  }
 
-    const colErr = validateCollection(collection);
-    if (colErr) return c.text(colErr, 400);
-
-    const existing = await c.env.DB.prepare(
-      'SELECT owner_id FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
+  // Read-merge-write as compare-and-set (#277): the UPDATE only applies if
+  // the document is still what we merged into. If a concurrent PUT changed
+  // it first, re-read and merge again, so neither patch is lost.
+  let existing: { data: string; owner_id: string; created_at: number } | null = null;
+  let merged: Record<string, unknown> = {};
+  let now = 0;
+  for (let attempt = 0; ; attempt++) {
+    existing = await c.env.DB.prepare(
+      'SELECT data, owner_id, created_at FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
     )
       .bind(appId, collection, id)
-      .first<{ owner_id: string }>();
+      .first<{ data: string; owner_id: string; created_at: number }>();
 
     if (!existing) return c.text('not found', 404);
     if (existing.owner_id !== user.id) return c.text('forbidden', 403);
 
-    await c.env.DB.prepare('DELETE FROM documents WHERE app_id = ? AND collection = ? AND id = ?')
-      .bind(appId, collection, id)
-      .run();
+    const existingData = JSON.parse(existing.data) as Record<string, unknown>;
+    merged = { ...existingData, ...patch };
+    const mergedJson = JSON.stringify(merged);
 
-    return c.body(null, 204);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
+    if (new TextEncoder().encode(mergedJson).length > MAX_DOC_BYTES) {
+      return c.text(`merged document exceeds ${MAX_DOC_BYTES} bytes`, 413);
+    }
+
+    now = Date.now();
+    const write = await c.env.DB.prepare(
+      'UPDATE documents SET data = ?, updated_at = ? WHERE app_id = ? AND collection = ? AND id = ? AND data = ?',
+    )
+      .bind(mergedJson, now, appId, collection, id, existing.data)
+      .run();
+    if (write.meta.changes) break;
+    if (attempt === 4) return c.text('document is being updated concurrently; retry', 409);
   }
+
+  return c.json(
+    withDocumentMeta(
+      id,
+      merged,
+      { ownerId: existing.owner_id, createdAt: existing.created_at, updatedAt: now },
+      user.id,
+    ),
+  );
+});
+
+/** Delete a document. Auth required, owner only. */
+dbRoutes.delete('/apps/:appId/db/:collection/:id', async (c) => {
+  const user = await requireAppUser(c, c.req.param('appId'));
+  const { appId, collection, id } = c.req.param();
+
+  const colErr = validateCollection(collection);
+  if (colErr) return c.text(colErr, 400);
+
+  const existing = await c.env.DB.prepare(
+    'SELECT owner_id FROM documents WHERE app_id = ? AND collection = ? AND id = ?',
+  )
+    .bind(appId, collection, id)
+    .first<{ owner_id: string }>();
+
+  if (!existing) return c.text('not found', 404);
+  if (existing.owner_id !== user.id) return c.text('forbidden', 403);
+
+  await c.env.DB.prepare('DELETE FROM documents WHERE app_id = ? AND collection = ? AND id = ?')
+    .bind(appId, collection, id)
+    .run();
+
+  return c.body(null, 204);
 });
 
 // -----------------------------------------------------------------------------
@@ -451,58 +423,48 @@ dbRoutes.delete('/apps/:appId/db/:collection/:id', async (c) => {
 
 /** Collections of this app that other users may read. */
 dbRoutes.get('/apps/:appId/collections', async (c) => {
-  try {
-    const appId = c.req.param('appId');
-    await requireConsoleAppOwner(c, appId);
-    const { results } = await c.env.DB.prepare(
-      'SELECT collection, updated_at FROM collection_settings WHERE app_id = ? AND shared = 1 ORDER BY collection',
-    )
-      .bind(appId)
-      .all<{ collection: string; updated_at: number }>();
-    return c.json({
-      shared: results.map((r) => ({ collection: r.collection, updatedAt: r.updated_at })),
-    });
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const appId = c.req.param('appId');
+  await requireConsoleAppOwner(c, appId);
+  const { results } = await c.env.DB.prepare(
+    'SELECT collection, updated_at FROM collection_settings WHERE app_id = ? AND shared = 1 ORDER BY collection',
+  )
+    .bind(appId)
+    .all<{ collection: string; updated_at: number }>();
+  return c.json({
+    shared: results.map((r) => ({ collection: r.collection, updatedAt: r.updated_at })),
+  });
 });
 
 /** Mark a collection shared (`{ shared: true }`) or private again (`{ shared: false }`). */
 dbRoutes.put('/apps/:appId/collections/:collection', async (c) => {
-  try {
-    const { appId, collection } = c.req.param();
-    await requireConsoleAppOwner(c, appId);
+  const { appId, collection } = c.req.param();
+  await requireConsoleAppOwner(c, appId);
 
-    const colErr = validateCollection(collection);
-    if (colErr) return c.text(colErr, 400);
+  const colErr = validateCollection(collection);
+  if (colErr) return c.text(colErr, 400);
 
-    const body = await c.req.json<{ shared?: unknown }>().catch(() => ({}) as { shared?: unknown });
-    if (typeof body.shared !== 'boolean') return c.text('shared must be true or false', 400);
+  const body = await c.req.json<{ shared?: unknown }>().catch(() => ({}) as { shared?: unknown });
+  if (typeof body.shared !== 'boolean') return c.text('shared must be true or false', 400);
 
-    if (!body.shared) {
-      await c.env.DB.prepare('DELETE FROM collection_settings WHERE app_id = ? AND collection = ?')
-        .bind(appId, collection)
-        .run();
-      return c.body(null, 204);
-    }
-
-    // Cap the rows an app can take, counting only new collections.
-    const write = await c.env.DB.prepare(
-      `INSERT INTO collection_settings (app_id, collection, shared, updated_at)
-       SELECT ?1, ?2, 1, ?3
-       WHERE EXISTS (SELECT 1 FROM collection_settings WHERE app_id = ?1 AND collection = ?2)
-          OR (SELECT COUNT(*) FROM collection_settings WHERE app_id = ?1) < ?4
-       ON CONFLICT(app_id, collection) DO UPDATE SET shared = 1, updated_at = excluded.updated_at`,
-    )
-      .bind(appId, collection, Date.now(), MAX_SHARED_COLLECTIONS_PER_APP)
+  if (!body.shared) {
+    await c.env.DB.prepare('DELETE FROM collection_settings WHERE app_id = ? AND collection = ?')
+      .bind(appId, collection)
       .run();
-    if (!write.meta.changes) {
-      return c.text(`max ${MAX_SHARED_COLLECTIONS_PER_APP} shared collections per app`, 409);
-    }
     return c.body(null, 204);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
   }
+
+  // Cap the rows an app can take, counting only new collections.
+  const write = await c.env.DB.prepare(
+    `INSERT INTO collection_settings (app_id, collection, shared, updated_at)
+     SELECT ?1, ?2, 1, ?3
+     WHERE EXISTS (SELECT 1 FROM collection_settings WHERE app_id = ?1 AND collection = ?2)
+        OR (SELECT COUNT(*) FROM collection_settings WHERE app_id = ?1) < ?4
+     ON CONFLICT(app_id, collection) DO UPDATE SET shared = 1, updated_at = excluded.updated_at`,
+  )
+    .bind(appId, collection, Date.now(), MAX_SHARED_COLLECTIONS_PER_APP)
+    .run();
+  if (!write.meta.changes) {
+    return c.text(`max ${MAX_SHARED_COLLECTIONS_PER_APP} shared collections per app`, 409);
+  }
+  return c.body(null, 204);
 });

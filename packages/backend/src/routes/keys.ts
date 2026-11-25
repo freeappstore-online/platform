@@ -665,26 +665,7 @@ export async function resolveUserKey(
 // ── Key management page (server-rendered HTML) ────────────────────────
 
 keysRoutes.get('/keys', async (c) => {
-  const accept = c.req.header('accept') ?? '';
-  if (accept.includes('application/json')) {
-    // API mode: return JSON status
-    const user = await requireUser(c);
-    const rows = await c.env.DB.prepare(
-      'SELECT provider, label, created_at, last_used_at FROM user_api_keys WHERE user_id = ?',
-    )
-      .bind(user.id)
-      .all<{
-        provider: string;
-        label: string | null;
-        created_at: number;
-        last_used_at: number | null;
-      }>();
-    if (isAppAudience(user.aud))
-      return c.json({ keys: rows.results.map((r) => ({ provider: r.provider })) });
-    return c.json({ keys: rows.results });
-  }
-
-  // HTML mode: render the key management page.
+  // The key management page.
   // The back link is attacker-supplied. It is shown only when it is a place
   // this app could have signed in at (the same rule as sign-in `return_to`),
   // so the API origin cannot be used to hand out an arbitrary link (#519).

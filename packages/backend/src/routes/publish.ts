@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { pickAppIcon } from '../lib/app-icon.js';
 import { APP_ID_RE, isReservedAppId, VALID_CATEGORIES } from '../lib/apps.js';
-import { HttpError, isAdmin, isAppOwner, requireConsoleUser } from '../lib/auth.js';
+import { isAdmin, isAppOwner, requireConsoleUser } from '../lib/auth.js';
 import { timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -51,13 +51,7 @@ const STORE_DOMAIN = {
  * dev without binding). Production wrangler.toml has [[services]] block.
  */
 publishRoutes.post('/publish', async (c) => {
-  let user;
-  try {
-    user = await requireConsoleUser(c);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
 
   let body: PublishBody;
   try {
@@ -261,13 +255,7 @@ interface UnpublishBody {
  * D1 route, R2 objects and DNS (+ the repo when deleteRepo is set).
  */
 publishRoutes.post('/unpublish', async (c) => {
-  let user;
-  try {
-    user = await requireConsoleUser(c);
-  } catch (err) {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 401);
-    throw err;
-  }
+  const user = await requireConsoleUser(c);
 
   let body: UnpublishBody;
   try {
