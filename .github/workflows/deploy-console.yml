@@ -57,6 +57,11 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # The root vitest config only collects *.test.ts, so the console's
+      # *.test.tsx suites run here, gating the deploy (#680).
+      - name: Test
+        run: pnpm test
+
       - name: Build
         run: pnpm build
 
