@@ -3399,10 +3399,11 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-24T13:20:33.838Z",
       "creatorGithub": "Abrarcancode67",
-      "permissions": []
+      "permissions": [],
+      "discoveryDeliveryPending": "9739ded2-b463-4226-8dae-4b5b18eb2cfe"
     }
   ]
 }
