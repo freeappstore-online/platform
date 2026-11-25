@@ -34,7 +34,7 @@ jobs:
           # Exclude internal spec docs from the public site
           rm -f zensical-src/APP-SECRET-PROXY.md zensical-src/FREE-API-STRATEGY.md
           rm -f zensical-src/FRIENDS-SPEC.md zensical-src/INTEGRATIONS-STRATEGY.md
-          rm -f zensical-src/VCQA-INTEGRATION-SPEC.md zensical-src/LIMITS.md
+          rm -f zensical-src/VCQA-INTEGRATION-SPEC.md
           rm -rf zensical-src/app-research
           cp sites/storefront/favicon.svg zensical-src/assets/logo.svg
           cp zensical-src/assets/logo.svg zensical-src/assets/favicon.svg

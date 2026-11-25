@@ -23,6 +23,7 @@ Server-enforced quotas for the free tier. These are deliberately conservative --
 |-------|-------|
 | Counters per app | 1,000 |
 | Increment range | -1,000 to +1,000 per call |
+| Counter key | 128 characters (`400`) |
 
 ## Collections (`fas.collections`)
 
@@ -32,6 +33,7 @@ Server-enforced quotas for the free tier. These are deliberately conservative --
 | Documents per user per collection | 5,000 (`413`) |
 | Distinct collections per app | 200 (`413` when a first document would create one more) |
 | Document size | 64KB |
+| Shared collections per app (`fas db share`) | 50 (`409`) |
 
 ## Realtime rooms (`fas.rooms`)
 
@@ -54,6 +56,7 @@ Rooms are ephemeral. Messages are not persisted.
 | Secrets per app | 5 | `409` |
 | Allowlist rules per app | 5 | `409` |
 | Proxy requests per day | 10,000 | `429` |
+| Proxy requests per user per day (across all apps) | 5,000 | `429` |
 | Request body | 100KB | `413` |
 | Response body | 100KB | `502` |
 
@@ -75,6 +78,7 @@ AI provider hosts are blocked from app secrets -- use the user key vault.
 | Sessions per user | 200 | `429` for a new session |
 | Stored message data per user | 100 MB (bytes, not characters) | `413` |
 | Body of one session write | 2 MB (bytes) | `413` |
+| Messages kept per session | last 300 | Older messages trimmed |
 
 ## Data rooms
 
@@ -83,6 +87,32 @@ AI provider hosts are blocked from app secrets -- use the user key vault.
 | Rooms owned per user per app | 100 |
 | Distinct collections per room | 50 |
 | Documents per collection | 10,000 |
+
+## Roles (`fas.roles`)
+
+| Limit | Value | On breach |
+|-------|-------|-----------|
+| Role assignments per app | 5,000 | `429` |
+
+## Friends (`fas.friends`)
+
+| Limit | Value | On breach |
+|-------|-------|-----------|
+| Friends per user | 200 | `409` |
+| Pending outgoing requests | 50 | `409` |
+| Pending request lifetime | 30 days | Request lapses |
+| Friend requests | 1 per 3 s per user; 1 min before re-requesting a user who declined | `429` |
+| Accept / decline / block / remove | 1 per second per user | `429` |
+| Search | 1 per 2 s per user | `429` |
+
+## Logs (`fas.log`)
+
+| Limit | Value | On breach |
+|-------|-------|-----------|
+| Entries per batch | 100 | Extra entries dropped |
+| Entry message / data | 4 KB each | Truncated |
+| Rows per user per day (across all apps) | 5,000 | `429` |
+| Retention | 7 days | Pruned daily |
 
 ## Shared infrastructure
 
@@ -94,6 +124,7 @@ KV and document data share the platform D1 database. Its capacity is not a dedic
 |-------|-------|
 | Emails per app per day | 100 |
 | Emails per sending user per day | 50 |
+| Emails across the whole platform per day | 2,000 |
 | Subject | 200 characters |
 | HTML or text body | 50,000 characters each |
 
@@ -154,10 +185,18 @@ Implementation and configuration define the limits:
 - `packages/backend/src/routes/counters.ts`: counters
 - `packages/backend/src/routes/email.ts`: email
 - `packages/backend/src/routes/webhooks.ts`: supported events and webhook cap
-- `packages/backend/src/routes/secrets.ts`: app-secret proxy
+- `packages/backend/src/routes/secrets.ts`: app-secret and user-key proxy
+- `packages/backend/src/routes/keys.ts`: key vault
+- `packages/backend/src/routes/roles.ts`: roles
+- `packages/backend/src/routes/friends.ts`: friends
+- `packages/backend/src/routes/logs.ts` and the daily prune in `index.ts`: logs
+- `packages/backend/src/routes/data-rooms.ts`: data rooms
+- `packages/backend/src/routes/agent-sessions.ts`: VibeCode sessions
 - `packages/backend/src/lib/session.ts`: session lifetime
 - `packages/backend/src/do/room.ts` and `routes/rooms.ts`: realtime limits
 - `packages/compliance/src/lib/bundle-limits.ts`: initial JS and lazy-asset caps
+
+When you change a limit, update the implementation, this page and the relevant public capability pages together, and check whether the change also needs an SDK release.
 
 Browser APIs are a separate concern: see [Browser Capabilities](capabilities.md). A documented API can still require configured platform credentials, user sign-in, browser support, and permission.
 
