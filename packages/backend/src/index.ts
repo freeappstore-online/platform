@@ -167,29 +167,31 @@ export default {
     } else if (event.cron === '0 4 * * *') {
       await runDailyBackup(env);
     } else if (event.cron === '0 3 * * *') {
-      // Abandoned and superseded keyless-deploy releases (#460).
-      await pruneDeploys(env, undefined, 25).catch((e) => console.error('pruneDeploys:', e));
-      // Daily log cleanup — prune entries older than 7 days.
-      const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const result = await env.DB.prepare('DELETE FROM app_logs WHERE ingested_at < ?')
-        .bind(cutoff)
-        .run();
-      console.log(
-        `log-prune: deleted=${result.meta?.changes ?? 0} (cutoff=${new Date(cutoff).toISOString()})`,
-      );
-      await pruneUsage(env.DB, Date.now()).catch((e) => console.error('pruneUsage:', e));
-      // Prune expired magic-link tokens (replay prevention table).
-      const nowEpoch = Math.floor(Date.now() / 1000);
-      await env.DB.prepare('DELETE FROM consumed_tokens WHERE expires_at < ?')
-        .bind(nowEpoch)
-        .run()
-        .catch(() => {});
-      // Prune expired one-time auth codes. Redemption deletes them, so these
-      // are the abandoned flows — rows here still hold a live session token.
-      await env.DB.prepare('DELETE FROM auth_codes WHERE expires_at < ?')
-        .bind(nowEpoch)
-        .run()
-        .catch(() => {});
+      // Independent prunes: one failing must not skip the others, notably the
+      // auth_codes prune, whose rows still hold live session material (#677).
+      const now = Date.now();
+      const nowEpoch = Math.floor(now / 1000);
+      const cutoff = now - 7 * 24 * 60 * 60 * 1000;
+      const jobs = await Promise.allSettled([
+        // Abandoned and superseded keyless-deploy releases (#460).
+        pruneDeploys(env, undefined, 25),
+        // Daily log cleanup — prune entries older than 7 days.
+        env.DB.prepare('DELETE FROM app_logs WHERE ingested_at < ?')
+          .bind(cutoff)
+          .run()
+          .then((result) =>
+            console.log(
+              `log-prune: deleted=${result.meta?.changes ?? 0} (cutoff=${new Date(cutoff).toISOString()})`,
+            ),
+          ),
+        pruneUsage(env.DB, now),
+        // Expired magic-link tokens (replay prevention table).
+        env.DB.prepare('DELETE FROM consumed_tokens WHERE expires_at < ?').bind(nowEpoch).run(),
+        // Expired one-time auth codes. Redemption deletes them, so these are
+        // the abandoned flows — rows here still hold a live session token.
+        env.DB.prepare('DELETE FROM auth_codes WHERE expires_at < ?').bind(nowEpoch).run(),
+      ]);
+      for (const job of jobs) if (job.status === 'rejected') console.error('cron 0 3:', job.reason);
     } else if (event.cron === '0 6 * * SUN') {
       // Weekly compliance audit — Sunday 06:00 UTC. Logs the totals
       // so a missed audit is obvious in `wrangler tail`.

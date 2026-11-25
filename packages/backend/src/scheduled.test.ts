@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from './index.js';
 import type { Env } from './types.js';
 
+vi.mock('./lib/audit.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/audit.js')>()),
+  runAudit: vi.fn(async () => ({ scanned: 3, failed: 1 })),
+}));
+
 interface DBCall {
   sql: string;
   binds: unknown[][];
@@ -161,6 +166,40 @@ describe('scheduled() — 0 4 cron (daily backup)', () => {
 
     expect(puts).toHaveLength(1);
     expect(puts[0]!.key).toMatch(/^db-backups\/\d{4}-\d{2}-\d{2}\/fas\.json$/);
+  });
+});
+
+describe('scheduled() — 0 3 cron (daily prunes)', () => {
+  it('a failing log prune does not skip the token and auth-code prunes (#677)', async () => {
+    const calls: DBCall[] = [];
+    const env = baseEnv(
+      fakeDB({
+        onPrepare: (c) => {
+          calls.push(c);
+          if (c.sql.startsWith('DELETE FROM app_logs')) throw new Error('D1 down');
+        },
+      }),
+    );
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(
+      worker.scheduled({ cron: '0 3 * * *' } as ScheduledEvent, env, fakeCtx),
+    ).resolves.toBeUndefined();
+
+    const ran = calls.map((c) => c.sql);
+    expect(ran).toContain('DELETE FROM consumed_tokens WHERE expires_at < ?');
+    expect(ran).toContain('DELETE FROM auth_codes WHERE expires_at < ?');
+    expect(error.mock.calls.some(([, reason]) => String(reason).includes('D1 down'))).toBe(true);
+    error.mockRestore();
+  });
+});
+
+describe('scheduled() — 0 6 * * SUN cron (weekly audit)', () => {
+  it('runs the compliance audit and logs its totals', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await worker.scheduled({ cron: '0 6 * * SUN' } as ScheduledEvent, baseEnv(fakeDB()), fakeCtx);
+    expect(log).toHaveBeenCalledWith('audit: scanned=3 failures=1');
+    log.mockRestore();
   });
 });
 
