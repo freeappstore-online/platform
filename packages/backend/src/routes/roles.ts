@@ -44,6 +44,19 @@ rolesRoutes.get('/apps/:appId/roles', async (c) => {
     grantedBy: r.granted_by,
     grantedAt: r.granted_at,
   }));
+  // 'owner' isn't stored in app_roles — it is apps.owner_id (#672).
+  const owner = await c.env.DB.prepare(
+    `SELECT owner_id, created_at FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`,
+  )
+    .bind(appId)
+    .first<{ owner_id: string | null; created_at: number }>();
+  if (owner?.owner_id)
+    roles.unshift({
+      userId: owner.owner_id,
+      roleName: 'owner',
+      grantedBy: null,
+      grantedAt: owner.created_at,
+    });
 
   return c.json({ roles });
 });
@@ -65,8 +78,14 @@ rolesRoutes.get('/apps/:appId/roles/:userId', async (c) => {
   )
     .bind(appId, targetUserId)
     .all<{ role_name: string; granted_by: string | null; granted_at: number }>();
+  const roles = (results ?? []).map((r) => r.role_name);
+  // 'owner' isn't stored in app_roles — it is apps.owner_id (#672).
+  const app = await c.env.DB.prepare(`SELECT owner_id FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
+    .bind(appId)
+    .first<{ owner_id: string | null }>();
+  if (app && isAppOwner({ id: targetUserId }, app.owner_id)) roles.push('owner');
 
-  return c.json({ roles: (results ?? []).map((r) => r.role_name) });
+  return c.json({ roles });
 });
 
 /** Assign a role to a user. Caller must be app owner or admin. */

@@ -69,6 +69,17 @@ describe.skipIf(!hasSqlite)('ownership by immutable id against real SQLite', () 
     expect((await get('/v1/apps/timer/roles', 'gh:1')).status).toBe(200);
   });
 
+  it("the owner's role lists include 'owner', which lives in apps.owner_id (#672)", async () => {
+    const { get } = setup();
+    expect(await (await get('/v1/apps/timer/roles/me', 'gh:1')).json()).toEqual({
+      roles: ['owner'],
+    });
+    expect(await (await get('/v1/apps/timer/roles/me', 'gh:2')).json()).toEqual({ roles: [] });
+    expect(await (await get('/v1/apps/timer/roles', 'gh:1')).json()).toEqual({
+      roles: [{ userId: 'gh:1', roleName: 'owner', grantedBy: null, grantedAt: 0 }],
+    });
+  });
+
   it('computeRoles lists only the apps bound to the account id', async () => {
     const { d1 } = setup();
     const env = { DB: d1 } as never;

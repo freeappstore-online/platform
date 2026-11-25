@@ -71,9 +71,10 @@ describe('roles routes', () => {
     );
     expect(res.status).toBe(200);
     const data = (await res.json()) as { roles: Record<string, unknown>[] };
-    expect(data.roles).toHaveLength(1);
+    expect(data.roles).toHaveLength(2);
+    expect(data.roles[0]).toMatchObject({ userId: 'u1', roleName: 'owner' });
     // Must be camelCase — the SDK's RoleAssignment / Roles.list() depend on it.
-    expect(data.roles[0]).toEqual({
+    expect(data.roles[1]).toEqual({
       userId: 'u2',
       roleName: 'editor',
       grantedBy: 'u1',
