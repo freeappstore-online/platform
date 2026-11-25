@@ -35,14 +35,14 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 
 ## Available Tools
 
-### Build — write code yourself (auth required)
+### Build — write code yourself (your account)
 
 | Tool | Description |
 |------|-------------|
 | `create_app` | Provision repo + hosting + listing, scaffold template, deploy live at `<id>.freeappstore.online` |
 | `update_files` | Write/overwrite files in an app you own; auto-redeploys in ~30-60s |
 
-### Build — let the VibeCode agent write code (auth + usable AI provider connection)
+### Build — let the VibeCode agent write code (your account + usable AI provider connection)
 
 | Tool | Description |
 |------|-------------|
@@ -50,7 +50,7 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 | `agent_status` | Poll an agent_build session for progress and live URL |
 | `agent_activity` | Read your conversation with the build agent for a session you own: prompts, replies, tool actions |
 
-### Read (no auth required)
+### Read (any connected account)
 
 | Tool | Description |
 |------|-------------|
@@ -59,15 +59,17 @@ Settings > MCP > Add Server: `npx mcp-remote https://mcp.freeappstore.online/mcp
 
 ### Inspect
 
-| Tool | Auth | Description |
+Every tool runs over the OAuth connection (see [Authentication](#authentication)). In the **Access** column, *Any* means the tool does not use your FAS session or account, *Your account* means it acts as you, and *Owner* means it also checks you own the app.
+
+| Tool | Access | Description |
 |------|------|-------------|
-| `list_apps` | FAS token | List your published apps |
-| `app_info` | None | Live URL, repo, store listing, up/down status |
-| `deploy_status` | None | Check last 5 GitHub Actions runs |
+| `list_apps` | Your account | List your published apps |
+| `app_info` | Any | Live URL, repo, store listing, up/down status |
+| `deploy_status` | Any | Check last 5 GitHub Actions runs |
 | `app_logs` | Owner | Recent errors, warnings, SDK calls, build info |
-| `platform_guide` | None | Fetch full SKILLS.md platform guide, followed by the current app-building rules |
-| `sdk_reference` | None | SDK reference. Start with `shell` (the standard app frame), then `components`; also auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui |
-| `mcp_audit_log` | FAS token | Your recent MCP audit events (writes, dry-runs, denials), newest first |
+| `platform_guide` | Any | Fetch full SKILLS.md platform guide, followed by the current app-building rules |
+| `sdk_reference` | Any | SDK reference. Start with `shell` (the standard app frame), then `components`; also auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui |
+| `mcp_audit_log` | Your account | Your recent MCP audit events (writes, dry-runs, denials), newest first |
 
 ## Workflow Recipes
 
@@ -123,22 +125,22 @@ Expected tool flow:
 
 ## Capabilities
 
-**Read** (no auth):
+**Read** (any connected account):
 - App metadata (info, listing, status)
 - Deploy history (GitHub Actions runs)
 - File tree and file contents (public repos)
 - Platform guide (SKILLS.md)
 - SDK reference docs
 
-**Read** (auth required):
+**Read** (your account):
 - Your published app list
 - App logs (errors, warnings, SDK calls)
 
-**Write** (auth + app ownership):
+**Write** (your account + app ownership):
 - Create new apps (provision + scaffold + deploy)
 - Update files in apps you own (auto-redeploys)
 
-**Agent** (auth + usable AI provider connection):
+**Agent** (your account + usable AI provider connection):
 - Trigger VibeCode agent builds
 - Poll agent build status
 - Read your agent build conversation
