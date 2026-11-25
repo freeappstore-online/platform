@@ -1,5 +1,6 @@
 import type { Context } from 'hono';
 import type { Env } from '../types.js';
+import { FAS_APP_ROWS } from './apps.js';
 import {
   CONSOLE_AUD,
   CROSS_STORE_AUD,
@@ -165,12 +166,8 @@ export function isAdmin(user: Pick<CurrentUser, 'id' | 'githubLogin'>, env: Env)
   return isAdminLogin(user.githubLogin, env) || isAdminUserId(user.id, env);
 }
 
-/**
- * SQL predicate for the FreeAppStore's own rows in the shared `apps` table.
- * PAS registers `store = 'apps_pro'` rows there too, whose ids can collide with
- * FAS ids (#571), so every FAS ownership read filters on it.
- */
-export const FAS_APP_ROWS = "(store IS NULL OR store = 'apps')";
+// Re-exported for the routes that already import it from here.
+export { FAS_APP_ROWS };
 
 /**
  * Whether `user` owns an app whose immutable `apps.owner_id` is `ownerId`

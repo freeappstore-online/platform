@@ -6,7 +6,6 @@
  * the shape AND that the app is a real, published row before any write.
  */
 import type { Env } from '../types.js';
-import { FAS_APP_ROWS } from './auth.js';
 
 /**
  * App ids: 2-31 chars, a lowercase letter first, a letter or digit last,
@@ -17,6 +16,15 @@ import { FAS_APP_ROWS } from './auth.js';
 export const APP_ID_RE = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/;
 
 export { isReservedAppId, RESERVED_APP_IDS } from './reserved-app-ids.js';
+
+/**
+ * SQL predicate for the FreeAppStore's own rows in the shared `apps` table.
+ * PAS registers `store = 'apps_pro'` rows there too, whose ids can collide with
+ * FAS ids (#571), so every FAS ownership read filters on it. Defined here, not
+ * in auth.ts: the admin, agent and mcp workers import this module, and they
+ * don't install hono (auth.ts imports it).
+ */
+export const FAS_APP_ROWS = "(store IS NULL OR store = 'apps')";
 
 /**
  * Store categories /v1/publish accepts (case-insensitive). The MCP worker
