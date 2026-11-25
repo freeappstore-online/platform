@@ -1,3 +1,5 @@
+> Historical strategy document. It is kept for context and is not maintained; for current behavior and quotas use the [platform docs](../index.md) and [Platform Limits](../platform-limits.md).
+
 # FAS Integrations Strategy
 
 How FreeAppStore approaches third-party API integrations. Three tiers, one principle: app code never touches a secret.
@@ -19,7 +21,7 @@ Platform owns the credentials. One account serves all apps. Devs call an SDK met
 | Auth (GitHub OAuth) | **Live** | `fas.auth.signIn()` | GitHub OAuth | Platform-managed OAuth app |
 | Transactional email | **Live** | `fas.email.send()` | Cloudflare Email Service | 100/day per app, magic link auth + app-triggered |
 
-FAS is free-tier. Heavy platform-managed services (AI, maps, SMS, push) live on PAS only. FAS apps that need AI use Tier 2 (user's own key).
+FAS is free-tier. Heavy platform-managed services (AI, maps, SMS) live on PAS only; FAS has scheduled Web Push reminders (`fas.push`). FAS apps that need AI use Tier 2 (user's own key).
 
 ### Tier 2: Key vault + proxy
 
@@ -35,13 +37,13 @@ Dev or user brings their own API key. Platform stores it encrypted (AES-256-GCM 
 
 1. **App secrets** (developer-managed): Developer stores a key for their app. All users of the app share the same key. Capped at 5 secrets, 5 allowlist rules, 10k requests/day per app. AI provider hosts are blocked at this level (use user keys instead).
 
-2. **User keys** (user-managed): Each user stores their own key for a provider (e.g., OpenAI). The proxy falls back to user keys when no app-level allowlist matches. No daily cap on user-key proxied requests. Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs (Stripe was removed in #495: a secret key relayed by a browser app is unbounded).
+2. **User keys** (user-managed): Each user stores their own key for a provider (e.g., OpenAI). The proxy falls back to user keys when no app-level allowlist matches. Capped at 1,000 user-key proxied requests per user per day (see [Platform Limits](../platform-limits.md)). Supported providers: OpenAI, Anthropic, Google AI, OpenRouter, Replicate, Stability AI, ElevenLabs (Stripe was removed in #495: a secret key relayed by a browser app is unbounded).
 
 ### Tier 3: Webhooks (events out)
 
 Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier, Make, n8n, and any HTTP endpoint work natively.
 
-**Proposed FAS events:**
+**Events at the time of this proposal** (shipped; the live list of 12, including `friend.*`, is `SUPPORTED_EVENTS` in `packages/backend/src/routes/webhooks.ts`):
 
 | Event | Payload | Use case |
 |---|---|---|
@@ -54,7 +56,7 @@ Platform fires HTTP POST on events. Devs configure webhook URLs per app. Zapier,
 | `role.assigned` | `{ userId, appId, role }` | Permission sync |
 | `role.revoked` | `{ userId, appId, role }` | Permission sync |
 
-**Implementation plan (when prioritized):**
+**Implementation plan (shipped; kept for history):**
 - D1 table: `app_webhooks (app_id, event, url, secret, active, created_at)`
 - Backend: `/v1/apps/:appId/webhooks` CRUD endpoints
 - Dispatcher: fire-and-forget via `waitUntil()`, retry on 5xx (max 3), dead-letter log

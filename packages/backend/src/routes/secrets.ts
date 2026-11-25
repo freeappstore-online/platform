@@ -26,7 +26,7 @@ import { resolveUserKey } from './keys.js';
 export const secretsRoutes = new Hono<{ Bindings: Env }>();
 
 /**
- * Free-tier caps. The spec (docs/APP-SECRET-PROXY.md) lists Pro tiers too,
+ * Free-tier caps. The spec (docs/history/APP-SECRET-PROXY.md) lists Pro tiers too,
  * but for now every app is treated as free — Pro caps land later.
  */
 const MAX_SECRETS_PER_APP = 5;

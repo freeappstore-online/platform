@@ -1,3 +1,5 @@
+> Historical audit report (2026-10-22). It is kept for context and is not maintained; for current behavior and quotas use the [platform docs](../index.md) and [Platform Limits](../platform-limits.md).
+
 # Documentation consistency audit — 2026-10-22
 
 Tracking issue: [platform #294](https://github.com/freeappstore-online/platform/issues/294).
@@ -41,7 +43,7 @@ Sister-store links were reviewed as FreeAppStore navigation and comparisons. The
 - `packages/sdk/src/platform-docs.test.ts` checks documented SDK members, collection/room methods, accepted webhook examples, CLI publish flag tables, and links to files actually published by the docs workflow.
 - Existing SDK docs tests check Shell props, UI imports, navigation examples, relative links, and anchors.
 - Build the storefront and the exact docs publication workflow locally; inspect rendered pages and verify live surfaces after deployment.
-- Run root, console, storefront, and Worker checks under [CONTRIBUTING.md](../CONTRIBUTING.md).
+- Run root, console, storefront, and Worker checks under [CONTRIBUTING.md](../../CONTRIBUTING.md).
 - When changing behavior, update implementation, canonical reference, relevant website copy, MCP reference, and generated guides together. Do not revive duplicate manuals as independent authorities.
 
 This audit does not certify legal compliance, provider configuration, every app's data practices, or independent sister-store deployments. Privacy changes remove statements contradicted by implemented features; apps and provider integrations still need accurate individual disclosures.

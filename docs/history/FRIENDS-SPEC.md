@@ -1,3 +1,5 @@
+> Historical design specification (shipped). It is kept for context and is not maintained; for current behavior and quotas use the [platform docs](../index.md) and [Platform Limits](../platform-limits.md).
+
 # Platform Friends System
 
 ## Problem
@@ -252,7 +254,7 @@ The calendar event modal currently has a free-text username input for attendees.
 
 ## What About the ProfileMenu?
 
-`Shell` does not mount `ProfileMenu`. The avatar opens `ProfilePage` in both auth states (#337). Friends UI belongs on that page, or on an app-owned `profileHref`. See the [composable starter contract](composable-starter-contract.md). The dropdown sketch below is historical.
+`Shell` does not mount `ProfileMenu`. The avatar opens `ProfilePage` in both auth states (#337). Friends UI belongs on that page, or on an app-owned `profileHref`. See the [composable starter contract](../composable-starter-contract.md). The dropdown sketch below is historical.
 
 The old guidance said the SDK's `ProfileMenu` component (the avatar dropdown in the top bar) should get a "Friends" item that opens a friends management panel.
 
@@ -264,7 +266,7 @@ The old guidance said the SDK's `ProfileMenu` component (the avatar dropdown in 
   - Delete account
 ```
 
-## Migration Path
+## Migration Path (shipped)
 
 ### Phase 1: Backend + SDK (ship first)
 
@@ -298,4 +300,4 @@ The old guidance said the SDK's `ProfileMenu` component (the avatar dropdown in 
 - Max 200 friends per user
 - Max 50 pending outgoing requests
 - Max 10 search results per query
-- Rate limit: 20 friend operations per minute
+- Rate limits: see [Platform Limits](../platform-limits.md#friends-fasfriends) (per-operation throttles in `routes/friends.ts`)

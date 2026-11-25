@@ -1,3 +1,5 @@
+> Historical strategy document. It is kept for context and is not maintained; for current behavior and quotas use the [platform docs](../index.md) and [Platform Limits](../platform-limits.md).
+
 # Free API Integration Strategy
 
 How free apps on FreeAppStore integrate with third-party APIs without costing developers or users money, while keeping users in control of their own data and API keys.

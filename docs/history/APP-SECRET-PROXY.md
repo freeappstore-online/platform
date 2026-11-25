@@ -1,4 +1,4 @@
-> Historical design specification. For implemented behavior and current quotas, use [Proxy & Keys](proxy-and-keys.md) and [Platform Limits](platform-limits.md); proposals and comparison figures below are not the live service contract.
+> Historical design specification. For implemented behavior and current quotas, use [Proxy & Keys](../proxy-and-keys.md) and [Platform Limits](../platform-limits.md); proposals and comparison figures below are not the live service contract.
 
 # App Secret Proxy
 

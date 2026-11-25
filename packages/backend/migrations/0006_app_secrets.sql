@@ -5,7 +5,7 @@
 --   app_proxy_allowlist per-app allowed upstream URL patterns + injection rules
 --   app_proxy_usage     per-app daily request counter (probabilistic writes)
 --
--- See docs/APP-SECRET-PROXY.md for the full spec.
+-- See docs/history/APP-SECRET-PROXY.md for the full spec.
 
 -- Encrypted developer-supplied API keys.
 -- key_ciphertext is AES-256-GCM ciphertext of the raw API key.

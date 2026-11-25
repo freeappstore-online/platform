@@ -1,3 +1,5 @@
+> Historical request to the VibeCodeQA team (2026-05-23). It is kept for context and is not maintained; for current behavior and quotas use the [platform docs](../index.md) and [Platform Limits](../platform-limits.md).
+
 # VCQA Integration Spec for FreeAppStore
 
 Requirements for integrating vibecodeqa.online into the FreeAppStore platform (and any other platform that wants to embed code health scores).

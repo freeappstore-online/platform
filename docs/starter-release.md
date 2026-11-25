@@ -123,7 +123,7 @@ These generated guide changes advance persistence to `1.0.1` and backup to `1.0.
 Existing installs must preview `fas add backup --dry-run --update` before applying
 `fas add backup --update`; edited app-owned guides remain conflicts to review.
 This does not migrate stored data or change app schemas. See
-[the build experience review](build-experience-pitstop.md) and
+[the build experience review](https://github.com/freeappstore-online/platform/blob/main/docs/history/build-experience-pitstop.md) and
 [practical app verification](app-verification.md).
 
 ## Reproducible generated deployments (#403)

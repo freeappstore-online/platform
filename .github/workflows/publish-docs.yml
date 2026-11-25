@@ -31,11 +31,9 @@ jobs:
           rm -rf zensical-src site public
           mkdir -p zensical-src/assets zensical-src/stylesheets
           cp -r docs/. zensical-src/
-          # Exclude internal spec docs from the public site
-          rm -f zensical-src/APP-SECRET-PROXY.md zensical-src/FREE-API-STRATEGY.md
-          rm -f zensical-src/FRIENDS-SPEC.md zensical-src/INTEGRATIONS-STRATEGY.md
-          rm -f zensical-src/VCQA-INTEGRATION-SPEC.md
-          rm -rf zensical-src/app-research
+          # Exclude internal docs from the public site: historical specs, reviews
+          # and audits (docs/history/), ADRs (linked on GitHub) and app research.
+          rm -rf zensical-src/history zensical-src/adr zensical-src/app-research
           cp sites/storefront/favicon.svg zensical-src/assets/logo.svg
           cp zensical-src/assets/logo.svg zensical-src/assets/favicon.svg
           cat > zensical-src/stylesheets/extra.css <<'CSS'
@@ -88,7 +86,6 @@ jobs:
             - Composable starter: composable-starter-contract.md
             - Starter release: starter-release.md
             - App verification: app-verification.md
-            - Pitstop build review: build-experience-pitstop.md
             - PWA lifecycle: pwa-lifecycle.md
             - CLI: cli.md
             - Publishing: publishing.md

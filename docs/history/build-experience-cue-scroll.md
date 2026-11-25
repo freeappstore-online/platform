@@ -1,3 +1,5 @@
+> Historical build review (2026-11-05). It is kept for context and is not maintained; for current behavior and quotas use the [platform docs](../index.md) and [Platform Limits](../platform-limits.md).
+
 # Cue Scroll: qualitative creation review
 
 2026-11-05. Follow-up to [#401](https://github.com/freeappstore-online/platform/issues/401)

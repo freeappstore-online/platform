@@ -1,3 +1,5 @@
+> Historical build review (2026-11-04). It is kept for context and is not maintained; for current behavior and quotas use the [platform docs](../index.md) and [Platform Limits](../platform-limits.md).
+
 # Pitstop Log: first-build experience review
 
 This review covers the real Car fuel & expense log build chosen from the storefront
