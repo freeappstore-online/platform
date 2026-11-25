@@ -4,8 +4,8 @@ name: Prod platform e2e
 # FGS's prod-create-canary. Exercises the path a creator actually uses:
 #
 #   exchange GitHub token -> fas session
-#   POST api/v1/publish   -> admin provisions repo (template-standalone) + CF
-#                            Pages + DNS + D1 route + storefront registry
+#   POST api/v1/publish   -> admin provisions repo (template-standalone) + D1
+#                            route + storefront registry
 #   verify                -> GitHub repo, host route answers, ownership row
 #   POST api/v1/unpublish  -> admin deprovisions everything (owner path)
 #   verify                -> host gone, ownership gone, repo gone
@@ -37,8 +37,8 @@ on:
       - 'scripts/prod-platform-e2e.mjs'
       - '.github/workflows/prod-platform-e2e.yml'
 
-# This workflow MUTATES production — it provisions a real repo, CF Pages
-# project, DNS record and registry row, then removes them. Two overlapping runs
+# This workflow MUTATES production — it provisions a real repo, D1 hosting
+# route and registry row, then removes them. Two overlapping runs
 # (schedule + push + dispatch all fire it) would each publish a canary and could
 # race each other's cleanup, which is how an app leaks. Serialise, and never
 # cancel a run mid-flight: a cancelled run is the one most likely to leave an

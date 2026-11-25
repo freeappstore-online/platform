@@ -64,7 +64,7 @@ platform/
 ├── workers/        # admin, agent, host, mcp (independent projects)
 ├── sites/          # storefront and creator console
 ├── brand/          # brand guide (BRAND.md) and the vendored kit (assets/)
-├── ops/            # operational docs and scripts
+├── ops/            # operational docs
 ├── examples/
 │   └── rooms-demo/  # minimal SDK consumer
 └── scripts/

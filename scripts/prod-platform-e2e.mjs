@@ -4,7 +4,7 @@
 //
 //   exchange GitHub token -> fas session
 //   POST api/v1/publish   -> admin provisions a repo from template-standalone,
-//                            CF Pages + DNS + D1 route + storefront registry
+//                            D1 route + storefront registry
 //   verify                -> GitHub repo exists, host route answers, ownership row
 //   POST api/v1/unpublish  -> admin deprovisions (registry + route + R2 + DNS +
 //                            repo), the same owner path a creator would use
