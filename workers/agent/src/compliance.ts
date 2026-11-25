@@ -58,7 +58,7 @@ export async function runComplianceCheck(files: Map<string, string>, config: Sto
   checkPwaManifest(files, pass, fail);
   checkPwaMeta(files, pass, fail);
   checkStoreLink(files, config, pass, fail);
-  checkStoreSpecific(files, config, pass, fail);
+  checkStoreSpecific(files, pass, fail);
   checkPnpmWorkspace(files, pass, fail);
   checkPlaceholders(files, pass, fail);
 
@@ -103,8 +103,7 @@ function checkBrandFonts(files: Map<string, string>, pass: Pass, fail: Fail) {
   else fail("Brand fonts", `Missing: ${!hasManrope ? "Manrope" : ""} ${!hasFraunces ? "Fraunces" : ""}`.trim());
 }
 
-// Apps and games share the canonical token names (DESIGN-SYSTEM.md bans the
-// old --bg alias in every store), so there is one rule for both (#64).
+// The canonical token names (DESIGN-SYSTEM.md bans the old --bg alias, #64).
 function checkCssVars(files: Map<string, string>, pass: Pass, fail: Fail) {
   const css = files.get("web/src/index.css") || "";
   if (/--paper/.test(css) && /--ink/.test(css) && /--accent/.test(css)) pass("CSS variables (--paper, --ink, --accent)");
@@ -142,7 +141,7 @@ function checkStoreLink(files: Map<string, string>, config: StoreConfig, pass: P
       pass(`${config.storeName} link in source`);
       return;
     }
-    if (config.store === "apps" && SDK_SHELL_RE.test(content)) {
+    if (SDK_SHELL_RE.test(content)) {
       pass(`${config.storeName} link (SDK Shell topbar)`);
       return;
     }
@@ -150,20 +149,14 @@ function checkStoreLink(files: Map<string, string>, config: StoreConfig, pass: P
   fail(`${config.storeName} link`, `No reference to ${config.domain} in web/src/`);
 }
 
-function checkStoreSpecific(files: Map<string, string>, config: StoreConfig, pass: Pass, fail: Fail) {
-  const css = files.get("web/src/index.css") || "";
-  if (config.store === "games") {
-    if (/overflow:\s*hidden/i.test(css) || /overflow-hidden/.test(css)) pass("Overflow hidden");
-    else fail("Overflow hidden", "Body or #root must have overflow: hidden for games");
-  } else {
-    for (const [path, content] of files) {
-      if (path.startsWith("web/src/") && /prefers-color-scheme|data-theme|color-scheme/.test(content)) {
-        pass("Dark mode support");
-        return;
-      }
+function checkStoreSpecific(files: Map<string, string>, pass: Pass, fail: Fail) {
+  for (const [path, content] of files) {
+    if (path.startsWith("web/src/") && /prefers-color-scheme|data-theme|color-scheme/.test(content)) {
+      pass("Dark mode support");
+      return;
     }
-    fail("Dark mode", "No prefers-color-scheme, data-theme, or color-scheme in web/src/");
   }
+  fail("Dark mode", "No prefers-color-scheme, data-theme, or color-scheme in web/src/");
 }
 
 function checkPnpmWorkspace(files: Map<string, string>, pass: Pass, fail: Fail) {

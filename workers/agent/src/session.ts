@@ -294,7 +294,7 @@ export class AgentSession implements DurableObject {
   }
 
   private applyArchetypeToEmptySession(session: SessionState, archetype: AppArchetype | undefined, preset?: AppPreset): boolean {
-    if ((!archetype && !preset) || this.config.store === "games") return false;
+    if (!archetype && !preset) return false;
     if (session.messages.length > 0 || session.appId) return false;
     const selectedPreset = preset ?? session.preset ?? "standalone";
     const selectedArchetype = archetype ?? session.archetype;

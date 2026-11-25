@@ -13,7 +13,7 @@ import {
 import { resolveStarterPreset } from './starter-presets.js';
 
 export interface StoreConfig {
-  store: 'apps' | 'games';
+  store: 'apps';
   r2Bucket: string;
   nounPlural: string;
 }
@@ -34,7 +34,7 @@ export const APP_ARCHETYPES: readonly AppArchetype[] = [
   'generic',
 ];
 
-// ── Shared template files (identical for apps and games) ──
+// ── Shared template files ──
 
 const SHARED_FILES: Record<string, string> = {
   'pnpm-workspace.yaml': `packages:\n  - web\n`,
@@ -748,145 +748,16 @@ const APP_ARCHETYPE_FILES: Record<AppArchetype, Record<string, string>> = {
   generic: {},
 };
 
-// ── Games-specific template files ──
-
-const GAME_FILES: Record<string, string> = {
-  'web/index.html': `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,700;9..144,800&display=swap" rel="stylesheet" />
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#10b981" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <title>APPNAME — FreeGameStore</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>`,
-
-  'web/public/manifest.json': `{
-  "name": "APPNAME",
-  "short_name": "APPNAME",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#0f0f0f",
-  "theme_color": "#10b981",
-  "orientation": "any"
-}`,
-
-  'web/src/index.css': `@import "tailwindcss";
-
-:root {
-  /* Games use the same canonical token names as apps (DESIGN-SYSTEM.md bans
-     the old background alias everywhere); only the values are game-dark. */
-  --paper: #0f0f0f;
-  --panel: #1a1a1a;
-  --ink: #f0f0f0;
-  --muted: #999;
-  --accent: #10b981;
-  --line: #2a2a2a;
-  --success: #22c55e;
-  --warning: #fbbf24;
-  --danger: #ef4444;
-  font-family: "Manrope", system-ui, sans-serif;
-}
-
-body {
-  margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  overflow: hidden;
-}
-
-#root {
-  width: 100vw;
-  height: 100dvh;
-  overflow: hidden;
-}`,
-
-  'web/src/components/GameShell.tsx': `import type { ReactNode } from "react";
-
-interface GameShellProps {
-  title: string;
-  children: ReactNode;
-}
-
-/** GameShell: full-viewport wrapper with a 44px top bar and game canvas area.
- *  The topbar shows the game name and a link to FreeGameStore.
- *  The children fill the remaining viewport height. */
-export function GameShell({ title, children }: GameShellProps) {
-  return (
-    <div style={{ width: "100vw", height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--paper)" }}>
-      <header style={{ height: 44, minHeight: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 1rem", background: "var(--panel)", borderBottom: "1px solid var(--line)", fontSize: "0.85rem" }}>
-        <span style={{ fontWeight: 700, fontFamily: "Fraunces, serif" }}>{title}</span>
-        <a href="https://freegamestore.online" target="_blank" rel="noopener noreferrer" style={{ color: "var(--muted)", fontSize: "0.75rem", textDecoration: "none" }}>
-          FreeGameStore
-        </a>
-      </header>
-      <main style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-        {children}
-      </main>
-    </div>
-  );
-}`,
-
-  'web/src/App.tsx': `import { GameShell } from "./components/GameShell";
-
-export default function App() {
-  return (
-    <GameShell title={"APPNAME_JS"}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", flexDirection: "column", gap: "1rem" }}>
-        <h1 style={{ fontFamily: "Fraunces, serif", fontSize: "2rem", margin: 0 }}>
-          APPNAME_TEXT
-        </h1>
-        <p style={{ color: "var(--muted)" }}>
-          Edit <code>src/App.tsx</code> to build your game.
-        </p>
-      </div>
-    </GameShell>
-  );
-}`,
-
-  LICENSE: `MIT License
-
-Copyright (c) 2025 FreeGameStore
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.`,
-};
-
 // ── Deploy workflow (R2) ──
 //
 // The single source of truth for every generated `.github/workflows/deploy.yml`:
 // `fas init`, the VibeCode builder and `fas publish` all emit this function's
 // output. GitHub Actions builds the app and syncs it to
 // r2://<bucket>/<nounPlural>/<repo>/ — the prefix the host Worker
-// (freeappstore-host / freegamestore-host) serves once the publish step writes
+// (freeappstore-host) serves once the publish step writes
 // the D1 routes row. Contains no APPNAME placeholder.
 //
-// Two jobs on purpose (mirrors freegamestore-online/ci-workflows game-ci.yml):
+// Two jobs on purpose:
 //   build  — installs, tests and builds the app, runs the pinned
 //            @freeappstore/cli validator and the pinned code-health scan, then
 //            uploads the built output as a workflow artifact. No secrets and
@@ -912,10 +783,7 @@ function indent(script: string, spaces: number): string {
 }
 
 /** The store API that verifies the OIDC token and owns the bucket binding. */
-const DEPLOY_API = {
-  apps: 'https://api.freeappstore.online',
-  games: 'https://admin.freegamestore.online',
-} as const;
+const DEPLOY_API = 'https://api.freeappstore.online';
 
 /**
  * The deploy job's whole client: plain bash, curl and jq from the runner image.
@@ -992,15 +860,14 @@ function withValue(value: string | boolean): string {
 /**
  * An app's whole deploy.yml: one job that calls the platform workflow at the
  * pinned commit (#559). The API refuses uploads from anything else, so this
- * file only chooses inputs. Games keep their inline two-job workflow.
+ * file only chooses inputs.
  */
-export function deployWorkflow(config: StoreConfig, inputs: AppDeployInputs = {}): string {
-  if (config.store === 'apps') {
-    const extra = Object.entries(inputs)
-      .filter(([, value]) => value !== undefined)
-      .map(([key, value]) => `      ${key}: ${withValue(value as string | boolean)}\n`)
-      .join('');
-    return `name: Deploy to R2
+export function deployWorkflow(inputs: AppDeployInputs = {}): string {
+  const extra = Object.entries(inputs)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `      ${key}: ${withValue(value as string | boolean)}\n`)
+    .join('');
+  return `name: Deploy to R2
 
 # Generated by @freeappstore/cli. The deploy is the platform's: this job calls
 # freeappstore-online/platform's app-deploy.yml at a pinned commit, and
@@ -1028,73 +895,6 @@ jobs:
     with:
       vars: \${{ toJSON(vars) }}
 ${extra}`;
-  }
-  return `name: Deploy to R2
-
-# Generated by @freeappstore/cli. Two jobs on purpose:
-#   build  — runs the app's install/test/build plus the pinned validators.
-#            No secrets here: a compromised npm package can only fail the build.
-#   deploy — uploads the artifact with a GitHub OIDC token (no stored secret):
-#            the store API writes it under this app's prefix and switches to it
-#            once complete. Runs no project code (no checkout, install or npx).
-# Regenerate with \`fas publish --update-workflow\`; do not add secrets to build.
-
-on:
-  push:
-    branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: deploy-\${{ github.repository }}
-  cancel-in-progress: true
-
-jobs:
-  build:
-    if: \${{ !startsWith(github.event.repository.name, 'template-') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - uses: ${DEPLOY_ACTIONS.checkout}
-      - uses: ${DEPLOY_ACTIONS.pnpm}
-      - uses: ${DEPLOY_ACTIONS.setupNode}
-        with:
-          node-version: 22
-      - name: Install
-        run: pnpm install --no-frozen-lockfile
-      - name: Build
-        run: pnpm build
-      - name: Verify build output
-        run: |
-          test -d ./web/dist || { echo "::error::No build output at web/dist"; exit 1; }
-          test -n "$(ls -A ./web/dist)" || { echo "::error::web/dist is empty"; exit 1; }
-      - name: Upload build artifact
-        uses: ${DEPLOY_ACTIONS.uploadArtifact}
-        with:
-          name: app
-          path: web/dist
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      DEPLOY_API: ${DEPLOY_API[config.store]}
-    steps:
-      - name: Download build artifact
-        uses: ${DEPLOY_ACTIONS.downloadArtifact}
-        with:
-          name: app
-          path: site
-      - name: Upload keylessly
-        run: |
-${indent(KEYLESS_UPLOAD, 10)}
-`;
 }
 
 // ── Platform app deploy workflow (#559) ──
@@ -1286,7 +1086,7 @@ ${indent(SAVE_APP_DEPENDENCY_LOCK, 10)}
       contents: read
       id-token: write
     env:
-      DEPLOY_API: ${DEPLOY_API.apps}
+      DEPLOY_API: ${DEPLOY_API}
     steps:
       - name: Download build artifact
         uses: ${DEPLOY_ACTIONS.downloadArtifact}
@@ -1315,37 +1115,34 @@ export function getArchetypeFiles(archetype: AppArchetype): Record<string, strin
 }
 
 export function getTemplateFiles(
-  config: StoreConfig,
+  _config: StoreConfig,
   archetype?: AppArchetype,
   preset: AppPreset = 'standalone',
 ): Record<string, string> {
-  const appArchetypeFiles =
-    config.store === 'games' ? {} : getArchetypeFiles(archetype ?? 'generic');
-  const capabilities = config.store === 'apps' ? resolveStarterPreset(preset) : [];
+  const appArchetypeFiles = getArchetypeFiles(archetype ?? 'generic');
+  const capabilities = resolveStarterPreset(preset);
   const foundationFiles = { ...SHARED_FILES, ...APP_FILES };
   const capabilityPlan = planCapabilityChanges(capabilities, foundationFiles, {}, () => false);
   const capabilityFiles = capabilityPlan.writes;
   const files: Record<string, string> = {
     ...SHARED_FILES,
-    ...(config.store === 'games' ? GAME_FILES : APP_FILES),
-    ...(config.store === 'apps'
-      ? {
-          'web/package.json': SHARED_FILES['web/package.json']!.replace(
-            '"vite": "^6"',
-            '"vite": "^6",\n    "vite-plugin-pwa": "^1.0"',
-          ),
-          'web/vite.config.ts': `import { defineConfig } from 'vite';
+    ...APP_FILES,
+    'web/package.json': SHARED_FILES['web/package.json']!.replace(
+      '"vite": "^6"',
+      '"vite": "^6",\n    "vite-plugin-pwa": "^1.0"',
+    ),
+    'web/vite.config.ts': `import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { pwaOptions } from '@freeappstore/sdk/pwa-config';
 export default defineConfig({ plugins: [react(), tailwindcss(), VitePWA(pwaOptions())] });`,
-          'web/src/pwa.ts': `// Compatibility path: the canonical app-owned controller lives in fas-capabilities/pwa.ts.
+    'web/src/pwa.ts': `// Compatibility path: the canonical app-owned controller lives in fas-capabilities/pwa.ts.
 export { pwa } from './fas-capabilities/pwa';
 `,
-          'web/src/main.tsx': `import './fas-capabilities/pwa';\n${SHARED_FILES['web/src/main.tsx']}`,
-          'web/public/icon.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="64" fill="#2563eb"/><path d="M160 160h192v48H208v48h120v48H208v48h-48z" fill="white"/></svg>`,
-          'web/pwa-assets.config.ts': `import { defineConfig, minimal2023Preset } from '@vite-pwa/assets-generator/config';
+    'web/src/main.tsx': `import './fas-capabilities/pwa';\n${SHARED_FILES['web/src/main.tsx']}`,
+    'web/public/icon.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="64" fill="#2563eb"/><path d="M160 160h192v48H208v48h120v48H208v48h-48z" fill="white"/></svg>`,
+    'web/pwa-assets.config.ts': `import { defineConfig, minimal2023Preset } from '@vite-pwa/assets-generator/config';
 
 // App-owned artwork and padding/background options. Keep manifest/HTML paths in sync.
 export default defineConfig({
@@ -1354,79 +1151,75 @@ export default defineConfig({
   images: ['public/icon.svg'],
 });
 `,
-          'web/public/manifest.json': JSON.stringify(
-            {
-              ...JSON.parse(APP_FILES['web/public/manifest.json']!),
-              id: '/',
-              scope: '/',
-              min_viewport_width: 320,
-              icons: [
-                { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-                { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-                {
-                  src: '/maskable-icon-512x512.png',
-                  sizes: '512x512',
-                  type: 'image/png',
-                  purpose: 'maskable',
-                },
-              ],
-            },
-            null,
-            2,
-          ),
-          'web/index.html': APP_FILES['web/index.html']!.replace(
-            'initial-scale=1.0',
-            'initial-scale=1.0, viewport-fit=cover',
-          ),
-          'web/src/index.css': `${APP_FILES['web/src/index.css']}
+    'web/public/manifest.json': JSON.stringify(
+      {
+        ...JSON.parse(APP_FILES['web/public/manifest.json']!),
+        id: '/',
+        scope: '/',
+        min_viewport_width: 320,
+        icons: [
+          { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          {
+            src: '/maskable-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    'web/index.html': APP_FILES['web/index.html']!.replace(
+      'initial-scale=1.0',
+      'initial-scale=1.0, viewport-fit=cover',
+    ),
+    'web/src/index.css': `${APP_FILES['web/src/index.css']}
 html { overflow-wrap: anywhere; }
 body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 img, video, canvas { max-width: 100%; }
 `,
-          'fas.json': JSON.stringify(
-            {
-              appId: 'APPID',
-              applicationRoot: 'web',
-              outputPath: 'web/dist',
-              buildCommand: 'pnpm build',
-            },
-            null,
-            2,
-          ),
-          ...capabilityFiles,
-        }
-      : {}),
+    'fas.json': JSON.stringify(
+      {
+        appId: 'APPID',
+        applicationRoot: 'web',
+        outputPath: 'web/dist',
+        buildCommand: 'pnpm build',
+      },
+      null,
+      2,
+    ),
+    ...capabilityFiles,
     ...appArchetypeFiles,
-    '.github/workflows/deploy.yml': deployWorkflow(config),
+    '.github/workflows/deploy.yml': deployWorkflow(),
   };
 
-  if (config.store === 'apps') {
-    files['web/src/index.css'] =
-      `${files['web/src/index.css']!.replace('\n:root {', '\n@layer base {\n:root {')}\n}\n`;
-    files['.gitignore'] +=
-      `\n*.tsbuildinfo\n# Derived from icon.svg; remove these entries when using prebuilt custom icons.\n/web/public/favicon.ico\n/web/public/apple-touch-icon-180x180.png\n/web/public/pwa-64x64.png\n/web/public/pwa-192x192.png\n/web/public/pwa-512x512.png\n/web/public/maskable-icon-512x512.png\n`;
-    const appPackage = JSON.parse(files['package.json']!) as {
-      scripts: Record<string, string>;
-      pnpm: { onlyBuiltDependencies: string[] };
-    };
-    appPackage.scripts.test = 'pnpm --filter @APPNAME/web test';
-    appPackage.pnpm.onlyBuiltDependencies.push('sharp');
-    files['package.json'] = JSON.stringify(appPackage, null, 2);
-    const webPackage = JSON.parse(files['web/package.json']!) as {
-      scripts: Record<string, string>;
-      devDependencies: Record<string, string>;
-    };
-    webPackage.devDependencies['@vite-pwa/assets-generator'] = '1.0.4';
-    webPackage.scripts['generate:icons'] = 'pwa-assets-generator --manifest=false';
-    webPackage.scripts.dev = 'pnpm generate:icons && vite';
-    webPackage.scripts.build = 'pnpm generate:icons && vite build';
-    files['web/package.json'] = JSON.stringify(webPackage, null, 2);
-    const nodeConfig = JSON.parse(files['web/tsconfig.node.json']!) as { include: string[] };
-    nodeConfig.include.push('pwa-assets.config.ts');
-    files['web/tsconfig.node.json'] = JSON.stringify(nodeConfig, null, 2);
-  }
+  files['web/src/index.css'] =
+    `${files['web/src/index.css']!.replace('\n:root {', '\n@layer base {\n:root {')}\n}\n`;
+  files['.gitignore'] +=
+    `\n*.tsbuildinfo\n# Derived from icon.svg; remove these entries when using prebuilt custom icons.\n/web/public/favicon.ico\n/web/public/apple-touch-icon-180x180.png\n/web/public/pwa-64x64.png\n/web/public/pwa-192x192.png\n/web/public/pwa-512x512.png\n/web/public/maskable-icon-512x512.png\n`;
+  const appPackage = JSON.parse(files['package.json']!) as {
+    scripts: Record<string, string>;
+    pnpm: { onlyBuiltDependencies: string[] };
+  };
+  appPackage.scripts.test = 'pnpm --filter @APPNAME/web test';
+  appPackage.pnpm.onlyBuiltDependencies.push('sharp');
+  files['package.json'] = JSON.stringify(appPackage, null, 2);
+  const webPackage = JSON.parse(files['web/package.json']!) as {
+    scripts: Record<string, string>;
+    devDependencies: Record<string, string>;
+  };
+  webPackage.devDependencies['@vite-pwa/assets-generator'] = '1.0.4';
+  webPackage.scripts['generate:icons'] = 'pwa-assets-generator --manifest=false';
+  webPackage.scripts.dev = 'pnpm generate:icons && vite';
+  webPackage.scripts.build = 'pnpm generate:icons && vite build';
+  files['web/package.json'] = JSON.stringify(webPackage, null, 2);
+  const nodeConfig = JSON.parse(files['web/tsconfig.node.json']!) as { include: string[] };
+  nodeConfig.include.push('pwa-assets.config.ts');
+  files['web/tsconfig.node.json'] = JSON.stringify(nodeConfig, null, 2);
 
-  if (config.store === 'apps' && preset === 'connected') {
+  if (preset === 'connected') {
     files['web/src/App.tsx'] = files['web/src/App.tsx']!.replace(
       'import { initApp }',
       'import { ConnectedDraft } from "./components/ConnectedDraft";\nimport { initApp }',

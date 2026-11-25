@@ -17,21 +17,6 @@ describe("getConfig", () => {
     expect(c.accentColor).toBe("#2563eb");
   });
 
-  it("returns games config for 'games'", () => {
-    const c = getConfig("games");
-    expect(c.store).toBe("games");
-    expect(c.org).toBe("freegamestore-online");
-    expect(c.domain).toBe("freegamestore.online");
-    expect(c.noun).toBe("game");
-    expect(c.Noun).toBe("Game");
-    expect(c.nounPlural).toBe("games");
-    expect(c.storeRepo).toBe("platform");
-    expect(c.registryPath).toBe("sites/freegamestore/registry.json");
-    expect(c.storeName).toBe("FreeGameStore");
-    expect(c.agentName).toBe("freegamestore-agent");
-    expect(c.accentColor).toBe("#10b981");
-  });
-
   it("falls back to apps for unknown store", () => {
     const c = getConfig("unknown");
     expect(c.store).toBe("apps");

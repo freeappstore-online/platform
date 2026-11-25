@@ -4,26 +4,14 @@ import { getTemplateFiles } from "./template";
 import { executeTool, getToolDefinitions, INFRA_TOOLS } from "./tools";
 
 const appsConfig = getConfig("apps");
-const gamesConfig = getConfig("games");
 
 describe("getToolDefinitions", () => {
   const appsTools = getToolDefinitions(appsConfig);
-  const gamesTools = getToolDefinitions(gamesConfig);
 
   it("apps tools include list_deployed_apps", () => {
     const names = appsTools.map((t) => t.name);
     expect(names).toContain("list_deployed_apps");
     expect(names).not.toContain("list_deployed_games");
-  });
-
-  it("games tools include list_deployed_games", () => {
-    const names = gamesTools.map((t) => t.name);
-    expect(names).toContain("list_deployed_games");
-    expect(names).not.toContain("list_deployed_apps");
-  });
-
-  it("both have same number of tools", () => {
-    expect(appsTools.length).toBe(gamesTools.length);
   });
 
   it("apps deploy tool mentions app categories", () => {
@@ -32,46 +20,20 @@ describe("getToolDefinitions", () => {
     expect(deploy.parameters.properties.category.description).toContain("productivity");
   });
 
-  it("games deploy tool mentions game categories", () => {
-    const deploy = gamesTools.find((t) => t.name === "deploy")!;
-    expect(deploy.parameters.properties.category.description).toContain("arcade");
-    expect(deploy.parameters.properties.category.description).toContain("puzzle");
-  });
-
   it("apps tool descriptions say 'app'", () => {
     const deploy = appsTools.find((t) => t.name === "deploy")!;
     expect(deploy.description).toContain("app");
-  });
-
-  it("games tool descriptions say 'game'", () => {
-    const deploy = gamesTools.find((t) => t.name === "deploy")!;
-    expect(deploy.description).toContain("game");
   });
 
   it("apps compliance check references FreeAppStore", () => {
     const check = appsTools.find((t) => t.name === "run_compliance_check")!;
     expect(check.description).toContain("FreeAppStore");
   });
-
-  it("games compliance check references FreeGameStore", () => {
-    const check = gamesTools.find((t) => t.name === "run_compliance_check")!;
-    expect(check.description).toContain("FreeGameStore");
-  });
-
-  it("file tools are identical between stores", () => {
-    const fileToolNames = ["write_file", "read_file", "list_files", "delete_file", "search_files"];
-    for (const name of fileToolNames) {
-      const appTool = appsTools.find((t) => t.name === name)!;
-      const gameTool = gamesTools.find((t) => t.name === name)!;
-      expect(appTool).toEqual(gameTool);
-    }
-  });
 });
 
 describe("INFRA_TOOLS", () => {
-  it("includes both list_deployed variants", () => {
+  it("includes list_deployed_apps", () => {
     expect(INFRA_TOOLS.has("list_deployed_apps")).toBe(true);
-    expect(INFRA_TOOLS.has("list_deployed_games")).toBe(true);
   });
 
   it("includes core infra tools", () => {
@@ -296,36 +258,6 @@ describe("run_compliance_check", () => {
     expect(result.content).toContain("PASS: No ads");
     expect(result.content).toContain("FAIL: APPNAME placeholders");
     expect(result.content).toContain("13 pass, 1 fail");
-  });
-
-  it("games template passes games compliance (except APPNAME + Fraunces)", async () => {
-    const files = new Map(Object.entries(getTemplateFiles(gamesConfig)));
-    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
-    expect(result.content).toContain("PASS: MIT License");
-    expect(result.content).toContain("PASS: CSS variables (--paper, --ink, --accent)");
-    expect(result.content).toContain("PASS: Overflow hidden");
-    expect(result.content).toContain("PASS: FreeGameStore link");
-    expect(result.content).toContain("PASS: pnpm workspace");
-    expect(result.content).toContain("PASS: PWA manifest");
-    expect(result.content).toContain("FAIL: Brand fonts");
-    expect(result.content).toContain("FAIL: APPNAME placeholders");
-    expect(result.content).toContain("PASS: No payments (free tier)");
-    expect(result.content).toContain("PASS: No ads");
-    expect(result.content).toContain("12 pass, 2 fail");
-  });
-
-  it("apps template would fail games compliance (overflow)", async () => {
-    const files = new Map(Object.entries(getTemplateFiles(appsConfig)));
-    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, gamesConfig);
-    // Token names are shared since #64, so only the game-specific rules differ.
-    expect(result.content).toContain("PASS: CSS variables (--paper, --ink, --accent)");
-    expect(result.content).toContain("FAIL: Overflow hidden");
-  });
-
-  it("games template would fail apps compliance (store link)", async () => {
-    const files = new Map(Object.entries(getTemplateFiles(gamesConfig)));
-    const result = await executeTool({ id: "1", name: "run_compliance_check", input: {} }, files, appsConfig);
-    expect(result.content).toContain("FAIL: FreeAppStore link");
   });
 
   it("detects APPNAME placeholders", async () => {

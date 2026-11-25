@@ -1,8 +1,7 @@
 # PWA lifecycle and offline capabilities
 
-Fresh `fas init` app scaffolds install the versioned `pwa` capability. Games keep
-their existing foundation. The builder's app scaffold uses the same SDK runtime
-and Vite configuration. No existing app repositories are migrated.
+Fresh `fas init` app scaffolds install the versioned `pwa` capability. The
+builder's app scaffold uses the same SDK runtime and Vite configuration. No existing app repositories are migrated.
 
 For an existing app, run `fas add pwa --dry-run`, then `fas add pwa`. This adds
 integration modules and records install/update/offline metadata in

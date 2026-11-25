@@ -3,7 +3,6 @@ import { runComplianceCheck } from "./compliance";
 import { getConfig } from "./config";
 
 const appsConfig = getConfig("apps");
-const gamesConfig = getConfig("games");
 
 function makeFiles(overrides: Record<string, string> = {}): Map<string, string> {
   return new Map(
@@ -52,18 +51,6 @@ describe("runComplianceCheck", () => {
       appsConfig,
     );
     expect(output).toContain("FAIL: Brand fonts");
-  });
-
-  it("checks overflow hidden for games", async () => {
-    const output = await runComplianceCheck(
-      makeFiles({
-        "web/src/index.css":
-          "@import url(manrope); @import url(fraunces); :root { --paper: #000; --ink: #fff; --accent: red; } body { overflow: hidden; }",
-      }),
-      gamesConfig,
-    );
-    expect(output).toContain("PASS: Overflow hidden");
-    expect(output).toContain("PASS: CSS variables (--paper, --ink, --accent)");
   });
 
   it("detects APPNAME placeholder", async () => {
@@ -123,15 +110,6 @@ describe("runComplianceCheck", () => {
       expect(output).toMatch(/FAIL: No ads — .*web\/index\.html \(Google AdSense\)/);
       expect(output).toContain("show no ads");
       expect(output).toContain("PASS: No payments (free tier)");
-    });
-
-    it("applies to games too", async () => {
-      const output = await runComplianceCheck(
-        makeFiles({ "web/src/Ads.ts": "PokiSDK.commercialBreak(() => {})", "web/package.json": '{"dependencies":{"stripe":"^17.0.0"}}' }),
-        gamesConfig,
-      );
-      expect(output).toContain("FAIL: No payments (free tier)");
-      expect(output).toContain("FAIL: No ads");
     });
 
     it("comments and test files don't count", async () => {

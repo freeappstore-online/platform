@@ -10,14 +10,11 @@ import {
 } from './starter-dependencies.js';
 import {
   APP_DEPLOY_WORKFLOW_FILE,
-  APP_STARTER_CONFIG,
   appDeployWorkflow,
   deployWorkflow,
   KEYLESS_UPLOAD,
-  type StoreConfig,
 } from './starter-foundation.js';
 
-const GAME_CONFIG: StoreConfig = { store: 'games', r2Bucket: 'fgs-games', nounPlural: 'games' };
 const R2_SECRETS = ['R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_ACCOUNT_ID'];
 
 interface Step {
@@ -43,30 +40,19 @@ function stepText(step: Step): string {
   return JSON.stringify(step);
 }
 
-describe.each([
-  ['apps', APP_STARTER_CONFIG],
-  ['games', GAME_CONFIG],
-])('the two-job deploy (%s)', (_store, config) => {
-  // Apps run it as the platform workflow their deploy.yml calls; games inline.
-  const source = config.store === 'apps' ? appDeployWorkflow() : deployWorkflow(config);
+describe('the platform app deploy', () => {
+  // Apps run it as the platform workflow their deploy.yml calls.
+  const source = appDeployWorkflow();
   const workflow = parse(source) as Workflow;
 
-  it('is valid YAML with a build job and a deploy job that needs it', () => {
-    if (config.store === 'apps') {
-      expect(Object.keys(workflow.jobs)).toEqual(['build', 'verify', 'deploy']);
-      expect(workflow.jobs.deploy!.needs).toEqual(['build', 'verify']);
-      return;
-    }
-    expect(Object.keys(workflow.jobs)).toEqual(['build', 'deploy']);
-    expect(workflow.jobs.deploy!.needs).toBe('build');
-    expect(workflow.name).toBe('Deploy to R2');
-    expect(workflow.on).toHaveProperty('push');
-    expect(workflow.on).toHaveProperty('workflow_dispatch');
+  it('is valid YAML with build and verify jobs and a deploy job that needs them', () => {
+    expect(Object.keys(workflow.jobs)).toEqual(['build', 'verify', 'deploy']);
+    expect(workflow.jobs.deploy!.needs).toEqual(['build', 'verify']);
   });
 
   it('pins every npx package to an exact version with --yes', () => {
     const invocations = [...source.matchAll(/\bnpx\s+(\S+)\s+(\S+)/g)];
-    expect(invocations.length).toBe(config.store === 'apps' ? 3 : 0);
+    expect(invocations.length).toBe(3);
     for (const [, flag, pkg] of invocations) {
       expect(flag).toBe('--yes');
       expect(pkg).toMatch(/^@[\w-]+\/[\w-]+@\d+\.\d+\.\d+$/);
@@ -110,13 +96,7 @@ describe.each([
 
   it('uploads the artifact through the store API session and commits it', () => {
     const deploy = workflow.jobs.deploy! as Job & { env: Record<string, string> };
-    expect(deploy.env.DEPLOY_API).toBe(
-      config.store === 'apps'
-        ? 'https://api.freeappstore.online'
-        : 'https://admin.freegamestore.online',
-    );
-    if (config.store === 'games')
-      expect(deploy.steps[0]!.with).toEqual({ name: 'app', path: 'site' });
+    expect(deploy.env.DEPLOY_API).toBe('https://api.freeappstore.online');
     const upload = deploy.steps.at(-1)!;
     expect(upload.run).toBe(`${KEYLESS_UPLOAD.trimEnd()}\n`);
     expect(upload.run).toContain('audience=$DEPLOY_API');
@@ -173,7 +153,7 @@ describe('appDeployWorkflow (apps specifics)', () => {
 });
 
 describe("deployWorkflow (apps): the repo's caller", () => {
-  const source = deployWorkflow(APP_STARTER_CONFIG);
+  const source = deployWorkflow();
   const workflow = parse(source) as {
     name: string;
     on: Record<string, unknown>;
@@ -198,7 +178,7 @@ describe("deployWorkflow (apps): the repo's caller", () => {
 
   it('passes repo-specific inputs, multi-line scripts as block scalars', () => {
     const custom = parse(
-      deployWorkflow(APP_STARTER_CONFIG, {
+      deployWorkflow({
         checks: 'pnpm lint\npnpm test:e2e',
         'python-version': '3.12',
         'code-health': false,
@@ -215,12 +195,6 @@ describe("deployWorkflow (apps): the repo's caller", () => {
 
   it('matches the reviewed snapshot (bump deliberately)', () => {
     expect(source).toMatchSnapshot();
-  });
-});
-
-describe('deployWorkflow (games specifics)', () => {
-  it('matches the reviewed snapshot (bump deliberately)', () => {
-    expect(deployWorkflow(GAME_CONFIG)).toMatchSnapshot();
   });
 });
 

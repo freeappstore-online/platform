@@ -12,7 +12,7 @@ import prompts from 'prompts';
 import { assertValidAppId } from '../lib/app-id.js';
 import { readConfig, sessionDaysRemaining } from '../lib/config.js';
 import { APP_DEPLOY_WORKFLOW } from '../lib/starter-dependencies.js';
-import { APP_STARTER_CONFIG, deployWorkflow } from '../lib/starter-foundation.js';
+import { deployWorkflow } from '../lib/starter-foundation.js';
 
 /** The platform workflow without its pinned commit: any pin of it is the platform's. */
 const APP_DEPLOY_WORKFLOW_PATH = APP_DEPLOY_WORKFLOW.split('@')[0];
@@ -558,7 +558,7 @@ async function detectDescription(): Promise<string | null> {
 }
 
 /** The canonical FreeAppStore deploy workflow — same generator as `fas init` and the builder. */
-export const DEPLOY_YML = deployWorkflow(APP_STARTER_CONFIG);
+export const DEPLOY_YML = deployWorkflow();
 
 export type DeployWorkflowResult = 'created' | 'ok' | 'updated' | { drift: string[] };
 

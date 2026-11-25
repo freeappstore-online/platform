@@ -76,7 +76,7 @@ export function prepareTurn(
   ctx?: SessionContext,
 ): PreparedTurn {
   // Build dynamic system prompt with session context
-  let systemPrompt = getSystemPrompt(storeConfig);
+  let systemPrompt = getSystemPrompt();
   if (ctx) {
     const noun = storeConfig.noun;
     const Noun = storeConfig.Noun;

@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getConfig } from "./config";
 import { getSystemPrompt } from "./template";
 
-const prompt = getSystemPrompt(getConfig("apps"));
+const prompt = getSystemPrompt();
 describe("effective builder prompt contract (#377)", () => {
   it("allows app-owned screens, styles and custom frames", () => {
     for (const text of [

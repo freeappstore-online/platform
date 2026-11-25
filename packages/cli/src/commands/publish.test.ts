@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { APP_DEPLOY_WORKFLOW } from '../lib/starter-dependencies.js';
-import { APP_STARTER_CONFIG, deployWorkflow } from '../lib/starter-foundation.js';
+import { deployWorkflow } from '../lib/starter-foundation.js';
 import {
   buildPromptList,
   commitDeployWorkflow,
@@ -149,7 +149,7 @@ describe('DEPLOY_YML', () => {
   });
 
   it('is the same workflow fas init and the builder generate', () => {
-    expect(DEPLOY_YML).toBe(deployWorkflow(APP_STARTER_CONFIG));
+    expect(DEPLOY_YML).toBe(deployWorkflow());
   });
 });
 

@@ -13,11 +13,9 @@ import {
 } from "./template";
 
 const appsConfig = getConfig("apps");
-const gamesConfig = getConfig("games");
 
 describe("getTemplateFiles", () => {
   const appsFiles = getTemplateFiles(appsConfig);
-  const gamesFiles = getTemplateFiles(gamesConfig);
 
   it("uses one declared target for the apps build, verification and upload", () => {
     const files = substituteAppName(appsFiles, "weather-app", "Weather App");
@@ -43,28 +41,12 @@ describe("getTemplateFiles", () => {
     expect(appsFiles).not.toHaveProperty("web/src/components/GameShell.tsx");
   });
 
-  it("games template has GameShell.tsx, not Shell.tsx", () => {
-    expect(gamesFiles).toHaveProperty("web/src/components/GameShell.tsx");
-    expect(gamesFiles).not.toHaveProperty("web/src/components/Shell.tsx");
-  });
-
   it("apps template uses --paper CSS variable", () => {
     expect(appsFiles["web/src/index.css"]).toContain("--paper");
   });
 
-  it("games template uses --paper, never the banned --bg alias (#64)", () => {
-    expect(gamesFiles["web/src/index.css"]).toContain("--paper:");
-    const banned = /var\(--bg\)|--bg\s*:/;
-    expect(gamesFiles["web/src/index.css"]).not.toMatch(banned);
-    expect(gamesFiles["web/src/components/GameShell.tsx"]).not.toMatch(banned);
-  });
-
   it("apps template's dark theme follows the SDK's data-theme (system default + Shell toggle)", () => {
     expect(appsFiles["web/src/index.css"]).toMatch(/:root\[data-theme="dark"\]\s*\{[^}]*color-scheme: dark/);
-  });
-
-  it("games template has overflow: hidden", () => {
-    expect(gamesFiles["web/src/index.css"]).toContain("overflow: hidden");
   });
 
   it("apps theme color is blue", () => {
@@ -72,64 +54,31 @@ describe("getTemplateFiles", () => {
     expect(appsFiles["web/public/manifest.json"]).toContain("#2563eb");
   });
 
-  it("games theme color is green", () => {
-    expect(gamesFiles["web/index.html"]).toContain("#10b981");
-    expect(gamesFiles["web/public/manifest.json"]).toContain("#10b981");
-  });
-
   it("apps title references FreeAppStore", () => {
     expect(appsFiles["web/index.html"]).toContain("FreeAppStore");
-  });
-
-  it("games title references FreeGameStore", () => {
-    expect(gamesFiles["web/index.html"]).toContain("FreeGameStore");
   });
 
   it("apps starter links to freeappstore.online", () => {
     expect(appsFiles["web/src/App.tsx"]).toContain("freeappstore.online");
   });
 
-  it("games GameShell links to freegamestore.online", () => {
-    expect(gamesFiles["web/src/components/GameShell.tsx"]).toContain("freegamestore.online");
-  });
-
   it("apps LICENSE says FreeAppStore", () => {
     expect(appsFiles.LICENSE).toContain("FreeAppStore");
   });
 
-  it("games LICENSE says FreeGameStore", () => {
-    expect(gamesFiles.LICENSE).toContain("FreeGameStore");
-  });
-
-  it("shares foundation files and keeps valid store-specific test scripts", () => {
-    const sharedPaths = ["pnpm-workspace.yaml", "web/tsconfig.json", "web/tsconfig.app.json"];
-    for (const p of sharedPaths) {
-      expect(appsFiles[p]).toBe(gamesFiles[p]);
-    }
+  it("keeps the apps-specific ignore, tsconfig and package scripts", () => {
     expect(appsFiles[".gitignore"]).toContain("/web/public/favicon.ico");
-    expect(gamesFiles[".gitignore"]).not.toContain("/web/public/favicon.ico");
     expect(JSON.parse(appsFiles["web/tsconfig.node.json"]!).include).toContain("pwa-assets.config.ts");
     const appPackage = JSON.parse(appsFiles["package.json"]!) as {
       scripts: Record<string, string>;
       pnpm: { onlyBuiltDependencies: string[] };
     };
-    const gamePackage = JSON.parse(gamesFiles["package.json"]!) as {
-      scripts: Record<string, string>;
-      pnpm: { onlyBuiltDependencies: string[] };
-    };
-    expect({ ...appPackage, pnpm: undefined, scripts: { ...appPackage.scripts, test: undefined } }).toEqual({
-      ...gamePackage,
-      pnpm: undefined,
-      scripts: { ...gamePackage.scripts, test: undefined },
-    });
-    expect(appPackage.pnpm.onlyBuiltDependencies).toEqual([...gamePackage.pnpm.onlyBuiltDependencies, "sharp"]);
+    expect(appPackage.pnpm.onlyBuiltDependencies).toContain("sharp");
     expect(appPackage.scripts.test).toBe("pnpm --filter @APPNAME/web test");
-    expect(gamePackage.scripts.test).toBe("pnpm build");
   });
 
-  it("both templates have a reasonable number of files", () => {
+  it("the template has a reasonable number of files", () => {
     expect(Object.keys(appsFiles).length).toBeGreaterThanOrEqual(15);
-    expect(Object.keys(gamesFiles).length).toBeGreaterThanOrEqual(15);
   });
 
   it("apps template includes dashboard archetype files", () => {
@@ -266,19 +215,13 @@ describe("getArchetypeFiles", () => {
 
 describe("getSystemPrompt", () => {
   it("apps prompt mentions FreeAppStore", () => {
-    const prompt = getSystemPrompt(appsConfig);
+    const prompt = getSystemPrompt();
     expect(prompt).toContain("FreeAppStore");
     expect(prompt).not.toContain("FreeGameStore");
   });
 
-  it("games prompt mentions FreeGameStore", () => {
-    const prompt = getSystemPrompt(gamesConfig);
-    expect(prompt).toContain("FreeGameStore");
-    expect(prompt).not.toContain("FreeAppStore");
-  });
-
   it("apps prompt teaches the SDK Shell as the standard path (#90)", () => {
-    const prompt = getSystemPrompt(appsConfig);
+    const prompt = getSystemPrompt();
     for (const term of ["<Shell>", '"@freeappstore/sdk/ui"', "NAV", "PageHeader", "useToast", "useDocumentTitle", "no paid tier"]) {
       expect(prompt).toContain(term);
     }
@@ -286,36 +229,19 @@ describe("getSystemPrompt", () => {
     expect(prompt).not.toMatch(/sidebar \(17rem\)|Shell sidebar|prefers-color-scheme/);
   });
 
-  it("both prompts forbid payments and ads, like fas check", () => {
-    for (const config of [appsConfig, gamesConfig]) {
-      const prompt = getSystemPrompt(config);
-      expect(prompt).toContain("NO payments and NO ads");
-      expect(prompt).toMatch(/Stripe[\s\S]*AdSense/);
-      expect(prompt).toContain("Do NOT add analytics, tracking, payments, ads, or any third-party scripts.");
-    }
-  });
-
-  it("games prompt references GameShell component", () => {
-    expect(getSystemPrompt(gamesConfig)).toContain("GameShell");
+  it("the prompt forbids payments and ads, like fas check", () => {
+    const prompt = getSystemPrompt();
+    expect(prompt).toContain("NO payments and NO ads");
+    expect(prompt).toMatch(/Stripe[\s\S]*AdSense/);
+    expect(prompt).toContain("Do NOT add analytics, tracking, payments, ads, or any third-party scripts.");
   });
 
   it("apps prompt references list_deployed_apps", () => {
-    expect(getSystemPrompt(appsConfig)).toContain("list_deployed_apps");
-  });
-
-  it("games prompt references list_deployed_games", () => {
-    expect(getSystemPrompt(gamesConfig)).toContain("list_deployed_games");
-  });
-
-  it("games prompt has game-specific rules", () => {
-    const prompt = getSystemPrompt(gamesConfig);
-    expect(prompt).toContain("requestAnimationFrame");
-    expect(prompt).toContain("overflow: hidden");
-    expect(prompt).toContain("Canvas");
+    expect(getSystemPrompt()).toContain("list_deployed_apps");
   });
 
   it("apps prompt has app-specific rules", () => {
-    const prompt = getSystemPrompt(appsConfig);
+    const prompt = getSystemPrompt();
     expect(prompt).toContain("localStorage");
     expect(prompt).toContain("Dark mode");
   });
@@ -403,8 +329,7 @@ describe("connected preset (#368)", () => {
     expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.16.39");
   });
 
-  it("does not change standalone or game templates", () => {
+  it("does not change the standalone template", () => {
     expect(getTemplateFiles(appsConfig, "generic", "standalone")).toEqual(getTemplateFiles(appsConfig, "generic"));
-    expect(getTemplateFiles(gamesConfig, "generic", "connected")).toEqual(getTemplateFiles(gamesConfig, "generic"));
   });
 });

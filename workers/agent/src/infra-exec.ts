@@ -16,20 +16,9 @@ import { substituteAppName } from "./template";
 
 // FreeAppStore ids use the backend's APP_ID_RE (#279): the storefront listing,
 // unpublish and admin transfer all use it, so an id the agent deployed outside
-// it went live but couldn't be listed or managed. Games publish through
-// FreeGameStore, which keeps its own rule.
+// it went live but couldn't be listed or managed.
 const FAS_APP_ID_MAX = 31;
-const GAME_ID_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-
-function isValidId(config: { store: string }, id: string): boolean {
-  return config.store === "apps" ? APP_ID_RE.test(id) : GAME_ID_RE.test(id) && id.length <= 58;
-}
-
-function idRuleText(config: { store: string }): string {
-  return config.store === "apps"
-    ? "Must be 2-31 characters: a lowercase letter first, then lowercase letters, numbers and hyphens."
-    : "Must be lowercase, numbers, hyphens. Max 58 chars.";
-}
+const ID_RULE_TEXT = "Must be 2-31 characters: a lowercase letter first, then lowercase letters, numbers and hyphens.";
 
 interface ExecContext {
   appId: string | null;
@@ -97,8 +86,8 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   // Validate deploy ID
   if (tc.name === "deploy" && tc.input.id) {
     const deployId = tc.input.id as string;
-    if (!isValidId(config, deployId) || deployId.startsWith("free") || deployId.startsWith("pro") || isReservedAppId(deployId)) {
-      return `Error: invalid ${config.noun} ID "${deployId}". ${idRuleText(config)} No "free"/"pro" prefix, no reserved names.`;
+    if (!APP_ID_RE.test(deployId) || deployId.startsWith("free") || deployId.startsWith("pro") || isReservedAppId(deployId)) {
+      return `Error: invalid ${config.noun} ID "${deployId}". ${ID_RULE_TEXT} No "free"/"pro" prefix, no reserved names.`;
     }
     if (ctx.appId && ctx.appId !== deployId) {
       return `Error: this session already deployed "${ctx.appId}". Create a new project for a different ${config.noun}.`;
@@ -120,7 +109,7 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
   }
 
   if (tc.name === "deploy" || tc.name === "push_update") {
-    if (config.store === "apps" && ctx.files.has("fas.json")) {
+    if (ctx.files.has("fas.json")) {
       const preview = new Map(ctx.files);
       const expectedAppId = id;
       if (expectedAppId) applyPlaceholders(preview, expectedAppId, (tc.input.name as string) ?? expectedAppId);
@@ -176,7 +165,6 @@ export async function executeInfraTool(tc: ToolCall, ctx: ExecContext): Promise<
     case "check_deploy_status":
       return executeCheckDeployStatus(id as string, ctx);
     case "list_deployed_apps":
-    case "list_deployed_games":
       return listDeployed(ctx.env, config);
     case "fetch_url":
       return executeFetchUrl(tc, config);
@@ -319,14 +307,13 @@ async function isAvailableTo(id: string, ctx: ExecContext): Promise<boolean> {
  * Resolve a collision-free id. Returns the requested id if available, else the
  * first free `-2`, `-3`, … variant. Checking up front and picking an available
  * id beats erroring back to the model, which just guesses another name and
- * collides again. Trims the base so the suffix stays within the 58-char limit.
+ * collides again. Trims the base so the suffix stays within the 31-char limit.
  */
 async function resolveAvailableId(baseId: string, ctx: ExecContext): Promise<string> {
   if (await isAvailableTo(baseId, ctx)) return baseId;
-  const maxLen = ctx.config.store === "apps" ? FAS_APP_ID_MAX : 58;
   for (let n = 2; n <= 50; n++) {
     const suffix = `-${n}`;
-    const candidate = `${baseId.slice(0, maxLen - suffix.length).replace(/-+$/, "")}${suffix}`;
+    const candidate = `${baseId.slice(0, FAS_APP_ID_MAX - suffix.length).replace(/-+$/, "")}${suffix}`;
     if (await isAvailableTo(candidate, ctx)) return candidate;
   }
   throw new Error(`Could not find an available ${ctx.config.noun} ID based on "${baseId}". Try a different name.`);

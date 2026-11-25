@@ -4,7 +4,7 @@ import {
   APP_DEPLOY_WORKFLOW as BACKEND_APP_DEPLOY_WORKFLOW,
 } from '../packages/backend/src/routes/deploy.js';
 import { APP_DEPLOY_WORKFLOW } from '../packages/cli/src/lib/starter-dependencies.js';
-import { APP_STARTER_CONFIG, deployWorkflow } from '../packages/cli/src/lib/starter-foundation.js';
+import { deployWorkflow } from '../packages/cli/src/lib/starter-foundation.js';
 // @ts-expect-error -- plain .mjs script without declarations
 import {
   CALLER_INPUTS,
@@ -14,7 +14,7 @@ import {
   missingTestRunner,
 } from './fleet-deploy-workflow.mjs';
 
-const generated = deployWorkflow(APP_STARTER_CONFIG);
+const generated = deployWorkflow();
 
 /** The single-job workflow most of the fleet still runs (vcqa variant). */
 const LEGACY = `name: Deploy to R2
@@ -143,7 +143,7 @@ describe('fleet deploy workflow classification', () => {
     const inputs = new Set(['setup', 'checks', 'python-version', 'code-health']);
     for (const [repo, values] of Object.entries(CALLER_INPUTS)) {
       for (const key of Object.keys(values as object)) expect(inputs, repo).toContain(key);
-      expect(deployWorkflow(APP_STARTER_CONFIG, values as object)).toContain('    with:\n');
+      expect(deployWorkflow(values as object)).toContain('    with:\n');
     }
   });
 

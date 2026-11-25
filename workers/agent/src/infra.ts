@@ -98,10 +98,8 @@ export async function getCIResults(appId: string, env: DeployEnv, config: StoreC
 /** Get quality audit results from the store's audit API. */
 export async function getAuditResults(appId: string, config: StoreConfig): Promise<string> {
   try {
-    // Audit rows for BOTH stores live in the FAS backend's audit_results table
-    // (packages/backend/src/lib/audit.ts scans apps and games). There is no
-    // api.freegamestore.online — that hostname lands on the FGS host worker,
-    // which 404s "no game registered" (#450).
+    // Audit rows live in the FAS backend's audit_results table
+    // (packages/backend/src/lib/audit.ts).
     const auditRes = await fetch(`https://api.freeappstore.online/v1/audit?store=${config.store}&app=${appId}`, {
       headers: { "User-Agent": config.agentName },
     });

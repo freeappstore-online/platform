@@ -104,8 +104,8 @@ const FILE_TOOLS: ToolDef[] = [
 /** Tool definitions parameterized by store config */
 export function getToolDefinitions(config: StoreConfig): ToolDef[] {
   const { noun, Noun, nounPlural, storeName, categories } = config;
-  const example = config.store === "games" ? "space-invaders" : "meditation-timer";
-  const exampleName = config.store === "games" ? "Space Invaders" : "Meditation Timer";
+  const example = "meditation-timer";
+  const exampleName = "Meditation Timer";
 
   return [
     ...FILE_TOOLS,
@@ -219,7 +219,6 @@ export const INFRA_TOOLS = new Set([
   "push_update",
   "check_deploy_status",
   "list_deployed_apps",
-  "list_deployed_games",
   "fetch_url",
   "get_build_logs",
   "get_ci_results",

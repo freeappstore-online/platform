@@ -16,7 +16,6 @@ import {
 import { executeInfraTool } from "./infra-exec";
 
 const appsConfig = getConfig("apps");
-const gamesConfig = getConfig("games");
 
 /** Platform backend stand-in: every /v1/publish succeeds, and the calls are recorded. */
 const publishCalls: { name: string }[] = [];
@@ -100,31 +99,6 @@ describe("deploy uniqueness — apps", () => {
     );
     // Should NOT contain "already taken" — uniqueness check was skipped
     expect(result).not.toContain("already taken");
-  });
-});
-
-describe("deploy uniqueness — games", () => {
-  it("auto-resolves to the next free ID when the requested one is taken", async () => {
-    // Base "taken-game" exists (200); the "-2" variant and other URLs are free (404).
-    globalThis.fetch = vi.fn((url: string) => {
-      const taken = typeof url === "string" && url.endsWith("/taken-game");
-      return Promise.resolve({ status: taken ? 200 : 404, json: () => Promise.resolve(taken ? { id: 1 } : {}) });
-    }) as any;
-    const onAppDeployed = vi.fn();
-
-    const result = await executeInfraTool(
-      {
-        id: "1",
-        name: "deploy",
-        input: { id: "taken-game", name: "Taken", category: "arcade", icon: "x", iconBg: "#fff", description: "test" },
-      },
-      { appId: null, files: new Map(), env: mockEnv, authHeader: "Bearer t", config: gamesConfig, onDeployStatus: vi.fn(), onAppDeployed },
-    );
-    expect(result).not.toContain("already taken");
-    expect(publishCalls.map((call) => call.name)).toEqual(["taken-game-2"]);
-    expect(onAppDeployed).toHaveBeenCalledWith("taken-game-2", "Taken");
-    // Verify it checked the correct org
-    expect((globalThis.fetch as any).mock.calls[0][0]).toContain("freegamestore-online");
   });
 });
 
@@ -259,14 +233,6 @@ describe("infra tool authorization", () => {
       { appId: null, files: new Map(), env: mockEnv, config: appsConfig, onDeployStatus: vi.fn(), onAppDeployed: vi.fn() },
     );
     expect(result).toContain("no app deployed yet");
-  });
-
-  it("uses game noun in error messages for games config", async () => {
-    const result = await executeInfraTool(
-      { id: "1", name: "push_update", input: { id: "some-game" } },
-      { appId: null, files: new Map(), env: mockEnv, config: gamesConfig, onDeployStatus: vi.fn(), onAppDeployed: vi.fn() },
-    );
-    expect(result).toContain("no game deployed yet");
   });
 });
 

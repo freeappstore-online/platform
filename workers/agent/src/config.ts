@@ -1,7 +1,7 @@
 /** Store configuration — one codebase, multiple deployments. */
 
 export interface StoreConfig {
-  store: "apps" | "games";
+  store: "apps";
   org: string;
   domain: string;
   noun: string;
@@ -34,21 +34,6 @@ const CONFIGS: Record<string, StoreConfig> = {
     accentColor: "#2563eb",
     categories: "utilities, productivity, learning, lifestyle, finance, health, creative, social",
     r2Bucket: "fas-apps",
-  },
-  games: {
-    store: "games",
-    org: "freegamestore-online",
-    domain: "freegamestore.online",
-    noun: "game",
-    Noun: "Game",
-    nounPlural: "games",
-    storeRepo: "platform",
-    registryPath: "sites/freegamestore/registry.json",
-    storeName: "FreeGameStore",
-    agentName: "freegamestore-agent",
-    accentColor: "#10b981",
-    categories: "arcade, puzzle, strategy, racing, sports, cards, board, rpg, action, casual",
-    r2Bucket: "fgs-games",
   },
 };
 

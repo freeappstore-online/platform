@@ -420,7 +420,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const wait = args.includes('--wait');
   const repos = args.includes('--all') ? allAppRepos() : args.filter((a) => !a.startsWith('--'));
   if (!repos.length) throw new Error('Name repos or pass --all');
-  const { APP_STARTER_CONFIG, appDeployWorkflow, deployWorkflow } = await import(
+  const { appDeployWorkflow, deployWorkflow } = await import(
     pathToFileURL(join(ROOT, 'packages/cli/dist/lib/starter-foundation.js'))
   );
   const { APP_DEPLOY_WORKFLOW } = await import(
@@ -432,7 +432,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const pinned = sh('git', ['-C', ROOT, 'show', `${pin}:.github/workflows/app-deploy.yml`]);
   if (pinned !== appDeployWorkflow())
     throw new Error(`app-deploy.yml at the pinned ${pin.slice(0, 7)} differs from the generator`);
-  const generatedFor = (repo) => deployWorkflow(APP_STARTER_CONFIG, CALLER_INPUTS[repo]);
+  const generatedFor = (repo) => deployWorkflow(CALLER_INPUTS[repo]);
   const workdir = join(tmpdir(), 'fas-fleet-deploy');
   mkdirSync(workdir, { recursive: true });
   const results = [];
