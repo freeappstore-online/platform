@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { StepOutcome } from "./agent";
-import { runAgentStep, runAgentTurn, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
+import { runAgentStep, STALL_NUDGE, STALL_VISIBLE_ERROR } from "./agent";
 import { computeFileDelta } from "./deploy";
 import { executeInfraTool } from "./infra-exec";
 import type { Message } from "./providers/types";
@@ -13,12 +13,11 @@ import { AgentSession, excessMessages, INFRA_STALL_THRESHOLD_MS, type PendingTur
 
 vi.mock("./agent", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./agent")>();
-  return { ...actual, runAgentStep: vi.fn(), runAgentTurn: vi.fn() };
+  return { ...actual, runAgentStep: vi.fn() };
 });
 vi.mock("./infra-exec", () => ({ executeInfraTool: vi.fn() }));
 
 const stepMock = vi.mocked(runAgentStep);
-const turnMock = vi.mocked(runAgentTurn);
 const infraMock = vi.mocked(executeInfraTool);
 
 const API_KEY = "sk-test-secret-123456";
@@ -52,7 +51,7 @@ function fakeState() {
   return { state: { storage, waitUntil: () => {} } as unknown as DurableObjectState, store, alarmAt: () => alarmAt };
 }
 
-function fakeEnv(alarmLoop = "true") {
+function fakeEnv() {
   const d1Writes: Array<{ messages: Message[]; errors: Array<{ source: string; message: string }> }> = [];
   const DB = {
     prepare: () => ({
@@ -65,7 +64,7 @@ function fakeEnv(alarmLoop = "true") {
     }),
   };
   const PLATFORM = { fetch: async () => new Response(JSON.stringify({ id: "u1", login: "alice", aud: "console" })) };
-  return { env: { STORE: "apps", ALARM_LOOP: alarmLoop, GITHUB_TOKEN: "gh", DB, PLATFORM } as any, d1Writes };
+  return { env: { STORE: "apps", GITHUB_TOKEN: "gh", DB, PLATFORM } as any, d1Writes };
 }
 
 function chatRequest(message = "build me a timer") {
@@ -139,7 +138,6 @@ async function drain(session: AgentSession, store: Map<string, unknown>, cap = 5
 
 beforeEach(() => {
   stepMock.mockReset();
-  turnMock.mockReset();
   infraMock.mockReset();
 });
 afterEach(() => vi.useRealTimers());
@@ -170,7 +168,7 @@ describe("fresh capability package preparation", () => {
   });
 });
 
-describe("ALARM_LOOP=true: /chat", () => {
+describe("/chat", () => {
   it("persists the pending turn and arms an immediate alarm instead of running the model", async () => {
     const { state, store, alarmAt } = fakeState();
     const session = new AgentSession(state, fakeEnv().env);
@@ -180,7 +178,6 @@ describe("ALARM_LOOP=true: /chat", () => {
 
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
     expect(stepMock).not.toHaveBeenCalled();
-    expect(turnMock).not.toHaveBeenCalled();
     const pending = await pendingOf(store);
     expect(pending).toMatchObject({ phase: "main", loopIndex: 0, message: "build me a timer" });
     expect(pending!.heartbeat).toBeGreaterThanOrEqual(before);
@@ -239,7 +236,7 @@ describe("ALARM_LOOP=true: /chat", () => {
   });
 });
 
-describe("ALARM_LOOP=true: alarm()", () => {
+describe("alarm()", () => {
   it("runs one step per alarm and completes with the client gone (tab closed)", async () => {
     const { state, store, alarmAt } = fakeState();
     const { env, d1Writes } = fakeEnv();
@@ -644,87 +641,7 @@ describe("turn-loop robustness (#599)", () => {
   });
 });
 
-describe("ALARM_LOOP off: legacy path", () => {
-  it("runs the turn in the /chat invocation and never arms an alarm", async () => {
-    const { state, store, alarmAt } = fakeState();
-    const session = new AgentSession(state, fakeEnv("false").env);
-    turnMock.mockResolvedValue({
-      newMessages: [{ role: "user", content: "build me a timer" }, assistant("legacy reply")],
-      infraRequests: [],
-    });
-
-    const res = await session.fetch(chatRequest());
-    await res.text(); // stream ends when the legacy build finishes
-
-    expect(turnMock).toHaveBeenCalledTimes(1);
-    expect(stepMock).not.toHaveBeenCalled();
-    expect(store.has("pendingTurn")).toBe(false);
-    expect(alarmAt()).toBeNull();
-    expect((store.get("session") as any).messages.at(-1).content).toBe("legacy reply");
-  });
-
-  it("uses pendingTurn as the concurrency guard even after eviction", async () => {
-    const { state, store } = fakeState();
-    const { env } = fakeEnv("false");
-    const session = new AgentSession(state, env);
-    let release!: () => void;
-    turnMock.mockImplementation(
-      () =>
-        new Promise((r) => {
-          release = () => r({ newMessages: [], infraRequests: [] });
-        }),
-    );
-    const first = await session.fetch(chatRequest());
-    const pending = store.get("pendingTurn") as PendingTurn;
-    const second = await new AgentSession(state, env).fetch(chatRequest("again"));
-    const body = (await second.json()) as any;
-    expect(second.status).toBe(409);
-    expect(second.headers.get("Retry-After")).toBe("2");
-    expect(second.headers.get("Last-Event-ID")).toBe("0");
-    expect(body).toMatchObject({ error: "A build is already in progress.", turnId: pending.turnId });
-    release();
-    await first.text();
-  });
-
-  it("clears pendingTurn on success so the next legacy chat is accepted", async () => {
-    const { state, store } = fakeState();
-    const session = new AgentSession(state, fakeEnv("false").env);
-    turnMock
-      .mockResolvedValueOnce({ newMessages: [{ role: "user", content: "build me a timer" }, assistant("first done")], infraRequests: [] })
-      .mockResolvedValueOnce({ newMessages: [{ role: "user", content: "second" }, assistant("second done")], infraRequests: [] });
-
-    const first = await session.fetch(chatRequest());
-    await first.text();
-    expect(store.has("pendingTurn")).toBe(false);
-
-    const second = await new AgentSession(state, fakeEnv("false").env).fetch(chatRequest("second"));
-    await second.text();
-    expect(second.status).toBe(200);
-    expect(store.has("pendingTurn")).toBe(false);
-    expect((store.get("session") as any).messages.at(-1).content).toBe("second done");
-  });
-
-  it("clears pendingTurn on terminal error so the next legacy chat is accepted", async () => {
-    const { state, store } = fakeState();
-    const session = new AgentSession(state, fakeEnv("false").env);
-    turnMock
-      .mockRejectedValueOnce(new Error("model exploded"))
-      .mockResolvedValueOnce({ newMessages: [{ role: "user", content: "retry" }, assistant("retry done")], infraRequests: [] });
-
-    const first = await session.fetch(chatRequest());
-    const body = await first.text();
-    expect(body).toContain("model exploded");
-    expect(store.has("pendingTurn")).toBe(false);
-
-    const second = await new AgentSession(state, fakeEnv("false").env).fetch(chatRequest("retry"));
-    await second.text();
-    expect(second.status).toBe(200);
-    expect(store.has("pendingTurn")).toBe(false);
-    expect((store.get("session") as any).messages.at(-1).content).toBe("retry done");
-  });
-});
-
-describe("ALARM_LOOP=true: read-only stall nudge (#37)", () => {
+describe("read-only stall nudge (#37)", () => {
   const readStep: StepOutcome = {
     kind: "continue",
     appended: [
@@ -827,7 +744,7 @@ describe("deploy failures are persisted for the session and admin (#11)", () => 
     expect(d1Writes.some((w) => w.errors.some((e) => e.source === "deploy" && e.message === REASON))).toBe(true);
   }
 
-  it("alarm loop: the failure lands in errors, deployLog and D1", async () => {
+  it("the failure lands in errors, deployLog and D1", async () => {
     const { state, store } = fakeState();
     const { env, d1Writes } = fakeEnv();
     const session = new AgentSession(state, env);
@@ -843,24 +760,6 @@ describe("deploy failures are persisted for the session and admin (#11)", () => 
 
     expectFailureRecorded(store, d1Writes);
     expect(sawCurrentStatus).toBeNull(); // check_deploy_status compares against this
-  });
-
-  it("legacy loop: the failure lands in errors, deployLog and D1", async () => {
-    const { state, store } = fakeState();
-    const { env, d1Writes } = fakeEnv("false");
-    const session = new AgentSession(state, env);
-    turnMock
-      .mockResolvedValueOnce({
-        newMessages: [{ role: "user", content: "build" }, assistant("Deploying", [deploy])],
-        infraRequests: [{ toolCall: deploy }],
-      })
-      .mockResolvedValueOnce({ newMessages: [assistant("The build broke; fixing it.")], infraRequests: [] });
-    failingDeploy();
-
-    const res = await session.fetch(chatRequest());
-    await res.text();
-
-    expectFailureRecorded(store, d1Writes);
   });
 });
 
@@ -883,7 +782,7 @@ describe("trimming past MAX_FILES never becomes a deletion (#12)", () => {
     expect([...delta.entries()].filter(([, v]) => v === null)).toEqual([]);
   }
 
-  it("alarm loop", async () => {
+  it("untracks the oldest files instead of deleting them", async () => {
     const { state, store } = fakeState();
     const { env } = fakeEnv();
     const res = await new AgentSession(state, env).fetch(chatRequest());
@@ -892,18 +791,6 @@ describe("trimming past MAX_FILES never becomes a deletion (#12)", () => {
     scriptSteps({ kind: "final", appended: [assistant("ok")] });
 
     await drain(new AgentSession(state, env), store);
-
-    expectNoDeletions(store);
-  });
-
-  it("legacy loop", async () => {
-    const { state, store } = fakeState();
-    const { env } = fakeEnv("false");
-    turnMock.mockResolvedValue({ newMessages: [assistant("ok")], infraRequests: [] });
-    await (await new AgentSession(state, env).fetch(chatRequest())).text();
-    seed(store);
-
-    await (await new AgentSession(state, env).fetch(chatRequest("again"))).text();
 
     expectNoDeletions(store);
   });
@@ -941,7 +828,7 @@ describe("AI usage persistence (#16)", () => {
 
   const usageWrite = (stmts: Array<{ sql: string; binds: unknown[] }>) => stmts.filter((s) => s.sql.includes("SET input_tokens")).at(-1);
 
-  it("alarm loop: sums each step's reported usage and writes it with the funding source", async () => {
+  it("sums each step's reported usage and writes it with the funding source", async () => {
     const { state, store } = fakeState();
     const { DB, stmts } = recordingDB();
     const env = { ...fakeEnv().env, DB };
@@ -971,22 +858,10 @@ describe("AI usage persistence (#16)", () => {
     expect(usageWrite(stmts)?.binds).toEqual([2300, 250, "anthropic", "claude-sonnet-4-6", "grant", "sess-1"]);
   });
 
-  it("legacy loop: adds the main turn's and follow-up's usage", async () => {
-    const { state, store } = fakeState();
-    const { DB, stmts } = recordingDB();
-    const env = { ...fakeEnv("false").env, DB };
-    turnMock.mockResolvedValue({ newMessages: [assistant("ok")], infraRequests: [], usage: { input: 70, output: 30 } });
-
-    await (await new AgentSession(state, env).fetch(chatWithSource("vault_admin"))).text();
-
-    expect((store.get("session") as any).tokenUsage).toEqual({ input: 70, output: 30 });
-    expect(usageWrite(stmts)?.binds).toEqual([70, 30, "anthropic", "claude-sonnet-4-6", "vault_admin", "sess-1"]);
-  });
-
   it("a turn with no key still records what was tried", async () => {
     const { state, store } = fakeState();
     const { DB, stmts } = recordingDB();
-    const env = { ...fakeEnv("false").env, DB };
+    const env = { ...fakeEnv().env, DB };
     const req = new Request("https://agent/chat", {
       method: "POST",
       headers: { Authorization: "Bearer tok", "X-Session-Id": "sess-1", "Content-Type": "application/json" },

@@ -38,20 +38,6 @@ export interface InfraRequest {
   toolCall: ToolCall;
 }
 
-export interface AgentTurnResult {
-  newMessages: Message[];
-  /** Infra tool calls that need server-side execution by the session */
-  infraRequests: InfraRequest[];
-  /**
-   * Set when the turn ended due to a non-thrown error (e.g. Anthropic API
-   * error stream event, empty-no-output).  The session must call logError and
-   * syncToD1 on this field so the failure is durable.
-   */
-  terminalError?: string;
-  /** Tokens the provider reported for this turn; zero when it reports none (#16). */
-  usage: TokenUsage;
-}
-
 export interface SessionContext {
   appId: string | null;
   appName: string | null;
@@ -215,8 +201,8 @@ export type StepOutcome =
 
 /**
  * One iteration of the agent loop: a single model call, then any file tools it
- * asked for. No delays, retries or loop bookkeeping — callers own those, so the
- * same step can run inside the legacy loop or one alarm at a time (#41).
+ * asked for. No delays, retries or loop bookkeeping — the session owns those
+ * and runs one step per alarm (#41).
  */
 export async function runAgentStep(
   config: AIConfig,
@@ -348,98 +334,4 @@ export const MAX_RATE_LIMIT_RETRIES = 3;
 /** Delay before loop iteration > 0, to stagger API calls under rate limits. */
 export function stepDelayMs(config: AIConfig): number {
   return config.provider === "github" ? 2000 : 500;
-}
-
-/**
- * Run one user turn through the agent loop in a single invocation (the legacy
- * path, used when ALARM_LOOP is off). Streams events via the writer, handles
- * file tool calls internally. Infra tools (deploy, push_update, etc.) are
- * collected and returned for the session to execute with env access.
- */
-export async function runAgentTurn(
-  config: AIConfig,
-  conversationHistory: Message[],
-  userMessage: string,
-  files: Map<string, string>,
-  writer: WritableStreamDefaultWriter<Uint8Array>,
-  storeConfig: StoreConfig,
-  ctx?: SessionContext,
-  /** AI Gateway env (AI_GATEWAY_*). Omit/empty → direct provider calls. */
-  gatewayEnv: GatewayEnv = {},
-): Promise<AgentTurnResult> {
-  const encoder = new TextEncoder();
-  const prepared = prepareTurn(config, conversationHistory, userMessage, storeConfig, ctx);
-  const newMessages: Message[] = [{ role: "user", content: userMessage }];
-  const infraRequests: InfraRequest[] = [];
-  // Track whether any tool calls occurred during this turn (used to detect
-  // the empty-no-output failure: model read files then exited without writing)
-  let anyToolCallsMade = false;
-  let nudged = false;
-
-  const send: Emit = async (event) => {
-    await writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-  };
-
-  let retries = 0;
-  const usage: TokenUsage = { input: 0, output: 0 };
-
-  for (let loop = 0; loop < MAX_LOOPS; loop++) {
-    // Stagger API calls — wait between rounds to avoid rate limits
-    if (loop > 0) await new Promise((r) => setTimeout(r, stepDelayMs(config)));
-
-    const counted = collectUsage(send);
-    const step = await runAgentStep(config, prepared, files, storeConfig, counted.emit, gatewayEnv, ctx?.freshTemplate === true);
-    addUsage(usage, counted.usage);
-
-    if (step.kind === "threw") break;
-    if (step.kind === "stream_error") {
-      newMessages.push({ role: "assistant", content: step.message });
-      return { newMessages, infraRequests, terminalError: step.message, usage };
-    }
-    // Auto-retry on rate limit with exponential backoff
-    if (step.kind === "rate_limited") {
-      retries++;
-      if (retries > MAX_RATE_LIMIT_RETRIES) {
-        await send({ type: "error", data: "Rate limited after 3 retries. Wait a minute or switch to a BYOK provider (gear icon)." });
-        break;
-      }
-      const retryDelay = 5000 * retries; // 5s, 10s, 15s
-      await send({
-        type: "text",
-        data: `\n_Rate limited — retrying in ${retryDelay / 1000}s (attempt ${retries}/${MAX_RATE_LIMIT_RETRIES})..._\n`,
-      });
-      await new Promise((r) => setTimeout(r, retryDelay));
-      loop--; // retry same iteration
-      continue;
-    }
-    retries = 0; // reset on success
-
-    prepared.messages.push(...step.appended);
-    newMessages.push(...step.appended);
-    if (step.kind === "final") {
-      const stall = readOnlyStallAction(newMessages, anyToolCallsMade, ctx?.appId, nudged);
-      if (stall === "nudge") {
-        nudged = true;
-        appendStallNudge(prepared.messages, newMessages);
-        continue;
-      }
-      if (stall === "give_up") {
-        await send({ type: "error", data: STALL_VISIBLE_ERROR });
-        newMessages.push({ role: "assistant", content: STALL_VISIBLE_ERROR });
-      }
-      break;
-    }
-    anyToolCallsMade = true;
-    if (step.kind === "infra") {
-      infraRequests.push(...step.infraRequests);
-      break;
-    }
-  }
-
-  if (infraRequests.length === 0) {
-    await send({ type: "done", data: "" });
-  }
-
-  const terminalError = emptyNoOutputError(newMessages, infraRequests, anyToolCallsMade);
-  return terminalError ? { newMessages, infraRequests, terminalError, usage } : { newMessages, infraRequests, usage };
 }

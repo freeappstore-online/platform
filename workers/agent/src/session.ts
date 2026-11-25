@@ -12,7 +12,6 @@ import {
   prepareTurn,
   readOnlyStallAction,
   runAgentStep,
-  runAgentTurn,
   type SessionContext,
   STALL_VISIBLE_ERROR,
   stepDelayMs,
@@ -115,7 +114,7 @@ const TOKEN_REVALIDATE_MS = 30 * 60 * 1000; // Re-verify token every 30 min
 
 // ── Alarm-driven build loop (#41) ──
 //
-// With ALARM_LOOP=true a chat turn no longer runs as one long invocation.
+// A chat turn does not run as one long invocation.
 // /chat persists a PendingTurn and arms an alarm; each alarm() runs ONE step
 // (one model round-trip, or one infra tool), persists the result, and re-arms.
 // A closed tab, an evicted DO or a transient upstream error loses at most the
@@ -136,12 +135,10 @@ const LATEST_TURN_ID_KEY = "latestTurnId";
 type TurnPhase = "main" | "main-infra" | "followup" | "followup-infra";
 /** aiSource is set by the worker entry (index.ts), never by the client. */
 type ChatBody = { preset?: AppPreset; message: string; aiConfig: AIConfig; archetype?: AppArchetype; aiSource?: AiSource };
-type AgentTurnResult = Awaited<ReturnType<typeof runAgentTurn>>;
 
 export interface PendingTurn {
   turnId: string;
   message: string;
-  mode?: "alarm" | "legacy";
   /** Includes the resolved API key; the record is deleted when the turn ends. */
   aiConfig: AIConfig;
   /** Caller's bearer token, needed by infra tools; deleted with the turn. */
@@ -163,7 +160,7 @@ export interface PendingTurn {
   infraResults: { id: string; content: string }[];
   /** Follow-up rounds already started in this turn. */
   followups?: number;
-  /** True once the main phase's messages are committed (mirrors the legacy path). */
+  /** True once the main phase's messages are committed. */
   turnSaved: boolean;
   /** Date.now() at the last completed step. */
   heartbeat: number;
@@ -180,21 +177,6 @@ interface TurnEventLog {
 type TurnEvent = { type: string; data: string };
 
 class StallError extends Error {}
-
-interface LegacyTurnContext {
-  pending: PendingTurn;
-  body: ChatBody;
-  session: SessionState;
-  files: Map<string, string>;
-  baselineFiles: Map<string, string>;
-  history: Message[];
-  writer: WritableStreamDefaultWriter<Uint8Array>;
-  config: StoreConfig;
-  deployEnv: DeployEnv | null;
-  authHeader?: string;
-  sendSSE: (evt: TurnEvent) => Promise<void>;
-  scrubKey: (s: string) => string;
-}
 
 function parseAppArchetype(value: unknown): AppArchetype | undefined {
   return typeof value === "string" && APP_ARCHETYPES.includes(value as AppArchetype) ? (value as AppArchetype) : undefined;
@@ -561,297 +543,10 @@ export class AgentSession implements DurableObject {
     const raced = await this.turnInProgress(request);
     if (raced) return raced;
 
-    if (this.env.ALARM_LOOP === "true") return this.startAlarmTurn(request, body);
-
-    const session = await this.load();
-    const files = new Map(Object.entries(session.files));
-    const baselineFiles = new Map(Object.entries(session.baselineFiles));
-    const history = session.messages.slice();
-    session.messages.push({ role: "user", content: body.message });
-    capMessages(session);
-    await this.save();
-    await this.syncToD1();
-
-    const { readable, writable } = new TransformStream<Uint8Array>();
-    const writer = writable.getWriter();
-
-    // Build deploy env directly from DO's env bindings (no header passing)
-    const deployEnv = this.deployEnv();
-    const config = this.config;
-    const authHeader = request.headers.get("Authorization") || undefined;
-    const now = Date.now();
-    const pending: PendingTurn = {
-      turnId: crypto.randomUUID(),
-      message: body.message,
-      mode: "legacy",
-      aiConfig: body.aiConfig,
-      authHeader,
-      phase: "main",
-      loopIndex: 0,
-      retries: 0,
-      messagesCursor: session.messages.length - 1,
-      prepared: null,
-      newMessages: [{ role: "user", content: body.message }],
-      anyToolCalls: false,
-      infraQueue: [],
-      infraResults: [],
-      turnSaved: false,
-      heartbeat: now,
-      startedAt: now,
-    };
-    const previousTurnId = await this.state.storage.get<string>(LATEST_TURN_ID_KEY);
-    if (previousTurnId && previousTurnId !== pending.turnId) await this.state.storage.delete(turnEventsKey(previousTurnId));
-    await this.state.storage.put("pendingTurn", pending);
-    await this.state.storage.put(LATEST_TURN_ID_KEY, pending.turnId);
-    await this.state.storage.put(turnEventsKey(pending.turnId), { turnId: pending.turnId, nextSeq: 1, events: [] } satisfies TurnEventLog);
-    await this.state.storage.delete("turnEvents");
-
-    // Scrub the user's API key from any error messages before streaming
-    const apiKey = body.aiConfig.apiKey;
-    const scrubKey = (s: string) => (apiKey && apiKey.length > 8 ? s.replaceAll(apiKey, "[REDACTED]") : s);
-    const sendSSE = this.createLegacySseSender(writer, pending, scrubKey);
-
-    // Run the agent in the background.
-    // Anchor the promise to the DO's lifetime so Cloudflare keeps the instance
-    // alive until the build completes, even if the client SSE stream closes.
-    const buildPromise = this.runLegacyTurn({
-      pending,
-      body,
-      session,
-      files,
-      baselineFiles,
-      history,
-      writer,
-      config,
-      deployEnv,
-      authHeader,
-      sendSSE,
-      scrubKey,
-    });
-    this.state.waitUntil(buildPromise);
-
-    return new Response(readable, {
-      headers: {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        Connection: "keep-alive",
-        ...corsHeaders(request, this.config.domain),
-      },
-    });
+    return this.startAlarmTurn(request, body);
   }
 
-  private createLegacySseSender(
-    writer: WritableStreamDefaultWriter<Uint8Array>,
-    pending: PendingTurn,
-    scrubKey: (s: string) => string,
-  ): (evt: TurnEvent) => Promise<void> {
-    const encoder = new TextEncoder();
-    const emitLegacy = this.emitter(pending);
-    return async (evt) => {
-      const safe = evt.type === "error" || evt.type === "text" ? { ...evt, data: scrubKey(evt.data) } : evt;
-      await emitLegacy(safe);
-      await this.flushEvents();
-      await writer.write(encoder.encode(`data: ${JSON.stringify(safe)}\n\n`)).catch(() => {});
-    };
-  }
-
-  private async runLegacyTurn(ctx: LegacyTurnContext): Promise<void> {
-    let turnSaved = false;
-    try {
-      const result = await this.runLegacyAgentTurn(ctx, ctx.history, ctx.body.message);
-      await this.persistLegacyAgentResult(ctx, result);
-      turnSaved = true;
-      ctx.pending.turnSaved = true;
-
-      if (result.infraRequests.length > 0) await this.runLegacyInfraAndFollowup(ctx, result.infraRequests);
-      await ctx.sendSSE({ type: "done", data: "" });
-    } catch (err) {
-      this.logError("chat", ctx.scrubKey(String(err)));
-      await ctx.sendSSE({ type: "error", data: String(err) });
-      if (!turnSaved) await this.appendLegacyFailure(ctx, err);
-      await this.syncToD1();
-    } finally {
-      await this.flushEvents();
-      await this.clearPendingTurn(ctx.pending.turnId);
-      ctx.writer.close().catch(() => {});
-    }
-  }
-
-  private async runLegacyAgentTurn(ctx: LegacyTurnContext, history: Message[], message: string): Promise<AgentTurnResult> {
-    try {
-      return await runAgentTurn(
-        ctx.body.aiConfig,
-        history,
-        message,
-        ctx.files,
-        ctx.writer,
-        ctx.config,
-        this.fileMapContext(ctx.session, ctx.files),
-        this.env,
-      );
-    } catch (err) {
-      this.logError("agent", String(err));
-      throw err;
-    }
-  }
-
-  private async persistLegacyAgentResult(ctx: LegacyTurnContext, result: AgentTurnResult): Promise<void> {
-    this.logTerminalError(result.terminalError, ctx.scrubKey);
-    if (result.usage) addUsage(ctx.session.tokenUsage, result.usage);
-    ctx.session.messages = [...ctx.history, ...result.newMessages];
-    capMessages(ctx.session);
-    if (ctx.session.errors.length > MAX_ERRORS) ctx.session.errors = ctx.session.errors.slice(-MAX_ERRORS);
-    this.trimFileMap(ctx.files, ctx.baselineFiles);
-    ctx.session.files = Object.fromEntries(ctx.files);
-    ctx.session.baselineFiles = Object.fromEntries(ctx.baselineFiles);
-    await this.save();
-    await this.syncToD1();
-  }
-
-  private async appendLegacyFailure(ctx: LegacyTurnContext, err: unknown): Promise<void> {
-    try {
-      ctx.session.messages.push({ role: "assistant", content: `Error: ${ctx.scrubKey(String(err))}` });
-      capMessages(ctx.session);
-      await this.save();
-    } catch {
-      /* best effort */
-    }
-  }
-
-  private async runLegacyInfraAndFollowup(ctx: LegacyTurnContext, infraRequests: AgentTurnResult["infraRequests"]): Promise<void> {
-    if (!ctx.deployEnv) {
-      await ctx.sendSSE({ type: "error", data: "Server configuration error: deploy environment not available." });
-      return;
-    }
-
-    const infraResults = await this.executeLegacyInfraRequests(ctx, infraRequests);
-    ctx.session.messages.push({ role: "tool_result", content: "", toolResults: infraResults });
-    ctx.session.files = Object.fromEntries(ctx.files);
-    ctx.session.baselineFiles = Object.fromEntries(ctx.baselineFiles);
-    await this.save();
-    await this.syncToD1();
-
-    try {
-      await this.runLegacyFollowup(ctx, infraResults);
-    } catch (followUpErr) {
-      this.logError("follow-up", ctx.scrubKey(String(followUpErr)));
-      await this.syncToD1();
-    }
-  }
-
-  private async runLegacyFollowup(ctx: LegacyTurnContext, infraResults: { id: string; content: string }[]): Promise<void> {
-    const hasError = infraResults.some((r) => /error|fail|threw/i.test(r.content));
-    const followUpPrompt = hasError
-      ? "The tool action above returned an error. Analyze the error, fix the issue if possible, and retry the action. Do not ask the user — just fix it."
-      : "The action completed. Summarize the result briefly for the user.";
-    const followUp = await this.runLegacyAgentTurn(ctx, ctx.session.messages, followUpPrompt);
-    if (followUp.usage) addUsage(ctx.session.tokenUsage, followUp.usage);
-
-    this.logTerminalError(followUp.terminalError, ctx.scrubKey);
-    ctx.session.messages.push(...followUp.newMessages);
-    capMessages(ctx.session);
-    ctx.session.files = Object.fromEntries(ctx.files);
-
-    if (followUp.infraRequests.length > 0) {
-      const retryResults = await this.executeLegacyInfraRequests(ctx, followUp.infraRequests);
-      ctx.session.messages.push({ role: "tool_result", content: "", toolResults: retryResults });
-      ctx.session.files = Object.fromEntries(ctx.files);
-      ctx.session.baselineFiles = Object.fromEntries(ctx.baselineFiles);
-    }
-    await this.save();
-    await this.syncToD1();
-  }
-
-  private async executeLegacyInfraRequests(
-    ctx: LegacyTurnContext,
-    infraRequests: AgentTurnResult["infraRequests"],
-  ): Promise<{ id: string; content: string }[]> {
-    const results: { id: string; content: string }[] = [];
-    for (const req of infraRequests) {
-      const tc = req.toolCall;
-      const toolResult = await this.executeLegacyInfraTool(ctx, tc);
-      await ctx.sendSSE({ type: "tool_result", data: JSON.stringify({ id: tc.id, tool: tc.name }) });
-      results.push({ id: tc.id, content: toolResult.slice(0, 3000) });
-    }
-    return results;
-  }
-
-  private async executeLegacyInfraTool(ctx: LegacyTurnContext, tc: ToolCall): Promise<string> {
-    if (!ctx.deployEnv) return "Server configuration error: deploy environment not available.";
-    try {
-      return await executeInfraTool(tc, {
-        appId: ctx.session.appId,
-        ownerId: ctx.session.ownerId,
-        ownerLogin: ctx.session.ownerLogin,
-        authHeader: ctx.authHeader,
-        files: ctx.files,
-        baselineFiles: ctx.baselineFiles,
-        env: ctx.deployEnv,
-        config: ctx.config,
-        isAdmin: ctx.session.ownerIsAdmin ?? false,
-        deployStatus: ctx.session.deployStatus,
-        onDeployStatus: (status) => this.handleLegacyDeployStatus(ctx, status),
-        onAppDeployed: (id, name) => this.handleLegacyAppDeployed(ctx, id, name),
-      });
-    } catch (err) {
-      return `Tool ${tc.name} threw an error: ${String(err)}`;
-    }
-  }
-
-  private async handleLegacyDeployStatus(ctx: LegacyTurnContext, status: DeployStatus): Promise<void> {
-    ctx.session.deployStatus = status;
-    this.logDeploy(status.phase, deployStatusDetail(status));
-    if (status.phase === "error") this.logError("deploy", status.error);
-    await this.state.storage.put("session", ctx.session);
-    await ctx.sendSSE({ type: "deploy_status", data: JSON.stringify(status) });
-    if (status.phase === "live") {
-      this.sendPush("Your build is live!");
-      this.syncToD1();
-    } else if (status.phase === "error") {
-      this.sendPush("Build failed");
-      this.syncToD1();
-    }
-  }
-
-  private async handleLegacyAppDeployed(ctx: LegacyTurnContext, id: string, name: string): Promise<void> {
-    ctx.session.appId = id;
-    ctx.session.appName = name;
-    ctx.session.deployStatus = { phase: "provisioning", steps: [] };
-    this.logDeploy("provisioning", `Starting deploy for ${name} (${id})`);
-    await this.state.storage.put("session", ctx.session);
-  }
-
-  private fileMapContext(session: SessionState, files: Map<string, string>): SessionContext {
-    return {
-      appId: session.appId,
-      appName: session.appName,
-      fileCount: files.size,
-      fileList: [...files.keys()].sort().join(", "),
-      freshTemplate: canPrepareFreshCapabilityPackages(session),
-    };
-  }
-
-  private logTerminalError(terminalError: string | undefined, scrubKey: (s: string) => string): void {
-    if (!terminalError) return;
-    const source = terminalError.startsWith("empty-no-output") ? "agent-empty" : "agent-stream";
-    this.logError(source, scrubKey(terminalError));
-  }
-
-  /** Stop tracking the oldest files past MAX_FILES, in the baseline too: a file
-   *  missing only from the working set would be pushed as a deletion
-   *  (computeFileDelta), while an untracked one is left alone in the repo. */
-  private trimFileMap(files: Map<string, string>, baselineFiles: Map<string, string>): void {
-    const fileKeys = [...files.keys()];
-    if (fileKeys.length <= MAX_FILES) return;
-    const keep = new Set(fileKeys.slice(-MAX_FILES));
-    for (const k of fileKeys) {
-      if (keep.has(k)) continue;
-      files.delete(k);
-      baselineFiles.delete(k);
-    }
-  }
-
-  // ── Alarm-driven turn (ALARM_LOOP=true) ──
+  // ── Alarm-driven turn ──
 
   /** The persisted turn, if one is running. A turn whose heartbeat is older
    *  than any step budget is stale (its alarm was lost): fail it so it can't
@@ -859,7 +554,7 @@ export class AgentSession implements DurableObject {
   private async activePendingTurn(): Promise<PendingTurn | null> {
     const pending = await this.state.storage.get<PendingTurn>("pendingTurn");
     if (!pending) return null;
-    if (pending.mode !== "legacy" && Date.now() - pending.heartbeat > INFRA_STALL_THRESHOLD_MS) {
+    if (Date.now() - pending.heartbeat > INFRA_STALL_THRESHOLD_MS) {
       await this.load();
       await this.failTurn(pending, `Build stalled — no progress for >${INFRA_STALL_THRESHOLD_MS / 1000}s`, "alarm", true);
       return null;
@@ -878,7 +573,7 @@ export class AgentSession implements DurableObject {
     };
   }
 
-  /** /chat under ALARM_LOOP: persist the turn, arm the alarm, relay events. */
+  /** /chat: persist the turn, arm the alarm, relay events. */
   private async startAlarmTurn(request: Request, body: { message: string; aiConfig: AIConfig }): Promise<Response> {
     const session = await this.load();
     const history = session.messages.slice();
@@ -890,7 +585,6 @@ export class AgentSession implements DurableObject {
     const pending: PendingTurn = {
       turnId: crypto.randomUUID(),
       message: body.message,
-      mode: "alarm",
       aiConfig: body.aiConfig,
       authHeader: request.headers.get("Authorization") || undefined,
       phase: "main",
@@ -1060,7 +754,9 @@ export class AgentSession implements DurableObject {
     pending.messagesCursor = Math.max(0, pending.messagesCursor - capMessages(session));
   }
 
-  /** Alarm-path twin of trimFileMap: untrack in both, never push a deletion. */
+  /** Stop tracking the oldest files past MAX_FILES, in the baseline too: a file
+   *  missing only from the working set would be pushed as a deletion
+   *  (computeFileDelta), while an untracked one is left alone in the repo. */
   private trimFiles(session: SessionState): void {
     const fileKeys = Object.keys(session.files);
     if (fileKeys.length > MAX_FILES) {
@@ -1342,7 +1038,7 @@ export class AgentSession implements DurableObject {
     const session = await this.load();
     this.logError(source, safe);
     await this.emitter(pending)({ type: "error", data: safe });
-    // Legacy parity: a turn that failed before its first save gets the error
+    // A turn that failed before its first save gets the error
     // appended to the saved user message. A stall always gets one, so the chat
     // shows why the build stopped instead of just going quiet.
     if (stalled || !pending.turnSaved) {
