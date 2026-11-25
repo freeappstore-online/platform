@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { computeRoles } from '../routes/auth.js';
+import { appExists } from './apps.js';
 import { isAdminLogin, isAppOwner } from './auth.js';
 import { signSession } from './session.js';
 import { hasSqlite, migration, sqliteD1 } from './sqlite-d1.testutil.js';
@@ -102,6 +103,28 @@ describe.skipIf(!hasSqlite)('ownership by immutable id against real SQLite', () 
       has: false,
     });
     expect((await get('/v1/apps/pro-only/roles', 'gh:1')).status).toBe(404);
+  });
+
+  it('a PAS row is not a FAS app for existence checks or session roles (#671)', async () => {
+    const { db, d1 } = setup();
+    db.prepare(
+      "INSERT INTO apps (id, owner_login, owner_id, created_at, store) VALUES ('pro-only', 'alice-new', 'gh:1', 0, 'apps_pro')",
+    ).run();
+    const env = { DB: d1 } as never;
+    expect(await appExists(env, 'pro-only')).toBe(false);
+    expect(await appExists(env, 'timer')).toBe(true);
+    expect((await computeRoles('gh:1', 'alice-new', env)).appRoles).toEqual({ timer: ['owner'] });
+    const res = await app.request(
+      '/v1/apps/pro-only/data-rooms',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${await signSession('gh:2', KEY, { aud: 'pro-only' })}`,
+        },
+      },
+      { DB: d1, SESSION_SIGNING_KEY: KEY },
+    );
+    expect(res.status).toBe(404);
   });
 });
 

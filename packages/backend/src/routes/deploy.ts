@@ -1,6 +1,6 @@
 import { checkArtifactFiles, registersServiceWorker } from '@freeappstore/compliance/artifact';
 import { Hono } from 'hono';
-import { HttpError } from '../lib/auth.js';
+import { FAS_APP_ROWS, HttpError } from '../lib/auth.js';
 import { type OidcClaims, verifyGithubOidc } from '../lib/github-oidc.js';
 import type { Env } from '../types.js';
 
@@ -223,7 +223,10 @@ export async function setDeployLimits(
   const files = pick('max_files', OVERRIDE_CEILING.files);
   const total = pick('max_total_bytes', OVERRIDE_CEILING.totalBytes);
   const perFile = pick('max_file_bytes', OVERRIDE_CEILING.fileBytes);
-  const app = await db.prepare('SELECT 1 AS ok FROM apps WHERE id = ?').bind(appId).first();
+  const app = await db
+    .prepare(`SELECT 1 AS ok FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
+    .bind(appId)
+    .first();
   if (!app) throw new HttpError(404, `no app ${appId}`);
   await db
     .prepare(

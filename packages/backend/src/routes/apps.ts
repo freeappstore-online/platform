@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { assertAppOwner, HttpError, requireConsoleUser } from '../lib/auth.js';
+import { assertAppOwner, FAS_APP_ROWS, HttpError, requireConsoleUser } from '../lib/auth.js';
 import type { Env } from '../types.js';
 
 export const appsRoutes = new Hono<{ Bindings: Env }>();
@@ -154,7 +154,7 @@ appsRoutes.get('/apps/deploy-status', async (c) => {
     throw err;
   }
 
-  const owned = await c.env.DB.prepare('SELECT id FROM apps WHERE owner_id = ?')
+  const owned = await c.env.DB.prepare(`SELECT id FROM apps WHERE owner_id = ? AND ${FAS_APP_ROWS}`)
     .bind(user.id)
     .all<{ id: string }>();
   const ids = new Set((owned.results ?? []).map((r) => r.id));

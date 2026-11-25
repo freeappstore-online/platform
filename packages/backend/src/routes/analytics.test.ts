@@ -40,7 +40,7 @@ function summaryEnv(owner = 'alice'): Env {
           return null as T | null;
         },
         async all<T>() {
-          if (compact === 'SELECT id FROM apps WHERE owner_id = ?') {
+          if (compact.startsWith('SELECT id FROM apps WHERE owner_id = ?')) {
             const ids = args[0] === 'gh:1' ? [{ id: 'alpha' }, { id: 'bravo' }] : [];
             return { results: ids as T[] } as D1Result<T>;
           }

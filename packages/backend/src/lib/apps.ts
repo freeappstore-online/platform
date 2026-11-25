@@ -6,6 +6,7 @@
  * the shape AND that the app is a real, published row before any write.
  */
 import type { Env } from '../types.js';
+import { FAS_APP_ROWS } from './auth.js';
 
 /**
  * App ids: 2-31 chars, a lowercase letter first, a letter or digit last,
@@ -41,6 +42,8 @@ export const VALID_CATEGORIES = [
 /** True iff `appId` is well-formed and exists in the apps registry. */
 export async function appExists(env: Env, appId: string): Promise<boolean> {
   if (!APP_ID_RE.test(appId)) return false;
-  const row = await env.DB.prepare('SELECT 1 FROM apps WHERE id = ?').bind(appId).first();
+  const row = await env.DB.prepare(`SELECT 1 FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`)
+    .bind(appId)
+    .first();
   return !!row;
 }

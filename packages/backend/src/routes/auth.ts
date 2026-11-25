@@ -2,6 +2,7 @@ import { Apple, decodeIdToken, Google } from 'arctic';
 import type { Context } from 'hono';
 import { Hono } from 'hono';
 import {
+  FAS_APP_ROWS,
   HttpError,
   isAdminLogin,
   isAdminUserId,
@@ -1063,7 +1064,9 @@ export async function computeRoles(
       env.DB.prepare('SELECT app_id, role_name FROM app_roles WHERE user_id = ?').bind(userId),
     ];
     if (isGithub) {
-      stmts.push(env.DB.prepare('SELECT id FROM apps WHERE owner_id = ?').bind(userId));
+      stmts.push(
+        env.DB.prepare(`SELECT id FROM apps WHERE owner_id = ? AND ${FAS_APP_ROWS}`).bind(userId),
+      );
     }
     const [assigned, owned] = (await env.DB.batch(stmts)) as [
       D1Result<{ app_id: string; role_name: string }>,

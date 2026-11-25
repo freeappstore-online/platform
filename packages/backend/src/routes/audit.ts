@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import { runAudit } from '../lib/audit.js';
-import { type CurrentUser, HttpError, isAdmin, requireConsoleUser } from '../lib/auth.js';
+import {
+  type CurrentUser,
+  FAS_APP_ROWS,
+  HttpError,
+  isAdmin,
+  requireConsoleUser,
+} from '../lib/auth.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import { checkAndBump, d1UsageStore } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
@@ -120,7 +126,9 @@ auditRoutes.post('/audit/run', async (c) => {
     throw err;
   }
   if (!isAdmin(user, c.env)) {
-    const owns = await c.env.DB.prepare('SELECT 1 FROM apps WHERE owner_id = ? LIMIT 1')
+    const owns = await c.env.DB.prepare(
+      `SELECT 1 FROM apps WHERE owner_id = ? AND ${FAS_APP_ROWS} LIMIT 1`,
+    )
       .bind(user.id)
       .first();
     if (!owns) return c.json({ error: 'app owners and admins only' }, 403);
