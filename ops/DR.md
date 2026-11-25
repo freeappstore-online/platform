@@ -81,11 +81,10 @@ A rollback takes effect in seconds. Then identify the actual bug, fix forward, a
 
 **Recovery (secret rotation):**
 1. https://github.com/organizations/freeappstore-online/settings/applications/3576238 → Generate a new client secret. Revoke the old one.
-2. Update the Worker:
+2. Store it and push it to the Worker (SOPS in `~/dev/ops`; `ops put` updates `secrets.enc.yaml` and every consumer in `inventory.yaml`, here `freeappstore-api`):
    ```bash
-   cd packages/backend
-   wrangler secret put GITHUB_CLIENT_SECRET
-   # paste the new secret in the prompt — do not put it on the command line
+   ~/dev/ops/bin/ops put fas GITHUB_CLIENT_SECRET
+   # paste the new secret at the prompt — do not put it on the command line
    ```
 3. No redeploy needed; secrets bind live.
 

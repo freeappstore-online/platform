@@ -44,15 +44,13 @@ openssl rand -hex 32      | wrangler secret put SESSION_SIGNING_KEY --local
 
 ## Deploy
 
-```bash
-pnpm db:migrate:prod
-wrangler secret put GITHUB_CLIENT_ID
-wrangler secret put GITHUB_CLIENT_SECRET
-wrangler secret put SESSION_SIGNING_KEY
-pnpm deploy
-```
+Push to `main`. `.github/workflows/deploy-backend.yml` runs the tests, applies the D1 migrations
+and deploys the Worker; `api.freeappstore.online` is attached by the `[[routes]]` custom domain in
+`wrangler.toml`. `GITHUB_CLIENT_ID` is a public `[vars]` entry there, not a secret.
 
-Then attach the custom domain `api.freeappstore.online` to this Worker via the Cloudflare dashboard (Workers Routes or custom domains).
+Production secrets (`GITHUB_CLIENT_SECRET`, `SESSION_SIGNING_KEY`, …) are SOPS-encrypted in
+`~/dev/ops`. Store or rotate one with `~/dev/ops/bin/ops put fas <KEY>`, which pushes it to the
+Worker; never `wrangler secret put` it directly, or `secrets.enc.yaml` goes stale.
 
 ## Security model
 
