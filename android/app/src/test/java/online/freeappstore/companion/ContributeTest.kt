@@ -67,13 +67,25 @@ class ContributeTest {
             return if (stop || !keepGoing()) null else Audio(FloatArray(text.length), 24_000)
         }
     }
+    /** Writes a byte per sample, so a file's size is its length in samples. */
+    class FakeSink(file: File, val rate: Int) : AudioSink {
+        private val out = file.outputStream()
+        val writes = mutableListOf<Int>()
+        var finished = false
+        var closed = false
+        override fun write(samples: FloatArray) { writes += samples.size; out.write(ByteArray(samples.size) { 7 }) }
+        override fun finish() { finished = true }
+        override fun close() { closed = true; out.close() }
+    }
+    private val sinks = mutableListOf<FakeSink>()
+    private val encoder = { file: File, rate: Int -> FakeSink(file, rate).also { sinks += it } }
     private fun job(id: String, text: String = "It was a bright cold day in April.", model: String = "kokoro", version: String = "v1.0",
                     params: JSONObject = JSONObject().put("voice", "af_heart"), formats: List<String> = listOf("audio/mp4"),
                     maxBytes: Long = 1_000_000, expires: Any = now + 15 * 60_000, input: JSONObject = JSONObject().put("text", text)) =
         JSONObject().put("id", id).put("setId", "set1").put("key", "book/$id").put("input", input).put("model", model).put("modelVersion", version)
             .put("params", params).put("formats", JSONArray(formats)).put("maxBytes", maxBytes).put("leaseToken", "lease-$id").put("leaseExpiresAt", expires)
     private fun contributor(attestation: Attestation = Attestation.NONE, clock: () -> Long = { now }) =
-        Contributor(GenerationClient(api) { "ndev_test" }, log, synth, { audio, file -> file.writeBytes(ByteArray(audio.samples.size) { 7 }) }, dir, attestation, clock)
+        Contributor(GenerationClient(api) { "ndev_test" }, log, synth, encoder, dir, attestation, clock)
 
     @Before fun setUp() { dir = Files.createTempDirectory("contribute").toFile() }
 
@@ -139,7 +151,7 @@ class ContributeTest {
         val slow = object : Synthesizer by synth {
             override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? { t += 15 * 60_000; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
         }
-        Contributor(GenerationClient(api) { "ndev_test" }, log, slow, { _, f -> f.writeBytes(ByteArray(1)) }, dir, now = { t }).run("books", { true })
+        Contributor(GenerationClient(api) { "ndev_test" }, log, slow, encoder, dir, now = { t }).run("books", { true })
         assertTrue(api.uploads.isEmpty())
         assertEquals("lease_expired", log.rows["j1"]!!.reason)
     }
@@ -149,7 +161,7 @@ class ContributeTest {
         val stopping = object : Synthesizer by synth {
             override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? { go = false; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
         }
-        Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, { _, f -> f.writeBytes(ByteArray(1)) }, dir, now = { now }).run("books", { go })
+        Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }).run("books", { go })
         assertTrue(api.uploads.isEmpty())
         assertEquals("stopped", log.rows["j1"]!!.reason)
     }
@@ -185,7 +197,7 @@ class ContributeTest {
                 synth.spoken += text; return Audio(FloatArray(if (text == "* * *") 0 else text.length * 2_400), 24_000)
             }
         }
-        Contributor(GenerationClient(api) { "ndev_test" }, log, tenthPerChar, { a, f -> f.writeBytes(ByteArray(a.samples.size)) }, dir, now = { now }).run("books", { true })
+        Contributor(GenerationClient(api) { "ndev_test" }, log, tenthPerChar, encoder, dir, now = { now }).run("books", { true })
         assertEquals(listOf("One two.", "Three!", "* * *", "Four."), synth.spoken)
         // 0.8 s, 0.4 s pause, 0.6 s, 0.8 s paragraph pause, "* * *" left out, 0.5 s; no pause at the end.
         val segments = api.uploads.single().meta!!.getJSONArray("segments")
@@ -196,13 +208,18 @@ class ContributeTest {
             assertEquals(e, listOf(got.getInt(0), got.getInt(1), got.getDouble(2), got.getDouble(3)))
         }
         assertEquals(3.1 * 24_000, api.uploads.single().bytes.size.toDouble(), 0.5)
+        // Each sentence and pause goes to the encoder as it comes (#793), never the chapter joined in memory.
+        val sink = sinks.single()
+        assertEquals(24_000, sink.rate)
+        assertEquals(listOf(19_200, 9_600, 14_400, 19_200, 12_000), sink.writes)
+        assertTrue(sink.finished && sink.closed)
     }
     @Test fun metaOverTheServerLimitIsNotSubmitted() {
         api.jobs += job("j1", text = "Go. ".repeat(4_000).trim(), maxBytes = Long.MAX_VALUE)
         val tiny = object : Synthesizer by synth { // 10 Hz keeps the audio small; 4,000 segments are about 100 KB of JSON
             override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean) = Audio(FloatArray(1), 10)
         }
-        assertEquals(0, Contributor(GenerationClient(api) { "ndev_test" }, log, tiny, { a, f -> f.writeBytes(ByteArray(a.samples.size)) }, dir, now = { now }).run("books", { true }))
+        assertEquals(0, Contributor(GenerationClient(api) { "ndev_test" }, log, tiny, encoder, dir, now = { now }).run("books", { true }))
         assertTrue(api.uploads.isEmpty())
         assertEquals("too_large", log.rows["j1"]!!.reason)
     }
@@ -216,7 +233,7 @@ class ContributeTest {
                 synth.spoken += text; t += minutes * 60_000L; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null
             }
         }
-        return Contributor(GenerationClient(api) { "ndev_test" }, log, timed, { a, f -> f.writeBytes(ByteArray(a.samples.size)) }, dir, now = { t }).run("books", { true })
+        return Contributor(GenerationClient(api) { "ndev_test" }, log, timed, encoder, dir, now = { t }).run("books", { true })
     }
     @Test fun extendsTheLeaseWithinFiveMinutesOfExpiry() {
         api.extend = { t + 15 * 60_000 }
@@ -231,6 +248,9 @@ class ContributeTest {
         assertEquals(1, api.extensions.size)
         assertTrue(api.uploads.isEmpty())
         assertEquals("lease_expired", log.rows["j1"]!!.reason)
+        val sink = sinks.single() // stopped part-way: the encoder is closed unfinished and its file removed
+        assertTrue(sink.closed && !sink.finished)
+        assertFalse(File(dir, "contribution.m4a").exists())
     }
     @Test fun aLeaseAtItsCapIsUsedWhileItLasts() {
         api.extend = { throw ApiFailure(409, "Lease cap reached.") }

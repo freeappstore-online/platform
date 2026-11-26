@@ -94,7 +94,9 @@ and verifies every upload; the phone is never trusted.
   than `{ text }` is skipped, never approximated.
 - **Loop** (WorkManager, hourly and on **Run now**; by default only while charging on an unmetered network, which the user
   can relax; foreground notification with Stop): `POST …/generation/claim` with the device credential → synthesize the
-  job's `input.text` verbatim, a sentence at a time → AAC-LC mono 64 kbps in MP4 (`MediaCodec` + `MediaMuxer`) →
+  job's `input.text` verbatim, a sentence at a time, each sentence and pause fed to the encoder as it is synthesized
+  (#793; the chapter is never held in memory, only a temp file in the cache) → AAC-LC mono 64 kbps in MP4
+  (`MediaCodec` + `MediaMuxer`) →
   `PUT …/jobs/:jobId/result` multipart (`file`, `audio/mp4`, and `meta`) with `X-Lease-Token`. Nothing is uploaded after
   the lease is within 30 s of expiry, above `maxBytes`, or with `meta` over 64 KB. A job is recorded before its upload
   starts and is never generated or uploaded again on this phone.

@@ -40,6 +40,14 @@ fun interface Attestation {
 
 class Audio(val samples: FloatArray, val sampleRate: Int)
 
+/** Where narration goes as it is synthesized (#793): [AacEncoder] on the phone, writing to a file. */
+interface AudioSink : AutoCloseable {
+    /** Appends mono samples in -1..1. */
+    fun write(samples: FloatArray)
+    /** Ends the audio and completes the file. */
+    fun finish()
+}
+
 interface Synthesizer {
     val model: ModelId
     /** Whether this model can honour the job's `params` exactly. */
@@ -159,7 +167,7 @@ object Sentences {
 /** The claim → generate → encode → submit loop for one app. */
 class Contributor(
     private val client: GenerationClient, private val log: ContributionLog, private val synth: Synthesizer,
-    private val encode: (Audio, File) -> Unit, private val workDir: File,
+    private val encoder: (File, Int) -> AudioSink, private val workDir: File,
     private val attestation: Attestation = Attestation.NONE, private val now: () -> Long = System::currentTimeMillis,
 ) {
     /**
@@ -185,14 +193,12 @@ class Contributor(
         val file = File(workDir, "contribution.m4a")
         val lease = Lease(appId, job)
         try {
-            val narration = narrate(job, lease, keepGoing)
-            if (narration == null) {
+            val segments = narrate(job, file, lease, keepGoing)
+            if (segments == null) {
                 log.record(Contribution(job.id, appId, job.key, now(), "skipped", if (keepGoing()) "lease_expired" else "stopped"))
                 return false
             }
-            val (audio, segments) = narration
             val meta = JSONObject().put("segments", segments)
-            encode(audio, file)
             lease.renew()
             val refusal = when {
                 file.length() > job.maxBytes || meta.toString().toByteArray().size > GenerationPolicy.MAX_META_BYTES -> "too_large"
@@ -215,29 +221,30 @@ class Contributor(
     }
     /**
      * The job's own input, verbatim: the only text this path can generate. Narrated a sentence at a time as Books does
-     * (#785), the sentences joined by its pauses, with `[charStart, charEnd, startSec, endSec]` for each. Null when
-     * stopped or the lease ran out.
+     * (#785), the sentences joined by its pauses, each one encoded into [file] as soon as it is synthesized (#793).
+     * Returns `[charStart, charEnd, startSec, endSec]` for each sentence, or null when stopped or the lease ran out.
      */
-    private fun narrate(job: GenerationJob, lease: Lease, keepGoing: () -> Boolean): Pair<Audio, JSONArray>? {
-        val parts = mutableListOf<FloatArray>()
+    private fun narrate(job: GenerationJob, file: File, lease: Lease, keepGoing: () -> Boolean): JSONArray? {
         val segments = JSONArray()
-        var length = 0
+        var sink: AudioSink? = null
         var rate = 24_000
-        for (s in Sentences.split(job.text, KokoroModel.spanish(job.params))) {
-            lease.renew()
-            val audio = synth.synthesize(job.text.substring(s.start, s.end), job.params) { keepGoing() && lease.held } ?: return null
-            if (audio.samples.isEmpty()) continue // nothing to say, e.g. "* * *"
-            rate = audio.sampleRate
-            segments.put(JSONArray().put(s.start).put(s.end).put(seconds(length, rate)).put(seconds(length + audio.samples.size, rate)))
-            val pause = FloatArray(((if (s.endsParagraph) GenerationPolicy.PARAGRAPH_PAUSE else GenerationPolicy.SENTENCE_PAUSE) * rate).toInt())
-            parts += audio.samples; parts += pause
-            length += audio.samples.size + pause.size
-        }
-        parts.removeLastOrNull() // no pause after the last sentence
-        val samples = FloatArray(parts.sumOf { it.size })
-        var at = 0
-        for (part in parts) { part.copyInto(samples, at); at += part.size }
-        return Audio(samples, rate) to segments
+        var length = 0
+        var pause = 0 // written before the next sentence, so none follows the last
+        try {
+            for (s in Sentences.split(job.text, KokoroModel.spanish(job.params))) {
+                lease.renew()
+                val audio = synth.synthesize(job.text.substring(s.start, s.end), job.params) { keepGoing() && lease.held } ?: return null
+                if (audio.samples.isEmpty()) continue // nothing to say, e.g. "* * *"
+                val out = sink ?: encoder(file, audio.sampleRate).also { sink = it; rate = audio.sampleRate }
+                if (pause > 0) { out.write(FloatArray(pause)); length += pause }
+                segments.put(JSONArray().put(s.start).put(s.end).put(seconds(length, rate)).put(seconds(length + audio.samples.size, rate)))
+                out.write(audio.samples)
+                length += audio.samples.size
+                pause = ((if (s.endsParagraph) GenerationPolicy.PARAGRAPH_PAUSE else GenerationPolicy.SENTENCE_PAUSE) * rate).toInt()
+            }
+            (sink ?: encoder(file, rate).also { sink = it }).finish()
+            return segments
+        } finally { sink?.close() }
     }
     private fun seconds(samples: Int, rate: Int) = Math.round(samples * 1000.0 / rate) / 1000.0
 

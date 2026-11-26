@@ -33,7 +33,7 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             if (apps.isEmpty()) return@withContext Result.success()
             show("Looking for jobs")
             KokoroSynthesizer(graph.kokoro).use { synth ->
-                val contributor = Contributor(graph.generation, local, synth, AacEncoder::encode, applicationContext.cacheDir)
+                val contributor = Contributor(graph.generation, local, synth, ::AacEncoder, applicationContext.cacheDir)
                 for (app in apps) {
                     if (!keepGoing()) break
                     runCatching { graph.generation.refresh(app, local) }.onFailure { if (DeviceConnection.expired(it)) throw it }
