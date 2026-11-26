@@ -1018,6 +1018,7 @@ authRoutes.delete('/auth/me', async (c) => {
     db.prepare('UPDATE generation_artifacts SET user_id = NULL WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM generation_submissions WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM generation_leases WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM generation_events WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
   ]);
   return c.json({ ok: true });

@@ -55,7 +55,62 @@ export const GENERATION_LIMITS = {
   verifyLockMs: 10 * 60_000,
   /** Replicas agree when their durations differ by at most this fraction. */
   replicaDurationSlack: 0.15,
+  /** Attempt records (#813, #827): per request, per user per UTC day, and how long they are kept. */
+  eventsPerRequest: 50,
+  eventsDaily: 1_000,
+  eventsKeepMs: 14 * 24 * 60 * 60_000,
 };
+
+/** How a job attempt ended on the device (#813), the same on every runner; `submitted`: it uploaded. */
+export const GENERATION_END_REASONS = [
+  'submitted',
+  'user_stop',
+  'unplugged',
+  'thermal',
+  'background_expired',
+  'network',
+  'lease_403',
+  'lease_cap',
+  'model_missing',
+  'model_error',
+  'encode_error',
+  'too_large',
+  'unsupported',
+  'server_4xx',
+  'server_5xx',
+  'other',
+] as const;
+const RUNNERS = ['android', 'ios', 'browser', 'desktop'];
+/**
+ * What a device may report about one attempt (#827): numbers and context, no
+ * text or audio. Stage wall times, process CPU time and peak memory where the
+ * platform exposes them, battery (0-100) and thermal state at start and end.
+ */
+const RECORD_FIELDS = {
+  error: 'string',
+  appVersion: 'string',
+  os: 'string',
+  device: 'string',
+  network: 'string',
+  thermalStart: 'string',
+  thermalEnd: 'string',
+  background: 'boolean',
+  chargingStart: 'boolean',
+  chargingEnd: 'boolean',
+  batteryStart: 'number',
+  batteryEnd: 'number',
+  startedAt: 'number',
+  wallMs: 'number',
+  loadMs: 'number',
+  synthMs: 'number',
+  encodeMs: 'number',
+  uploadMs: 'number',
+  cpuMs: 'number',
+  peakMemMb: 'number',
+  rtf: 'number',
+  bytes: 'number',
+  durationMs: 'number',
+} as const;
 const FORMATS = ['audio/mp4', 'audio/ogg', 'audio/wav'];
 const KEY_RE = /^[A-Za-z0-9._:/-]{1,200}$/;
 const NAME_RE = /^[A-Za-z0-9._:/@+-]{1,120}$/;
@@ -493,6 +548,30 @@ async function ownerJobs(
       created_at: number;
       decided_at: number | null;
     }>();
+  // Attempt records (#827), linked to a submission through the lease.
+  const { results: events } = await c.env.DB.prepare(
+    `SELECT e.job_id, e.user_id, u.github_login, e.runner, e.reason, e.record, e.created_at, l.submission_id
+     FROM generation_events e LEFT JOIN generation_leases l ON l.job_id = e.job_id AND l.user_id = e.user_id
+     LEFT JOIN users u ON u.id = e.user_id
+     WHERE e.job_id IN (SELECT value FROM json_each(?)) ORDER BY e.created_at DESC`,
+  )
+    .bind(JSON.stringify(page.map((j) => j.id)))
+    .all<{
+      job_id: string;
+      user_id: string;
+      github_login: string | null;
+      runner: string;
+      reason: string;
+      record: string;
+      created_at: number;
+      submission_id: string | null;
+    }>();
+  const record = (e: (typeof events)[number]) => ({
+    runner: e.runner,
+    reason: e.reason,
+    createdAt: e.created_at,
+    ...(JSON.parse(e.record) as Record<string, unknown>),
+  });
   const jobs = page.map((j) => ({
     id: j.id,
     key: j.key,
@@ -522,7 +601,13 @@ async function ownerJobs(
         durationMs: x.duration_ms,
         createdAt: x.created_at,
         decidedAt: x.decided_at,
+        record: ((e) => (e ? record(e) : null))(events.find((e) => e.submission_id === x.id)),
       })),
+    // Attempts that ended without an upload, the 5 latest.
+    attempts: events
+      .filter((e) => e.job_id === j.id && !e.submission_id)
+      .slice(0, 5)
+      .map((e) => ({ contributor: contributorInfo(e.user_id, e.github_login), ...record(e) })),
   }));
   return { jobs, more: rows.length > q.limit };
 }
@@ -861,6 +946,77 @@ generationRoutes.get('/apps/:appId/generation/submissions', async (c) => {
   });
 });
 
+/** A device's record of one attempt, validated: only RECORD_FIELDS, strings of at most 300 characters. */
+function attemptRecord(e: Record<string, unknown>): Record<string, unknown> {
+  const record: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(e)) {
+    if (name === 'jobId' || name === 'runner' || name === 'reason' || value === null) continue;
+    const type = RECORD_FIELDS[name as keyof typeof RECORD_FIELDS];
+    const ok =
+      type === 'string'
+        ? typeof value === 'string' && value.length <= 300
+        : type === 'number'
+          ? typeof value === 'number' && Number.isFinite(value) && value >= 0
+          : type === 'boolean' && typeof value === 'boolean';
+    if (!ok) throw new HttpError(400, `invalid event field ${name}`);
+    record[name] = value;
+  }
+  return record;
+}
+
+/**
+ * Attempt records (#813, #827): what the device measured while it ran a job it
+ * leased and how the attempt ended. One per lease, a resend replaces it; events
+ * for jobs the caller never leased are ignored. Owners see them in `listJobs`.
+ */
+generationRoutes.post('/apps/:appId/generation/events', async (c) => {
+  const appId = c.req.param('appId');
+  const who = await contributor(c, appId);
+  const { events } = await nativeBody(c, 64 * 1024);
+  if (
+    !Array.isArray(events) ||
+    !events.length ||
+    events.length > GENERATION_LIMITS.eventsPerRequest
+  )
+    throw new HttpError(400, `send 1 to ${GENERATION_LIMITS.eventsPerRequest} events`);
+  const rows = events.map((e) => {
+    if (
+      !e ||
+      typeof e !== 'object' ||
+      typeof e.jobId !== 'string' ||
+      !RUNNERS.includes(e.runner) ||
+      !GENERATION_END_REASONS.includes(e.reason)
+    )
+      throw new HttpError(400, 'an event needs jobId, runner and reason');
+    return {
+      jobId: e.jobId as string,
+      runner: e.runner as string,
+      reason: e.reason as string,
+      record: attemptRecord(e),
+    };
+  });
+  const now = Date.now();
+  const allowed = await d1UsageStore(c.env.DB).bumpIfBelow!(
+    `genevents:${who.id}`,
+    dayKey(now),
+    rows.length,
+    GENERATION_LIMITS.eventsDaily,
+  );
+  if (!allowed) throw new HttpError(429, 'daily event limit reached; try tomorrow');
+  const results = await c.env.DB.batch(
+    rows.map((r) =>
+      c.env.DB.prepare(
+        `INSERT INTO generation_events (job_id, user_id, app_id, runner, reason, record, created_at)
+         SELECT l.job_id, l.user_id, l.app_id, ?4, ?5, ?6, ?7 FROM generation_leases l
+         WHERE l.job_id = ?1 AND l.user_id = ?2 AND l.app_id = ?3
+         ON CONFLICT (job_id, user_id) DO UPDATE SET runner = excluded.runner, reason = excluded.reason,
+           record = excluded.record, created_at = excluded.created_at`,
+      ).bind(r.jobId, who.id, appId, r.runner, r.reason, JSON.stringify(r.record), now),
+    ),
+  );
+  return c.json({ recorded: results.reduce((n, r) => n + r.meta.changes, 0) });
+});
+
 /**
  * Discovery (#794): the sets with jobs the caller could claim right now, by
  * app, under the claim's own rules. A console session or a native device
@@ -1171,6 +1327,9 @@ export async function pruneGenerated(env: Env, now = Date.now(), limit = 100): P
          WHERE status = 'pending' AND created_at < ?`,
       )
       .bind(now, now - GENERATION_LIMITS.pendingMs),
+    db
+      .prepare('DELETE FROM generation_events WHERE created_at < ?')
+      .bind(now - GENERATION_LIMITS.eventsKeepMs),
   ]);
   return results.length;
 }

@@ -78,7 +78,9 @@ Jobs are ordered by key. `status` is `open` or `accepted`; `limit` is 50 by defa
 characters of the text and `inputChars` its length. `artifact` is `null` or `{ url, durationMs, bytes,
 contributor, acceptedAt }` (`url` as in the manifest). `submissions` are the job's 5 latest, newest
 first: `{ id, contributor, deviceKind, attestation, status, reason, wer, durationMs, createdAt,
-decidedAt }`. A `contributor` is `{ id, login }` (the user id `block` takes and the GitHub login), or
+decidedAt, record }`, where `record` is the device's attempt record for that upload (below) or null;
+`attempts` are the job's 5 latest attempt records that ended without an upload, each with its
+`contributor`. A `contributor` is `{ id, login }` (the user id `block` takes and the GitHub login), or
 `null` once the account is deleted.
 
 Contributor: a session delivered to the app (or a console session), or a native companion device
@@ -89,6 +91,7 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
 | `POST /apps/:appId/generation/claim` | `{ setId?, models: [{ model, modelVersion }] }`; optional header `X-Runner-Id` | `{ job: { id, setId, key, input, model, modelVersion, params, formats, maxBytes, language, leaseToken, leaseExpiresAt } }` or `204` |
 | `POST /apps/:appId/generation/jobs/:jobId/lease` | header `X-Lease-Token` | `{ leaseExpiresAt }`; `409 { error, leaseExpiresAt }` at the cap |
 | `PUT /apps/:appId/generation/jobs/:jobId/result` | multipart `file` + optional `meta` (JSON object, at most 64 KB); header `X-Lease-Token`; optional `X-Attestation` | `202 { submissionId, status }` |
+| `POST /apps/:appId/generation/events` | `{ events: [{ jobId, runner, reason, ...numbers }] }`, 1-50 | `{ recorded }` |
 | `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, wer, durationMs, input: { text }, artifact: { url, metaUrl } \| null }] }`, the caller's own, newest 100 |
 
 - A lease lasts 15 minutes and uploads once. While still generating, the holder can extend it
@@ -114,6 +117,21 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   device skips sets it cannot run. A console session or a native device sees every store app;
   `?appId=` narrows to one app and then authenticates exactly like claim (that app's session too,
   `403` if blocked).
+- `…/events` records how each attempt at a job the caller leased went
+  ([#813](https://github.com/freeappstore-online/platform/issues/813),
+  [#827](https://github.com/freeappstore-online/platform/issues/827)): one record per lease (a resend
+  replaces it; jobs the caller never leased are ignored). `runner` is `android`, `ios`, `browser` or
+  `desktop`; `reason` is the local end: `submitted`, `user_stop`, `unplugged`, `thermal`,
+  `background_expired`, `network`, `lease_403`, `lease_cap`, `model_missing`, `model_error`,
+  `encode_error`, `too_large`, `unsupported`, `server_4xx`, `server_5xx` or `other`. Optional fields,
+  numbers and context only: `error`, `appVersion`, `os`, `device`, `network`, `thermalStart`,
+  `thermalEnd` (strings of at most 300 characters), `background`, `chargingStart`, `chargingEnd`
+  (booleans), `batteryStart`, `batteryEnd` (0-100), `startedAt`, `wallMs`, `loadMs`, `synthMs`,
+  `encodeMs`, `uploadMs`, `cpuMs` (process CPU time), `peakMemMb`, `rtf` (synthesis time over audio
+  duration), `bytes`, `durationMs` (non-negative numbers). Any other field is `400`. No text or audio:
+  the device keeps the full record (input, output, segments) in its own history, where it can be
+  played back; the server already has the text and the upload. Kept 14 days, 1,000 per user per UTC
+  day (then `429`). Owners see them in the jobs list.
 - `…/submissions` lists only the caller's own submissions (#824). `wer` and `durationMs` are what
   verification measured (null until then), `input` is the job's input as the claim returned it (so a
   device can show text for jobs another device of the account ran), and `artifact` is the job's

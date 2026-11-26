@@ -628,6 +628,7 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
       inputChars: number;
       artifact: Record<string, unknown> | null;
       submissions: Record<string, unknown>[];
+      attempts: Record<string, unknown>[];
     }[];
     nextCursor: string | null;
   };
@@ -733,8 +734,10 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
         durationMs: null,
         createdAt: expect.any(Number),
         decidedAt: expect.any(Number),
+        record: null,
       },
     ]);
+    expect(a!.attempts).toEqual([]);
     expect(first.jobs[1]).toEqual(expect.objectContaining({ artifact: null, submissions: [] }));
     const rest = (await (await s.request(`/sets/${setId}/jobs?limit=2&cursor=b`)).json()) as Listed;
     expect(rest.jobs.map((j) => j.key)).toEqual(['c']);
@@ -743,6 +746,79 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
       await s.request(`/sets/${setId}/jobs?status=accepted`)
     ).json()) as Listed;
     expect(accepted.jobs.map((j) => j.key)).toEqual(['a']);
+  });
+
+  it('attempt records: one per lease, numbers only, shown to the owner by submission or as an attempt (#827)', async () => {
+    const s = await setup();
+    const setId = await s.createSet();
+    await s.addJobs(setId, [
+      { key: 'a', input: { text: 'A.' } },
+      { key: 'b', input: { text: 'B.' } },
+    ]);
+    const send = (user: string, events: unknown) =>
+      s.request('/events', { method: 'POST', user, json: { events } });
+    const a = (await s.claim('u2', { setId }))!;
+    const sub = await s.submissionId(await s.submit('u2', a.id, a.leaseToken));
+    const b = (await s.claim('u3', { setId }))!;
+    const numbers = {
+      wallMs: 5200,
+      loadMs: 900,
+      synthMs: 3800,
+      cpuMs: 7100,
+      rtf: 0.4,
+      batteryStart: 80,
+      chargingStart: true,
+    };
+    const sent = await send('u2', [
+      { jobId: a.id, runner: 'browser', reason: 'other', ...numbers },
+      // Never leased by u2: ignored.
+      { jobId: b.id, runner: 'browser', reason: 'submitted' },
+    ]);
+    expect(await sent.json()).toEqual({ recorded: 1 });
+    // A resend replaces the lease's record.
+    expect(
+      await (
+        await send('u2', [
+          { jobId: a.id, runner: 'browser', reason: 'submitted', ...numbers, appVersion: '1.2' },
+        ])
+      ).json(),
+    ).toEqual({ recorded: 1 });
+    await send('u3', [
+      { jobId: b.id, runner: 'android', reason: 'thermal', thermalEnd: 'severe', background: true },
+    ]);
+    for (const bad of [
+      [],
+      [{ jobId: a.id, runner: 'toaster', reason: 'submitted' }],
+      [{ jobId: a.id, runner: 'ios', reason: 'bored' }],
+      [{ jobId: a.id, runner: 'ios', reason: 'submitted', text: 'no text' }],
+      [{ jobId: a.id, runner: 'ios', reason: 'submitted', cpuMs: -1 }],
+      [{ jobId: a.id, runner: 'ios', reason: 'submitted', device: 'x'.repeat(301) }],
+    ])
+      expect((await send('u2', bad)).status).toBe(400);
+    const { jobs } = (await (await s.request(`/sets/${setId}/jobs`)).json()) as Listed;
+    const [ja, jb] = jobs;
+    expect(ja!.submissions[0]!.id).toBe(sub.submissionId);
+    expect(ja!.submissions[0]!.record).toEqual({
+      runner: 'browser',
+      reason: 'submitted',
+      createdAt: expect.any(Number),
+      ...numbers,
+      appVersion: '1.2',
+    });
+    expect(ja!.attempts).toEqual([]);
+    expect(jb!.attempts).toEqual([
+      {
+        contributor: { id: 'u3', login: 'carol' },
+        runner: 'android',
+        reason: 'thermal',
+        createdAt: expect.any(Number),
+        thermalEnd: 'severe',
+        background: true,
+      },
+    ]);
+    // Kept 14 days.
+    await pruneGenerated(s.env as never, Date.now() + GENERATION_LIMITS.eventsKeepMs + 1);
+    expect(s.db.prepare('SELECT COUNT(*) AS n FROM generation_events').get()).toEqual({ n: 0 });
   });
 
   it('owner reads one job with its whole input', async () => {
