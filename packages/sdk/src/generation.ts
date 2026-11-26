@@ -4,6 +4,28 @@ import { authedFetch } from './authed-fetch.js';
 /** `contribute` extends a lease this close to its expiry while `generate` still runs (#783). */
 const LEASE_MARGIN_MS = 5 * 60_000;
 
+const RUNNER_KEY = 'fas:generation-runner';
+let sessionRunner: string | undefined;
+
+/**
+ * This browser's runner id (#825), sent as `X-Runner-Id` so each of a user's
+ * devices holds its own lease: random once per install (localStorage), or once
+ * per page load where storage is unavailable.
+ */
+function runnerId(): string {
+  try {
+    let id = localStorage.getItem(RUNNER_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(RUNNER_KEY, id);
+    }
+    return id;
+  } catch {
+    sessionRunner ??= crypto.randomUUID();
+    return sessionRunner;
+  }
+}
+
 export type GenerationFormat = 'audio/mp4' | 'audio/ogg' | 'audio/wav';
 
 /** A local model a device can run. */
@@ -257,11 +279,14 @@ export class Generation {
 
   // ── Contributor ──
 
-  /** Lease one open job (15 minutes), or null when there is no work for these models. */
+  /**
+   * Lease one open job (15 minutes), or null when there is no work for these models. A new claim
+   * releases this browser's previous lease; other devices keep theirs, up to 4 per user (then 429).
+   */
   async claim(opts: { setId?: string; models: GenerationModel[] }): Promise<GenerationJob | null> {
     const response = await this.request('/claim', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Runner-Id': runnerId() },
       body: JSON.stringify(opts),
     });
     if (response.status === 204) return null;
@@ -277,7 +302,10 @@ export class Generation {
     const body = new FormData();
     body.append('file', file);
     if (opts.meta !== undefined) body.append('meta', JSON.stringify(opts.meta));
-    const headers: Record<string, string> = { 'X-Lease-Token': job.leaseToken };
+    const headers: Record<string, string> = {
+      'X-Lease-Token': job.leaseToken,
+      'X-Runner-Id': runnerId(),
+    };
     if (opts.attestation) headers['X-Attestation'] = opts.attestation;
     const response = await this.request(`/jobs/${encodeURIComponent(job.id)}/result`, {
       method: 'PUT',
@@ -295,7 +323,7 @@ export class Generation {
   async extendLease(job: GenerationJob): Promise<number> {
     const response = await this.request(`/jobs/${encodeURIComponent(job.id)}/lease`, {
       method: 'POST',
-      headers: { 'X-Lease-Token': job.leaseToken },
+      headers: { 'X-Lease-Token': job.leaseToken, 'X-Runner-Id': runnerId() },
     });
     job.leaseExpiresAt = ((await response.json()) as { leaseExpiresAt: number }).leaseExpiresAt;
     return job.leaseExpiresAt;

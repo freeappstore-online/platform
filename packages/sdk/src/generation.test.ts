@@ -122,6 +122,39 @@ describe('generation SDK', () => {
     expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ setId: 's1', models });
   });
 
+  it('claim, submit and extendLease send one X-Runner-Id per browser install', async () => {
+    const stored = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => stored.get(k) ?? null,
+      setItem: (k: string, v: string) => stored.set(k, v),
+    });
+    const fetch = mockFetch(
+      json({ job: job('j1') }),
+      json({ leaseExpiresAt: 1 }),
+      json({ submissionId: 'sub1', status: 'pending' }, 202),
+    );
+    const gen = client();
+    const j = (await gen.claim({ models }))!;
+    await gen.extendLease(j);
+    await gen.submit(j, new Blob(['ogg'], { type: 'audio/ogg' }));
+    const ids = fetch.mock.calls.map(([, init]) => init.headers['X-Runner-Id']);
+    expect(ids[0]).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    expect(ids).toEqual([ids[0], ids[0], ids[0]]);
+    expect(stored.get('fas:generation-runner')).toBe(ids[0]);
+    // Storage that throws (private mode, blocked): one id for the page's lifetime.
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('denied');
+      },
+    });
+    const f2 = mockFetch(json({ job: job('j2') }), json({ job: job('j3') }));
+    await gen.claim({ models });
+    await client().claim({ models });
+    const [a, b] = f2.mock.calls.map(([, init]) => init.headers['X-Runner-Id']);
+    expect(a).toMatch(/^[A-Za-z0-9_-]{8,64}$/);
+    expect(b).toBe(a);
+  });
+
   it('submit sends multipart file + meta with the lease token and attestation', async () => {
     const fetch = mockFetch(json({ submissionId: 'sub1', status: 'pending' }, 202));
     const file = new Blob(['ogg'], { type: 'audio/ogg' });

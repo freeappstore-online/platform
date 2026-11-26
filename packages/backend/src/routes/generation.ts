@@ -37,6 +37,8 @@ export const GENERATION_LIMITS = {
   leaseMs: 15 * 60_000,
   /** Extensions (#783) never take a lease past this long after its claim. */
   leaseMaxMs: 2 * 60 * 60_000,
+  /** Open leases one user holds at once, across their runners (devices, browsers) (#825). */
+  userLeases: 4,
   userDaily: 200,
   appDaily: 5_000,
   jobsPerRequest: 500,
@@ -210,28 +212,35 @@ async function owner(c: Ctx, appId: string): Promise<string> {
 
 /**
  * An app-audience session, or a native companion device (`ndev_`). Without an
- * app (cross-app discovery) the session must be first-party (#495).
+ * app (cross-app discovery) the session must be first-party (#495). `runner`
+ * is the device that holds a lease (#825): the native device, or a session's
+ * `X-Runner-Id` (one default runner, '', when it sends none).
  */
 async function contributor(c: Ctx, appId?: string) {
-  let id: string, device: 'web' | 'native';
+  let id: string, device: 'web' | 'native', runner: string;
   if (c.req.header('Authorization')?.startsWith('Bearer ndev_')) {
     const d = await nativeDevice(c);
     const user = await c.env.DB.prepare('SELECT 1 FROM users WHERE id = ?').bind(d.user_id).first();
     if (!user) throw new HttpError(401, 'Account no longer exists.');
     id = d.user_id;
     device = 'native';
+    runner = `ndev:${d.id}`;
   } else {
     id = (appId ? await requireAppUser(c, appId) : await requireConsoleUser(c)).id;
     device = 'web';
+    const header = c.req.header('X-Runner-Id');
+    if (header !== undefined && !/^[A-Za-z0-9_-]{8,64}$/.test(header))
+      throw new HttpError(400, 'X-Runner-Id must be 8-64 characters of A-Z, a-z, 0-9, _ or -');
+    runner = header === undefined ? '' : `web:${header}`;
   }
-  if (!appId) return { id, device };
+  if (!appId) return { id, device, runner };
   const blocked = await c.env.DB.prepare(
     'SELECT 1 FROM generation_blocks WHERE app_id = ? AND user_id = ?',
   )
     .bind(appId, id)
     .first();
   if (blocked) throw new HttpError(403, 'blocked from contributing to this app');
-  return { id, device };
+  return { id, device, runner };
 }
 
 generationRoutes.post('/apps/:appId/generation/sets', async (c) => {
@@ -571,23 +580,36 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
   }
   const now = Date.now();
   const token = `glt_${nativeRandom()}`;
-  // One open lease per user: a new claim releases the previous one, whose job
-  // that user can never be given again.
+  // One open lease per runner (#825): a new claim releases this runner's
+  // previous one, whose job that user can never be given again. The user's
+  // other devices keep theirs, up to `userLeases` open leases in all.
   await c.env.DB.prepare(
-    "UPDATE generation_leases SET state = 'released' WHERE user_id = ? AND state = 'open'",
+    "UPDATE generation_leases SET state = 'released' WHERE user_id = ? AND runner = ? AND state = 'open'",
   )
-    .bind(who.id)
+    .bind(who.id, who.runner)
     .run();
-  // One statement, so concurrent claims cannot over-assign a job's replicas.
+  const held = await c.env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM generation_leases WHERE user_id = ? AND state = 'open' AND expires_at > ?",
+  )
+    .bind(who.id, now)
+    .first<{ n: number }>();
+  if (held!.n >= GENERATION_LIMITS.userLeases)
+    throw new HttpError(
+      429,
+      `at most ${GENERATION_LIMITS.userLeases} open leases per user; finish or let one expire on another device first`,
+    );
+  // One statement, so concurrent claims cannot over-assign a job's replicas
+  // or exceed the user's lease cap.
   // Sets that require attestation are not claimable until it is verified (#732).
   const claimed = await c.env.DB.prepare(
-    `INSERT INTO generation_leases (job_id, user_id, app_id, token_hash, state, created_at, expires_at)
-     SELECT j.id, ?1, ?2, ?3, 'open', ?4, ?5
+    `INSERT INTO generation_leases (job_id, user_id, app_id, token_hash, state, created_at, expires_at, runner)
+     SELECT j.id, ?1, ?2, ?3, 'open', ?4, ?5, ?8
      FROM generation_jobs j JOIN generation_sets s ON s.id = j.set_id
      WHERE j.app_id = ?2 AND (?6 IS NULL OR j.set_id = ?6) AND ${claimable('?1', '?4')}
        AND EXISTS (SELECT 1 FROM json_each(?7) m WHERE json_extract(m.value, '$.model') = s.model
          AND json_extract(m.value, '$.modelVersion') = s.model_version)
-       AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.user_id = ?1 AND l.state = 'open' AND l.expires_at > ?4)
+       AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.user_id = ?1 AND l.runner = ?8 AND l.state = 'open' AND l.expires_at > ?4)
+       AND (SELECT COUNT(*) FROM generation_leases l WHERE l.user_id = ?1 AND l.state = 'open' AND l.expires_at > ?4) < ?9
      ORDER BY j.created_at, j.rowid LIMIT 1
      RETURNING job_id`,
   )
@@ -599,6 +621,8 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
       now + GENERATION_LIMITS.leaseMs,
       b.setId ?? null,
       JSON.stringify(models),
+      who.runner,
+      GENERATION_LIMITS.userLeases,
     )
     .first<{ job_id: string }>();
   if (!claimed) return c.body(null, 204);

@@ -69,8 +69,14 @@ app.use(
   cors({
     origin: (origin) => (isAllowedOrigin(origin) ? origin : null),
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    // X-Lease-Token / X-Attestation: community generation uploads (#728).
-    allowHeaders: ['Authorization', 'Content-Type', 'X-Lease-Token', 'X-Attestation'],
+    // X-Lease-Token / X-Attestation / X-Runner-Id: community generation (#728, #825).
+    allowHeaders: [
+      'Authorization',
+      'Content-Type',
+      'X-Lease-Token',
+      'X-Attestation',
+      'X-Runner-Id',
+    ],
     maxAge: 600,
   }),
 );

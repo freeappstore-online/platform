@@ -86,7 +86,7 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
 
 | Call | Body | Result |
 |---|---|---|
-| `POST /apps/:appId/generation/claim` | `{ setId?, models: [{ model, modelVersion }] }` | `{ job: { id, setId, key, input, model, modelVersion, params, formats, maxBytes, language, leaseToken, leaseExpiresAt } }` or `204` |
+| `POST /apps/:appId/generation/claim` | `{ setId?, models: [{ model, modelVersion }] }`; optional header `X-Runner-Id` | `{ job: { id, setId, key, input, model, modelVersion, params, formats, maxBytes, language, leaseToken, leaseExpiresAt } }` or `204` |
 | `POST /apps/:appId/generation/jobs/:jobId/lease` | header `X-Lease-Token` | `{ leaseExpiresAt }`; `409 { error, leaseExpiresAt }` at the cap |
 | `PUT /apps/:appId/generation/jobs/:jobId/result` | multipart `file` + optional `meta` (JSON object, at most 64 KB); header `X-Lease-Token`; optional `X-Attestation` | `202 { submissionId, status }` |
 | `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, wer, durationMs, input: { text }, artifact: { url, metaUrl } \| null }] }`, the caller's own, newest 100 |
@@ -96,8 +96,16 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   2 hours after the claim; at the cap the call is `409` with the final `leaseExpiresAt`. An invalid,
   used, released or expired lease is `403`. Clients extend when within 5 minutes of expiry
   ([#783](https://github.com/freeappstore-online/platform/issues/783)). Claims, replica counts and
-  uploads all use the extended expiry. A user holds one open lease: claiming again releases
-  the previous one. A user is never given the same job twice (even after a release or rejection).
+  uploads all use the extended expiry. A user is never given the same job twice (even after a
+  release or rejection).
+- One open lease per *runner*, the device holding it
+  ([#825](https://github.com/freeappstore-online/platform/issues/825)): claiming again releases
+  only that runner's previous lease, so a user's phone, tablet and browsers each keep their own. A
+  native device (`ndev_`) is its own runner; a browser session names itself with `X-Runner-Id`
+  (8-64 characters of `A-Z a-z 0-9 _ -`, otherwise `400`; the SDK sends a random id kept per browser
+  install). A session that sends none is one default runner per user. A user holds at most 4 open
+  leases across runners; a claim past that is `429`. The lease token alone authorizes extending and
+  submitting.
 - A job has at most `replicas` open leases plus pending submissions at a time, each a different user.
 - Discovery: `GET /generation/open` → `{ apps: [{ appId, oneliner, sets: [{ setId, kind, model,
   modelVersion, params, formats, maxBytes, language, open }] }] }`, the sets with jobs the caller could claim

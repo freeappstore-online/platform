@@ -111,12 +111,16 @@ async function setup(heard?: (audio: Uint8Array) => string) {
   };
   const addJobs = (setId: string, jobs: unknown[]) =>
     request(`/sets/${setId}/jobs`, { method: 'POST', json: { jobs } });
-  const claim = async (user: string | null, o: { token?: string; setId?: string } = {}) => {
+  const claim = async (
+    user: string | null,
+    o: { token?: string; setId?: string; runner?: string } = {},
+  ) => {
     const r = await request('/claim', {
       method: 'POST',
       user,
       token: o.token,
       json: { setId: o.setId, models: [MODEL] },
+      ...(o.runner !== undefined && { headers: { 'X-Runner-Id': o.runner } }),
     });
     if (r.status === 204) return null;
     expect(r.status).toBe(200);
@@ -238,7 +242,7 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     ).toBe(400);
   });
 
-  it('claims: one open lease per user, never the same job twice, matching models only', async () => {
+  it('claims: one open lease per runner, never the same job twice, matching models only', async () => {
     const s = await setup();
     const setId = await s.createSet();
     await s.addJobs(setId, [
@@ -274,6 +278,51 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     expect((await s.submit('u2', j1!.id, j1!.leaseToken)).status).toBe(403);
     // The released job is free for another user.
     expect((await s.claim('u3'))?.key).toBe('a');
+  });
+
+  it("one open lease per runner: a user's devices keep theirs, up to 4 in all (#825)", async () => {
+    const s = await setup();
+    const setId = await s.createSet();
+    await s.addJobs(
+      setId,
+      ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((key) => ({ key, input: { text: `${key}.` } })),
+    );
+    // u4's phone (its ndev_ credential) and two browsers hold leases at once.
+    const phone = (await s.claim(null, { token: DEVICE }))!;
+    const laptop = (await s.claim('u4', { runner: 'laptop-01' }))!;
+    const tablet = (await s.claim('u4', { runner: 'tablet-01' }))!;
+    expect(new Set([phone.key, laptop.key, tablet.key]).size).toBe(3);
+    // Re-claiming on one runner releases only that runner's lease.
+    const laptop2 = (await s.claim('u4', { runner: 'laptop-01' }))!;
+    expect((await s.submit('u4', laptop.id, laptop.leaseToken)).status).toBe(403);
+    // A session without X-Runner-Id is one default runner, as before.
+    expect(await s.claim('u4')).not.toBeNull();
+    // A fifth runner is over the cap.
+    const over = await s.request('/claim', {
+      method: 'POST',
+      user: 'u4',
+      json: { models: [MODEL] },
+      headers: { 'X-Runner-Id': 'desktop-01' },
+    });
+    expect(over.status).toBe(429);
+    expect(await over.text()).toMatch(/at most 4 open leases/);
+    // Every device still holding a lease submits it.
+    await s.submissionId(await s.submit(null, phone.id, phone.leaseToken, { token: DEVICE }));
+    await s.submissionId(await s.submit('u4', tablet.id, tablet.leaseToken));
+    await s.submissionId(await s.submit('u4', laptop2.id, laptop2.leaseToken));
+    // With leases freed, the new runner claims; no job is ever given to u4 twice.
+    const desktop = (await s.claim('u4', { runner: 'desktop-01' }))!;
+    expect([phone, laptop, tablet, laptop2].map((j) => j.key)).not.toContain(desktop.key);
+    expect(
+      (
+        await s.request('/claim', {
+          method: 'POST',
+          user: 'u4',
+          json: { models: [MODEL] },
+          headers: { 'X-Runner-Id': 'short' },
+        })
+      ).status,
+    ).toBe(400);
   });
 
   it('replicas go to distinct users and cap concurrent leases', async () => {
