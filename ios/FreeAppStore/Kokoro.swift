@@ -66,7 +66,7 @@ final class KokoroModel: @unchecked Sendable {
             try? files.removeItem(at: archive)
             if !installed { try? files.removeItem(at: dir) }
         }
-        guard try await download(source, to: archive, cellular: cellular, progress: progress, keepGoing: keepGoing) else { return false }
+        guard try await download(source, to: archive, cellular: cellular, progress: progress, keepGoing: keepGoing), keepGoing() else { return false }
         guard try Self.sha256(of: archive) == sha256 else {
             throw CompanionError("The voice model download did not match its checksum. Nothing was installed.")
         }
