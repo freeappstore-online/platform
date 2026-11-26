@@ -1,0 +1,5 @@
+# Own pnpm root, outside the monorepo workspace (see workers/README.md).
+packages: []
+onlyBuiltDependencies:
+  - electron
+  - esbuild

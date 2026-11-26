@@ -9,6 +9,7 @@
       "!**/node_modules",
       "!**/.vibe-check",
       "!workers",
+      "!desktop",
       "!sites",
       "!brand",
       "!ops",

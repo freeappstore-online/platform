@@ -50,6 +50,10 @@
     "./generation-kokoro/worker": {
       "types": "./dist/generation-kokoro/worker.d.ts",
       "import": "./dist/generation-kokoro/worker.js"
+    },
+    "./bridge": {
+      "types": "./dist/bridge.d.ts",
+      "import": "./dist/bridge.js"
     }
   },
   "homepage": "https://github.com/freeappstore-online/platform#readme",

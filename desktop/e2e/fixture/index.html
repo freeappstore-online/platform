@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Toy app</title>
+  </head>
+  <body>
+    <p id="status">off</p>
+    <script type="module">
+      import { exposeTools } from '/bridge.js';
+
+      const params = new URLSearchParams(location.search);
+      exposeTools({
+        // In a desktop window the id comes from the window; this claim is ignored there.
+        appId: params.get('app') ?? 'impostor',
+        url: params.get('ws') ?? undefined,
+        onStatus: (status) => {
+          document.getElementById('status').textContent = status;
+        },
+        tools: [
+          {
+            name: 'echo',
+            description: 'Echo the text back, saying where the app runs.',
+            inputSchema: {
+              type: 'object',
+              properties: { text: { type: 'string' } },
+              required: ['text'],
+            },
+            handler: ({ text }) => ({
+              echoed: text,
+              where: globalThis.fasDesktopBridge ? 'desktop' : 'browser',
+            }),
+          },
+        ],
+      });
+    </script>
+  </body>
+</html>

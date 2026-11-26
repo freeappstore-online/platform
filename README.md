@@ -65,6 +65,7 @@ platform/
 ├── sites/          # storefront and creator console
 ├── ios/            # native companion app (Swift)
 ├── android/        # native companion app (Kotlin)
+├── desktop/        # desktop app (Electron): local MCP bridge for AI clients
 ├── brand/          # brand guide (BRAND.md) and the vendored kit (assets/)
 ├── ops/            # operational docs
 ├── examples/

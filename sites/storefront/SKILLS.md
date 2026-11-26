@@ -590,6 +590,45 @@ VITE_FIREBASE_API_KEY=AIzaSy...
 **Production:**
 Set the same variables in your GitHub repo: Settings > Secrets and variables > Actions > Variables (not Secrets). Every `VITE_*` variable reaches the build automatically; don't edit `deploy.yml` for it.
 
+### Local AI access (`@freeappstore/sdk/bridge`)
+
+Let an AI client on the user's computer (Claude Code, Claude Desktop) work on the app's local data through the
+FreeAppStore desktop app. The app defines tools; the AI calls them with the desktop app's MCP tools
+`list_open_apps`, `app_tools`, `app_call` and `open_app`. FAS keeps no app data on a server, so this is how an
+AI reaches it.
+
+```ts
+import { exposeTools } from '@freeappstore/sdk/bridge';
+
+const bridge = exposeTools({
+  enabled: allowAi, // the user's "Allow AI access" toggle
+  tools: [
+    {
+      name: 'read_range',
+      description: 'Read the cell values in a range such as A1:C10 on the active sheet.',
+      inputSchema: {
+        type: 'object',
+        properties: { range: { type: 'string' } },
+        required: ['range'],
+      },
+      handler: ({ range }) => sheet.read(range), // any JSON value; throw for an error
+    },
+  ],
+  onStatus: setAiStatus, // 'off' | 'connecting' | 'connected' | 'rejected'
+});
+bridge.setEnabled(false); // when the user turns AI access off
+```
+
+- Inside the FreeAppStore desktop app the tools go over the window's IPC channel. In a browser tab they go to
+  `ws://127.0.0.1:47821/bridge`, which only accepts `https://<id>.freeappstore.online` pages registering their
+  own id `<id>`. Off that host (local dev) pass `appId`; the desktop app accepts `http://localhost:*` only in dev builds.
+- Keep AI access off until the user turns it on, and make the toggle visible. The bridge reconnects quietly while
+  enabled, so the app can be opened before or after the desktop app.
+- Messages are capped at 1 MB and each call times out after 30 s: return summaries or ranges, not whole datasets.
+- Tool errors reach the AI as-is, so write them as instructions ("Sheet \"Q4\" does not exist. Sheets: Q1, Q2.").
+- The data stays on the device: the desktop app relays calls on this computer only, and nothing goes to a
+  FreeAppStore server. Desktop windows and browser tabs keep separate local data.
+
 ## Free platform boundaries
 
 FreeAppStore exposes the shared SDK services described here, not a dedicated server for each app.

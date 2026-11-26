@@ -37,6 +37,7 @@ fas/platform/
 ├── sites/console        Creator portal + VibeCode builder (/app/build) — freeappstore.online/app/ (proxied)
 ├── ios/                 Native companion app (Swift) — see native-companion.md
 ├── android/             Native companion app (Kotlin) — see native-companion.md
+├── desktop/             FreeAppStore desktop app (Electron): app windows + local MCP bridge — see desktop/README.md
 ├── brand/               Brand assets + BRAND.md / SKILLS.md
 └── ops/                 Ops docs (DR, infra, submission)
 ```

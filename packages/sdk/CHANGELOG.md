@@ -4,6 +4,7 @@
 
 - Add `@freeappstore/sdk/generation-kokoro` (platform#795): the browser Kokoro TTS runner for `fas.generation` (kokoro-js in a Web Worker, sentence timings, WebCodecs AAC in MP4), shared by Books and the Creator Console. `kokoro-js` and `mp4-muxer` are optional peer dependencies.
 - Add `fas.generation.getJob(setId, jobId)`: one job with its whole input, for the owner.
+- Add `@freeappstore/sdk/bridge` (platform#797): `exposeTools()` offers an app's tools to a local AI client through the FreeAppStore desktop app, over desktop IPC or the loopback WebSocket, with quiet reconnects, a 1 MB message cap and an `enabled` toggle.
 - Add `fas.generation` (platform#727): owner job sets and jobs, a `contribute()` claim → generate → submit loop for local-model contributors, and the public write-once artifact manifest.
 - Sessions are scoped to the app that received them (platform#495). The token an app stores works for that app's data and the user-level routes only; publish, app settings, the key vault and account deletion need a console sign-in.
 - `auth.deleteAccount()` opens the console's account settings instead of deleting from inside the app.

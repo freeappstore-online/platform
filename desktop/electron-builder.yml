@@ -1,0 +1,15 @@
+# Local, unsigned builds only. Signing, notarization and releases: #799.
+appId: online.freeappstore.desktop
+productName: FreeAppStore
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+mac:
+  category: public.app-category.productivity
+  icon: build/icon.png
+  identity: null
+  target:
+    - zip
+publish: null

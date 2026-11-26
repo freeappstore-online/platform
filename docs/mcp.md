@@ -171,6 +171,59 @@ Write tools (`create_app`, `update_files`) additionally verify app ownership via
 - **OAuth rate limiting**: token endpoint returns 429 on abuse.
 - **Backend is the auth authority**: MCP does not hold signing keys; all auth decisions are delegated to the FAS backend.
 
+## Local AI access to app data (FreeAppStore desktop)
+
+AI clients work on an app's data through the **FreeAppStore desktop app**, not through a server: the app's
+data stays on the device. The desktop app runs a loopback MCP server at `http://127.0.0.1:47821/mcp`,
+protected by a per-install token. Its home screen shows the exact setup command:
+
+```bash
+claude mcp add --transport http fas http://127.0.0.1:47821/mcp --header "Authorization: Bearer <token>"
+```
+
+| Tool | Description |
+|------|-------------|
+| `list_open_apps` | Apps open with AI access on: app id, title, desktop window or browser tab, tool names |
+| `app_tools` | One open app's tools, with descriptions and JSON Schemas |
+| `app_call` | Run one of an open app's tools on its local data |
+| `open_app` | Open an app in a desktop window and wait for its tools |
+
+An app offers tools with `exposeTools` from `@freeappstore/sdk/bridge`:
+
+```ts
+import { exposeTools } from '@freeappstore/sdk/bridge';
+
+const bridge = exposeTools({
+  enabled: allowAi, // the user's "Allow AI access" toggle
+  tools: [
+    {
+      name: 'read_range',
+      description: 'Read the cell values in a range such as A1:C10 on the active sheet.',
+      inputSchema: {
+        type: 'object',
+        properties: { range: { type: 'string' } },
+        required: ['range'],
+      },
+      handler: ({ range }) => sheet.read(range), // any JSON value; throw for an error
+    },
+  ],
+  onStatus: setAiStatus, // 'off' | 'connecting' | 'connected' | 'rejected'
+});
+bridge.setEnabled(false); // when the user turns AI access off
+```
+
+- Inside the FreeAppStore desktop app the tools go over the window's IPC channel. In a browser tab they go to
+  `ws://127.0.0.1:47821/bridge`, which only accepts `https://<id>.freeappstore.online` pages registering their
+  own id `<id>`. Off that host (local dev) pass `appId`; the desktop app accepts `http://localhost:*` only in dev builds.
+- Keep AI access off until the user turns it on, and make the toggle visible. The bridge reconnects quietly while
+  enabled, so the app can be opened before or after the desktop app.
+- Messages are capped at 1 MB and each call times out after 30 s: return summaries or ranges, not whole datasets.
+- Tool errors reach the AI as-is, so write them as instructions ("Sheet \"Q4\" does not exist. Sheets: Q1, Q2.").
+- The data stays on the device: the desktop app relays calls on this computer only, and nothing goes to a
+  FreeAppStore server. Desktop windows and browser tabs keep separate local data.
+
+Running and building the desktop app: [`desktop/README.md`](https://github.com/freeappstore-online/platform/blob/main/desktop/README.md).
+
 ## Alternative: SKILLS.md
 
 For agents that don't support MCP, point them at the full platform guide:

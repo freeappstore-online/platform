@@ -226,6 +226,13 @@ object URL. Display/tab capture is not consistently supported on mobile browsers
 No permission is requested until the app calls capture, and no media is stored by
 the SDK.
 
+## Local AI bridge (`@freeappstore/sdk/bridge`)
+
+A separate entry point, not part of the root bundle. `exposeTools({ tools, enabled, appId, onStatus })` offers
+tools (`{ name, description, inputSchema, handler }`) to a local AI client through the FreeAppStore desktop app,
+over the desktop window's IPC channel or `ws://127.0.0.1:47821/bridge` from a browser tab. It returns
+`{ status, setEnabled, close }`. See [MCP: local AI access](mcp.md#local-ai-access-to-app-data-freeappstore-desktop).
+
 ## Secret-injecting proxy (`fas.proxy`)
 
 Call third-party APIs without exposing keys to the browser.

@@ -37,6 +37,7 @@ Each deployable surface carries its own copy, so none depends on another origin 
 - `sites/storefront/` (freeappstore.online)
 - `sites/console/web/public/` (creator console)
 - `workers/admin/web/public/` (admin; also `icon.svg`, a copy of `favicon.svg`)
+- `desktop/` (desktop app): `src/renderer/public/favicon.svg` (header and window icon) and `build/icon.png`, a copy of `icon-512.png` used for the unsigned macOS app icon.
 - `ios/FreeAppStore/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` (iOS companion app icon): the maskable composition behind `icon-512.png`, rendered at 1024×1024 by the kit's `generate.py` and flattened to opaque RGB. It is a render, not a byte copy.
 - `android/app/src/main/res/mipmap-anydpi/ic_launcher.xml` and `ic_launcher_round.xml` (Android companion adaptive launcher icon): background `#2563eb` (`res/values/colors.xml`), foreground and Android 13 themed `<monochrome>` layer `res/drawable/ic_launcher_foreground.xml`, the four tiles of `mark.svg` as VectorDrawable paths in white, placed on the visible 72dp as on `favicon.svg`. A transcription of the SVG geometry, not a redraw. No PNG fallback and no `-v26` qualifier: minSdk is 29.
 
