@@ -68,6 +68,17 @@ export interface GenerationSubmission {
   contentType: GenerationFormat;
   createdAt: number;
   decidedAt: number | null;
+  /** Word error rate verification measured (0-1); null until verified or if it never got that far. */
+  wer: number | null;
+  /** Audio duration verification measured; null until verified. */
+  durationMs: number | null;
+  /** The job's input, as the claim returned it. */
+  input: { text: string };
+  /**
+   * The job's accepted artifact (absolute URLs; `metaUrl` null when it has no meta), or null while
+   * none is. It may be another user's: it is this submission's only when `status` is `accepted`.
+   */
+  artifact: { url: string; metaUrl: string | null } | null;
 }
 
 /** A verified, write-once artifact. `url` and `metaUrl` are absolute. */

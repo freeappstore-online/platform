@@ -792,29 +792,48 @@ generationRoutes.put('/apps/:appId/generation/jobs/:jobId/result', async (c) => 
   return c.json({ submissionId: id, status: row!.status }, 202);
 });
 
+/**
+ * The caller's own 100 newest submissions to the app (#824): with what
+ * verification measured (`wer`, `durationMs`), the job's input text (the
+ * caller received it when claiming), and the job's accepted artifact, which may
+ * come from another user's submission (then `status` is not `accepted`).
+ */
 generationRoutes.get('/apps/:appId/generation/submissions', async (c) => {
   const appId = c.req.param('appId');
   const who = await contributor(c, appId);
   const { results } = await c.env.DB.prepare(
-    `SELECT s.id, s.job_id, s.set_id, j.key, s.status, s.reason, s.bytes, s.content_type, s.created_at, s.decided_at
+    `SELECT s.id, s.job_id, s.set_id, j.key, s.status, s.reason, s.bytes, s.content_type, s.created_at, s.decided_at,
+       s.wer, s.duration_ms, json_extract(j.input, '$.text') AS text, a.sha256 AS a_sha256, a.meta_key AS a_meta_key
      FROM generation_submissions s JOIN generation_jobs j ON j.id = s.job_id
+     LEFT JOIN generation_artifacts a ON a.job_id = s.job_id
      WHERE s.app_id = ? AND s.user_id = ? ORDER BY s.created_at DESC LIMIT 100`,
   )
     .bind(appId, who.id)
     .all<Record<string, string | number | null>>();
   return c.json({
-    submissions: results.map((s) => ({
-      submissionId: s.id,
-      jobId: s.job_id,
-      setId: s.set_id,
-      key: s.key,
-      status: s.status,
-      reason: s.reason,
-      bytes: s.bytes,
-      contentType: s.content_type,
-      createdAt: s.created_at,
-      decidedAt: s.decided_at,
-    })),
+    submissions: results.map((s) => {
+      const a = s.a_sha256
+        ? { app_id: appId, job_id: s.job_id as string, sha256: s.a_sha256 as string }
+        : null;
+      return {
+        submissionId: s.id,
+        jobId: s.job_id,
+        setId: s.set_id,
+        key: s.key,
+        status: s.status,
+        reason: s.reason,
+        bytes: s.bytes,
+        contentType: s.content_type,
+        createdAt: s.created_at,
+        decidedAt: s.decided_at,
+        wer: s.wer,
+        durationMs: s.duration_ms,
+        input: { text: s.text },
+        artifact: a
+          ? { url: artifactUrl(c, a), metaUrl: s.a_meta_key ? artifactUrl(c, a, '/meta') : null }
+          : null,
+      };
+    }),
   });
 });
 

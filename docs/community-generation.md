@@ -89,7 +89,7 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
 | `POST /apps/:appId/generation/claim` | `{ setId?, models: [{ model, modelVersion }] }` | `{ job: { id, setId, key, input, model, modelVersion, params, formats, maxBytes, language, leaseToken, leaseExpiresAt } }` or `204` |
 | `POST /apps/:appId/generation/jobs/:jobId/lease` | header `X-Lease-Token` | `{ leaseExpiresAt }`; `409 { error, leaseExpiresAt }` at the cap |
 | `PUT /apps/:appId/generation/jobs/:jobId/result` | multipart `file` + optional `meta` (JSON object, at most 64 KB); header `X-Lease-Token`; optional `X-Attestation` | `202 { submissionId, status }` |
-| `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt }] }`, newest 100 |
+| `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, wer, durationMs, input: { text }, artifact: { url, metaUrl } \| null }] }`, the caller's own, newest 100 |
 
 - A lease lasts 15 minutes and uploads once. While still generating, the holder can extend it
   (`…/lease`, same `X-Lease-Token`, which does not change) to 15 minutes from now, but never past
@@ -106,6 +106,11 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   device skips sets it cannot run. A console session or a native device sees every store app;
   `?appId=` narrows to one app and then authenticates exactly like claim (that app's session too,
   `403` if blocked).
+- `…/submissions` lists only the caller's own submissions (#824). `wer` and `durationMs` are what
+  verification measured (null until then), `input` is the job's input as the claim returned it (so a
+  device can show text for jobs another device of the account ran), and `artifact` is the job's
+  accepted artifact (absolute URLs, `metaUrl` null without meta) or null. It may come from another
+  user's submission: it is this one's only when `status` is `accepted`.
 - The `file` part's content type must be one of the set's `formats`, non-empty and at most
   `maxBytes`. Without a valid lease the upload is `403`.
 - Submission statuses: `pending`, `accepted`, `rejected` (with `reason`), `superseded` (another

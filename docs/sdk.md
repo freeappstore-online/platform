@@ -459,7 +459,7 @@ const { submitted, stopped } = await fas.generation.contribute({
   signal: controller.signal,
   onProgress: ({ stage, job, submitted }) => console.log(stage, job.key, submitted),
 }); // stopped: 'no-work' | 'aborted' | 'lease-expired'
-const mine = await fas.generation.mySubmissions(); // newest 100: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt }]
+const mine = await fas.generation.mySubmissions(); // newest 100: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, wer, durationMs, input: { text }, artifact: { url, metaUrl } | null }]
 const work = await fas.generation.openWork();      // this app's sets the user could claim now: [{ setId, kind, model, modelVersion, params, formats, maxBytes, language, open }]
 
 // Public, no sign-in: accepted artifacts with absolute URLs

@@ -318,6 +318,10 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
         jobId: job.id,
         key: 'a',
         status: 'pending',
+        wer: null,
+        durationMs: null,
+        input: { text: 'A.' },
+        artifact: null,
       }),
     ]);
     expect(
@@ -418,6 +422,14 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
       }[];
     };
     expect(artifacts).toHaveLength(1);
+    // The contributor's own listing links the same artifact and meta (#824).
+    const mine = (await (await s.request('/submissions', { user: 'u2' })).json()) as {
+      submissions: { artifact: unknown }[];
+    };
+    expect(mine.submissions[0]!.artifact).toEqual({
+      url: artifacts[0]!.url,
+      metaUrl: artifacts[0]!.metaUrl,
+    });
     expect(artifacts[0]).toEqual(
       expect.objectContaining({
         key: 'a',
@@ -963,6 +975,42 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     expect(s.db.prepare('SELECT submission_id FROM generation_artifacts').get()).toEqual({
       submission_id: first.submissionId,
     });
+    // Each sees only their own submission, with the measurements, the input and the job's artifact (#824).
+    const mine = async (user: string) =>
+      (
+        (await (await s.request('/submissions', { user })).json()) as {
+          submissions: {
+            submissionId: string;
+            status: string;
+            wer: number | null;
+            durationMs: number | null;
+            input: { text: string };
+            artifact: { url: string; metaUrl: string | null } | null;
+          }[];
+        }
+      ).submissions;
+    const [winner, loser] = [await mine('u2'), await mine('u3')];
+    expect(winner).toHaveLength(1);
+    expect(loser).toHaveLength(1);
+    expect(winner[0]).toMatchObject({
+      submissionId: first.submissionId,
+      status: 'accepted',
+      wer: 0,
+      durationMs: 10_000,
+      input: { text: TEXT },
+      artifact: { metaUrl: null },
+    });
+    expect(loser[0]).toMatchObject({
+      submissionId: second.submissionId,
+      status: 'superseded',
+      input: { text: TEXT },
+    });
+    // A superseded submission still points at the job's accepted artifact: the winner's.
+    expect(loser[0]!.artifact).toEqual(winner[0]!.artifact);
+    const read = await app.request(winner[0]!.artifact!.url, {}, s.env);
+    expect(read.status).toBe(200);
+    expect((await read.arrayBuffer()).byteLength).toBe(NARRATION.length);
+    expect(await mine('u4')).toEqual([]);
   });
 
   it('long replicas are compared window by window, at the same points of each replica', async () => {
