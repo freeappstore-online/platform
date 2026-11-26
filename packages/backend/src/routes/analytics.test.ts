@@ -491,3 +491,93 @@ describe.skipIf(!hasSqlite)('PUT /v1/internal/apps/:appId/analytics/cf-token (#4
     expect(stored(db).n).toBe(1);
   });
 });
+
+describe('POST /v1/analytics/event drops malformed entries (#737)', () => {
+  function eventEnv() {
+    const points: Array<{ blobs: string[] }> = [];
+    const env = {
+      ANALYTICS: { writeDataPoint: (p: { blobs: string[] }) => points.push(p) },
+    } as unknown as Env;
+    return { env, points };
+  }
+  const post = (body: string, env: Env) =>
+    app.request(
+      '/v1/analytics/event',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body },
+      env,
+    );
+
+  it('skips null and wrongly typed batch entries and keeps the good ones', async () => {
+    const { env, points } = eventEnv();
+    const res = await post(
+      JSON.stringify({
+        events: [null, 7, { app: 42 }, { app: 'malformed-a', kind: 5 }, { app: 'malformed-a' }],
+      }),
+      env,
+    );
+    expect(res.status).toBe(204);
+    expect(res.headers.get('x-events-accepted')).toBe('1');
+    expect(points.map((p) => p.blobs.slice(0, 3))).toEqual([['malformed-a', 'pageview', '/']]);
+  });
+
+  it('ignores a non-string path or referrer', async () => {
+    const { env, points } = eventEnv();
+    const res = await post(JSON.stringify({ app: 'malformed-b', path: 1, referrer: {} }), env);
+    expect(res.status).toBe(204);
+    expect(points[0]?.blobs.slice(0, 4)).toEqual(['malformed-b', 'pageview', '/', '']);
+  });
+
+  it('answers 400 for a JSON body that is not an object', async () => {
+    const { env } = eventEnv();
+    expect((await post('null', env)).status).toBe(400);
+  });
+});
+
+describe('analytics loader replays its offline outbox (#737)', () => {
+  it('posts the buffered events themselves, not undefined', async () => {
+    const stored = [
+      { id: 1, app: 'myapp', kind: 'pageview', path: '/a', t: 1 },
+      { id: 2, app: 'myapp', kind: 'buy', path: '/b', t: 2 },
+    ];
+    const request = <T>(result: T) => {
+      const r: { result: T; onsuccess?: () => void } = { result };
+      queueMicrotask(() => r.onsuccess?.());
+      return r;
+    };
+    const store = { getAll: () => request(stored), count: () => request(0), add() {}, clear() {} };
+    const db = { transaction: () => ({ objectStore: () => store }) };
+    const indexedDB = {
+      open: () => {
+        const r: { result: unknown; onsuccess?: () => void } = { result: db };
+        queueMicrotask(() => r.onsuccess?.());
+        return r;
+      },
+    };
+    const beacons: string[] = [];
+    const navigator = { onLine: true, sendBeacon: (_u: string, b: string) => beacons.push(b) > 0 };
+    const window = { addEventListener() {} } as Record<string, unknown>;
+    const history = { pushState() {}, replaceState() {} };
+    new Function(
+      'window',
+      'navigator',
+      'indexedDB',
+      'location',
+      'document',
+      'history',
+      buildLoaderJs(null, 'myapp'),
+    )(
+      window,
+      navigator,
+      indexedDB,
+      { pathname: '/' },
+      { referrer: '', head: { appendChild() {} }, createElement: () => ({}) },
+      history,
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    const batch = beacons.map((b) => JSON.parse(b)).find((b) => b.events);
+    expect(batch.events).toEqual([
+      { app: 'myapp', kind: 'pageview', path: '/a', t: 1 },
+      { app: 'myapp', kind: 'buy', path: '/b', t: 2 },
+    ]);
+  });
+});

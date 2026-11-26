@@ -793,12 +793,13 @@ function shouldAccept(key: string, now: number): boolean {
 }
 
 analyticsRoutes.post('/analytics/event', async (c) => {
-  let body: EventBody;
+  let body: unknown;
   try {
     body = await c.req.json();
   } catch {
     return c.text('invalid json', 400);
   }
+  if (!body || typeof body !== 'object') return c.text('invalid json', 400);
 
   const ua = c.req.header('user-agent') ?? null;
   const uaClass = classifyUA(ua);
@@ -813,21 +814,32 @@ analyticsRoutes.post('/analytics/event', async (c) => {
   // (used by the loader to flush its IndexedDB outbox after reconnecting).
   // Each entry carries its own client-recorded `t` so the dashboard places
   // it on the day it actually happened, not the flush day.
-  const items: EventBody[] = Array.isArray(body.events) ? body.events.slice(0, MAX_BATCH) : [body];
+  // Public input: a malformed entry is dropped, never a 500 (#737).
+  const events = (body as EventBody).events;
+  const items: unknown[] = Array.isArray(events) ? events.slice(0, MAX_BATCH) : [body];
   const nowMs = Date.now();
   let accepted = 0;
-  for (const item of items) {
-    const appId = (item.app ?? '').trim();
+  for (const raw of items) {
+    if (!raw || typeof raw !== 'object') continue;
+    const item = raw as EventBody;
+    const appId = typeof item.app === 'string' ? item.app.trim() : '';
     if (!APP_ID_RE.test(appId)) continue;
-    const kind = (item.kind ?? 'pageview').trim().toLowerCase();
+    const kind =
+      item.kind === undefined
+        ? 'pageview'
+        : typeof item.kind === 'string'
+          ? item.kind.trim().toLowerCase()
+          : '';
     if (!EVENT_KIND_RE.test(kind)) continue;
     if (!shouldAccept(`${appId}:${ip}:${kind}`, nowMs)) continue;
     if (!dataset) {
       accepted++;
       continue;
     }
-    const path = (item.path ?? '/').slice(0, PATH_MAX);
-    const referrerHost = safeReferrerHost(item.referrer);
+    const path = typeof item.path === 'string' ? item.path.slice(0, PATH_MAX) : '/';
+    const referrerHost = safeReferrerHost(
+      typeof item.referrer === 'string' ? item.referrer : undefined,
+    );
     const t = effectiveTimestamp(item.t, nowMs);
     dataset.writeDataPoint({
       indexes: [appId],
@@ -923,7 +935,8 @@ export function buildLoaderJs(
           req.onsuccess = function(){
             var rows = req.result || [];
             if (!rows.length) return;
-            postBatch(rows.map(function(r){ return r.evt; })).then(function(ok){
+            // A row is the buffered event plus its IndexedDB key (#737).
+            postBatch(rows.map(function(r){ delete r.id; return r; })).then(function(ok){
               if (!ok) return;
               var tx2 = db.transaction(STORE, "readwrite");
               tx2.objectStore(STORE).clear();
