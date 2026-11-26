@@ -3467,6 +3467,22 @@
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-25T22:10:35.262Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "sayback",
+      "name": "sayback",
+      "category": "Learning",
+      "icon": "🎙️",
+      "iconBg": "#dbeafe",
+      "description": "Listen, repeat, and master phrases in English and Mandarin — offline phrase packs with audio, pinyin, and practice pauses.",
+      "appUrl": "https://sayback.freeappstore.online",
+      "repo": "freeappstore-online/sayback",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-26T01:49:27.815Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
