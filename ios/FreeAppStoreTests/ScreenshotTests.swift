@@ -50,6 +50,12 @@ final class ScreenshotTests: XCTestCase {
         try local.syncFailed("0 The Internet connection appears to be offline.")
         try local.record(.permission, detail: "precise→approximate")
         try local.record(.permission, detail: "approximate→precise")
+        // #733: two apps opted in, a few results.
+        try local.setContributing("books", true)
+        try local.setContributing("sayback", true)
+        try local.record(Contribution(jobId: "j1", appId: "books", key: "pride-and-prejudice/ch-01", at: now - 3_600_000, status: "accepted"))
+        try local.record(Contribution(jobId: "j2", appId: "books", key: "pride-and-prejudice/ch-02", at: now - 600_000, status: "pending"))
+        try local.record(Contribution(jobId: "j3", appId: "sayback", key: "es/hola", at: now - 300_000, status: "skipped", reason: "params"))
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [StubProtocol.self]
         StubProtocol.handler = { request in
@@ -81,7 +87,24 @@ final class ScreenshotTests: XCTestCase {
         let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
         for style in [UIUserInterfaceStyle.light, .dark] {
             let name = style == .dark ? "dark" : "light"
-            for tab in [ContentView.Tab.store, .sharing, .settings] {
+            // #733: Contribute at the largest accessibility text size; no word may break.
+            let large = UIWindow(windowScene: scene)
+            large.overrideUserInterfaceStyle = style
+            large.rootViewController = UIHostingController(rootView: ContributeView(model: model, runner: model.contribute, catalogue: catalogue)
+                .environment(\.dynamicTypeSize, .accessibility5))
+            large.makeKeyAndVisible()
+            try await Task.sleep(for: .seconds(3))
+            // A page per screen, scrolled down the whole tab.
+            let scroll = try XCTUnwrap(firstScrollView(in: large))
+            for page in 0..<12 {
+                let y = CGFloat(page) * scroll.bounds.height * 0.8
+                if y > scroll.contentSize.height { break }
+                scroll.contentOffset = CGPoint(x: 0, y: min(y, max(0, scroll.contentSize.height - scroll.bounds.height)))
+                try await Task.sleep(for: .milliseconds(500))
+                try save(large, to: "\(output)/contribute-ax5-\(name)-\(page).png")
+            }
+            large.isHidden = true
+            for tab in [ContentView.Tab.store, .sharing, .contribute, .settings] {
                 let window = UIWindow(windowScene: scene)
                 window.overrideUserInterfaceStyle = style
                 window.rootViewController = UIHostingController(rootView: ContentView(model: model, collector: model.collector, catalogue: catalogue, tab: tab))
@@ -149,6 +172,12 @@ final class ScreenshotTests: XCTestCase {
         XCTAssertEqual(sqlite3_open(local.fileURL.path, &db), SQLITE_OK)
         defer { sqlite3_close(db) }
         XCTAssertEqual(sqlite3_exec(db, "UPDATE share_events SET at = \(at) WHERE kind = '\(kind.rawValue)'", nil, nil, nil), SQLITE_OK)
+    }
+
+    private func firstScrollView(in view: UIView) -> UIScrollView? {
+        if let scroll = view as? UIScrollView { return scroll }
+        for child in view.subviews { if let scroll = firstScrollView(in: child) { return scroll } }
+        return nil
     }
 
     private func save(_ window: UIWindow, to path: String) throws {

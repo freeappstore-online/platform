@@ -1,0 +1,568 @@
+import AVFoundation
+import CryptoKit
+import XCTest
+@testable import FreeAppStore
+
+/// #733: the contribute loop against a stubbed API, the job policy, Kokoro params, the model install and the encoder.
+/// A port of the Android companion's ContributeTest.kt.
+final class ContributeTests: XCTestCase {
+    private let now: Int64 = 1_000_000_000_000
+    private var dir: URL!
+    private var log: FakeLog!
+    private var synth: FakeSynth!
+    private var sinks: [FakeSink] = []
+    private var api: FasApi!
+    private var server: FakeServer!
+
+    final class FakeLog: ContributionLog {
+        var rows: [String: Contribution] = [:]
+        func handled(_ jobId: String) -> Bool { rows[jobId] != nil }
+        func record(_ contribution: Contribution) { rows[contribution.jobId] = contribution }
+        func updateStatus(_ jobId: String, status: String, reason: String) { rows[jobId]?.status = status; rows[jobId]?.reason = reason }
+    }
+
+    final class FakeSynth: Synthesizer {
+        let model = KokoroModel.id
+        var spoken: [String] = []
+        /// Replaces the default: one sample per character, nil once `keepGoing` is false.
+        var say: ((String, () -> Bool) -> Audio?)?
+        func accepts(_ params: [String: Any]) -> Bool { KokoroModel.params(params) != nil }
+        func synthesize(_ text: String, params: [String: Any], keepGoing: @escaping () -> Bool) -> Audio? {
+            spoken.append(text)
+            if let say { return say(text, keepGoing) }
+            return keepGoing() ? Audio(samples: [Float](repeating: 0, count: text.utf16.count), sampleRate: 24_000) : nil
+        }
+    }
+
+    /// Writes a byte per sample, so a file's size is its length in samples.
+    final class FakeSink: AudioSink {
+        let rate: Int
+        private let out: FileHandle
+        var writes: [Int] = []
+        var finished = false
+        var closed = false
+        init(_ file: URL, _ rate: Int) throws {
+            self.rate = rate
+            FileManager.default.createFile(atPath: file.path, contents: nil)
+            out = try FileHandle(forWritingTo: file)
+        }
+        func write(_ samples: [Float]) throws { writes.append(samples.count); try out.write(contentsOf: Data(repeating: 7, count: samples.count)) }
+        func finish() { finished = true }
+        func close() { closed = true; try? out.close() }
+    }
+
+    struct Upload { let path: String; let headers: [String: String]; let file: Data; let contentType: String; let meta: [String: Any]? }
+
+    /// The contributor routes of `api.freeappstore.online`, for app `books`.
+    final class FakeServer {
+        var jobs: [[String: Any]] = []
+        var claims: [[String: Any]] = []
+        var uploads: [Upload] = []
+        var uploadFailure: (Int, String)?
+        var submissions: [[String: Any]] = []
+        /// Lease extensions asked for (path, `X-Lease-Token`), and what the next one answers: an expiry or a failure.
+        var extensions: [(String, String?)] = []
+        var extend: () -> Result<Int64, ApiFailure> = { .failure(ApiFailure(status: 500, message: "no extension expected")) }
+
+        func handle(_ request: URLRequest) -> StubProtocol.Stub {
+            guard request.value(forHTTPHeaderField: "Authorization") == "Bearer ndev_test" else { return .init(status: 400, json: ["error": "token"]) }
+            let path = request.url!.path
+            switch (request.httpMethod!, path) {
+            case ("POST", "/v1/apps/books/generation/claim"):
+                claims.append((try? JSONSerialization.jsonObject(with: Self.body(request))) as? [String: Any] ?? [:])
+                return jobs.isEmpty ? .init(status: 204) : .init(json: ["job": jobs.removeFirst()])
+            case ("GET", "/v1/apps/books/generation/submissions"):
+                return .init(json: ["submissions": submissions])
+            case ("POST", _) where path.hasSuffix("/lease"):
+                extensions.append((path, request.value(forHTTPHeaderField: "X-Lease-Token")))
+                switch extend() {
+                case .success(let at): return .init(json: ["leaseExpiresAt": at])
+                case .failure(let failure): return .init(status: failure.status, json: ["error": failure.message])
+                }
+            case ("PUT", _) where path.hasSuffix("/result"):
+                if let (status, message) = uploadFailure { return .init(status: status, json: ["error": message]) }
+                uploads.append(Self.parse(request))
+                return .init(status: 202, json: ["submissionId": "sub-\(uploads.count)", "status": "pending"])
+            default:
+                return .init(status: 404, json: ["error": "unexpected \(request.httpMethod!) \(path)"])
+            }
+        }
+
+        static func body(_ request: URLRequest) -> Data {
+            guard let stream = request.httpBodyStream else { return request.httpBody ?? Data() }
+            stream.open(); defer { stream.close() }
+            var data = Data(); var buffer = [UInt8](repeating: 0, count: 65_536)
+            while stream.hasBytesAvailable { let n = stream.read(&buffer, maxLength: buffer.count); if n <= 0 { break }; data.append(buffer, count: n) }
+            return data
+        }
+
+        /// The `file` and `meta` parts of a multipart body.
+        static func parse(_ request: URLRequest) -> Upload {
+            let type = request.value(forHTTPHeaderField: "Content-Type")!
+            let boundary = Data("--\(type.components(separatedBy: "boundary=")[1])".utf8)
+            let body = body(request)
+            var file = Data(), contentType = "", meta: [String: Any]?
+            var start = body.range(of: boundary)!.upperBound
+            while let next = body.range(of: boundary, in: start..<body.endIndex) {
+                let part = body[start..<next.lowerBound]
+                let split = part.range(of: Data("\r\n\r\n".utf8))!
+                let head = String(decoding: part[part.startIndex..<split.lowerBound], as: UTF8.self)
+                let content = part[split.upperBound..<part.endIndex].dropLast(2) // the part's closing CRLF
+                if head.contains("name=\"file\"") {
+                    file = Data(content)
+                    contentType = head.components(separatedBy: "Content-Type: ")[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                } else if head.contains("name=\"meta\"") {
+                    meta = try? JSONSerialization.jsonObject(with: Data(content)) as? [String: Any]
+                }
+                start = next.upperBound
+            }
+            var headers: [String: String] = [:]
+            for name in ["X-Lease-Token", "X-Attestation"] { headers[name] = request.value(forHTTPHeaderField: name) }
+            return Upload(path: request.url!.path, headers: headers, file: file, contentType: contentType, meta: meta)
+        }
+    }
+
+    override func setUpWithError() throws {
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        log = FakeLog(); synth = FakeSynth(); sinks = []
+        server = FakeServer()
+        StubProtocol.handler = { [server] in server!.handle($0) }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubProtocol.self]
+        api = FasApi(configuration: configuration)
+    }
+
+    override func tearDownWithError() throws { try? FileManager.default.removeItem(at: dir) }
+
+    private var client: GenerationClient { GenerationClient(api: api, credential: { "ndev_test" }) }
+
+    private func contributor(synth: Synthesizer? = nil, attestation: Attestation = .none, clock: (() -> Int64)? = nil,
+                             stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false }) -> Contributor {
+        let now = now
+        return Contributor(client: client, log: log, synth: synth ?? self.synth, encoder: { [unowned self] file, rate in
+            let sink = try FakeSink(file, rate); sinks.append(sink); return sink
+        }, workDir: dir, attestation: attestation, now: clock ?? { now }, stopReason: stopReason, hot: hot, coolDown: .milliseconds(1))
+    }
+
+    private func job(_ id: String, text: String = "It was a bright cold day in April.", model: String = "kokoro", version: String = "v1.0",
+                     params: [String: Any] = ["voice": "af_heart"], formats: [String] = ["audio/mp4"], maxBytes: Int64 = 1_000_000,
+                     expires: Any? = nil, input: [String: Any]? = nil) -> [String: Any] {
+        ["id": id, "setId": "set1", "key": "book/\(id)", "input": input ?? ["text": text], "model": model, "modelVersion": version,
+         "params": params, "formats": formats, "maxBytes": maxBytes, "leaseToken": "lease-\(id)", "leaseExpiresAt": expires ?? now + 15 * 60_000]
+    }
+
+    private func segments(_ upload: Upload) -> [[Double]] {
+        (upload.meta?["segments"] as? [[NSNumber]] ?? []).map { $0.map(\.doubleValue) }
+    }
+
+    func testGeneratesExactlyTheClaimedInputAndSubmitsWithTheLease() async throws {
+        server.jobs = [job("j1", text: "First chapter."), job("j2", text: "Second chapter.")]
+        let submitted = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 2)
+        XCTAssertEqual(synth.spoken, ["First chapter.", "Second chapter."])
+        XCTAssertEqual(server.claims.count, 3) // the third claim found nothing (204)
+        let models = server.claims[0]["models"] as? [[String: String]]
+        XCTAssertEqual(models, [["model": "kokoro", "modelVersion": "v1.0"]])
+        let upload = server.uploads[0]
+        XCTAssertEqual(upload.path, "/v1/apps/books/generation/jobs/j1/result")
+        XCTAssertEqual(upload.headers["X-Lease-Token"], "lease-j1")
+        XCTAssertNil(upload.headers["X-Attestation"], "no attestation until #732")
+        XCTAssertEqual(upload.contentType, "audio/mp4")
+        XCTAssertEqual(upload.file.count, "First chapter.".count)
+        XCTAssertEqual(segments(upload), [[0, 14, 0, 0.001]])
+        XCTAssertEqual(log.rows["j1"]?.status, "pending")
+        XCTAssertEqual(log.rows["j1"]?.key, "book/j1")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("contribution.m4a").path), "the temp file is removed")
+    }
+
+    func testAttestationHookAddsTheHeader() async throws {
+        server.jobs = [job("j1")]
+        _ = try await contributor(attestation: Attestation { app, j in "token-\(app)-\(j.id)" }).run("books", keepGoing: { true })
+        XCTAssertEqual(server.uploads.first?.headers["X-Attestation"], "token-books-j1")
+    }
+
+    func testRefusesJobsItCannotHonourExactly() async throws {
+        let cases: [String: [String: Any]] = [
+            "model": job("a", model: "piper"), "version": job("b", version: "v0.19"), "format": job("c", formats: ["audio/ogg"]),
+            "params": job("d", params: ["voice": "af_heart", "pitch": 2]), "voice": job("e", params: ["voice": "nobody"]),
+            "input": job("f", input: ["text": "x", "extra": "y"]), "blank": job("g", text: " "),
+            "lease": job("h", expires: now + 1_000), "max": job("i", maxBytes: 0),
+        ]
+        for (name, j) in cases {
+            server.jobs = [j]
+            let submitted = try await contributor().run("books", keepGoing: { true })
+            XCTAssertEqual(submitted, 0, name)
+            XCTAssertEqual(log.rows[j["id"] as! String]?.status, "skipped", name)
+        }
+        XCTAssertTrue(synth.spoken.isEmpty)
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertEqual(log.rows["a"]?.reason, "model")
+        XCTAssertEqual(log.rows["e"]?.reason, "params")
+        XCTAssertEqual(log.rows["f"]?.reason, "input")
+    }
+
+    func testNeverUploadsTwiceForOneJob() async throws {
+        log.record(Contribution(jobId: "j1", appId: "books", key: "book/j1", at: now, status: "uploading"))
+        server.jobs = [job("j1")]
+        let submitted = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertTrue(synth.spoken.isEmpty)
+        XCTAssertEqual(log.rows["j1"]?.status, "uploading") // untouched
+    }
+
+    func testTooLargeIsNotSubmitted() async throws {
+        server.jobs = [job("j1", text: "A long sentence here.", maxBytes: 5)]
+        let submitted = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertEqual(log.rows["j1"]?.reason, "too_large")
+    }
+
+    func testLeaseRunningOutDuringGenerationStops() async throws {
+        var t = now
+        server.jobs = [job("j1")]
+        // The clock passes the lease margin before generation ends.
+        synth.say = { _, keepGoing in t += 15 * 60_000; return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil }
+        _ = try await contributor(clock: { t }).run("books", keepGoing: { true })
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertEqual(log.rows["j1"]?.reason, "lease_expired")
+    }
+
+    func testStoppingEndsTheRunWithoutUploading() async throws {
+        server.jobs = [job("j1")]
+        var go = true
+        synth.say = { _, keepGoing in go = false; return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil }
+        _ = try await contributor(stopReason: { "user_stop" }).run("books", keepGoing: { go })
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertEqual(log.rows["j1"]?.reason, "user_stop", "the runner's reason is recorded")
+    }
+
+    /// A hot phone pauses the work and keeps the lease alive; it goes on once cool, rather than stopping.
+    func testAHotPhonePausesAndResumesKeepingTheLease() async throws {
+        t = now
+        server.jobs = [job("j1", text: "One. Two.")]
+        server.extend = { [unowned self] in .success(t + 15 * 60_000) }
+        var checks = 0
+        // Hot for the first five checks before the second sentence, four minutes each: the lease would lapse unextended.
+        let hot = { [unowned self] () -> Bool in
+            guard synth.spoken.count == 1, checks < 5 else { return false }
+            checks += 1; t += 4 * 60_000; return true
+        }
+        let submitted = try await contributor(clock: { [unowned self] in t }, hot: hot).run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(synth.spoken, ["One.", "Two."])
+        XCTAssertGreaterThan(server.extensions.count, 0, "the lease is extended while paused")
+        XCTAssertEqual(log.rows["j1"]?.status, "pending")
+    }
+
+    func testUploadFailureIsRecordedAndEndsTheRun() async throws {
+        server.jobs = [job("j1"), job("j2")]
+        server.uploadFailure = (409, "Lease expired.")
+        let submitted = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertEqual(log.rows["j1"]?.status, "failed")
+        XCTAssertEqual(log.rows["j1"]?.reason, "409 Lease expired.")
+        XCTAssertNil(log.rows["j2"])
+    }
+
+    func testExpiredConnectionIsThrown() async throws {
+        server.jobs = [job("j1")]
+        server.uploadFailure = (401, "expired")
+        do {
+            _ = try await contributor().run("books", keepGoing: { true })
+            XCTFail("a 401 must be thrown")
+        } catch let failure as ApiFailure { XCTAssertEqual(failure.status, 401) }
+    }
+
+    func testSplitsSentencesLikeBooks() {
+        // Expected: Books' scripts/audio/segments.py (`sentences`, then `utf16`) on the same texts, as in the Android test.
+        func s(_ start: Int, _ end: Int, _ paragraph: Bool) -> Sentences.Sentence { .init(start: start, end: end, endsParagraph: paragraph) }
+        let en = "Mr. Brown met L. Frank Baum.  “Oh dear!” said the Rabbit. It was I.\n\nA new paragraph… Then more?! Yes 😀 indeed. (Quite.)\n \n* * *\n\nEnd"
+        XCTAssertEqual(Sentences.split(en, spanish: false), [s(0, 28, false), s(30, 57, false), s(58, 67, true), s(69, 85, false), s(86, 97, false),
+                                                             s(98, 112, false), s(113, 121, true), s(124, 129, true), s(131, 134, true)])
+        let es = "—¿Quién es? —dijo el Sr. Pérez. Nadie respondió.\n\nD. Juan llegó. —Hola —dijo. ¡Ya!"
+        XCTAssertEqual(Sentences.split(es, spanish: true), [s(0, 31, false), s(32, 48, true), s(50, 64, false), s(65, 77, false), s(78, 82, true)])
+        XCTAssertTrue(Sentences.split(" \n\n ", spanish: false).isEmpty)
+        XCTAssertTrue(KokoroModel.spanish(["voice": "ef_dora"]))
+        XCTAssertFalse(KokoroModel.spanish(["voice": "af_heart"]))
+    }
+
+    func testNarratesASentenceAtATimeAndSendsBooksTimings() async throws {
+        server.jobs = [job("j1", text: "One two. Three!\n\n* * *\n\nFour.")]
+        synth.say = { text, _ in Audio(samples: [Float](repeating: 0, count: text == "* * *" ? 0 : text.count * 2_400), sampleRate: 24_000) } // 0.1 s a character
+        _ = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(synth.spoken, ["One two.", "Three!", "* * *", "Four."])
+        // 0.8 s, 0.4 s pause, 0.6 s, 0.8 s paragraph pause, "* * *" left out, 0.5 s; no pause at the end.
+        let upload = try XCTUnwrap(server.uploads.first)
+        XCTAssertEqual(segments(upload), [[0, 8, 0.0, 0.8], [9, 15, 1.2, 1.8], [24, 29, 2.6, 3.1]])
+        XCTAssertEqual(Double(upload.file.count), 3.1 * 24_000, accuracy: 0.5)
+        // Each sentence and pause goes to the encoder as it comes, never the chapter joined in memory.
+        let sink = try XCTUnwrap(sinks.first)
+        XCTAssertEqual(sinks.count, 1)
+        XCTAssertEqual(sink.rate, 24_000)
+        XCTAssertEqual(sink.writes, [19_200, 9_600, 14_400, 19_200, 12_000])
+        XCTAssertTrue(sink.finished && sink.closed)
+    }
+
+    func testMetaOverTheServerLimitIsNotSubmitted() async throws {
+        server.jobs = [job("j1", text: String(repeating: "Go. ", count: 4_000).trimmingCharacters(in: .whitespaces), maxBytes: Int64.max)]
+        synth.say = { _, _ in Audio(samples: [0], sampleRate: 10) } // 10 Hz keeps the audio small; 4,000 segments are about 100 KB of JSON
+        let submitted = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertEqual(log.rows["j1"]?.reason, "too_large")
+    }
+
+    private var t: Int64 = 0
+    /// A job of `sentences` sentences, each taking `minutes` of the 15-minute lease to say.
+    private func timedRun(sentences: Int, minutes: Int64) async throws -> Int {
+        t = now
+        server.jobs = [job("j1", text: (1...sentences).map { "Sentence \($0)." }.joined(separator: " "))]
+        synth.say = { [unowned self] _, keepGoing in t += minutes * 60_000; return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil }
+        return try await contributor(clock: { [unowned self] in t }).run("books", keepGoing: { true })
+    }
+
+    func testExtendsTheLeaseWithinFiveMinutesOfExpiry() async throws {
+        server.extend = { [unowned self] in .success(t + 15 * 60_000) }
+        // 6 min a sentence: the lease is extended before the third (3 min left) and lasts to the upload.
+        let submitted = try await timedRun(sentences: 3, minutes: 6)
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(server.extensions.map(\.0), ["/v1/apps/books/generation/jobs/j1/lease"])
+        XCTAssertEqual(server.extensions.map(\.1), ["lease-j1"])
+        XCTAssertEqual(log.rows["j1"]?.status, "pending")
+    }
+
+    func testALeaseTheServerRefusesStopsWithoutUploading() async throws {
+        server.extend = { .failure(ApiFailure(status: 403, message: "Lease expired.")) }
+        let submitted = try await timedRun(sentences: 6, minutes: 2)
+        XCTAssertEqual(submitted, 0)
+        XCTAssertEqual(server.extensions.count, 1)
+        XCTAssertTrue(server.uploads.isEmpty)
+        XCTAssertEqual(log.rows["j1"]?.reason, "lease_expired")
+        let sink = try XCTUnwrap(sinks.first) // stopped part-way: the encoder is closed unfinished and its file removed
+        XCTAssertTrue(sink.closed && !sink.finished)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("contribution.m4a").path))
+    }
+
+    func testALeaseAtItsCapIsUsedWhileItLasts() async throws {
+        server.extend = { .failure(ApiFailure(status: 409, message: "Lease cap reached.")) }
+        let submitted = try await timedRun(sentences: 6, minutes: 2) // done at 12 of 15 minutes
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(server.extensions.count, 1, "no retry after 409")
+    }
+
+    func testOtherExtensionFailuresAreRetriedAndDoNotStop() async throws {
+        server.extend = { .failure(ApiFailure(status: 500, message: "Try again.")) }
+        let submitted = try await timedRun(sentences: 6, minutes: 2)
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(server.extensions.count, 2, "before the last sentence and before the upload")
+    }
+
+    func testAnExpiredConnectionWhileExtendingIsThrown() async throws {
+        server.extend = { .failure(ApiFailure(status: 401, message: "expired")) }
+        do {
+            _ = try await timedRun(sentences: 6, minutes: 2)
+            XCTFail("a 401 must be thrown")
+        } catch let failure as ApiFailure { XCTAssertEqual(failure.status, 401) }
+    }
+
+    func testRefreshCopiesVerdicts() async throws {
+        log.record(Contribution(jobId: "j1", appId: "books", key: "book/j1", at: now, status: "pending"))
+        log.record(Contribution(jobId: "j2", appId: "books", key: "book/j2", at: now, status: "pending"))
+        server.submissions = [
+            ["submissionId": "s1", "jobId": "j1", "status": "rejected", "reason": "transcript_mismatch"],
+            ["jobId": "other", "status": "accepted"],
+            ["id": "s2", "jobId": "j2", "status": "accepted", "reason": NSNull(), "createdAt": now],
+        ]
+        try await client.refresh("books", log: log)
+        XCTAssertEqual(log.rows["j1"]?.status, "rejected")
+        XCTAssertEqual(log.rows["j1"]?.reason, "transcript_mismatch")
+        XCTAssertNil(log.rows["other"], "only this phone's jobs")
+        XCTAssertEqual(log.rows["j2"], Contribution(jobId: "j2", appId: "books", key: "book/j2", at: now, status: "accepted", reason: ""))
+    }
+
+    func testParsesIsoLeaseExpiryAndRejectsOddJobIds() throws {
+        let parsed = try GenerationClient.parseJob(job("j1", expires: "2026-11-26T12:00:00Z"))
+        XCTAssertEqual(parsed.leaseExpiresAt, Int64(ISO8601DateFormatter().date(from: "2026-11-26T12:00:00Z")!.timeIntervalSince1970 * 1000))
+        XCTAssertThrowsError(try GenerationClient.parseJob(job("../native/device")))
+    }
+
+    func testApiOnlyLetsTheCredentialReachNativeAndGenerationRoutes() {
+        XCTAssertEqual(FasApi.endpoint("/apps/books/generation/claim")?.absoluteString, "https://api.freeappstore.online/v1/apps/books/generation/claim")
+        for path in ["/auth/me", "/apps/books/photos", "/apps/../native/x/generation/claim", "/apps/Books/generation/claim",
+                     "/apps/books/generation/../../auth/me"] {
+            XCTAssertNil(FasApi.endpoint(path), path)
+        }
+    }
+
+    func testKokoroParams() {
+        XCTAssertEqual(KokoroModel.params(["voice": "af_heart"]).map { [Float($0.sid), $0.speed] }, [3, 1])
+        XCTAssertEqual(KokoroModel.params(["voice": "em_santa", "speed": 1.25]).map { [Float($0.sid), $0.speed] }, [53, 1.25])
+        XCTAssertNil(KokoroModel.params([:]))
+        XCTAssertNil(KokoroModel.params(["voice": "af_heart", "speed": 3]))
+        XCTAssertNil(KokoroModel.params(["voice": "af_heart", "speed": "fast"]))
+        XCTAssertNil(KokoroModel.params(["voice": "af_heart", "speed": true]))
+        XCTAssertNil(KokoroModel.params(["voice": 3]))
+        XCTAssertEqual(KokoroModel.voices.count, 54)
+    }
+
+    // MARK: Model install
+
+    /// A ustar `.tar.bz2` of `entries`, written in the test so the extractor is checked against a real libbz2 stream.
+    private func archive(_ entries: [(String, String)]) throws -> URL {
+        var tar = Data()
+        for (name, body) in entries {
+            var header = [UInt8](repeating: 0, count: 512)
+            func put(_ s: String, _ offset: Int) { for (i, byte) in s.utf8.enumerated() { header[offset + i] = byte } }
+            put(name, 0); put("0000644", 100); put("0000000", 108); put("0000000", 116)
+            put(String(format: "%011o", body.utf8.count), 124); put(String(format: "%011o", 0), 136)
+            put("        ", 148); header[156] = UInt8(ascii: "0"); put("ustar", 257); put("00", 263)
+            put(String(format: "%06o", header.reduce(0) { $0 + Int($1) }) + "\0 ", 148)
+            tar.append(contentsOf: header)
+            tar.append(Data(body.utf8))
+            tar.append(Data(count: (512 - body.utf8.count % 512) % 512))
+        }
+        tar.append(Data(count: 1024))
+        var compressed = [CChar](repeating: 0, count: tar.count + 4096)
+        var length = UInt32(compressed.count)
+        var source = tar.map { CChar(bitPattern: $0) }
+        XCTAssertEqual(BZ2_bzBuffToBuffCompress(&compressed, &length, &source, UInt32(source.count), 9, 0, 0), BZ_OK)
+        let url = dir.appendingPathComponent("model.tar.bz2")
+        try Data(compressed.prefix(Int(length)).map { UInt8(bitPattern: $0) }).write(to: url)
+        return url
+    }
+
+    func testModelInstallsOnlyWhenTheChecksumMatches() async throws {
+        let source = try archive([("kokoro-multi-lang-v1_0/model.onnx", "weights"), ("kokoro-multi-lang-v1_0/tokens.txt", "a 1")])
+        let model = KokoroModel(dir: dir.appendingPathComponent("kokoro"))
+        do {
+            _ = try await model.install(source: source, sha256: String(repeating: "0", count: 64))
+            XCTFail("a wrong checksum must refuse the model")
+        } catch {}
+        XCTAssertFalse(model.installed)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("kokoro").path))
+        let installed = try await model.install(source: source, sha256: try KokoroModel.sha256(of: source))
+        XCTAssertTrue(installed)
+        XCTAssertTrue(model.installed)
+        XCTAssertEqual(try String(contentsOf: model.root.appendingPathComponent("model.onnx"), encoding: .utf8), "weights")
+        XCTAssertEqual(try dir.appendingPathComponent("kokoro").resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
+        model.delete()
+        XCTAssertFalse(model.installed)
+    }
+
+    func testModelInstallRefusesPathsOutsideItsFolder() async throws {
+        let source = try archive([("../escape.txt", "x")])
+        let model = KokoroModel(dir: dir.appendingPathComponent("kokoro"))
+        do {
+            _ = try await model.install(source: source, sha256: try KokoroModel.sha256(of: source))
+            XCTFail("a path outside the folder must refuse the model")
+        } catch {}
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("escape.txt").path))
+        XCTAssertFalse(model.installed)
+    }
+
+    func testModelInstallCanBeStopped() async throws {
+        let source = try archive([("kokoro-multi-lang-v1_0/model.onnx", "weights")])
+        let model = KokoroModel(dir: dir.appendingPathComponent("kokoro"))
+        let installed = try await model.install(source: source, sha256: try KokoroModel.sha256(of: source), keepGoing: { false })
+        XCTAssertFalse(installed)
+        XCTAssertFalse(model.installed)
+    }
+
+    func testPinnedModel() {
+        XCTAssertTrue(KokoroModel.url.absoluteString.hasPrefix("https://github.com/k2-fsa/sherpa-onnx/releases/download/"))
+        XCTAssertNotNil(KokoroModel.sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression))
+    }
+
+    // MARK: Encoder and the real model
+
+    /// AAC-LC mono in an MP4, at the sample rate it was given, as the server's MP4 check expects.
+    func testEncoderWritesAacInMp4() throws {
+        let url = dir.appendingPathComponent("tone.m4a")
+        let encoder = try AacEncoder(url: url, sampleRate: 24_000)
+        for _ in 0..<4 { try encoder.write((0..<6_000).map { Float(sin(Double($0) * 2 * .pi * 440 / 24_000) * 0.5) }) }
+        try encoder.finish()
+        encoder.close()
+        let file = try AVAudioFile(forReading: url)
+        XCTAssertEqual(file.fileFormat.streamDescription.pointee.mFormatID, kAudioFormatMPEG4AAC)
+        XCTAssertEqual(file.fileFormat.sampleRate, 24_000)
+        XCTAssertEqual(file.fileFormat.channelCount, 1)
+        XCTAssertEqual(Double(file.length), 24_000, accuracy: 2_048) // one second, give or take the codec's priming
+        let data = try Data(contentsOf: url)
+        XCTAssertEqual(String(decoding: data[4..<8], as: UTF8.self), "ftyp")
+        var audioFile: AudioFileID?
+        XCTAssertEqual(AudioFileOpenURL(url as CFURL, .readPermission, 0, &audioFile), noErr)
+        var audioBytes: UInt64 = 0
+        var size = UInt32(8)
+        XCTAssertEqual(AudioFileGetProperty(audioFile!, kAudioFilePropertyAudioDataByteCount, &size, &audioBytes), noErr)
+        AudioFileClose(audioFile!)
+        // At most 64 kbps, 8 KB a second (a tone needs far less). The file itself carries a padding atom besides.
+        XCTAssertGreaterThan(audioBytes, 0)
+        XCTAssertLessThanOrEqual(audioBytes, 8_500)
+    }
+
+    /// The real Kokoro model through sherpa-onnx, when TEST_RUNNER_FAS_KOKORO_ARCHIVE names a local copy of the pinned
+    /// `kokoro-multi-lang-v1_0.tar.bz2`: install, narrate a sentence, encode it.
+    func testRealKokoroNarratesAndEncodes() async throws {
+        guard let path = ProcessInfo.processInfo.environment["FAS_KOKORO_ARCHIVE"] else { throw XCTSkip("FAS_KOKORO_ARCHIVE not set") }
+        let model = KokoroModel(dir: FileManager.default.temporaryDirectory.appendingPathComponent("kokoro-test"))
+        let installed = try await model.install(source: URL(fileURLWithPath: path))
+        XCTAssertTrue(installed)
+        let synth = KokoroSynthesizer(files: model)
+        defer { synth.close(); model.delete() }
+        let text = "It was a bright cold day in April, and the clocks were striking thirteen."
+        let audio = try XCTUnwrap(try synth.synthesize(text, params: ["voice": "af_heart"], keepGoing: { true }))
+        XCTAssertEqual(audio.sampleRate, 24_000)
+        let seconds = Double(audio.samples.count) / 24_000
+        XCTAssertGreaterThan(Double(text.count) / seconds, 8) // the server's default characters-per-second band
+        XCTAssertLessThan(Double(text.count) / seconds, 30)
+        XCTAssertNil(try synth.synthesize(text, params: ["voice": "af_heart"], keepGoing: { false }), "stopping returns nothing")
+        let url = dir.appendingPathComponent("kokoro.m4a")
+        let encoder = try AacEncoder(url: url, sampleRate: audio.sampleRate)
+        try encoder.write(audio.samples)
+        try encoder.finish()
+        XCTAssertEqual(Double(try AVAudioFile(forReading: url).length), Double(audio.samples.count), accuracy: 2_048)
+    }
+}
+
+/// The contribution record in the real store (#733).
+final class ContributionStoreTests: XCTestCase {
+    func testRecordsJobsAndCountsToday() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let local = try LocalStore(directory: directory)
+        defer { local.close() }
+        XCTAssertFalse(local.handled("j1"))
+        try local.record(Contribution(jobId: "j1", appId: "books", key: "book/1", at: 100, status: "uploading"))
+        try local.record(Contribution(jobId: "j2", appId: "books", key: "book/2", at: 200, status: "skipped", reason: "params"))
+        try local.updateStatus("j1", status: "accepted", reason: "")
+        XCTAssertTrue(local.handled("j1"))
+        XCTAssertEqual(try local.contributions().map(\.jobId), ["j2", "j1"])
+        XCTAssertEqual(try local.contributions().last?.status, "accepted")
+        XCTAssertEqual(try local.contributedSince("books", from: 50), 1, "skipped and failed jobs do not count")
+        try local.setContributing("books", true)
+        local.modelWanted = true
+        XCTAssertEqual(local.contributeApps(), ["books"])
+        try local.clear() // Disconnect
+        XCTAssertFalse(local.handled("j1"))
+        XCTAssertEqual(local.contributeApps(), [])
+        XCTAssertFalse(local.modelWanted)
+    }
+
+    /// `freeappstore://native/contribute/<id>` asks; it never opts in by itself, and only takes an app id.
+    @MainActor
+    func testContributeLinkAsksAndNeverOptsIn() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let local = try LocalStore(directory: directory)
+        let model = CompanionModel(repository: CompanionRepository(local: local, secure: SecureStore(service: "online.freeappstore.companion.contributetests")))
+        model.handle(URL(string: "freeappstore://native/contribute/books")!)
+        XCTAssertEqual(model.linkedContribute, "books")
+        XCTAssertTrue(local.contributeApps().isEmpty)
+        model.linkedContribute = nil
+        model.handle(URL(string: "freeappstore://native/contribute/Books%2F..")!)
+        XCTAssertNil(model.linkedContribute)
+    }
+}

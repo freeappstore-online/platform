@@ -26,6 +26,16 @@ struct AppDetailView: View {
                     .accessibilityLabel("Open \(app.name)")
                 if !app.description.isEmpty { Text(app.description) }
                 if let connected = model.apps.first(where: { $0.id == app.id }) { companion(connected) }
+                if model.signedIn {
+                    GroupBox {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ContributeToggle(appId: app.id, name: app.name, model: model)
+                            Text("Generate \(app.name)'s published jobs, such as narration, on this phone. Nothing happens if it has none.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
                 if let permissions = app.permissions { self.permissions(permissions) }
             }
             .padding(24)

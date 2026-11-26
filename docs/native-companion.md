@@ -113,3 +113,34 @@ and verifies every upload; the phone is never trusted.
   `GET …/generation/submissions`; the tab shows today's count per app and recent results. Cleared by **Disconnect**.
 - **Attestation**: `X-Attestation` is sent when the `Attestation` hook returns a token; none until #732.
 
+## Contribute (iOS, #733)
+
+The iPhone companion does the same work as the Android one, with the same rules: per-app opt-in, the same Kokoro model and
+claims, the same skipping, sentence timings, lease extension, upload checks and on-device record. Only what differs on iOS:
+
+- **Where**: a **Contribute** tab (voice model, the current run with **Run now** / **Stop**, the apps opted in with today's
+  count, recent results), a **Contribute from this phone** switch on each app's Store page while signed in, and the link
+  `freeappstore://native/contribute/<appId>`. Each asks first; a link never opts in by itself.
+- **Runtime**: the official sherpa-onnx `2.0.3` iOS xcframework with onnxruntime linked in
+  (`sherpa-onnx-v2.0.3-ios-shared-onnxruntime-static.xcframework.zip`), called through its C API. The scheme's build
+  pre-action (`ios/scripts/fetch-sherpa-onnx.sh`) fetches it into the untracked `ios/Vendor/` and refuses it unless its
+  SHA-256 matches the pinned one.
+- **Model**: the same pinned `kokoro-multi-lang-v1_0.tar.bz2` and SHA-256, downloaded only on **Download** or after an
+  opt-in, verified before anything is unpacked (libbz2 and a tar reader that takes only regular files and folders inside
+  the model folder), kept in Application Support excluded from backup, and deletable from the tab.
+- **When**: a `BGProcessingTask` (`online.freeappstore.companion.contribute`) that iOS starts only on external power with a
+  network connection, at most every 15 minutes and at the system's discretion; a background run never downloads the model
+  over a cellular or Low Data network. **Run now** runs in the foreground while the app is open and keeps the screen awake
+  meanwhile (auto-lock would otherwise background the app). When iOS ends either (the task's expiration handler, or the
+  app's background time running out after leaving it), the job in hand stops between sentences and is not uploaded.
+  Unplugging stops a background run. A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
+  `unplugged`, `opted_out` or `lease_expired`, shown in the tab's recent results.
+- **Heat**: while the thermal state is *serious* or *critical* the run pauses between sentences (and before claiming),
+  keeps extending the job's lease, and goes on once the phone is back to *fair* or *nominal*.
+- **Encoding**: each sentence and pause is written as it is synthesized into an `ExtAudioFile` (Apple's software AAC-LC
+  encoder, mono 64 kbps at Kokoro's 24 kHz, `.m4a`) in the temporary folder; the chapter is never held in memory.
+- **Record**: `generation_jobs` in the protected, backup-excluded queue database, refreshed from `GET …/generation/submissions`
+  when the app opens. The opt-ins and the record are cleared by **Disconnect**.
+- **Attestation**: the `Attestation` hook is where an App Attest assertion for `X-Attestation` goes (#732); it returns
+  nothing yet, so nothing is sent.
+

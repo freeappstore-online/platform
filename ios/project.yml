@@ -13,10 +13,16 @@ targets:
     type: application
     platform: iOS
     sources: [FreeAppStore]
+    dependencies:
+      # Contribute (#733): Kokoro through sherpa-onnx, fetched by the scheme's build pre-action; libbz2 unpacks the model.
+      - framework: Vendor/SherpaOnnxC.xcframework
+        embed: true
+      - sdk: libbz2.tbd
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(FAS_BUNDLE_ID)
         INFOPLIST_FILE: FreeAppStore/Info.plist
+        SWIFT_OBJC_BRIDGING_HEADER: FreeAppStore/FreeAppStore-Bridging-Header.h
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         CODE_SIGN_STYLE: Automatic
@@ -27,6 +33,7 @@ targets:
     sources: [FreeAppStoreTests]
     dependencies:
       - target: FreeAppStore
+      - sdk: libbz2.tbd # builds the test archives
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(FAS_BUNDLE_ID).tests
@@ -39,5 +46,10 @@ schemes:
       targets:
         FreeAppStore: all
         FreeAppStoreTests: [test]
+      # Before the build is planned, so the xcframework exists when Xcode looks for it. It checks the pinned SHA-256.
+      preActions:
+        - name: Fetch sherpa-onnx
+          script: '"$SRCROOT/scripts/fetch-sherpa-onnx.sh"'
+          settingsTarget: FreeAppStore
     test:
       targets: [FreeAppStoreTests]

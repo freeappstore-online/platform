@@ -48,6 +48,12 @@ final class LocalStore: @unchecked Sendable {
         try exec("CREATE INDEX IF NOT EXISTS share_points_point ON share_points(point_id)")
         try exec("CREATE INDEX IF NOT EXISTS share_points_app_sent ON share_points(app_id, sent_at)")
         try exec("CREATE INDEX IF NOT EXISTS share_points_at ON share_points(at)")
+        // This phone's contribution record (#733): one row per job it ever started, so none is generated twice.
+        try exec("""
+            CREATE TABLE IF NOT EXISTS generation_jobs(job_id TEXT PRIMARY KEY, app_id TEXT NOT NULL, job_key TEXT NOT NULL,
+              at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '')
+            """)
+        try exec("CREATE INDEX IF NOT EXISTS generation_jobs_at ON generation_jobs(at)")
         for path in [fileURL.path, fileURL.path + "-wal", fileURL.path + "-shm"] where FileManager.default.fileExists(atPath: path) {
             try FileManager.default.setAttributes(protection, ofItemAtPath: path)
         }
@@ -271,6 +277,7 @@ final class LocalStore: @unchecked Sendable {
             try clearConnection()
             try exec("DELETE FROM share_events")
             try exec("DELETE FROM share_points")
+            try exec("DELETE FROM generation_jobs")
         }
     }
 
@@ -383,6 +390,38 @@ final class LocalStore: @unchecked Sendable {
         if self.paused { try record(.pausedAll, detail: detail, at: now) }
     }
 
+    // MARK: Contribute (#733)
+
+    /// Apps this phone contributes to. A setting, so Disconnect clears it.
+    func contributeApps() -> Set<String> { ids("contributeApps") }
+
+    func setContributing(_ appId: String, _ on: Bool) throws {
+        lock.lock(); defer { lock.unlock() }
+        try saveIds("contributeApps", on ? contributeApps().union([appId]) : contributeApps().subtracting([appId]))
+    }
+
+    /// The user asked for the voice model; a contribute run downloads it.
+    var modelWanted: Bool {
+        get { setting("modelWanted") == "1" }
+        set { try? setSetting("modelWanted", newValue ? "1" : "0") }
+    }
+
+    /// Newest first.
+    func contributions(limit: Int = 30) throws -> [Contribution] {
+        try query("SELECT job_id, app_id, job_key, at, status, reason FROM generation_jobs ORDER BY at DESC LIMIT ?", [Int64(limit)]) { row in
+            Contribution(jobId: String(cString: sqlite3_column_text(row, 0)), appId: String(cString: sqlite3_column_text(row, 1)),
+                         key: String(cString: sqlite3_column_text(row, 2)), at: sqlite3_column_int64(row, 3),
+                         status: String(cString: sqlite3_column_text(row, 4)), reason: String(cString: sqlite3_column_text(row, 5)))
+        }
+    }
+
+    /// Jobs this phone generated for the app since `from`, uploaded or on their way.
+    func contributedSince(_ appId: String, from: Int64) throws -> Int {
+        try query("SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('skipped', 'failed')", [appId, from]) {
+            Int(sqlite3_column_int64($0, 0))
+        }.first ?? 0
+    }
+
     // MARK: SQLite
 
     private func setting(_ key: String) -> String? {
@@ -441,5 +480,21 @@ final class LocalStore: @unchecked Sendable {
     /// Never includes SQL arguments, which can hold coordinates.
     private func storageError() -> CompanionError {
         CompanionError("Could not save location on this phone (SQLite \(sqlite3_extended_errcode(db))).")
+    }
+}
+
+extension LocalStore: ContributionLog {
+    func handled(_ jobId: String) -> Bool {
+        !((try? query("SELECT 1 FROM generation_jobs WHERE job_id = ?", [jobId], row: { _ in true })) ?? []).isEmpty
+    }
+
+    func record(_ contribution: Contribution) throws {
+        try exec("INSERT OR REPLACE INTO generation_jobs(job_id, app_id, job_key, at, status, reason) VALUES (?, ?, ?, ?, ?, ?)",
+                 [contribution.jobId, contribution.appId, String(contribution.key.prefix(200)), contribution.at, contribution.status,
+                  String(contribution.reason.prefix(120))])
+    }
+
+    func updateStatus(_ jobId: String, status: String, reason: String) throws {
+        try exec("UPDATE generation_jobs SET status = ?, reason = ? WHERE job_id = ?", [status, String(reason.prefix(120)), jobId])
     }
 }

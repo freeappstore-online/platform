@@ -15,7 +15,9 @@ xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination
 
 Tests are ad-hoc signed (`CODE_SIGN_IDENTITY=-`) because an unsigned simulator host has no Keychain access. The device build is unsigned.
 
-Bundle ID: `online.freeappstore.companion` (`FAS_BUNDLE_ID` in `Config/Base.xcconfig`). iOS 17 minimum, Swift 5 language mode. No third-party packages.
+Bundle ID: `online.freeappstore.companion` (`FAS_BUNDLE_ID` in `Config/Base.xcconfig`). iOS 17 minimum, Swift 5 language mode. No package manager. The one binary dependency is sherpa-onnx (Kokoro TTS for Contribute, #733): the scheme's build pre-action runs `scripts/fetch-sherpa-onnx.sh`, which downloads the pinned release xcframework into the untracked `Vendor/` once and refuses it unless its SHA-256 matches. A build without network access needs `Vendor/SherpaOnnxC.xcframework` already in place.
+
+`ContributeTests.testRealKokoroNarratesAndEncodes` runs the real model when `TEST_RUNNER_FAS_KOKORO_ARCHIVE` names a local copy of the pinned `kokoro-multi-lang-v1_0.tar.bz2`; otherwise it is skipped.
 
 Device installs are signed in Xcode with your own team. `DEVELOPMENT_TEAM` is never committed: set it in Signing & Capabilities or in an untracked `Config/Local.xcconfig` (which may also override `FAS_BUNDLE_ID`). Distribution is developer installation only; there is no TestFlight or App Store build.
 

@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // delivery, Always only). The collector exists from here on and resumes only if a credential exists,
         // collection is not paused and an app still has a grant.
         model.collector.evaluate()
+        model.contribute.register()
         return true
     }
 }

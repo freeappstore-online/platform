@@ -32,6 +32,14 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     @Published private(set) var lastUploadByApp: [String: Int64] = [:]
     @Published private(set) var busy = false
     @Published var consent: ConnectedApp?
+    // Contribute (#733).
+    let contribute: ContributeRunner
+    @Published private(set) var contributeApps: Set<String> = []
+    @Published private(set) var modelState = ModelState.none
+    @Published private(set) var contributions: [Contribution] = []
+    @Published private(set) var contributedToday: [String: Int] = [:]
+    /// `freeappstore://native/contribute/<id>`: asks before opting in, never opts in by itself.
+    @Published var linkedContribute: String?
     private var error = ""
     private var authSession: ASWebAuthenticationSession?
     private var refreshTask: Task<Void, Never>?
@@ -43,9 +51,10 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     }
 
     /// Tests pass a repository with a temporary store and a stubbed API.
-    init(repository: CompanionRepository) {
+    init(repository: CompanionRepository, contribute: ContributeRunner? = nil) {
         self.repository = repository
         collector = LocationCollector(repository: repository)
+        self.contribute = contribute ?? ContributeRunner(repository: repository)
         super.init()
         if repository.token() != nil { try? local.seedIfEmpty() }
         refresh()
@@ -71,6 +80,11 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         events = (try? local.events()) ?? []
         pendingByApp = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, (try? local.pendingCount($0.id)) ?? 0) })
         lastUploadByApp = apps.reduce(into: [:]) { $0[$1.id] = try? local.lastUpload($1.id) }
+        contributeApps = local.contributeApps()
+        modelState = contribute.kokoro.installed ? .installed : local.modelWanted ? .waiting : .none
+        contributions = (try? local.contributions()) ?? []
+        let today = SharingTimeline.today().lowerBound
+        contributedToday = Dictionary(uniqueKeysWithValues: contributeApps.map { ($0, (try? local.contributedSince($0, from: today)) ?? 0) })
         message = error.isEmpty ? local.message : error
     }
 
@@ -86,7 +100,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         }
     }
 
-    func resignActive() { refreshTask?.cancel() }
+    func resignActive() { refreshTask?.cancel(); contribute.schedule() }
 
     /// Finishes a pending connection, then syncs. A connection error is shown until the next activation; sync
     /// failures are left to `local.message`, which every later successful sync clears, background ones included.
@@ -95,7 +109,11 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
             _ = try await repository.finishSignIn()
             error = ""
         } catch { self.error = error.localizedDescription }
-        if repository.token() != nil { try? await repository.sync() }
+        if repository.token() != nil {
+            try? await repository.sync()
+            await contribute.refreshVerdicts()
+        }
+        contribute.schedule() // pairing finished, or the sync found the connection expired
         refresh(); collector.evaluate()
     }
 
@@ -143,7 +161,33 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         let parts = url.pathComponents.filter { $0 != "/" }
         if parts == ["connected"] { completeSignIn() }
         else if parts.count == 2, parts[0] == "apps", let app = apps.first(where: { $0.id == parts[1] }), !enabled(app) { consent = app }
+        else if parts.count == 2, parts[0] == "contribute", Self.appId.firstMatch(in: parts[1], range: NSRange(location: 0, length: parts[1].utf16.count)) != nil {
+            linkedContribute = parts[1]
+        }
     }
+
+    private static let appId = try! NSRegularExpression(pattern: "^[a-z0-9][a-z0-9-]{0,62}$")
+
+    // MARK: Contribute (#733)
+
+    /// Opting in asks for the voice model too; a run downloads it (in the background only on a non-cellular network).
+    func setContributing(_ appId: String, _ on: Bool) {
+        do {
+            try local.setContributing(appId, on)
+            if on && !contribute.kokoro.installed { local.modelWanted = true }
+        } catch { self.error = error.localizedDescription }
+        contribute.schedule(); refresh()
+    }
+    func downloadModel() { local.modelWanted = true; contribute.runNow(); refresh() }
+    func deleteModel() {
+        local.modelWanted = false
+        contribute.stop()
+        let kokoro = contribute.kokoro
+        Task.detached { kokoro.delete() }
+        contribute.schedule(); refresh()
+    }
+    func contributeNow() { contribute.runNow(); refresh() }
+    func stopContributing() { contribute.stop(); refresh() }
 
     func enable(_ app: ConnectedApp) {
         act { [self] in
@@ -156,7 +200,9 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     func disconnect() {
         act { [self] in
             try local.setPaused(true); collector.evaluate()
+            contribute.stop()
             try await repository.disconnect()
+            contribute.schedule()
         }
     }
     func setPaused(_ value: Bool) {
@@ -194,7 +240,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var phase
     @State private var tab: Tab
 
-    enum Tab { case store, sharing, settings }
+    enum Tab { case store, sharing, contribute, settings }
 
     /// Without `tab`: Sharing when any app has a grant or the connection expired, otherwise Store.
     init(model: CompanionModel, collector: LocationCollector, catalogue: CatalogueStore, tab: Tab? = nil) {
@@ -212,6 +258,9 @@ struct ContentView: View {
             SharingDashboardView(model: model, collector: collector)
                 .tabItem { Label("Sharing", systemImage: "location.circle") }
                 .tag(Tab.sharing)
+            ContributeView(model: model, runner: model.contribute, catalogue: catalogue)
+                .tabItem { Label("Contribute", systemImage: "waveform") }
+                .tag(Tab.contribute)
             SettingsView(model: model, collector: collector)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
                 .tag(Tab.settings)
@@ -224,6 +273,12 @@ struct ContentView: View {
         }
         .onOpenURL { model.handle($0) }
         .sheet(item: $model.consent) { app in disclosure(app) }
+        .contributeAlert(name: model.linkedContribute.map(catalogue.name) ?? "", isPresented: Binding(
+            get: { model.signedIn && model.linkedContribute != nil },
+            set: { if !$0 { model.linkedContribute = nil } }
+        )) {
+            if let id = model.linkedContribute { model.setContributing(id, true) }
+        }
     }
 
     private func disclosure(_ app: ConnectedApp) -> some View {
