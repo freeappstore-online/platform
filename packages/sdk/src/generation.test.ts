@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Auth } from './auth.js';
-import { Generation, type GenerationJob } from './generation.js';
+import { Generation, type GenerationJob, type GenerationSubmission } from './generation.js';
 
 const base = 'https://api.example/v1/apps/books/generation';
 const models = [{ model: 'kokoro', modelVersion: '1.0' }];
@@ -134,8 +134,19 @@ describe('generation SDK', () => {
 
   it('mySubmissions lists the caller’s submissions; signed out throws before fetching', async () => {
     const submissions = [
-      { id: 'sub1', jobId: 'j1', status: 'rejected', reason: 'asr mismatch', createdAt: 1 },
-    ];
+      {
+        submissionId: 'sub1',
+        jobId: 'j1',
+        setId: 'set1',
+        key: 'ch1',
+        status: 'rejected',
+        reason: 'asr mismatch',
+        bytes: 3,
+        contentType: 'audio/ogg',
+        createdAt: 1,
+        decidedAt: 2,
+      },
+    ] satisfies GenerationSubmission[];
     const fetch = mockFetch(json({ submissions }));
     expect(await client().mySubmissions()).toEqual(submissions);
     expect(fetch.mock.calls[0]![0]).toBe(`${base}/submissions`);

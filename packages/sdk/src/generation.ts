@@ -43,12 +43,18 @@ export interface GenerationJob extends GenerationModel {
 
 export type GenerationSubmissionStatus = 'pending' | 'accepted' | 'rejected' | 'superseded';
 
+/** One of the caller's own submissions (`mySubmissions`). */
 export interface GenerationSubmission {
-  id: string;
+  submissionId: string;
   jobId: string;
+  setId: string;
+  key: string;
   status: GenerationSubmissionStatus;
   reason: string | null;
+  bytes: number;
+  contentType: GenerationFormat;
   createdAt: number;
+  decidedAt: number | null;
 }
 
 /** A verified, write-once artifact. `url` and `metaUrl` are absolute. */
@@ -260,6 +266,7 @@ export class Generation {
     return apps[0]?.sets ?? [];
   }
 
+  /** The caller's 100 newest submissions to this app, newest first. */
   async mySubmissions(): Promise<GenerationSubmission[]> {
     return (
       (await (await this.request('/submissions', {})).json()) as {
