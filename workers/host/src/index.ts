@@ -113,7 +113,8 @@ export default {
     // Platform-infra subdomains short-circuit before app routing.
     // Only applies to freeappstore.online zone — custom domains skip this.
     const zone = dot > 0 ? cleaned.slice(dot + 1) : "";
-    if (zone === "freeappstore.online" && slug in PLATFORM_SUBDOMAINS) {
+    // hasOwn, not `in`: `constructor` is an app id, not Object.prototype's (#776).
+    if (zone === "freeappstore.online" && Object.hasOwn(PLATFORM_SUBDOMAINS, slug)) {
       return await dispatchPlatform(req, env, slug, host);
     }
 

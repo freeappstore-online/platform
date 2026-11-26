@@ -25,6 +25,7 @@ beforeAll(async () => {
     route.bind("unbuilt", "freeappstore.online", "apps/unbuilt", now, now),
     route.bind("smoke-sandbox", "freeappstore.online", "apps/smoke-sandbox", now, now),
     route.bind("agentcoder", "space", "apps/agentcoder", now, now),
+    route.bind("constructor", "freeappstore.online", "apps/constructor", now, now),
     route.bind("console", "freeappstore.online", "apps/console", now, now),
     isolated.bind("wasm", "freeappstore.online", "apps/wasm", now, now),
   ]);
@@ -36,6 +37,7 @@ beforeAll(async () => {
   await env.APPS.put("apps/dict/manifest.json", "{}");
   await env.APPS.put("apps/dict/audio/word.mp3", AUDIO);
   await env.APPS.put("apps/agentcoder/index.html", "<!doctype html><title>AgentCoder</title>");
+  await env.APPS.put("apps/constructor/index.html", "<!doctype html><title>Constructor</title>");
   await env.APPS.put("apps/console/index.html", "<!doctype html><title>Console</title>");
   await env.APPS.put("apps/console/assets/index.js", "console.log('console')");
   await env.APPS.put("apps/wasm/index.html", "<!doctype html><title>Wasm</title>");
@@ -291,6 +293,12 @@ describe("custom domains", () => {
 });
 
 describe("reserved platform subdomains", () => {
+  it("serves an app whose id is an Object.prototype key (#776)", async () => {
+    const res = await get("https://constructor.freeappstore.online/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<!doctype html><title>Constructor</title>");
+  });
+
   it("dispatches api.* to the API service binding, unchanged", async () => {
     const res = await get("https://api.freeappstore.online/v1/health?x=1", { method: "POST", body: "{}" });
     expect(await res.json()).toMatchObject({ binding: "API", url: "https://api.freeappstore.online/v1/health?x=1", method: "POST" });
