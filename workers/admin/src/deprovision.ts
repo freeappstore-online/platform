@@ -130,6 +130,7 @@ export const APP_DATA_TABLES = [
   "auth_codes",
   "app_deploy_limits",
   // Community generation (0053). Children first; artifact R2 objects become unreachable.
+  "generation_events", // 0058 (#827)
   "generation_leases",
   "generation_submissions",
   "generation_artifacts",
