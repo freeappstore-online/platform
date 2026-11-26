@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Auth } from './auth.js';
-import { Generation, type GenerationJob, type GenerationSubmission } from './generation.js';
+import {
+  Generation,
+  GenerationError,
+  type GenerationJob,
+  type GenerationSubmission,
+  generationRetryDelay,
+} from './generation.js';
 
 const base = 'https://api.example/v1/apps/books/generation';
 const models = [{ model: 'kokoro', modelVersion: '1.0' }];
@@ -334,6 +340,125 @@ describe('generation SDK', () => {
       });
       expect(fetch).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('generationRetryDelay retries network failures, 5xx, 408 and 429 with Retry-After only', () => {
+    expect(generationRetryDelay(new TypeError('Failed to fetch'), 0)).toBe(2_000);
+    expect(generationRetryDelay(new TypeError('Failed to fetch'), 3)).toBe(16_000);
+    expect(generationRetryDelay(new TypeError('Failed to fetch'), 9)).toBe(60_000);
+    expect(generationRetryDelay(new GenerationError('x', 503), 1)).toBe(4_000);
+    expect(generationRetryDelay(new GenerationError('x', 502, 7_000), 0)).toBe(7_000);
+    expect(generationRetryDelay(new GenerationError('x', 408), 0)).toBe(2_000);
+    expect(generationRetryDelay(new GenerationError('x', 429, 5_000), 0)).toBe(5_000);
+    expect(generationRetryDelay(new GenerationError('daily limit', 429), 0)).toBeNull();
+    expect(generationRetryDelay(new GenerationError('x', 403), 0)).toBeNull();
+    expect(generationRetryDelay(new Error('Not signed in.'), 0)).toBeNull();
+  });
+
+  it('failed requests carry their status and Retry-After', async () => {
+    mockFetch(new Response('busy', { status: 429, headers: { 'Retry-After': '12' } }));
+    const err = await client()
+      .claim({ models })
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(GenerationError);
+    expect([err.message, err.status, err.retryAfterMs]).toEqual(['busy', 429, 12_000]);
+  });
+
+  describe('contribute rides out network failures (#819 parity)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('retries a claim that failed transiently, but not a final failure', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fetch = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce(new Response('down', { status: 503 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      vi.stubGlobal('fetch', fetch);
+      const running = client().contribute({ models, generate: vi.fn() });
+      await vi.advanceTimersByTimeAsync(6_000); // 2 s, then 4 s
+      expect(await running).toEqual({ submitted: 0, stopped: 'no-work' });
+      expect(fetch).toHaveBeenCalledTimes(3);
+
+      mockFetch(new Response('limit', { status: 429 }));
+      await expect(client().contribute({ models, generate: vi.fn() })).rejects.toThrow('limit');
+    });
+
+    it('sends the same file again until it goes through, never generating twice', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const fetch = vi
+        .fn()
+        .mockResolvedValueOnce(json({ job: job('j1') }))
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockResolvedValueOnce(new Response('', { status: 502 }))
+        .mockResolvedValueOnce(json({ submissionId: 's1', status: 'pending' }, 202))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      vi.stubGlobal('fetch', fetch);
+      const file = new Blob(['audio']);
+      const generate = vi.fn(async () => ({ file }));
+      const running = client().contribute({ models, generate });
+      await vi.advanceTimersByTimeAsync(6_000);
+      expect(await running).toEqual({ submitted: 1, stopped: 'no-work' });
+      expect(generate).toHaveBeenCalledTimes(1);
+      const uploads = fetch.mock.calls.filter(([url]) => url.endsWith('/jobs/j1/result'));
+      expect(uploads).toHaveLength(3);
+      for (const [, init] of uploads)
+        expect(await ((init.body as FormData).get('file') as Blob).text()).toBe('audio');
+    });
+
+    it('gives up on the upload 30 s before the lease ends, extending it meanwhile', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const now = Date.now();
+      const uploadsAt: number[] = [];
+      const fetch = vi.fn(async (url: string) => {
+        if (url.endsWith('/claim')) return json({ job: job('j1', now + 6 * 60_000) });
+        uploadsAt.push(Date.now());
+        if (url.endsWith('/lease')) return new Response('cap', { status: 409 });
+        throw new TypeError('Failed to fetch');
+      });
+      vi.stubGlobal('fetch', fetch);
+      const running = client()
+        .contribute({ models, generate: async () => ({ file: new Blob(['x']) }) })
+        .catch((e) => e);
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      expect(await running).toBeInstanceOf(TypeError);
+      const paths = fetch.mock.calls.map(([url]) => url.slice(base.length));
+      expect(paths[0]).toBe('/claim');
+      expect(paths.filter((p) => p === '/jobs/j1/lease')).toHaveLength(1); // 409: no more tries
+      // Backoff 2, 4, … 60 s: the last try is the last whose wait ended before the deadline
+      expect(Math.max(...uploadsAt)).toBeLessThan(now + 6 * 60_000 - 30_000);
+      expect(Math.max(...uploadsAt)).toBeGreaterThan(now + 3 * 60_000);
+    });
+  });
+
+  it('extends the lease when the generator renews it, without any timer firing', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] }); // timers never run: as if throttled in a hidden tab
+    const now = Date.now();
+    const fetch = mockFetch(
+      json({ job: job('j1', now + 15 * 60_000) }),
+      json({ leaseExpiresAt: now + 26 * 60_000 }),
+      json({ submissionId: 's1', status: 'pending' }, 202),
+      new Response(null, { status: 204 }),
+    );
+    const generate = async (_job: GenerationJob, lease: { renew(): Promise<void> }) => {
+      vi.setSystemTime(now + 5 * 60_000);
+      await lease.renew(); // not due yet
+      vi.setSystemTime(now + 11 * 60_000);
+      await lease.renew();
+      vi.setSystemTime(now + 16 * 60_000); // past the first expiry
+      return { file: new Blob(['x']) };
+    };
+    expect(await client().contribute({ models, generate })).toEqual({
+      submitted: 1,
+      stopped: 'no-work',
+    });
+    expect(fetch.mock.calls.map(([url]) => url.slice(base.length))).toEqual([
+      '/claim',
+      '/jobs/j1/lease',
+      '/jobs/j1/result',
+      '/claim',
+    ]);
+    vi.useRealTimers();
   });
 
   it('manifest is public and returns absolute URLs', async () => {

@@ -64,6 +64,7 @@ export type {
   GenerationJob,
   GenerationJobDetail,
   GenerationJobSummary,
+  GenerationLease,
   GenerationModel,
   GenerationOpenApp,
   GenerationOpenSet,
@@ -73,7 +74,7 @@ export type {
   GenerationSubmission,
   GenerationSubmissionStatus,
 } from './generation.js';
-export { Generation } from './generation.js';
+export { Generation, GenerationError, generationRetryDelay } from './generation.js';
 export type { NativeCursor, NativePoint, NativeStatus } from './native.js';
 export type { Photo } from './photos.js';
 export { PHOTO_LIMITS, Photos, preparePhoto } from './photos.js';

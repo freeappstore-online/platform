@@ -1,8 +1,63 @@
-import type { Auth } from './auth.js';
-import { authedFetch } from './authed-fetch.js';
+import { authedFetch, type SessionAuth } from './authed-fetch.js';
 
 /** `contribute` extends a lease this close to its expiry while `generate` still runs (#783). */
 const LEASE_MARGIN_MS = 5 * 60_000;
+/** An upload must start at least this long before its lease runs out (as on the phones). */
+const UPLOAD_MARGIN_MS = 30_000;
+/** How long a claim keeps retrying a transient failure (#819 parity). */
+const CLAIM_WINDOW_MS = 60_000;
+/** A lease extension that failed transiently is tried again after this long. */
+const EXTEND_RETRY_MS = 30_000;
+
+/** A failed API call: its HTTP status, and `Retry-After` in milliseconds when the server sent one. */
+export class GenerationError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterMs: number | null = null,
+  ) {
+    super(message);
+    this.name = 'GenerationError';
+  }
+}
+
+/**
+ * The wait before trying a failed call again (`attempt` from 0), or null when the failure is
+ * final, as the phone runners do (#819): a network failure (fetch's `TypeError`), a `5xx` or `408`
+ * after 2 s doubling to 60 s (or `Retry-After`), and a `429` only when it says when (`Retry-After`;
+ * without it, it is the daily limit). Any other failure is final.
+ */
+export function generationRetryDelay(err: unknown, attempt: number): number | null {
+  const backoff = Math.min(60_000, 2_000 * 2 ** Math.min(attempt, 5));
+  if (err instanceof TypeError) return backoff;
+  if (!(err instanceof GenerationError)) return null;
+  if (err.status === 429) return err.retryAfterMs;
+  if (err.status >= 500 || err.status === 408) return err.retryAfterMs ?? backoff;
+  return null;
+}
+
+function retryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now();
+  return Number.isFinite(ms) ? Math.max(0, ms) : null;
+}
+
+/** Resolves after `ms`, or rejects with the signal's reason as soon as it aborts. */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 const RUNNER_KEY = 'fas:generation-runner';
 let sessionRunner: string | undefined;
@@ -255,12 +310,25 @@ export interface GenerationOpenApp {
   sets: GenerationOpenSet[];
 }
 
+/** The lease of the job being generated, as `contribute` hands it to `generate`. */
+export interface GenerationLease {
+  /**
+   * Extend the lease now if it is within 5 minutes of expiry (otherwise nothing). `contribute`
+   * also does this on a timer; a generator that calls it as it makes progress (e.g. on every
+   * message from its worker) keeps the lease even where the page's timers are throttled, as in a
+   * background tab. Never rejects.
+   */
+  renew(): Promise<void>;
+}
+
 export interface ContributeOptions {
   setId?: string;
   models: GenerationModel[];
   /** Runs the app's own local model; the SDK bundles none. */
-  generate: (job: GenerationJob) => Promise<{ file: Blob; meta?: unknown }>;
+  generate: (job: GenerationJob, lease: GenerationLease) => Promise<{ file: Blob; meta?: unknown }>;
   signal?: AbortSignal;
+  /** Claim at most this many jobs, then stop with `limit`. */
+  limit?: number;
   onProgress?: (event: {
     stage: 'generating' | 'submitted';
     job: GenerationJob;
@@ -277,7 +345,7 @@ export class Generation {
   constructor(
     private readonly appId: string,
     private readonly apiBase: string,
-    private readonly auth: Auth,
+    private readonly auth: SessionAuth,
   ) {}
 
   // ── Owner ──
@@ -416,56 +484,125 @@ export class Generation {
   }
 
   /**
-   * Claim → generate → submit until there is no work, `signal` aborts, or a
-   * lease expires before its result is ready (that job is abandoned). While
-   * `generate` runs, the lease is extended within 5 minutes of its expiry; a
-   * job is abandoned only once extending fails (e.g. the 2-hour cap).
+   * Claim → generate → submit until there is no work, `signal` aborts, `limit` jobs were claimed,
+   * or a lease expires before its result is ready (that job is abandoned). While `generate` runs,
+   * the lease is extended within 5 minutes of its expiry (on a timer and whenever `generate` calls
+   * `lease.renew()`); a job is abandoned only once its lease can't be extended (the 2-hour cap, or
+   * the lease is gone). As on the phones (#819), a claim that fails transiently (see
+   * `generationRetryDelay`) is tried again for up to a minute, and an upload sends the same file
+   * again, extending the lease as due, until 30 s before the lease ends; then the last failure is
+   * thrown. Nothing is generated twice.
    */
-  async contribute(
-    opts: ContributeOptions,
-  ): Promise<{ submitted: number; stopped: 'no-work' | 'aborted' | 'lease-expired' }> {
-    const { generate, signal, onProgress, ...query } = opts;
+  async contribute(opts: ContributeOptions): Promise<{
+    submitted: number;
+    stopped: 'no-work' | 'aborted' | 'lease-expired' | 'limit';
+  }> {
+    const { generate, signal, onProgress, limit = Infinity, ...query } = opts;
     let submitted = 0;
-    while (!signal?.aborted) {
-      const job = await this.claim(query);
-      if (!job) return { submitted, stopped: 'no-work' };
-      onProgress?.({ stage: 'generating', job, submitted });
-      const stopExtending = this.keepLeased(job);
-      let result;
-      try {
-        result = await generate(job);
-      } finally {
-        stopExtending();
+    let claimed = 0;
+    try {
+      while (!signal?.aborted) {
+        if (claimed >= limit) return { submitted, stopped: 'limit' };
+        const window = Date.now() + CLAIM_WINDOW_MS;
+        const job = await this.retrying(
+          () => this.claim(query),
+          () => window,
+          signal,
+        );
+        if (!job) return { submitted, stopped: 'no-work' };
+        claimed++;
+        onProgress?.({ stage: 'generating', job, submitted });
+        const lease = this.keepLeased(job);
+        try {
+          const { file, meta } = await generate(job, lease);
+          if (signal?.aborted) break;
+          await lease.renew();
+          const deadline = () => job.leaseExpiresAt - UPLOAD_MARGIN_MS;
+          if (Date.now() >= deadline()) return { submitted, stopped: 'lease-expired' };
+          await this.retrying(
+            () => this.submit(job, file, { meta }),
+            deadline,
+            signal,
+            lease.renew,
+          );
+        } finally {
+          lease.stop();
+        }
+        submitted++;
+        onProgress?.({ stage: 'submitted', job, submitted });
       }
-      const { file, meta } = result;
-      if (signal?.aborted) break;
-      if (Date.now() >= job.leaseExpiresAt) return { submitted, stopped: 'lease-expired' };
-      await this.submit(job, file, { meta });
-      submitted++;
-      onProgress?.({ stage: 'submitted', job, submitted });
+    } catch (err) {
+      if (!signal?.aborted) throw err;
     }
     return { submitted, stopped: 'aborted' };
   }
 
-  /** Extend `job`'s lease each time it nears expiry, until stopped or an extension fails. */
-  private keepLeased(job: GenerationJob): () => void {
+  /**
+   * `call`, tried again after `generationRetryDelay` (then `beforeRetry`) while the wait ends
+   * before `until()`; otherwise its failure is thrown. Waiting stops as soon as `signal` aborts.
+   */
+  private async retrying<T>(
+    call: () => Promise<T>,
+    until: () => number,
+    signal?: AbortSignal,
+    beforeRetry?: () => Promise<void>,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await call();
+      } catch (err) {
+        const wait = generationRetryDelay(err, attempt);
+        if (wait === null || signal?.aborted || Date.now() + wait >= until()) throw err;
+        await sleep(wait, signal);
+        await beforeRetry?.();
+      }
+    }
+  }
+
+  /**
+   * Keeps `job` leased while it is generated: `renew` extends it once within 5 minutes of expiry,
+   * also called by a timer. A `403` (lease gone) or `409` (2-hour cap) ends extending; any other
+   * failure is tried again at the next `renew`, or by the timer after 30 s.
+   */
+  private keepLeased(job: GenerationJob): GenerationLease & { stop(): void } {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stopped = false;
+    let extendable = true;
+    let retryAt = 0;
+    let pending: Promise<void> | null = null;
     const schedule = () => {
-      timer = setTimeout(
-        () => {
-          this.extendLease(job).then(
-            () => !stopped && schedule(),
-            () => {},
-          );
-        },
-        Math.max(0, job.leaseExpiresAt - LEASE_MARGIN_MS - Date.now()),
-      );
+      clearTimeout(timer);
+      if (stopped || !extendable) return;
+      const at = Math.max(job.leaseExpiresAt - LEASE_MARGIN_MS, retryAt);
+      timer = setTimeout(() => void renew(), Math.max(0, at - Date.now()));
+    };
+    const renew = (): Promise<void> => {
+      const now = Date.now();
+      // Not due yet, or already over (the server refuses an expired lease)
+      const due = now >= job.leaseExpiresAt - LEASE_MARGIN_MS && now < job.leaseExpiresAt;
+      if (stopped || !extendable || !due) return Promise.resolve();
+      pending ??= this.extendLease(job)
+        .then(
+          () => {},
+          (err) => {
+            if (err instanceof GenerationError && (err.status === 403 || err.status === 409))
+              extendable = false;
+            else retryAt = Date.now() + EXTEND_RETRY_MS;
+          },
+        )
+        .finally(() => {
+          pending = null;
+          schedule();
+        });
+      return pending;
     };
     schedule();
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
+    return {
+      renew,
+      stop: () => {
+        stopped = true;
+        clearTimeout(timer);
+      },
     };
   }
 
@@ -503,7 +640,11 @@ export class Generation {
   private async send(url: string, init: Parameters<typeof authedFetch>[2]): Promise<Response> {
     const response = await authedFetch(this.auth, url, init);
     if (!response.ok)
-      throw new Error((await response.text()) || `Generation request failed (${response.status}).`);
+      throw new GenerationError(
+        (await response.text()) || `Generation request failed (${response.status}).`,
+        response.status,
+        retryAfter(response.headers.get('Retry-After')),
+      );
     return response;
   }
 }

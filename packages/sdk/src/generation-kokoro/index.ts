@@ -286,7 +286,65 @@ export type KokoroEvent =
   | { type: 'claimed'; job: GenerationJob }
   | { type: 'progress'; job: GenerationJob; progress: KokoroProgress }
   | { type: 'submitted'; job: GenerationJob; submitted: number }
-  | { type: 'skipped'; job: GenerationJob; reason: string };
+  | { type: 'skipped'; job: GenerationJob; reason: string }
+  /** `contributeKokoroApps` only: a claimed job that failed (e.g. its upload never got through). */
+  | { type: 'failed'; job: GenerationJob; reason: string };
+
+type Turn =
+  | { outcome: 'submitted'; job: GenerationJob }
+  | { outcome: 'skipped' | 'failed'; job: GenerationJob }
+  | { outcome: 'no-work' | 'aborted' | 'lease-expired' };
+
+/**
+ * One job of `setId` (any set when undefined): claim → generate → submit through
+ * `generation.contribute`, which retries transient failures and keeps the lease. The lease is
+ * renewed on every message from the worker, so it holds where the page's timers are throttled
+ * (a background tab). A job the runner gives back is reported `skipped`: the next claim releases
+ * it, and it is never offered to this user again. Any other failure after the claim is thrown
+ * with the job attached as `failedJob`.
+ */
+async function kokoroTurn(
+  generation: Generation,
+  runner: KokoroRunner,
+  signal: AbortSignal,
+  setId: string | undefined,
+  onEvent?: (event: KokoroEvent) => void,
+): Promise<Turn> {
+  let claimed: GenerationJob | null = null;
+  try {
+    const { submitted, stopped } = await generation.contribute({
+      ...(setId !== undefined && { setId }),
+      models: [KOKORO_MODEL],
+      signal,
+      limit: 1,
+      generate: (job, lease) =>
+        runner.generate(job, {
+          signal,
+          onLoading: (progress) => {
+            void lease.renew();
+            onEvent?.({ type: 'loading', progress });
+          },
+          onProgress: (progress) => {
+            void lease.renew();
+            onEvent?.({ type: 'progress', job, progress });
+          },
+        }),
+      onProgress: ({ stage, job }) => {
+        if (stage === 'generating') {
+          claimed = job;
+          onEvent?.({ type: 'claimed', job });
+        }
+      },
+    });
+    if (submitted && claimed) return { outcome: 'submitted', job: claimed };
+    return { outcome: stopped === 'limit' ? 'lease-expired' : stopped };
+  } catch (err) {
+    if (signal.aborted) return { outcome: 'aborted' };
+    if (!(err instanceof KokoroSkip)) throw Object.assign(err as object, { failedJob: claimed });
+    onEvent?.({ type: 'skipped', job: err.job, reason: err.message });
+    return { outcome: 'skipped', job: err.job };
+  }
+}
 
 /**
  * Claim → generate → submit with `runner` through `generation.contribute` (which extends each
@@ -306,28 +364,66 @@ export async function contributeKokoro(
   const { runner, signal, setId, onEvent } = opts;
   let submitted = 0;
   while (!signal.aborted) {
-    try {
-      const { stopped } = await generation.contribute({
-        ...(setId !== undefined && { setId }),
-        models: [KOKORO_MODEL],
-        signal,
-        generate: (job) =>
-          runner.generate(job, {
-            signal,
-            onLoading: (progress) => onEvent?.({ type: 'loading', progress }),
-            onProgress: (progress) => onEvent?.({ type: 'progress', job, progress }),
-          }),
-        onProgress: ({ stage, job }) => {
-          if (stage === 'generating') onEvent?.({ type: 'claimed', job });
-          else onEvent?.({ type: 'submitted', job, submitted: ++submitted });
-        },
-      });
-      if (stopped === 'no-work') return { submitted, stopped };
-      // A lease that ran out: claim the next job
-    } catch (err) {
+    const turn = await kokoroTurn(generation, runner, signal, setId, onEvent);
+    if (turn.outcome === 'no-work') return { submitted, stopped: 'no-work' };
+    if (turn.outcome === 'submitted')
+      onEvent?.({ type: 'submitted', job: turn.job, submitted: ++submitted });
+    // A skip or a lease that ran out: claim the next job
+  }
+  return { submitted, stopped: 'aborted' };
+}
+
+/** An app `contributeKokoroApps` generates for: its `Generation` and the sets to claim from, in order. */
+export interface KokoroApp {
+  appId: string;
+  generation: Generation;
+  /** Sets this runner can do (`kokoroProblem` null), so none of their jobs is claimed only to be skipped. */
+  setIds: string[];
+}
+
+/**
+ * Generate for several apps the way the phone runners do (platform#819): one job from each app in
+ * turn, not one app drained before the next. `apps` is read again before each turn, so an app
+ * turned off mid-run is left out. An app leaves the run once none of its sets has a job for this
+ * user, or a job of it is not submitted (skipped, its lease ran out, or it failed: reported as a
+ * `failed` event and the run goes on). Ends with `no-work` once every app has left, or `aborted`.
+ * A claim that still fails after its retries, or a lost sign-in, is thrown.
+ */
+export async function contributeKokoroApps(opts: {
+  runner: KokoroRunner;
+  signal: AbortSignal;
+  apps: () => KokoroApp[];
+  onEvent?: (event: KokoroEvent, appId: string) => void;
+}): Promise<{ submitted: number; stopped: 'no-work' | 'aborted' }> {
+  const { runner, signal, apps, onEvent } = opts;
+  const done = new Set<string>(); // app ids, and `appId setId` for sets with no work
+  let submitted = 0;
+  while (!signal.aborted) {
+    const round = apps().filter((app) => !done.has(app.appId));
+    if (!round.length) return { submitted, stopped: 'no-work' };
+    for (const { appId } of round) {
+      const app = apps().find((a) => a.appId === appId);
       if (signal.aborted) break;
-      if (!(err instanceof KokoroSkip)) throw err;
-      onEvent?.({ type: 'skipped', job: err.job, reason: err.message });
+      if (!app) continue;
+      const emit = (event: KokoroEvent) => onEvent?.(event, appId);
+      let turn: Turn = { outcome: 'no-work' };
+      for (const setId of app.setIds) {
+        if (done.has(`${appId} ${setId}`)) continue;
+        try {
+          turn = await kokoroTurn(app.generation, runner, signal, setId, emit);
+        } catch (err) {
+          const job = (err as { failedJob?: GenerationJob | null }).failedJob;
+          if (!job || (err as Error).message === 'Not signed in.') throw err;
+          emit({ type: 'failed', job, reason: err instanceof Error ? err.message : String(err) });
+          turn = { outcome: 'failed', job };
+        }
+        if (turn.outcome !== 'no-work') break;
+        done.add(`${appId} ${setId}`);
+      }
+      if (turn.outcome === 'aborted') break;
+      if (turn.outcome === 'submitted')
+        emit({ type: 'submitted', job: turn.job, submitted: ++submitted });
+      else done.add(appId);
     }
   }
   return { submitted, stopped: 'aborted' };

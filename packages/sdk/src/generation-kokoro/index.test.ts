@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ContributeOptions, Generation, GenerationJob } from '../generation.js';
 import {
   contributeKokoro,
+  contributeKokoroApps,
   KokoroRunner,
   KokoroSkip,
   kokoroEncoder,
@@ -255,26 +256,28 @@ describe('KokoroRunner', () => {
 
 describe('contributeKokoro', () => {
   /** `contribute` as the SDK runs it, over these claims */
-  function generation(claims: GenerationJob[]) {
-    const submitted: string[] = [];
+  function generation(claims: GenerationJob[], submitted: string[] = []) {
+    const renew = vi.fn(async () => {});
     const contribute = vi.fn(async (opts: ContributeOptions) => {
+      let n = 0;
       for (;;) {
+        if (n >= (opts.limit ?? Infinity)) return { submitted: n, stopped: 'limit' as const };
         const claimed = claims.shift();
-        if (!claimed) return { submitted: 0, stopped: 'no-work' as const };
+        if (!claimed) return { submitted: n, stopped: 'no-work' as const };
         expect(opts.models).toEqual([{ model: 'kokoro', modelVersion: 'v1.0' }]);
-        opts.onProgress?.({ stage: 'generating', job: claimed, submitted: 0 });
-        await opts.generate(claimed);
+        opts.onProgress?.({ stage: 'generating', job: claimed, submitted: n });
+        await opts.generate(claimed, { renew });
         submitted.push(claimed.id);
-        opts.onProgress?.({ stage: 'submitted', job: claimed, submitted: 1 });
+        opts.onProgress?.({ stage: 'submitted', job: claimed, submitted: ++n });
       }
     });
-    return { gen: { contribute } as unknown as Generation, contribute, submitted };
+    return { gen: { contribute } as unknown as Generation, contribute, submitted, renew };
   }
 
   it('submits what it can, skips what it can’t, until there is no work', async () => {
     const { worker } = narrates();
     const runner = new KokoroRunner({ createWorker: () => worker, encoder, device: 'wasm' });
-    const { gen, contribute, submitted } = generation([
+    const { gen, contribute, submitted, renew } = generation([
       job({ id: 'a' }),
       job({ id: 'b', params: { voice: 'af_heart', tone: 'warm' } }),
       job({ id: 'c' }),
@@ -288,8 +291,10 @@ describe('contributeKokoro', () => {
     });
     expect(result).toEqual({ submitted: 2, stopped: 'no-work' });
     expect(submitted).toEqual(['a', 'c']);
-    expect(contribute).toHaveBeenCalledTimes(2);
+    expect(contribute).toHaveBeenCalledTimes(4); // one job per call, then no work
     expect(contribute.mock.calls[0]![0].setId).toBe('s1');
+    // Each message from the worker (loading, progress) renews the lease, timers or not
+    expect(renew).toHaveBeenCalledTimes(4);
     expect(events).toEqual([
       'claimed:a',
       'loading',
@@ -322,5 +327,107 @@ describe('contributeKokoro', () => {
     await expect(
       contributeKokoro(broken, { runner, signal: new AbortController().signal }),
     ).rejects.toThrow('403');
+  });
+
+  describe('contributeKokoroApps', () => {
+    const appsOf = (gens: Record<string, Generation>, setIds = ['s1']) =>
+      Object.entries(gens).map(([appId, generation]) => ({ appId, generation, setIds }));
+
+    it('takes one job from each app in turn, dropping apps with no work', async () => {
+      const { worker } = narrates();
+      const runner = new KokoroRunner({ createWorker: () => worker, encoder, device: 'wasm' });
+      const order: string[] = [];
+      const books = generation([job({ id: 'b1' }), job({ id: 'b2' }), job({ id: 'b3' })], order);
+      const radio = generation([job({ id: 'r1' })], order);
+      const events: string[] = [];
+      const result = await contributeKokoroApps({
+        runner,
+        signal: new AbortController().signal,
+        apps: () => appsOf({ books: books.gen, radio: radio.gen }),
+        onEvent: (e, appId) => e.type === 'submitted' && events.push(`${appId}:${e.job.id}`),
+      });
+      expect(result).toEqual({ submitted: 4, stopped: 'no-work' });
+      expect(order).toEqual(['b1', 'r1', 'b2', 'b3']);
+      expect(events).toEqual(['books:b1', 'radio:r1', 'books:b2', 'books:b3']);
+    });
+
+    it('tries an app’s sets in order and leaves out an app turned off mid-run', async () => {
+      const { worker } = narrates();
+      const runner = new KokoroRunner({ createWorker: () => worker, encoder, device: 'wasm' });
+      const books = generation([job({ id: 'b1' }), job({ id: 'b2' })]);
+      const radio = generation([job({ id: 'r1' }), job({ id: 'r2' })]);
+      let on = ['books', 'radio'];
+      const result = await contributeKokoroApps({
+        runner,
+        signal: new AbortController().signal,
+        apps: () =>
+          appsOf({ books: books.gen, radio: radio.gen }, ['s1', 's2']).filter((a) =>
+            on.includes(a.appId),
+          ),
+        onEvent: (e, appId) => {
+          if (e.type === 'submitted' && appId === 'radio') on = ['books'];
+        },
+      });
+      expect(result).toEqual({ submitted: 3, stopped: 'no-work' });
+      expect(radio.submitted).toEqual(['r1']);
+      expect(books.submitted).toEqual(['b1', 'b2']);
+      // books: s1 gave both jobs, then s1 and s2 had none
+      expect(books.contribute.mock.calls.map(([o]) => o.setId)).toEqual(['s1', 's1', 's1', 's2']);
+    });
+
+    it('reports a failed job and goes on; a skip or failure takes the app out of the run', async () => {
+      const { worker } = narrates();
+      const runner = new KokoroRunner({ createWorker: () => worker, encoder, device: 'wasm' });
+      const failing = {
+        contribute: vi.fn(async (opts: ContributeOptions) => {
+          opts.onProgress?.({ stage: 'generating', job: job({ id: 'f1' }), submitted: 0 });
+          throw new TypeError('Failed to fetch');
+        }),
+      } as unknown as Generation;
+      const skipping = generation([job({ id: 'x1', params: { voice: 'zf_xiaobei' } }), job()]);
+      const fine = generation([job({ id: 'ok1' })]);
+      const events: string[] = [];
+      const result = await contributeKokoroApps({
+        runner,
+        signal: new AbortController().signal,
+        apps: () => appsOf({ failing, skipping: skipping.gen, fine: fine.gen }),
+        onEvent: (e, appId) =>
+          ['failed', 'skipped', 'submitted'].includes(e.type) &&
+          events.push(`${e.type}:${appId}:${'job' in e ? e.job.id : ''}`),
+      });
+      expect(result).toEqual({ submitted: 1, stopped: 'no-work' });
+      expect(events).toEqual(['failed:failing:f1', 'skipped:skipping:x1', 'submitted:fine:ok1']);
+    });
+
+    it('throws a claim that failed and a lost sign-in; stops on abort', async () => {
+      const { worker } = narrates();
+      const runner = new KokoroRunner({ createWorker: () => worker, encoder, device: 'wasm' });
+      const claimFails = {
+        contribute: vi.fn().mockRejectedValue(new Error('503 down')),
+      } as unknown as Generation;
+      const signal = new AbortController().signal;
+      await expect(
+        contributeKokoroApps({ runner, signal, apps: () => appsOf({ a: claimFails }) }),
+      ).rejects.toThrow('503 down');
+      const signedOut = {
+        contribute: vi.fn(async (opts: ContributeOptions) => {
+          opts.onProgress?.({ stage: 'generating', job: job(), submitted: 0 });
+          throw new Error('Not signed in.');
+        }),
+      } as unknown as Generation;
+      await expect(
+        contributeKokoroApps({ runner, signal, apps: () => appsOf({ a: signedOut }) }),
+      ).rejects.toThrow('Not signed in.');
+
+      const controller = new AbortController();
+      const endless = generation(Array.from({ length: 10 }, (_, i) => job({ id: `j${i}` })));
+      const result = await contributeKokoroApps({
+        runner,
+        signal: controller.signal,
+        apps: () => appsOf({ a: endless.gen }),
+        onEvent: (e) => e.type === 'submitted' && e.submitted === 2 && controller.abort(),
+      });
+      expect(result).toEqual({ submitted: 2, stopped: 'aborted' });
+    });
   });
 });
