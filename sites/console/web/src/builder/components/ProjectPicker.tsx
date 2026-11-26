@@ -21,6 +21,7 @@ interface OrgRepo {
 export function ProjectPicker({ projects, currentId, onSelect, onCreate, onOpenApp, onClose }: ProjectPickerProps) {
   const [orgRepos, setOrgRepos] = useState<OrgRepo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [newName, setNewName] = useState("");
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -35,11 +36,15 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onOpenA
     // The user's own published apps. Not the org's repo list: that showed
     // everyone's apps, and opening one made a session with no code (#590).
     fetch(`${API_URL}/v1/apps/mine`, { headers: authHeaders() })
-      .then((r) => (r.ok ? r.json() : { apps: [] }))
+      .then((r) => {
+        // A failed load is not "no published apps" (#757).
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((data: { apps?: { id: string; oneliner?: string | null }[] }) => {
         setOrgRepos((data.apps ?? []).map((a) => ({ id: a.id, name: a.id, description: a.oneliner || "" })));
       })
-      .catch(() => {})
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
   }, []);
 
@@ -136,6 +141,8 @@ export function ProjectPicker({ projects, currentId, onSelect, onCreate, onOpenA
               {/* Org repos (not in local) */}
               {loading ? (
                 <div className="text-center py-4 text-sm text-muted">Loading your apps...</div>
+              ) : loadError ? (
+                <div className="text-center py-4 text-sm text-danger">Couldn't load your published apps. Close and reopen to retry.</div>
               ) : orgOnly.length > 0 ? (
                 <div>
                   <div className="text-xs font-semibold uppercase mb-1 px-1 text-muted tracking-[0.05em]">Your published apps</div>

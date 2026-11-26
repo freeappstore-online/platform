@@ -54,6 +54,7 @@ function validateId(id: string): string | null {
 export function PublishForm({ getToken }: Props) {
   const [apps, setApps] = useState<MyApp[]>([])
   const [loadingApps, setLoadingApps] = useState(true)
+  const [appsError, setAppsError] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [result, setResult] = useState<PublishResult | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -63,10 +64,15 @@ export function PublishForm({ getToken }: Props) {
   const headers = useCallback(() => authHeaders(getToken()), [getToken])
 
   const refreshApps = useCallback(() => {
+    setAppsError(false)
     fetch(`${API_URL}/v1/apps/mine`, { headers: headers() })
-      .then((r) => (r.ok ? r.json() : { apps: [] }))
+      .then((r) => {
+        // A failed load is not "no apps" (#591, #757).
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json()
+      })
       .then((data) => setApps(data.apps ?? []))
-      .catch(() => setApps([]))
+      .catch(() => setAppsError(true))
       .finally(() => setLoadingApps(false))
   }, [headers])
 
@@ -127,6 +133,11 @@ export function PublishForm({ getToken }: Props) {
         <h4 className="text-sm font-bold text-accent mb-2">Your Apps</h4>
         {loadingApps ? (
           <p className="text-sm text-muted">Loading…</p>
+        ) : appsError ? (
+          <p className="text-sm text-danger">
+            Couldn't load your apps.{' '}
+            <button type="button" onClick={refreshApps} className="font-semibold text-accent underline">Retry</button>
+          </p>
         ) : apps.length ? (
           <div className="flex flex-col gap-2">
             {apps.map((app) => (
