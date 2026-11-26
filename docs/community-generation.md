@@ -63,7 +63,7 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 
 | Call | Body | Result |
 |---|---|---|
-| `POST /apps/:appId/generation/sets` | `{ kind: 'tts', model, modelVersion, params, formats, maxBytes, replicas, requireAttestation?, language?, minCharsPerSecond?, maxCharsPerSecond?, maxWer? }` | `201 { set }` |
+| `POST /apps/:appId/generation/sets` | `{ kind: 'tts', model, modelVersion, params, formats, maxBytes, replicas, requireAttestation?, language?, minCharsPerSecond?, maxCharsPerSecond? }` | `201 { set }` |
 | `POST /apps/:appId/generation/sets/:setId/jobs` | `{ jobs: [{ key, input: { text } }] }`, 1-500 | `{ jobs: [{ id, key, status }] }`; `409 { error, keys }` if a key exists with another input |
 | `DELETE /apps/:appId/generation/artifacts/:jobId` | | `{ withdrawn: 1 }`; the job reopens |
 | `POST /apps/:appId/generation/contributors/:userId/block` | | `{ blocked: true, withdrawn: n }` |
@@ -74,11 +74,10 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 `formats` is a non-empty subset of `audio/mp4`, `audio/ogg`, `audio/wav`; `maxBytes` at most
 25,000,000; `replicas` 1-3. Keys are 1-200 characters of `A-Za-z0-9._:/-`; `text` at most 100,000
 characters. `language` is an optional BCP 47 tag of the input text (`en`, `es`, `zh`, `zh-Hans`,
-`pt-BR`, …) whose primary subtag Whisper must know (otherwise `400`); sets, claimed jobs and
+`pt-BR`, …); sets, claimed jobs and
 discovery echo it, `null` when the set has none. Verification thresholds default to the language's
-characters-per-second band (`zh` and `yue` 2-9, `ja` 3-15, anything else or no language 8-30) and an
-error rate of 0.25 (see [Verification](#verification)); `minCharsPerSecond`, `maxCharsPerSecond` and
-`maxWer` override them. Re-sending a job with the same key and input is a no-op that returns its status
+characters-per-second band (`zh` and `yue` 2-9, `ja` 3-15, anything else or no language 8-30; see
+[Verification](#verification)); `minCharsPerSecond` and `maxCharsPerSecond` override them. Re-sending a job with the same key and input is a no-op that returns its status
 (`open` or `accepted`).
 
 Set counts: `open` and `accepted` count jobs by status, `leased` live leases, and `pending`, `rejected`
@@ -177,38 +176,16 @@ that retries anything unfinished, in `packages/backend/src/lib/generation-verify
    phrase with silence around it passes). If `meta` has Books-style sentence timings
    (`segments: [[charStart, charEnd, startSec, endSec], …]`), they must be monotonic, inside the text,
    and end within the duration (0.5 s slack).
-3. **Content**: Workers AI Whisper (`@cf/openai/whisper-large-v3-turbo`) transcribes the audio,
-   told the set's language (its primary subtag, e.g. `zh`) when the set has one, and the transcript
-   is compared with the input text by word error rate (lowercased words, punctuation and diacritics
-   dropped). Scripts written without spaces (Han, Hiragana, Katakana, Thai, Lao, Khmer, Myanmar)
-   count each letter as a token, so their error rate is a character error rate, and Traditional
-   Chinese is read as Simplified (OpenCC's character table), so either form Whisper writes matches.
-   Mandarin phrases from 2 to 12 characters spoken by macOS `say` and transcribed by the real model
-   passed at an error rate of 0 to 0.1, with or without the language hint (#810). The transcript
-   must be within `maxWer`, except that a reference of at most 3 tokens (after normalisation, any
-   script) passes with one edit at most that keeps a token of it: `对。` heard as `对呀` or `是的。`
-   heard as `是` passes, `对。` heard as `好` or nothing fails (#816; one extra character on a
-   one-character reply is an error rate of 1). The same rule applies to sampled windows and replica
-   agreement. Audio up to 60 s is transcribed whole. Longer audio is checked as three
-   20-second windows, each matched against the best-fitting stretch of the text. Window positions
-   are random fractions of the audio, drawn once per job (devices never see them), so every replica
-   of a job is sampled at the same points. MP4 windows are re-framed as ADTS AAC, Ogg windows keep
-   the Opus header pages. Whisper accepts all of these: whole M4A (AAC-LC) and Ogg Opus files and
-   both kinds of window were checked against the real model (#784).
-4. **Replicas**: with `replicas > 1`, a passing submission waits until `replicas` distinct users have
-   passing submissions that agree with the earliest one: durations within 15%, and what Whisper
-   heard matches as in step 3 (whole transcripts against each other; for long audio each window against
-   the earliest submission's same window, ignoring the words cut at the window edges). This reuses
-   the transcripts from step 3, so replicas cost no extra Whisper calls. The earliest becomes the
+3. **Replicas**: with `replicas > 1`, a passing submission waits until `replicas` distinct users have
+   passing submissions whose durations are within 15% of the earliest one. The earliest becomes the
    artifact; the others are `superseded`. If every replica passed but they disagree, the dissenters
    are rejected so others can claim the job.
 
-A failed check sets `rejected` with the reason, deletes the quarantined bytes and reopens the job for
-other users. Each submission records the measured duration and word error rate.
-
-Verification is capped at 2,000 per app per UTC day (Workers AI cost). Over the budget, or when
-Whisper fails, a submission stays `pending` and is retried later; after 6 days it is rejected as
-expired.
+**No AI compute checks anything** ([#831](https://github.com/freeappstore-online/platform/issues/831)):
+the server checks structure only, and people judge whether audio is good, on the device that made it
+and in the console. A failed check sets `rejected` with the reason, deletes the quarantined bytes and
+reopens the job for other users. Each submission records the measured duration. When storage fails a
+submission stays `pending` and is retried later; after 6 days it is rejected as expired.
 
 ## Models and runners
 
@@ -246,9 +223,7 @@ catalogue planned in [#788](https://github.com/freeappstore-online/platform/issu
 model id, version, tasks, languages, runtimes, licence, download size and checksum. Devices never
 download a model a job names.
 
-Set `language` on sets whose text is not English (#810): it tells Whisper the language and picks the
-characters-per-second band; text in scripts without spaces is compared by character error rate
-whether or not it is set.
+Set `language` on sets whose text is not English (#810): it picks the characters-per-second band.
 
 ### Browser and desktop runner behaviour
 
@@ -315,11 +290,11 @@ runner in a hidden window with background throttling turned off and keeps going 
 
 ## Limits
 
-- 200 submissions per user per UTC day across all apps; 5,000 per app per UTC day. Uploads past either are `429`
-  (no `Retry-After`), and once either is reached a claim is `429` too and leases nothing, so a runner
+- 5,000 submissions per app per UTC day (it bounds storage); there is no per-user cap, contributors
+  set their own limits on the device ([#830](https://github.com/freeappstore-online/platform/issues/830)). Uploads
+  past it are `429` (no `Retry-After`), and once it is reached a claim is `429` too and leases nothing, so a runner
   never generates a job it cannot upload ([#828](https://github.com/freeappstore-online/platform/issues/828)).
 - Leases: 15 minutes, extendable to at most 2 hours after the claim; one open per user.
-- Verifications: 2,000 per app per UTC day.
 - Jobs: 1-500 per request; text at most 100,000 characters (8 MB per request). Sets: `maxBytes` at most 25 MB.
 
 ## Storage and lifecycle

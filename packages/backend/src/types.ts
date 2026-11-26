@@ -17,8 +17,6 @@ export interface Env {
   UPLOADS?: R2Bucket;
   /** Community generation (#727): quarantine `q/` (7-day lifecycle) and write-once artifacts `a/`. */
   GENERATED?: R2Bucket;
-  /** Workers AI: Whisper transcripts for community generation verification (#729). */
-  AI?: Ai;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;

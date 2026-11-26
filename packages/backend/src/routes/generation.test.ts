@@ -46,8 +46,8 @@ function memoryBucket() {
   return { objects, bucket };
 }
 
-/** `heard` stands in for Whisper: what it transcribes from the uploaded bytes. */
-async function setup(heard?: (audio: Uint8Array) => string) {
+/** `verify: false` keeps uploads pending: the verifier's read of each upload fails, so it retries later. */
+async function setup({ verify = true } = {}) {
   const { db, d1 } = sqliteD1();
   db.exec(`INSERT INTO users (id, github_id, github_login, created_at) VALUES
       ('u1', 1, 'alice', 0), ('u2', 2, 'bob', 0), ('u3', 3, 'carol', 0), ('u4', 4, 'dave', 0);
@@ -56,12 +56,19 @@ async function setup(heard?: (audio: Uint8Array) => string) {
     "INSERT INTO native_devices (id, user_id, label, token_hash, created_at, expires_at) VALUES ('d1', 'u4', 'Pixel', ?, 0, ?)",
   ).run(await nativeHash(DEVICE), Date.now() + 86400000);
   const { objects, bucket } = memoryBucket();
-  const ai = heard && {
-    run: vi.fn(async (_model: string, input: { audio: string }) => ({
-      text: heard(Uint8Array.from(atob(input.audio), (ch) => ch.charCodeAt(0))),
-    })),
-  };
-  const env = { DB: d1, SESSION_SIGNING_KEY: KEY, GENERATED: bucket, AI: ai };
+  if (!verify) {
+    const get = bucket.get.bind(bucket);
+    const held = new Set<string>();
+    bucket.get = (async (key: string) => {
+      if (key.startsWith('q/') && !key.endsWith('.meta') && !held.has(key)) {
+        held.add(key);
+        throw new Error('verification held by the test');
+      }
+      return get(key);
+    }) as R2Bucket['get'];
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  }
+  const env = { DB: d1, SESSION_SIGNING_KEY: KEY, GENERATED: bucket };
   const background: Promise<unknown>[] = [];
   const ctx = {
     waitUntil: (p: Promise<unknown>) => background.push(p),
@@ -153,7 +160,6 @@ async function setup(heard?: (audio: Uint8Array) => string) {
     db,
     d1,
     env,
-    ai,
     objects,
     request,
     createSet,
@@ -340,7 +346,7 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
   });
 
   it('submits need a valid lease, an allowed format and size; a lease uploads once', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet();
     await s.addJobs(setId, [{ key: 'a', input: { text: 'A.' } }]);
     const job = (await s.claim('u2'))!;
@@ -437,7 +443,7 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
   });
 
   it('accepted artifacts are write-once and public; later submissions are superseded', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet({ replicas: 2 });
     await s.addJobs(setId, [{ key: 'a', input: { text: 'A.' } }]);
     const a = (await s.claim('u2'))!;
@@ -512,7 +518,7 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
   });
 
   it('owner withdraw reopens the job (audited); block refuses and withdraws a contributor', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet();
     await s.addJobs(setId, [
       { key: 'a', input: { text: 'A.' } },
@@ -566,14 +572,14 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     );
   });
 
-  it('daily contribution limit is enforced per user', async () => {
+  it('the app daily limit is enforced; there is no per-user limit (#830)', async () => {
     const s = await setup();
     const setId = await s.createSet();
     await s.addJobs(setId, [{ key: 'a', input: { text: 'A.' } }]);
     const job = (await s.claim('u2'))!;
     s.db
       .prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)')
-      .run('genuser:u2', new Date().toISOString().slice(0, 10), GENERATION_LIMITS.userDaily);
+      .run('genapp:books', new Date().toISOString().slice(0, 10), GENERATION_LIMITS.appDaily);
     expect((await s.submit('u2', job.id, job.leaseToken)).status).toBe(429);
     // Once at the cap, a claim leases nothing (#828): the upload would be refused.
     await s.addJobs(setId, [{ key: 'b', input: { text: 'B.' } }]);
@@ -592,7 +598,6 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     expect(refused.status).toBe(429);
     expect(refused.headers.get('Retry-After')).toBeNull();
     expect(leases()).toBe(before);
-    expect(await s.claim('u3')).not.toBeNull();
   });
 
   it('unknown or non-FAS apps are 404; the manifest of an unknown set is 404', async () => {
@@ -605,7 +610,7 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
   });
 
   it('the reaper removes artifacts and rows of deleted apps and expires stale pending submissions', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet();
     await s.addJobs(setId, [
       { key: 'a', input: { text: 'A.' } },
@@ -663,7 +668,7 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
   };
 
   it('owner lists sets with progress counts', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet({ replicas: 2 });
     await s.addJobs(setId, [
       { key: 'a', input: { text: 'A.' } },
@@ -708,7 +713,7 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
   });
 
   it('owner pages jobs with artifacts and latest submissions, filtered by status', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet();
     await s.addJobs(setId, [
       { key: 'a', input: { text: 'x'.repeat(300) } },
@@ -767,7 +772,7 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
   });
 
   it('attempt records: one per lease, numbers only, shown to the owner by submission or as an attempt (#827)', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet();
     await s.addJobs(setId, [
       { key: 'a', input: { text: 'A.' } },
@@ -840,7 +845,7 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
   });
 
   it('owner reads one job with its whole input', async () => {
-    const s = await setup();
+    const s = await setup({ verify: false });
     const setId = await s.createSet();
     const text = 'A sentence. '.repeat(30);
     await s.addJobs(setId, [{ key: 'a', input: { text } }]);
@@ -1028,21 +1033,20 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
       job,
       row: s.db
         .prepare(
-          'SELECT status, reason, passed, duration_ms, wer FROM generation_submissions WHERE id = ?',
+          'SELECT status, reason, passed, duration_ms FROM generation_submissions WHERE id = ?',
         )
         .get(submissionId) as Record<string, unknown>,
     };
   }
 
   it('accepts a correct narration right after upload and publishes it', async () => {
-    const s = await setup(() => TEXT);
+    const s = await setup();
     const { setId, row } = await run(s, NARRATION);
     expect(row).toEqual({
       status: 'accepted',
       reason: null,
       passed: 1,
       duration_ms: 10_000,
-      wer: 0,
     });
     const { artifacts } = (await (
       await s.request(`/sets/${setId}/manifest`, { user: null })
@@ -1059,17 +1063,16 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     expect([...s.objects.keys()].some((k) => k.startsWith('q/'))).toBe(false);
   });
 
-  it('rejects silence, wrong text, wrong format, truncation and a mislabelled content type', async () => {
-    const cases: [Uint8Array, string, (a: Uint8Array) => string, RegExp][] = [
-      [wav(10, true), 'audio/wav', () => '', /does not match the text/],
-      [NARRATION, 'audio/wav', () => 'buy cheap pills from our website', /does not match the text/],
-      [OGG, 'audio/wav', () => TEXT, /does not match audio\/ogg/],
-      [M4A.subarray(0, M4A.length - 500), 'audio/mp4', () => TEXT, /truncated/],
-      [NARRATION.subarray(0, 50_000), 'audio/wav', () => TEXT, /truncated/],
-      [NARRATION, 'audio/mp4', () => TEXT, /does not match audio\/wav/],
+  it('rejects a wrong format, truncation, a mislabelled content type and an implausible duration', async () => {
+    const cases: [Uint8Array, string, RegExp][] = [
+      [OGG, 'audio/wav', /does not match audio\/ogg/],
+      [M4A.subarray(0, M4A.length - 500), 'audio/mp4', /truncated/],
+      [NARRATION.subarray(0, 50_000), 'audio/wav', /truncated/],
+      [NARRATION, 'audio/mp4', /does not match audio\/wav/],
+      [wav(2), 'audio/wav', /too short/],
     ];
-    for (const [file, type, heard, reason] of cases) {
-      const s = await setup(heard);
+    for (const [file, type, reason] of cases) {
+      const s = await setup();
       const { row, setId } = await run(s, file, { type });
       expect(row.status).toBe('rejected');
       expect(row.reason).toMatch(reason);
@@ -1092,7 +1095,7 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
   });
 
   it('replicas: accepted only once enough distinct users agree; the earliest wins, the rest are superseded', async () => {
-    const s = await setup(() => TEXT);
+    const s = await setup();
     const setId = await s.createSet({ ...WAV_SET, replicas: 2 });
     await s.addJobs(setId, [{ key: 'k', input: { text: TEXT } }]);
     const a = (await s.claim('u2'))!;
@@ -1125,7 +1128,6 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
           submissions: {
             submissionId: string;
             status: string;
-            wer: number | null;
             durationMs: number | null;
             input: { text: string };
             artifact: { url: string; metaUrl: string | null } | null;
@@ -1138,7 +1140,6 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     expect(winner[0]).toMatchObject({
       submissionId: first.submissionId,
       status: 'accepted',
-      wer: 0,
       durationMs: 10_000,
       input: { text: TEXT },
       artifact: { metaUrl: null },
@@ -1156,48 +1157,25 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     expect(await mine('u4')).toEqual([]);
   });
 
-  it('long replicas are compared window by window, at the same points of each replica', async () => {
-    // 200 distinct words over 70 s; ADTS (MP4) windows hear one stretch, Ogg windows another.
-    const all = Array.from({ length: 200 }, (_, i) => `word${i}`);
-    for (const [second, type, statuses] of [
-      [M4A, 'audio/mp4', ['accepted', 'superseded']],
-      [OGG, 'audio/ogg', ['pending', 'rejected']],
-    ] as const) {
-      const s = await setup((a) =>
-        (a[0] === 0xff ? all.slice(10, 40) : all.slice(100, 130)).join(' '),
-      );
-      const setId = await s.createSet({ ...WAV_SET, replicas: 2 });
-      await s.addJobs(setId, [{ key: 'k', input: { text: all.join(' ') } }]);
-      const a = (await s.claim('u2'))!;
-      const b = (await s.claim('u3'))!;
-      await s.submit('u2', a.id, a.leaseToken, { file: M4A, type: 'audio/mp4' });
-      await s.settled();
-      await s.submit('u3', b.id, b.leaseToken, { file: second, type });
-      await s.settled();
-      const rows = s.db
-        .prepare(
-          'SELECT status, reason, passed, window_transcripts FROM generation_submissions ORDER BY created_at',
-        )
-        .all() as {
-        status: string;
-        reason: string | null;
-        passed: number;
-        window_transcripts: string;
-      }[];
-      // Each passed against the text on its own; only the comparison tells them apart.
-      expect(rows.map((r) => r.passed)).toEqual([1, 1]);
-      expect(JSON.parse(rows[0]!.window_transcripts)).toHaveLength(3);
-      expect(rows.map((r) => r.status)).toEqual(statuses);
-      if (second === OGG) expect(rows[1]!.reason).toBe('disagrees with other replicas');
-      // Three Whisper calls each; identical files give identical clips (same window points).
-      const clips = s.ai!.run.mock.calls.map(([, input]) => input.audio);
-      expect(clips).toHaveLength(6);
-      if (second === M4A) expect(clips.slice(3)).toEqual(clips.slice(0, 3));
-    }
+  it('replicas that differ in duration by more than 15% disagree; the dissenter is rejected', async () => {
+    const s = await setup();
+    const setId = await s.createSet({ ...WAV_SET, replicas: 2 });
+    await s.addJobs(setId, [{ key: 'k', input: { text: TEXT } }]);
+    const a = (await s.claim('u2'))!;
+    const b = (await s.claim('u3'))!;
+    await s.submit('u2', a.id, a.leaseToken, { file: NARRATION });
+    await s.settled();
+    await s.submit('u3', b.id, b.leaseToken, { file: wav(12) });
+    await s.settled();
+    const rows = s.db
+      .prepare('SELECT status, reason FROM generation_submissions ORDER BY created_at')
+      .all() as { status: string; reason: string | null }[];
+    expect(rows.map((r) => r.status)).toEqual(['pending', 'rejected']);
+    expect(rows[1]!.reason).toBe('disagrees with other replicas');
   });
 
   it('a correct submission for an already accepted job is superseded and never overwrites', async () => {
-    const s = await setup(() => TEXT);
+    const s = await setup();
     const { job } = await run(s, NARRATION);
     const before = s.db.prepare('SELECT * FROM generation_artifacts').get();
     // An old lease that outlived acceptance (e.g. issued before replicas were met).
@@ -1212,12 +1190,11 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     await s.settled();
     expect(late.status).toBe('superseded');
     expect(s.db.prepare('SELECT * FROM generation_artifacts').get()).toEqual(before);
-    expect(s.ai!.run).toHaveBeenCalledTimes(1);
   });
 
-  it('a set language reaches Whisper, sets the zh band and is echoed by set, list, discovery and claim (#810)', async () => {
-    const s = await setup(() => '對。');
-    for (const language of ['', 'zh_CN', 'chinese-simplified-x', 'tlh', 7])
+  it('a set language sets the zh band and is echoed by set, list, discovery and claim (#810)', async () => {
+    const s = await setup();
+    for (const language of ['', 'zh_CN', 'chinese-simplified-x', 7])
       expect(
         (
           await s.request('/sets', {
@@ -1237,7 +1214,6 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
         language: 'zh-Hans',
         minCharsPerSecond: 2,
         maxCharsPerSecond: 9,
-        maxWer: 0.25,
       }),
     );
     const setId = created.set.id as string;
@@ -1255,12 +1231,8 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     expect(open.apps[0]!.sets[0]!.language).toBe('zh-Hans');
     const { row, job } = await run(s, wav(1.5), { setId, text: '对。' });
     expect((job as unknown as { language: string }).language).toBe('zh-Hans');
-    expect(row).toEqual(expect.objectContaining({ status: 'accepted', wer: 0 }));
-    expect(s.ai!.run).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ language: 'zh' }),
-    );
-    // Explicit bands still win over the language's defaults; no language, no hint.
+    expect(row).toEqual(expect.objectContaining({ status: 'accepted' }));
+    // Explicit bands still win over the language's defaults.
     const own = (await (
       await s.request('/sets', {
         method: 'POST',
@@ -1270,27 +1242,19 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     expect(own.set).toEqual(
       expect.objectContaining({ minCharsPerSecond: 1, maxCharsPerSecond: 9 }),
     );
-    s.ai!.run.mockClear();
-    await run(s, NARRATION);
-    expect(s.ai!.run.mock.calls[0]![1]).not.toHaveProperty('language');
   });
 
-  it('stays pending over the daily verification budget or when Whisper fails; the cron retries', async () => {
-    const s = await setup(() => TEXT);
-    s.db
-      .prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)')
-      .run('genverify:books', new Date().toISOString().slice(0, 10), GENERATION_LIMITS.verifyDaily);
+  it('stays pending when storage fails; the cron retries', async () => {
+    const s = await setup();
+    const get = s.env.GENERATED.get;
+    s.env.GENERATED.get = async () => {
+      throw new Error('R2 down');
+    };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
     const { row } = await run(s, NARRATION);
     expect(row).toEqual(expect.objectContaining({ status: 'pending', passed: null }));
-    expect(s.ai!.run).not.toHaveBeenCalled();
-    s.db.exec("DELETE FROM app_proxy_usage WHERE app_id = 'genverify:books'");
-    s.ai!.run.mockRejectedValueOnce(new Error('AI down'));
-    vi.spyOn(console, 'error').mockImplementation(() => {});
+    s.env.GENERATED.get = get;
     expect(await verifyPending(s.env as never)).toBe(1);
-    expect(
-      s.db.prepare('SELECT status, passed, verifying_at FROM generation_submissions').get(),
-    ).toEqual({ status: 'pending', passed: null, verifying_at: null });
-    await verifyPending(s.env as never);
     expect(s.db.prepare('SELECT status FROM generation_submissions').get()).toEqual({
       status: 'accepted',
     });
