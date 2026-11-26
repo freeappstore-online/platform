@@ -221,12 +221,14 @@ Button cycling: system → light → dark. Shows sun/moon icon. Writes to `local
 
 ### Text size
 
-Button cycling: default → large → small. Adds `data-text="lg"` or `data-text="sm"` on `<html>`. Stored in `localStorage('stores-text-size')`.
+Five steps: small, default, large, extra large, huge. The topbar button cycles default → large → extra large → huge → small; the Profile page lists all five. Adds `data-text="sm|lg|xl|xxl"` on `<html>` (none for default). Stored in `localStorage('stores-text-size')`. The SDK (`TEXT_SIZES` in `@freeappstore/sdk/ui`) also sets the root font-size itself, so apps on the SDK get every step without their own rules.
 
 ```css
 :root { font-size: 16px; }
-:root[data-text="lg"] { font-size: 18px; }
 :root[data-text="sm"] { font-size: 14px; }
+:root[data-text="lg"] { font-size: 18px; }
+:root[data-text="xl"] { font-size: 22px; }
+:root[data-text="xxl"] { font-size: 28px; }
 ```
 
 ### Avatar / sign-in

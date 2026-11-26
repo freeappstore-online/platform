@@ -40,7 +40,7 @@
     <script>
       (function () {
         var t = localStorage.getItem('stores-text-size');
-        if (t === 'lg' || t === 'sm') document.documentElement.dataset.text = t;
+        if (['sm', 'lg', 'xl', 'xxl'].indexOf(t) !== -1) document.documentElement.dataset.text = t;
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

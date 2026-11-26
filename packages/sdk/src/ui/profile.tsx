@@ -10,7 +10,7 @@ import { useAuth, useTheme } from '../hooks.js';
 import type { FreeAppStore } from '../index.js';
 import { getPwaInstallState, requestPwaInstall, subscribePwaInstall } from '../pwa.js';
 import { Modal } from './components.js';
-import { Avatar, SignInButton, ThemeToggle, useTextSize } from './core.js';
+import { Avatar, SignInButton, TEXT_SIZES, ThemeToggle, useTextSize } from './core.js';
 import { FriendRequestBadge, FriendsList } from './friends.js';
 import {
   canFollowLink,
@@ -336,12 +336,6 @@ export function ProfilePage({
     { value: 'dark', label: 'Dark' },
   ];
 
-  const textSizeOptions: Array<{ value: 'default' | 'lg' | 'sm'; label: string }> = [
-    { value: 'sm', label: 'Small' },
-    { value: 'default', label: 'Default' },
-    { value: 'lg', label: 'Large' },
-  ];
-
   return (
     <div className="w-full max-w-120 m-[0_auto] p-[2rem_1rem]">
       <PageHeader title="Profile" />
@@ -387,7 +381,7 @@ export function ProfilePage({
         )}
         <ProfileLabel>Text Size</ProfileLabel>
         <div className="flex flex-wrap gap-2">
-          {textSizeOptions.map((opt) => (
+          {TEXT_SIZES.map((opt) => (
             <ToggleButton
               key={opt.value}
               active={textSize === opt.value}

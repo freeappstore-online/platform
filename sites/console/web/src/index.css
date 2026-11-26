@@ -72,6 +72,14 @@
   font-size: 87.5%; /* 14px — scales all rem-based Tailwind utilities */
 }
 
+:root[data-text="xl"] {
+  font-size: 137.5%; /* 22px */
+}
+
+:root[data-text="xxl"] {
+  font-size: 175%; /* 28px */
+}
+
 :root[data-theme="dark"] {
   color-scheme: dark;
   --paper: #000000;

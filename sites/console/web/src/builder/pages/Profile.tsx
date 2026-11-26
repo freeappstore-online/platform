@@ -141,7 +141,7 @@ export function Profile() {
           <div>
             <label className="text-xs font-semibold block mb-2 text-muted">Text Size</label>
             <div className="flex gap-2 flex-wrap">
-              {([["sm", "Small"], ["default", "Default"], ["lg", "Large"]] as const).map(([val, label]) => (
+              {([["sm", "Small"], ["default", "Default"], ["lg", "Large"], ["xl", "Extra large"], ["xxl", "Huge"]] as const).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setTextSize(val)}

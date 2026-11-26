@@ -55,6 +55,19 @@ it('keeps all mounted text controls in sync', async () => {
   expect(output('second')).toContain(':lg');
 });
 
+it('applies the larger text steps to the root font size and clears it on default', async () => {
+  await act(async () => text.setSize('xl'));
+  expect(document.documentElement.dataset.text).toBe('xl');
+  expect(document.documentElement.style.fontSize).toBe('137.5%');
+  await act(async () => text.setSize('xxl'));
+  expect(document.documentElement.dataset.text).toBe('xxl');
+  expect(document.documentElement.style.fontSize).toBe('175%');
+  expect(localStorage.getItem('stores-text-size')).toBe('xxl');
+  await act(async () => text.setSize('default'));
+  expect(document.documentElement.dataset.text).toBeUndefined();
+  expect(document.documentElement.style.fontSize).toBe('');
+});
+
 it('retains the selected theme and text size when storage writes fail', async () => {
   vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
     throw new Error('blocked');

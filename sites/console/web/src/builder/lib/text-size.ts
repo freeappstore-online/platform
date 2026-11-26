@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 
 // Shared across all stores so the preference follows the user.
 const KEY = "stores-text-size";
-export type TextSize = "default" | "lg" | "sm";
+export type TextSize = "default" | "sm" | "lg" | "xl" | "xxl";
 
 function getTextSize(): TextSize {
   const stored = localStorage.getItem(KEY);
-  if (stored === "lg" || stored === "sm") return stored;
+  if (stored === "sm" || stored === "lg" || stored === "xl" || stored === "xxl") return stored;
   return "default";
 }
 

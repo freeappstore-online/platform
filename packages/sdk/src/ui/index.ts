@@ -32,8 +32,15 @@ export {
   Tabs,
   useStandalone,
 } from './components.js';
-export type { AvatarProps, SignInButtonProps } from './core.js';
-export { Avatar, SignInButton, TextSizeToggle, ThemeToggle, useTextSize } from './core.js';
+export type { AvatarProps, SignInButtonProps, TextSize } from './core.js';
+export {
+  Avatar,
+  SignInButton,
+  TEXT_SIZES,
+  TextSizeToggle,
+  ThemeToggle,
+  useTextSize,
+} from './core.js';
 export type { AddFriendButtonProps, FriendRequestBadgeProps, FriendsListProps } from './friends.js';
 export { AddFriendButton, FriendRequestBadge, FriendsList } from './friends.js';
 export type {

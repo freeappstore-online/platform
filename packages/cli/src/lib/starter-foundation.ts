@@ -372,6 +372,8 @@ https://github.com/freeappstore-online/platform/blob/main/CONTRIBUTING.md#updati
 /* Shell text preferences scale rem-based typography without blocking zoom. */
 :root[data-text="lg"] { font-size: 112.5%; }
 :root[data-text="sm"] { font-size: 87.5%; }
+:root[data-text="xl"] { font-size: 137.5%; }
+:root[data-text="xxl"] { font-size: 175%; }
 
 body {
   margin: 0;

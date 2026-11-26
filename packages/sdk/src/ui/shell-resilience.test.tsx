@@ -1422,7 +1422,7 @@ for (const signedIn of [false, true]) {
       expect(byText('button', 'Large')!.getAttribute('aria-pressed')).toBe('true');
       await act(async () => byText('button', 'Dark')!.click());
       expect(byText('button', 'Dark')!.getAttribute('aria-pressed')).toBe('true');
-      expect(container.querySelectorAll('button[aria-pressed]')).toHaveLength(6);
+      expect(container.querySelectorAll('button[aria-pressed]')).toHaveLength(8);
       await mount(<ProfilePage app={app} showThemeToggle={false} />);
       expect(byText('button', 'Dark')).toBeUndefined();
       expect(byText('button', 'Large')).toBeDefined();

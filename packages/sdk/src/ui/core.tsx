@@ -183,21 +183,41 @@ export function ThemeToggle() {
 // TextSizeToggle
 // ---------------------------------------------------------------------------
 
-type TextSize = 'default' | 'lg' | 'sm';
+/**
+ * Text size steps, smallest first. `scale` is the root font-size, so every
+ * rem-based size in the app follows it (browser zoom keeps working too).
+ */
+export const TEXT_SIZES = [
+  { value: 'sm', label: 'Small', short: 'A\u2212', scale: '87.5%' },
+  { value: 'default', label: 'Default', short: 'A', scale: '' },
+  { value: 'lg', label: 'Large', short: 'A+', scale: '112.5%' },
+  { value: 'xl', label: 'Extra large', short: 'A++', scale: '137.5%' },
+  { value: 'xxl', label: 'Huge', short: 'A+++', scale: '175%' },
+] as const;
+
+export type TextSize = (typeof TEXT_SIZES)[number]['value'];
+
+function textSizeStep(size: TextSize) {
+  return TEXT_SIZES.find((step) => step.value === size) ?? TEXT_SIZES[1];
+}
 
 function applyTextSize(size: TextSize): void {
   if (typeof document === 'undefined') return;
+  const root = document.documentElement;
   if (size === 'default') {
-    delete document.documentElement.dataset.text;
+    delete root.dataset.text;
   } else {
-    document.documentElement.dataset.text = size;
+    root.dataset.text = size;
   }
+  // Set the scale here too, so apps without their own `data-text` CSS get every step.
+  root.style.fontSize = textSizeStep(size).scale;
 }
 
 const textSizeStore = createPreferenceStore({
   key: 'stores-text-size',
   defaultValue: 'default' as TextSize,
-  parse: (stored): TextSize => (stored === 'lg' || stored === 'sm' ? stored : 'default'),
+  parse: (stored): TextSize =>
+    TEXT_SIZES.some((step) => step.value === stored) ? (stored as TextSize) : 'default',
   resolve: (size) => size,
   apply: applyTextSize,
 });
@@ -212,18 +232,19 @@ export function useTextSize() {
   return { size, setSize: textSizeStore.set };
 }
 
-/** Text size toggle. Cycles: default -> large -> small. Shows A/A+/A-. */
+/** Text size toggle. Cycles default -> larger steps -> small -> default. */
 export function TextSizeToggle() {
   const { size, setSize } = useTextSize();
 
   const cycle = useCallback(() => {
-    const order: TextSize[] = ['default', 'lg', 'sm'];
+    const order: TextSize[] = ['default', 'lg', 'xl', 'xxl', 'sm'];
     const idx = order.indexOf(size);
     setSize(order[(idx + 1) % order.length]!);
   }, [size, setSize]);
 
-  const label = size === 'lg' ? 'A+' : size === 'sm' ? 'A\u2212' : 'A';
-  const title = size === 'lg' ? 'Text: large' : size === 'sm' ? 'Text: small' : 'Text: default';
+  const step = textSizeStep(size);
+  const label = step.short;
+  const title = `Text: ${step.label.toLowerCase()}`;
 
   return (
     <button
@@ -231,7 +252,7 @@ export function TextSizeToggle() {
       onClick={cycle}
       aria-label={title}
       title={title}
-      className="w-9 h-9 rounded border border-line bg-panel text-ink inline-flex items-center justify-center cursor-pointer p-0 font-[inherit] text-[0.85rem] font-bold"
+      className="min-w-9 h-9 rounded border border-line bg-panel text-ink inline-flex items-center justify-center cursor-pointer px-1.5 py-0 font-[inherit] text-[0.85rem] font-bold"
     >
       {label}
     </button>

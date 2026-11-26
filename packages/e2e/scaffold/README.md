@@ -40,6 +40,6 @@ It does not install a PWA
 or claim physical-device coverage. Mobile coverage uses Chromium with an iPhone
 viewport/touch configuration, not Safari.
 
-Both templates need CSS for `html[data-text='lg']` and `html[data-text='sm']`.
+Both templates need CSS for `html[data-text]` = `sm`, `lg`, `xl`, `xxl` (the SDK also sets the root font-size).
 The browser test checks computed font size and persisted preferences, so a toggle
 that only changes its button label cannot pass.
