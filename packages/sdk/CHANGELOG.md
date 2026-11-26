@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `fas.generation` (platform#727): owner job sets and jobs, a `contribute()` claim → generate → submit loop for local-model contributors, and the public write-once artifact manifest.
 - Sessions are scoped to the app that received them (platform#495). The token an app stores works for that app's data and the user-level routes only; publish, app settings, the key vault and account deletion need a console sign-in.
 - `auth.deleteAccount()` opens the console's account settings instead of deleting from inside the app.
 - `proxy.fetch()` to a vault provider throws `ProxyNoGrantError` (403 `no_grant`) unless the caller owns the app; `api.stripe.com` is no longer a vault provider.

@@ -3,6 +3,7 @@ import { Counters } from './counters.js';
 import { Collections } from './db.js';
 import { Email } from './email.js';
 import { Friends } from './friends.js';
+import { Generation } from './generation.js';
 import { Keys } from './keys.js';
 import { Kv } from './kv.js';
 import { Logger } from './logger.js';
@@ -52,6 +53,18 @@ export {
 export type { Collection, CollectionOptions, GeoBBox, QueryOptions, QueryResult } from './db.js';
 export { Collections } from './db.js';
 export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js';
+export type {
+  ContributeOptions,
+  GenerationArtifact,
+  GenerationFormat,
+  GenerationJob,
+  GenerationModel,
+  GenerationSet,
+  GenerationSetOptions,
+  GenerationSubmission,
+  GenerationSubmissionStatus,
+} from './generation.js';
+export { Generation } from './generation.js';
 export type { NativeCursor, NativePoint, NativeStatus } from './native.js';
 export type { Photo } from './photos.js';
 export { PHOTO_LIMITS, Photos, preparePhoto } from './photos.js';
@@ -98,6 +111,7 @@ export class FreeAppStore {
   readonly push: Push;
   readonly photos: Photos;
   readonly native: Native;
+  readonly generation: Generation;
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
@@ -117,6 +131,7 @@ export class FreeAppStore {
     this.push = new Push(opts.appId, apiBase, this.auth);
     this.photos = new Photos(opts.appId, apiBase, this.auth);
     this.native = new Native(opts.appId, apiBase, this.auth);
+    this.generation = new Generation(opts.appId, apiBase, this.auth);
   }
 }
 

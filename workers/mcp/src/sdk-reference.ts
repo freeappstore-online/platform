@@ -322,6 +322,27 @@ import { registerFasPushHandler } from '@freeappstore/sdk/push-sw'
 registerFasPushHandler({ title: 'Cycle', body: 'Time to check in.', onClick: () => '/' })
 \`\`\`
 Keep the text generic for anything sensitive (it can show on a lock screen). Limits: 10 devices and 20 reminders per user per app.`,
+  generation: `## Community generation (fas.generation)
+Signed-in users' devices generate pregenerated assets (TTS narration) with a local model the app supplies; the server verifies each upload and stores the first accepted result write-once.
+\`\`\`tsx
+// Owner
+const set = await fas.generation.createSet({ kind: 'tts', model: 'kokoro', modelVersion: '1.0', params: {}, formats: ['audio/ogg'], maxBytes: 5_000_000, replicas: 1 })
+await fas.generation.addJobs(set.id, [{ key: 'ch1:p1', input: { text: 'Hello.' } }])  // 1-500 per call
+await fas.generation.withdraw(jobId)            // job reopens
+await fas.generation.blockContributor(userId)   // withdraws all their artifacts
+
+// Contributor: claim → generate → submit until no work, abort, or lease expiry
+const { submitted, stopped } = await fas.generation.contribute({
+  models: [{ model: 'kokoro', modelVersion: '1.0' }],
+  generate: async (job) => ({ file: await synthesize(job.input.text), meta: undefined }),
+})
+await fas.generation.claim({ models: [{ model: 'kokoro', modelVersion: '1.0' }] })  // job | null (15-min lease)
+await fas.generation.mySubmissions()            // [{ id, jobId, status, reason, createdAt }]
+
+// Public, no sign-in
+const artifacts = await fas.generation.manifest(set.id)  // [{ key, url, metaUrl?, contentType, durationMs, sha256, ... }]
+\`\`\`
+\`submit(job, file, { meta?, attestation? })\` uploads one result against the job's lease. Uploads stay private until verified (format, size, duration, transcript, optional replicas).`,
   hooks: `## React Hooks
 \`\`\`tsx
 import { useAuth, useTheme } from '@freeappstore/sdk/hooks'

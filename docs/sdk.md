@@ -413,3 +413,34 @@ Use `fas.photos.upload(file)` for private photos, or explicitly pass
 `{ visibility: 'public' }` for listing photos. The SDK resizes and compresses;
 the API enforces 640 px, 200,000 bytes, quotas and 90-day expiry.
 See [Photo uploads](photo-uploads.md) for the contract and examples.
+
+## Community generation (`fas.generation`)
+
+Devices of signed-in users generate pregenerated assets (today: TTS narration) with a local model and contribute them for everyone. The server never trusts the device: the owner decides what is generated, every upload is verified in private quarantine before it is public, and the first accepted result is stored write-once. The SDK bundles no model; the app supplies `generate`.
+
+```ts
+// Owner (app owner session; CI can call the same API with GitHub Actions OIDC)
+const set = await fas.generation.createSet({
+  kind: 'tts', model: 'kokoro', modelVersion: '1.0', params: { voice: 'af_heart' },
+  formats: ['audio/ogg'], maxBytes: 5_000_000, replicas: 1,
+});
+await fas.generation.addJobs(set.id, [{ key: 'ch1:p1', input: { text: 'Call me Ishmael.' } }]); // 1-500; same key + different input → 409
+await fas.generation.withdraw(jobId);           // the job reopens
+await fas.generation.blockContributor(userId);  // withdraws everything they contributed
+
+// Contributor: claim → generate → submit until there is no work
+const controller = new AbortController();
+const { submitted, stopped } = await fas.generation.contribute({
+  setId: set.id,
+  models: [{ model: 'kokoro', modelVersion: '1.0' }],
+  generate: async (job) => ({ file: await synthesize(job.input.text, job.params), meta: { timings } }),
+  signal: controller.signal,
+  onProgress: ({ stage, job, submitted }) => console.log(stage, job.key, submitted),
+}); // stopped: 'no-work' | 'aborted' | 'lease-expired'
+const mine = await fas.generation.mySubmissions(); // [{ id, jobId, status, reason, createdAt }]
+
+// Public, no sign-in: accepted artifacts with absolute URLs
+const artifacts = await fas.generation.manifest(set.id); // [{ key, jobId, url, metaUrl?, bytes, contentType, durationMs, sha256, model, modelVersion, acceptedAt }]
+```
+
+The step-by-step calls are `claim({ setId?, models })` (a 15-minute lease, or `null` when there is no work) and `submit(job, file, { meta?, attestation? })` (`202`, status `pending`). Submissions move to `accepted`, `rejected` (with a `reason`) or `superseded`. A lease that runs out before the result is ready is abandoned; the job goes back to the pool.
