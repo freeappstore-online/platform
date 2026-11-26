@@ -24,6 +24,9 @@ timeout() {
   ATTEMPTS=$((ATTEMPTS + 1)); echo ATTEMPT
   case "$MODE" in
     eventual) if [ "$ATTEMPTS" -ge 3 ]; then return 0; fi ;;
+    packument) if [ "$ATTEMPTS" -ge 3 ]; then return 0; fi
+      echo ' ERR_PNPM_NO_MATCHING_VERSION  No matching version found for @freeappstore/sdk@0.16.37 while fetching it from https://registry.npmjs.org/'; return 1 ;;
+    othernomatch) echo ' ERR_PNPM_NO_MATCHING_VERSION  No matching version found for @freeappstore/sdk@0.16.370 while fetching it from https://registry.npmjs.org/'; return 1 ;;
     unrelated) echo 'ERR_PNPM_FETCH_404 GET https://registry.npmjs.org/another/-/another-1.tgz: Not Found'; return 1 ;;
     wrongversion) echo 'ERR_PNPM_FETCH_404 GET https://registry.npmjs.org/@freeappstore/sdk/-/sdk-0.16.36.tgz: Not Found'; return 1 ;;
     lifecycle) echo 'ELIFECYCLE'; return 7 ;;
@@ -48,7 +51,14 @@ it('waits for the exact selected SDK archive after metadata became visible', () 
   expect(result.stdout).toContain('CONTINUED');
 });
 
-it.each(['unrelated', 'wrongversion', 'lifecycle', 'timeout'])(
+it('waits for a stale packument of the selected SDK version (#779)', () => {
+  const result = run('packument');
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout.match(/ATTEMPT/g)).toHaveLength(3);
+  expect(result.stdout).toContain('CONTINUED');
+});
+
+it.each(['unrelated', 'wrongversion', 'othernomatch', 'lifecycle', 'timeout'])(
   'does not retry %s failures',
   (mode) => {
     const result = run(mode);

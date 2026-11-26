@@ -81,7 +81,11 @@ install_published_scaffold_dependencies() {
       status=$?
     fi
     cat "$output"
-    if [ "$status" -eq 124 ] || [ "$status" -eq 137 ] || ! grep -F 'ERR_PNPM_FETCH_404' "$output" | grep -Fq "GET https://registry.npmjs.org/@freeappstore/sdk/-/sdk-${SDK_VERSION}.tgz:"; then
+    # Retry only the selected SDK's propagation: archive 404 (#411) or stale packument (#779).
+    if [ "$status" -eq 124 ] || [ "$status" -eq 137 ] || {
+      ! grep -F 'ERR_PNPM_FETCH_404' "$output" | grep -Fq "GET https://registry.npmjs.org/@freeappstore/sdk/-/sdk-${SDK_VERSION}.tgz:" &&
+      ! grep -Fq "ERR_PNPM_NO_MATCHING_VERSION  No matching version found for @freeappstore/sdk@${SDK_VERSION} " "$output"
+    }; then
       rm "$output"
       return "$status"
     fi
