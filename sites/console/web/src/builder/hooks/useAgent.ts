@@ -131,14 +131,17 @@ export function useAgent() {
     if (!s?.token) return;
     setIsLoadingHistory(true);
     setHistoryError(false);
-    let doOk = false;
+    // The user may switch project while this load is in flight: its result
+    // then belongs to a project no longer on screen and must not land (#755).
+    const stale = () => sessionIdRef.current !== sessionId;
     let d1Ok = false;
     try {
       // 1. Durable Object — authoritative + freshest.
       const doRes = await fetch(`${AGENT_URL}/session/${sessionId}/history`, { headers: authHeaders() });
+      if (stale()) return;
       if (doRes.ok) {
-        doOk = true;
         const data = await doRes.json();
+        if (stale()) return;
         const restored = restoreMessages(data.messages || []);
         if (restored.length > 0) {
           if (messagesRef.current.some((m) => m.role === "user") && isStreamingRef.current) return;
@@ -158,21 +161,26 @@ export function useAgent() {
       }
       // 2. D1 fallback — survives DO eviction.
       const d1Res = await fetch(`${API_URL}/v1/agent/sessions/${sessionId}`, { headers: authHeaders(s.token) });
+      if (stale()) return;
       if (d1Res.ok) {
         d1Ok = true;
         const data = (await d1Res.json()) as { session?: { messages?: ChatMessage[]; deployState?: DeployState | null } };
+        if (stale()) return;
         const msgs = data.session?.messages;
         if (messagesRef.current.some((m) => m.role === "user")) return;
         skipNextSyncRef.current = true;
         setMessages(msgs?.length ? msgs : DEFAULT_MSG);
         setDeployState(data.session?.deployState ?? null);
       }
-      // Neither source was reachable — we have no authoritative answer.
-      if (!doOk && !d1Ok) setHistoryError(true);
+      // The DO had no history (it answers an empty list once evicted) and D1
+      // failed: no authoritative answer. Showing an empty chat here would let
+      // the next turn's save replace the whole saved history (#755).
+      if (!d1Ok) setHistoryError(true);
     } catch (err) {
+      if (stale()) return;
       if ((err as Error).name !== "AbortError") { console.error("Failed to load history:", err); setHistoryError(true); }
     } finally {
-      setIsLoadingHistory(false);
+      if (!stale()) setIsLoadingHistory(false);
     }
     // markDeployed/rename are useCallback-stable; depending on the whole
     // projectsMgr object would change identity every render and loop.
