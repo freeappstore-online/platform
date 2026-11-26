@@ -55,13 +55,22 @@ final class ContributeTests: XCTestCase {
 
     struct Upload { let path: String; let headers: [String: String]; let file: Data; let contentType: String; let meta: [String: Any]? }
 
-    /// The contributor routes of `api.freeappstore.online`, for app `books`.
+    /// The contributor routes of `api.freeappstore.online`: `jobs` for app `books`, `appJobs` for any other.
     final class FakeServer {
         var jobs: [[String: Any]] = []
+        var appJobs: [String: [[String: Any]]] = [:]
+        /// The app of every claim, in order, failed ones included.
+        var claimed: [String] = []
         var claims: [[String: Any]] = []
         var uploads: [Upload] = []
         var uploadFailure: (Int, String)?
+        /// Answers for the next claims or uploads, before any job or `uploadFailure` (#819).
+        var claimFailures: [StubProtocol.Stub] = []
+        var uploadFailures: [StubProtocol.Stub] = []
+        /// Every upload attempt, failed ones included.
+        var attempts: [Upload] = []
         var submissions: [[String: Any]] = []
+        var refreshes = 0
         /// Lease extensions asked for (path, `X-Lease-Token`), and what the next one answers: an expiry or a failure.
         var extensions: [(String, String?)] = []
         var extend: () -> Result<Int64, ApiFailure> = { .failure(ApiFailure(status: 500, message: "no extension expected")) }
@@ -70,10 +79,19 @@ final class ContributeTests: XCTestCase {
             guard request.value(forHTTPHeaderField: "Authorization") == "Bearer ndev_test" else { return .init(status: 400, json: ["error": "token"]) }
             let path = request.url!.path
             switch (request.httpMethod!, path) {
-            case ("POST", "/v1/apps/books/generation/claim"):
+            case ("POST", _) where path.hasSuffix("/generation/claim"):
+                let app = path.split(separator: "/")[2]
+                claimed.append(String(app))
+                if !claimFailures.isEmpty { return claimFailures.removeFirst() }
                 claims.append((try? JSONSerialization.jsonObject(with: Self.body(request))) as? [String: Any] ?? [:])
+                if app != "books" {
+                    guard let next = appJobs[String(app)]?.first else { return .init(status: 204) }
+                    appJobs[String(app)]!.removeFirst()
+                    return .init(json: ["job": next])
+                }
                 return jobs.isEmpty ? .init(status: 204) : .init(json: ["job": jobs.removeFirst()])
             case ("GET", "/v1/apps/books/generation/submissions"):
+                refreshes += 1
                 return .init(json: ["submissions": submissions])
             case ("POST", _) where path.hasSuffix("/lease"):
                 extensions.append((path, request.value(forHTTPHeaderField: "X-Lease-Token")))
@@ -82,8 +100,11 @@ final class ContributeTests: XCTestCase {
                 case .failure(let failure): return .init(status: failure.status, json: ["error": failure.message])
                 }
             case ("PUT", _) where path.hasSuffix("/result"):
+                let upload = Self.parse(request)
+                attempts.append(upload)
+                if !uploadFailures.isEmpty { return uploadFailures.removeFirst() }
                 if let (status, message) = uploadFailure { return .init(status: status, json: ["error": message]) }
-                uploads.append(Self.parse(request))
+                uploads.append(upload)
                 return .init(status: 202, json: ["submissionId": "sub-\(uploads.count)", "status": "pending"])
             default:
                 return .init(status: 404, json: ["error": "unexpected \(request.httpMethod!) \(path)"])
@@ -144,8 +165,13 @@ final class ContributeTests: XCTestCase {
         let now = now
         return Contributor(client: client, log: log, synth: synth ?? self.synth, encoder: { [unowned self] file, rate in
             let sink = try FakeSink(file, rate); sinks.append(sink); return sink
-        }, workDir: dir, attestation: attestation, now: clock ?? { now }, stopReason: stopReason, hot: hot, coolDown: .milliseconds(1))
+        }, workDir: dir, attestation: attestation, now: clock ?? { now }, stopReason: stopReason, hot: hot, coolDown: .milliseconds(1),
+           retry: NetworkRetry(sleep: { [unowned self] ms in waited += ms; t += ms; onWait() }))
     }
+
+    /// Network retry waits (#819): their total in ms, and a hook run after each step. They advance `t` instead of sleeping.
+    private var waited: Int64 = 0
+    private var onWait: () -> Void = {}
 
     private func job(_ id: String, text: String = "It was a bright cold day in April.", model: String = "kokoro", version: String = "v1.0",
                      params: [String: Any] = ["voice": "af_heart"], formats: [String] = ["audio/mp4"], maxBytes: Int64 = 1_000_000,
@@ -161,7 +187,7 @@ final class ContributeTests: XCTestCase {
 
     func testGeneratesExactlyTheClaimedInputAndSubmitsWithTheLease() async throws {
         server.jobs = [job("j1", text: "First chapter."), job("j2", text: "Second chapter.")]
-        let submitted = try await contributor().run("books", keepGoing: { true })
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 2)
         XCTAssertEqual(synth.spoken, ["First chapter.", "Second chapter."])
         XCTAssertEqual(server.claims.count, 3) // the third claim found nothing (204)
@@ -181,7 +207,7 @@ final class ContributeTests: XCTestCase {
 
     func testAttestationHookAddsTheHeader() async throws {
         server.jobs = [job("j1")]
-        _ = try await contributor(attestation: Attestation { app, j in "token-\(app)-\(j.id)" }).run("books", keepGoing: { true })
+        _ = try await contributor(attestation: Attestation { app, j in "token-\(app)-\(j.id)" }).run(["books"], keepGoing: { true })
         XCTAssertEqual(server.uploads.first?.headers["X-Attestation"], "token-books-j1")
     }
 
@@ -194,7 +220,7 @@ final class ContributeTests: XCTestCase {
         ]
         for (name, j) in cases {
             server.jobs = [j]
-            let submitted = try await contributor().run("books", keepGoing: { true })
+            let submitted = try await contributor().run(["books"], keepGoing: { true })
             XCTAssertEqual(submitted, 0, name)
             XCTAssertEqual(log.rows[j["id"] as! String]?.status, "skipped", name)
         }
@@ -208,7 +234,7 @@ final class ContributeTests: XCTestCase {
     func testNeverUploadsTwiceForOneJob() async throws {
         log.record(Contribution(jobId: "j1", appId: "books", key: "book/j1", at: now, status: "uploading"))
         server.jobs = [job("j1")]
-        let submitted = try await contributor().run("books", keepGoing: { true })
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 0)
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertTrue(synth.spoken.isEmpty)
@@ -217,7 +243,7 @@ final class ContributeTests: XCTestCase {
 
     func testTooLargeIsNotSubmitted() async throws {
         server.jobs = [job("j1", text: "A long sentence here.", maxBytes: 5)]
-        let submitted = try await contributor().run("books", keepGoing: { true })
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 0)
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertEqual(log.rows["j1"]?.reason, "too_large")
@@ -228,7 +254,7 @@ final class ContributeTests: XCTestCase {
         server.jobs = [job("j1")]
         // The clock passes the lease margin before generation ends.
         synth.say = { _, keepGoing in t += 15 * 60_000; return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil }
-        _ = try await contributor(clock: { t }).run("books", keepGoing: { true })
+        _ = try await contributor(clock: { t }).run(["books"], keepGoing: { true })
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertEqual(log.rows["j1"]?.reason, "lease_expired")
     }
@@ -237,7 +263,7 @@ final class ContributeTests: XCTestCase {
         server.jobs = [job("j1")]
         var go = true
         synth.say = { _, keepGoing in go = false; return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil }
-        _ = try await contributor(stopReason: { "user_stop" }).run("books", keepGoing: { go })
+        _ = try await contributor(stopReason: { "user_stop" }).run(["books"], keepGoing: { go })
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertEqual(log.rows["j1"]?.reason, "user_stop", "the runner's reason is recorded")
     }
@@ -253,7 +279,7 @@ final class ContributeTests: XCTestCase {
             guard synth.spoken.count == 1, checks < 5 else { return false }
             checks += 1; t += 4 * 60_000; return true
         }
-        let submitted = try await contributor(clock: { [unowned self] in t }, hot: hot).run("books", keepGoing: { true })
+        let submitted = try await contributor(clock: { [unowned self] in t }, hot: hot).run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 1)
         XCTAssertEqual(synth.spoken, ["One.", "Two."])
         XCTAssertGreaterThan(server.extensions.count, 0, "the lease is extended while paused")
@@ -263,7 +289,7 @@ final class ContributeTests: XCTestCase {
     func testUploadFailureIsRecordedAndEndsTheRun() async throws {
         server.jobs = [job("j1"), job("j2")]
         server.uploadFailure = (409, "Lease expired.")
-        let submitted = try await contributor().run("books", keepGoing: { true })
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 0)
         XCTAssertEqual(log.rows["j1"]?.status, "failed")
         XCTAssertEqual(log.rows["j1"]?.reason, "409 Lease expired.")
@@ -274,9 +300,128 @@ final class ContributeTests: XCTestCase {
         server.jobs = [job("j1")]
         server.uploadFailure = (401, "expired")
         do {
-            _ = try await contributor().run("books", keepGoing: { true })
+            _ = try await contributor().run(["books"], keepGoing: { true })
             XCTFail("a 401 must be thrown")
         } catch let failure as ApiFailure { XCTAssertEqual(failure.status, 401) }
+    }
+
+    // MARK: Network retries (#819)
+
+    func testRetryDelayOnlyForPassingNetworkFailures() {
+        func delay(_ error: Error, _ attempt: Int = 0) -> Int64? { GenerationPolicy.retryDelay(error, attempt: attempt) }
+        for code: URLError.Code in [.cannotFindHost, .dnsLookupFailed, .timedOut, .networkConnectionLost, .notConnectedToInternet, .cannotConnectToHost] {
+            XCTAssertEqual(delay(URLError(code)), 2_000, "\(code)")
+        }
+        XCTAssertEqual(delay(URLError(.timedOut), 1), 4_000)
+        XCTAssertEqual(delay(URLError(.timedOut), 9), 60_000, "capped")
+        XCTAssertEqual(delay(ApiFailure(status: 503, message: "")), 2_000)
+        XCTAssertEqual(delay(ApiFailure(status: 502, message: "", retryAfter: 30)), 30_000)
+        XCTAssertEqual(delay(ApiFailure(status: 429, message: "", retryAfter: 5)), 5_000)
+        XCTAssertNil(delay(ApiFailure(status: 429, message: "daily contribution limit reached")), "a 429 without Retry-After is final")
+        for status in [400, 401, 403, 409, 413, 415] { XCTAssertNil(delay(ApiFailure(status: status, message: "")), "\(status)") }
+        XCTAssertNil(delay(URLError(.badServerResponse)))
+        XCTAssertNil(delay(CompanionError("no")))
+    }
+
+    /// DNS, a 503 and a 429 with Retry-After: the same file goes up again once they pass, generated once.
+    func testPassingNetworkFailuresRetryTheSameFile() async throws {
+        server.jobs = [job("j1", text: "First chapter.")]
+        server.uploadFailures = [.init(offline: true), .init(status: 503, json: ["error": "busy"]),
+                                 .init(status: 429, json: ["error": "slow down"], headers: ["Retry-After": "7"])]
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(synth.spoken, ["First chapter."], "generated once")
+        XCTAssertEqual(sinks.count, 1)
+        XCTAssertEqual(server.attempts.count, 4)
+        XCTAssertEqual(Set(server.attempts.map(\.file)).count, 1, "never a different file")
+        XCTAssertTrue(server.attempts.allSatisfy { $0.headers["X-Lease-Token"] == "lease-j1" })
+        XCTAssertEqual(waited, 2_000 + 4_000 + 7_000)
+        XCTAssertEqual(log.rows["j1"]?.status, "pending")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("contribution.m4a").path))
+    }
+
+    /// Offline until the lease is about to run out: given up with reason `network`, never past the lease, never generated again.
+    func testNetworkDownUntilTheLeaseRunsOutGivesUpWithReasonNetwork() async throws {
+        t = now
+        server.jobs = [job("j1")]
+        server.uploadFailures = Array(repeating: .init(offline: true), count: 100)
+        let submitted = try await contributor(clock: { [unowned self] in t }).run(["books"], keepGoing: { true })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertEqual(synth.spoken.count, 1)
+        XCTAssertGreaterThan(server.attempts.count, 5)
+        XCTAssertLessThan(t, now + 15 * 60_000 - GenerationPolicy.leaseMarginMs, "no try after the lease's margin")
+        XCTAssertEqual(log.rows["j1"]?.status, "failed")
+        XCTAssertEqual(log.rows["j1"]?.reason, "network")
+        XCTAssertEqual(server.refreshes, 1, "an answer may have been lost: the server's record is asked for")
+    }
+
+    /// A lost answer: the first upload arrived, so the retry finds the lease used; the server's verdict is copied.
+    func testARetryThatFindsTheLeaseUsedTakesTheServersRecord() async throws {
+        server.jobs = [job("j1")]
+        server.uploadFailures = [.init(offline: true), .init(status: 403, json: ["error": "no valid lease for this job"])]
+        server.submissions = [["jobId": "j1", "status": "pending"]]
+        _ = try await contributor().run(["books"], keepGoing: { true })
+        XCTAssertEqual(server.attempts.count, 2)
+        XCTAssertEqual(log.rows["j1"]?.status, "pending")
+    }
+
+    func testStoppingWhileWaitingToRetryEndsWithTheStopReason() async throws {
+        server.jobs = [job("j1"), job("j2")]
+        server.uploadFailures = Array(repeating: .init(offline: true), count: 100)
+        var go = true
+        onWait = { go = false }
+        let submitted = try await contributor(stopReason: { "user_stop" }).run(["books"], keepGoing: { go })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertEqual(server.attempts.count, 1)
+        XCTAssertEqual(waited, 1_000, "stopped within a second's step")
+        XCTAssertEqual(log.rows["j1"]?.status, "skipped")
+        XCTAssertEqual(log.rows["j1"]?.reason, "user_stop")
+        XCTAssertNil(log.rows["j2"])
+    }
+
+    func testClaimsAreRetriedThenTheRunFails() async throws {
+        server.jobs = [job("j1")]
+        server.claimFailures = [.init(offline: true), .init(status: 500, json: ["error": "oops"])]
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(waited, 2_000 + 4_000)
+
+        server.jobs = [job("j2")]
+        server.claimFailures = Array(repeating: .init(offline: true), count: 100)
+        do {
+            _ = try await contributor().run(["books"], keepGoing: { true })
+            XCTFail("a claim still failing after its retries ends the run")
+        } catch let error as URLError { XCTAssertEqual(error.code, .notConnectedToInternet) }
+        XCTAssertEqual(server.claimed.count, 4 + GenerationPolicy.retryAttempts, "two failures, j1, none left; then every try")
+        XCTAssertNil(log.rows["j2"])
+    }
+
+    // MARK: Round robin (#819)
+
+    func testTakesOneJobFromEachAppInTurn() async throws {
+        server.jobs = [job("b1"), job("b2"), job("b3")]
+        server.appJobs = ["dialogue": [job("d1"), job("d2")], "notes": []]
+        var progress: [String] = []
+        let submitted = try await contributor().run(["books", "dialogue", "notes"], keepGoing: { true }) { app, job in progress.append("\(app)/\(job.id)") }
+        XCTAssertEqual(submitted, 5)
+        XCTAssertEqual(progress, ["books/b1", "dialogue/d1", "books/b2", "dialogue/d2", "books/b3"])
+        XCTAssertEqual(server.claimed, ["books", "dialogue", "notes", "books", "dialogue", "books", "dialogue", "books"],
+                       "an app with nothing left leaves the rotation")
+    }
+
+    func testAnAppTurnedOffLeavesTheRotation() async throws {
+        server.jobs = [job("b1"), job("b2")]
+        server.appJobs = ["dialogue": [job("d1"), job("d2")]]
+        var on: Set = ["books", "dialogue"]
+        synth.say = { text, keepGoing in
+            on.remove("dialogue") // turned off while the first job is generated
+            return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil
+        }
+        let submitted = try await contributor().run(["dialogue", "books"], keepGoing: { true }, optedIn: { on.contains($0) })
+        XCTAssertEqual(submitted, 2)
+        XCTAssertEqual(log.rows["d1"]?.reason, "opted_out")
+        XCTAssertEqual(server.claimed, ["dialogue", "books", "books", "books"])
+        XCTAssertNil(log.rows["d2"])
     }
 
     func testSplitsSentencesLikeBooks() {
@@ -333,7 +478,7 @@ final class ContributeTests: XCTestCase {
     func testMandarinSetsAreSpokenAMandarinSentenceAtATime() async throws {
         server.jobs = [job("j1", text: "一号线，三站。明白了，谢谢！", params: ["voice": "zm_yunxi"], language: "zh"),
                        job("j2", text: "请问，洗手间在哪里？", params: ["voice": "zf_xiaobei"])] // no language: the voice says
-        let submitted = try await contributor().run("books", keepGoing: { true })
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 2)
         XCTAssertEqual(synth.spoken, ["一号线，三站。", "明白了，谢谢！", "请问，洗手间在哪里？"])
         XCTAssertEqual(synth.languages, [.mandarin, .mandarin, .mandarin])
@@ -346,7 +491,7 @@ final class ContributeTests: XCTestCase {
                      job("d", text: "Hello.", params: ["voice": "zf_xiaobei"], language: "en")]
         for j in cases {
             server.jobs = [j]
-            let submitted = try await contributor().run("books", keepGoing: { true })
+            let submitted = try await contributor().run(["books"], keepGoing: { true })
             XCTAssertEqual(submitted, 0)
             XCTAssertEqual(log.rows[j["id"] as! String]?.reason, "language", j["id"] as! String)
         }
@@ -357,7 +502,7 @@ final class ContributeTests: XCTestCase {
     func testATwoCharacterPhrasePassesTheServerDurationChecks() async throws {
         server.jobs = [job("j1", text: "对。", params: ["voice": "zf_xiaobei"], language: "zh")]
         synth.say = { _, _ in Audio(samples: [Float](repeating: 0, count: 6_000), sampleRate: 24_000) } // Kokoro says 对。 in about a quarter of a second
-        let submitted = try await contributor().run("books", keepGoing: { true })
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 1)
         let upload = try XCTUnwrap(server.uploads.first)
         let seconds = Double(upload.file.count) / 24_000
@@ -371,7 +516,7 @@ final class ContributeTests: XCTestCase {
     func testNarratesASentenceAtATimeAndSendsBooksTimings() async throws {
         server.jobs = [job("j1", text: "One two. Three!\n\n* * *\n\nFour.")]
         synth.say = { text, _ in Audio(samples: [Float](repeating: 0, count: text == "* * *" ? 0 : text.count * 2_400), sampleRate: 24_000) } // 0.1 s a character
-        _ = try await contributor().run("books", keepGoing: { true })
+        _ = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(synth.spoken, ["One two.", "Three!", "* * *", "Four."])
         // 0.8 s, 0.4 s pause, 0.6 s, 0.8 s paragraph pause, "* * *" left out, 0.5 s; no pause at the end.
         let upload = try XCTUnwrap(server.uploads.first)
@@ -388,7 +533,7 @@ final class ContributeTests: XCTestCase {
     func testMetaOverTheServerLimitIsNotSubmitted() async throws {
         server.jobs = [job("j1", text: String(repeating: "Go. ", count: 4_000).trimmingCharacters(in: .whitespaces), maxBytes: Int64.max)]
         synth.say = { _, _ in Audio(samples: [0], sampleRate: 10) } // 10 Hz keeps the audio small; 4,000 segments are about 100 KB of JSON
-        let submitted = try await contributor().run("books", keepGoing: { true })
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
         XCTAssertEqual(submitted, 0)
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertEqual(log.rows["j1"]?.reason, "too_large")
@@ -400,7 +545,7 @@ final class ContributeTests: XCTestCase {
         t = now
         server.jobs = [job("j1", text: (1...sentences).map { "Sentence \($0)." }.joined(separator: " "))]
         synth.say = { [unowned self] _, keepGoing in t += minutes * 60_000; return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil }
-        return try await contributor(clock: { [unowned self] in t }).run("books", keepGoing: { true })
+        return try await contributor(clock: { [unowned self] in t }).run(["books"], keepGoing: { true })
     }
 
     func testExtendsTheLeaseWithinFiveMinutesOfExpiry() async throws {
@@ -577,9 +722,9 @@ final class ContributeTests: XCTestCase {
         var size = UInt32(8)
         XCTAssertEqual(AudioFileGetProperty(audioFile!, kAudioFilePropertyAudioDataByteCount, &size, &audioBytes), noErr)
         AudioFileClose(audioFile!)
-        // At most 64 kbps, 8 KB a second (a tone needs far less). The file itself carries a padding atom besides.
+        // At most 32 kbps (#798), 4 KB a second. The file itself carries a padding atom besides.
         XCTAssertGreaterThan(audioBytes, 0)
-        XCTAssertLessThanOrEqual(audioBytes, 8_500)
+        XCTAssertLessThanOrEqual(audioBytes, 4_300)
     }
 
     /// The real Kokoro model through sherpa-onnx, when TEST_RUNNER_FAS_KOKORO_ARCHIVE names a local copy of the pinned

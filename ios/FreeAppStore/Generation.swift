@@ -170,6 +170,29 @@ enum GenerationPolicy {
     /// server's characters-per-second floor and Whisper hears it whole. Audio up to 3 s is never too long for its text.
     static let minSeconds = 1.0
 
+    /// Network retries (#819): the first wait, doubled each time up to the longest.
+    static let retryFirstMs: Int64 = 2_000
+    static let retryLongestMs: Int64 = 60_000
+    /// Tries of a claim or a verdict refresh before the run gives up (about a minute of waiting). An upload is tried
+    /// for as long as its lease leaves time.
+    static let retryAttempts = 6
+
+    /// How long to wait before trying again after `error`, or nil when it is not a passing network failure: no
+    /// connection, DNS, a timeout or a dropped connection; a 5xx or 408; a 429 only when it says when (`Retry-After`).
+    static func retryDelay(_ error: Error, attempt: Int) -> Int64? {
+        let backoff = min(retryFirstMs << min(attempt, 10), retryLongestMs)
+        if let failure = error as? ApiFailure {
+            switch failure.status {
+            case 429: return failure.retryAfter.map { Int64(max($0, 0)) * 1000 }
+            case 408, 500...599: return failure.retryAfter.map { Int64(max($0, 0)) * 1000 } ?? backoff
+            default: return nil
+            }
+        }
+        let transient: [URLError.Code] = [.timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .dnsLookupFailed,
+                                          .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff, .callIsActive]
+        return (error as? URLError).map(\.code).map(transient.contains) == true ? backoff : nil
+    }
+
     /// Why this phone will not generate the job, or nil when it will.
     static func refusal(_ job: GenerationJob, synth: Synthesizer, handled: Bool, now: Int64) -> String? {
         if handled { return "already_handled" }
@@ -240,7 +263,36 @@ enum Sentences {
     }
 }
 
-/// The claim → generate → encode → submit loop for one app.
+/// Thrown by `NetworkRetry` when the run stopped while it waited to try again.
+struct RetryStopped: Error {}
+
+/// Tries a request again after passing network failures (#819), waiting as `GenerationPolicy.retryDelay` says, in steps
+/// of at most a second so a stop is never kept waiting.
+struct NetworkRetry {
+    var sleep: (Int64) async throws -> Void = { try await Task.sleep(for: .milliseconds($0)) }
+
+    /// `call(attempt)` until it succeeds, fails for good, or `more(attempt, wait)` says there is no time for another try;
+    /// then its last error is thrown. `RetryStopped` when `keepGoing` turned false while waiting.
+    func run<T>(keepGoing: () -> Bool, more: (_ attempt: Int, _ waitMs: Int64) -> Bool, _ call: (_ attempt: Int) async throws -> T) async throws -> T {
+        var attempt = 0
+        while true {
+            do { return try await call(attempt) } catch {
+                guard let wait = GenerationPolicy.retryDelay(error, attempt: attempt), more(attempt + 1, wait) else { throw error }
+                attempt += 1
+                var left = wait
+                while left > 0 && keepGoing() { let step = min(left, 1_000); try await sleep(step); left -= step }
+                if !keepGoing() { throw RetryStopped() }
+            }
+        }
+    }
+
+    /// At most `GenerationPolicy.retryAttempts` tries: a claim or a verdict refresh.
+    func attempts<T>(keepGoing: () -> Bool, _ call: () async throws -> T) async throws -> T {
+        try await run(keepGoing: keepGoing, more: { attempt, _ in attempt < GenerationPolicy.retryAttempts }) { _ in try await call() }
+    }
+}
+
+/// The claim → generate → encode → submit loop over the apps this phone contributes to.
 final class Contributor {
     private let client: GenerationClient
     private let log: ContributionLog
@@ -252,43 +304,63 @@ final class Contributor {
     private let stopReason: () -> String
     private let hot: () -> Bool
     private let coolDown: Duration
+    private let retry: NetworkRetry
 
     /// `stopReason` names why `keepGoing` turned false, for the record. While `hot()` (the phone is too warm) the work
     /// waits between sentences and before claiming, checking every `coolDown` and keeping the lease alive, then goes on.
     init(client: GenerationClient, log: ContributionLog, synth: Synthesizer, encoder: @escaping (URL, Int) throws -> AudioSink, workDir: URL,
          attestation: Attestation = .none, now: @escaping () -> Int64 = CompanionRepository.now,
-         stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false }, coolDown: Duration = .seconds(10)) {
+         stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false }, coolDown: Duration = .seconds(10),
+         retry: NetworkRetry = NetworkRetry()) {
         self.client = client; self.log = log; self.synth = synth; self.encoder = encoder; self.workDir = workDir
         self.attestation = attestation; self.now = now; self.stopReason = stopReason; self.hot = hot; self.coolDown = coolDown
+        self.retry = retry
     }
 
-    /// Works through `appId`'s open jobs until none is left, `keepGoing` turns false, or a job is not submitted (it keeps
-    /// its lease until expiry, so the next run continues). Returns how many were submitted. A `401` is thrown.
-    func run(_ appId: String, keepGoing: @escaping () -> Bool, progress: (GenerationJob) -> Void = { _ in }) async throws -> Int {
+    /// Takes one job from each app in turn (#819), so every app moves forward, until none has a job left or `keepGoing`
+    /// turns false. An app leaves the rotation when it has no open job, `optedIn` turns false for it, or a job of it is
+    /// not submitted (that job keeps its lease until expiry, so a later run continues). Returns how many were submitted.
+    /// A `401` is thrown, and so is a claim that still fails after its network retries.
+    func run(_ apps: [String], keepGoing: @escaping () -> Bool, optedIn: @escaping (String) -> Bool = { _ in true },
+             progress: (String, GenerationJob) -> Void = { _, _ in }) async throws -> Int {
         var submitted = 0
-        while keepGoing() {
-            while hot() && keepGoing() { try await Task.sleep(for: coolDown) }
-            if !keepGoing() { break }
-            guard let job = try await client.claim(appId, models: [synth.model]) else { break }
-            progress(job)
-            guard try await process(appId, job, keepGoing) else { break }
-            submitted += 1
+        var rotation = apps
+        while !rotation.isEmpty && keepGoing() {
+            for app in rotation {
+                let go = { keepGoing() && optedIn(app) }
+                var stays = false
+                while hot() && go() { try await Task.sleep(for: coolDown) }
+                if go() {
+                    let job: GenerationJob?
+                    do { job = try await retry.attempts(keepGoing: go) { try await self.client.claim(app, models: [self.synth.model]) } }
+                    catch is RetryStopped { job = nil }
+                    if let job {
+                        progress(app, job)
+                        stays = try await process(app, job, go, optedIn: { optedIn(app) })
+                        if stays { submitted += 1 }
+                    }
+                }
+                if !stays { rotation.removeAll { $0 == app } }
+                if !keepGoing() { break }
+            }
         }
         return submitted
     }
 
-    private func process(_ appId: String, _ job: GenerationJob, _ keepGoing: @escaping () -> Bool) async throws -> Bool {
+    private func process(_ appId: String, _ job: GenerationJob, _ keepGoing: @escaping () -> Bool, optedIn: @escaping () -> Bool) async throws -> Bool {
         let handled = log.handled(job.id)
         if let reason = GenerationPolicy.refusal(job, synth: synth, handled: handled, now: now()) {
             if !handled { try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "skipped", reason: reason)) }
             return false
         }
+        let stopped = { optedIn() ? self.stopReason() : "opted_out" }
         let file = workDir.appendingPathComponent("contribution.m4a")
         defer { try? FileManager.default.removeItem(at: file) }
         let lease = Lease(client: client, appId: appId, job: job, now: now)
+        var retried = false
         do {
             guard let segments = try await narrate(job, file, lease, keepGoing) else {
-                try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "skipped", reason: keepGoing() ? "lease_expired" : stopReason()))
+                try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "skipped", reason: keepGoing() ? "lease_expired" : stopped()))
                 return false
             }
             let meta: [String: Any] = ["segments": segments]
@@ -301,15 +373,25 @@ final class Contributor {
             if let refusal { try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "skipped", reason: refusal)); return false }
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
             try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "uploading"))
-            _ = try await client.submit(appId, job: job, file: file, contentType: GenerationPolicy.contentType, meta: meta,
-                                        attestation: attestation.token(appId, job))
+            // The same file, sent again after a network failure while the lease leaves time (#819); never generated again.
+            _ = try await retry.run(keepGoing: keepGoing, more: { _, wait in retried = true; return lease.held(after: wait) }) { attempt in
+                if attempt > 0 { try await lease.renew() }
+                return try await self.client.submit(appId, job: job, file: file, contentType: GenerationPolicy.contentType, meta: meta,
+                                                    attestation: self.attestation.token(appId, job))
+            }
             try log.updateStatus(job.id, status: "pending", reason: "")
             return true
+        } catch is RetryStopped {
+            try log.updateStatus(job.id, status: "skipped", reason: stopped())
+            return false
         } catch {
             if (error as? ApiFailure)?.status == 401 { throw error }
-            let reason = String((((error as? ApiFailure).map { "\($0.status) " } ?? "") + error.localizedDescription).prefix(120))
+            let reason = GenerationPolicy.retryDelay(error, attempt: 0) != nil ? "network"
+                : String((((error as? ApiFailure).map { "\($0.status) " } ?? "") + error.localizedDescription).prefix(120))
             if log.handled(job.id) { try log.updateStatus(job.id, status: "failed", reason: reason) }
             else { try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "failed", reason: reason)) }
+            // An upload whose answer was lost may have arrived (a retry then finds the lease used): the server's record says.
+            if retried { try? await client.refresh(appId, log: log) }
             return false
         }
     }
@@ -370,7 +452,10 @@ private final class Lease: @unchecked Sendable {
     }
 
     /// Whether there is still time to finish and upload.
-    var held: Bool { lock.withLock { now() < expiresAt - GenerationPolicy.leaseMarginMs } }
+    var held: Bool { held(after: 0) }
+
+    /// Whether there will still be time to upload `ms` from now.
+    func held(after ms: Int64) -> Bool { lock.withLock { now() + ms < expiresAt - GenerationPolicy.leaseMarginMs } }
 
     func renew() async throws {
         let due = lock.withLock { extendable && now() >= expiresAt - GenerationPolicy.extendWithinMs }

@@ -3,6 +3,8 @@ import Foundation
 struct ApiFailure: LocalizedError {
     let status: Int
     let message: String
+    /// The response's `Retry-After` in seconds, when it gave a number (#819).
+    var retryAfter: Int?
     var errorDescription: String? { message }
 }
 
@@ -89,7 +91,8 @@ final class FasApi: Sendable {
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         let result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         guard (200...299).contains(code) else {
-            throw ApiFailure(status: code, message: result["error"] as? String ?? "Could not reach FreeAppStore (\(code)).")
+            throw ApiFailure(status: code, message: result["error"] as? String ?? "Could not reach FreeAppStore (\(code)).",
+                             retryAfter: (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Retry-After").flatMap { Int($0) })
         }
         return result
     }

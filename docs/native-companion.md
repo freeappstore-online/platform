@@ -139,8 +139,19 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   over a cellular or Low Data network. **Run now** runs in the foreground while the app is open and keeps the screen awake
   meanwhile (auto-lock would otherwise background the app). When iOS ends either (the task's expiration handler, or the
   app's background time running out after leaving it), the job in hand stops between sentences and is not uploaded.
+  Leaving the app during **Run now**, or Run now ending with `background_expired`, submits the background task request
+  with no earliest start (#819), so the work goes on as soon as iOS allows on external power; the tab says plainly that
+  Run now needs the app on screen and background runs happen while charging.
   Unplugging stops a background run. A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
   `unplugged`, `opted_out` or `lease_expired`, shown in the tab's recent results.
+- **Order** (#819): one job per opted-in app in turn (Books, then Dialogue, then Books, …), so every app moves forward;
+  an app leaves the rotation for the run when it has no open job, is turned off, or a job of it is not submitted.
+- **Network** (#819): claims, uploads and verdict refreshes are tried again after passing failures (no connection, DNS,
+  timeouts, a dropped connection, 5xx, 408, and 429 only with `Retry-After`), waiting 2 s doubling to 60 s, or what
+  `Retry-After` says; a failed lease extension is tried again at the next sentence or upload try. A claim or refresh
+  gets six tries; an upload keeps the encoded file and sends the
+  same file again for as long as the lease leaves time, then gives up as `failed` with reason `network`. Nothing is ever
+  generated twice. If a retry finds the lease already used (the earlier answer was lost), the server's record is read.
 - **Languages** (#812), as on Android: a set's `language` (#810) must match its voice: `en` with an `a…`/`b…` voice, `es`
   with `e…`, `zh` (`zh-Hans`, `zh-CN`, …) with `zf_`/`zm_`; a set naming no language goes by the voice. Anything else is
   skipped with reason `language`. Mandarin is spoken through `lexicon-zh` with the package's `date-zh`, `phone-zh` and
@@ -150,7 +161,8 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
 - **Heat**: while the thermal state is *serious* or *critical* the run pauses between sentences (and before claiming),
   keeps extending the job's lease, and goes on once the phone is back to *fair* or *nominal*.
 - **Encoding**: each sentence and pause is written as it is synthesized into an `ExtAudioFile` (Apple's software AAC-LC
-  encoder, mono 64 kbps at Kokoro's 24 kHz, `.m4a`) in the temporary folder; the chapter is never held in memory.
+  encoder, mono 32 kbps at Kokoro's 24 kHz, `.m4a`; #798, so long chapters fit 25 MB) in the temporary folder; the
+  chapter is never held in memory.
 - **Record**: `generation_jobs` in the protected, backup-excluded queue database, refreshed from `GET …/generation/submissions`
   when the app opens. The opt-ins and the record are cleared by **Disconnect**.
 - **Attestation**: the `Attestation` hook is where an App Attest assertion for `X-Attestation` goes (#732); it returns

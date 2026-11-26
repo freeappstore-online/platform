@@ -1,11 +1,12 @@
 import AudioToolbox
 import Foundation
 
-/// Mono float PCM to AAC-LC in an MP4 (`.m4a`, `audio/mp4`), 64 kbps, with ExtAudioFile (#733), as the Android companion's
-/// AacEncoder does with MediaCodec. Fed as the audio is synthesized, so a chapter is never held in memory whole. Apple's
-/// software codec, so encoding never depends on the audio hardware while the app is in the background.
+/// Mono float PCM to AAC-LC in an MP4 (`.m4a`, `audio/mp4`), 32 kbps (#798, so a long chapter at Kokoro's 24 kHz fits the
+/// 25 MB cap), with ExtAudioFile (#733), as the Android companion's AacEncoder does with MediaCodec. Fed as the audio is
+/// synthesized, so a chapter is never held in memory whole. Apple's software codec, so encoding never depends on the audio
+/// hardware while the app is in the background.
 final class AacEncoder: AudioSink {
-    static let bitRate: UInt32 = 64_000
+    static let bitRate: UInt32 = 32_000
     private var file: ExtAudioFileRef?
 
     init(url: URL, sampleRate: Int) throws {

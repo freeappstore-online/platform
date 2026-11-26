@@ -3,15 +3,18 @@ import Foundation
 import UIKit
 
 /// Contribute (#733), the iOS counterpart of the Android ContributeWorker: downloads the voice model when asked, then
-/// works through each opted-in app's open jobs. Runs as a BGProcessingTask, which iOS starts only while the phone is on
-/// external power with a network connection, and on Run now while the app is open. iOS ending either (the task's
-/// expiration, or the app leaving the foreground) stops the job in hand without uploading it.
+/// works through the opted-in apps' open jobs, one app at a time in turn. Runs as a BGProcessingTask, which iOS starts
+/// only while the phone is on external power with a network connection, and on Run now while the app is open. iOS ending
+/// either (the task's expiration, or the app leaving the foreground) stops the job in hand without uploading it; a Run
+/// now cut short that way asks for the background run at once.
 @MainActor
 final class ContributeRunner: ObservableObject {
     static let taskId = "online.freeappstore.companion.contribute"
 
     /// What the run is doing, nil while idle.
     @Published private(set) var status: String?
+    /// The app whose job is in hand, while generating.
+    @Published private(set) var app: String?
     /// The last run's failure, until the next run starts. In memory only.
     @Published private(set) var lastError = ""
     /// The run is waiting for the phone to cool down.
@@ -37,8 +40,10 @@ final class ContributeRunner: ObservableObject {
         }
     }
 
-    /// Asks iOS for a background run while paired with something to do: an app opted in, or the model asked for.
-    func schedule() {
+    /// Asks iOS for a background run while paired with something to do: an app opted in, or the model asked for. `soon`
+    /// (a Run now cut short by leaving the app, #819) asks for it as soon as iOS allows rather than in 15 minutes; it
+    /// still needs external power and a network connection.
+    func schedule(soon: Bool = false) {
         let todo = !local.contributeApps().isEmpty || (local.modelWanted && !kokoro.installed)
         guard repository.token() != nil, todo else {
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: Self.taskId)
@@ -47,7 +52,7 @@ final class ContributeRunner: ObservableObject {
         let request = BGProcessingTaskRequest(identifier: Self.taskId)
         request.requiresExternalPower = true
         request.requiresNetworkConnectivity = true
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+        request.earliestBeginDate = soon ? nil : Date(timeIntervalSinceNow: 15 * 60)
         try? BGTaskScheduler.shared.submit(request)
     }
 
@@ -56,13 +61,16 @@ final class ContributeRunner: ObservableObject {
         let flag = StopFlag()
         task.expirationHandler = { flag.stop("background_expired") }
         Task {
+            // A Run now that just lost the foreground ends at its next sentence; this run then takes over.
+            while running && !flag.stopped { try? await Task.sleep(for: .seconds(1)) }
             await run(flag, background: true)
             task.setTaskCompleted(success: !flag.stopped)
         }
     }
 
     /// Runs now, while the app is open, with the screen kept awake: auto-lock would send the app to the background,
-    /// where iOS ends the extra time after about 30 seconds.
+    /// where iOS ends the extra time after about 30 seconds. When that cuts the run short, the background run is asked
+    /// for straight away (#819), so the work goes on once the phone is charging.
     func runNow() {
         guard !running else { return }
         let flag = StopFlag()
@@ -76,6 +84,7 @@ final class ContributeRunner: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
         Task {
             await run(flag, background: false)
+            if flag.reason == "background_expired" { schedule(soon: true) }
             UIApplication.shared.isIdleTimerDisabled = idle
             if id.value != .invalid { UIApplication.shared.endBackgroundTask(id.value) }
         }
@@ -86,14 +95,20 @@ final class ContributeRunner: ObservableObject {
 
     /// The server's verdicts on this phone's contributions. A refresh only.
     func refreshVerdicts() async {
-        for app in local.contributeApps() { try? await client.refresh(app, log: local) }
+        for app in local.contributeApps() { try? await refresh(app, keepGoing: { true }) }
+    }
+
+    /// One app's verdicts, tried again after passing network failures (#819).
+    private func refresh(_ app: String, keepGoing: () -> Bool) async throws {
+        let (client, local) = (client, local)
+        try await NetworkRetry().attempts(keepGoing: keepGoing) { try await client.refresh(app, log: local) }
     }
 
     private func run(_ flag: StopFlag, background: Bool) async {
         guard stopFlag == nil, repository.token() != nil else { return }
         stopFlag = flag
         lastError = ""
-        defer { stopFlag = nil; status = nil; cooling = false }
+        defer { stopFlag = nil; status = nil; app = nil; cooling = false }
         // A background run needs external power: unplugging stops it (iOS would end it soon anyway).
         UIDevice.current.isBatteryMonitoringEnabled = true
         let unplugged = background ? NotificationCenter.default.addObserver(
@@ -124,13 +139,12 @@ final class ContributeRunner: ObservableObject {
             let local = self.local
             for app in apps {
                 if !keepGoing() { break }
-                do { try await client.refresh(app, log: local) } catch let failure as ApiFailure where failure.status == 401 { throw failure } catch {}
-                let contributor = Contributor(client: client, log: local, synth: synth, encoder: { try AacEncoder(url: $0, sampleRate: $1) },
-                                              workDir: FileManager.default.temporaryDirectory,
-                                              stopReason: { flag.reason ?? (local.contributeApps().contains(app) ? "stopped" : "opted_out") }, hot: hot)
-                _ = try await contributor.run(app, keepGoing: { keepGoing() && local.contributeApps().contains(app) }) { job in
-                    Task { @MainActor in self.status = "Generating \(job.key)" }
-                }
+                do { try await refresh(app, keepGoing: keepGoing) } catch let failure as ApiFailure where failure.status == 401 { throw failure } catch {}
+            }
+            let contributor = Contributor(client: client, log: local, synth: synth, encoder: { try AacEncoder(url: $0, sampleRate: $1) },
+                                          workDir: FileManager.default.temporaryDirectory, stopReason: { flag.reason ?? "stopped" }, hot: hot)
+            _ = try await contributor.run(apps, keepGoing: keepGoing, optedIn: { local.contributeApps().contains($0) }) { app, job in
+                Task { @MainActor in self.app = app; self.status = "Generating \(job.key)" }
             }
         } catch let failure as ApiFailure where failure.status == 401 {
             try? await repository.sync() // the connection expired: the sync marks it, and the expired card says so

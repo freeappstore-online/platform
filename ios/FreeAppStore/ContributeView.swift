@@ -10,7 +10,7 @@ enum ContributeText {
             + "and upload the result to FreeAppStore under your account. It only ever generates exactly what \(name)'s publisher "
             + "asked for, never anything you type, and FreeAppStore checks every upload before anyone hears it. It needs a "
             + "\(KokoroModel.downloadBytes / 1_000_000) MB voice model, and it runs in the background only while this phone is "
-            + "charging and online, or when you tap Run now."
+            + "charging and online, or while FreeAppStore is open on screen after you tap Run now."
     }
 
     /// The labels of `Contribution.status`.
@@ -21,9 +21,11 @@ enum ContributeText {
 
     /// Why a job was skipped, when this phone stopped it; other reasons are shown as recorded.
     static let reasons = [
-        "user_stop": "you tapped Stop", "background_expired": "iOS ended the time it gave FreeAppStore",
+        "user_stop": "you tapped Stop",
+        "background_expired": "FreeAppStore left the screen or iOS ended its background time; it carries on while charging",
         "unplugged": "the phone was unplugged", "opted_out": "the app was turned off", "lease_expired": "the job's time ran out",
         "stopped": "stopped", "language": "this phone can't speak the set's language in that voice",
+        "network": "no connection to FreeAppStore before the job's time ran out",
     ]
 }
 
@@ -140,12 +142,14 @@ struct ContributeView: View {
     private var running: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text(runner.status ?? "Not running").font(.headline)
+                Text((runner.app.map { "\(catalogue.name($0)) · " } ?? "") + (runner.status ?? "Not running")).font(.headline)
                 if runner.running && runner.cooling {
                     Text("Paused while the phone cools down. It goes on by itself.").foregroundStyle(.orange)
                 }
                 if !runner.lastError.isEmpty { Text(runner.lastError).foregroundStyle(.red) }
-                Text("Runs in the background while this phone is charging and online, when iOS allows. Run now keeps the screen on while FreeAppStore is open; leaving the app stops the job in hand without uploading.")
+                Text("Run now needs FreeAppStore open on screen; it keeps the screen on meanwhile. Leaving the app stops the job in hand without uploading.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Text("Background runs happen only while this phone is charging and online, when iOS allows. If you leave during Run now, it carries on in the background once the phone is charging.")
                     .font(.footnote).foregroundStyle(.secondary)
                 if runner.running {
                     Button("Stop") { model.stopContributing() }.buttonStyle(.bordered)
@@ -163,7 +167,7 @@ struct ContributeView: View {
         if model.contributeApps.isEmpty {
             Text("No apps yet. Turn on Contribute on an app's page in the Store, or from an app that asks for help.").foregroundStyle(.secondary)
         }
-        ForEach(model.contributeApps.sorted(), id: \.self) { id in
+        ForEach(model.contributeApps.sorted { catalogue.name($0).localizedStandardCompare(catalogue.name($1)) == .orderedAscending }, id: \.self) { id in
             GroupBox {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(catalogue.name(id)).font(.headline)
