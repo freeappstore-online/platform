@@ -89,7 +89,6 @@ jobs:
           fi
           BUMPED=""
           FAILED=""
-          BEFORE="${{ github.event.before }}"
 
           # Keep in-source version constants in lockstep with package.json so
           # version.test.ts can't drift on release (the SDK telemetry version in
@@ -137,12 +136,14 @@ jobs:
               BUMPED="$BUMPED $PKG_NAME@$NPM_VER"
 
             else
-              # Version matches npm — auto-bump only if this package has changes
+              # Version matches npm — auto-bump only if this package changed since
+              # its version last changed (auto-bump, manual bump or heal), i.e. since
+              # it was last published. Not since this push's `before`: a queued run
+              # cancelled by the concurrency group would drop its changes (#778).
               HAS_CHANGES=true
-              if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
-                if git diff --quiet "$BEFORE" HEAD -- "packages/$PKG/"; then
-                  HAS_CHANGES=false
-                fi
+              LAST_RELEASE=$(git log -G'"version"' -1 --format=%H -- "packages/$PKG/package.json")
+              if [ -n "$LAST_RELEASE" ] && git diff --quiet "$LAST_RELEASE" HEAD -- "packages/$PKG/"; then
+                HAS_CHANGES=false
               fi
 
               if [ "$HAS_CHANGES" = "true" ]; then
