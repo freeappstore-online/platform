@@ -132,9 +132,19 @@ and verifies every upload; the phone is never trusted.
 The iPhone companion does the same work as the Android one, with the same rules: per-app opt-in, the same Kokoro model and
 claims, the same skipping, sentence timings, lease extension, upload checks and on-device record. Only what differs on iOS:
 
-- **Where**: a **Contribute** tab (voice model, the current run with **Run now** / **Stop**, the apps opted in with today's
-  count, recent results), a **Contribute from this phone** switch on each app's Store page while signed in, and the link
-  `freeappstore://native/contribute/<appId>`. Each asks first; a link never opts in by itself.
+- **Where** (#820): the **Contribute** tab is one status card (running, paused while hot, idle or stopped and why, the
+  app and job in hand, sentence n of N with speed as audio seconds per second, **Run now** / **Stop**) and today's counts
+  as chips (Accepted, Checking, Rejected, Not done) that open **Activity** filtered. **Activity** lists every job this
+  phone tried, newest first, grouped by day, filtered by status (All · Accepted · Checking · Rejected · Not done) and by
+  app; pull to refresh reads the server's verdicts for every app on the record. A row opens the job: app, key, when, the
+  audio's length and size, this phone's reason or the server's verdict and reason (and error rate when the server sends
+  `wer`), the job's text, and **Play** for an accepted job from the public artifact URL, marking each sentence from the
+  public meta's `segments` as it plays. The gear opens **Contribute settings**: the apps opted in or with open jobs
+  (`GET /generation/open`, Kokoro sets only) with their switch and open-job count, the voice model download, progress
+  and delete, **Only while charging** (on by default; off, the background task no longer asks for external power and
+  unplugging no longer stops it), and the space the model and the record take. A **Contribute from this phone** switch
+  is also on each app's Store page while signed in, and the link `freeappstore://native/contribute/<appId>`. Each asks
+  first; a link never opts in by itself.
 - **Runtime**: the official sherpa-onnx `2.0.3` iOS xcframework with onnxruntime linked in
   (`sherpa-onnx-v2.0.3-ios-shared-onnxruntime-static.xcframework.zip`), called through its C API. The scheme's build
   pre-action (`ios/scripts/fetch-sherpa-onnx.sh`) fetches it into the untracked `ios/Vendor/` and refuses it unless its
@@ -172,7 +182,9 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   encoder, mono 32 kbps at Kokoro's 24 kHz, `.m4a`; #798, so long chapters fit 25 MB) in the temporary folder; the
   chapter is never held in memory.
 - **Record**: `generation_jobs` in the protected, backup-excluded queue database, refreshed from `GET …/generation/submissions`
-  when the app opens. The opt-ins and the record are cleared by **Disconnect**.
+  when the app opens and on pull to refresh in Activity. Since #820 (migration 1, `PRAGMA user_version`) it also keeps the
+  job's text and set, the audio's length and size, and the server's error rate when given. The opt-ins and the record are
+  cleared by **Disconnect**.
 - **Attestation**: the `Attestation` hook is where an App Attest assertion for `X-Attestation` goes (#732); it returns
   nothing yet, so nothing is sent.
 

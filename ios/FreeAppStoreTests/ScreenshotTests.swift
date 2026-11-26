@@ -53,7 +53,11 @@ final class ScreenshotTests: XCTestCase {
         // #733: two apps opted in, a few results.
         try local.setContributing("books", true)
         try local.setContributing("sayback", true)
-        try local.record(Contribution(jobId: "j1", appId: "books", key: "pride-and-prejudice/ch-01", at: now - 3_600_000, status: "accepted"))
+        let chapter = "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."
+        try local.record(Contribution(jobId: "j1", appId: "books", key: "pride-and-prejudice/ch-01", at: now - 3_600_000, status: "accepted",
+                                      input: chapter, setId: "s1", durationMs: 7_400, bytes: 31_000, wer: 0.04))
+        try local.record(Contribution(jobId: "j0", appId: "books", key: "pride-and-prejudice/ch-00", at: now - 90_000_000, status: "rejected",
+                                      reason: "wer", input: chapter, durationMs: 7_100, bytes: 30_000, wer: 0.41))
         try local.record(Contribution(jobId: "j2", appId: "books", key: "pride-and-prejudice/ch-02", at: now - 600_000, status: "pending"))
         try local.record(Contribution(jobId: "j3", appId: "sayback", key: "es/hola", at: now - 300_000, status: "skipped", reason: "params"))
         let configuration = URLSessionConfiguration.ephemeral
@@ -104,6 +108,24 @@ final class ScreenshotTests: XCTestCase {
                 try save(large, to: "\(output)/contribute-ax5-\(name)-\(page).png")
             }
             large.isHidden = true
+            // #820: Activity, a job's detail and Contribute settings, at the largest accessibility size and the default one.
+            let accepted = try XCTUnwrap(model.allContributions().first { $0.jobId == "j1" })
+            let screens: [(String, AnyView)] = [
+                ("activity", AnyView(ContributeActivityView(model: model, catalogue: catalogue))),
+                ("job", AnyView(ContributionDetailView(contribution: accepted, appName: catalogue.name("books")))),
+                ("settings", AnyView(ContributeSettingsView(model: model, runner: model.contribute, catalogue: catalogue))),
+            ]
+            for (screen, view) in screens {
+                for (label, size) in [("ax5", DynamicTypeSize.accessibility5), ("default", .large)] {
+                    let window = UIWindow(windowScene: scene)
+                    window.overrideUserInterfaceStyle = style
+                    window.rootViewController = UIHostingController(rootView: NavigationStack { view }.environment(\.dynamicTypeSize, size))
+                    window.makeKeyAndVisible()
+                    try await Task.sleep(for: .seconds(2))
+                    try save(window, to: "\(output)/contribute-\(screen)-\(label)-\(name).png")
+                    window.isHidden = true
+                }
+            }
             for tab in [ContentView.Tab.store, .sharing, .contribute, .settings] {
                 let window = UIWindow(windowScene: scene)
                 window.overrideUserInterfaceStyle = style

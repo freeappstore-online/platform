@@ -24,11 +24,12 @@ final class FasApi: Sendable {
         session = URLSession(configuration: configuration, delegate: RefuseRedirects(), delegateQueue: nil)
     }
 
-    /// The device credential goes to the native routes and to the contributor routes of community generation (#733).
-    private static let allowed = try! NSRegularExpression(pattern: "^/(native/|apps/[a-z0-9][a-z0-9-]{0,62}/generation/)")
+    /// The device credential goes to the native routes and to the contributor routes of community generation (#733),
+    /// discovery included (#820).
+    private static let allowed = try! NSRegularExpression(pattern: "^/(native/|generation/open$|apps/[a-z0-9][a-z0-9-]{0,62}/generation/)")
 
-    /// The only URLs a request may target: `/v1/native/*` and `/v1/apps/<id>/generation/*` on the fixed origin, with no
-    /// `..` segment. Nil for any other path.
+    /// The only URLs a request may target: `/v1/native/*`, `/v1/generation/open` and `/v1/apps/<id>/generation/*` on the
+    /// fixed origin, with no `..` segment. Nil for any other path.
     static func endpoint(_ path: String) -> URL? {
         guard !path.contains(".."), allowed.firstMatch(in: path, range: NSRange(location: 0, length: path.utf16.count)) != nil else { return nil }
         return URL(string: "\(ORIGIN)/v1\(path)")

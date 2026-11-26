@@ -54,6 +54,16 @@ final class LocalStore: @unchecked Sendable {
               at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '')
             """)
         try exec("CREATE INDEX IF NOT EXISTS generation_jobs_at ON generation_jobs(at)")
+        // Migration 1 (#820): what the Activity screen shows, added to a record kept since #733.
+        if (try query("PRAGMA user_version") { sqlite3_column_int64($0, 0) }.first ?? 0) < 1 {
+            try transaction {
+                for column in ["input TEXT NOT NULL DEFAULT ''", "set_id TEXT NOT NULL DEFAULT ''", "duration_ms INTEGER NOT NULL DEFAULT 0",
+                               "bytes INTEGER NOT NULL DEFAULT 0", "wer REAL"] {
+                    try exec("ALTER TABLE generation_jobs ADD COLUMN \(column)")
+                }
+                try exec("PRAGMA user_version = 1")
+            }
+        }
         for path in [fileURL.path, fileURL.path + "-wal", fileURL.path + "-shm"] where FileManager.default.fileExists(atPath: path) {
             try FileManager.default.setAttributes(protection, ofItemAtPath: path)
         }
@@ -406,13 +416,37 @@ final class LocalStore: @unchecked Sendable {
         set { try? setSetting("modelWanted", newValue ? "1" : "0") }
     }
 
+    /// Background runs wait for external power (#820). On by default.
+    var chargingOnly: Bool {
+        get { setting("chargingOnly") != "0" }
+        set { try? setSetting("chargingOnly", newValue ? "1" : "0") }
+    }
+
     /// Newest first.
     func contributions(limit: Int = 30) throws -> [Contribution] {
-        try query("SELECT job_id, app_id, job_key, at, status, reason FROM generation_jobs ORDER BY at DESC LIMIT ?", [Int64(limit)]) { row in
+        try query("""
+            SELECT job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer FROM generation_jobs
+            ORDER BY at DESC LIMIT ?
+            """, [Int64(limit)]) { row in
             Contribution(jobId: String(cString: sqlite3_column_text(row, 0)), appId: String(cString: sqlite3_column_text(row, 1)),
                          key: String(cString: sqlite3_column_text(row, 2)), at: sqlite3_column_int64(row, 3),
-                         status: String(cString: sqlite3_column_text(row, 4)), reason: String(cString: sqlite3_column_text(row, 5)))
+                         status: String(cString: sqlite3_column_text(row, 4)), reason: String(cString: sqlite3_column_text(row, 5)),
+                         input: String(cString: sqlite3_column_text(row, 6)), setId: String(cString: sqlite3_column_text(row, 7)),
+                         durationMs: sqlite3_column_int64(row, 8), bytes: sqlite3_column_int64(row, 9),
+                         wer: sqlite3_column_type(row, 10) == SQLITE_NULL ? nil : sqlite3_column_double(row, 10))
         }
+    }
+
+    /// How many jobs since `from` are in each status.
+    func contributionCounts(since from: Int64) throws -> [String: Int] {
+        Dictionary(uniqueKeysWithValues: try query("SELECT status, COUNT(*) FROM generation_jobs WHERE at >= ? GROUP BY status", [from]) {
+            (String(cString: sqlite3_column_text($0, 0)), Int(sqlite3_column_int64($0, 1)))
+        })
+    }
+
+    /// Every app this phone has a job of, opted in or not.
+    func contributionApps() throws -> Set<String> {
+        Set(try query("SELECT DISTINCT app_id FROM generation_jobs") { String(cString: sqlite3_column_text($0, 0)) })
     }
 
     /// Jobs this phone generated for the app since `from`, uploaded or on their way.
@@ -489,12 +523,16 @@ extension LocalStore: ContributionLog {
     }
 
     func record(_ contribution: Contribution) throws {
-        try exec("INSERT OR REPLACE INTO generation_jobs(job_id, app_id, job_key, at, status, reason) VALUES (?, ?, ?, ?, ?, ?)",
-                 [contribution.jobId, contribution.appId, String(contribution.key.prefix(200)), contribution.at, contribution.status,
-                  String(contribution.reason.prefix(120))])
+        try exec("""
+            INSERT OR REPLACE INTO generation_jobs(job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [contribution.jobId, contribution.appId, String(contribution.key.prefix(200)), contribution.at, contribution.status,
+                  String(contribution.reason.prefix(120)), contribution.input, contribution.setId, contribution.durationMs, contribution.bytes,
+                  contribution.wer ?? NSNull()])
     }
 
-    func updateStatus(_ jobId: String, status: String, reason: String) throws {
-        try exec("UPDATE generation_jobs SET status = ?, reason = ? WHERE job_id = ?", [status, String(reason.prefix(120)), jobId])
+    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?) throws {
+        try exec("UPDATE generation_jobs SET status = ?, reason = ?, wer = COALESCE(?, wer) WHERE job_id = ?",
+                 [status, String(reason.prefix(120)), wer ?? NSNull(), jobId])
     }
 }

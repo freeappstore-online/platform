@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The voice model on this phone (#733).
 enum ModelState { case none, waiting, installed }
@@ -10,7 +11,7 @@ enum ContributeText {
             + "and upload the result to FreeAppStore under your account. It only ever generates exactly what \(name)'s publisher "
             + "asked for, never anything you type, and FreeAppStore checks every upload before anyone hears it. It needs a "
             + "\(KokoroModel.downloadBytes / 1_000_000) MB voice model, and it runs in the background only while this phone is "
-            + "charging and online, or while FreeAppStore is open on screen after you tap Run now."
+            + "charging and online (you can change that in Contribute settings), or while FreeAppStore is open on screen after you tap Run now."
     }
 
     /// The labels of `Contribution.status`.
@@ -27,6 +28,42 @@ enum ContributeText {
         "stopped": "stopped", "language": "this phone can't speak the set's language in that voice",
         "network": "no connection to FreeAppStore before the job's time ran out",
     ]
+
+    /// The status card's headline and why (#820). `downloading`: the run is fetching the voice model.
+    static func state(running: Bool, cooling: Bool, downloading: Bool, hasApps: Bool, model: ModelState, lastStop: String?,
+                      charging: Bool, chargingOnly: Bool) -> (title: String, why: String) {
+        if running {
+            if cooling { return ("Paused", "The phone is hot. It goes on by itself once it cools down.") }
+            return ("Running", downloading ? "Downloading the voice model." : "Generating audio on this phone.")
+        }
+        if !hasApps { return ("Idle", "No apps turned on. Turn one on in settings, on an app's page in the Store, or from an app that asks for help.") }
+        switch model {
+        case .none: return ("Idle", "The voice model isn't on this phone. Download it in settings.")
+        case .waiting: return ("Waiting", "The voice model downloads while the phone charges on Wi-Fi, or tap Run now.")
+        case .installed: break
+        }
+        if let lastStop { return ("Stopped", "Stopped because \(reasons[lastStop] ?? lastStop).") }
+        if chargingOnly && !charging { return ("Idle", "Waiting for the phone to charge. Background runs need power and a connection.") }
+        return ("Idle", chargingOnly ? "Runs in the background while the phone charges and is online, when iOS allows."
+            : "Runs in the background when iOS allows, most often while the phone charges.")
+    }
+}
+
+/// The Activity filter (#820), and which statuses each one shows.
+enum ContributeFilter: String, CaseIterable, Identifiable {
+    case all = "All", accepted = "Accepted", checking = "Checking", rejected = "Rejected", notDone = "Not done"
+    var id: Self { self }
+
+    static func of(_ status: String) -> ContributeFilter {
+        switch status {
+        case "accepted": .accepted
+        case "uploading", "pending": .checking
+        case "rejected": .rejected
+        default: .notDone // skipped, failed, superseded
+        }
+    }
+
+    func shows(_ status: String) -> Bool { self == .all || Self.of(status) == self }
 }
 
 extension CatalogueStore {
@@ -80,12 +117,13 @@ struct AdaptiveToggle: View {
     }
 }
 
-/// The Contribute tab: voice model, the current run, the apps opted in and recent results.
+/// The Contribute tab (#820): what the run is doing, and today's results, each opening Activity filtered. Settings sit
+/// behind the gear.
 struct ContributeView: View {
     @ObservedObject var model: CompanionModel
     @ObservedObject var runner: ContributeRunner
     @ObservedObject var catalogue: CatalogueStore
-    @State private var deletePrompt = false
+    @Environment(\.dynamicTypeSize) private var size
 
     var body: some View {
         NavigationStack {
@@ -94,10 +132,8 @@ struct ContributeView: View {
                     StatusMessages(model: model)
                     Text("Help apps you use by generating their audio on this phone, such as narration for Books. Apps publish the jobs; your phone does the work while it charges.")
                     if model.signedIn {
-                        voiceModel
-                        running
-                        apps
-                        recent
+                        status
+                        today
                     } else {
                         Button("Sign in to FreeAppStore") { model.connect() }.buttonStyle(.borderedProminent).disabled(model.busy)
                     }
@@ -106,91 +142,71 @@ struct ContributeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle("Contribute")
-        }
-        .alert("Delete the voice model?", isPresented: $deletePrompt) {
-            Button("Delete", role: .destructive) { model.deleteModel() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Frees \(KokoroModel.installedBytes / 1_000_000) MB. Contributing stops until you download it again.")
-        }
-    }
-
-    private var downloadMB: Int64 { KokoroModel.downloadBytes / 1_000_000 }
-
-    private var voiceModel: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Voice model").font(.title3.bold())
-                Text("Kokoro \(KokoroModel.id.version)").font(.headline)
-                switch model.modelState {
-                case .installed:
-                    Text("Installed · \(KokoroModel.installedBytes / 1_000_000) MB").foregroundStyle(.secondary)
-                    Button("Delete model", role: .destructive) { deletePrompt = true }
-                case .waiting:
-                    Text(runner.running ? "Downloading" : "Downloads while charging on Wi-Fi, or tap Download now.").foregroundStyle(.secondary)
-                    if !runner.running { Button("Download now (\(downloadMB) MB)") { model.downloadModel() } }
-                    Button("Cancel download", role: .destructive) { model.deleteModel() }
-                case .none:
-                    Text("\(downloadMB) MB download, kept on this phone and never backed up.").foregroundStyle(.secondary)
-                    Button("Download (\(downloadMB) MB)") { model.downloadModel() }.buttonStyle(.borderedProminent)
+            .toolbar {
+                if model.signedIn {
+                    NavigationLink { ContributeSettingsView(model: model, runner: runner, catalogue: catalogue) } label: {
+                        Label("Contribute settings", systemImage: "gearshape")
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .onAppear { UIDevice.current.isBatteryMonitoringEnabled = true }
     }
 
-    private var running: some View {
-        GroupBox {
+    private var status: some View {
+        let state = ContributeText.state(running: runner.running, cooling: runner.cooling, downloading: runner.downloaded != nil,
+                                         hasApps: !model.contributeApps.isEmpty, model: model.modelState, lastStop: runner.lastStop,
+                                         charging: [.charging, .full].contains(UIDevice.current.batteryState), chargingOnly: model.chargingOnly)
+        return GroupBox {
             VStack(alignment: .leading, spacing: 8) {
-                Text((runner.app.map { "\(catalogue.name($0)) · " } ?? "") + (runner.status ?? "Not running")).font(.headline)
-                if runner.running && runner.cooling {
-                    Text("Paused while the phone cools down. It goes on by itself.").foregroundStyle(.orange)
+                Text(state.title).font(.title3.bold())
+                Text(state.why).foregroundStyle(runner.running && runner.cooling ? .orange : .secondary)
+                if let app = runner.app, let job = runner.job {
+                    Text("\(catalogue.name(app)) · \(job)").font(.headline)
+                }
+                if let sentences = runner.sentences, sentences.total > 0 {
+                    ProgressView(value: Double(sentences.done), total: Double(sentences.total)) {
+                        Text("Sentence \(min(sentences.done + 1, sentences.total)) of \(sentences.total)")
+                    } currentValueLabel: {
+                        if let speed = runner.speed { Text("\(speed.formatted(.number.precision(.fractionLength(1))))× real time") }
+                    }
+                }
+                if let downloaded = runner.downloaded {
+                    ProgressView(value: downloaded) { Text("Voice model \(Int(downloaded * 100))%") }
                 }
                 if !runner.lastError.isEmpty { Text(runner.lastError).foregroundStyle(.red) }
-                Text("Run now needs FreeAppStore open on screen; it keeps the screen on meanwhile. Leaving the app stops the job in hand without uploading.")
-                    .font(.footnote).foregroundStyle(.secondary)
-                Text("Background runs happen only while this phone is charging and online, when iOS allows. If you leave during Run now, it carries on in the background once the phone is charging.")
+                Text("Run now needs FreeAppStore open on screen and keeps the screen on meanwhile; leaving the app stops the job in hand without uploading.")
                     .font(.footnote).foregroundStyle(.secondary)
                 if runner.running {
                     Button("Stop") { model.stopContributing() }.buttonStyle(.bordered)
                 } else {
                     Button("Run now") { model.contributeNow() }.buttonStyle(.borderedProminent)
-                        .disabled(model.contributeApps.isEmpty || model.modelState != .installed)
+                        .disabled(model.modelState == .none || (model.contributeApps.isEmpty && model.modelState == .installed))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    @ViewBuilder private var apps: some View {
-        Text("Apps").font(.title3.bold())
-        if model.contributeApps.isEmpty {
-            Text("No apps yet. Turn on Contribute on an app's page in the Store, or from an app that asks for help.").foregroundStyle(.secondary)
-        }
-        ForEach(model.contributeApps.sorted { catalogue.name($0).localizedStandardCompare(catalogue.name($1)) == .orderedAscending }, id: \.self) { id in
-            GroupBox {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(catalogue.name(id)).font(.headline)
-                    Text("\(model.contributedToday[id] ?? 0) today").font(.footnote).foregroundStyle(.secondary)
-                    ContributeToggle(appId: id, name: catalogue.name(id), model: model)
+    /// Today's jobs by Activity filter, as tappable chips.
+    @ViewBuilder private var today: some View {
+        Text("Today").font(.title3.bold())
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), alignment: .top), count: size.isAccessibilitySize ? 1 : 2),
+                  alignment: .leading, spacing: 12) {
+            ForEach(ContributeFilter.allCases.filter { $0 != .all }) { filter in
+                NavigationLink { ContributeActivityView(model: model, catalogue: catalogue, filter: filter) } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(model.todayCounts.filter { filter.shows($0.key) }.values.reduce(0, +))").font(.title2.bold())
+                        Text(filter.rawValue).font(.subheadline)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(.fill.tertiary, in: RoundedRectangle(cornerRadius: 10))
+                    .accessibilityElement(children: .combine)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .buttonStyle(.plain)
             }
         }
-    }
-
-    @ViewBuilder private var recent: some View {
-        if !model.contributions.isEmpty {
-            Text("Recent").font(.title3.bold())
-            ForEach(model.contributions, id: \.jobId) { c in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("\(catalogue.name(c.appId)) · \(c.key)").font(.subheadline.weight(.semibold))
-                    Text(ContributeText.labels[c.status] ?? c.status).font(.subheadline)
-                    Text(Date(timeIntervalSince1970: Double(c.at) / 1000).formatted(.relative(presentation: .named)) + (c.reason.isEmpty ? "" : " · \(ContributeText.reasons[c.reason] ?? c.reason)"))
-                        .font(.footnote).foregroundStyle(.secondary)
-                }
-                .accessibilityElement(children: .combine)
-            }
-        }
+        NavigationLink("All activity") { ContributeActivityView(model: model, catalogue: catalogue) }
     }
 }

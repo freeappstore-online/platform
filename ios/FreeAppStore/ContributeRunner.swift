@@ -19,6 +19,14 @@ final class ContributeRunner: ObservableObject {
     @Published private(set) var lastError = ""
     /// The run is waiting for the phone to cool down.
     @Published private(set) var cooling = false
+    /// The job in hand (#820): its key, sentences done of all, and audio seconds made per second of work.
+    @Published private(set) var job: String?
+    @Published private(set) var sentences: (done: Int, total: Int)?
+    @Published private(set) var speed: Double?
+    /// The voice model download, 0...1, while downloading.
+    @Published private(set) var downloaded: Double?
+    /// Why the last run stopped before it ran out of work (a `StopFlag` reason), until the next run starts. In memory only.
+    @Published private(set) var lastStop: String?
     let kokoro: KokoroModel
     private let repository: CompanionRepository
     private let client: GenerationClient
@@ -50,7 +58,7 @@ final class ContributeRunner: ObservableObject {
             return
         }
         let request = BGProcessingTaskRequest(identifier: Self.taskId)
-        request.requiresExternalPower = true
+        request.requiresExternalPower = local.chargingOnly
         request.requiresNetworkConnectivity = true
         request.earliestBeginDate = soon ? nil : Date(timeIntervalSinceNow: 15 * 60)
         try? BGTaskScheduler.shared.submit(request)
@@ -94,8 +102,12 @@ final class ContributeRunner: ObservableObject {
     func stop() { stopFlag?.stop("user_stop") }
 
     /// The server's verdicts on this phone's contributions. A refresh only.
+    /// Discovery (#820): open jobs this phone could run now, by app.
+    func openJobs() async throws -> [String: Int] { try await client.open(model: KokoroModel.id) }
+
+    /// Every app with a job on this phone's record, opted in or not (#820).
     func refreshVerdicts() async {
-        for app in local.contributeApps() { try? await refresh(app, keepGoing: { true }) }
+        for app in local.contributeApps().union((try? local.contributionApps()) ?? []).sorted() { try? await refresh(app, keepGoing: { true }) }
     }
 
     /// One app's verdicts, tried again after passing network failures (#819).
@@ -108,10 +120,11 @@ final class ContributeRunner: ObservableObject {
         guard stopFlag == nil, repository.token() != nil else { return }
         stopFlag = flag
         lastError = ""
-        defer { stopFlag = nil; status = nil; app = nil; cooling = false }
-        // A background run needs external power: unplugging stops it (iOS would end it soon anyway).
+        lastStop = nil
+        defer { stopFlag = nil; status = nil; app = nil; cooling = false; job = nil; sentences = nil; speed = nil; downloaded = nil; lastStop = flag.reason }
+        // A background run asked for external power: unplugging stops it (iOS would end it soon anyway).
         UIDevice.current.isBatteryMonitoringEnabled = true
-        let unplugged = background ? NotificationCenter.default.addObserver(
+        let unplugged = background && local.chargingOnly ? NotificationCenter.default.addObserver(
             forName: UIDevice.batteryStateDidChangeNotification, object: nil, queue: .main) { _ in
             if UIDevice.current.batteryState == .unplugged { flag.stop("unplugged") }
         } : nil
@@ -128,8 +141,12 @@ final class ContributeRunner: ObservableObject {
             if local.modelWanted && !kokoro.installed {
                 status = "Downloading the voice model"
                 _ = try await kokoro.install(cellular: !background, progress: { bytes in
-                    Task { @MainActor in self.status = "Downloading the voice model · \(bytes * 100 / KokoroModel.downloadBytes)%" }
+                    Task { @MainActor in
+                        self.status = "Downloading the voice model · \(bytes * 100 / KokoroModel.downloadBytes)%"
+                        self.downloaded = min(Double(bytes) / Double(KokoroModel.downloadBytes), 1)
+                    }
                 }, keepGoing: keepGoing)
+                downloaded = nil
             }
             let apps = local.contributeApps().sorted()
             guard kokoro.installed, !apps.isEmpty else { return }
@@ -141,10 +158,19 @@ final class ContributeRunner: ObservableObject {
                 if !keepGoing() { break }
                 do { try await refresh(app, keepGoing: keepGoing) } catch let failure as ApiFailure where failure.status == 401 { throw failure } catch {}
             }
+            let started = Box(Date())
             let contributor = Contributor(client: client, log: local, synth: synth, encoder: { try AacEncoder(url: $0, sampleRate: $1) },
-                                          workDir: FileManager.default.temporaryDirectory, stopReason: { flag.reason ?? "stopped" }, hot: hot)
+                                          workDir: FileManager.default.temporaryDirectory, stopReason: { flag.reason ?? "stopped" }, hot: hot,
+                                          sentence: { done, total, audio in
+                let elapsed = Date().timeIntervalSince(started.value)
+                Task { @MainActor in
+                    self.sentences = (done, total)
+                    self.speed = done > 0 && elapsed > 0 ? audio / elapsed : nil
+                }
+            })
             _ = try await contributor.run(apps, keepGoing: keepGoing, optedIn: { local.contributeApps().contains($0) }) { app, job in
-                Task { @MainActor in self.app = app; self.status = "Generating \(job.key)" }
+                started.value = Date()
+                Task { @MainActor in self.app = app; self.job = job.key; self.sentences = nil; self.speed = nil; self.status = "Generating \(job.key)" }
             }
         } catch let failure as ApiFailure where failure.status == 401 {
             try? await repository.sync() // the connection expired: the sync marks it, and the expired card says so

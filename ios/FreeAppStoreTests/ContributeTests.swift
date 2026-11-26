@@ -1,4 +1,5 @@
 import AVFoundation
+import SQLite3
 import CryptoKit
 import XCTest
 @testable import FreeAppStore
@@ -18,7 +19,9 @@ final class ContributeTests: XCTestCase {
         var rows: [String: Contribution] = [:]
         func handled(_ jobId: String) -> Bool { rows[jobId] != nil }
         func record(_ contribution: Contribution) { rows[contribution.jobId] = contribution }
-        func updateStatus(_ jobId: String, status: String, reason: String) { rows[jobId]?.status = status; rows[jobId]?.reason = reason }
+        func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?) {
+            rows[jobId]?.status = status; rows[jobId]?.reason = reason; if let wer { rows[jobId]?.wer = wer }
+        }
     }
 
     final class FakeSynth: Synthesizer {
@@ -161,12 +164,13 @@ final class ContributeTests: XCTestCase {
     private var client: GenerationClient { GenerationClient(api: api, credential: { "ndev_test" }) }
 
     private func contributor(synth: Synthesizer? = nil, attestation: Attestation = .none, clock: (() -> Int64)? = nil,
-                             stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false }) -> Contributor {
+                             stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false },
+                             sentence: @escaping (Int, Int, Double) -> Void = { _, _, _ in }) -> Contributor {
         let now = now
         return Contributor(client: client, log: log, synth: synth ?? self.synth, encoder: { [unowned self] file, rate in
             let sink = try FakeSink(file, rate); sinks.append(sink); return sink
         }, workDir: dir, attestation: attestation, now: clock ?? { now }, stopReason: stopReason, hot: hot, coolDown: .milliseconds(1),
-           retry: NetworkRetry(sleep: { [unowned self] ms in waited += ms; t += ms; onWait() }))
+           retry: NetworkRetry(sleep: { [unowned self] ms in waited += ms; t += ms; onWait() }), sentence: sentence)
     }
 
     /// Network retry waits (#819): their total in ms, and a hook run after each step. They advance `t` instead of sleeping.
@@ -516,7 +520,11 @@ final class ContributeTests: XCTestCase {
     func testNarratesASentenceAtATimeAndSendsBooksTimings() async throws {
         server.jobs = [job("j1", text: "One two. Three!\n\n* * *\n\nFour.")]
         synth.say = { text, _ in Audio(samples: [Float](repeating: 0, count: text == "* * *" ? 0 : text.count * 2_400), sampleRate: 24_000) } // 0.1 s a character
-        _ = try await contributor().run(["books"], keepGoing: { true })
+        var progress: [[Double]] = []
+        _ = try await contributor(sentence: { progress.append([Double($0), Double($1), $2]) }).run(["books"], keepGoing: { true })
+        // #820: the status card's sentence n of N, with the audio made so far.
+        XCTAssertEqual(progress.map { [$0[0], $0[1]] }, [[0, 4], [1, 4], [2, 4], [3, 4], [4, 4]])
+        XCTAssertEqual(progress.last?[2] ?? 0, 3.1, accuracy: 0.001)
         XCTAssertEqual(synth.spoken, ["One two.", "Three!", "* * *", "Four."])
         // 0.8 s, 0.4 s pause, 0.6 s, 0.8 s paragraph pause, "* * *" left out, 0.5 s; no pause at the end.
         let upload = try XCTUnwrap(server.uploads.first)
@@ -528,6 +536,12 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(sink.rate, 24_000)
         XCTAssertEqual(sink.writes, [19_200, 9_600, 14_400, 19_200, 12_000])
         XCTAssertTrue(sink.finished && sink.closed)
+        // #820: what Activity shows about the job.
+        let row = try XCTUnwrap(log.rows["j1"])
+        XCTAssertEqual(row.input, "One two. Three!\n\n* * *\n\nFour.")
+        XCTAssertEqual(row.setId, "set1")
+        XCTAssertEqual(row.durationMs, 3_100)
+        XCTAssertEqual(row.bytes, Int64(upload.file.count))
     }
 
     func testMetaOverTheServerLimitIsNotSubmitted() async throws {
@@ -600,11 +614,58 @@ final class ContributeTests: XCTestCase {
             ["jobId": "other", "status": "accepted"],
             ["id": "s2", "jobId": "j2", "status": "accepted", "reason": NSNull(), "createdAt": now],
         ]
+        log.rows["j1"]?.wer = 0.1
         try await client.refresh("books", log: log)
         XCTAssertEqual(log.rows["j1"]?.status, "rejected")
         XCTAssertEqual(log.rows["j1"]?.reason, "transcript_mismatch")
+        XCTAssertEqual(log.rows["j1"]?.wer, 0.1, "kept when the server gives none")
         XCTAssertNil(log.rows["other"], "only this phone's jobs")
         XCTAssertEqual(log.rows["j2"], Contribution(jobId: "j2", appId: "books", key: "book/j2", at: now, status: "accepted", reason: ""))
+        server.submissions = [["jobId": "j1", "status": "rejected", "reason": "wer", "wer": 0.42]]
+        try await client.refresh("books", log: log)
+        XCTAssertEqual(log.rows["j1"]?.wer, 0.42, "the error rate when the server gives one (#820)")
+    }
+
+    /// #820: Settings' open-job counts, only for sets this phone runs and app ids the contributor routes take.
+    func testDiscoveryCountsOpenJobsThisPhoneCanRun() async throws {
+        let set: (String, String, Int) -> [String: Any] = { model, version, open in ["setId": "s", "model": model, "modelVersion": version, "open": open] }
+        StubProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/generation/open")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ndev_test")
+            return .init(json: ["apps": [
+                ["appId": "books", "sets": [set("kokoro", "v1.0", 3), set("kokoro", "v1.0", 2), set("piper", "v1", 9)]],
+                ["appId": "dialogue", "sets": [set("kokoro", "v1.1", 4)]],
+                ["appId": "Bad/..", "sets": [set("kokoro", "v1.0", 1)]],
+            ]])
+        }
+        let counts = try await client.open(model: KokoroModel.id)
+        XCTAssertEqual(counts, ["books": 5])
+    }
+
+    func testArtifactUrlsArePublicAndOnlyForValidIds() {
+        XCTAssertEqual(GenerationClient.artifactURL("books", "j_1")?.absoluteString, "https://api.freeappstore.online/v1/apps/books/generation/artifacts/j_1")
+        XCTAssertEqual(GenerationClient.artifactURL("books", "j_1", meta: true)?.absoluteString,
+                       "https://api.freeappstore.online/v1/apps/books/generation/artifacts/j_1/meta")
+        XCTAssertNil(GenerationClient.artifactURL("Books", "j1"))
+        XCTAssertNil(GenerationClient.artifactURL("books", "../j1"))
+    }
+
+    func testActivityFiltersAndStatusCard() {
+        XCTAssertEqual(["accepted", "uploading", "pending", "rejected", "skipped", "failed", "superseded"].map(ContributeFilter.of),
+                       [.accepted, .checking, .checking, .rejected, .notDone, .notDone, .notDone])
+        XCTAssertTrue(ContributeFilter.all.shows("failed"))
+        XCTAssertFalse(ContributeFilter.accepted.shows("pending"))
+        func state(running: Bool = false, cooling: Bool = false, hasApps: Bool = true, model: ModelState = .installed, lastStop: String? = nil,
+                   charging: Bool = true) -> (title: String, why: String) {
+            ContributeText.state(running: running, cooling: cooling, downloading: false, hasApps: hasApps, model: model, lastStop: lastStop,
+                                 charging: charging, chargingOnly: true)
+        }
+        XCTAssertEqual(state(running: true).title, "Running")
+        XCTAssertEqual(state(running: true, cooling: true).title, "Paused")
+        XCTAssertEqual(state(hasApps: false).title, "Idle")
+        XCTAssertEqual(state(model: .waiting).title, "Waiting")
+        XCTAssertEqual(state(lastStop: "unplugged").why, "Stopped because the phone was unplugged.")
+        XCTAssertTrue(state(charging: false).why.hasPrefix("Waiting for the phone to charge"))
     }
 
     func testParsesIsoLeaseExpiryAndRejectsOddJobIds() throws {
@@ -615,7 +676,8 @@ final class ContributeTests: XCTestCase {
 
     func testApiOnlyLetsTheCredentialReachNativeAndGenerationRoutes() {
         XCTAssertEqual(FasApi.endpoint("/apps/books/generation/claim")?.absoluteString, "https://api.freeappstore.online/v1/apps/books/generation/claim")
-        for path in ["/auth/me", "/apps/books/photos", "/apps/../native/x/generation/claim", "/apps/Books/generation/claim",
+        XCTAssertEqual(FasApi.endpoint("/generation/open")?.absoluteString, "https://api.freeappstore.online/v1/generation/open")
+        for path in ["/auth/me", "/generation/openx", "/generation/open/x", "/generation/sets", "/apps/books/photos", "/apps/../native/x/generation/claim", "/apps/Books/generation/claim",
                      "/apps/books/generation/../../auth/me"] {
             XCTAssertNil(FasApi.endpoint(path), path)
         }
@@ -777,10 +839,45 @@ final class ContributionStoreTests: XCTestCase {
         try local.setContributing("books", true)
         local.modelWanted = true
         XCTAssertEqual(local.contributeApps(), ["books"])
+        // #820: Activity's fields, today's counts by status and the apps on the record.
+        try local.record(Contribution(jobId: "j3", appId: "dialogue", key: "d/1", at: 300, status: "pending", input: "Hola.", setId: "s1",
+                                      durationMs: 1_200, bytes: 4_096))
+        try local.updateStatus("j3", status: "rejected", reason: "wer", wer: 0.5)
+        try local.updateStatus("j3", status: "rejected", reason: "wer")
+        XCTAssertEqual(try local.contributions().first, Contribution(jobId: "j3", appId: "dialogue", key: "d/1", at: 300, status: "rejected", reason: "wer",
+                                                                      input: "Hola.", setId: "s1", durationMs: 1_200, bytes: 4_096, wer: 0.5))
+        XCTAssertEqual(try local.contributionCounts(since: 150), ["skipped": 1, "rejected": 1])
+        XCTAssertEqual(try local.contributionApps(), ["books", "dialogue"])
+        XCTAssertTrue(local.chargingOnly)
+        local.chargingOnly = false
+        XCTAssertFalse(local.chargingOnly)
         try local.clear() // Disconnect
         XCTAssertFalse(local.handled("j1"))
         XCTAssertEqual(local.contributeApps(), [])
         XCTAssertFalse(local.modelWanted)
+    }
+
+    /// #820: a record kept since #733 gains Activity's columns and keeps its rows.
+    func testMigratesAnOlderRecord() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(directory.appendingPathComponent(LocalStore.fileName).path, &db), SQLITE_OK)
+        XCTAssertEqual(sqlite3_exec(db, """
+            CREATE TABLE generation_jobs(job_id TEXT PRIMARY KEY, app_id TEXT NOT NULL, job_key TEXT NOT NULL,
+              at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '');
+            INSERT INTO generation_jobs VALUES ('j1', 'books', 'book/1', 100, 'accepted', '');
+            """, nil, nil, nil), SQLITE_OK)
+        sqlite3_close(db)
+        let local = try LocalStore(directory: directory)
+        XCTAssertEqual(try local.contributions(), [Contribution(jobId: "j1", appId: "books", key: "book/1", at: 100, status: "accepted")])
+        try local.record(Contribution(jobId: "j2", appId: "books", key: "book/2", at: 200, status: "pending", input: "Text", durationMs: 5))
+        XCTAssertEqual(try local.contributions().first?.input, "Text")
+        local.close()
+        let reopened = try LocalStore(directory: directory) // the migration runs once
+        XCTAssertEqual(try reopened.contributions().count, 2)
+        reopened.close()
     }
 
     /// `freeappstore://native/contribute/<id>` asks; it never opts in by itself, and only takes an app id.

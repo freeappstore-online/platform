@@ -38,6 +38,11 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     @Published private(set) var modelState = ModelState.none
     @Published private(set) var contributions: [Contribution] = []
     @Published private(set) var contributedToday: [String: Int] = [:]
+    /// Today's jobs by status, for the Contribute tab's chips (#820).
+    @Published private(set) var todayCounts: [String: Int] = [:]
+    /// Open jobs this phone could take now, by app, from discovery; empty until loaded.
+    @Published private(set) var openJobs: [String: Int] = [:]
+    @Published private(set) var chargingOnly = true
     /// `freeappstore://native/contribute/<id>`: asks before opting in, never opts in by itself.
     @Published var linkedContribute: String?
     private var error = ""
@@ -85,6 +90,8 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         contributions = (try? local.contributions()) ?? []
         let today = SharingTimeline.today().lowerBound
         contributedToday = Dictionary(uniqueKeysWithValues: contributeApps.map { ($0, (try? local.contributedSince($0, from: today)) ?? 0) })
+        todayCounts = (try? local.contributionCounts(since: today)) ?? [:]
+        chargingOnly = local.chargingOnly
         message = error.isEmpty ? local.message : error
     }
 
@@ -188,6 +195,14 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         contribute.schedule(); refresh()
     }
     func contributeNow() { contribute.runNow(); refresh() }
+    /// Every job on this phone's record, newest first (#820).
+    func allContributions() -> [Contribution] { (try? local.contributions(limit: 100_000)) ?? [] }
+    /// Pull to refresh on Activity: the server's verdicts on this phone's submissions.
+    func refreshVerdicts() async { await contribute.refreshVerdicts(); refresh() }
+    func loadOpenJobs() async {
+        if let counts = try? await contribute.openJobs() { openJobs = counts }
+    }
+    func setChargingOnly(_ on: Bool) { local.chargingOnly = on; contribute.schedule(); refresh() }
     func stopContributing() { contribute.stop(); refresh() }
 
     func enable(_ app: ConnectedApp) {

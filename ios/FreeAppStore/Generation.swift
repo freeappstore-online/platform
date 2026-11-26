@@ -34,6 +34,13 @@ struct Contribution: Equatable {
     let at: Int64
     var status: String
     var reason = ""
+    /// What the Activity screen shows (#820): the job's input and set, the audio this phone made (length and file size),
+    /// and the server's word error rate for its submission when the server gives one.
+    var input = ""
+    var setId = ""
+    var durationMs: Int64 = 0
+    var bytes: Int64 = 0
+    var wer: Double?
 }
 
 /// Where the record lives: `LocalStore` on the phone, a dictionary in tests.
@@ -41,7 +48,12 @@ protocol ContributionLog: AnyObject {
     /// Whether this job was ever started on this phone. Such a job is never generated or uploaded again.
     func handled(_ jobId: String) -> Bool
     func record(_ contribution: Contribution) throws
-    func updateStatus(_ jobId: String, status: String, reason: String) throws
+    /// `wer` nil keeps the one recorded.
+    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?) throws
+}
+
+extension ContributionLog {
+    func updateStatus(_ jobId: String, status: String, reason: String) throws { try updateStatus(jobId, status: status, reason: reason, wer: nil) }
 }
 
 /// The `X-Attestation` hook (#732): an App Attest assertion (`DCAppAttestService`) bound to the job, or nil. The server
@@ -122,8 +134,30 @@ final class GenerationClient: @unchecked Sendable {
         let result = try await api.request("GET", "/apps/\(appId)/generation/submissions", token: try token())
         for s in result["submissions"] as? [[String: Any]] ?? [] {
             guard let jobId = s["jobId"] as? String, !jobId.isEmpty else { continue }
-            try log.updateStatus(jobId, status: s["status"] as? String ?? "", reason: String((s["reason"] as? String ?? "").prefix(120)))
+            try log.updateStatus(jobId, status: s["status"] as? String ?? "", reason: String((s["reason"] as? String ?? "").prefix(120)),
+                                 wer: (s["wer"] as? NSNumber)?.doubleValue)
         }
+    }
+
+    /// Discovery (#794): open jobs this phone could claim now, by app, counting only the sets of `model`.
+    func open(model: ModelId) async throws -> [String: Int] {
+        let result = try await api.request("GET", "/generation/open", token: try token())
+        var counts: [String: Int] = [:]
+        for app in result["apps"] as? [[String: Any]] ?? [] {
+            // Only ids the contributor routes take, since an opt-in from this list claims through them.
+            guard let id = app["appId"] as? String, FasApi.endpoint("/apps/\(id)/generation/claim") != nil else { continue }
+            for set in app["sets"] as? [[String: Any]] ?? [] where set["model"] as? String == model.model && set["modelVersion"] as? String == model.version {
+                counts[id, default: 0] += (set["open"] as? NSNumber)?.intValue ?? 0
+            }
+        }
+        return counts
+    }
+
+    /// The public URL of a job's accepted audio (no credential), or of its sentence timings with `meta`.
+    static func artifactURL(_ appId: String, _ jobId: String, meta: Bool = false) -> URL? {
+        guard FasApi.endpoint("/apps/\(appId)/generation/claim") != nil, jobIdPattern.firstMatch(in: jobId, range: NSRange(location: 0, length: jobId.utf16.count)) != nil
+        else { return nil }
+        return URL(string: "\(FasApi.ORIGIN)/v1/apps/\(appId)/generation/artifacts/\(jobId)\(meta ? "/meta" : "")")
     }
 
     private static let jobIdPattern = try! NSRegularExpression(pattern: "^[A-Za-z0-9_-]{1,128}$")
@@ -305,16 +339,17 @@ final class Contributor {
     private let hot: () -> Bool
     private let coolDown: Duration
     private let retry: NetworkRetry
+    private let sentence: (_ done: Int, _ total: Int, _ audioSeconds: Double) -> Void
 
     /// `stopReason` names why `keepGoing` turned false, for the record. While `hot()` (the phone is too warm) the work
     /// waits between sentences and before claiming, checking every `coolDown` and keeping the lease alive, then goes on.
     init(client: GenerationClient, log: ContributionLog, synth: Synthesizer, encoder: @escaping (URL, Int) throws -> AudioSink, workDir: URL,
          attestation: Attestation = .none, now: @escaping () -> Int64 = CompanionRepository.now,
          stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false }, coolDown: Duration = .seconds(10),
-         retry: NetworkRetry = NetworkRetry()) {
+         retry: NetworkRetry = NetworkRetry(), sentence: @escaping (_ done: Int, _ total: Int, _ audioSeconds: Double) -> Void = { _, _, _ in }) {
         self.client = client; self.log = log; self.synth = synth; self.encoder = encoder; self.workDir = workDir
         self.attestation = attestation; self.now = now; self.stopReason = stopReason; self.hot = hot; self.coolDown = coolDown
-        self.retry = retry
+        self.retry = retry; self.sentence = sentence
     }
 
     /// Takes one job from each app in turn (#819), so every app moves forward, until none has a job left or `keepGoing`
@@ -349,8 +384,11 @@ final class Contributor {
 
     private func process(_ appId: String, _ job: GenerationJob, _ keepGoing: @escaping () -> Bool, optedIn: @escaping () -> Bool) async throws -> Bool {
         let handled = log.handled(job.id)
+        func row(_ status: String, _ reason: String = "") -> Contribution {
+            Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: status, reason: reason, input: job.text, setId: job.setId)
+        }
         if let reason = GenerationPolicy.refusal(job, synth: synth, handled: handled, now: now()) {
-            if !handled { try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "skipped", reason: reason)) }
+            if !handled { try log.record(row("skipped", reason)) }
             return false
         }
         let stopped = { optedIn() ? self.stopReason() : "opted_out" }
@@ -359,8 +397,8 @@ final class Contributor {
         let lease = Lease(client: client, appId: appId, job: job, now: now)
         var retried = false
         do {
-            guard let segments = try await narrate(job, file, lease, keepGoing) else {
-                try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "skipped", reason: keepGoing() ? "lease_expired" : stopped()))
+            guard let (segments, durationMs) = try await narrate(job, file, lease, keepGoing) else {
+                try log.record(row("skipped", keepGoing() ? "lease_expired" : stopped()))
                 return false
             }
             let meta: [String: Any] = ["segments": segments]
@@ -370,9 +408,13 @@ final class Contributor {
             let refusal: String? = if bytes > job.maxBytes || metaBytes > GenerationPolicy.maxMetaBytes {
                 "too_large"
             } else if !lease.held { "lease_expired" } else { nil }
-            if let refusal { try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "skipped", reason: refusal)); return false }
+            var made = row("skipped", refusal ?? "")
+            made.durationMs = durationMs
+            made.bytes = bytes
+            if refusal != nil { try log.record(made); return false }
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
-            try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "uploading"))
+            made.status = "uploading"
+            try log.record(made)
             // The same file, sent again after a network failure while the lease leaves time (#819); never generated again.
             _ = try await retry.run(keepGoing: keepGoing, more: { _, wait in retried = true; return lease.held(after: wait) }) { attempt in
                 if attempt > 0 { try await lease.renew() }
@@ -389,7 +431,7 @@ final class Contributor {
             let reason = GenerationPolicy.retryDelay(error, attempt: 0) != nil ? "network"
                 : String((((error as? ApiFailure).map { "\($0.status) " } ?? "") + error.localizedDescription).prefix(120))
             if log.handled(job.id) { try log.updateStatus(job.id, status: "failed", reason: reason) }
-            else { try log.record(Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: "failed", reason: reason)) }
+            else { try log.record(row("failed", reason)) }
             // An upload whose answer was lost may have arrived (a retry then finds the lease used): the server's record says.
             if retried { try? await client.refresh(appId, log: log) }
             return false
@@ -398,8 +440,9 @@ final class Contributor {
 
     /// The job's own input, verbatim: the only text this path can generate. Narrated a sentence at a time as Books does
     /// (#785), the sentences joined by its pauses, each one encoded into `file` as soon as it is synthesized. Returns
-    /// `[charStart, charEnd, startSec, endSec]` for each sentence, or nil when stopped or the lease ran out.
-    private func narrate(_ job: GenerationJob, _ file: URL, _ lease: Lease, _ keepGoing: @escaping () -> Bool) async throws -> [[Any]]? {
+    /// `[charStart, charEnd, startSec, endSec]` for each sentence and the audio's length in ms, or nil when stopped or the
+    /// lease ran out. `sentence` hears of each one done.
+    private func narrate(_ job: GenerationJob, _ file: URL, _ lease: Lease, _ keepGoing: @escaping () -> Bool) async throws -> ([[Any]], Int64)? {
         var segments: [[Any]] = []
         var sink: AudioSink?
         defer { sink?.close() }
@@ -408,7 +451,10 @@ final class Contributor {
         var pause = 0 // written before the next sentence, so none follows the last
         let text = job.text as NSString
         guard let language = synth.language(job.params, tag: job.language) else { return nil } // refused before this
-        for s in Sentences.split(job.text, language: language) {
+        let sentences = Sentences.split(job.text, language: language)
+        sentence(0, sentences.count, 0)
+        for (i, s) in sentences.enumerated() {
+            defer { sentence(i + 1, sentences.count, Double(length) / Double(rate)) }
             while hot() && keepGoing() && lease.held {
                 try await lease.renew()
                 try await Task.sleep(for: coolDown)
@@ -427,9 +473,9 @@ final class Contributor {
         }
         if sink == nil { sink = try encoder(file, rate) }
         let short = Int(GenerationPolicy.minSeconds * Double(rate)) - length
-        if short > 0 { try sink?.write([Float](repeating: 0, count: short)) }
+        if short > 0 { try sink?.write([Float](repeating: 0, count: short)); length += short }
         try sink?.finish()
-        return segments
+        return (segments, Int64(length) * 1000 / Int64(rate))
     }
 
     private func seconds(_ samples: Int, _ rate: Int) -> Double { (Double(samples) * 1000 / Double(rate)).rounded() / 1000 }
