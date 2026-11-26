@@ -182,8 +182,12 @@ export function scanContent(
     const isJsx = m[1]!.startsWith('fontFamily');
     const start = m.index + m[0].length;
     const value = sliceFontValue(content, start, isJsx);
-    const quotedStrings = [...value.matchAll(quotedRe)].map((x) => x[2]!);
-    const candidates = isJsx && quotedStrings.length > 0 ? quotedStrings : [value];
+    // A string compared in a ternary predicate (`t.label === "ABC" ? ...`) is not a font.
+    const quoted = [...value.matchAll(quotedRe)];
+    const quotedStrings = quoted
+      .filter((x) => !/[!=]==?\s*$/.test(value.slice(0, x.index)))
+      .map((x) => x[2]!);
+    const candidates = isJsx && quoted.length > 0 ? quotedStrings : [value];
     let flagged = false;
     for (const cand of candidates) {
       const fontValue = isJsx ? cand : cand.replace(/\s*!important\s*$/i, '');
@@ -245,11 +249,12 @@ function sliceFontValue(content: string, start: number, isJsx: boolean): string 
     }
     if (c === '\n' || c === ';' || c === '}') break;
     if (isJsx && c === ',') {
-      // Lookahead: is this `,` followed by `identifier:`? If yes, end of value.
+      // Lookahead: is this `,` followed by a property key (`identifier:`, or a
+      // quoted key such as `"--gap":` / `'line-height':`)? If yes, end of value.
       let j = i + 1;
       while (j < content.length && (content[j] === ' ' || content[j] === '\t')) j++;
       const rest = content.slice(j, j + 64);
-      if (/^[A-Za-z_$][\w$]*\s*:/.test(rest)) break;
+      if (/^(?:[A-Za-z_$][\w$]*|(['"])[^'"\n]*\1)\s*:/.test(rest)) break;
     }
     i++;
   }

@@ -81,6 +81,22 @@ describe('scanContent (unit)', () => {
     expect(issues).toEqual([]);
   });
 
+  it('ends the JSX fontFamily value at a quoted sibling key (#758)', () => {
+    expect(
+      scanContent('web/src/App.tsx', `<div style={{ fontFamily: "Manrope", "--gap": "4px" }} />`),
+    ).toEqual([]);
+    expect(
+      scanContent('web/src/App.tsx', `<div style={{ fontFamily: "Manrope", 'line-height': 1 }} />`),
+    ).toEqual([]);
+  });
+
+  it('ignores strings compared in a ternary predicate (#758)', () => {
+    const src = `<b style={{ fontFamily: t.label === "ABC" || t.label !== "abc"
+      ? "Manrope"
+      : "'Courier New', Courier, monospace" }} />`;
+    expect(scanContent('web/src/App.tsx', src)).toEqual([]);
+  });
+
   it('handles a JSX ternary fontFamily without false-positiving on the predicate', () => {
     // Regression: the prefix `isGiven ?` used to be parsed as a font name
     // because the opening quote in the regex was optional.
