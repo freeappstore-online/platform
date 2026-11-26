@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useId } from 'react'
 import { API_URL, authHeaders } from './builder/lib/api'
 
 
@@ -188,6 +188,7 @@ function AddWebhookForm({ appId, events, headers, onCreated, onError }: {
   onError: (msg: string) => void
 }) {
   const [event, setEvent] = useState(events[0] ?? '')
+  const id = useId()
   const [url, setUrl] = useState('https://')
   const [saving, setSaving] = useState(false)
 
@@ -218,8 +219,9 @@ function AddWebhookForm({ appId, events, headers, onCreated, onError }: {
     <form onSubmit={submit} className="mb-3 p-3 rounded-xl border border-[var(--line)] bg-[var(--paper)]">
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)] block mb-1">Event</label>
+          <label htmlFor={`${id}-1`} className="text-xs font-semibold text-[var(--muted)] block mb-1">Event</label>
           <select
+            id={`${id}-1`}
             value={event}
             onChange={(e) => setEvent(e.target.value)}
             className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--ink)] min-h-[44px]"
@@ -228,8 +230,9 @@ function AddWebhookForm({ appId, events, headers, onCreated, onError }: {
           </select>
         </div>
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)] block mb-1">URL (HTTPS)</label>
+          <label htmlFor={`${id}-2`} className="text-xs font-semibold text-[var(--muted)] block mb-1">URL (HTTPS)</label>
           <input
+            id={`${id}-2`}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://example.com/webhook"

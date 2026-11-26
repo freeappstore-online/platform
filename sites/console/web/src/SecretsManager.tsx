@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useId } from 'react'
 import { API_URL, authHeaders } from './builder/lib/api'
 
 
@@ -205,6 +205,7 @@ function AddSecretForm({ appId, headers, onDone, onError }: {
   onError: (msg: string) => void
 }) {
   const [name, setName] = useState('')
+  const id = useId()
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -234,8 +235,9 @@ function AddSecretForm({ appId, headers, onDone, onError }: {
     <form onSubmit={submit} className="mb-3 p-3 rounded-xl border border-[var(--line)] bg-[var(--paper)]">
       <div className="grid gap-2 sm:grid-cols-2">
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)] block mb-1">Name (UPPER_SNAKE)</label>
+          <label htmlFor={`${id}-1`} className="text-xs font-semibold text-[var(--muted)] block mb-1">Name (UPPER_SNAKE)</label>
           <input
+            id={`${id}-1`}
             value={name}
             onChange={(e) => setName(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))}
             placeholder="OPENWEATHER_KEY"
@@ -243,8 +245,9 @@ function AddSecretForm({ appId, headers, onDone, onError }: {
           />
         </div>
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)] block mb-1">Value</label>
+          <label htmlFor={`${id}-2`} className="text-xs font-semibold text-[var(--muted)] block mb-1">Value</label>
           <input
+            id={`${id}-2`}
             type="password"
             value={value}
             onChange={(e) => setValue(e.target.value)}
@@ -272,6 +275,7 @@ function AddRuleForm({ appId, secrets, headers, onDone, onError }: {
   onError: (msg: string) => void
 }) {
   const [pattern, setPattern] = useState('https://')
+  const id = useId()
   const [injectKind, setInjectKind] = useState<'bearer' | 'header' | 'query'>('bearer')
   const [injectName, setInjectName] = useState('')
   const [secretName, setSecretName] = useState(secrets[0]?.name ?? '')
@@ -307,8 +311,9 @@ function AddRuleForm({ appId, secrets, headers, onDone, onError }: {
     <form onSubmit={submit} className="mb-3 p-3 rounded-xl border border-[var(--line)] bg-[var(--paper)]">
       <div className="grid gap-2">
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)] block mb-1">URL pattern (prefix match)</label>
+          <label htmlFor={`${id}-1`} className="text-xs font-semibold text-[var(--muted)] block mb-1">URL pattern (prefix match)</label>
           <input
+            id={`${id}-1`}
             value={pattern}
             onChange={(e) => setPattern(e.target.value)}
             placeholder="https://api.openweathermap.org/data/2.5/"
@@ -317,8 +322,9 @@ function AddRuleForm({ appId, secrets, headers, onDone, onError }: {
         </div>
         <div className="grid gap-2 sm:grid-cols-3">
           <div>
-            <label className="text-xs font-semibold text-[var(--muted)] block mb-1">Injection method</label>
+            <label htmlFor={`${id}-2`} className="text-xs font-semibold text-[var(--muted)] block mb-1">Injection method</label>
             <select
+              id={`${id}-2`}
               value={injectKind}
               onChange={(e) => setInjectKind(e.target.value as 'bearer' | 'header' | 'query')}
               className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--ink)] focus:border-[var(--accent)] outline-none min-h-[44px]"
@@ -330,10 +336,11 @@ function AddRuleForm({ appId, secrets, headers, onDone, onError }: {
           </div>
           {injectKind !== 'bearer' && (
             <div>
-              <label className="text-xs font-semibold text-[var(--muted)] block mb-1">
+              <label htmlFor={`${id}-3`} className="text-xs font-semibold text-[var(--muted)] block mb-1">
                 {injectKind === 'header' ? 'Header name' : 'Param name'}
               </label>
               <input
+                id={`${id}-3`}
                 value={injectName}
                 onChange={(e) => setInjectName(e.target.value)}
                 placeholder={injectKind === 'header' ? 'X-API-Key' : 'appid'}
@@ -342,8 +349,9 @@ function AddRuleForm({ appId, secrets, headers, onDone, onError }: {
             </div>
           )}
           <div>
-            <label className="text-xs font-semibold text-[var(--muted)] block mb-1">Secret</label>
+            <label htmlFor={`${id}-4`} className="text-xs font-semibold text-[var(--muted)] block mb-1">Secret</label>
             <select
+              id={`${id}-4`}
               value={secretName}
               onChange={(e) => setSecretName(e.target.value)}
               className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel)] px-3 py-2 text-sm font-mono text-[var(--ink)] focus:border-[var(--accent)] outline-none min-h-[44px]"
@@ -354,8 +362,9 @@ function AddRuleForm({ appId, secrets, headers, onDone, onError }: {
           </div>
         </div>
         <div>
-          <label className="text-xs font-semibold text-[var(--muted)] block mb-1">HTTP methods (comma-separated)</label>
+          <label htmlFor={`${id}-5`} className="text-xs font-semibold text-[var(--muted)] block mb-1">HTTP methods (comma-separated)</label>
           <input
+            id={`${id}-5`}
             value={methods}
             onChange={(e) => setMethods(e.target.value.toUpperCase())}
             placeholder="GET,POST"

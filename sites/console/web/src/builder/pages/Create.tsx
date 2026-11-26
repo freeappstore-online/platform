@@ -338,6 +338,7 @@ export function Create() {
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
               placeholder="Build me a meditation timer..."
+              aria-label="Message"
               rows={1}
               className="flex-1 resize-none border border-line rounded-[0.5rem] p-[0.55rem_0.7rem] bg-paper text-ink text-[1rem] min-h-[44px] max-h-[120px] font-[inherit]"
             />

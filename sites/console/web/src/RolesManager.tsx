@@ -173,6 +173,7 @@ export function RolesManager({ appId, getToken }: Props) {
         <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
+            aria-label="User ID"
             placeholder="User ID (gh:12345, from their Settings page)"
             value={userId}
             onChange={(e) => setUserId(e.target.value)}
@@ -181,6 +182,7 @@ export function RolesManager({ appId, getToken }: Props) {
           {useCustom ? (
             <input
               type="text"
+              aria-label="Custom role name"
               placeholder="Custom role name"
               value={customRole}
               onChange={(e) => setCustomRole(e.target.value)}
@@ -188,6 +190,7 @@ export function RolesManager({ appId, getToken }: Props) {
             />
           ) : (
             <select
+              aria-label="Role"
               value={selectedRole}
               onChange={(e) => setSelectedRole(e.target.value)}
               className="w-full sm:w-40 rounded-lg border border-[var(--line-strong)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--ink)] min-h-[40px]"

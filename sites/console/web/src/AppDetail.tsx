@@ -6,6 +6,7 @@ import { SecretsManager } from './SecretsManager'
 import { WebhooksManager } from './WebhooksManager'
 import { GenerationManager } from './GenerationManager'
 import { LogsViewer } from './LogsViewer'
+import { useModalDialog } from './useModalDialog'
 import {
   type AppDeployStatus,
   type DeployRun,
@@ -358,12 +359,13 @@ function JsonView({ data, onPreview }: { data: unknown; onPreview: (url: string)
 /** Fullscreen preview dialog for images / URLs. */
 function PreviewDialog({ url, onClose }: { url: string; onClose: () => void }) {
   const isImage = isImageUrl(url)
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="relative max-w-[90vw] max-h-[90vh] bg-[var(--panel-strong)] rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Preview" tabIndex={-1} className="outline-none relative max-w-[90vw] max-h-[90vh] bg-[var(--panel-strong)] rounded-2xl overflow-hidden shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-line">
           <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-accent truncate hover:underline">{url}</a>
-          <button onClick={onClose} title="Close" className="text-muted hover:text-ink p-1 min-h-[32px] flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button onClick={onClose} title="Close" aria-label="Close" className="text-muted hover:text-ink p-1 min-h-[32px] flex-shrink-0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         {isImage ? (
           <div className="p-4 flex items-center justify-center min-w-[200px] min-h-[200px]">

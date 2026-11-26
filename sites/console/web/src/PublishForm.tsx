@@ -175,16 +175,16 @@ export function PublishForm({ getToken }: Props) {
             <p className="text-xs mt-1 font-mono text-success">{idValue}.freeappstore.online</p>
           )}
         </div>
-        <select name="type" defaultValue="standalone" className={fieldCls}>
+        <select name="type" aria-label="App type" defaultValue="standalone" className={fieldCls}>
           <option value="standalone">Standalone (self-contained)</option>
           <option value="connected">Connected (uses the platform SDK)</option>
         </select>
-        <select name="category" required defaultValue="" className={fieldCls}>
+        <select name="category" aria-label="Category" required defaultValue="" className={fieldCls}>
           <option value="" disabled>Choose a category…</option>
           {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
         </select>
-        <input name="oneliner" placeholder="One-line tagline, e.g. A calm meditation timer" required className={fieldCls} />
-        <input name="description" placeholder="Longer description" required className={fieldCls} />
+        <input name="oneliner" aria-label="One-line tagline" placeholder="One-line tagline, e.g. A calm meditation timer" required className={fieldCls} />
+        <input name="description" aria-label="Description" placeholder="Longer description" required className={fieldCls} />
         <button
           type="submit"
           disabled={publishing || !!idError}

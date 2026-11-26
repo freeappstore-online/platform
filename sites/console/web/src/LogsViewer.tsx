@@ -67,6 +67,7 @@ export function LogsViewer({ appId, getToken }: Props) {
         <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">Logs</h3>
         <div className="flex items-center gap-2">
           <select
+            aria-label="Log level"
             value={level}
             onChange={e => setLevel(e.target.value)}
             className="rounded-lg border border-line bg-panel px-2 py-1 text-xs text-ink min-h-[36px]"
@@ -74,6 +75,7 @@ export function LogsViewer({ appId, getToken }: Props) {
             {LEVELS.map(l => <option key={l} value={l}>{l === 'all' ? 'All levels' : l.toUpperCase()}</option>)}
           </select>
           <select
+            aria-label="Number of entries"
             value={limit}
             onChange={e => setLimit(Number(e.target.value))}
             className="rounded-lg border border-line bg-panel px-2 py-1 text-xs text-ink min-h-[36px]"

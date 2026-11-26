@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 import { API_URL, authHeaders } from "../../lib/api";
 import { summarizeSteps } from "../../../deploy-status";
+import { useModalDialog } from "../../../useModalDialog";
 
 
 export interface PublishAudit {
@@ -17,6 +18,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
   const [publishing, setPublishing] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const id = useId();
+  const dialogRef = useModalDialog<HTMLDivElement>(onClose);
 
   // The backend uses `name` as the app ID and validates ^[a-z][a-z0-9-]{0,29}[a-z0-9]$.
   const idValid = /^[a-z][a-z0-9-]{0,29}[a-z0-9]$/.test(appId);
@@ -69,7 +72,7 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
 
   return (
     <div className="fixed inset-[0px] z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.5)]" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-paper rounded-[var(--radius-lg)] p-[1.5rem] w-[100%] max-w-[420px] max-h-[90vh] overflow-auto shadow-[var(--shadow-lg)] border border-line">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} tabIndex={-1} className="outline-none bg-paper rounded-[var(--radius-lg)] p-[1.5rem] w-[100%] max-w-[420px] max-h-[90vh] overflow-auto shadow-[var(--shadow-lg)] border border-line">
         {result?.appId ? (() => {
           // A 200 from /publish does not mean every provisioning step worked.
           // Show a partial failure as a failure, naming the step (#32).
@@ -78,12 +81,12 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
           <>
             {steps.allOk ? (
               <>
-                <h2 className="text-lg font-bold mb-2 text-success">Published!</h2>
+                <h2 id={`${id}-title`} className="text-lg font-bold mb-2 text-success">Published!</h2>
                 <p className="text-sm mb-2">Your app is live at <a href={result.appUrl || `https://${appId}.freeappstore.online`} target="_blank" rel="noopener" className="font-semibold text-accent">{appId}.freeappstore.online</a></p>
               </>
             ) : (
               <>
-                <h2 className="text-lg font-bold mb-2 text-danger">{steps.summary}</h2>
+                <h2 id={`${id}-title`} className="text-lg font-bold mb-2 text-danger">{steps.summary}</h2>
                 <p className="text-sm mb-2">The app was created but is not fully set up. These steps failed:</p>
                 <ul className="text-sm mb-2 pl-[1.1rem]">
                   {steps.failed.map((s, i) => (
@@ -111,15 +114,15 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
         })() : (
           <>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold">Publish to Store</h2>
-              <button onClick={onClose} className="bg-transparent border-0 cursor-pointer text-muted text-[1.2rem]">✕</button>
+              <h2 id={`${id}-title`} className="text-lg font-bold">Publish to Store</h2>
+              <button onClick={onClose} aria-label="Close" className="bg-transparent border-0 cursor-pointer text-muted text-[1.2rem]">✕</button>
             </div>
             <p className="text-xs mb-3 text-muted">
               This will add <strong>{appName}</strong> to freeappstore.online with a custom subdomain.
             </p>
             <form onSubmit={handlePublish} className="flex flex-col gap-2">
               <div>
-                <label className="text-xs font-semibold text-muted">URL</label>
+                <span className="text-xs font-semibold text-muted">URL</span>
                 <p className="text-sm font-mono text-accent">{appId}.freeappstore.online</p>
               </div>
               {!idValid && (
@@ -128,8 +131,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
                 </p>
               )}
               <div>
-                <label className="text-xs font-semibold text-muted">Category</label>
-                <select name="category" className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink">
+                <label htmlFor={`${id}-category`} className="text-xs font-semibold text-muted">Category</label>
+                <select id={`${id}-category`} name="category" className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink">
                   {/* The backend's category names (/v1/publish), kept equal by scripts/categories.test.ts (#594, #679). */}
                   {["Learning", "Strategy", "Discovery", "Brain Training", "Social", "Productivity", "Lifestyle", "Health & Fitness", "Finance", "Creative", "News & Weather", "Utilities", "Other (specify in description)"].map((c) => (
                     <option key={c} value={c}>{c}</option>
@@ -137,8 +140,8 @@ export function PublishModal({ appId, appName, onClose, onPublished }: {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted">One-line description</label>
-                <input name="oneliner" placeholder="What does it do, in one line?" required className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink"  />
+                <label htmlFor={`${id}-oneliner`} className="text-xs font-semibold text-muted">One-line description</label>
+                <input id={`${id}-oneliner`} name="oneliner" placeholder="What does it do, in one line?" required className="w-full p-2 rounded-lg border text-sm bg-panel border-line text-ink"  />
               </div>
               {error && <p className="text-xs text-danger">{error}</p>}
               <button type="submit" disabled={publishing || !idValid} className={`p-2 rounded-lg font-semibold text-white text-sm bg-accent border-0 cursor-pointer ${(publishing || !idValid ? "opacity-[0.6]" : "opacity-[1]")}`} >
