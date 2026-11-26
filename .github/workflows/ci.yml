@@ -179,14 +179,18 @@ jobs:
           SESSION_SIGNING_KEY=local_test_key_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           GITHUB_CLIENT_SECRET=local_test_client_secret_dummy_value_not_real
           EOF
-          npx wrangler d1 migrations apply fas --local
-          npx wrangler d1 execute fas --local --command "INSERT OR IGNORE INTO users (id, github_id, github_login, avatar_url, created_at) VALUES ('gh:1', 1, 'testuser', NULL, $(date +%s)000)"
-          npx wrangler d1 execute fas --local --command "INSERT OR IGNORE INTO apps (id, owner_login, created_at, store) VALUES ('e2e', 'testuser', $(date +%s)000, 'apps')"
+          # Workers AI has no local mode: its binding makes wrangler dev open a remote
+          # session that needs Cloudflare credentials. e2e doesn't exercise it (#782).
+          sed '/^\[ai\]$/,/^binding = "AI"$/d' wrangler.toml > wrangler.e2e.toml
+          if grep -q '^\[ai\]' wrangler.e2e.toml; then echo "::error::[ai] block not stripped"; exit 1; fi
+          npx wrangler d1 migrations apply fas --local -c wrangler.e2e.toml
+          npx wrangler d1 execute fas --local -c wrangler.e2e.toml --command "INSERT OR IGNORE INTO users (id, github_id, github_login, avatar_url, created_at) VALUES ('gh:1', 1, 'testuser', NULL, $(date +%s)000)"
+          npx wrangler d1 execute fas --local -c wrangler.e2e.toml --command "INSERT OR IGNORE INTO apps (id, owner_login, created_at, store) VALUES ('e2e', 'testuser', $(date +%s)000, 'apps')"
 
       - name: Start wrangler dev
         working-directory: packages/backend
         run: |
-          npx wrangler dev --port 8787 > /tmp/wrangler.log 2>&1 &
+          npx wrangler dev -c wrangler.e2e.toml --port 8787 > /tmp/wrangler.log 2>&1 &
           # Wait for /health to respond before continuing.
           for i in $(seq 1 30); do
             if curl -sf http://localhost:8787/health > /dev/null 2>&1; then
