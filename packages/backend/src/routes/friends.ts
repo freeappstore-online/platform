@@ -97,11 +97,21 @@ friendsRoutes.post('/friends/request', async (c) => {
   const now = Date.now();
 
   // Check existing row
-  const existing = await c.env.DB.prepare(
-    'SELECT status, initiator, blocker FROM friendships WHERE user_a = ? AND user_b = ?',
+  let existing = await c.env.DB.prepare(
+    'SELECT status, initiator, blocker, created_at FROM friendships WHERE user_a = ? AND user_b = ?',
   )
     .bind(a, b)
-    .first<{ status: string; initiator: string; blocker: string | null }>();
+    .first<{ status: string; initiator: string; blocker: string | null; created_at: number }>();
+  // An expired request is gone (the lists already hide it): neither side's old
+  // request may block a new one or be auto-accepted by it (#760).
+  if (existing?.status === 'pending' && existing.created_at <= now - PENDING_TTL_MS) {
+    await c.env.DB.prepare(
+      "DELETE FROM friendships WHERE user_a = ? AND user_b = ? AND status = 'pending' AND created_at <= ?",
+    )
+      .bind(a, b, now - PENDING_TTL_MS)
+      .run();
+    existing = null;
+  }
 
   if (existing) {
     // Blocked — invisible
@@ -298,20 +308,23 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
   const now = Date.now();
 
   if (body.action === 'accept') {
+    const pendingCutoff = now - PENDING_TTL_MS;
     const row = await c.env.DB.prepare(
-      'SELECT status, initiator FROM friendships WHERE user_a = ? AND user_b = ?',
+      'SELECT status, initiator, created_at FROM friendships WHERE user_a = ? AND user_b = ?',
     )
       .bind(a, b)
-      .first<{ status: string; initiator: string }>();
-    if (!row || row.status !== 'pending') throw new HttpError(404, 'no pending request');
+      .first<{ status: string; initiator: string; created_at: number }>();
+    // An expired request can no longer be accepted (#760).
+    if (!row || row.status !== 'pending' || row.created_at <= pendingCutoff)
+      throw new HttpError(404, 'no pending request');
     if (row.initiator === me.id) throw new HttpError(400, 'cannot accept your own request');
 
     const acc = await c.env.DB.prepare(
       `UPDATE friendships SET status = 'accepted', updated_at = ?
-       WHERE user_a = ? AND user_b = ? AND status = 'pending'
+       WHERE user_a = ? AND user_b = ? AND status = 'pending' AND created_at > ?
          AND (SELECT COUNT(*) FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted') < ?`,
     )
-      .bind(now, a, b, me.id, me.id, MAX_FRIENDS)
+      .bind(now, a, b, pendingCutoff, me.id, me.id, MAX_FRIENDS)
       .run();
     if (!acc.meta.changes) throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
     await dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
@@ -434,12 +447,15 @@ friendsRoutes.get('/friends/check/:userId', async (c) => {
   const [a, b] = pair(me.id, targetId);
 
   const row = await c.env.DB.prepare(
-    'SELECT status, blocker, initiator FROM friendships WHERE user_a = ? AND user_b = ?',
+    'SELECT status, blocker, initiator, created_at FROM friendships WHERE user_a = ? AND user_b = ?',
   )
     .bind(a, b)
-    .first<{ status: string; blocker: string | null; initiator: string }>();
+    .first<{ status: string; blocker: string | null; initiator: string; created_at: number }>();
 
   if (!row) return c.json({ status: 'none' });
+  // An expired request is gone (#760).
+  if (row.status === 'pending' && row.created_at <= Date.now() - PENDING_TTL_MS)
+    return c.json({ status: 'none' });
   if (row.status === 'blocked' && row.blocker !== me.id) return c.json({ status: 'none' });
   if (row.status === 'blocked' && row.blocker === me.id)
     return c.json({ status: 'blocked_by_you' });

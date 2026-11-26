@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import { mutationRateMap, requestCooldownMap, requestRateMap, searchRateMap } from './friends.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
@@ -1008,5 +1009,87 @@ describe('friends routes', () => {
       env(fakeDB({ user: user1 })),
     );
     expect(res.status).toBe(400);
+  });
+});
+
+describe.skipIf(!hasSqlite)('expired pending requests are gone (#760)', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  afterEach(() => {
+    requestRateMap.clear();
+    mutationRateMap.clear();
+    requestCooldownMap.clear();
+  });
+
+  function setup(pendingAgeMs: number) {
+    const { db, d1 } = sqliteD1();
+    for (const [id, githubId, login] of [
+      ['gh:1', 1, 'alice'],
+      ['gh:2', 2, 'bob'],
+    ] as const)
+      db.prepare(
+        'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, 0)',
+      ).run(id, githubId, login);
+    const at = Date.now() - pendingAgeMs;
+    db.prepare(
+      "INSERT INTO friendships (user_a, user_b, status, initiator, created_at, updated_at) VALUES ('gh:1', 'gh:2', 'pending', 'gh:1', ?, ?)",
+    ).run(at, at);
+    const env = { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY };
+    const as = async (uid: string) => ({
+      Authorization: `Bearer ${await signSession(uid, SIGNING_KEY, { aud: 'console' })}`,
+      'Content-Type': 'application/json',
+    });
+    const status = () =>
+      (db.prepare('SELECT status, initiator FROM friendships').get() as {
+        status: string;
+        initiator: string;
+      }) ?? null;
+    return { env, as, status };
+  }
+
+  it('lets the initiator ask again instead of 409', async () => {
+    const { env, as, status } = setup(31 * DAY);
+    const res = await app.request(
+      '/v1/friends/request',
+      { method: 'POST', headers: await as('gh:1'), body: JSON.stringify({ userId: 'gh:2' }) },
+      env,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: 'pending', autoAccepted: false });
+    expect(status()).toEqual({ status: 'pending', initiator: 'gh:1' });
+  });
+
+  it('is not auto-accepted by the other side asking', async () => {
+    const { env, as, status } = setup(31 * DAY);
+    const res = await app.request(
+      '/v1/friends/request',
+      { method: 'POST', headers: await as('gh:2'), body: JSON.stringify({ userId: 'gh:1' }) },
+      env,
+    );
+    expect(await res.json()).toEqual({ status: 'pending', autoAccepted: false });
+    expect(status()).toEqual({ status: 'pending', initiator: 'gh:2' });
+  });
+
+  it('cannot be accepted and is reported as none', async () => {
+    const { env, as, status } = setup(31 * DAY);
+    const accept = await app.request(
+      '/v1/friends/gh:1',
+      { method: 'PATCH', headers: await as('gh:2'), body: JSON.stringify({ action: 'accept' }) },
+      env,
+    );
+    expect(accept.status).toBe(404);
+    expect(status().status).toBe('pending');
+    const check = await app.request('/v1/friends/check/gh:1', { headers: await as('gh:2') }, env);
+    expect(await check.json()).toEqual({ status: 'none' });
+  });
+
+  it('a live request still auto-accepts', async () => {
+    const { env, as, status } = setup(DAY);
+    const res = await app.request(
+      '/v1/friends/request',
+      { method: 'POST', headers: await as('gh:2'), body: JSON.stringify({ userId: 'gh:1' }) },
+      env,
+    );
+    expect(await res.json()).toEqual({ status: 'accepted', autoAccepted: true });
+    expect(status().status).toBe('accepted');
   });
 });
