@@ -242,7 +242,7 @@ export function isFirstPartyRoute(route: Pick<Route, "zone" | "r2_prefix">): boo
 export const CONSOLE_INLINE_SCRIPT_HASHES = [
   "sha256-8O2IPEowYy9mTengIhQu41uD6sCZajsHEplxgYuyjDA=",
   "sha256-szzCDnIvCnioMMwpbl8bnsjp6++N4jUwgDu3xjPQnIE=",
-  "sha256-QJbsF1MAHCSxn3FpUOa86W8HZFof3n0uABnqtxclTpo=",
+  "sha256-Cg9HycuzrYMNgvsDcVd7q5kWKIZZy80EYvuHSfi+WXI=",
 ] as const;
 
 /**
