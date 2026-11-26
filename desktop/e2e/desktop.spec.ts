@@ -148,7 +148,7 @@ test('home leads with the status and Connect buttons, in light and dark', async 
   }
   await home.getByText('Manual setup (other AI apps)').click();
   await expect(home.getByTestId('setup-command')).toHaveText(
-    `claude mcp add --transport http fas http://127.0.0.1:${port}/mcp --header "Authorization: Bearer ${token}"`,
+    `claude mcp add --transport http freeappstore-desktop http://127.0.0.1:${port}/mcp --header "Authorization: Bearer ${token}"`,
   );
   await home.getByText('Manual setup (other AI apps)').click();
 });
@@ -157,8 +157,8 @@ test('Connect and Disconnect Claude Desktop and Claude Code, keeping their other
   await client('claude-desktop').getByRole('button', { name: 'Connect' }).click();
   await expect(client('claude-desktop')).toContainText('Connected');
   const config = JSON.parse(readFileSync(desktopConfig, 'utf8'));
-  expect(Object.keys(config.mcpServers)).toEqual(['other', 'freeappstore']);
-  const entry = config.mcpServers.freeappstore;
+  expect(Object.keys(config.mcpServers)).toEqual(['other', 'freeappstore-desktop']);
+  const entry = config.mcpServers['freeappstore-desktop'];
   expect(entry.command).toBe(await electron.evaluate(() => process.execPath));
   expect(entry.args).toEqual([new URL('../dist/stdio/main.mjs', here).pathname]);
   expect(entry.env).toMatchObject({
@@ -176,8 +176,8 @@ test('Connect and Disconnect Claude Desktop and Claude Code, keeping their other
     .split('\n')
     .map((l) => JSON.parse(l));
   expect(calls.map((c) => [c.args.slice(0, 5).join(' '), c.configDir])).toEqual([
-    ['mcp add-json --scope user freeappstore', null],
-    ['mcp add-json --scope user freeappstore', join(claudeHome, '.claude-work')],
+    ['mcp add-json --scope user freeappstore-desktop', null],
+    ['mcp add-json --scope user freeappstore-desktop', join(claudeHome, '.claude-work')],
   ]);
   expect(JSON.parse(calls[0].args[5])).toEqual({ type: 'stdio', ...entry });
   for (const theme of ['light', 'dark']) {
@@ -198,7 +198,7 @@ test('Connect and Disconnect Claude Desktop and Claude Code, keeping their other
 
 test('the stdio entry works with a real MCP client launching the app binary in node mode', async () => {
   // Exactly what Claude Desktop would run, from the config Connect wrote.
-  const entry = JSON.parse(readFileSync(desktopConfig, 'utf8')).mcpServers.freeappstore;
+  const entry = JSON.parse(readFileSync(desktopConfig, 'utf8')).mcpServers['freeappstore-desktop'];
   const stdio = new Client({ name: 'e2e-stdio', version: '1.0.0' });
   await stdio.connect(
     new StdioClientTransport({

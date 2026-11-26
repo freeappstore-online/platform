@@ -56,14 +56,14 @@ Click **Connect** next to **Claude Code** or **Claude Desktop** on the home scre
 session or quit and reopen Claude Desktop. Ask, for example, "list my open FreeAppStore apps". Tools:
 `list_open_apps`, `app_tools(app_id)`, `app_call(app_id, tool, args)`, `open_app(app_id)`.
 
-Connect installs a **stdio** entry named `freeappstore`: the app's own binary with `ELECTRON_RUN_AS_NODE=1`
+Connect installs a **stdio** entry named `freeappstore-desktop` (never `freeappstore`, the remote server at mcp.freeappstore.online): the app's own binary with `ELECTRON_RUN_AS_NODE=1`
 running `dist/stdio/main.mjs` (unpacked from the asar archive: `Contents/Resources/app.asar.unpacked/…` on macOS).
 That proxy forwards stdio to `/mcp`, reading the token from userData on every request, so client configs hold
 no token and **Regenerate token** breaks nothing. If the app isn't running, the proxy starts it in the
 background (`--hidden`; the single-instance lock keeps one GUI) and waits up to 20 s; otherwise tool calls get
 "FreeAppStore isn't running. Open FreeAppStore and try again."
 
-- **Claude Desktop:** adds or removes `mcpServers.freeappstore` in `claude_desktop_config.json` (macOS
+- **Claude Desktop:** adds or removes `mcpServers.freeappstore-desktop` in `claude_desktop_config.json` (macOS
   `~/Library/Application Support/Claude/`, Windows `%APPDATA%\Claude\`), keeping everything else in the file.
 - **Claude Code:** runs `claude mcp add-json --scope user` / `claude mcp remove --scope user`. A GUI app doesn't
   inherit the shell's environment, so the `claude` path, `PATH` and `CLAUDE_CONFIG_DIR` come from the user's

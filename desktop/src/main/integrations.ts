@@ -11,8 +11,11 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-/** The name of our entry in every client's MCP server list. */
-export const SERVER_NAME = 'freeappstore';
+/**
+ * The name of our entry in every client's MCP server list. Not `freeappstore`: that is the remote
+ * server at mcp.freeappstore.online (docs/mcp.md), which Connect must never replace or remove (#817).
+ */
+export const SERVER_NAME = 'freeappstore-desktop';
 
 export interface StdioEntry {
   command: string;

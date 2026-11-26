@@ -234,6 +234,22 @@ describe('Integrations', () => {
     expect(readJson(join(home, '.claude.json'))).toEqual({ projects: { a: 1 }, mcpServers: {} });
   });
 
+  it('never touches the remote freeappstore server entry (#817)', async () => {
+    const { integrations, home } = setup({ FAS_DESKTOP_CLAUDE_CLI: FAKE_CLAUDE });
+    const remote = { type: 'http', url: 'https://mcp.freeappstore.online/mcp' };
+    writeFileSync(
+      join(home, '.claude.json'),
+      JSON.stringify({ mcpServers: { freeappstore: remote } }),
+    );
+    await integrations.connect('claude-code');
+    expect(readServers(join(home, '.claude.json'))).toEqual({
+      freeappstore: remote,
+      [SERVER_NAME]: { type: 'stdio', ...ENTRY },
+    });
+    await integrations.disconnect('claude-code');
+    expect(readServers(join(home, '.claude.json'))).toEqual({ freeappstore: remote });
+  });
+
   it('shows an entry pointing at another copy of the app as not connected', async () => {
     const { integrations, desktopConfig } = setup({ FAS_DESKTOP_CLAUDE_CLI: FAKE_CLAUDE });
     mkdirSync(join(tmp, 'Claude'));

@@ -66,7 +66,7 @@ const appWindows = new Map<string, BrowserWindow>();
 
 const mcpUrl = `http://${HOST}:${port}/mcp`;
 const setupCommand = () =>
-  `claude mcp add --transport http fas ${mcpUrl} --header "Authorization: Bearer ${token}"`;
+  `claude mcp add --transport http freeappstore-desktop ${mcpUrl} --header "Authorization: Bearer ${token}"`;
 
 /**
  * How AI clients launch the stdio entry (#815): this app's own binary in node mode running
