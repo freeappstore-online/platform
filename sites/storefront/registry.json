@@ -903,7 +903,12 @@
       "type": "standalone",
       "developer": "FreeAppStore",
       "creatorGithub": "serge-ivo",
-      "permissions": []
+      "permissions": [
+        {
+          "name": "camera",
+          "reason": "Shows a live view of a nutrition label so its values can be read and filled in. The camera is only used while you scan."
+        }
+      ]
     },
     {
       "id": "sleep",
@@ -3290,7 +3295,20 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-14T14:22:52.197Z",
       "creatorGithub": "vuthanhvannguyen2006-commits",
-      "permissions": []
+      "permissions": [
+        {
+          "name": "microphone",
+          "reason": "Record a short clip for on-device multilingual speech recognition."
+        },
+        {
+          "name": "camera",
+          "reason": "Take a photo for local text recognition when you choose Take photo."
+        },
+        {
+          "name": "clipboard",
+          "reason": "Copy a translation when you tap Copy."
+        }
+      ]
     },
     {
       "id": "teleprompter",
@@ -3418,7 +3436,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T20:30:24.307Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "grocery-price-tracker",
@@ -3434,7 +3453,13 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T21:21:40.331Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        {
+          "name": "camera",
+          "reason": "Scan grocery package barcodes and optionally photograph shelf labels."
+        }
+      ]
     },
     {
       "id": "mandarinflash",
@@ -3450,7 +3475,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T21:36:47.997Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "slides",
@@ -3466,7 +3492,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T22:10:35.262Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "sayback",
@@ -3482,7 +3509,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-26T01:49:27.815Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": []
     },
     {
       "id": "dialogue",
@@ -3498,7 +3526,13 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-26T02:06:38.478Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "permissions": [
+        {
+          "name": "microphone",
+          "reason": "Optional: after you tap Listen, turns one short spoken phrase into text to find it or check your reply. Never always-on; nothing is stored."
+        }
+      ]
     },
     {
       "id": "payback",
@@ -3514,7 +3548,8 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-26T02:39:45.145Z",
-      "creatorGithub": "reeyansh404"
+      "creatorGithub": "reeyansh404",
+      "permissions": []
     }
   ]
 }
