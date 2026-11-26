@@ -14,7 +14,16 @@ import {
   requireAppUser,
   requireConsoleUser,
 } from '../lib/auth.js';
-import { agree, type Verdict, verdict, WINDOWS, whisper } from '../lib/generation-verify.js';
+import {
+  agree,
+  cpsBand,
+  primaryLanguage,
+  type Verdict,
+  verdict,
+  WHISPER_LANGUAGES,
+  WINDOWS,
+  whisper,
+} from '../lib/generation-verify.js';
 import { verifyGithubOidc } from '../lib/github-oidc.js';
 import { nativeBody, nativeDevice, nativeHash, nativeRandom } from '../lib/native-companion.js';
 import { queryLimit } from '../lib/paging.js';
@@ -48,6 +57,8 @@ export const GENERATION_LIMITS = {
 const FORMATS = ['audio/mp4', 'audio/ogg', 'audio/wav'];
 const KEY_RE = /^[A-Za-z0-9._:/-]{1,200}$/;
 const NAME_RE = /^[A-Za-z0-9._:/@+-]{1,120}$/;
+/** A BCP 47 language tag such as `en`, `zh`, `zh-Hans` or `pt-BR` (#810). */
+const LANGUAGE_RE = /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8}){0,4}$/;
 const WITHDRAWN = 'withdrawn by the app owner';
 
 export interface SetRow {
@@ -67,8 +78,13 @@ export interface SetRow {
   min_cps: number;
   max_cps: number;
   max_wer: number;
+  /** BCP 47 tag of the input text (#810); null: unspecified. */
+  language: string | null;
 }
-type JobJoin = Pick<SetRow, 'model' | 'model_version' | 'params' | 'formats' | 'max_bytes'> & {
+type JobJoin = Pick<
+  SetRow,
+  'model' | 'model_version' | 'params' | 'formats' | 'max_bytes' | 'language'
+> & {
   set_id: string;
   key: string;
   input: string;
@@ -134,6 +150,7 @@ function setInfo(row: SetRow) {
     minCharsPerSecond: row.min_cps,
     maxCharsPerSecond: row.max_cps,
     maxWer: row.max_wer,
+    language: row.language,
     createdAt: row.created_at,
   };
 }
@@ -223,10 +240,19 @@ generationRoutes.post('/apps/:appId/generation/sets', async (c) => {
   const b = await nativeBody(c, 8192);
   const formats = b.formats;
   const params = JSON.stringify(b.params ?? {});
-  const minCps = b.minCharsPerSecond ?? 8,
-    maxCps = b.maxCharsPerSecond ?? 30,
+  const language = b.language ?? null;
+  // Whisper refuses a language it does not know, so such a set could never be verified.
+  const validLanguage =
+    language === null ||
+    (typeof language === 'string' &&
+      LANGUAGE_RE.test(language) &&
+      WHISPER_LANGUAGES.has(primaryLanguage(language)));
+  const [minDefault, maxDefault] = cpsBand(validLanguage ? (language as string | null) : null);
+  const minCps = b.minCharsPerSecond ?? minDefault,
+    maxCps = b.maxCharsPerSecond ?? maxDefault,
     maxWer = b.maxWer ?? 0.25;
   if (
+    !validLanguage ||
     b.kind !== 'tts' ||
     typeof b.model !== 'string' ||
     !NAME_RE.test(b.model) ||
@@ -268,11 +294,12 @@ generationRoutes.post('/apps/:appId/generation/sets', async (c) => {
     min_cps: minCps,
     max_cps: maxCps,
     max_wer: maxWer,
+    language: language as string | null,
   };
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO generation_sets (id, app_id, kind, model, model_version, params, formats, max_bytes, replicas, require_attestation, created_by, created_at, min_cps, max_cps, max_wer)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO generation_sets (id, app_id, kind, model, model_version, params, formats, max_bytes, replicas, require_attestation, created_by, created_at, min_cps, max_cps, max_wer, language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(...Object.values(row)),
     audit(c.env.DB, appId, actor, 'set.create', row.id),
   ]);
@@ -576,7 +603,7 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
     .first<{ job_id: string }>();
   if (!claimed) return c.body(null, 204);
   const job = await c.env.DB.prepare(
-    `SELECT j.set_id, j.key, j.input, s.model, s.model_version, s.params, s.formats, s.max_bytes
+    `SELECT j.set_id, j.key, j.input, s.model, s.model_version, s.params, s.formats, s.max_bytes, s.language
      FROM generation_jobs j JOIN generation_sets s ON s.id = j.set_id WHERE j.id = ?`,
   )
     .bind(claimed.job_id)
@@ -592,6 +619,7 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
       params: JSON.parse(job!.params),
       formats: JSON.parse(job!.formats),
       maxBytes: job!.max_bytes,
+      language: job!.language,
       leaseToken: token,
       leaseExpiresAt: now + GENERATION_LIMITS.leaseMs,
     },
@@ -804,7 +832,7 @@ generationRoutes.get('/generation/open', async (c) => {
   const who = await contributor(c, appId);
   const { results } = await c.env.DB.prepare(
     `SELECT s.app_id, a.oneliner, s.id, s.kind, s.model, s.model_version, s.params, s.formats, s.max_bytes,
-       COUNT(*) AS open
+       s.language, COUNT(*) AS open
      FROM generation_sets s JOIN apps a ON a.id = s.app_id AND ${FAS_APP_ROWS}
      JOIN generation_jobs j ON j.set_id = s.id
      WHERE (?3 IS NULL OR s.app_id = ?3) AND ${claimable('?1', '?2')}
@@ -824,6 +852,7 @@ generationRoutes.get('/generation/open', async (c) => {
       params: JSON.parse(r.params),
       formats: JSON.parse(r.formats),
       maxBytes: r.max_bytes,
+      language: r.language,
       open: r.open,
     });
   }
@@ -1154,7 +1183,7 @@ export async function verifySubmission(env: Env, id: string): Promise<void> {
           (JSON.parse(job.input) as { text: string }).text,
           { minCps: set.min_cps, maxCps: set.max_cps, maxWer: set.max_wer },
           JSON.parse(job.windows) as number[],
-          whisper(env.AI),
+          whisper(env.AI, set.language),
         )
       : { ok: false, reason: 'upload missing from quarantine' };
   } catch (error) {

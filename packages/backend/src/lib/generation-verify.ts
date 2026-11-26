@@ -1,9 +1,11 @@
 /**
  * Verdicts for community generation (#729): container and content type,
  * duration plausibility against the input text, `meta` sentence timings, and a
- * Workers AI Whisper transcript compared with the text by word error rate.
+ * Workers AI Whisper transcript compared with the text by word error rate, or
+ * character error rate for scripts written without spaces (#810).
  */
 import { parseAudio } from './generation-audio.js';
+import { simplified } from './zh-simplified.js';
 
 const WHISPER_MODEL = '@cf/openai/whisper-large-v3-turbo';
 /** Audio up to this long is transcribed whole; longer audio as sampled windows. */
@@ -13,6 +15,32 @@ const WINDOW_MS = 20_000;
 export const WINDOWS = 3;
 /** Timings may overrun the measured duration by this much (encoder padding). */
 const SEGMENT_SLACK_S = 0.5;
+/** Audio this short is never too long for its text: a two-character phrase plus silence (#810). */
+const SHORT_MS = 3000;
+/** Default characters-per-second bands by primary language subtag; others use the default. */
+const CPS: Record<string, [number, number]> = { zh: [2, 9], yue: [2, 9], ja: [3, 15] };
+const DEFAULT_CPS: [number, number] = [8, 30];
+/** Scripts written without spaces between words: each letter is its own token. */
+const SPACELESS =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/gu;
+
+/** Language codes Whisper accepts; it refuses any other (checked against the model, #810). */
+export const WHISPER_LANGUAGES = new Set(
+  (
+    'af am ar as az ba be bg bn bo br bs ca cs cy da de el en es et eu fa fi fo fr gl gu ha haw he ' +
+    'hi hr ht hu hy id is it ja jw ka kk km kn ko la lb ln lo lt lv mg mi mk ml mn mr ms mt my ne ' +
+    'nl nn no oc pa pl ps pt ro ru sa sd si sk sl sn so sq sr su sv sw ta te tg th tk tl tr tt uk ' +
+    'ur uz vi yi yo yue zh'
+  ).split(' '),
+);
+
+/** The primary subtag of a BCP 47 tag (`zh-Hans` → `zh`), which Whisper takes. */
+export const primaryLanguage = (language: string) => language.split('-')[0]!.toLowerCase();
+
+/** A set's default characters-per-second band for its language (null: unspecified). */
+export function cpsBand(language: string | null): [number, number] {
+  return (language && CPS[primaryLanguage(language)]) || DEFAULT_CPS;
+}
 
 export interface VerifyLimits {
   minCps: number;
@@ -39,13 +67,20 @@ export interface Heard {
 
 export type Transcribe = (audio: Uint8Array) => Promise<string>;
 
-/** Lowercase words, letters and digits of any script only. */
-export function words(text: string): string[] {
-  return text
+/**
+ * Lowercase words of letters and digits; in scripts without word spaces (Han,
+ * kana, Thai, Lao, Khmer, Myanmar) each letter is a token, so the error rate
+ * there is a character error rate. Punctuation and diacritics are dropped
+ * (kana voicing marks kept) and Traditional Chinese is read as Simplified.
+ */
+export function tokens(text: string): string[] {
+  return simplified(text)
     .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
+    .replace(/(?![\u3099\u309a])\p{M}/gu, '')
+    .normalize('NFC')
     .toLowerCase()
     .replace(/['’]/g, '')
+    .replace(SPACELESS, ' $& ')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(' ')
@@ -53,7 +88,7 @@ export function words(text: string): string[] {
 }
 
 /**
- * Word error rate of `hypothesis` against `reference`. With `within`, the
+ * Token error rate of `hypothesis` against `reference` (see `tokens`). With `within`, the
  * reference may be any contiguous stretch of `reference` (a sampled window).
  */
 export function wer(hypothesis: string[], reference: string[], within = false): number {
@@ -131,15 +166,15 @@ export async function verdict(
   const cps = text.trim().length / (durationMs / 1000);
   if (!durationMs || cps > limits.maxCps)
     return { ok: false, durationMs, reason: 'audio is too short for the text' };
-  if (cps < limits.minCps)
+  if (cps < limits.minCps && durationMs > SHORT_MS)
     return { ok: false, durationMs, reason: 'audio is too long for the text' };
   const segments = checkSegments(meta, text.length, durationMs / 1000);
   if (segments) return { ok: false, durationMs, reason: segments };
-  const reference = words(text);
+  const reference = tokens(text);
   let result: { wer: number } & Heard;
   if (durationMs <= WHOLE_MS) {
     const transcript = await transcribe(bytes);
-    result = { wer: wer(words(transcript), reference), transcript, windows: null };
+    result = { wer: wer(tokens(transcript), reference), transcript, windows: null };
   } else {
     // Proportional offsets: replicas at a slightly different pace still line up.
     let worst = 0;
@@ -160,7 +195,7 @@ export async function verdict(
       wer: rounded,
       transcript: result.transcript,
       windows: result.windows,
-      reason: `transcript does not match the text (word error rate ${rounded})`,
+      reason: `transcript does not match the text (${text.match(SPACELESS) ? 'character' : 'word'} error rate ${rounded})`,
     };
   return {
     ok: true,
@@ -172,7 +207,7 @@ export async function verdict(
 }
 
 /** A window's words without the first and last, which the window edges cut. */
-const trimEdges = (heard: string) => words(heard).slice(1, -1);
+const trimEdges = (heard: string) => tokens(heard).slice(1, -1);
 
 /**
  * Whether two passing replicas of a job say the same thing (#784): whole
@@ -182,27 +217,31 @@ const trimEdges = (heard: string) => words(heard).slice(1, -1);
  */
 export function agree(a: Heard, b: Heard, maxWer: number): boolean {
   if (a.transcript !== null && b.transcript !== null)
-    return wer(words(b.transcript), words(a.transcript)) <= maxWer;
+    return wer(tokens(b.transcript), tokens(a.transcript)) <= maxWer;
   if (a.windows && b.windows) {
     const other = b.windows;
     return (
       a.windows.length === other.length &&
-      a.windows.every((w, i) => wer(trimEdges(other[i]!), words(w), true) <= maxWer)
+      a.windows.every((w, i) => wer(trimEdges(other[i]!), tokens(w), true) <= maxWer)
     );
   }
   const whole = a.transcript ?? b.transcript;
   const windows = a.windows ?? b.windows;
   // Verified before window transcripts were kept (#784): only durations compare.
   if (whole === null || !windows) return true;
-  return windows.every((w) => wer(trimEdges(w), words(whole), true) <= maxWer);
+  return windows.every((w) => wer(trimEdges(w), tokens(whole), true) <= maxWer);
 }
 
-export function whisper(ai: Ai): Transcribe {
+/** Whisper, told the set's language when it has one (its primary subtag, e.g. `zh`). */
+export function whisper(ai: Ai, language: string | null = null): Transcribe {
   return async (audio) => {
     let binary = '';
     for (let i = 0; i < audio.length; i += 0x8000)
       binary += String.fromCharCode(...audio.subarray(i, i + 0x8000));
-    const result = await ai.run(WHISPER_MODEL, { audio: btoa(binary) });
+    const result = await ai.run(WHISPER_MODEL, {
+      audio: btoa(binary),
+      ...(language ? { language: primaryLanguage(language) } : {}),
+    });
     return result.text ?? '';
   };
 }

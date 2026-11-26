@@ -736,6 +736,7 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
             params: { voice: 'af' },
             formats: ['audio/wav'],
             maxBytes: 1000,
+            language: null,
             open: 2,
           },
         ],
@@ -1021,6 +1022,66 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     expect(late.status).toBe('superseded');
     expect(s.db.prepare('SELECT * FROM generation_artifacts').get()).toEqual(before);
     expect(s.ai!.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('a set language reaches Whisper, sets the zh band and is echoed by set, list, discovery and claim (#810)', async () => {
+    const s = await setup(() => '對。');
+    for (const language of ['', 'zh_CN', 'chinese-simplified-x', 'tlh', 7])
+      expect(
+        (
+          await s.request('/sets', {
+            method: 'POST',
+            json: { ...SET, ...WAV_SET, replicas: 1, language },
+          })
+        ).status,
+      ).toBe(400);
+    const created = (await (
+      await s.request('/sets', {
+        method: 'POST',
+        json: { ...SET, ...WAV_SET, replicas: 1, language: 'zh-Hans' },
+      })
+    ).json()) as { set: Record<string, unknown> };
+    expect(created.set).toEqual(
+      expect.objectContaining({
+        language: 'zh-Hans',
+        minCharsPerSecond: 2,
+        maxCharsPerSecond: 9,
+        maxWer: 0.25,
+      }),
+    );
+    const setId = created.set.id as string;
+    const listed = (await (await s.request('/sets')).json()) as { sets: { language: string }[] };
+    expect(listed.sets[0]!.language).toBe('zh-Hans');
+    await s.addJobs(setId, [{ key: 'k', input: { text: '对。' } }]);
+    const token = await signSession('u2', KEY, { aud: 'console' });
+    const open = (await (
+      await app.request(
+        '/v1/generation/open',
+        { headers: { Authorization: `Bearer ${token}` } },
+        s.env,
+      )
+    ).json()) as { apps: { sets: { language: string }[] }[] };
+    expect(open.apps[0]!.sets[0]!.language).toBe('zh-Hans');
+    const { row, job } = await run(s, wav(1.5), { setId, text: '对。' });
+    expect((job as unknown as { language: string }).language).toBe('zh-Hans');
+    expect(row).toEqual(expect.objectContaining({ status: 'accepted', wer: 0 }));
+    expect(s.ai!.run).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ language: 'zh' }),
+    );
+    // Explicit bands still win over the language's defaults; no language, no hint.
+    const own = (await (
+      await s.request('/sets', {
+        method: 'POST',
+        json: { ...SET, ...WAV_SET, replicas: 1, language: 'zh', minCharsPerSecond: 1 },
+      })
+    ).json()) as { set: Record<string, unknown> };
+    expect(own.set).toEqual(
+      expect.objectContaining({ minCharsPerSecond: 1, maxCharsPerSecond: 9 }),
+    );
+    s.ai!.run.mockClear();
+    await run(s, NARRATION);
+    expect(s.ai!.run.mock.calls[0]![1]).not.toHaveProperty('language');
   });
 
   it('stays pending over the daily verification budget or when Whisper fails; the cron retries', async () => {

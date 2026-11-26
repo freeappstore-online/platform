@@ -21,6 +21,17 @@ export interface GenerationSetOptions extends GenerationModel {
   /** Distinct users who must each pass verification and agree (1-3). */
   replicas: 1 | 2 | 3;
   requireAttestation?: boolean;
+  /**
+   * BCP 47 tag of the input text (`en`, `es`, `zh`, `zh-Hans`, …), whose primary subtag Whisper
+   * must know. Verification tells Whisper the language and takes the default characters-per-second
+   * band from it (`zh` 2-9, `ja` 3-15, others 8-30). Omitted: Whisper detects the language. Sets,
+   * claimed jobs and `openWork` echo it, `null` when none.
+   */
+  language?: string | null;
+  /** Verification overrides: characters-per-second band (default by `language`) and maximum error rate (0.25). */
+  minCharsPerSecond?: number;
+  maxCharsPerSecond?: number;
+  maxWer?: number;
 }
 
 export interface GenerationSet extends GenerationSetOptions {
@@ -36,6 +47,8 @@ export interface GenerationJob extends GenerationModel {
   params: Record<string, unknown>;
   formats: GenerationFormat[];
   maxBytes: number;
+  /** The set's BCP 47 language tag, or null when it names none. */
+  language: string | null;
   leaseToken: string;
   /** Lease end (ms epoch). */
   leaseExpiresAt: number;
@@ -136,6 +149,8 @@ export interface GenerationOpenSet extends GenerationModel {
   params: Record<string, unknown>;
   formats: GenerationFormat[];
   maxBytes: number;
+  /** The set's BCP 47 language tag, or null when it names none. */
+  language: string | null;
   /** Jobs this user could claim. */
   open: number;
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseAudio } from './generation-audio.js';
 import { M4A, OGG, SENTENCE, wav } from './generation-audio.testutil.js';
-import { agree, verdict, wer, words } from './generation-verify.js';
+import { agree, cpsBand, tokens, verdict, wer } from './generation-verify.js';
 
 const LIMITS = { minCps: 8, maxCps: 30, maxWer: 0.25 };
 const AT = [0.1, 0.5, 0.9];
@@ -41,11 +41,11 @@ describe('generation verdicts', () => {
   const text = SENTENCE.repeat(3);
 
   it('word error rate, whole and within a longer text', () => {
-    expect(wer(words('The quick, brown fox!'), words('the quick brown fox'))).toBe(0);
-    expect(wer(words('a quick brown cat'), words('the quick brown fox'))).toBe(0.5);
-    expect(wer([], words('the fox'))).toBe(1);
-    expect(wer(words('brown fox jumps'), words(text), true)).toBe(0);
-    expect(wer(words('purple elephants dance'), words(text), true)).toBe(1);
+    expect(wer(tokens('The quick, brown fox!'), tokens('the quick brown fox'))).toBe(0);
+    expect(wer(tokens('a quick brown cat'), tokens('the quick brown fox'))).toBe(0.5);
+    expect(wer([], tokens('the fox'))).toBe(1);
+    expect(wer(tokens('brown fox jumps'), tokens(text), true)).toBe(0);
+    expect(wer(tokens('purple elephants dance'), tokens(text), true)).toBe(1);
   });
 
   it('accepts matching narration and records duration and WER', async () => {
@@ -126,6 +126,48 @@ describe('generation verdicts', () => {
       async () => 'buy cheap pills now please',
     );
     expect(junk.ok).toBe(false);
+  });
+});
+
+describe('languages without word spaces (#810)', () => {
+  const ZH = { minCps: 2, maxCps: 9, maxWer: 0.25 };
+
+  it('tokenises Han, kana and Thai by character, other scripts by word', () => {
+    expect(tokens('好的，谢谢。')).toEqual(['好', '的', '谢', '谢']);
+    expect(tokens('我用iPhone 15。')).toEqual(['我', '用', 'iphone', '15']);
+    expect(tokens('ありがとうございます')).toHaveLength(10);
+    expect(tokens('が')).toEqual(['が']);
+    expect(tokens('ขอบคุณ').length).toBeGreaterThan(1);
+    expect(tokens('¿Dónde está?')).toEqual(['donde', 'esta']);
+  });
+
+  it('reads Traditional as Simplified and ignores punctuation', () => {
+    expect(tokens('對話，謝謝！')).toEqual(tokens('对话谢谢'));
+    expect(wer(tokens('好的謝謝'), tokens('好的，谢谢。'))).toBe(0);
+    expect(wer(tokens('好的谢了'), tokens('好的，谢谢。'))).toBe(0.25);
+  });
+
+  it('default characters-per-second bands by language', () => {
+    expect(cpsBand('zh')).toEqual([2, 9]);
+    expect(cpsBand('zh-Hans')).toEqual([2, 9]);
+    expect(cpsBand('ja')).toEqual([3, 15]);
+    expect(cpsBand('en')).toEqual([8, 30]);
+    expect(cpsBand(null)).toEqual([8, 30]);
+  });
+
+  it('accepts a two-character phrase with silence around it, by character error rate', async () => {
+    const v = await verdict(wav(1.5), 'audio/wav', null, '对。', ZH, AT, async () => '對。');
+    expect(v).toEqual(expect.objectContaining({ ok: true, wer: 0 }));
+    // Audio up to 3 s is never too long for its text, in any language.
+    expect((await verdict(wav(2), 'audio/wav', null, 'Hi.', LIMITS, AT, async () => 'Hi')).ok).toBe(
+      true,
+    );
+    expect(
+      (await verdict(wav(4), 'audio/wav', null, '对。', ZH, AT, async () => '对')).reason,
+    ).toMatch(/too long/);
+    expect(
+      (await verdict(wav(2), 'audio/wav', null, '好的，谢谢。', ZH, AT, async () => '你好')).reason,
+    ).toMatch(/character error rate 1/);
   });
 });
 
