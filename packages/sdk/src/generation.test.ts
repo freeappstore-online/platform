@@ -194,13 +194,13 @@ describe('generation SDK', () => {
         setId: 'set1',
         key: 'ch1',
         status: 'rejected',
-        reason: 'asr mismatch',
+        reason: 'audio is too short for the text',
         bytes: 3,
         contentType: 'audio/ogg',
         createdAt: 1,
         decidedAt: 2,
-        wer: 0.6,
         durationMs: 1500,
+        report: null,
         input: { text: 'Hello.' },
         artifact: null,
       },
@@ -215,8 +215,8 @@ describe('generation SDK', () => {
         contentType: 'audio/ogg',
         createdAt: 3,
         decidedAt: 4,
-        wer: 0,
         durationMs: 2000,
+        report: { good: true, note: null, at: 5 },
         input: { text: 'World.' },
         artifact: { url: 'https://api/a/j2?v=1', metaUrl: 'https://api/a/j2/meta?v=1' },
       },
@@ -226,6 +226,22 @@ describe('generation SDK', () => {
     expect(fetch.mock.calls[0]![0]).toBe(`${base}/submissions`);
     await expect(client(null).claim({ models })).rejects.toThrow('Not signed in');
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('report sends the caller’s Good / Not good; review sends the owner’s verdict on a version (#831)', async () => {
+    const report = { good: false, note: 'cuts off', at: 1 };
+    const review = { status: 'needs_changes', note: null, by: 'alice', at: 2 } as const;
+    const fetch = mockFetch(json({ report }), json({ review }));
+    expect(await client().report('sub 1', false, 'cuts off')).toEqual(report);
+    expect(fetch.mock.calls[0]![0]).toBe(`${base}/submissions/sub%201/report`);
+    expect(fetch.mock.calls[0]![1]).toEqual(expect.objectContaining({ method: 'PUT' }));
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ good: false, note: 'cuts off' });
+    expect(await client().review('j1', 'sub1', 'needs_changes')).toEqual(review);
+    expect(fetch.mock.calls[1]![0]).toBe(`${base}/artifacts/j1/review`);
+    expect(JSON.parse(fetch.mock.calls[1]![1].body)).toEqual({
+      submissionId: 'sub1',
+      status: 'needs_changes',
+    });
   });
 
   it('contribute loops claim → generate → submit until there is no work', async () => {

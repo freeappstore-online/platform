@@ -99,16 +99,29 @@ export interface GenerationSetOptions extends GenerationModel {
   replicas: 1 | 2 | 3;
   requireAttestation?: boolean;
   /**
-   * BCP 47 tag of the input text (`en`, `es`, `zh`, `zh-Hans`, …), whose primary subtag Whisper
-   * must know. Verification tells Whisper the language and takes the default characters-per-second
-   * band from it (`zh` 2-9, `ja` 3-15, others 8-30). Omitted: Whisper detects the language. Sets,
-   * claimed jobs and `openWork` echo it, `null` when none.
+   * BCP 47 tag of the input text (`en`, `es`, `zh`, `zh-Hans`, …). Verification takes the default
+   * characters-per-second band from it (`zh` 2-9, `ja` 3-15, others 8-30). Sets, claimed jobs and
+   * `openWork` echo it, `null` when none.
    */
   language?: string | null;
-  /** Verification overrides: characters-per-second band (default by `language`) and maximum error rate (0.25). */
+  /** Verification overrides: the characters-per-second band (default by `language`). */
   minCharsPerSecond?: number;
   maxCharsPerSecond?: number;
-  maxWer?: number;
+}
+
+/** What the contributor's device said of its own upload (#831): good or not, an optional note. */
+export interface GenerationReport {
+  good: boolean;
+  note: string | null;
+  at: number;
+}
+
+/** The owner's review of one exact artifact version (#787, #831); `by` is the reviewer's login. */
+export interface GenerationReview {
+  status: 'reviewed' | 'needs_changes';
+  note: string | null;
+  by: string;
+  at: number;
 }
 
 export interface GenerationSet extends GenerationSetOptions {
@@ -145,10 +158,10 @@ export interface GenerationSubmission {
   contentType: GenerationFormat;
   createdAt: number;
   decidedAt: number | null;
-  /** Word error rate verification measured (0-1); null until verified or if it never got that far. */
-  wer: number | null;
   /** Audio duration verification measured; null until verified. */
   durationMs: number | null;
+  /** This user's own Good / Not good for the upload (`report`), or null. */
+  report: GenerationReport | null;
   /** The job's input, as the claim returned it. */
   input: { text: string };
   /**
@@ -261,10 +274,14 @@ export interface GenerationJobSummary {
   createdAt: number;
   artifact: {
     url: string;
+    /** The submission this version came from: `review` names it. */
+    submissionId: string;
     durationMs: number | null;
     bytes: number;
     contributor: GenerationContributor | null;
     acceptedAt: number;
+    /** Null: not reviewed. A version generated again starts unreviewed. */
+    review: GenerationReview | null;
   } | null;
   /** The 5 latest, newest first. */
   submissions: {
@@ -274,10 +291,11 @@ export interface GenerationJobSummary {
     attestation: 'none' | 'unverified' | 'verified';
     status: GenerationSubmissionStatus;
     reason: string | null;
-    wer: number | null;
     durationMs: number | null;
     createdAt: number;
     decidedAt: number | null;
+    /** The contributor's own Good / Not good, or null. */
+    report: GenerationReport | null;
     /** The device's attempt record for this upload (#827), or null when it sent none. */
     record: GenerationAttempt | null;
   }[];
@@ -400,6 +418,23 @@ export class Generation {
     await this.request(`/artifacts/${encodeURIComponent(jobId)}`, { method: 'DELETE' });
   }
 
+  /**
+   * Mark the job's current artifact `reviewed` or `needs_changes` (#787), with an optional note of
+   * at most 500 characters. `submissionId` (`artifact.submissionId`) names the exact version; a
+   * `409` means the artifact is another version now. Console sessions of the owner only. A review
+   * never publishes or withdraws anything.
+   */
+  async review(
+    jobId: string,
+    submissionId: string,
+    status: GenerationReview['status'],
+    note?: string,
+  ): Promise<GenerationReview> {
+    const path = `/artifacts/${encodeURIComponent(jobId)}/review`;
+    const body = { submissionId, status, note };
+    return ((await this.json(path, 'PUT', body)) as { review: GenerationReview }).review;
+  }
+
   /** Withdraw everything this user contributed and refuse their future submissions. */
   async blockContributor(userId: string): Promise<void> {
     await this.request(`/contributors/${encodeURIComponent(userId)}/block`, { method: 'POST' });
@@ -472,6 +507,15 @@ export class Generation {
    */
   async recordAttempts(events: (GenerationAttemptRecord & { jobId: string })[]): Promise<number> {
     return ((await this.json('/events', 'POST', { events })) as { recorded: number }).recorded;
+  }
+
+  /**
+   * Say whether one of the caller's own uploads is good (#831), with an optional note of at most
+   * 500 characters; the owner sees it. Sending again changes it.
+   */
+  async report(submissionId: string, good: boolean, note?: string): Promise<GenerationReport> {
+    const path = `/submissions/${encodeURIComponent(submissionId)}/report`;
+    return ((await this.json(path, 'PUT', { good, note })) as { report: GenerationReport }).report;
   }
 
   /** The caller's 100 newest submissions to this app, newest first. */

@@ -68,6 +68,8 @@ export type {
   GenerationModel,
   GenerationOpenApp,
   GenerationOpenSet,
+  GenerationReport,
+  GenerationReview,
   GenerationSet,
   GenerationSetOptions,
   GenerationSetSummary,

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `fas.generation` (platform#831): no AI compute verifies anything. `wer` is gone from `mySubmissions()` and `listJobs()`, and `maxWer` from set options. People judge quality instead: `report(submissionId, good, note?)` for the caller's own uploads, `review(jobId, submissionId, status, note?)` for the owner (console session), and `report` / `review` (`GenerationReport`, `GenerationReview`) on listed submissions and artifacts.
 - `useFriends` follows sign-in and sign-out (platform#775): it loads for the signed-in account, clears on sign-out and ignores responses superseded by an account change. `useVoiceInput` no longer calls `onResult` after unmount.
 - `fas.generation`: sets take an optional `language` (BCP 47, platform#810), echoed on claimed jobs and `openWork()` sets; `createSet` options also type `minCharsPerSecond`, `maxCharsPerSecond` and `maxWer`.
 - Add `@freeappstore/sdk/generation-kokoro` (platform#795): the browser Kokoro TTS runner for `fas.generation` (kokoro-js in a Web Worker, sentence timings, WebCodecs AAC in MP4), shared by Books and the Creator Console. `kokoro-js` and `mp4-muxer` are optional peer dependencies.
