@@ -135,7 +135,12 @@ that retries anything unfinished, in `packages/backend/src/lib/generation-verify
    count each letter as a token, so their error rate is a character error rate, and Traditional
    Chinese is read as Simplified (OpenCC's character table), so either form Whisper writes matches.
    Mandarin phrases from 2 to 12 characters spoken by macOS `say` and transcribed by the real model
-   passed at an error rate of 0 to 0.1, with or without the language hint (#810). Audio up to 60 s is transcribed whole. Longer audio is checked as three
+   passed at an error rate of 0 to 0.1, with or without the language hint (#810). The transcript
+   must be within `maxWer`, except that a reference of at most 3 tokens (after normalisation, any
+   script) passes with one edit at most that keeps a token of it: `对。` heard as `对呀` or `是的。`
+   heard as `是` passes, `对。` heard as `好` or nothing fails (#816; one extra character on a
+   one-character reply is an error rate of 1). The same rule applies to sampled windows and replica
+   agreement. Audio up to 60 s is transcribed whole. Longer audio is checked as three
    20-second windows, each matched against the best-fitting stretch of the text. Window positions
    are random fractions of the audio, drawn once per job (devices never see them), so every replica
    of a job is sampled at the same points. MP4 windows are re-framed as ADTS AAC, Ogg windows keep
@@ -143,7 +148,7 @@ that retries anything unfinished, in `packages/backend/src/lib/generation-verify
    both kinds of window were checked against the real model (#784).
 4. **Replicas**: with `replicas > 1`, a passing submission waits until `replicas` distinct users have
    passing submissions that agree with the earliest one: durations within 15%, and what Whisper
-   heard within `maxWer` (whole transcripts against each other; for long audio each window against
+   heard matches as in step 3 (whole transcripts against each other; for long audio each window against
    the earliest submission's same window, ignoring the words cut at the window edges). This reuses
    the transcripts from step 3, so replicas cost no extra Whisper calls. The earliest becomes the
    artifact; the others are `superseded`. If every replica passed but they disagree, the dissenters
@@ -166,7 +171,7 @@ claimed. Runners today:
 |---|---|---|---|---|
 | Android companion ([#731](https://github.com/freeappstore-online/platform/issues/731)) | `kokoro` `v1.0` (sherpa-onnx `kokoro-multi-lang-v1_0`) | `audio/mp4` (AAC-LC 64 kbps, 24 kHz mono) | `{ voice, speed? }` (speed 0.5-2, default 1) | All 54 Kokoro v1.0 voices: English (`af_`, `am_`, `bf_`, `bm_`), Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin (`zf_`, `zm_`) |
 | iOS companion ([#733](https://github.com/freeappstore-online/platform/issues/733)) | same | same | same | same |
-| Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC) | same | English voices only |
+| Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC-LC 32 kbps mono, 24 kHz, else 48 kHz where the browser refuses 24 kHz) | same | English voices only |
 
 A runner skips any job it would not generate exactly: another model or version, no `audio/mp4` in
 `formats`, params other than `voice` and `speed`, or a voice it doesn't have. Language

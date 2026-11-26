@@ -88,12 +88,11 @@ export function tokens(text: string): string[] {
 }
 
 /**
- * Token error rate of `hypothesis` against `reference` (see `tokens`). With `within`, the
- * reference may be any contiguous stretch of `reference` (a sampled window).
+ * Edits (substitutions, insertions, deletions) from `reference` to `hypothesis`, and the length
+ * they are measured against (see `tokens`). With `within`, the reference may be any contiguous
+ * stretch of `reference` (a sampled window) and the length is the hypothesis's.
  */
-export function wer(hypothesis: string[], reference: string[], within = false): number {
-  if (!hypothesis.length) return 1;
-  if (!reference.length) return 1;
+function edits(hypothesis: string[], reference: string[], within: boolean) {
   // Rows: hypothesis words; columns: reference words. A free start/end in the
   // reference (semi-global alignment) when matching a window.
   let prev = Array.from({ length: reference.length + 1 }, (_, j) => (within ? 0 : j));
@@ -105,8 +104,37 @@ export function wer(hypothesis: string[], reference: string[], within = false): 
     }
     prev = row;
   }
-  const errors = within ? Math.min(...prev) : prev[reference.length]!;
-  return errors / (within ? hypothesis.length : reference.length);
+  return {
+    errors: within ? Math.min(...prev) : prev[reference.length]!,
+    length: within ? hypothesis.length : reference.length,
+  };
+}
+
+/** Token error rate of `hypothesis` against `reference` (see `edits`). */
+export function wer(hypothesis: string[], reference: string[], within = false): number {
+  if (!hypothesis.length || !reference.length) return 1;
+  const { errors, length } = edits(hypothesis, reference, within);
+  return errors / length;
+}
+
+/** Up to this many tokens, a match is judged by an absolute edit budget instead of the rate (#816). */
+const SHORT_TOKENS = 3;
+
+/**
+ * Whether `hypothesis` matches `reference` (see `edits`): an error rate within `maxWer`, or for
+ * at most 3 tokens, one edit at most that keeps a token of the reference. Whisper often hears
+ * one extra character in a one-character reply (`对。` as `对呀`), an error rate of 1 (#816).
+ */
+export function matches(
+  hypothesis: string[],
+  reference: string[],
+  maxWer: number,
+  within = false,
+): boolean {
+  if (!hypothesis.length || !reference.length) return false;
+  const { errors, length } = edits(hypothesis, reference, within);
+  if (length > SHORT_TOKENS) return errors / length <= maxWer;
+  return errors <= 1 && hypothesis.some((t) => reference.includes(t));
 }
 
 /** Books-style sentence timings: `segments: [[charStart, charEnd, startSec, endSec], …]`. */
@@ -171,24 +199,32 @@ export async function verdict(
   const segments = checkSegments(meta, text.length, durationMs / 1000);
   if (segments) return { ok: false, durationMs, reason: segments };
   const reference = tokens(text);
-  let result: { wer: number } & Heard;
+  let result: { wer: number; ok: boolean } & Heard;
   if (durationMs <= WHOLE_MS) {
     const transcript = await transcribe(bytes);
-    result = { wer: wer(tokens(transcript), reference), transcript, windows: null };
+    const heard = tokens(transcript);
+    result = {
+      wer: wer(heard, reference),
+      ok: matches(heard, reference, limits.maxWer),
+      transcript,
+      windows: null,
+    };
   } else {
     // Proportional offsets: replicas at a slightly different pace still line up.
     let worst = 0;
+    let ok = true;
     const windows: string[] = [];
     for (const at of windowAt) {
       const start = Math.floor(at * (durationMs - WINDOW_MS));
       const heard = await transcribe(audio.window(start, WINDOW_MS));
       windows.push(heard);
       worst = Math.max(worst, wer(trimEdges(heard), reference, true));
+      ok &&= matches(trimEdges(heard), reference, limits.maxWer, true);
     }
-    result = { wer: worst, transcript: null, windows };
+    result = { wer: worst, ok, transcript: null, windows };
   }
   const rounded = Math.round(result.wer * 1000) / 1000;
-  if (result.wer > limits.maxWer)
+  if (!result.ok)
     return {
       ok: false,
       durationMs,
@@ -211,25 +247,25 @@ const trimEdges = (heard: string) => tokens(heard).slice(1, -1);
 
 /**
  * Whether two passing replicas of a job say the same thing (#784): whole
- * transcripts within `maxWer` of each other; sampled windows (the same
- * fractions of each replica) each within `maxWer` of the other's same window;
- * a window against a whole transcript, anywhere in it.
+ * transcripts match each other (see `matches`); sampled windows (the same
+ * fractions of each replica) each match the other's same window; a window
+ * against a whole transcript, anywhere in it.
  */
 export function agree(a: Heard, b: Heard, maxWer: number): boolean {
   if (a.transcript !== null && b.transcript !== null)
-    return wer(tokens(b.transcript), tokens(a.transcript)) <= maxWer;
+    return matches(tokens(b.transcript), tokens(a.transcript), maxWer);
   if (a.windows && b.windows) {
     const other = b.windows;
     return (
       a.windows.length === other.length &&
-      a.windows.every((w, i) => wer(trimEdges(other[i]!), tokens(w), true) <= maxWer)
+      a.windows.every((w, i) => matches(trimEdges(other[i]!), tokens(w), maxWer, true))
     );
   }
   const whole = a.transcript ?? b.transcript;
   const windows = a.windows ?? b.windows;
   // Verified before window transcripts were kept (#784): only durations compare.
   if (whole === null || !windows) return true;
-  return windows.every((w) => wer(trimEdges(w), tokens(whole), true) <= maxWer);
+  return windows.every((w) => matches(trimEdges(w), tokens(whole), maxWer, true));
 }
 
 /** Whisper, told the set's language when it has one (its primary subtag, e.g. `zh`). */

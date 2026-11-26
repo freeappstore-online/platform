@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { parseAudio } from './generation-audio.js';
 import { M4A, OGG, SENTENCE, wav } from './generation-audio.testutil.js';
-import { agree, cpsBand, tokens, verdict, wer } from './generation-verify.js';
+import { agree, cpsBand, matches, tokens, verdict, wer } from './generation-verify.js';
 
 const LIMITS = { minCps: 8, maxCps: 30, maxWer: 0.25 };
 const AT = [0.1, 0.5, 0.9];
@@ -168,6 +168,49 @@ describe('languages without word spaces (#810)', () => {
     expect(
       (await verdict(wav(2), 'audio/wav', null, '好的，谢谢。', ZH, AT, async () => '你好')).reason,
     ).toMatch(/character error rate 1/);
+  });
+});
+
+describe('very short references (#816)', () => {
+  const ZH = { minCps: 2, maxCps: 9, maxWer: 0.25 };
+  const ok = (heard: string, text: string, within = false) =>
+    matches(tokens(heard), tokens(text), 0.25, within);
+
+  it('up to 3 tokens, one extra, missing or changed token that keeps the reference passes', () => {
+    expect(ok('对呀', '对。')).toBe(true);
+    expect(ok('對', '对。')).toBe(true);
+    expect(ok('好', '对。')).toBe(false);
+    expect(ok('', '对。')).toBe(false);
+    expect(ok('对对呀', '对。')).toBe(false);
+    expect(ok('好的呀', '好的。')).toBe(true);
+    expect(ok('好啊', '好的。')).toBe(true);
+    expect(ok('你好', '好的。')).toBe(false);
+    expect(ok('是', '是的。')).toBe(true);
+    expect(ok('是吧呢', '是的呢。')).toBe(true);
+    expect(ok('不是的', '是的呢。')).toBe(false);
+    expect(ok('Yes, yes.', 'Yes.')).toBe(true);
+    expect(ok('No.', 'Yes.')).toBe(false);
+    // Longer references keep the rate: one error in four tokens is 0.25, two are too many.
+    expect(ok('好的谢了', '好的，谢谢。')).toBe(true);
+    expect(ok('好的谢了呀', '好的，谢谢。')).toBe(false);
+  });
+
+  it('applies in verdicts, sampled windows and replica agreement', async () => {
+    const v = await verdict(wav(1.5), 'audio/wav', null, '对。', ZH, AT, async () => '对呀。');
+    expect(v).toEqual(expect.objectContaining({ ok: true, wer: 1, transcript: '对呀。' }));
+    expect(
+      (await verdict(wav(1.5), 'audio/wav', null, '对。', ZH, AT, async () => '好。')).reason,
+    ).toMatch(/character error rate 1/);
+    expect((await verdict(wav(1.5), 'audio/wav', null, '对。', ZH, AT, async () => '')).ok).toBe(
+      false,
+    );
+    // A window that kept 3 words: one changed word passes, two don't.
+    expect(ok('fox jumped over', SENTENCE, true)).toBe(true);
+    expect(ok('fox ran away', SENTENCE, true)).toBe(false);
+    const whole = (t: string) => ({ transcript: t, windows: null });
+    expect(agree(whole('对。'), whole('对呀'), 0.25)).toBe(true);
+    expect(agree(whole('对。'), whole('好'), 0.25)).toBe(false);
+    expect(agree(whole('对。'), whole(''), 0.25)).toBe(false);
   });
 });
 

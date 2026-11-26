@@ -640,7 +640,8 @@ good one write-once to a public manifest. Players should fall back to bundled au
   the Android and iOS companions (all Kokoro v1.0 voices, Mandarin `zf_*`/`zm_*` included) and the browser runner
   `@freeappstore/sdk/generation-kokoro` (English voices only). A set naming any other model is accepted but never claimed.
 - Set `language` (BCP 47: `en`, `es`, `zh`, …) on non-English sets. Chinese and other scripts without spaces are
-  verified by character error rate; short phrases (2 characters) pass.
+  verified by character error rate; short phrases pass, and a reference of up to 3 characters may be heard with one
+  extra or changed character (`对。` as `对呀`).
 - Need another model? Open an issue on `freeappstore-online/platform`. Don't promise a model no runner supports.
 
 Full contract: https://docs.freeappstore.online/community-generation/ and the `fas.generation` section of

@@ -1,13 +1,19 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ContributeOptions, Generation, GenerationJob } from '../generation.js';
-import { contributeKokoro, KokoroRunner, KokoroSkip, kokoroProblem } from './index.js';
+import {
+  contributeKokoro,
+  KokoroRunner,
+  KokoroSkip,
+  kokoroEncoder,
+  kokoroProblem,
+} from './index.js';
 import type { WorkerReply, WorkerRequest } from './shared.js';
 
 const encoder: AudioEncoderConfig = {
   codec: 'mp4a.40.2',
   sampleRate: 24_000,
   numberOfChannels: 1,
-  bitrate: 40_000,
+  bitrate: 32_000,
 };
 const job = (over: Partial<GenerationJob> = {}): GenerationJob => ({
   id: 'j1',
@@ -92,7 +98,7 @@ describe('kokoroProblem', () => {
   });
 
   it('refuses a job whose audio or sentence timings would be too large', () => {
-    const text = 'A word. '.repeat(2000); // 2,000 sentences; 16,000 chars ≈ 1,143 s ≈ 5.7 MB at 40 kbps
+    const text = 'A word. '.repeat(2000); // 2,000 sentences; 16,000 chars ≈ 1,143 s ≈ 4.6 MB at 32 kbps
     expect(kokoroProblem(job({ input: { text }, maxBytes: 2_000_000 }), encoder)).toBe(
       'audio would exceed maxBytes',
     );
@@ -101,6 +107,39 @@ describe('kokoroProblem', () => {
     );
     // Without the encoder (a set, not a claimed job) the size is not checked
     expect(kokoroProblem(job({ input: { text }, maxBytes: 1 }))).toBeNull();
+  });
+});
+
+describe('kokoroEncoder', () => {
+  const browser = (supported: (c: AudioEncoderConfig) => boolean) => {
+    vi.stubGlobal('Worker', class {});
+    vi.stubGlobal('AudioEncoder', {
+      isConfigSupported: async (config: AudioEncoderConfig) => ({ supported: supported(config) }),
+    });
+  };
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('encodes speech at 32 kbps mono AAC 24 kHz (platform#798)', async () => {
+    browser(() => true);
+    expect(await kokoroEncoder()).toEqual({
+      codec: 'mp4a.40.2',
+      sampleRate: 24_000,
+      numberOfChannels: 1,
+      bitrate: 32_000,
+    });
+  });
+
+  it('falls back to 48 kHz, then a higher bitrate, else none', async () => {
+    browser((c) => c.sampleRate === 48_000);
+    expect(await kokoroEncoder()).toEqual(
+      expect.objectContaining({ sampleRate: 48_000, bitrate: 32_000 }),
+    );
+    browser((c) => (c.bitrate ?? 0) > 64_000);
+    expect(await kokoroEncoder()).toEqual(
+      expect.objectContaining({ sampleRate: 48_000, bitrate: 96_000 }),
+    );
+    browser(() => false);
+    expect(await kokoroEncoder()).toBeNull();
   });
 });
 

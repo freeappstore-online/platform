@@ -42,10 +42,13 @@ const LEASE_MS = 15 * 60_000;
 const LEASE_CAP_MS = 2 * 60 * 60_000;
 /** Characters narrated per second of audio, with pauses (books#22: 10k chars is ~11 min) */
 const CHARS_PER_SECOND = 14;
-/** Encoder settings to try, in order: Books' pipeline's 40 kbps at Kokoro's rate, else what the browser's AAC encoder takes */
+/**
+ * Encoder settings to try, in order: 32 kbps mono speech at Kokoro's 24 kHz, so long chapters fit
+ * 25 MB (platform#798), else what the browser's AAC encoder takes.
+ */
 const ENCODERS: AudioEncoderConfig[] = [
-  { codec: 'mp4a.40.2', sampleRate: 24_000, numberOfChannels: 1, bitrate: 40_000 },
-  { codec: 'mp4a.40.2', sampleRate: 48_000, numberOfChannels: 1, bitrate: 40_000 },
+  { codec: 'mp4a.40.2', sampleRate: 24_000, numberOfChannels: 1, bitrate: 32_000 },
+  { codec: 'mp4a.40.2', sampleRate: 48_000, numberOfChannels: 1, bitrate: 32_000 },
   { codec: 'mp4a.40.2', sampleRate: 48_000, numberOfChannels: 1, bitrate: 96_000 },
 ];
 
