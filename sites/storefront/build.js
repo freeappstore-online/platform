@@ -914,10 +914,10 @@ const appCards = apps.map((app, i) => {
 // Now finalize and write the index page with the embedded cross-store
 // registry so the search bar can federate.
 indexHtml = indexHtml
-  .replace('{{APPS_GRID}}', appCards)
+  .replace('{{APPS_GRID}}', () => appCards)
   .replace(
     '{{CROSS_STORE_REGISTRY}}',
-    JSON.stringify(crossRegistry).replace(/</g, '\\u003c'),
+    () => JSON.stringify(crossRegistry).replace(/</g, '\\u003c'),
   );
 indexHtml = replaceStylesheetUrls(indexHtml, stylesheetUrls);
 fs.writeFileSync(path.join(DIST, 'index.html'), indexHtml);
@@ -964,8 +964,8 @@ const codeQualityCards = apps
 
 let qualityHtml = injectSettingsBootstrap(qualityTemplate, 'templates/quality.html')
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
-  .replace('{{CODE_QUALITY_CARDS}}', codeQualityCards)
-  .replace('{{REGISTRIES_JSON}}', JSON.stringify(qualityRegistry).replace(/</g, '\\u003c'));
+  .replace('{{CODE_QUALITY_CARDS}}', () => codeQualityCards)
+  .replace('{{REGISTRIES_JSON}}', () => JSON.stringify(qualityRegistry).replace(/</g, '\\u003c'));
 for (const [k, v] of Object.entries(sriHashes)) {
   qualityHtml = qualityHtml.replaceAll(`{{SRI_${k}}}`, v);
 }
@@ -997,34 +997,34 @@ apps.forEach((app, i) => {
   // for defense in depth.
   let html = injectSettingsBootstrap(detailTemplate, 'templates/app-detail.html')
     .replace(/\{\{PREVIEW_ALLOW\}\}/g, PREVIEW_ALLOW)
-    .replace(/\{\{PERMISSIONS_SECTION\}\}/g, renderPermissionsSection(app))
+    .replace(/\{\{PERMISSIONS_SECTION\}\}/g, () => renderPermissionsSection(app))
     .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
-    .replace(/\{\{NAME\}\}/g, escapeHtml(app.name))
-    .replace(/\{\{NAME_LOWER\}\}/g, escapeHtml(app.name.toLowerCase()))
-    .replace(/\{\{ID\}\}/g, escapeHtml(app.id))
-    .replace(/\{\{ICON\}\}/g, app.icon)
-    .replace(/\{\{LETTER\}\}/g, escapeHtml((app.name || '?').trim().charAt(0).toUpperCase()))
-    .replace(/\{\{ICON_BG\}\}/g, escapeHtml(app.iconBg))
-    .replace(/\{\{CATEGORY_LABEL\}\}/g, escapeHtml(categoryLabel(app.category)))
+    .replace(/\{\{NAME\}\}/g, () => escapeHtml(app.name))
+    .replace(/\{\{NAME_LOWER\}\}/g, () => escapeHtml(app.name.toLowerCase()))
+    .replace(/\{\{ID\}\}/g, () => escapeHtml(app.id))
+    .replace(/\{\{ICON\}\}/g, () => app.icon)
+    .replace(/\{\{LETTER\}\}/g, () => escapeHtml((app.name || '?').trim().charAt(0).toUpperCase()))
+    .replace(/\{\{ICON_BG\}\}/g, () => escapeHtml(app.iconBg))
+    .replace(/\{\{CATEGORY_LABEL\}\}/g, () => escapeHtml(categoryLabel(app.category)))
     .replace('{{CATEGORY_TAG}}', () => {
       const slug = typeof app.category === 'string' && categorySlugByKey.get(app.category.toLowerCase());
       const label = escapeHtml(categoryLabel(app.category));
       return slug ? `<a class="tag" href="/category/${escapeHtml(slug)}" title="More free ${label} apps">${label}</a>` : `<div class="tag">${label}</div>`;
     })
-    .replace(/\{\{DESCRIPTION\}\}/g, escapeHtml(app.description))
-    .replace(/\{\{APP_URL\}\}/g, escapeHtml(app.appUrl))
-    .replace(/\{\{REPO\}\}/g, escapeHtml(app.repo))
-    .replace(/\{\{TYPE_LABEL\}\}/g, escapeHtml(typeLabel(app.type)))
-    .replace(/\{\{DEVELOPER\}\}/g, escapeHtml(app.developer))
-    .replace(/\{\{AUTHOR_CHIP\}\}/g, renderAuthorChip(app))
-    .replace(/\{\{OFFLINE\}\}/g, escapeHtml(offline))
-    .replace(/\{\{ACCOUNT\}\}/g, escapeHtml(account))
-    .replace(/\{\{PUBLISHED_LINE\}\}/g, renderPublishedLine(history))
-    .replace(/\{\{HISTORY_SECTION\}\}/g, renderHistorySection(app.repo, history))
-    .replace(/\{\{AUDIT_BADGE\}\}/g, renderAuditBadge(auditMap.get(app.id)))
-    .replace(/\{\{CODE_QUALITY_BADGE\}\}/g, renderCodeQualityBadge(app.id))
-    .replace(/\{\{VIEWPORT_BADGE\}\}/g, renderViewportBadge(manifests[i]))
-    .replace(/\{\{SIZE\}\}/g, formatSize(buildInfos[i]?.size) || 'Unknown');
+    .replace(/\{\{DESCRIPTION\}\}/g, () => escapeHtml(app.description))
+    .replace(/\{\{APP_URL\}\}/g, () => escapeHtml(app.appUrl))
+    .replace(/\{\{REPO\}\}/g, () => escapeHtml(app.repo))
+    .replace(/\{\{TYPE_LABEL\}\}/g, () => escapeHtml(typeLabel(app.type)))
+    .replace(/\{\{DEVELOPER\}\}/g, () => escapeHtml(app.developer))
+    .replace(/\{\{AUTHOR_CHIP\}\}/g, () => renderAuthorChip(app))
+    .replace(/\{\{OFFLINE\}\}/g, () => escapeHtml(offline))
+    .replace(/\{\{ACCOUNT\}\}/g, () => escapeHtml(account))
+    .replace(/\{\{PUBLISHED_LINE\}\}/g, () => renderPublishedLine(history))
+    .replace(/\{\{HISTORY_SECTION\}\}/g, () => renderHistorySection(app.repo, history))
+    .replace(/\{\{AUDIT_BADGE\}\}/g, () => renderAuditBadge(auditMap.get(app.id)))
+    .replace(/\{\{CODE_QUALITY_BADGE\}\}/g, () => renderCodeQualityBadge(app.id))
+    .replace(/\{\{VIEWPORT_BADGE\}\}/g, () => renderViewportBadge(manifests[i]))
+    .replace(/\{\{SIZE\}\}/g, () => formatSize(buildInfos[i]?.size) || 'Unknown');
   // Title / meta description / JSON-LD (lib/app-seo.cjs). Function replacers so
   // `$&`-style sequences in registry text are not treated as patterns.
   const seo = appSeo(app, appKinds, { size: formatSize(buildInfos[i]?.size) || null });
@@ -1130,7 +1130,7 @@ uniqueAuthors.forEach(username => {
     .replace(/\{\{APP_COUNT\}\}/g, String(authorApps.length))
     .replace(/\{\{S\}\}/g, authorApps.length === 1 ? '' : 's')
     .replace(/\{\{BADGES\}\}/g, renderBadges(badges))
-    .replace(/\{\{APP_CARDS\}\}/g, appCardsHtml);
+    .replace(/\{\{APP_CARDS\}\}/g, () => appCardsHtml);
   for (const [k, v] of Object.entries(sriHashes)) {
     html = html.replaceAll(`{{SRI_${k}}}`, v);
   }
@@ -1162,7 +1162,7 @@ const devCards = uniqueAuthors.map(username => {
 
 let creatorsHtml = injectSettingsBootstrap(creatorsTemplate, 'templates/creators.html')
   .replace('__CF_BEACON__', CF_BEACON_SNIPPET)
-  .replace('{{DEVELOPERS_GRID}}', devCards);
+  .replace('{{DEVELOPERS_GRID}}', () => devCards);
 for (const [k, v] of Object.entries(sriHashes)) {
   creatorsHtml = creatorsHtml.replaceAll(`{{SRI_${k}}}`, v);
 }

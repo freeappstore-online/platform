@@ -34,7 +34,7 @@ const REAL_REGISTRY = join(REPO_ROOT, "registry.json");
 const XSS_PAYLOAD = "<script>alert(1)</script>";
 const FIXTURE_ID = "xss-fixture";
 
-function runBuild({ withQualityScores = false, withStalePages = false, discoveryStatus } = {}) {
+function runBuild({ withQualityScores = false, withStalePages = false, discoveryStatus, extraApps = [] } = {}) {
   // Use a unique temp dir per run so parallel test invocations don't
   // collide. The temp dir is cleaned up after each test below.
   const tmp = mkdtempSync(join(tmpdir(), "fas-build-test-"));
@@ -63,6 +63,7 @@ function runBuild({ withQualityScores = false, withStalePages = false, discovery
     developer: "FreeAppStore",
   });
   if (discoveryStatus) realRegistry.apps.push({ id: 'first-deploy-fixture', name: 'First Deploy Fixture', category: 'utilities', appUrl: 'https://first-deploy-fixture.freeappstore.online/', repo: 'freeappstore-online/first-deploy-fixture', discoveryStatus });
+  realRegistry.apps.push(...extraApps);
   writeFileSync(tmpRegistry, JSON.stringify(realRegistry, null, 2));
   if (withQualityScores) {
     mkdirSync(join(tmpDist, "quality"), { recursive: true });
@@ -674,4 +675,28 @@ test("reused build output removes withdrawn app and author pages", () => {
   try {
     for (const directory of ["apps", "u"]) assert.ok(!readdirSync(join(tmpDist, directory)).includes("withdrawn.html"));
   } finally { rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test("registry text with $ replacement patterns is copied verbatim into built pages (#754)", () => {
+  const description = "Costs $0, save $$ and $& more; $' and $` too";
+  const { tmp, tmpDist } = runBuild({
+    extraApps: [{
+      id: "dollar-fixture", name: "Dollar $& Fixture", category: "utilities", icon: "&#36;", iconBg: "#fee2e2",
+      description, appUrl: "https://dollar-fixture.freeappstore.online", repo: "freeappstore-online/dollar-fixture",
+      type: "standalone", developer: "FreeAppStore", creatorGithub: "dollar-dev",
+    }],
+  });
+  try {
+    const detail = readFileSync(join(tmpDist, "apps", "dollar-fixture.html"), "utf8");
+    assert.ok(detail.includes("Costs $0, save $$ and $&amp; more; $&#39; and $` too"), "description verbatim");
+    assert.ok(!detail.includes("{{"), "no template placeholder leaked into the detail page");
+    assert.ok(detail.includes("Dollar $&amp; Fixture"));
+    const index = readFileSync(join(tmpDist, "index.html"), "utf8");
+    assert.ok(index.includes("Dollar $&amp; Fixture"));
+    assert.ok(!index.includes("{{"));
+    const author = readFileSync(join(tmpDist, "u", "dollar-dev.html"), "utf8");
+    assert.ok(author.includes("Dollar $&amp; Fixture"));
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
