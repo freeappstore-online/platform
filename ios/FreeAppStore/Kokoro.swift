@@ -272,6 +272,12 @@ final class KokoroSynthesizer: Synthesizer {
         return Audio(samples: samples, sampleRate: Int(audio.pointee.sample_rate))
     }
 
+    func load(_ language: Language) throws -> Bool {
+        if tts != nil, mandarin == (language == .mandarin) { return false }
+        _ = try load(mandarin: language == .mandarin)
+        return true
+    }
+
     func close() {
         if let tts { SherpaOnnxDestroyOfflineTts(tts) }
         tts = nil

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Community generation (#727, #733), ported from the Android companion's Generation.kt: this phone claims an app's open
 /// jobs, generates each one on the phone and uploads the result against the job's lease. The server decides what is
@@ -41,6 +42,8 @@ struct Contribution: Equatable {
     var durationMs: Int64 = 0
     var bytes: Int64 = 0
     var wer: Double?
+    /// How this phone's last attempt at the job went (#827), once it ended.
+    var record: AttemptRecord?
 }
 
 /// Where the record lives: `LocalStore` on the phone, a dictionary in tests.
@@ -51,6 +54,8 @@ protocol ContributionLog: AnyObject {
     /// The server's measures (#824), each nil to keep the one recorded: `wer`, `durationMs` (the audio's length as
     /// verification measured it) and `input`, which only fills a row recorded without its text.
     func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) throws
+    /// Keeps the record of the job's attempt with its row (#827).
+    func saveAttempt(_ jobId: String, _ record: AttemptRecord) throws
 }
 
 extension ContributionLog {
@@ -94,6 +99,13 @@ protocol Synthesizer: AnyObject {
     func language(_ params: [String: Any], tag: String?) -> Language?
     /// The audio for `text`, or nil when `keepGoing` turned false part-way.
     func synthesize(_ text: String, params: [String: Any], language: Language, keepGoing: @escaping () -> Bool) throws -> Audio?
+    /// Loads the model for `language` ahead of the first sentence, so its time is measured apart (#827). Whether it
+    /// loaded now; false when it was loaded already or loads lazily.
+    func load(_ language: Language) throws -> Bool
+}
+
+extension Synthesizer {
+    func load(_ language: Language) throws -> Bool { false }
 }
 
 /// The contributor routes, with the device credential.
@@ -130,6 +142,14 @@ final class GenerationClient: @unchecked Sendable {
         let result = try await api.request("POST", "/apps/\(appId)/generation/jobs/\(job.id)/lease", token: try token(),
                                            headers: ["X-Lease-Token": job.leaseToken])
         return try Self.epochMs(result["leaseExpiresAt"])
+    }
+
+    /// Attempt records (#813, #827) of jobs this phone leased. Returns how many the server recorded.
+    @discardableResult
+    func events(_ appId: String, records: [(jobId: String, record: AttemptRecord)]) async throws -> Int {
+        let body = try JSONSerialization.data(withJSONObject: ["events": try records.map { try $0.record.event($0.jobId) }])
+        let result = try await api.request("POST", "/apps/\(appId)/generation/events", token: try token(), body: body)
+        return (result["recorded"] as? NSNumber)?.intValue ?? 0
     }
 
     /// Copies the server's verdicts on this account's submissions into `log`.
@@ -229,6 +249,36 @@ enum GenerationPolicy {
         let transient: [URLError.Code] = [.timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .dnsLookupFailed,
                                           .notConnectedToInternet, .dataNotAllowed, .internationalRoamingOff, .callIsActive]
         return (error as? URLError).map(\.code).map(transient.contains) == true ? backoff : nil
+    }
+
+    /// The #813 end reason of a job recorded with this phone's local `reason`: a refusal, a stop or a lease that ran out
+    /// (`leaseRevoked`: the server answered 403 when it was extended).
+    static func endReason(_ local: String, leaseRevoked: Bool = false) -> String {
+        switch local {
+        case "model", "format", "input", "params", "language", "max_bytes": "unsupported"
+        case "lease_expired": leaseRevoked ? "lease_403" : "lease_cap"
+        case "too_large", "user_stop", "thermal", "background_expired", "unplugged", "network": local
+        case "opted_out": "user_stop"
+        default: "other"
+        }
+    }
+
+    /// The #813 end reason of an attempt that failed with `error` during `stage`.
+    static func endReason(_ error: Error, stage: AttemptMeter.Stage) -> String {
+        if let failure = error as? ApiFailure {
+            switch failure.status {
+            case 403 where stage == .upload: return "lease_403"
+            case 400..<500: return "server_4xx"
+            case 500..<600: return "server_5xx"
+            default: break
+            }
+        }
+        if retryDelay(error, attempt: 0) != nil { return "network" }
+        switch stage {
+        case .synth: return "model_error"
+        case .encode: return "encode_error"
+        case .start, .upload: return "other"
+        }
     }
 
     /// Why this phone will not generate the job, or nil when it will.
@@ -344,16 +394,21 @@ final class Contributor {
     private let coolDown: Duration
     private let retry: NetworkRetry
     private let sentence: (_ done: Int, _ total: Int, _ audioSeconds: Double) -> Void
+    private let probes: DeviceProbes
+    private let audio: AttemptAudio?
+    private static let logger = Logger(subsystem: "online.freeappstore.companion", category: "contribute")
 
     /// `stopReason` names why `keepGoing` turned false, for the record. While `hot()` (the phone is too warm) the work
     /// waits between sentences and before claiming, checking every `coolDown` and keeping the lease alive, then goes on.
+    /// Each attempt is measured with `probes` (#827); its audio is kept in `audio` when given.
     init(client: GenerationClient, log: ContributionLog, synth: Synthesizer, encoder: @escaping (URL, Int) throws -> AudioSink, workDir: URL,
          attestation: Attestation = .none, now: @escaping () -> Int64 = CompanionRepository.now,
          stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false }, coolDown: Duration = .seconds(10),
-         retry: NetworkRetry = NetworkRetry(), sentence: @escaping (_ done: Int, _ total: Int, _ audioSeconds: Double) -> Void = { _, _, _ in }) {
+         retry: NetworkRetry = NetworkRetry(), sentence: @escaping (_ done: Int, _ total: Int, _ audioSeconds: Double) -> Void = { _, _, _ in },
+         probes: DeviceProbes = DeviceProbes(), audio: AttemptAudio? = nil) {
         self.client = client; self.log = log; self.synth = synth; self.encoder = encoder; self.workDir = workDir
         self.attestation = attestation; self.now = now; self.stopReason = stopReason; self.hot = hot; self.coolDown = coolDown
-        self.retry = retry; self.sentence = sentence
+        self.retry = retry; self.sentence = sentence; self.probes = probes; self.audio = audio
     }
 
     /// Takes one job from each app in turn (#819), so every app moves forward, until none has a job left or `keepGoing`
@@ -386,28 +441,51 @@ final class Contributor {
         return submitted
     }
 
+    /// One attempt at `job`, measured (#827): when it ends its record is kept with the job's row, its finished audio is
+    /// kept for playback, and the record is sent to the server, best effort.
     private func process(_ appId: String, _ job: GenerationJob, _ keepGoing: @escaping () -> Bool, optedIn: @escaping () -> Bool) async throws -> Bool {
+        let meter = await AttemptMeter(probes: probes, startedAt: now())
+        let file = workDir.appendingPathComponent("contribution.m4a")
+        defer { try? FileManager.default.removeItem(at: file) }
+        var segments: [[Any]]?
+        let submitted = try await attempt(appId, job, keepGoing, optedIn: optedIn, meter: meter, file: file, segments: &segments)
+        if meter.skip { return submitted }
+        let record = await meter.finish()
+        do { try log.saveAttempt(job.id, record) } catch { Self.logger.error("attempt record not kept: \(error.localizedDescription, privacy: .public)") }
+        if let audio, let segments, FileManager.default.fileExists(atPath: file.path) {
+            do { try audio.save(job.id, file: file, segments: segments) } catch { Self.logger.error("audio not kept: \(error.localizedDescription, privacy: .public)") }
+        }
+        do { try await client.events(appId, records: [(job.id, record)]) }
+        catch { Self.logger.error("attempt record not sent: \(error.localizedDescription, privacy: .public)") } // best effort: never fails the job
+        return submitted
+    }
+
+    private func attempt(_ appId: String, _ job: GenerationJob, _ keepGoing: @escaping () -> Bool, optedIn: @escaping () -> Bool,
+                         meter: AttemptMeter, file: URL, segments: inout [[Any]]?) async throws -> Bool {
         let handled = log.handled(job.id)
         func row(_ status: String, _ reason: String = "") -> Contribution {
             Contribution(jobId: job.id, appId: appId, key: job.key, at: now(), status: status, reason: reason, input: job.text, setId: job.setId)
         }
         if let reason = GenerationPolicy.refusal(job, synth: synth, handled: handled, now: now()) {
-            if !handled { try log.record(row("skipped", reason)) }
+            if handled { meter.skip = true } else { meter.reason = GenerationPolicy.endReason(reason); try log.record(row("skipped", reason)) }
             return false
         }
         let stopped = { optedIn() ? self.stopReason() : "opted_out" }
-        let file = workDir.appendingPathComponent("contribution.m4a")
-        defer { try? FileManager.default.removeItem(at: file) }
         let lease = Lease(client: client, appId: appId, job: job, now: now)
         var retried = false
         do {
-            guard let (segments, durationMs) = try await narrate(job, file, lease, keepGoing) else {
-                try log.record(row("skipped", keepGoing() ? "lease_expired" : stopped()))
+            guard let (narrated, durationMs) = try await narrate(job, file, lease, keepGoing, meter) else {
+                let reason = keepGoing() ? "lease_expired" : stopped()
+                meter.reason = GenerationPolicy.endReason(reason, leaseRevoked: lease.revoked)
+                try log.record(row("skipped", reason))
                 return false
             }
-            let meta: [String: Any] = ["segments": segments]
+            segments = narrated
+            let meta: [String: Any] = ["segments": narrated]
+            meter.stage = .start
             try await lease.renew()
             let bytes = ((try? FileManager.default.attributesOfItem(atPath: file.path))?[.size] as? NSNumber)?.int64Value ?? 0
+            meter.output(bytes: bytes, durationMs: durationMs)
             let metaBytes = try JSONSerialization.data(withJSONObject: meta).count
             let refusal: String? = if bytes > job.maxBytes || metaBytes > GenerationPolicy.maxMetaBytes {
                 "too_large"
@@ -415,23 +493,34 @@ final class Contributor {
             var made = row("skipped", refusal ?? "")
             made.durationMs = durationMs
             made.bytes = bytes
-            if refusal != nil { try log.record(made); return false }
+            if let refusal {
+                meter.reason = GenerationPolicy.endReason(refusal, leaseRevoked: lease.revoked)
+                try log.record(made)
+                return false
+            }
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
             made.status = "uploading"
             try log.record(made)
+            meter.stage = .upload
             // The same file, sent again after a network failure while the lease leaves time (#819); never generated again.
-            _ = try await retry.run(keepGoing: keepGoing, more: { _, wait in retried = true; return lease.held(after: wait) }) { attempt in
-                if attempt > 0 { try await lease.renew() }
-                return try await self.client.submit(appId, job: job, file: file, contentType: GenerationPolicy.contentType, meta: meta,
-                                                    attestation: self.attestation.token(appId, job))
+            _ = try await meter.time(\.uploadMs) {
+                try await retry.run(keepGoing: keepGoing, more: { _, wait in retried = true; return lease.held(after: wait) }) { attempt in
+                    if attempt > 0 { try await lease.renew() }
+                    return try await self.client.submit(appId, job: job, file: file, contentType: GenerationPolicy.contentType, meta: meta,
+                                                        attestation: self.attestation.token(appId, job))
+                }
             }
             try log.updateStatus(job.id, status: "pending", reason: "")
+            meter.reason = "submitted"
             return true
         } catch is RetryStopped {
+            meter.reason = GenerationPolicy.endReason(stopped())
             try log.updateStatus(job.id, status: "skipped", reason: stopped())
             return false
         } catch {
             if (error as? ApiFailure)?.status == 401 { throw error }
+            meter.reason = GenerationPolicy.endReason(error, stage: meter.stage)
+            meter.failure = error
             let reason = GenerationPolicy.retryDelay(error, attempt: 0) != nil ? "network"
                 : String((((error as? ApiFailure).map { "\($0.status) " } ?? "") + error.localizedDescription).prefix(120))
             if log.handled(job.id) { try log.updateStatus(job.id, status: "failed", reason: reason) }
@@ -446,7 +535,8 @@ final class Contributor {
     /// (#785), the sentences joined by its pauses, each one encoded into `file` as soon as it is synthesized. Returns
     /// `[charStart, charEnd, startSec, endSec]` for each sentence and the audio's length in ms, or nil when stopped or the
     /// lease ran out. `sentence` hears of each one done.
-    private func narrate(_ job: GenerationJob, _ file: URL, _ lease: Lease, _ keepGoing: @escaping () -> Bool) async throws -> ([[Any]], Int64)? {
+    private func narrate(_ job: GenerationJob, _ file: URL, _ lease: Lease, _ keepGoing: @escaping () -> Bool,
+                         _ meter: AttemptMeter) async throws -> ([[Any]], Int64)? {
         var segments: [[Any]] = []
         var sink: AudioSink?
         defer { sink?.close() }
@@ -456,29 +546,40 @@ final class Contributor {
         let text = job.text as NSString
         guard let language = synth.language(job.params, tag: job.language) else { return nil } // refused before this
         let sentences = Sentences.split(job.text, language: language)
+        meter.stage = .synth
+        try meter.load { try synth.load(language) }
         sentence(0, sentences.count, 0)
         for (i, s) in sentences.enumerated() {
-            defer { sentence(i + 1, sentences.count, Double(length) / Double(rate)) }
+            defer { meter.sample(); sentence(i + 1, sentences.count, Double(length) / Double(rate)) }
             while hot() && keepGoing() && lease.held {
                 try await lease.renew()
                 try await Task.sleep(for: coolDown)
             }
             try await lease.renew()
-            guard let audio = try synth.synthesize(text.substring(with: NSRange(location: s.start, length: s.end - s.start)), params: job.params,
-                                                   language: language, keepGoing: { keepGoing() && lease.held }) else { return nil }
+            meter.stage = .synth
+            guard let audio = try await meter.time(\.synthMs, {
+                try synth.synthesize(text.substring(with: NSRange(location: s.start, length: s.end - s.start)), params: job.params,
+                                     language: language, keepGoing: { keepGoing() && lease.held })
+            }) else { return nil }
             if audio.samples.isEmpty { continue } // nothing to say, e.g. "* * *"
-            let out: AudioSink
-            if let sink { out = sink } else { out = try encoder(file, audio.sampleRate); sink = out; rate = audio.sampleRate }
-            if pause > 0 { try out.write([Float](repeating: 0, count: pause)); length += pause }
-            segments.append([s.start, s.end, seconds(length, rate), seconds(length + audio.samples.count, rate)])
-            try out.write(audio.samples)
+            meter.stage = .encode
+            try await meter.time(\.encodeMs) {
+                let out: AudioSink
+                if let sink { out = sink } else { out = try encoder(file, audio.sampleRate); sink = out; rate = audio.sampleRate }
+                if pause > 0 { try out.write([Float](repeating: 0, count: pause)); length += pause }
+                segments.append([s.start, s.end, seconds(length, rate), seconds(length + audio.samples.count, rate)])
+                try out.write(audio.samples)
+            }
             length += audio.samples.count
             pause = Int((s.endsParagraph ? GenerationPolicy.paragraphPause : GenerationPolicy.sentencePause) * Double(rate))
         }
-        if sink == nil { sink = try encoder(file, rate) }
-        let short = Int(GenerationPolicy.minSeconds * Double(rate)) - length
-        if short > 0 { try sink?.write([Float](repeating: 0, count: short)); length += short }
-        try sink?.finish()
+        meter.stage = .encode
+        try await meter.time(\.encodeMs) {
+            if sink == nil { sink = try encoder(file, rate) }
+            let short = Int(GenerationPolicy.minSeconds * Double(rate)) - length
+            if short > 0 { try sink?.write([Float](repeating: 0, count: short)); length += short }
+            try sink?.finish()
+        }
         return (segments, Int64(length) * 1000 / Int64(rate))
     }
 
@@ -503,6 +604,9 @@ private final class Lease: @unchecked Sendable {
 
     /// Whether there is still time to finish and upload.
     var held: Bool { held(after: 0) }
+
+    /// The server refused to extend it (`403`).
+    var revoked: Bool { lock.withLock { expiresAt == 0 } }
 
     /// Whether there will still be time to upload `ms` from now.
     func held(after ms: Int64) -> Bool { lock.withLock { now() + ms < expiresAt - GenerationPolicy.leaseMarginMs } }

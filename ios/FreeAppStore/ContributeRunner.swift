@@ -159,6 +159,7 @@ final class ContributeRunner: ObservableObject {
                 do { try await refresh(app, keepGoing: keepGoing) } catch let failure as ApiFailure where failure.status == 401 { throw failure } catch {}
             }
             let started = Box(Date())
+            let (path, appState) = (NetworkPath(), AppBackground()) // what each attempt's record says of the phone (#827)
             let contributor = Contributor(client: client, log: local, synth: synth, encoder: { try AacEncoder(url: $0, sampleRate: $1) },
                                           workDir: FileManager.default.temporaryDirectory, stopReason: { flag.reason ?? "stopped" }, hot: hot,
                                           sentence: { done, total, audio in
@@ -167,7 +168,7 @@ final class ContributeRunner: ObservableObject {
                     self.sentences = (done, total)
                     self.speed = done > 0 && elapsed > 0 ? audio / elapsed : nil
                 }
-            })
+            }, probes: .phone(path: path, background: { background || appState.now }), audio: AttemptAudio(dir: AttemptAudio.defaultDirectory))
             _ = try await contributor.run(apps, keepGoing: keepGoing, optedIn: { local.contributeApps().contains($0) }) { app, job in
                 started.value = Date()
                 Task { @MainActor in self.app = app; self.job = job.key; self.sentences = nil; self.speed = nil; self.status = "Generating \(job.key)" }

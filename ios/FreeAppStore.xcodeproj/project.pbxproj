@@ -35,6 +35,7 @@
 		76BA4BD00F562FC63D743106 /* TrackShape.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29EFD7782FBC2DCD77572F83 /* TrackShape.swift */; };
 		7F5F5D3176AC82128EBCA5EA /* FasApiTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7C5389BC465CE8E80F68655 /* FasApiTests.swift */; };
 		8070BA9DC36BCFB8FDDD841B /* CompanionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71D4E32035786C6BF2E054ED /* CompanionRepository.swift */; };
+		887CF28607642FD828254A06 /* GenerationRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A149FA01D9DCAD1F265D23B /* GenerationRecord.swift */; };
 		8E781652C351ADF7ACAEC1B5 /* CatalogueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454EEECFB09A5AC2C0312837 /* CatalogueTests.swift */; };
 		93B762059FCD3EE397D0DB46 /* Catalogue.swift in Sources */ = {isa = PBXBuildFile; fileRef = 326A8F0E0B73A6A4A9E2F454 /* Catalogue.swift */; };
 		9766D73B94C6355A460FFAA0 /* ContributeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05FD5D027308262FAFF6F02D /* ContributeSettingsView.swift */; };
@@ -96,6 +97,7 @@
 		14EB27762396BF711FCE2A95 /* ScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotTests.swift; sourceTree = "<group>"; };
 		19455AC3A92674A231867842 /* SherpaOnnxC.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = SherpaOnnxC.xcframework; path = Vendor/SherpaOnnxC.xcframework; sourceTree = "<group>"; };
 		19650849963AF9B21298AD45 /* SharingDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharingDashboardView.swift; sourceTree = "<group>"; };
+		1A149FA01D9DCAD1F265D23B /* GenerationRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationRecord.swift; sourceTree = "<group>"; };
 		234EF81AAE905652AC071062 /* AppSharingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSharingView.swift; sourceTree = "<group>"; };
 		29401AA14559DC9FA8C99272 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		29EFD7782FBC2DCD77572F83 /* TrackShape.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackShape.swift; sourceTree = "<group>"; };
@@ -207,6 +209,7 @@
 				65C7C1B68E32AED9170743E0 /* FreeAppStore-Bridging-Header.h */,
 				CDF779FB8F919D8E2133DAD6 /* FreeAppStoreApp.swift */,
 				E9AC16DC2BA827CBAF6E93C4 /* Generation.swift */,
+				1A149FA01D9DCAD1F265D23B /* GenerationRecord.swift */,
 				11C4129D2EEEEE44DDBEB00A /* Info.plist */,
 				8A07EB69701D7012FBF98FB4 /* InstallGuideSheet.swift */,
 				F07CFD12E61602CA2A644D19 /* Kokoro.swift */,
@@ -374,6 +377,7 @@
 				37EAD83F16DA744010820FF7 /* FasApi.swift in Sources */,
 				23F27F1E99D351731FB7DCA3 /* FreeAppStoreApp.swift in Sources */,
 				A411B26D3618B172DEC3CBBB /* Generation.swift in Sources */,
+				887CF28607642FD828254A06 /* GenerationRecord.swift in Sources */,
 				5A3F2F7CABBF0C745F9ABAD2 /* InstallGuideSheet.swift in Sources */,
 				59C5331CD3E96EF488B7C919 /* Kokoro.swift in Sources */,
 				FF2E1F53117A530AF249E69A /* LocalStore.swift in Sources */,

@@ -85,14 +85,16 @@ struct ContributeActivityView: View {
     }
 }
 
-/// One job (#820): what it was, what this phone made, why it was not done or what the server said, and its audio once
-/// accepted.
+/// One job (#820): what it was, what this phone made, why it was not done or what the server said, how this phone's
+/// attempt went (#827), and its audio: this phone's own while kept, else the accepted audio.
 struct ContributionDetailView: View {
     let contribution: Contribution
     let appName: String
+    var kept = AttemptAudio(dir: AttemptAudio.defaultDirectory)
     @StateObject private var player = ArtifactPlayer()
 
     private var device: Bool { ["skipped", "failed"].contains(contribution.status) }
+    private var playable: Bool { kept.load(contribution.jobId) != nil || ["accepted", "superseded"].contains(contribution.status) }
 
     var body: some View {
         ScrollView {
@@ -109,11 +111,12 @@ struct ContributionDetailView: View {
                     field(device ? "Why" : "Reason", ContributeText.reasons[contribution.reason] ?? contribution.reason)
                 }
                 if let wer = contribution.wer { field("Error rate", wer.formatted(.percent.precision(.fractionLength(0...1)))) }
-                // `superseded`: another contributor's audio was accepted first; it plays from the same URL (#824).
-                if ["accepted", "superseded"].contains(contribution.status) {
+                // `superseded`: another contributor's audio was accepted first; it plays from the same URL (#824) once this
+                // phone no longer keeps its own.
+                if playable {
                     if contribution.status == "superseded" { Text("Another contributor's audio was accepted for this job.").font(.footnote).foregroundStyle(.secondary) }
                     Button(player.playing ? "Pause" : "Play", systemImage: player.playing ? "pause.fill" : "play.fill") {
-                        player.toggle(appId: contribution.appId, jobId: contribution.jobId)
+                        player.toggle(appId: contribution.appId, jobId: contribution.jobId, kept: kept)
                     }
                     .buttonStyle(.borderedProminent)
                     if !player.error.isEmpty { Text(player.error).foregroundStyle(.red) }
@@ -122,6 +125,10 @@ struct ContributionDetailView: View {
                     Text("Text").font(.headline)
                     Text(player.highlighted(contribution.input)).textSelection(.enabled)
                 }
+                if let record = contribution.record {
+                    Text("On this phone").font(.headline)
+                    ForEach(Self.facts(record), id: \.label) { field($0.label, $0.value) }
+                }
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -129,6 +136,33 @@ struct ContributionDetailView: View {
         .navigationTitle(contribution.key)
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.stop() }
+    }
+
+    /// The attempt's record (#827), as label and value, leaving out what it did not measure.
+    static func facts(_ r: AttemptRecord) -> [(label: String, value: String)] {
+        func s(_ ms: Int64?) -> String? { ms.map { (Double($0) / 1000).formatted(.number.precision(.fractionLength(1))) + " s" } }
+        func power(_ level: Int?, _ charging: Bool?) -> String? {
+            let parts = [level.map { "\($0)%" }, charging.map { $0 ? "charging" : "on battery" }].compactMap { $0 }
+            return parts.isEmpty ? nil : parts.joined(separator: " ")
+        }
+        func span(_ start: String?, _ end: String?) -> String? {
+            guard start != nil || end != nil else { return nil }
+            return start == end ? start : "\(start ?? "?") → \(end ?? "?")"
+        }
+        let stages = [("load", r.loadMs), ("speech", r.synthMs), ("encode", r.encodeMs), ("upload", r.uploadMs)]
+            .compactMap { name, ms in s(ms).map { "\(name) \($0)" } }.joined(separator: " · ")
+        let rows: [(String, String?)] = [
+            ("Ended", r.reason), ("Error", r.error),
+            ("Ran on", [r.runner, r.appVersion, r.os, r.device].compactMap { $0 }.joined(separator: " · ")),
+            ("Conditions", [r.network, r.background.map { $0 ? "in the background" : "in the foreground" }].compactMap { $0 }.joined(separator: " · ")),
+            ("Time", s(r.wallMs).map { stages.isEmpty ? $0 : "\($0) (\(stages))" }),
+            ("CPU time", s(r.cpuMs)),
+            ("Real-time factor", r.rtf.map { $0.formatted(.number.precision(.fractionLength(2))) }),
+            ("Peak memory", r.peakMemMb.map { "\($0) MB" }),
+            ("Battery", span(power(r.batteryStart, r.chargingStart), power(r.batteryEnd, r.chargingEnd))),
+            ("Thermal state", span(r.thermalStart, r.thermalEnd)),
+        ]
+        return rows.compactMap { label, value in value.flatMap { $0.isEmpty ? nil : (label, $0) } }
     }
 
     private func field(_ label: String, _ value: String) -> some View {
@@ -151,13 +185,15 @@ final class ArtifactPlayer: ObservableObject {
     private var observers: [Any] = []
     private var segments: [(range: NSRange, from: Double, to: Double)] = []
 
-    func toggle(appId: String, jobId: String) {
+    /// Plays this phone's own audio of the job while `kept` has it (#827), else the job's accepted audio.
+    func toggle(appId: String, jobId: String, kept: AttemptAudio? = nil) {
         if let player {
             if playing { player.pause() } else { player.play() }
             playing.toggle()
             return
         }
-        guard let url = GenerationClient.artifactURL(appId, jobId), let meta = GenerationClient.artifactURL(appId, jobId, meta: true) else { return }
+        let own = kept?.load(jobId)
+        guard let url = own?.audio ?? GenerationClient.artifactURL(appId, jobId), let meta = GenerationClient.artifactURL(appId, jobId, meta: true) else { return }
         try? AVAudioSession.sharedInstance().setCategory(.playback)
         let player = AVPlayer(url: url)
         observers.append(player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 10), queue: .main) { [weak self] time in
@@ -174,7 +210,7 @@ final class ArtifactPlayer: ObservableObject {
         self.player = player
         player.play()
         playing = true
-        Task { segments = await Self.segments(meta) }
+        if let own { segments = own.segments } else { Task { segments = await Self.segments(meta) } }
     }
 
     func stop() {
@@ -207,10 +243,7 @@ final class ArtifactPlayer: ObservableObject {
         let session = URLSession(configuration: .ephemeral, delegate: RefuseRedirects(), delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
         guard let (data, response) = try? await session.data(from: url), (response as? HTTPURLResponse)?.statusCode == 200,
-              let meta = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let rows = meta["segments"] as? [[NSNumber]] else { return [] }
-        return rows.compactMap { row in
-            guard row.count == 4, row[1].intValue >= row[0].intValue else { return nil }
-            return (NSRange(location: row[0].intValue, length: row[1].intValue - row[0].intValue), row[2].doubleValue, row[3].doubleValue)
-        }
+              let meta = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return [] }
+        return AttemptAudio.segments(meta["segments"])
     }
 }

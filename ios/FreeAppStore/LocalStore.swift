@@ -64,6 +64,13 @@ final class LocalStore: @unchecked Sendable {
                 try exec("PRAGMA user_version = 1")
             }
         }
+        // Migration 2 (#827): the record of the job's last attempt on this phone, as JSON.
+        if (try query("PRAGMA user_version") { sqlite3_column_int64($0, 0) }.first ?? 0) < 2 {
+            try transaction {
+                try exec("ALTER TABLE generation_jobs ADD COLUMN record TEXT")
+                try exec("PRAGMA user_version = 2")
+            }
+        }
         for path in [fileURL.path, fileURL.path + "-wal", fileURL.path + "-shm"] where FileManager.default.fileExists(atPath: path) {
             try FileManager.default.setAttributes(protection, ofItemAtPath: path)
         }
@@ -425,7 +432,7 @@ final class LocalStore: @unchecked Sendable {
     /// Newest first.
     func contributions(limit: Int = 30) throws -> [Contribution] {
         try query("""
-            SELECT job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer FROM generation_jobs
+            SELECT job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer, record FROM generation_jobs
             ORDER BY at DESC LIMIT ?
             """, [Int64(limit)]) { row in
             Contribution(jobId: String(cString: sqlite3_column_text(row, 0)), appId: String(cString: sqlite3_column_text(row, 1)),
@@ -433,7 +440,8 @@ final class LocalStore: @unchecked Sendable {
                          status: String(cString: sqlite3_column_text(row, 4)), reason: String(cString: sqlite3_column_text(row, 5)),
                          input: String(cString: sqlite3_column_text(row, 6)), setId: String(cString: sqlite3_column_text(row, 7)),
                          durationMs: sqlite3_column_int64(row, 8), bytes: sqlite3_column_int64(row, 9),
-                         wer: sqlite3_column_type(row, 10) == SQLITE_NULL ? nil : sqlite3_column_double(row, 10))
+                         wer: sqlite3_column_type(row, 10) == SQLITE_NULL ? nil : sqlite3_column_double(row, 10),
+                         record: sqlite3_column_type(row, 11) == SQLITE_NULL ? nil : AttemptRecord.decode(String(cString: sqlite3_column_text(row, 11))))
         }
     }
 
@@ -524,11 +532,15 @@ extension LocalStore: ContributionLog {
 
     func record(_ contribution: Contribution) throws {
         try exec("""
-            INSERT OR REPLACE INTO generation_jobs(job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO generation_jobs(job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer, record)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [contribution.jobId, contribution.appId, String(contribution.key.prefix(200)), contribution.at, contribution.status,
                   String(contribution.reason.prefix(120)), contribution.input, contribution.setId, contribution.durationMs, contribution.bytes,
-                  contribution.wer ?? NSNull()])
+                  contribution.wer ?? NSNull(), contribution.record?.json ?? NSNull()])
+    }
+
+    func saveAttempt(_ jobId: String, _ record: AttemptRecord) throws {
+        try exec("UPDATE generation_jobs SET record = ? WHERE job_id = ?", [record.json, jobId])
     }
 
     func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) throws {

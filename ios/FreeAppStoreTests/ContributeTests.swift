@@ -25,6 +25,7 @@ final class ContributeTests: XCTestCase {
             if let durationMs { rows[jobId]?.durationMs = durationMs }
             if let input, rows[jobId]?.input == "" { rows[jobId]?.input = input }
         }
+        func saveAttempt(_ jobId: String, _ record: AttemptRecord) { rows[jobId]?.record = record }
     }
 
     final class FakeSynth: Synthesizer {
@@ -32,12 +33,15 @@ final class ContributeTests: XCTestCase {
         var spoken: [String] = []
         var languages: [Language] = []
         /// Replaces the default: one sample per character, nil once `keepGoing` is false.
-        var say: ((String, () -> Bool) -> Audio?)?
+        var say: ((String, () -> Bool) throws -> Audio?)?
+        /// What `load` does and answers (#827); nil answers false, as a lazily loading model.
+        var loads: (() -> Bool)?
+        func load(_ language: Language) -> Bool { loads?() ?? false }
         func accepts(_ params: [String: Any]) -> Bool { KokoroModel.params(params) != nil }
         func language(_ params: [String: Any], tag: String?) -> Language? { KokoroModel.language(params, tag: tag) }
-        func synthesize(_ text: String, params: [String: Any], language: Language, keepGoing: @escaping () -> Bool) -> Audio? {
+        func synthesize(_ text: String, params: [String: Any], language: Language, keepGoing: @escaping () -> Bool) throws -> Audio? {
             spoken.append(text); languages.append(language)
-            if let say { return say(text, keepGoing) }
+            if let say { return try say(text, keepGoing) }
             return keepGoing() ? Audio(samples: [Float](repeating: 0, count: text.utf16.count), sampleRate: 24_000) : nil
         }
     }
@@ -49,12 +53,13 @@ final class ContributeTests: XCTestCase {
         var writes: [Int] = []
         var finished = false
         var closed = false
+        var onWrite: () -> Void = {}
         init(_ file: URL, _ rate: Int) throws {
             self.rate = rate
             FileManager.default.createFile(atPath: file.path, contents: nil)
             out = try FileHandle(forWritingTo: file)
         }
-        func write(_ samples: [Float]) throws { writes.append(samples.count); try out.write(contentsOf: Data(repeating: 7, count: samples.count)) }
+        func write(_ samples: [Float]) throws { onWrite(); writes.append(samples.count); try out.write(contentsOf: Data(repeating: 7, count: samples.count)) }
         func finish() { finished = true }
         func close() { closed = true; try? out.close() }
     }
@@ -77,6 +82,9 @@ final class ContributeTests: XCTestCase {
         var attempts: [Upload] = []
         var submissions: [[String: Any]] = []
         var refreshes = 0
+        /// Attempt records posted (#827), and whether that route fails.
+        var events: [[String: Any]] = []
+        var eventsFail = false
         /// Lease extensions asked for (path, `X-Lease-Token`), and what the next one answers: an expiry or a failure.
         var extensions: [(String, String?)] = []
         var extend: () -> Result<Int64, ApiFailure> = { .failure(ApiFailure(status: 500, message: "no extension expected")) }
@@ -96,6 +104,11 @@ final class ContributeTests: XCTestCase {
                     return .init(json: ["job": next])
                 }
                 return jobs.isEmpty ? .init(status: 204) : .init(json: ["job": jobs.removeFirst()])
+            case ("POST", _) where path.hasSuffix("/generation/events"):
+                if eventsFail { return .init(status: 500, json: ["error": "down"]) }
+                let posted = ((try? JSONSerialization.jsonObject(with: Self.body(request))) as? [String: Any])?["events"] as? [[String: Any]] ?? []
+                events += posted
+                return .init(json: ["recorded": posted.count])
             case ("GET", "/v1/apps/books/generation/submissions"):
                 refreshes += 1
                 return .init(json: ["submissions": submissions])
@@ -168,13 +181,17 @@ final class ContributeTests: XCTestCase {
 
     private func contributor(synth: Synthesizer? = nil, attestation: Attestation = .none, clock: (() -> Int64)? = nil,
                              stopReason: @escaping () -> String = { "stopped" }, hot: @escaping () -> Bool = { false },
-                             sentence: @escaping (Int, Int, Double) -> Void = { _, _, _ in }) -> Contributor {
+                             sentence: @escaping (Int, Int, Double) -> Void = { _, _, _ in }, probes: DeviceProbes = DeviceProbes(),
+                             audio: AttemptAudio? = nil) -> Contributor {
         let now = now
         return Contributor(client: client, log: log, synth: synth ?? self.synth, encoder: { [unowned self] file, rate in
-            let sink = try FakeSink(file, rate); sinks.append(sink); return sink
+            let sink = try FakeSink(file, rate); sink.onWrite = { [unowned self] in mono += 50 }; sinks.append(sink); return sink
         }, workDir: dir, attestation: attestation, now: clock ?? { now }, stopReason: stopReason, hot: hot, coolDown: .milliseconds(1),
-           retry: NetworkRetry(sleep: { [unowned self] ms in waited += ms; t += ms; onWait() }), sentence: sentence)
+           retry: NetworkRetry(sleep: { [unowned self] ms in waited += ms; t += ms; onWait() }), sentence: sentence, probes: probes, audio: audio)
     }
+
+    /// The fake monotonic clock of `probes` (#827): each encoder write takes 50 ms.
+    private var mono: Int64 = 0
 
     /// Network retry waits (#819): their total in ms, and a hook run after each step. They advance `t` instead of sleeping.
     private var waited: Int64 = 0
@@ -236,6 +253,10 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(log.rows["a"]?.reason, "model")
         XCTAssertEqual(log.rows["e"]?.reason, "params")
         XCTAssertEqual(log.rows["f"]?.reason, "input")
+        // #827: each refusal's attempt record.
+        XCTAssertEqual(log.rows["a"]?.record?.reason, "unsupported")
+        XCTAssertEqual(log.rows["h"]?.record?.reason, "lease_cap")
+        XCTAssertEqual(Set(server.events.map { $0["reason"] as? String }), ["unsupported", "lease_cap"])
     }
 
     func testNeverUploadsTwiceForOneJob() async throws {
@@ -273,6 +294,7 @@ final class ContributeTests: XCTestCase {
         _ = try await contributor(stopReason: { "user_stop" }).run(["books"], keepGoing: { go })
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertEqual(log.rows["j1"]?.reason, "user_stop", "the runner's reason is recorded")
+        XCTAssertEqual(server.events.first?["reason"] as? String, "user_stop")
     }
 
     /// A hot phone pauses the work and keeps the lease alive; it goes on once cool, rather than stopping.
@@ -301,6 +323,8 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(log.rows["j1"]?.status, "failed")
         XCTAssertEqual(log.rows["j1"]?.reason, "409 Lease expired.")
         XCTAssertNil(log.rows["j2"])
+        XCTAssertEqual(server.events.first?["reason"] as? String, "server_4xx")
+        XCTAssertEqual(server.events.first?["error"] as? String, "ApiFailure: Lease expired.")
     }
 
     func testExpiredConnectionIsThrown() async throws {
@@ -310,6 +334,119 @@ final class ContributeTests: XCTestCase {
             _ = try await contributor().run(["books"], keepGoing: { true })
             XCTFail("a 401 must be thrown")
         } catch let failure as ApiFailure { XCTAssertEqual(failure.status, 401) }
+    }
+
+    // MARK: Attempt records (#827)
+
+    func testEndReasons() {
+        for local in ["model", "format", "input", "params", "language", "max_bytes"] { XCTAssertEqual(GenerationPolicy.endReason(local), "unsupported", local) }
+        for local in ["too_large", "user_stop", "thermal", "background_expired", "unplugged", "network"] { XCTAssertEqual(GenerationPolicy.endReason(local), local) }
+        XCTAssertEqual(GenerationPolicy.endReason("lease_expired"), "lease_cap")
+        XCTAssertEqual(GenerationPolicy.endReason("lease_expired", leaseRevoked: true), "lease_403")
+        XCTAssertEqual(GenerationPolicy.endReason("opted_out"), "user_stop")
+        XCTAssertEqual(GenerationPolicy.endReason("stopped"), "other")
+        func reason(_ error: Error, _ stage: AttemptMeter.Stage) -> String { GenerationPolicy.endReason(error, stage: stage) }
+        XCTAssertEqual(reason(ApiFailure(status: 403, message: ""), .upload), "lease_403")
+        XCTAssertEqual(reason(ApiFailure(status: 403, message: ""), .start), "server_4xx")
+        XCTAssertEqual(reason(ApiFailure(status: 409, message: ""), .upload), "server_4xx")
+        XCTAssertEqual(reason(ApiFailure(status: 429, message: "", retryAfter: 5), .upload), "server_4xx")
+        XCTAssertEqual(reason(ApiFailure(status: 503, message: ""), .upload), "server_5xx")
+        XCTAssertEqual(reason(URLError(.timedOut), .upload), "network")
+        XCTAssertEqual(reason(CompanionError("no"), .synth), "model_error")
+        XCTAssertEqual(reason(CompanionError("no"), .encode), "encode_error")
+        XCTAssertEqual(reason(CompanionError("no"), .start), "other")
+    }
+
+    /// A processed job's record: stage times on the fake clock, the probes at start and end, kept with the row and posted,
+    /// and the audio with its segments kept for playback.
+    func testAProcessedJobYieldsARecordWithStageTimesAndPostsIt() async throws {
+        server.jobs = [job("j1", text: "One. Two.")]
+        StubProtocol.handler = { [server, unowned self] request in
+            if request.url!.path.hasSuffix("/result") { mono += 200 }
+            return server!.handle(request)
+        }
+        synth.loads = { [unowned self] in mono += 300; return true }
+        synth.say = { [unowned self] _, _ in mono += 1_000; return Audio(samples: [Float](repeating: 0, count: 24_000), sampleRate: 24_000) }
+        var cpu: Int64 = 100, memory = 0, thermal = ["nominal", "fair"], power: [(Int?, Bool?)] = [(80, true), (79, true)], samples = 0
+        let probes = DeviceProbes(clock: { [unowned self] in mono }, cpuMs: { defer { cpu += 300 }; return cpu },
+                                  memoryMb: { memory += 10; return memory }, thermal: { thermal.removeFirst() }, power: { power.removeFirst() },
+                                  background: { samples += 1; return samples == 2 }, network: { "wifi" })
+        let kept = AttemptAudio(dir: dir.appendingPathComponent("kept"))
+        let submitted = try await contributor(probes: probes, audio: kept).run(["books"], keepGoing: { true })
+        XCTAssertEqual(submitted, 1)
+        let record = try XCTUnwrap(log.rows["j1"]?.record)
+        XCTAssertEqual(record.reason, "submitted")
+        XCTAssertEqual(record.runner, "ios")
+        XCTAssertEqual(record.startedAt, now)
+        XCTAssertEqual(record.loadMs, 300)
+        XCTAssertEqual(record.synthMs, 2_000)
+        XCTAssertEqual(record.encodeMs, 150, "a sentence, a pause and a sentence")
+        XCTAssertEqual(record.uploadMs, 200)
+        XCTAssertEqual(record.wallMs, 2_650)
+        XCTAssertEqual(record.cpuMs, 300)
+        XCTAssertEqual(record.durationMs, 2_400)
+        XCTAssertEqual(record.rtf ?? 0, 2_000.0 / 2_400, accuracy: 0.0001)
+        XCTAssertEqual(record.bytes, Int64(server.uploads[0].file.count))
+        XCTAssertEqual(record.peakMemMb, 40, "start, two sentences, end")
+        XCTAssertEqual(record.background, true)
+        XCTAssertEqual([record.thermalStart, record.thermalEnd], ["nominal", "fair"])
+        XCTAssertEqual(record.batteryStart, 80)
+        XCTAssertEqual(record.batteryEnd, 79)
+        XCTAssertEqual(record.chargingEnd, true)
+        XCTAssertEqual(record.network, "wifi")
+        XCTAssertNil(record.error)
+        XCTAssertNotNil(record.appVersion)
+        XCTAssertTrue(record.os?.hasPrefix("iOS ") == true)
+        XCTAssertFalse(record.device?.isEmpty ?? true)
+        let event = try XCTUnwrap(server.events.first)
+        XCTAssertEqual(server.events.count, 1)
+        XCTAssertEqual(event["jobId"] as? String, "j1")
+        XCTAssertEqual(event["reason"] as? String, "submitted")
+        XCTAssertEqual(event["synthMs"] as? Int, 2_000)
+        XCTAssertNil(event["error"], "unmeasured fields are left out")
+        let allowed: Set = ["jobId", "runner", "reason", "error", "appVersion", "os", "device", "network", "thermalStart", "thermalEnd", "background",
+                            "chargingStart", "chargingEnd", "batteryStart", "batteryEnd", "startedAt", "wallMs", "loadMs", "synthMs", "encodeMs",
+                            "uploadMs", "cpuMs", "peakMemMb", "rtf", "bytes", "durationMs"]
+        XCTAssertTrue(Set(event.keys).isSubset(of: allowed), "the server refuses any other field")
+        let own = try XCTUnwrap(kept.load("j1"))
+        XCTAssertEqual(try Data(contentsOf: own.audio), server.uploads[0].file)
+        XCTAssertEqual(own.segments.map(\.range), [NSRange(location: 0, length: 4), NSRange(location: 5, length: 4)])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("contribution.m4a").path))
+    }
+
+    func testASynthesisErrorIsModelErrorAndAFailedPostNeverFailsTheJob() async throws {
+        server.jobs = [job("j1"), job("j2")]
+        server.eventsFail = true
+        synth.say = { text, _ in
+            if self.synth.spoken.count == 1 { throw CompanionError("The voice model could not narrate this text.") }
+            return Audio(samples: [Float](repeating: 0, count: text.utf16.count), sampleRate: 24_000)
+        }
+        let submitted = try await contributor().run(["books"], keepGoing: { true })
+        XCTAssertEqual(submitted, 0)
+        XCTAssertEqual(log.rows["j1"]?.status, "failed")
+        XCTAssertEqual(log.rows["j1"]?.record?.reason, "model_error")
+        XCTAssertEqual(log.rows["j1"]?.record?.error, "CompanionError: The voice model could not narrate this text.")
+        XCTAssertTrue(server.events.isEmpty)
+
+        server.eventsFail = false
+        server.jobs = [job("j3")]
+        synth.say = nil
+        let again = try await contributor().run(["books"], keepGoing: { true })
+        XCTAssertEqual(again, 1, "the post fails or not, the job is done")
+        XCTAssertEqual(server.events.map { $0["reason"] as? String }, ["submitted"])
+    }
+
+    func testKeepsTheLatestAttemptsAudio() throws {
+        let kept = AttemptAudio(dir: dir.appendingPathComponent("kept"), keep: 2)
+        for id in ["a", "b", "c"] {
+            let file = dir.appendingPathComponent("\(id).tmp")
+            try Data(id.utf8).write(to: file)
+            try kept.save(id, file: file, segments: [[0, 1, 0.0, 0.5]])
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path), "moved, not copied")
+        }
+        XCTAssertNil(kept.load("a"), "the oldest beyond two goes")
+        XCTAssertEqual(kept.load("c")?.segments.map(\.to), [0.5])
+        XCTAssertEqual(try kept.load("b").map { try Data(contentsOf: $0.audio) }, Data("b".utf8))
     }
 
     // MARK: Network retries (#819)
@@ -359,6 +496,7 @@ final class ContributeTests: XCTestCase {
         XCTAssertLessThan(t, now + 15 * 60_000 - GenerationPolicy.leaseMarginMs, "no try after the lease's margin")
         XCTAssertEqual(log.rows["j1"]?.status, "failed")
         XCTAssertEqual(log.rows["j1"]?.reason, "network")
+        XCTAssertEqual(log.rows["j1"]?.record?.reason, "network")
         XCTAssertEqual(server.refreshes, 1, "an answer may have been lost: the server's record is asked for")
     }
 
@@ -582,6 +720,7 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(server.extensions.count, 1)
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertEqual(log.rows["j1"]?.reason, "lease_expired")
+        XCTAssertEqual(log.rows["j1"]?.record?.reason, "lease_403")
         let sink = try XCTUnwrap(sinks.first) // stopped part-way: the encoder is closed unfinished and its file removed
         XCTAssertTrue(sink.closed && !sink.finished)
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("contribution.m4a").path))
@@ -855,6 +994,12 @@ final class ContributionStoreTests: XCTestCase {
                                                                       input: "Hola.", setId: "s1", durationMs: 1_200, bytes: 4_096, wer: 0.5))
         XCTAssertEqual(try local.contributionCounts(since: 150), ["skipped": 1, "rejected": 1])
         XCTAssertEqual(try local.contributionApps(), ["books", "dialogue"])
+        // #827: the attempt's record, kept with the row; a verdict leaves it as it is.
+        var attempt = AttemptRecord(reason: "submitted", error: nil, network: "wifi", background: true, wallMs: 1_234, rtf: 0.5)
+        attempt.peakMemMb = 300
+        try local.saveAttempt("j3", attempt)
+        try local.updateStatus("j3", status: "accepted", reason: "")
+        XCTAssertEqual(try local.contributions().first?.record, attempt)
         XCTAssertTrue(local.chargingOnly)
         local.chargingOnly = false
         XCTAssertFalse(local.chargingOnly)
@@ -881,6 +1026,9 @@ final class ContributionStoreTests: XCTestCase {
         XCTAssertEqual(try local.contributions(), [Contribution(jobId: "j1", appId: "books", key: "book/1", at: 100, status: "accepted")])
         try local.record(Contribution(jobId: "j2", appId: "books", key: "book/2", at: 200, status: "pending", input: "Text", durationMs: 5))
         XCTAssertEqual(try local.contributions().first?.input, "Text")
+        XCTAssertNil(try local.contributions().first?.record)
+        try local.saveAttempt("j1", AttemptRecord(reason: "submitted"))
+        XCTAssertEqual(try local.contributions().last?.record?.reason, "submitted")
         local.close()
         let reopened = try LocalStore(directory: directory) // the migration runs once
         XCTAssertEqual(try reopened.contributions().count, 2)
