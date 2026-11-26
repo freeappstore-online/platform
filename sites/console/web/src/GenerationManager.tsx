@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { GenerationJobDetail, GenerationJobSummary, GenerationSetSummary } from '@freeappstore/sdk'
+import type { GenerationAttempt, GenerationJobDetail, GenerationJobSummary, GenerationSetSummary } from '@freeappstore/sdk'
 import { ConfirmDialog, ProgressBar } from '@freeappstore/sdk/ui'
+import { attemptRows } from './attempt'
 import { API_URL, authHeaders } from './builder/lib/api'
 import { formatTimeAgo } from './deploy-status'
 
@@ -303,14 +304,48 @@ function JobRow({ job, onAction, loadText }: {
                     ) : 'deleted account'}
                   </td>
                   <td className="pr-3 py-1 text-ink">{s.deviceKind} · {s.attestation}</td>
-                  <td className="pr-3 py-1 text-muted whitespace-nowrap">{formatTimeAgo(new Date(s.createdAt))}</td>
+                  <td className="pr-3 py-1 text-muted whitespace-nowrap">
+                    {formatTimeAgo(new Date(s.createdAt))}
+                    {s.record && <AttemptRecord record={s.record} />}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {job.attempts.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-semibold text-muted">Attempts without an upload</p>
+          <ul className="text-xs">
+            {job.attempts.map(a => (
+              <li key={`${a.contributor?.id}-${a.createdAt}`} className="border-t border-line py-1">
+                <span className="text-ink">{a.reason}</span>
+                <span className="text-muted"> · {a.contributor?.login ?? 'deleted account'} · {a.runner} · {formatTimeAgo(new Date(a.createdAt))}</span>
+                <AttemptRecord record={a} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
+  )
+}
+
+/** The device's record of one attempt (#827), folded: how it ran and ended, and what it measured. */
+export function AttemptRecord({ record, label = 'Device record' }: { record: GenerationAttempt; label?: string }) {
+  return (
+    <details className="mt-1">
+      <summary className="cursor-pointer text-accent">{label}</summary>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 whitespace-normal">
+        {attemptRows(record).map(([name, value]) => (
+          <div key={name} className="contents">
+            <dt className="text-muted">{name}</dt>
+            <dd className="text-ink break-words min-w-0">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   )
 }
 

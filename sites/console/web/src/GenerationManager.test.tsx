@@ -41,7 +41,13 @@ const job = (key: string): GenerationJobSummary => ({
   submissions: [{
     id: `s-${key}`, contributor, deviceKind: 'web', attestation: 'unverified', status: 'rejected',
     reason: 'asr mismatch', wer: 0.42, durationMs: 2400, createdAt: Date.now(), decidedAt: Date.now(),
+    record: {
+      runner: 'android', reason: 'submitted', appVersion: '1.4.0', device: 'Google Pixel 10a', os: 'Android 16',
+      background: true, wallMs: 12_400, loadMs: 900, synthMs: 8200, cpuMs: 30_100, rtf: 0.35,
+      batteryStart: 81, batteryEnd: 79, chargingStart: true, thermalStart: 'none', thermalEnd: 'light', createdAt: Date.now(),
+    },
   }],
+  attempts: [{ contributor, runner: 'browser', reason: 'user_stop', wallMs: 3000, createdAt: Date.now() }],
 })
 
 it('explains how to create a set when the app has none', async () => {
@@ -73,6 +79,14 @@ it('shows set progress, pages jobs by cursor with a status filter, and withdraws
   expect(container.textContent).toContain('asr mismatch')
   expect(container.textContent).toContain('42%')
   expect(container.textContent).toContain('alice')
+  // The device's attempt record (#827)
+  expect(container.textContent).toContain('Google Pixel 10a · Android 16')
+  expect(container.textContent).toContain('load 900 ms · synthesis 8.2 s')
+  expect(container.textContent).toContain('CPU time30 s')
+  expect(container.textContent).toContain('81% charging → 79%')
+  expect(container.textContent).toContain('none → light')
+  expect(container.textContent).toContain('Attempts without an upload')
+  expect(container.textContent).toContain('user_stop')
 
   act(() => button('Load more')!.click())
   await flush()
