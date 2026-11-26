@@ -319,6 +319,14 @@ describe("securityHeaders", () => {
     expect(directive("connect-src")).toContain("wss:");
   });
 
+  // #804: app tabs reach the FAS desktop app's local bridge, and only that port.
+  it("CSP lets apps reach the desktop bridge on its loopback port only", () => {
+    const csp = html.get("content-security-policy") ?? "";
+    const connect = csp.split("; ").find((d) => d.startsWith("connect-src ")) ?? "";
+    const insecure = connect.split(" ").filter((s) => s.startsWith("ws:") || s.startsWith("http:"));
+    expect(insecure).toEqual(["ws://127.0.0.1:47821"]);
+  });
+
   it("sets nosniff + strict referrer policy", () => {
     expect(html.get("x-content-type-options")).toBe("nosniff");
     expect(html.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
