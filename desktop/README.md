@@ -29,7 +29,9 @@ pnpm --dir desktop dev        # builds main, preloads and UI, then starts Electr
 The home screen leads with the status (**Pause AI access** / **Resume**, **Open at login**) and the **Connect**
 buttons for Claude Code and Claude Desktop, then the connected apps and their tools, and a collapsed **Manual
 setup** with the HTTP command and token for other AI apps. **Store** opens apps from `registry.json` in desktop
-windows; **Activity** logs every AI call. The tray menu shows the status and offers Open, Pause / Resume and Quit.
+windows; **Contribute** generates community jobs ([below](#contribute)); **Activity** logs every AI call. The tray
+menu shows the status and offers Open, Pause / Resume and Quit, plus Contribute's status and Pause / Resume
+contributing while this computer is connected.
 
 Development environment variables (dev builds, i.e. not packaged):
 
@@ -38,6 +40,7 @@ Development environment variables (dev builds, i.e. not packaged):
 | `FAS_DEV_APP_ORIGIN=http://localhost:5173` | Load every app window from a local dev server instead of `https://<id>.freeappstore.online` |
 | `FAS_DESKTOP_PORT`                         | Listen on another port (default `47821`)                                                    |
 | `FAS_DESKTOP_USER_DATA`                    | Use another profile directory (token, settings, app data); never registers a login item     |
+| `FAS_DEV_API_ORIGIN=http://127.0.0.1:8787` | Contribute talks to this API instead of `https://api.freeappstore.online`                   |
 
 Dev builds also accept bridge connections from `http://localhost:*` and `http://127.0.0.1:*` pages. Dev builds
 never register a login item either.
@@ -84,6 +87,36 @@ the server stays up, so clients stay connected.
 
 How an app offers tools (`exposeTools` from `@freeappstore/sdk/bridge`): [docs/mcp.md](../docs/mcp.md#local-ai-access-to-app-data-freeappstore-desktop).
 
+## Contribute
+
+Contribute (#826) lends this computer to community generation ([docs/community-generation.md](../docs/community-generation.md)):
+it generates narration jobs for the store apps you opt in to, with the SDK's shared Kokoro runner
+(`@freeappstore/sdk/generation-kokoro`, the one Books and the console's Generate page use), and keeps going while the
+window is closed, as long as FreeAppStore runs in the tray.
+
+- **Connect**: the desktop app has no FreeAppStore sign-in of its own, so **Connect this computer** uses the phones'
+  device pairing ([docs/native-companion.md](../docs/native-companion.md)): the browser opens the pairing page, you sign
+  in and approve (the page still talks about a phone), and the app redeems the approval for an `ndev_` device
+  credential, kept in userData as `device-token` (mode `0600`, never logged; 90 days). **Disconnect** revokes it on the
+  server and deletes it. A credential the server refuses (expired, revoked) is dropped and the page asks to connect
+  again. Submissions from the desktop are `device_kind` `native`.
+- **Opt in** per app from discovery (`GET /v1/generation/open`; apps whose sets this runner can't do are listed
+  with why), and **Download the model** after seeing its size (WebGPU fp32 about 326 MB, else WebAssembly q8 about
+  92 MB, from Hugging Face; kept in the hidden window's Cache Storage until **Delete model**). Nothing is claimed
+  before both.
+- **Loop**, in the main process: discovery, then one job from each opted-in app in turn until none has work, then a
+  new look every 15 minutes (or at once after a setting changes). Claim retries, the upload resend and lease
+  extension are the SDK's (`Generation.contribute`): the same behaviour as the phones (#819) and the browser. The
+  main process makes every API call with the device credential (plain `fetch`, no CORS, no page sees the
+  credential). Pause (home or tray) stops the job in hand at once; its lease runs out on the server.
+- **Model**: the main process has no WebCodecs, so synthesis and AAC encoding run in a module Web Worker in a hidden
+  window (`src/renderer/contribute.*`, `backgroundThrottling: false`, sandboxed, a preload that only relays worker
+  messages). `RelayWorker` in `src/main/contribute.ts` is the `Worker` the SDK's `KokoroRunner` talks to; a finished
+  file crosses IPC as bytes. The worker is disposed after each run, freeing the model's memory. Electron 45 on macOS
+  refuses 24 kHz AAC, so the audio is 32 kbps mono at 48 kHz (the SDK's fallback).
+- The **Contribute** page shows the status (running with app, job and sentence n of N, idle and why, or paused), the
+  counts since the app started, the model and the apps with their switches. Per-job history is #827.
+
 ## Security
 
 - The server binds to `127.0.0.1` only.
@@ -110,6 +143,14 @@ resumes, and closes the window while the server keeps answering.
 
 The end-to-end test serves a toy app that runs the SDK's `packages/sdk/src/bridge.ts`. Set `FAS_SHOTS_DIR` to
 keep its screenshots.
+
+`e2e/contribute.spec.ts` runs Contribute with the real model against a stand-in API: it downloads the model, closes
+the window, and checks the uploaded file is mono AAC in MP4 whose length matches its sentence timings and is not
+silent (`ffprobe`/`ffmpeg`). It downloads Kokoro, so it runs only with `FAS_E2E_MODEL=1`:
+
+```bash
+pnpm --dir desktop build && FAS_E2E_MODEL=1 pnpm --dir desktop exec playwright test e2e/contribute.spec.ts
+```
 
 ## Build
 
@@ -145,8 +186,10 @@ first launch. Signing, notarization and auto-update are #799.
 | `src/main/hub.ts`                  | Connected apps, call routing, timeouts, activity log                                   |
 | `src/main/security.ts`, `token.ts` | Origin rules, token check and storage                                                  |
 | `src/main/integrations.ts`         | Connect / Disconnect for Claude Code and Claude Desktop                                |
-| `src/main/settings.ts`, `tray.ts`  | Pause and open-at-login settings; the tray menu                                        |
+| `src/main/settings.ts`, `tray.ts`  | Pause, open-at-login and Contribute settings; the tray menu                            |
+| `src/main/contribute.ts`           | Contribute's loop and state, `RelayWorker` to the hidden window's model worker         |
+| `src/main/device.ts`               | Device pairing (`ndev_` credential) and its storage                                    |
 | `src/stdio/`                       | The stdio MCP entry (`main.mjs`) and its proxy                                         |
 | `assets/`                          | Tray icons: `trayTemplate*.png` (macOS, from `brand/assets/mark-mono.svg`), `tray.png` |
-| `src/preload/`                     | `app.cts` (app windows: bridge only), `home.cts` (home UI)                             |
-| `src/renderer/`                    | Home UI (React + Tailwind 4 on the FAS tokens)                                         |
+| `src/preload/`                     | `app.cts` (app windows: bridge only), `home.cts` (home UI), `contribute.cts`           |
+| `src/renderer/`                    | Home UI (React + Tailwind 4 on the FAS tokens); `contribute.*`: the hidden model page  |

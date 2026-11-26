@@ -260,17 +260,30 @@ describe('Integrations', () => {
 });
 
 describe('settings', () => {
+  const contribute = { contributeApps: [], contributePaused: false, contributeModel: false };
   it('defaults to on and open at login on first run, and persists changes', () => {
     expect(loadSettings(tmp)).toEqual({
-      settings: { paused: false, openAtLogin: true },
+      settings: { paused: false, openAtLogin: true, ...contribute },
       firstRun: true,
     });
-    saveSettings(tmp, { paused: true, openAtLogin: false });
-    expect(loadSettings(tmp)).toEqual({
-      settings: { paused: true, openAtLogin: false },
-      firstRun: false,
+    const changed = {
+      paused: true,
+      openAtLogin: false,
+      contributeApps: ['books'],
+      contributePaused: true,
+      contributeModel: true,
+    };
+    saveSettings(tmp, changed);
+    expect(loadSettings(tmp)).toEqual({ settings: changed, firstRun: false });
+    // Settings saved before Contribute (#826) get its defaults
+    writeFileSync(join(tmp, 'settings.json'), '{"paused":true,"contributeApps":[1,"books"]}');
+    expect(loadSettings(tmp).settings).toEqual({
+      ...contribute,
+      paused: true,
+      openAtLogin: true,
+      contributeApps: ['books'],
     });
     writeFileSync(join(tmp, 'settings.json'), 'garbage');
-    expect(loadSettings(tmp).settings).toEqual({ paused: false, openAtLogin: true });
+    expect(loadSettings(tmp).settings).toEqual({ paused: false, openAtLogin: true, ...contribute });
   });
 });

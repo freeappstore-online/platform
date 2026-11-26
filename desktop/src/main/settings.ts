@@ -7,10 +7,22 @@ export interface Settings {
   paused: boolean;
   /** Start FreeAppStore when the user logs in. On by default (#815). */
   openAtLogin: boolean;
+  /** Contribute (#826): the apps this computer generates for, and whether it is paused. */
+  contributeApps: string[];
+  contributePaused: boolean;
+  /** The user agreed to the voice model's download and it completed. */
+  contributeModel: boolean;
 }
 
 const FILE = 'settings.json';
-const DEFAULTS: Settings = { paused: false, openAtLogin: true };
+const DEFAULTS: Settings = {
+  paused: false,
+  openAtLogin: true,
+  contributeApps: [],
+  contributePaused: false,
+  contributeModel: false,
+};
+const bool = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback);
 
 /** The saved settings, plus whether this is the first run (no settings file yet). */
 export function loadSettings(dir: string): { settings: Settings; firstRun: boolean } {
@@ -24,9 +36,13 @@ export function loadSettings(dir: string): { settings: Settings; firstRun: boole
   }
   return {
     settings: {
-      paused: typeof saved.paused === 'boolean' ? saved.paused : DEFAULTS.paused,
-      openAtLogin:
-        typeof saved.openAtLogin === 'boolean' ? saved.openAtLogin : DEFAULTS.openAtLogin,
+      paused: bool(saved.paused, DEFAULTS.paused),
+      openAtLogin: bool(saved.openAtLogin, DEFAULTS.openAtLogin),
+      contributeApps: Array.isArray(saved.contributeApps)
+        ? saved.contributeApps.filter((id): id is string => typeof id === 'string')
+        : [],
+      contributePaused: bool(saved.contributePaused, DEFAULTS.contributePaused),
+      contributeModel: bool(saved.contributeModel, DEFAULTS.contributeModel),
     },
     firstRun: false,
   };

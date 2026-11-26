@@ -20,13 +20,14 @@
     "dist:mac": "pnpm build && electron-builder --mac --publish never"
   },
   "dependencies": {
+    "@freeappstore/sdk": "^0.21.17",
     "@modelcontextprotocol/sdk": "1.32.2",
     "ws": "^8.23.0",
     "zod": "4.6.7"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.9",
-    "@freeappstore/sdk": "^0.21.5",
+    "@huggingface/transformers": "3.8.1",
     "@playwright/test": "^1.65.1",
     "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^22.19.0",
@@ -36,6 +37,8 @@
     "@vitejs/plugin-react": "^6.1.1",
     "electron": "^45.5.0",
     "electron-builder": "^26.18.0",
+    "kokoro-js": "1.2.1",
+    "mp4-muxer": "5.2.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "tailwindcss": "^4.3.5",

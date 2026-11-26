@@ -1,11 +1,27 @@
-import { Badge, EmptyState, SearchInput, TextSizeToggle, ThemeToggle } from '@freeappstore/sdk/ui';
+import {
+  Badge,
+  ConfirmDialog,
+  EmptyState,
+  ProgressBar,
+  SearchInput,
+  TextSizeToggle,
+  ThemeToggle,
+} from '@freeappstore/sdk/ui';
 import { type ReactNode, useEffect, useState } from 'react';
-import type { ClientId, ClientStatus, DesktopState, OpenApp, RegistryApp } from './desktop.js';
+import type {
+  ClientId,
+  ClientStatus,
+  DesktopContribute,
+  DesktopState,
+  OpenApp,
+  RegistryApp,
+} from './desktop.js';
 
-type Page = 'home' | 'store' | 'activity';
+type Page = 'home' | 'store' | 'contribute' | 'activity';
 const PAGES: { id: Page; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'store', label: 'Store' },
+  { id: 'contribute', label: 'Contribute' },
   { id: 'activity', label: 'Activity' },
 ];
 
@@ -64,6 +80,8 @@ export function App() {
           <Home state={state} openStore={() => setPage('store')} />
         ) : page === 'store' ? (
           <Store />
+        ) : page === 'contribute' ? (
+          <Contribute state={state.contribute} />
         ) : (
           <Activity state={state} />
         )}
@@ -392,6 +410,237 @@ function Store() {
         ))}
       </ul>
     </Section>
+  );
+}
+
+const DEVICE_LABEL = { webgpu: 'WebGPU', wasm: 'WebAssembly' } as const;
+const megabytes = (bytes: number) => `${Math.round(bytes / 1_000_000).toLocaleString()} MB`;
+
+/**
+ * Contribute (#826): lend this computer to apps that pregenerate narration. Connects with the
+ * phone apps' device pairing, then runs in the background, also with this window closed.
+ */
+function Contribute({ state }: { state: DesktopContribute }) {
+  const api = desktop.contribute;
+  const intro = (
+    <p className="mt-0 mb-6 text-muted max-w-2xl">
+      Lend this computer to apps that pregenerate content with a local model (today: narration). It
+      generates a job, the platform checks it, and everyone gets it. It keeps going in the
+      background while FreeAppStore runs, with this window closed too.
+    </p>
+  );
+  if (!state.connected)
+    return (
+      <Section title="Contribute">
+        {intro}
+        <div className={`${card} p-5`}>
+          <p className="mt-0 mb-4 text-sm">
+            Connect this computer to your FreeAppStore account. Your browser opens the device
+            connection page the phone apps use: sign in there and approve.
+          </p>
+          {state.pairError && (
+            <p
+              role="alert"
+              className="mt-0 mb-4 rounded-control bg-danger-soft text-danger p-3 text-sm"
+            >
+              {state.pairError}
+            </p>
+          )}
+          {state.pairing ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-muted">
+                Waiting for you to approve in your browser…
+              </span>
+              <button type="button" className={secondary} onClick={() => api.cancel()}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button type="button" className={primary} onClick={() => api.connect()}>
+              Connect this computer
+            </button>
+          )}
+        </div>
+      </Section>
+    );
+  return (
+    <Section
+      title="Contribute"
+      aside={
+        <button type="button" className={secondary} onClick={() => api.disconnect()}>
+          Disconnect
+        </button>
+      }
+    >
+      {intro}
+      <ContributeStatus state={state} />
+      <ContributeModel state={state} />
+      <ContributeApps state={state} />
+    </Section>
+  );
+}
+
+function ContributeStatus({ state }: { state: DesktopContribute }) {
+  const { current } = state;
+  const label =
+    state.status === 'running' ? 'Running' : state.status === 'paused' ? 'Paused' : 'Idle';
+  return (
+    <section className={`${card} mb-6 p-5`} aria-label="Contribute status">
+      <div className="flex flex-wrap items-center gap-4">
+        <span
+          aria-hidden="true"
+          className={`h-3 w-3 shrink-0 rounded-full ${
+            state.status === 'running'
+              ? 'bg-success'
+              : state.status === 'paused'
+                ? 'bg-warning'
+                : 'bg-line-strong'
+          }`}
+        />
+        <div className="min-w-0 flex-1">
+          <div data-testid="contribute-status" className="text-lg font-bold text-ink-strong">
+            {label}
+          </div>
+          <div className="text-sm text-muted">
+            {current
+              ? `${current.appId} · ${current.key}`
+              : state.status === 'paused'
+                ? 'Resume to go on generating.'
+                : (state.message ?? 'Looking for work…')}
+          </div>
+        </div>
+        <button
+          type="button"
+          className={state.paused ? primary : secondary}
+          onClick={() => desktop.contribute.setPaused(!state.paused)}
+        >
+          {state.paused ? 'Resume' : 'Pause'}
+        </button>
+      </div>
+      {current && current.sentences > 0 && (
+        <div className="mt-4">
+          <ProgressBar
+            value={current.sentence}
+            max={current.sentences}
+            label={`Sentence ${current.sentence} of ${current.sentences}`}
+          />
+          <p className="mt-1 mb-0 text-xs text-muted">
+            {current.charsPerSecond.toFixed(1)} characters per second
+          </p>
+        </div>
+      )}
+      <p className="mt-4 mb-0 text-xs text-muted">
+        Since FreeAppStore started: {state.submitted} submitted, {state.skipped} skipped (this
+        computer couldn't do them exactly), {state.failed} failed. Each job is checked by the
+        platform before anyone hears it.
+      </p>
+    </section>
+  );
+}
+
+function ContributeModel({ state }: { state: DesktopContribute }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const { model } = state;
+  if (state.encoder === false)
+    return (
+      <p role="alert" className="mb-6 rounded-control bg-danger-soft text-danger p-3 text-sm">
+        This computer can't encode AAC audio, so it can't generate.
+      </p>
+    );
+  if (!model) return null;
+  const size = megabytes(model.bytes);
+  return (
+    <section className={`${card} mb-6 p-5`} aria-label="Voice model">
+      <h3 className="mt-0 mb-2 text-base font-bold">Voice model</h3>
+      <p className="mt-0 mb-3 text-sm">
+        Kokoro TTS v1.0 on {DEVICE_LABEL[model.device]} · {size}
+      </p>
+      {model.ready ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant="success">Downloaded</Badge>
+          <button type="button" className={secondary} onClick={() => setConfirmDelete(true)}>
+            Delete model
+          </button>
+        </div>
+      ) : model.loading !== null ? (
+        <ProgressBar
+          value={Math.round(model.loading * 100)}
+          max={100}
+          label={`Downloading the model: ${Math.round(model.loading * 100)}%`}
+        />
+      ) : (
+        <>
+          <p className="mt-0 mb-3 text-sm text-muted">
+            Generating downloads the model ({size}) from Hugging Face once and keeps it on this
+            computer until you delete it.
+          </p>
+          <button
+            type="button"
+            className={primary}
+            onClick={() => desktop.contribute.downloadModel()}
+          >
+            Download the model ({size})
+          </button>
+        </>
+      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        variant="danger"
+        title="Delete the model?"
+        message="Stops generating and frees the model's storage. You can download it again later."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          setConfirmDelete(false);
+          void desktop.contribute.deleteModel();
+        }}
+      />
+    </section>
+  );
+}
+
+function ContributeApps({ state }: { state: DesktopContribute }) {
+  return (
+    <section className={`${card} p-5`} aria-label="Apps with open work">
+      <div className="mb-3 flex items-baseline justify-between gap-4">
+        <h3 className="m-0 text-base font-bold">Apps with open work</h3>
+        <button type="button" className={secondary} onClick={() => desktop.contribute.refresh()}>
+          Look again
+        </button>
+      </div>
+      {!state.apps ? (
+        <p className="m-0 text-sm text-muted">Loading…</p>
+      ) : state.apps.length === 0 ? (
+        <p className="m-0 text-sm text-muted">No app has open work for you right now.</p>
+      ) : (
+        <ul className="m-0 p-0 list-none divide-y divide-line">
+          {state.apps.map((app) => (
+            <li key={app.appId} className="flex flex-wrap items-center gap-4 py-3">
+              <div className="min-w-0 flex-1">
+                <div className="font-bold text-ink-strong">{app.appId}</div>
+                {app.oneliner && <div className="text-sm text-muted">{app.oneliner}</div>}
+                <div className="text-xs text-muted">
+                  {app.problem
+                    ? `This computer can't run its jobs (${app.problem})`
+                    : `${app.open.toLocaleString()} open job${app.open === 1 ? '' : 's'}`}
+                </div>
+              </div>
+              <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--accent)] cursor-pointer"
+                  aria-label={`Generate for ${app.appId}`}
+                  disabled={app.problem !== null}
+                  checked={state.optedIn.includes(app.appId)}
+                  onChange={(event) => desktop.contribute.setOptIn(app.appId, event.target.checked)}
+                />
+                Generate for this app
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

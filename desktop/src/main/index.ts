@@ -16,6 +16,15 @@ import {
   Tray,
   type WebContents,
 } from 'electron';
+import { Contribute, contributeStatus, type Engine, RelayWorker } from './contribute.js';
+import {
+  API_ORIGIN,
+  deleteDeviceToken,
+  loadDeviceToken,
+  pairDevice,
+  saveDeviceToken,
+  unpairDevice,
+} from './device.js';
 import { Hub, type Peer } from './hub.js';
 import { type ClientId, Integrations, type StdioEntry } from './integrations.js';
 import { APP_ID, appOrigin, DEFAULT_PORT, HOST } from './security.js';
@@ -34,6 +43,8 @@ const dev = !app.isPackaged;
 const manageLoginItem = app.isPackaged && !userDataOverride;
 // Dev builds can load every app from a local dev server (e.g. http://localhost:5173).
 const devOrigin = dev ? process.env.FAS_DEV_APP_ORIGIN : undefined;
+// Dev builds can point Contribute at a local API (the e2e test's stand-in).
+const apiOrigin = (dev && process.env.FAS_DEV_API_ORIGIN) || API_ORIGIN;
 const REGISTRY = 'https://freeappstore.online/registry.json';
 
 // Windows start hidden on the theme's paper colour (DESIGN-SYSTEM tokens) and show on first
@@ -43,8 +54,12 @@ const windowLook = () => ({
   backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f172a' : '#f8fafc',
 });
 const showWhenPainted = (win: BrowserWindow) => {
+  let shown = false;
+  // Once only: the fallback must not bring back a window the user already closed
   const show = () => {
-    if (!win.isDestroyed() && !win.isVisible()) win.show();
+    if (shown || win.isDestroyed()) return;
+    shown = true;
+    if (!win.isVisible()) win.show();
   };
   win.once('ready-to-show', show);
   // A slow or failing network load still gets a window, on the dark/light paper colour.
@@ -89,6 +104,7 @@ function stdioEntry(): StdioEntry {
 
 function state() {
   return {
+    contribute: contributeState(),
     mcpUrl,
     setupCommand: setupCommand(),
     serverError,
@@ -267,7 +283,14 @@ function applyLoginItem(): void {
 }
 
 function trayState() {
-  return { paused: settings.paused, openApps: hub.openApps().length, serverError };
+  return {
+    paused: settings.paused,
+    openApps: hub.openApps().length,
+    serverError,
+    contribute: deviceToken
+      ? { status: contributeStatus(contribute.state), paused: settings.contributePaused }
+      : null,
+  };
 }
 
 function createTray(): void {
@@ -288,7 +311,12 @@ function updateTray(): void {
   tray.setToolTip(trayStatus(current));
   tray.setContextMenu(
     Menu.buildFromTemplate(
-      trayMenu(current, { open: showHome, setPaused, quit: () => app.quit() }),
+      trayMenu(current, {
+        open: showHome,
+        setPaused,
+        setContributePaused,
+        quit: () => app.quit(),
+      }),
     ),
   );
 }
@@ -346,6 +374,186 @@ function pushState() {
 }
 hub.on('change', pushState);
 
+// ── Contribute (#826) ───────────────────────────────────────────
+
+let deviceToken: string | null = null;
+let pairing: AbortController | null = null;
+let pairError: string | null = null;
+/** The hidden window that hosts the model worker; created when Contribute first needs it. */
+let engineWindow: BrowserWindow | null = null;
+let engineReady: Promise<Engine> | null = null;
+let relay: RelayWorker | null = null;
+let modelDeleted: (() => void) | null = null;
+const contribute = new Contribute(
+  {
+    token: () => deviceToken,
+    optedIn: () => settings.contributeApps,
+    paused: () => settings.contributePaused,
+    modelReady: () => settings.contributeModel,
+    setModelReady: (ready) => saveContribute({ contributeModel: ready }),
+    engine: () => {
+      engineWindowContents();
+      return engineReady!;
+    },
+    createWorker: () => {
+      const contents = engineWindowContents();
+      relay = new RelayWorker((message) => {
+        if (!contents.isDestroyed()) contents.send('contribute:to-worker', message);
+      });
+      return relay;
+    },
+    deleteModel: () =>
+      new Promise<void>((resolve) => {
+        modelDeleted = resolve;
+        engineWindowContents().send('contribute:to-worker', { type: 'delete-model' });
+      }),
+    signedOut: () => {
+      disconnectDevice(false);
+      pairError = 'This computer’s connection expired or was removed. Connect it again.';
+      pushState();
+    },
+    changed: () => pushState(),
+  },
+  apiOrigin,
+);
+
+function contributeState() {
+  return {
+    ...contribute.state,
+    connected: deviceToken !== null,
+    pairing: pairing !== null,
+    pairError,
+    optedIn: settings.contributeApps,
+    paused: settings.contributePaused,
+  };
+}
+
+/**
+ * The hidden window's contents: no throttling, since it does the work while every other window
+ * is closed. It loads the SDK's runner page from disk and reports this computer's encoder,
+ * WebGPU or WebAssembly, and whether the model is cached.
+ */
+function engineWindowContents(): WebContents {
+  if (engineWindow && !engineWindow.isDestroyed()) return engineWindow.webContents;
+  const win = new BrowserWindow({
+    show: false,
+    webPreferences: {
+      preload: preload('contribute'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+    },
+  });
+  engineWindow = win;
+  const contents = win.webContents;
+  engineReady = new Promise<Engine>((resolve) => {
+    ipcMain.removeAllListeners('contribute:engine');
+    ipcMain.on('contribute:engine', (event, engine: Engine) => {
+      if (event.sender === contents) resolve(engine);
+    });
+  });
+  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  contents.on('will-navigate', (event) => event.preventDefault());
+  // A crashed renderer takes the job in hand with it: stop, and start over on the next look
+  contents.on('render-process-gone', () => {
+    contribute.stop();
+    win.destroy();
+  });
+  win.on('closed', () => {
+    if (engineWindow === win) engineWindow = null;
+  });
+  void win.loadFile(fileURLToPath(new URL('../renderer/contribute.html', import.meta.url)));
+  return contents;
+}
+
+ipcMain.on('contribute:from-worker', (event, message: { type?: string }) => {
+  if (!engineWindow || event.sender !== engineWindow.webContents) return;
+  if (message?.type === 'model-deleted') {
+    modelDeleted?.();
+    modelDeleted = null;
+  } else relay?.receive(message);
+});
+
+function saveContribute(changes: Partial<Settings>) {
+  Object.assign(settings, changes);
+  saveSettings(app.getPath('userData'), settings);
+  pushState();
+}
+
+function setContributePaused(paused: boolean) {
+  saveContribute({ contributePaused: paused });
+  contribute.wake();
+}
+
+const deviceLabel = () =>
+  `FreeAppStore desktop (${
+    { darwin: 'Mac', win32: 'Windows', linux: 'Linux' }[process.platform as string] ??
+    process.platform
+  })`;
+
+async function connectDevice() {
+  if (pairing || deviceToken) return;
+  pairing = new AbortController();
+  pairError = null;
+  pushState();
+  try {
+    const token = await pairDevice({
+      label: deviceLabel(),
+      open: openExternal,
+      signal: pairing.signal,
+      api: `${apiOrigin}/v1`,
+    });
+    saveDeviceToken(app.getPath('userData'), token);
+    deviceToken = token;
+  } catch (error) {
+    if (!pairing.signal.aborted) pairError = (error as Error).message;
+  } finally {
+    pairing = null;
+    pushState();
+  }
+  if (deviceToken) contribute.wake();
+}
+
+function disconnectDevice(revoke: boolean) {
+  if (deviceToken && revoke) void unpairDevice(deviceToken, `${apiOrigin}/v1`);
+  deleteDeviceToken(app.getPath('userData'));
+  deviceToken = null;
+  contribute.stop();
+  contribute.wake(); // ends the loop's wait
+  engineWindow?.destroy();
+}
+
+ipcMain.handle('home:contribute-connect', (event) => {
+  if (fromHome(event)) void connectDevice();
+});
+ipcMain.handle('home:contribute-cancel', (event) => {
+  if (fromHome(event)) pairing?.abort();
+});
+ipcMain.handle('home:contribute-disconnect', (event) => {
+  if (!fromHome(event)) return;
+  disconnectDevice(true);
+  pushState();
+});
+ipcMain.handle('home:contribute-opt-in', (event, appId: unknown, on: unknown) => {
+  if (!fromHome(event) || typeof appId !== 'string' || !APP_ID.test(appId)) return;
+  const apps = settings.contributeApps.filter((id) => id !== appId);
+  saveContribute({ contributeApps: on === true ? [...apps, appId] : apps });
+  contribute.wake();
+});
+ipcMain.handle('home:contribute-paused', (event, paused: unknown) => {
+  if (fromHome(event) && typeof paused === 'boolean') setContributePaused(paused);
+});
+ipcMain.handle('home:contribute-download', (event) => {
+  if (fromHome(event) && deviceToken) void contribute.downloadModel();
+});
+ipcMain.handle('home:contribute-delete-model', async (event) => {
+  if (fromHome(event) && deviceToken) await contribute.deleteModel();
+});
+ipcMain.handle('home:contribute-refresh', (event) => {
+  if (fromHome(event)) contribute.wake();
+});
+
 // ── Startup ─────────────────────────────────────────────────────
 
 if (!app.requestSingleInstanceLock()) {
@@ -357,6 +565,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on('before-quit', () => {
     quitting = true;
+    contribute.stop();
   });
 
   app.whenReady().then(async () => {
@@ -379,6 +588,7 @@ if (!app.requestSingleInstanceLock()) {
       home: app.getPath('home'),
     });
     token = loadToken(userData);
+    deviceToken = loadDeviceToken(userData);
     try {
       await startServer({
         hub,
@@ -397,6 +607,7 @@ if (!app.requestSingleInstanceLock()) {
           : `The local MCP server could not start (${code ?? 'unknown error'}).`;
     }
     createTray();
+    if (deviceToken) contribute.wake();
     if (hidden) app.dock?.hide();
     else createHome();
     app.on('activate', showHome);
