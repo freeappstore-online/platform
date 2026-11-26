@@ -139,6 +139,62 @@ export interface GenerationSetSummary extends GenerationSet {
   };
 }
 
+/** How a job attempt ended on the device (#813), the same on every runner; `submitted`: it uploaded. */
+export type GenerationEndReason =
+  | 'submitted'
+  | 'user_stop'
+  | 'unplugged'
+  | 'thermal'
+  | 'background_expired'
+  | 'network'
+  | 'lease_403'
+  | 'lease_cap'
+  | 'model_missing'
+  | 'model_error'
+  | 'encode_error'
+  | 'too_large'
+  | 'unsupported'
+  | 'server_4xx'
+  | 'server_5xx'
+  | 'other';
+
+/**
+ * What a device measured while it ran one leased job (#827), as `POST …/generation/events` takes
+ * it: numbers and context only, no text or audio. Times in milliseconds; battery 0-100; `rtf` is
+ * synthesis time over audio duration; `cpuMs` and `peakMemMb` only where the platform exposes them.
+ */
+export interface GenerationAttemptRecord {
+  runner: 'android' | 'ios' | 'browser' | 'desktop';
+  reason: GenerationEndReason;
+  error?: string;
+  appVersion?: string;
+  os?: string;
+  device?: string;
+  network?: string;
+  /** Whether it ran in the background at any point. */
+  background?: boolean;
+  thermalStart?: string;
+  thermalEnd?: string;
+  batteryStart?: number;
+  batteryEnd?: number;
+  chargingStart?: boolean;
+  chargingEnd?: boolean;
+  startedAt?: number;
+  wallMs?: number;
+  loadMs?: number;
+  synthMs?: number;
+  encodeMs?: number;
+  uploadMs?: number;
+  cpuMs?: number;
+  peakMemMb?: number;
+  rtf?: number;
+  bytes?: number;
+  durationMs?: number;
+}
+
+/** An attempt record as the owner sees it, with when the server received it. */
+export type GenerationAttempt = GenerationAttemptRecord & { createdAt: number };
+
 /** A job as the owner sees it (`listJobs`). */
 export interface GenerationJobSummary {
   id: string;
@@ -167,7 +223,11 @@ export interface GenerationJobSummary {
     durationMs: number | null;
     createdAt: number;
     decidedAt: number | null;
+    /** The device's attempt record for this upload (#827), or null when it sent none. */
+    record: GenerationAttempt | null;
   }[];
+  /** The 5 latest attempts that ended without an upload (#827). */
+  attempts: (GenerationAttempt & { contributor: GenerationContributor | null })[];
 }
 
 /** One job with its whole input (`getJob`). */
@@ -336,6 +396,14 @@ export class Generation {
       apps: { sets: GenerationOpenSet[] }[];
     };
     return apps[0]?.sets ?? [];
+  }
+
+  /**
+   * Report how attempts at jobs this user leased went (#827), 1-50 at a time; one record per
+   * lease, a resend replaces it. Returns how many were recorded (jobs never leased are ignored).
+   */
+  async recordAttempts(events: (GenerationAttemptRecord & { jobId: string })[]): Promise<number> {
+    return ((await this.json('/events', 'POST', { events })) as { recorded: number }).recorded;
   }
 
   /** The caller's 100 newest submissions to this app, newest first. */

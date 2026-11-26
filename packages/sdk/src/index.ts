@@ -56,7 +56,10 @@ export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js'
 export type {
   ContributeOptions,
   GenerationArtifact,
+  GenerationAttempt,
+  GenerationAttemptRecord,
   GenerationContributor,
+  GenerationEndReason,
   GenerationFormat,
   GenerationJob,
   GenerationJobDetail,

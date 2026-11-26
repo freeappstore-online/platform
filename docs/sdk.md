@@ -460,6 +460,7 @@ const { submitted, stopped } = await fas.generation.contribute({
   onProgress: ({ stage, job, submitted }) => console.log(stage, job.key, submitted),
 }); // stopped: 'no-work' | 'aborted' | 'lease-expired'
 const mine = await fas.generation.mySubmissions(); // newest 100: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, wer, durationMs, input: { text }, artifact: { url, metaUrl } | null }]
+await fas.generation.recordAttempts([{ jobId, runner: 'browser', reason: 'submitted', wallMs, synthMs }]); // attempt records (#827): numbers only, one per lease; owners see them in listJobs
 const work = await fas.generation.openWork();      // this app's sets the user could claim now: [{ setId, kind, model, modelVersion, params, formats, maxBytes, language, open }]
 
 // Public, no sign-in: accepted artifacts with absolute URLs

@@ -172,6 +172,14 @@ describe('generation SDK', () => {
     expect(JSON.parse(body.get('meta') as string)).toEqual({ t: [0, 1] });
   });
 
+  it('recordAttempts posts attempt records (#827)', async () => {
+    const fetch = mockFetch(json({ recorded: 1 }));
+    const events = [{ jobId: 'j1', runner: 'browser', reason: 'submitted', wallMs: 1200 }] as const;
+    expect(await client().recordAttempts([...events])).toBe(1);
+    expect(fetch.mock.calls[0]![0]).toBe(`${base}/events`);
+    expect(JSON.parse(fetch.mock.calls[0]![1].body)).toEqual({ events });
+  });
+
   it('mySubmissions lists the caller’s submissions; signed out throws before fetching', async () => {
     const submissions = [
       {
