@@ -3499,6 +3499,22 @@
       "discoveryStatus": "pending",
       "discoveryRequestedAt": "2026-11-26T02:06:38.478Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "payback",
+      "name": "payback",
+      "category": "Finance",
+      "icon": "💰",
+      "iconBg": "#fef9c3",
+      "description": "Track money you lend and borrow, with repayments and reminders. Private to your device.",
+      "appUrl": "https://payback.freeappstore.online",
+      "repo": "freeappstore-online/payback",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-26T02:39:45.145Z",
+      "creatorGithub": "reeyansh404"
     }
   ]
 }
