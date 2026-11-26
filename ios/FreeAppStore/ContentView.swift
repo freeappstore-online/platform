@@ -17,6 +17,8 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     @Published private(set) var expiresInDays: Int?
     @Published private(set) var name = ""
     @Published private(set) var deviceLabel = ""
+    /// The signed-in account and this phone's connection (#829), nil until `/native/me` answered.
+    @Published private(set) var profile: Profile?
     @Published private(set) var apps: [ConnectedApp] = []
     @Published private(set) var blocked: Set<String> = []
     @Published private(set) var pausedApps: Set<String> = []
@@ -79,7 +81,7 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
         signedIn = repository.token() != nil
         expired = local.expired
         expiresInDays = signedIn ? CompanionRepository.expiresInDays(local.deviceExpiresAt) : nil
-        name = local.userName; deviceLabel = local.deviceLabel; apps = local.apps(); blocked = local.blocked(); pausedApps = local.pausedApps(); paused = local.paused
+        name = local.userName; deviceLabel = local.deviceLabel; profile = Profile(json: local.profile); apps = local.apps(); blocked = local.blocked(); pausedApps = local.pausedApps(); paused = local.paused
         queued = (try? local.count()) ?? 0; lastSync = local.lastSync; pairingCode = repository.pairingCode()
         lastSyncAttempt = local.lastSyncAttempt; lastSyncError = local.lastSyncError
         events = (try? local.events()) ?? []
@@ -268,7 +270,7 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            StorefrontView(model: model, catalogue: catalogue)
+            StorefrontView(model: model, catalogue: catalogue) { tab = .settings }
                 .tabItem { Label("Store", systemImage: "square.grid.2x2") }
                 .tag(Tab.store)
             SharingDashboardView(model: model, collector: collector)

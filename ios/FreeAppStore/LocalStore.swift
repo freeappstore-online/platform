@@ -116,6 +116,11 @@ final class LocalStore: @unchecked Sendable {
         get { setting("userName") ?? "" }
         set { try? setSetting("userName", newValue) }
     }
+    /// `{ user, device }` from the last `/native/me` (#829), "" until known.
+    var profile: String {
+        get { setting("profile") ?? "" }
+        set { try? setSetting("profile", newValue) }
+    }
     var deviceLabel: String {
         get { setting("deviceLabel") ?? "" }
         set { try? setSetting("deviceLabel", newValue) }

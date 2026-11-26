@@ -9,6 +9,8 @@ struct StorefrontView: View {
     @Environment(\.openURL) private var openURL
     @State private var query = ""
     @State private var guideFor: CatalogueApp?
+    /// Opens the profile in Settings (#829).
+    var showProfile: () -> Void = {}
 
     var body: some View {
         NavigationStack {
@@ -22,6 +24,11 @@ struct StorefrontView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .navigationTitle("Store")
+            .toolbar {
+                if model.signedIn, let profile = model.profile {
+                    ToolbarItem(placement: .topBarTrailing) { Button(action: showProfile) { ProfileSummary(profile: profile) } }
+                }
+            }
             .searchable(text: $query, prompt: "Search apps")
             .refreshable { await catalogue.refresh() }
             .navigationDestination(for: String.self) { id in

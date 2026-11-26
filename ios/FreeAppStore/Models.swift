@@ -27,6 +27,46 @@ struct ConnectedApp: Decodable, Equatable, Identifiable {
     }
 }
 
+/// The signed-in account and this device, from `GET /native/me` (#829). Kept on the phone only.
+struct Profile: Equatable {
+    let id: String
+    let name: String
+    let login: String?
+    let provider: String
+    let avatarUrl: URL?
+    let email: String?
+    let roles: [String]
+    let appCount: Int
+    let deviceLabel: String
+    let pairedAt: Int64
+    let expiresAt: Int64
+
+    static let consoleLink = "https://freeappstore.online/app/"
+    var providerName: String { ["github": "GitHub", "google": "Google", "apple": "Apple", "email": "Email"][provider] ?? provider.capitalized }
+    /// `@login` for GitHub, otherwise the provider's name.
+    var account: String { login.map { "@\($0)" } ?? providerName }
+    var creator: Bool { roles.contains("creator") }
+
+    /// `{ user, device }` as `/native/me` sends them; nil when there is no user.
+    init?(json: String) {
+        guard let data = json.data(using: .utf8), let me = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let user = me["user"] as? [String: Any], let id = user["id"] as? String else { return nil }
+        let device = me["device"] as? [String: Any] ?? [:]
+        func text(_ key: String) -> String? { (user[key] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+        self.init(id: id, name: text("name") ?? "", login: text("login"), provider: text("provider") ?? "github",
+                  avatarUrl: text("avatarUrl").flatMap { $0.hasPrefix("https://") ? URL(string: $0) : nil }, email: text("email"),
+                  roles: user["roles"] as? [String] ?? ["user"], appCount: (user["appCount"] as? NSNumber)?.intValue ?? 0,
+                  deviceLabel: device["label"] as? String ?? "", pairedAt: (device["createdAt"] as? NSNumber)?.int64Value ?? 0,
+                  expiresAt: (device["expiresAt"] as? NSNumber)?.int64Value ?? 0)
+    }
+
+    init(id: String, name: String, login: String?, provider: String, avatarUrl: URL?, email: String?, roles: [String], appCount: Int,
+         deviceLabel: String, pairedAt: Int64, expiresAt: Int64) {
+        self.id = id; self.name = name; self.login = login; self.provider = provider; self.avatarUrl = avatarUrl; self.email = email
+        self.roles = roles; self.appCount = appCount; self.deviceLabel = deviceLabel; self.pairedAt = pairedAt; self.expiresAt = expiresAt
+    }
+}
+
 /// One queued fix. Encodes to exactly the `POST /native/locations` point shape.
 struct TrackPoint: Codable, Equatable {
     let id: String

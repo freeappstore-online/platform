@@ -200,6 +200,7 @@ actor CompanionRepository {
         let device = me["device"] as? [String: Any]
         local.deviceLabel = device?["label"] as? String ?? ""
         local.deviceExpiresAt = (device?["expiresAt"] as? NSNumber)?.int64Value ?? 0
+        local.profile = String(decoding: try json(["user": user ?? [:], "device": device ?? [:]]), as: UTF8.self)
         try local.saveApps(try JSONSerialization.data(withJSONObject: me["apps"] as? [Any] ?? []))
     }
 

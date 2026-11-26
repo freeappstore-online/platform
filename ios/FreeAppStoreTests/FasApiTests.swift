@@ -178,6 +178,8 @@ final class FasApiTests: XCTestCase {
         XCTAssertGreaterThan(local.lastSync, 0)
         XCTAssertEqual(local.userName, "Alex")
         XCTAssertEqual(local.deviceLabel, "iPhone (iOS 18.0)")
+        XCTAssertEqual(Profile(json: local.profile)?.name, "Alex") // #829
+        XCTAssertEqual(Profile(json: local.profile)?.deviceLabel, "iPhone (iOS 18.0)")
     }
 
     func testAckMismatchKeepsTheQueueAndSetsTheMessage() async throws {

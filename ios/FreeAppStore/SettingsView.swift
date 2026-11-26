@@ -2,7 +2,7 @@ import CoreLocation
 import SwiftUI
 import UIKit
 
-/// Account, permissions, history and About: the account block of the original single screen, moved as is.
+/// Profile, permissions, history and About. Sign out revokes this phone's device credential.
 struct SettingsView: View {
     @ObservedObject var model: CompanionModel
     @ObservedObject var collector: LocationCollector
@@ -27,8 +27,8 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
         }
-        .alert("Disconnect this phone?", isPresented: $disconnectPrompt) {
-            Button("Disconnect", role: .destructive) { model.disconnect() }
+        .alert("Sign out of this phone?", isPresented: $disconnectPrompt) {
+            Button("Sign out", role: .destructive) { model.disconnect() }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Stops location sharing and deletes this phone’s pending updates, its sharing history and platform location copies. Saved runs in your apps are separate. An internet connection is needed to finish.")
@@ -42,7 +42,7 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var account: some View {
-        Text(model.name).font(.headline)
+        if let profile = model.profile { ProfileSection(profile: profile, open: open) } else { Text(model.name).font(.headline) }
         if let days = model.expiresInDays {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Connection renews when you reconnect — expires in \(days) day\(days == 1 ? "" : "s")").font(.footnote).foregroundStyle(.secondary)
@@ -59,7 +59,7 @@ struct SettingsView: View {
         Button("Manage account") { open("https://freeappstore.online/app/") }
         Button("Delete account") { open(Self.deleteAccountLink) }
         Button("Clear sharing history") { clearHistoryPrompt = true }
-        Button("Disconnect this phone") { disconnectPrompt = true }.disabled(model.busy)
+        Button("Sign out") { disconnectPrompt = true }.disabled(model.busy)
     }
 
     @ViewBuilder private var about: some View {
@@ -69,7 +69,6 @@ struct SettingsView: View {
                 LabeledContent("Version", value: AppInfo.current.version)
                 LabeledContent("Build", value: AppInfo.current.build)
                 LabeledContent("Commit", value: AppInfo.current.commit)
-                if model.signedIn && !model.deviceLabel.isEmpty { LabeledContent("This phone", value: model.deviceLabel) }
             }
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -106,4 +105,76 @@ struct PermissionControls: View {
     }
 
     private func openSettings() { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } }
+}
+
+/// The account's picture, its initial until (or unless) it loads.
+struct Avatar: View {
+    let profile: Profile
+    let size: CGFloat
+
+    var body: some View {
+        AsyncImage(url: profile.avatarUrl) { image in
+            image.resizable().scaledToFill()
+        } placeholder: {
+            Circle().fill(Color.accentColor.opacity(0.2)).overlay { Text(profile.name.prefix(1).uppercased()).foregroundStyle(Color.accentColor) }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .accessibilityHidden(true)
+    }
+}
+
+/// Avatar and name, for the Store's toolbar.
+struct ProfileSummary: View {
+    let profile: Profile
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Avatar(profile: profile, size: 28)
+            Text(profile.name).font(.subheadline).lineLimit(1)
+        }
+    }
+}
+
+/// The signed-in account in full, and this phone's connection (#829).
+struct ProfileSection: View {
+    let profile: Profile
+    let open: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Avatar(profile: profile, size: 64)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(profile.name).font(.title2.bold())
+                Text(profile.account).foregroundStyle(.secondary)
+            }
+        }
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                LabeledContent("Signed in with", value: profile.providerName)
+                LabeledContent("User ID", value: profile.id)
+                if let email = profile.email { LabeledContent("Email", value: email) }
+                LabeledContent("Roles", value: profile.roles.joined(separator: ", "))
+                if profile.creator {
+                    LabeledContent("Your apps", value: "\(profile.appCount)")
+                    Button("Open the console") { open(Profile.consoleLink) }
+                }
+            }
+            .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                LabeledContent("This phone", value: profile.deviceLabel)
+                if profile.pairedAt > 0 { LabeledContent("Connected", value: Self.date(profile.pairedAt)) }
+                if profile.expiresAt > 0 { LabeledContent("Connection expires", value: Self.date(profile.expiresAt)) }
+            }
+            .font(.subheadline)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private static func date(_ ms: Int64) -> String {
+        Date(timeIntervalSince1970: Double(ms) / 1000).formatted(date: .abbreviated, time: .omitted)
+    }
 }
