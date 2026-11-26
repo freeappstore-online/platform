@@ -26,7 +26,7 @@ internal fun androidProbes(context: Context, stopReason: () -> String): DevicePr
     val power = context.getSystemService(PowerManager::class.java)
     val connectivity = context.getSystemService(ConnectivityManager::class.java)
     return DeviceProbes(
-        appVersion = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).let { "${it.versionName} (${it.longVersionCode})" } }.getOrNull(),
+        appVersion = AppInfo.current.label,
         os = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})", device = "${Build.MANUFACTURER} ${Build.MODEL}",
         reading = {
             val battery = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))

@@ -47,6 +47,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
       - name: Build, unit test and lint
         working-directory: android
+        # A numbered CI build, not "dev" (#832): the release job picks its own, higher-or-equal number.
+        env: { ANDROID_BUILD_NUMBER: '${{ github.run_number }}' }
         run: ./gradlew --no-daemon :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
       - name: Debug APK and reports
         if: always()

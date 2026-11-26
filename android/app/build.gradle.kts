@@ -10,8 +10,11 @@ plugins {
 val releaseVersion = Properties().apply {
     rootProject.file("version.properties").inputStream().use { load(it) }
 }
-val buildNumber = (System.getenv("ANDROID_BUILD_NUMBER") ?: releaseVersion.getProperty("versionCode")).toInt()
+// CI builds number themselves with ANDROID_BUILD_NUMBER; a build without it is a dev build and says so (#832).
+val ciBuildNumber: String? = System.getenv("ANDROID_BUILD_NUMBER")
+val buildNumber = (ciBuildNumber ?: releaseVersion.getProperty("versionCode")).toInt()
 require(buildNumber in 1..2_100_000_000) { "Android versionCode is out of range" }
+val commit = providers.exec { commandLine("git", "rev-parse", "--short=7", "HEAD") }.standardOutput.asText.get().trim()
 val uploadStore = System.getenv("ANDROID_UPLOAD_KEYSTORE_PATH")
 android {
     namespace = "online.freeappstore.companion"
@@ -22,6 +25,8 @@ android {
         targetSdk = 36
         versionCode = buildNumber
         versionName = releaseVersion.getProperty("versionName")
+        buildConfigField("String", "FAS_COMMIT", "\"$commit\"")
+        buildConfigField("boolean", "FAS_DEV_BUILD", "${ciBuildNumber == null}")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     // Release builds are signed with the FAS upload key; scripts/build-android-release.sh restores it (#651).
@@ -45,7 +50,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures { compose = true; buildConfig = true }
 }
 // A release task must never quietly produce an unsigned artifact or use a debug key.
 gradle.taskGraph.whenReady {

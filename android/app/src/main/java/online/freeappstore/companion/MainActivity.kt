@@ -47,7 +47,7 @@ data class CompanionState(
     val lastSyncAttempt: Long = 0, val lastSyncError: String = "", val online: Boolean = true,
     /** `denied`, `approximate`, `whenInUse` or `always` (LocationService.permissionState). */
     val permission: String = "", val locationOn: Boolean = true, val powerSave: Boolean = false, val batteryOptimized: Boolean = false,
-    val lastFix: LiveFix? = null, val version: String = "",
+    val lastFix: LiveFix? = null,
     /** The device connection expired or was revoked (#638); [expiresInDays] is set only in its last 7 days. */
     val expired: Boolean = false, val expiresInDays: Int? = null,
     /** The system's label for background location access (`backgroundPermissionOptionLabel`), localised (#650). */
@@ -107,7 +107,6 @@ class MainActivity : ComponentActivity() {
     /** `freeappstore://native/contribute/<id>`: asks before opting in, never opts in by itself. */
     private var linkedContribute by mutableStateOf<String?>(null)
     private var refreshJob: Job? = null
-    private val version by lazy { packageManager.getPackageInfo(packageName, 0).let { "${it.versionName} (${it.longVersionCode})" } }
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh(); maybeStart() }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState); enableEdgeToEdge()
@@ -241,7 +240,6 @@ class MainActivity : ComponentActivity() {
             locationOn = getSystemService(LocationManager::class.java).isLocationEnabled,
             powerSave = power.isPowerSaveMode, batteryOptimized = !power.isIgnoringBatteryOptimizations(packageName),
             lastFix = LocationService.lastFix,
-            version = version,
             expired = local.expired, backgroundOption = backgroundOption(),
             expiresInDays = if (signedIn) DeviceConnection.expiresInDays(local.deviceExpiresAt, System.currentTimeMillis()) else null,
             contributeApps = local.contributeApps(), contributeAnyTime = local.contributeAnyTime,
@@ -429,10 +427,13 @@ private fun SettingsScreen(
         Text("About", style = MaterialTheme.typography.titleLarge)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Labeled("Version", state.version)
+                Labeled("Version", AppInfo.current.version)
+                Labeled("Build", AppInfo.current.build)
+                Labeled("Commit", AppInfo.current.commit)
                 Labeled("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             }
         }
+        TextButton(onClick = { openUrl(AppInfo.current.notesUrl) }) { Text("What's new") }
         TextButton(onClick = privacy) { Text("How your data is used") }
         TextButton(onClick = { openUrl("https://freeappstore.online/privacy") }) { Text("Privacy policy") }
         Spacer(Modifier.height(24.dp))
