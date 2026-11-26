@@ -8,6 +8,7 @@
 import { type Context, Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
 import { FAS_APP_ROWS, HttpError, requireAppOwner, requireAppUser } from '../lib/auth.js';
+import { verdict, wer, whisper, words } from '../lib/generation-verify.js';
 import { verifyGithubOidc } from '../lib/github-oidc.js';
 import { nativeBody, nativeDevice, nativeHash, nativeRandom } from '../lib/native-companion.js';
 import { d1UsageStore, dayKey } from '../lib/proxy-rate-limit.js';
@@ -21,12 +22,19 @@ export const GENERATION_LIMITS = {
   userDaily: 200,
   appDaily: 5_000,
   jobsPerRequest: 500,
-  textChars: 10_000,
+  /** A whole chapter. */
+  textChars: 100_000,
   maxBytes: 25_000_000,
   metaBytes: 64 * 1024,
   models: 20,
   /** Quarantine objects expire after 7 days (R2 lifecycle); stop waiting a day earlier. */
   pendingMs: 6 * 24 * 60 * 60_000,
+  /** Verifications (each up to a few Whisper calls) per app per UTC day. */
+  verifyDaily: 2_000,
+  /** A verifier that has not finished in this long is presumed dead. */
+  verifyLockMs: 10 * 60_000,
+  /** Replicas agree when their durations differ by at most this fraction. */
+  replicaDurationSlack: 0.15,
 };
 const FORMATS = ['audio/mp4', 'audio/ogg', 'audio/wav'];
 const KEY_RE = /^[A-Za-z0-9._:/-]{1,200}$/;
@@ -45,6 +53,10 @@ export interface SetRow {
   require_attestation: number;
   created_by: string;
   created_at: number;
+  /** Verification thresholds (#729): characters per second band, word error rate. */
+  min_cps: number;
+  max_cps: number;
+  max_wer: number;
 }
 type JobJoin = Pick<SetRow, 'model' | 'model_version' | 'params' | 'formats' | 'max_bytes'> & {
   set_id: string;
@@ -109,6 +121,9 @@ function setInfo(row: SetRow) {
     maxBytes: row.max_bytes,
     replicas: row.replicas,
     requireAttestation: !!row.require_attestation,
+    minCharsPerSecond: row.min_cps,
+    maxCharsPerSecond: row.max_cps,
+    maxWer: row.max_wer,
     createdAt: row.created_at,
   };
 }
@@ -178,6 +193,9 @@ generationRoutes.post('/apps/:appId/generation/sets', async (c) => {
   const b = await nativeBody(c, 8192);
   const formats = b.formats;
   const params = JSON.stringify(b.params ?? {});
+  const minCps = b.minCharsPerSecond ?? 8,
+    maxCps = b.maxCharsPerSecond ?? 30,
+    maxWer = b.maxWer ?? 0.25;
   if (
     b.kind !== 'tts' ||
     typeof b.model !== 'string' ||
@@ -195,7 +213,12 @@ generationRoutes.post('/apps/:appId/generation/sets', async (c) => {
     (b.maxBytes as number) < 1 ||
     (b.maxBytes as number) > GENERATION_LIMITS.maxBytes ||
     ![1, 2, 3].includes(b.replicas as number) ||
-    (b.requireAttestation !== undefined && typeof b.requireAttestation !== 'boolean')
+    (b.requireAttestation !== undefined && typeof b.requireAttestation !== 'boolean') ||
+    typeof minCps !== 'number' ||
+    typeof maxCps !== 'number' ||
+    !(minCps > 0 && minCps < maxCps && maxCps <= 100) ||
+    typeof maxWer !== 'number' ||
+    !(maxWer > 0 && maxWer <= 1)
   ) {
     throw new HttpError(400, 'invalid generation set');
   }
@@ -212,11 +235,14 @@ generationRoutes.post('/apps/:appId/generation/sets', async (c) => {
     require_attestation: b.requireAttestation ? 1 : 0,
     created_by: actor,
     created_at: Date.now(),
+    min_cps: minCps,
+    max_cps: maxCps,
+    max_wer: maxWer,
   };
   await c.env.DB.batch([
     c.env.DB.prepare(
-      `INSERT INTO generation_sets (id, app_id, kind, model, model_version, params, formats, max_bytes, replicas, require_attestation, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO generation_sets (id, app_id, kind, model, model_version, params, formats, max_bytes, replicas, require_attestation, created_by, created_at, min_cps, max_cps, max_wer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(...Object.values(row)),
     audit(c.env.DB, appId, actor, 'set.create', row.id),
   ]);
@@ -228,7 +254,7 @@ generationRoutes.post('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
   await owner(c, appId);
   const set = await setRow(c.env.DB, appId, c.req.param('setId'));
   if (!set) throw new HttpError(404, 'set not found');
-  const { jobs } = await nativeBody(c, 2_000_000);
+  const { jobs } = await nativeBody(c, 8_000_000);
   if (!Array.isArray(jobs) || !jobs.length || jobs.length > GENERATION_LIMITS.jobsPerRequest)
     throw new HttpError(400, `send 1 to ${GENERATION_LIMITS.jobsPerRequest} jobs`);
   const keys = new Set<string>();
@@ -262,13 +288,27 @@ generationRoutes.post('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
     rows.filter((r) => wanted.find((w) => w.key === r.key)?.id !== r.id).map((r) => r.key);
   let changed = conflicts((await existing()).results);
   if (!changed.length) {
-    await c.env.DB.prepare(
-      `INSERT INTO generation_jobs (id, set_id, app_id, key, input, status, created_at)
-       SELECT json_extract(value, '$.id'), ?, ?, json_extract(value, '$.key'), json_extract(value, '$.input'), 'open', ?
-       FROM json_each(?) WHERE true ON CONFLICT DO NOTHING`,
-    )
-      .bind(set.id, appId, Date.now(), JSON.stringify(wanted))
-      .run();
+    // D1 caps a bound value at 2 MB: insert in chunks, in one transaction.
+    const chunks: (typeof wanted)[] = [[]];
+    let size = 0;
+    for (const w of wanted) {
+      size += w.input.length + 300;
+      if (size > 900_000 && chunks.at(-1)!.length) {
+        chunks.push([]);
+        size = w.input.length + 300;
+      }
+      chunks.at(-1)!.push(w);
+    }
+    const now = Date.now();
+    await c.env.DB.batch(
+      chunks.map((chunk) =>
+        c.env.DB.prepare(
+          `INSERT INTO generation_jobs (id, set_id, app_id, key, input, status, created_at)
+           SELECT json_extract(value, '$.id'), ?, ?, json_extract(value, '$.key'), json_extract(value, '$.input'), 'open', ?
+           FROM json_each(?) WHERE true ON CONFLICT DO NOTHING`,
+        ).bind(set.id, appId, now, JSON.stringify(chunk)),
+      ),
+    );
   }
   const rows = (await existing()).results;
   // A concurrent request may have taken a key with another input.
@@ -486,6 +526,8 @@ generationRoutes.put('/apps/:appId/generation/jobs/:jobId/result', async (c) => 
   const row = await c.env.DB.prepare('SELECT status FROM generation_submissions WHERE id = ?')
     .bind(id)
     .first<{ status: string }>();
+  // Verify right away; the */15 cron retries anything this does not finish.
+  if (row!.status === 'pending') c.executionCtx.waitUntil(verifySubmission(c.env, id));
   return c.json({ submissionId: id, status: row!.status }, 202);
 });
 
@@ -787,5 +829,152 @@ export async function pruneGenerated(env: Env, now = Date.now(), limit = 100): P
       )
       .bind(now, now - GENERATION_LIMITS.pendingMs),
   ]);
+  return results.length;
+}
+
+/**
+ * Verify one pending submission (#729) and accept or reject it. Safe to call
+ * from several places at once: a lock on the row lets one verifier work on it.
+ * Over the app's daily budget, or when Whisper fails, it stays pending for the
+ * next 15-minute cron run; nothing is decided without a verdict.
+ */
+export async function verifySubmission(env: Env, id: string): Promise<void> {
+  if (!env.AI || !env.GENERATED) return;
+  const db = env.DB;
+  const now = Date.now();
+  const sub = await db
+    .prepare(
+      `UPDATE generation_submissions SET verifying_at = ?1
+       WHERE id = ?2 AND status = 'pending' AND passed IS NULL AND (verifying_at IS NULL OR verifying_at < ?3)
+       RETURNING *`,
+    )
+    .bind(now, id, now - GENERATION_LIMITS.verifyLockMs)
+    .first<SubmissionRow>();
+  if (!sub) return;
+  const unlock = () =>
+    db.prepare('UPDATE generation_submissions SET verifying_at = NULL WHERE id = ?').bind(id).run();
+  const allowed = await d1UsageStore(db).bumpIfBelow!(
+    `genverify:${sub.app_id}`,
+    dayKey(now),
+    1,
+    GENERATION_LIMITS.verifyDaily,
+  );
+  if (!allowed) return void (await unlock());
+  const set = (await db
+    .prepare('SELECT * FROM generation_sets WHERE id = ?')
+    .bind(sub.set_id)
+    .first<SetRow>())!;
+  const job = (await db
+    .prepare('SELECT input FROM generation_jobs WHERE id = ?')
+    .bind(sub.job_id)
+    .first<{ input: string }>())!;
+  const object = await env.GENERATED.get(sub.object_key);
+  const metaObject = sub.meta_key ? await env.GENERATED.get(sub.meta_key) : null;
+  let result;
+  try {
+    result = object
+      ? await verdict(
+          new Uint8Array(await object.arrayBuffer()),
+          sub.content_type,
+          metaObject ? await metaObject.text() : null,
+          (JSON.parse(job.input) as { text: string }).text,
+          { minCps: set.min_cps, maxCps: set.max_cps, maxWer: set.max_wer },
+          whisper(env.AI),
+        )
+      : { ok: false, reason: 'upload missing from quarantine' };
+  } catch (error) {
+    console.error('generation verify:', id, error);
+    return void (await unlock());
+  }
+  await db
+    .prepare(
+      `UPDATE generation_submissions SET passed = ?, duration_ms = ?, wer = ?, transcript = ?,
+         status = CASE WHEN ? THEN status ELSE 'rejected' END, reason = ?, decided_at = CASE WHEN ? THEN NULL ELSE ? END
+       WHERE id = ? AND status = 'pending'`,
+    )
+    .bind(
+      result.ok ? 1 : 0,
+      result.durationMs ?? null,
+      result.wer ?? null,
+      result.transcript?.slice(0, 20_000) ?? null,
+      result.ok ? 1 : 0,
+      result.reason ?? null,
+      result.ok ? 1 : 0,
+      Date.now(),
+      id,
+    )
+    .run();
+  if (!result.ok) {
+    await env.GENERATED.delete(sub.meta_key ? [sub.object_key, sub.meta_key] : [sub.object_key]);
+    return;
+  }
+  try {
+    await settleJob(env, sub.job_id, set);
+  } catch (error) {
+    // Promotion failed (storage): verify again on a later run.
+    console.error('generation accept:', id, error);
+    await db
+      .prepare(
+        "UPDATE generation_submissions SET passed = NULL, verifying_at = NULL WHERE id = ? AND status = 'pending'",
+      )
+      .bind(id)
+      .run();
+  }
+}
+
+/**
+ * With every replica in, accept the earliest passing submission if enough
+ * distinct users' passing submissions agree with it (duration, and the
+ * transcript where audio was transcribed whole). Leases and submissions are
+ * one per user per job, so passing submissions are from distinct users.
+ */
+async function settleJob(env: Env, jobId: string, set: SetRow): Promise<void> {
+  const { results } = await env.DB.prepare(
+    `SELECT id, duration_ms, transcript FROM generation_submissions
+     WHERE job_id = ? AND status = 'pending' AND passed = 1 ORDER BY created_at, id`,
+  )
+    .bind(jobId)
+    .all<{ id: string; duration_ms: number; transcript: string | null }>();
+  const [first, ...rest] = results;
+  if (!first) return;
+  const agrees = (r: (typeof results)[number]) =>
+    Math.abs(r.duration_ms - first.duration_ms) <=
+      GENERATION_LIMITS.replicaDurationSlack * first.duration_ms &&
+    (r.transcript === null ||
+      first.transcript === null ||
+      wer(words(r.transcript), words(first.transcript)) <= set.max_wer);
+  const agreeing = rest.filter(agrees);
+  if (1 + agreeing.length >= set.replicas) {
+    await acceptSubmission(env, first.id, first.duration_ms);
+    return;
+  }
+  // Every replica passed but they disagree: free the dissenters' slots for others.
+  if (results.length >= set.replicas) {
+    const now = Date.now();
+    await env.DB.batch(
+      rest
+        .filter((r) => !agrees(r))
+        .map((r) =>
+          env.DB.prepare(
+            `UPDATE generation_submissions SET status = 'rejected', reason = 'disagrees with other replicas', decided_at = ?
+             WHERE id = ? AND status = 'pending'`,
+          ).bind(now, r.id),
+        ),
+    );
+  }
+}
+
+/** The 15-minute cron: verify a bounded batch of the oldest unverified submissions. */
+export async function verifyPending(env: Env, limit = 25): Promise<number> {
+  if (!env.AI || !env.GENERATED) return 0;
+  const now = Date.now();
+  const { results } = await env.DB.prepare(
+    `SELECT id FROM generation_submissions
+     WHERE status = 'pending' AND passed IS NULL AND (verifying_at IS NULL OR verifying_at < ?)
+     ORDER BY created_at LIMIT ?`,
+  )
+    .bind(now - GENERATION_LIMITS.verifyLockMs, limit)
+    .all<{ id: string }>();
+  for (const { id } of results) await verifySubmission(env, id);
   return results.length;
 }

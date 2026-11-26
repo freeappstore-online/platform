@@ -23,7 +23,7 @@ import { emailRoutes } from './routes/email.js';
 import { exchangeRoutes } from './routes/exchange.js';
 import { fleetAuditRoutes } from './routes/fleet-audit.js';
 import { friendsRoutes } from './routes/friends.js';
-import { generationRoutes, pruneGenerated } from './routes/generation.js';
+import { generationRoutes, pruneGenerated, verifyPending } from './routes/generation.js';
 import { ideaBuildersRoutes } from './routes/idea-builders.js';
 import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
@@ -164,6 +164,7 @@ export default {
         runPushDelivery(env),
         prunePhotos(env),
         pruneGenerated(env),
+        verifyPending(env),
         pruneNativeData(env.DB, Date.now()),
       ]);
       for (const job of jobs)

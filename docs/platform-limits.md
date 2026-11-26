@@ -207,4 +207,4 @@ See [Photo uploads](photo-uploads.md): 640 px maximum edge, 200,000 bytes, JPEG/
 
 ## Community generation
 
-See [Community generation](community-generation.md): 200 submissions per user and 5,000 per app per UTC day, 15-minute leases (one open per user), 1-500 jobs per request, text at most 10,000 characters, `maxBytes` at most 25 MB, meta at most 64 KB, quarantine expires after 7 days.
+See [Community generation](community-generation.md): 200 submissions per user and 5,000 per app per UTC day, 15-minute leases (one open per user), 1-500 jobs per request, text at most 100,000 characters, 2,000 verifications per app per UTC day, `maxBytes` at most 25 MB, meta at most 64 KB, quarantine expires after 7 days.

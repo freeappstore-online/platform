@@ -1,11 +1,17 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
+import { M4A, OGG, SENTENCE, wav } from '../lib/generation-audio.testutil.js';
 import { _resetJwksCache } from '../lib/github-oidc.js';
 import { nativeHash } from '../lib/native-companion.js';
 import { signSession } from '../lib/session.js';
 import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import { APP_ORG_ID, DEPLOY_AUDIENCE } from './deploy.js';
-import { acceptSubmission, GENERATION_LIMITS, pruneGenerated } from './generation.js';
+import {
+  acceptSubmission,
+  GENERATION_LIMITS,
+  pruneGenerated,
+  verifyPending,
+} from './generation.js';
 
 const KEY = 'a'.repeat(64);
 const DEVICE = `ndev_${'b'.repeat(64)}`;
@@ -40,7 +46,8 @@ function memoryBucket() {
   return { objects, bucket };
 }
 
-async function setup() {
+/** `heard` stands in for Whisper: what it transcribes from the uploaded bytes. */
+async function setup(heard?: (audio: Uint8Array) => string) {
   const { db, d1 } = sqliteD1();
   db.exec(`INSERT INTO users (id, github_id, github_login, created_at) VALUES
       ('u1', 1, 'alice', 0), ('u2', 2, 'bob', 0), ('u3', 3, 'carol', 0), ('u4', 4, 'dave', 0);
@@ -49,7 +56,19 @@ async function setup() {
     "INSERT INTO native_devices (id, user_id, label, token_hash, created_at, expires_at) VALUES ('d1', 'u4', 'Pixel', ?, 0, ?)",
   ).run(await nativeHash(DEVICE), Date.now() + 86400000);
   const { objects, bucket } = memoryBucket();
-  const env = { DB: d1, SESSION_SIGNING_KEY: KEY, GENERATED: bucket };
+  const ai = heard && {
+    run: vi.fn(async (_model: string, input: { audio: string }) => ({
+      text: heard(Uint8Array.from(atob(input.audio), (ch) => ch.charCodeAt(0))),
+    })),
+  };
+  const env = { DB: d1, SESSION_SIGNING_KEY: KEY, GENERATED: bucket, AI: ai };
+  const background: Promise<unknown>[] = [];
+  const ctx = {
+    waitUntil: (p: Promise<unknown>) => background.push(p),
+    passThroughOnException() {},
+    props: {},
+  };
+  const settled = () => Promise.all(background.splice(0));
   const request = async (
     path: string,
     o: {
@@ -79,6 +98,7 @@ async function setup() {
             : {}),
       },
       env,
+      ctx as unknown as ExecutionContext,
     );
   };
   const createSet = async (extra: Record<string, unknown> = {}) => {
@@ -125,7 +145,20 @@ async function setup() {
     expect(r.status).toBe(202);
     return (await r.json()) as { submissionId: string; status: string };
   };
-  return { db, d1, env, objects, request, createSet, addJobs, claim, submit, submissionId };
+  return {
+    db,
+    d1,
+    env,
+    ai,
+    objects,
+    request,
+    createSet,
+    addJobs,
+    claim,
+    submit,
+    submissionId,
+    settled,
+  };
 }
 
 describe.skipIf(!hasSqlite)('community generation jobs API', () => {
@@ -548,6 +581,166 @@ describe.skipIf(!hasSqlite)('community generation owner calls from GitHub Action
     expect(ok.status).toBe(201);
     expect(s.db.prepare('SELECT created_by FROM generation_sets').get()).toEqual({
       created_by: 'repo:freeappstore-online/books',
+    });
+  });
+});
+
+describe.skipIf(!hasSqlite)('community generation verification', () => {
+  const TEXT = SENTENCE.repeat(3);
+  const NARRATION = wav(10);
+  const WAV_SET = { formats: ['audio/wav', 'audio/ogg', 'audio/mp4'], maxBytes: 1_000_000 };
+  /** One claimed job of `text`, submitted by u2 with `file`; returns its row after verification. */
+  async function run(
+    s: Awaited<ReturnType<typeof setup>>,
+    file: Uint8Array,
+    o: { type?: string; text?: string; meta?: string; user?: string; setId?: string } = {},
+  ) {
+    const setId = o.setId ?? (await s.createSet(WAV_SET));
+    await s.addJobs(setId, [{ key: 'k', input: { text: o.text ?? TEXT } }]);
+    const user = o.user ?? 'u2';
+    const job = (await s.claim(user, { setId }))!;
+    const { submissionId } = await s.submissionId(
+      await s.submit(user, job.id, job.leaseToken, {
+        file,
+        type: o.type ?? 'audio/wav',
+        ...(o.meta ? { meta: o.meta } : {}),
+      }),
+    );
+    await s.settled();
+    return {
+      setId,
+      job,
+      row: s.db
+        .prepare(
+          'SELECT status, reason, passed, duration_ms, wer FROM generation_submissions WHERE id = ?',
+        )
+        .get(submissionId) as Record<string, unknown>,
+    };
+  }
+
+  it('accepts a correct narration right after upload and publishes it', async () => {
+    const s = await setup(() => TEXT);
+    const { setId, row } = await run(s, NARRATION);
+    expect(row).toEqual({
+      status: 'accepted',
+      reason: null,
+      passed: 1,
+      duration_ms: 10_000,
+      wer: 0,
+    });
+    const { artifacts } = (await (
+      await s.request(`/sets/${setId}/manifest`, { user: null })
+    ).json()) as {
+      artifacts: { durationMs: number; url: string }[];
+    };
+    expect(artifacts[0]!.durationMs).toBe(10_000);
+    const read = await app.request(artifacts[0]!.url, {}, s.env);
+    // Deep equality on 320 KB is slow under load: compare bytes directly.
+    const served = new Uint8Array(await read.arrayBuffer());
+    expect(served.length === NARRATION.length && served.every((x, i) => x === NARRATION[i])).toBe(
+      true,
+    );
+    expect([...s.objects.keys()].some((k) => k.startsWith('q/'))).toBe(false);
+  });
+
+  it('rejects silence, wrong text, wrong format, truncation and a mislabelled content type', async () => {
+    const cases: [Uint8Array, string, (a: Uint8Array) => string, RegExp][] = [
+      [wav(10, true), 'audio/wav', () => '', /does not match the text/],
+      [NARRATION, 'audio/wav', () => 'buy cheap pills from our website', /does not match the text/],
+      [OGG, 'audio/wav', () => TEXT, /does not match audio\/ogg/],
+      [M4A.subarray(0, M4A.length - 500), 'audio/mp4', () => TEXT, /truncated/],
+      [NARRATION.subarray(0, 50_000), 'audio/wav', () => TEXT, /truncated/],
+      [NARRATION, 'audio/mp4', () => TEXT, /does not match audio\/wav/],
+    ];
+    for (const [file, type, heard, reason] of cases) {
+      const s = await setup(heard);
+      const { row, setId } = await run(s, file, { type });
+      expect(row.status).toBe('rejected');
+      expect(row.reason).toMatch(reason);
+      expect(
+        (
+          (await (await s.request(`/sets/${setId}/manifest`, { user: null })).json()) as {
+            artifacts: [];
+          }
+        ).artifacts,
+      ).toEqual([]);
+      // Rejected bytes leave quarantine; the contributor sees the reason.
+      expect(s.objects.size).toBe(0);
+      const mine = (await (await s.request('/submissions', { user: 'u2' })).json()) as {
+        submissions: { status: string; reason: string }[];
+      };
+      expect(mine.submissions[0]!.reason).toMatch(reason);
+      // The job is open again for someone else.
+      expect(await s.claim('u3', { setId })).not.toBeNull();
+    }
+  });
+
+  it('replicas: accepted only once enough distinct users agree; the earliest wins, the rest are superseded', async () => {
+    const s = await setup(() => TEXT);
+    const setId = await s.createSet({ ...WAV_SET, replicas: 2 });
+    await s.addJobs(setId, [{ key: 'k', input: { text: TEXT } }]);
+    const a = (await s.claim('u2'))!;
+    const b = (await s.claim('u3'))!;
+    const first = await s.submissionId(
+      await s.submit('u2', a.id, a.leaseToken, { file: NARRATION }),
+    );
+    await s.settled();
+    expect(
+      s.db
+        .prepare('SELECT status, passed FROM generation_submissions WHERE id = ?')
+        .get(first.submissionId),
+    ).toEqual({ status: 'pending', passed: 1 });
+    const second = await s.submissionId(
+      await s.submit('u3', b.id, b.leaseToken, { file: wav(10.2) }),
+    );
+    await s.settled();
+    const statuses = s.db
+      .prepare('SELECT id, status FROM generation_submissions ORDER BY created_at')
+      .all() as { id: string; status: string }[];
+    expect(statuses.find((r) => r.id === first.submissionId)!.status).toBe('accepted');
+    expect(statuses.find((r) => r.id === second.submissionId)!.status).toBe('superseded');
+    expect(s.db.prepare('SELECT submission_id FROM generation_artifacts').get()).toEqual({
+      submission_id: first.submissionId,
+    });
+  });
+
+  it('a correct submission for an already accepted job is superseded and never overwrites', async () => {
+    const s = await setup(() => TEXT);
+    const { job } = await run(s, NARRATION);
+    const before = s.db.prepare('SELECT * FROM generation_artifacts').get();
+    // An old lease that outlived acceptance (e.g. issued before replicas were met).
+    s.db
+      .prepare(
+        "INSERT INTO generation_leases (job_id, user_id, app_id, token_hash, state, created_at, expires_at) VALUES (?, 'u3', 'books', ?, 'open', 0, ?)",
+      )
+      .run(job.id, await nativeHash(`glt_${'1'.repeat(64)}`), Date.now() + 60_000);
+    const late = await s.submissionId(
+      await s.submit('u3', job.id, `glt_${'1'.repeat(64)}`, { file: wav(10, true) }),
+    );
+    await s.settled();
+    expect(late.status).toBe('superseded');
+    expect(s.db.prepare('SELECT * FROM generation_artifacts').get()).toEqual(before);
+    expect(s.ai!.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays pending over the daily verification budget or when Whisper fails; the cron retries', async () => {
+    const s = await setup(() => TEXT);
+    s.db
+      .prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)')
+      .run('genverify:books', new Date().toISOString().slice(0, 10), GENERATION_LIMITS.verifyDaily);
+    const { row } = await run(s, NARRATION);
+    expect(row).toEqual(expect.objectContaining({ status: 'pending', passed: null }));
+    expect(s.ai!.run).not.toHaveBeenCalled();
+    s.db.exec("DELETE FROM app_proxy_usage WHERE app_id = 'genverify:books'");
+    s.ai!.run.mockRejectedValueOnce(new Error('AI down'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await verifyPending(s.env as never)).toBe(1);
+    expect(
+      s.db.prepare('SELECT status, passed, verifying_at FROM generation_submissions').get(),
+    ).toEqual({ status: 'pending', passed: null, verifying_at: null });
+    await verifyPending(s.env as never);
+    expect(s.db.prepare('SELECT status FROM generation_submissions').get()).toEqual({
+      status: 'accepted',
     });
   });
 });

@@ -114,3 +114,8 @@ bucket_name = "fas-uploads"
 [[r2_buckets]]
 binding = "GENERATED"
 bucket_name = "fas-generated"
+
+# Workers AI: Whisper transcripts verify community generation uploads (#729).
+# Capped per app per day in routes/generation.ts (verifyDaily).
+[ai]
+binding = "AI"
