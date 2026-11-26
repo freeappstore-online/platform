@@ -3,14 +3,16 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 
 // Check built output, not template spelling: every sitemap HTML identity must
-// agree with Pages' extensionless destination. Docs and plain text are separate.
+// agree with Pages' extensionless destination. Plain text is separate. A
+// sitemap may only list URLs on its own host (#774).
 function verifySeo(dist) {
   const xml = fs.readFileSync(path.join(dist, 'sitemap.xml'), 'utf8');
   const urls = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
   assert.equal(new Set(urls).size, urls.length, 'Duplicate sitemap destinations');
   for (const url of urls) {
     const u = new URL(url);
-    if (u.origin !== 'https://freeappstore.online' || /\.(txt|md)$/.test(u.pathname)) continue;
+    assert.equal(u.origin, 'https://freeappstore.online', `Off-host sitemap location: ${url}`);
+    if (/\.(txt|md)$/.test(u.pathname)) continue;
     assert.ok(!u.pathname.endsWith('.html'), `Redirecting sitemap location: ${url}`);
     const file = u.pathname === '/' ? 'index.html' : `${u.pathname.slice(1)}.html`;
     const html = fs.readFileSync(path.join(dist, file), 'utf8');
