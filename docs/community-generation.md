@@ -34,7 +34,9 @@ Any signed-in creator can generate for every store app from the console's **Gene
 (`freeappstore.online/app/generate`, desktop browsers with WebCodecs AAC): it lists the apps with open
 work from discovery, runs Kokoro sets (`kokoro` `v1.0`, `audio/mp4`) for the apps they opt in to, after
 they agree to download the model. It uses the SDK's shared browser runner,
-`@freeappstore/sdk/generation-kokoro` (also used by Books), and runs only while the window is open.
+`@freeappstore/sdk/generation-kokoro` (also used by Books), takes one job from each opted-in app in turn
+like the phones, and keeps going in a background tab or a minimised installed console while the browser
+runs ([Running in the background](#running-in-the-background)).
 The page has three tabs (#820): **Status** (running, idle or paused and why; the current app, job,
 sentence n/N and speed; Start/Stop; today's accepted, checking, rejected and not-done counts, which
 open Activity filtered), **Activity** (the account's `mySubmissions()` for every app it may have worked
@@ -219,6 +221,7 @@ claimed. Runners today:
 | Android companion ([#731](https://github.com/freeappstore-online/platform/issues/731)) | `kokoro` `v1.0` (sherpa-onnx `kokoro-multi-lang-v1_0`) | `audio/mp4` (AAC-LC 32 kbps, 24 kHz mono; [#798](https://github.com/freeappstore-online/platform/issues/798)) | `{ voice, speed? }` (speed 0.5-2, default 1) | All 54 Kokoro v1.0 voices: English (`af_`, `am_`, `bf_`, `bm_`), Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin (`zf_`, `zm_`) |
 | iOS companion ([#733](https://github.com/freeappstore-online/platform/issues/733)) | same | same | same | same |
 | Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC-LC 32 kbps mono, 24 kHz, else 48 kHz where the browser refuses 24 kHz) | same | English voices only |
+| FAS desktop app ([#826](https://github.com/freeappstore-online/platform/issues/826); `desktop/`, Electron) | same as the browser (the same SDK runner, in a hidden window) | same; 48 kHz on macOS, whose Electron build refuses 24 kHz AAC | same | English voices only |
 
 A runner skips any job it would not generate exactly: another model or version, no `audio/mp4` in
 `formats`, params other than `voice` and `speed`, or a voice it doesn't have. Language
@@ -230,7 +233,7 @@ A runner skips any job it would not generate exactly: another model or version, 
   (`zf_`/`zm_` are Mandarin). English and Spanish text is split into sentences as Books does;
   Mandarin at 。！？；… (and `. ! ? ;`), with Mandarin number and date reading. Audio under a second
   gets silence at the end, so a two-character phrase such as `对。` passes verification.
-- **Browser** speaks English only: `kokoroProblem` skips a set naming a language other than `en`, or
+- **Browser and desktop** speak English only: `kokoroProblem` skips a set naming a language other than `en`, or
   using a non-English voice, with the reason (for example `language zh: this browser runner speaks
   English only`). Browser Mandarin needs sherpa-onnx
 WASM (kokoro-js phonemizes English only); Kokoro v1.1-zh (more Mandarin voices) is held in reserve
@@ -246,6 +249,69 @@ download a model a job names.
 Set `language` on sets whose text is not English (#810): it tells Whisper the language and picks the
 characters-per-second band; text in scripts without spaces is compared by character error rate
 whether or not it is set.
+
+### Browser and desktop runner behaviour
+
+The console's Generate page and the desktop app run the same SDK code (`Generation.contribute` and
+`contributeKokoroApps`) and behave like the phones ([#819](https://github.com/freeappstore-online/platform/issues/819)):
+
+- **Order**: one job from each opted-in app in turn; an app leaves the run when it has no job for this user or a
+  job of it is not submitted (skipped, lease ran out, failed). The opt-ins are read again before each turn.
+- **Retries**: a claim that fails transiently (network failure, `5xx`, `408`, or `429` with `Retry-After`) is tried
+  again after 2 s doubling to 60 s (or `Retry-After`) for up to a minute. An upload sends the same file again, extending
+  the lease as due, until 30 s before the lease ends, then the job is recorded failed. Nothing is generated twice.
+- **Lease**: extended once within 5 minutes of expiry, on every message from the model worker (each sentence, and
+  each download step) and on a timer. A `403` or `409` stops extending.
+
+### Running in the background
+
+Synthesis and AAC encoding run in a dedicated Web Worker; the page's main thread only relays messages and makes
+the API calls. Because the lease is renewed on the worker's messages, not only on a timer, it holds where the
+page's own timers are throttled.
+
+**Chrome and Edge (Chromium), tab or installed console**, from Chrome's documentation and source:
+
+- A hidden page's timers run at most once a second, and after 5 minutes hidden, chained timers once a minute
+  ([timer throttling](https://developer.chrome.com/blog/timer-throttling-in-chrome-88)). Dedicated worker
+  timers are not throttled (Blink's `kDedicatedWorkerThrottling` is off by default), so synthesis runs at full
+  speed. A minimised installed console is hidden like a background tab (Chrome's freezing code has no
+  installed-app exemption).
+- With **Energy Saver** on, Chrome freezes pages hidden and silent for over 5 minutes that use a lot of CPU,
+  workers included ([freezing on Energy Saver](https://developer.chrome.com/blog/freezing-on-energy-saver)). A page
+  holding a Web Lock is exempt (`CannotFreezeReason::kHoldingWebLock`), so the Generate page holds the
+  `fas:generate` lock while it runs. The lock also keeps the run to one tab: a second console tab says another one
+  is generating.
+- **Memory Saver** may discard a background tab; a Web Lock does not prevent it. An installed console's window is
+  never discarded on desktop (`CannotDiscardReason::kWebApp`). A discarded tab loses the job in hand (its lease runs
+  out on the server; another device takes it later).
+- The screen wake lock is released whenever the page is hidden; the page takes it again when it is shown. Without
+  it the computer may sleep, which stops everything.
+
+What was tested (#826, macOS 15, against a local stand-in API, with the SDK's runner and worker as the console
+builds them): in Electron 45 (Chromium 156) a page in a window that was shown and then hidden, with background
+throttling on, so `document.visibilityState` was `hidden` and Blink throttled it as a background tab. A 12-sentence
+job (WebAssembly) took 336 s hidden and 326 s visible and was uploaded both times. In a longer WebGPU job, after
+5 minutes hidden the page's own 1-second timer fired once a minute (a 51 s gap), while the worker kept finishing a
+sentence every ~10 s; the lease, due 6 minutes after the claim, was extended 0.5 s after it became due, on a worker
+message (the throttled timer would have fired about 48 s later). The run was stopped there; the upload path was
+covered by the shorter jobs and by the desktop's end-to-end test. Not tested: Chrome's own browser-level policies
+(Energy Saver freezing, Memory Saver discarding), because Playwright-driven Chrome on this Mac never reported the
+page hidden (its display was off, so windows were never occluded); what is written about them above is from Chrome's
+documentation and source, not observed. A first run's model download (WebAssembly, 92 MB) took about two minutes.
+
+**Safari** (26+) has WebCodecs `AudioEncoder`. It throttles hidden pages' timers and lowers background processes'
+priority but, since 2023, does not suspend them on macOS
+([WebKit 254535](https://bugs.webkit.org/show_bug.cgi?id=254535)). WebKit's AAC encoder gave MP4 files no valid
+decoder config, so their audio played silent ([WebKit 302253](https://bugs.webkit.org/show_bug.cgi?id=302253),
+fixed in WebKit in October 2026); a Safari without the fix produces uploads that fail verification. Not tested
+here: Safari's behaviour in the background and in a Dock web app is not documented that we could find.
+
+**Firefox** has no WebCodecs AAC encoder, so the page says it can't generate (as it did before).
+
+**Limits no page can avoid**: the browser must stay open and the computer awake; closing the tab or window,
+quitting the browser, sleep, a Memory Saver discard or a crash ends the run and loses the job in hand (its lease
+expires; nothing partial is uploaded). For generating with no window open, use the desktop app, which runs the same
+runner in a hidden window with background throttling turned off and keeps going from the tray.
 
 ## Limits
 

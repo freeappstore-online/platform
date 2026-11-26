@@ -218,7 +218,8 @@ export class KokoroRunner {
     const { voice, speed = 1 } = job.params as { voice: string; speed?: number };
     // Before `contribute` extends the lease, its expiry is 15 minutes after the claim
     const capAt = job.leaseExpiresAt - LEASE_MS + LEASE_CAP_MS;
-    const started = Date.now();
+    // Pace is measured from the end of the model's download, which can take minutes on a first run
+    let started = Date.now();
     this.worker ??= this.opts.createWorker();
     const w = this.worker;
     const id = ++this.ids;
@@ -235,7 +236,10 @@ export class KokoroRunner {
       };
       const onMessage = (e: MessageEvent<WorkerReply>) => {
         const msg = e.data;
-        if (msg.type === 'loading') return onLoading?.(msg.progress);
+        if (msg.type === 'loading') {
+          started = Date.now();
+          return onLoading?.(msg.progress);
+        }
         if (msg.id !== id) return; // a cancelled job's last word, or a load
         if (msg.type === 'progress') {
           const elapsed = Date.now() - started;

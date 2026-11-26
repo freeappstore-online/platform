@@ -455,10 +455,12 @@ const controller = new AbortController();
 const { submitted, stopped } = await fas.generation.contribute({
   setId: set.id,
   models: [{ model: 'kokoro', modelVersion: 'v1.0' }],
-  generate: async (job) => ({ file: await synthesize(job.input.text, job.params), meta: { timings } }),
+  // lease.renew(): extend now if due; call it as work progresses (see below)
+  generate: async (job, lease) => ({ file: await synthesize(job.input.text, job.params, lease.renew), meta: { timings } }),
   signal: controller.signal,
+  limit: 10, // optional: claim at most 10 jobs
   onProgress: ({ stage, job, submitted }) => console.log(stage, job.key, submitted),
-}); // stopped: 'no-work' | 'aborted' | 'lease-expired'
+}); // stopped: 'no-work' | 'aborted' | 'lease-expired' | 'limit'
 const mine = await fas.generation.mySubmissions(); // newest 100: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, wer, durationMs, input: { text }, artifact: { url, metaUrl } | null }]
 await fas.generation.recordAttempts([{ jobId, runner: 'browser', reason: 'submitted', wallMs, synthMs }]); // attempt records (#827): numbers only, one per lease; owners see them in listJobs
 const work = await fas.generation.openWork();      // this app's sets the user could claim now: [{ setId, kind, model, modelVersion, params, formats, maxBytes, language, open }]
@@ -469,13 +471,13 @@ const artifacts = await fas.generation.manifest(set.id); // [{ key, jobId, url, 
 
 Runners exist today only for `kokoro` `v1.0` with `audio/mp4` and params `{ voice, speed? }`: the Android and iOS companions (all Kokoro v1.0 voices, Mandarin included) and the browser runner below (English voices only). A set naming another model is accepted but never claimed; to ask for a model, open an issue on the platform repo. `language` (BCP 47, e.g. `en`, `es`, `zh`; `null` when omitted) is passed to Whisper and picks the default characters-per-second band (`zh` 2-9, `ja` 3-15, others 8-30); Chinese, Japanese, Thai and other scripts without spaces are verified by character error rate, Traditional and Simplified Chinese alike. `minCharsPerSecond`, `maxCharsPerSecond` and `maxWer` (0.25) override the defaults. See [Models and runners](community-generation.md#models-and-runners).
 
-The step-by-step calls are `claim({ setId?, models })` (a 15-minute lease, or `null` when there is no work; it releases this browser's previous lease, while the user's other devices keep theirs, up to 4 open leases per user, then it throws on the `429`) and `submit(job, file, { meta?, attestation? })` (`202`, status `pending`), plus `extendLease(job)`, which pushes `job.leaseExpiresAt` to 15 minutes from now (at most 2 hours after the claim; throws at the cap or once the lease is invalid). Submissions move to `accepted`, `rejected` (with a `reason`) or `superseded`. While `generate` runs, `contribute` extends the lease within 5 minutes of its expiry; a job is abandoned (back to the pool) only if extending fails and the lease runs out before the result is ready.
+The step-by-step calls are `claim({ setId?, models })` (a 15-minute lease, or `null` when there is no work; it releases this browser's previous lease, while the user's other devices keep theirs, up to 4 open leases per user, then it throws on the `429`) and `submit(job, file, { meta?, attestation? })` (`202`, status `pending`), plus `extendLease(job)`, which pushes `job.leaseExpiresAt` to 15 minutes from now (at most 2 hours after the claim; throws at the cap or once the lease is invalid). Submissions move to `accepted`, `rejected` (with a `reason`) or `superseded`. While `generate` runs, `contribute` extends the lease within 5 minutes of its expiry, on a timer and whenever `generate` calls `lease.renew()`; call it as the work progresses (for example on each message from a worker), because a background tab's timers can be delayed by minutes. A job is abandoned (back to the pool) only if the lease can't be extended (`403` gone, `409` at the cap) and runs out before the result is ready. Like the phone runners (#819), `contribute` tries a claim that failed transiently again for up to a minute, and sends the same file again on a failed upload, extending the lease as due, until 30 s before the lease ends; then it throws the last failure. Transient means a network failure, a `5xx` or `408` (2 s doubling to 60 s, or `Retry-After`), or a `429` with `Retry-After`; `generationRetryDelay(err, attempt)` says which. Failed calls throw `GenerationError` with `status` and `retryAfterMs`.
 
 ### Kokoro in the browser (`@freeappstore/sdk/generation-kokoro`)
 
-A ready-made `generate` for TTS sets with `model: 'kokoro'`, `modelVersion: 'v1.0'`, `formats` including `audio/mp4` and `params: { voice, speed? }` (Kokoro's English voices; `kokoroProblem` skips a set naming another `language`, such as `zh`, or using a non-English voice, and says why). Books and the Creator Console's Generate page use it. It runs [kokoro-js](https://www.npmjs.com/package/kokoro-js) in a Web Worker (WebGPU fp32, about 326 MB, else WebAssembly q8, about 92 MB; cached in Cache Storage), speaks the text a sentence at a time (`narrationSentences`, the same split as Books' `segments.py`), encodes AAC with WebCodecs into MP4 ([mp4-muxer](https://www.npmjs.com/package/mp4-muxer)) and submits the sentence timings as meta `{ segments: [[charStart, charEnd, startSec, endSec], …] }`. `kokoro-js` and `mp4-muxer` are optional peer dependencies: install them (`kokoro-js@1.2.1`, `mp4-muxer@5.2.2`) only if you use this. The window must stay open while it runs.
+A ready-made `generate` for TTS sets with `model: 'kokoro'`, `modelVersion: 'v1.0'`, `formats` including `audio/mp4` and `params: { voice, speed? }` (Kokoro's English voices; `kokoroProblem` skips a set naming another `language`, such as `zh`, or using a non-English voice, and says why). Books and the Creator Console's Generate page use it. It runs [kokoro-js](https://www.npmjs.com/package/kokoro-js) in a Web Worker (WebGPU fp32, about 326 MB, else WebAssembly q8, about 92 MB; cached in Cache Storage), speaks the text a sentence at a time (`narrationSentences`, the same split as Books' `segments.py`), encodes AAC with WebCodecs into MP4 ([mp4-muxer](https://www.npmjs.com/package/mp4-muxer)) and submits the sentence timings as meta `{ segments: [[charStart, charEnd, startSec, endSec], …] }`. `kokoro-js` and `mp4-muxer` are optional peer dependencies: install them (`kokoro-js@1.2.1`, `mp4-muxer@5.2.2`) only if you use this. It needs the page to stay open; synthesis and encoding run in the worker, and the lease is renewed on each message from it, so a hidden tab keeps going as long as the browser runs it (what each browser does: [Running in the background](community-generation.md#running-in-the-background)).
 
-It generates exactly the claimed input with the job's model, version and params, or skips the job (the next claim releases it): another model or version, no `audio/mp4`, params other than `voice` and `speed`, a voice Kokoro doesn't have, audio over `maxBytes`, timings over the 64 KB meta limit, or too slow to finish within the lease's 2-hour cap.
+It generates exactly the claimed input with the job's model, version and params, or skips the job (the next claim releases it): another model or version, no `audio/mp4`, params other than `voice` and `speed`, a voice Kokoro doesn't have, audio over `maxBytes`, timings over the 64 KB meta limit, or too slow to finish within the lease's 2-hour cap (its pace is measured once the model has loaded, so a first download doesn't count).
 
 ```ts
 // kokoro.worker.ts: the app's own worker module, so its bundler builds the model's runtime
@@ -483,7 +485,7 @@ import { serveKokoroWorker } from '@freeappstore/sdk/generation-kokoro/worker';
 serveKokoroWorker(); // or { wasmPaths } to serve ONNX Runtime's .wasm from the app instead of a CDN
 
 // main thread
-import { contributeKokoro, kokoroDevice, kokoroEncoder, kokoroProblem, KokoroRunner,
+import { contributeKokoro, contributeKokoroApps, kokoroDevice, kokoroEncoder, kokoroProblem, KokoroRunner,
   KOKORO_DOWNLOAD_BYTES, isKokoroDownloaded, deleteKokoroModel } from '@freeappstore/sdk/generation-kokoro';
 const encoder = await kokoroEncoder();  // null: no WebCodecs AAC (e.g. Firefox) — hide the feature
 const device = await kokoroDevice();    // 'webgpu' | 'wasm'; show KOKORO_DOWNLOAD_BYTES[device] before the first run
@@ -497,6 +499,14 @@ const { submitted, stopped } = await contributeKokoro(fas.generation, {
   runner, setId: sets[0].setId, signal: controller.signal,
   onEvent: (e) => console.log(e), // loading | claimed | progress { sentence, sentences, chars, totalChars, charsPerSecond } | generated { result: { file, meta, timing: { loadMs, synthMs, encodeMs } } } | submitted | skipped
 }); // stopped: 'no-work' | 'aborted'
+
+// Several apps, one job from each in turn (as the phones do); an app leaves the run when it has no
+// work for you or a job of it is not submitted. A failed job is an event, not the end of the run.
+await contributeKokoroApps({
+  runner, signal: controller.signal,
+  apps: () => [{ appId: 'books', generation: booksGeneration, setIds: ['s1'] }], // read before each turn
+  onEvent: (e, appId) => console.log(appId, e), // … | failed { job, reason }
+});
 runner.dispose();          // frees the model's memory
 await deleteKokoroModel(); // frees its storage
 ```

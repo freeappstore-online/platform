@@ -232,6 +232,32 @@ describe('KokoroRunner', () => {
     await expect(timed.generate(job())).rejects.toThrow('sentence timings exceed 64 KB');
   });
 
+  it('does not count the model download towards “too slow”', async () => {
+    const now = Date.now();
+    const { worker } = fakeWorker((req, send) => {
+      if (req.type !== 'narrate') return;
+      vi.setSystemTime(now + 10 * 60_000); // a slow first download
+      send({ type: 'loading', progress: 1 });
+      queueMicrotask(() => {
+        vi.setSystemTime(now + 10 * 60_000 + 5_000);
+        send({ type: 'progress', id: req.id, done: 1, total: 100, chars: 50 });
+        send({ type: 'done', id: req.id, file: new Blob([new Uint8Array(3)]), segments: [] });
+      });
+    });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const runner = new KokoroRunner({ createWorker: () => worker, encoder, device: 'wasm' });
+      const text = 'Word. '.repeat(1000).trim();
+      await expect(
+        runner.generate(job({ input: { text }, maxBytes: 25_000_000 })),
+      ).resolves.toMatchObject({
+        meta: { segments: [] },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails on a worker error and cancels on abort', async () => {
     const failing = fakeWorker((req, send) => {
       if (req.type === 'narrate') send({ type: 'error', id: req.id, message: 'boom', skip: false });
