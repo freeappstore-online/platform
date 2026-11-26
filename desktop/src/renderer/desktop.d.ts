@@ -1,9 +1,10 @@
 // The API the home window's preload (src/preload/home.cts) exposes.
 import type { ContributeState } from '../main/contribute.js';
+import type { HistoryItem } from '../main/history.js';
 import type { LogEntry, OpenApp } from '../main/hub.js';
 import type { ClientId, ClientStatus } from '../main/integrations.js';
 
-export type { ClientId, ClientStatus, LogEntry, OpenApp };
+export type { ClientId, ClientStatus, HistoryItem, LogEntry, OpenApp };
 
 /** Contribute (#826) as the home window sees it. */
 export interface DesktopContribute extends ContributeState {
@@ -72,6 +73,10 @@ declare global {
         downloadModel(): Promise<void>;
         deleteModel(): Promise<void>;
         refresh(): Promise<void>;
+        /** This computer's attempts, newest first (#827). */
+        history(): Promise<HistoryItem[]>;
+        /** A kept attempt's audio and meta `{ segments }`, or null once pruned. */
+        audio(appId: string, jobId: string): Promise<{ audio: Uint8Array; meta: unknown } | null>;
       };
     };
   }

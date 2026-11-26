@@ -2,8 +2,22 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Contribute, type ContributeHost, contributeStatus, RelayWorker } from './contribute.js';
+import {
+  Contribute,
+  type ContributeHost,
+  contributeStatus,
+  type Reading,
+  RelayWorker,
+} from './contribute.js';
 import { deleteDeviceToken, loadDeviceToken, pairDevice, saveDeviceToken } from './device.js';
+import {
+  endReason,
+  type HistoryItem,
+  keepAudio,
+  loadHistory,
+  readAudio,
+  saveHistory,
+} from './history.js';
 
 const api = 'https://api.test/v1';
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -61,8 +75,13 @@ describe('RelayWorker', () => {
 });
 
 describe('Contribute', () => {
+  let history: HistoryItem[] = [];
+  /** What the host reads of this computer, in turn: start, each sentence, generated, end. */
+  let readings: Reading[] = [];
   function setup(over: Partial<ContributeHost> = {}) {
     let relay: RelayWorker | null = null;
+    history = [];
+    readings = [];
     // The hidden window's worker: narrates any job in one sentence
     const createWorker = () => {
       relay = new RelayWorker((message) => {
@@ -75,6 +94,7 @@ describe('Contribute', () => {
             id: msg.id,
             file: new Uint8Array(8).buffer,
             segments: [[0, 4, 0, 1]],
+            timing: { loadMs: 700, synthMs: 500, encodeMs: 20 },
           } as never);
         });
       });
@@ -91,6 +111,13 @@ describe('Contribute', () => {
       deleteModel: vi.fn(async () => {}),
       signedOut: vi.fn(),
       changed: vi.fn(),
+      probe: () => readings.shift() ?? { foreground: false },
+      context: () => ({ appVersion: '0.1.2', os: 'darwin 24.6.0', device: 'Apple M3 arm64' }),
+      history: () => history,
+      setHistory: (items) => {
+        history = items;
+      },
+      keepAudio: vi.fn(async () => {}),
       ...over,
     };
     return { host, contribute: new Contribute(host, 'https://api.test', 60 * 60_000) };
@@ -117,12 +144,65 @@ describe('Contribute', () => {
       if (url.endsWith('/claim')) return claims.shift()!;
       if (url.endsWith('/jobs/j1/result') && init?.method === 'PUT')
         return json({ submissionId: 'x', status: 'pending' }, 202);
+      if (url.endsWith('/events')) return json({ recorded: 1 });
+      if (url.endsWith('/submissions'))
+        return json({
+          submissions: [
+            { jobId: 'j1', status: 'rejected', reason: 'too fast', wer: 0.5, durationMs: 1000 },
+          ],
+        });
       return new Response('not found', { status: 404 });
     });
     vi.stubGlobal('fetch', fetch);
-    const { contribute } = setup();
+    const { contribute, host } = setup();
+    readings.push(
+      { cpuMs: 1000, memMb: 300, charging: true, thermal: 'nominal', foreground: true },
+      { memMb: 900, foreground: true },
+      { memMb: 700, foreground: false },
+      { cpuMs: 4500, memMb: 400, charging: false, thermal: 'fair', foreground: true },
+    );
     contribute.wake();
     await until(() => contribute.state.submitted === 1 && contribute.state.status === 'idle');
+    await until(() => history[0]?.verdict !== null && history.length > 0);
+    // The attempt's record (#827): kept here with the verdict, and its numbers sent
+    expect(history).toEqual([
+      expect.objectContaining({
+        appId: 'books',
+        jobId: 'j1',
+        outcome: 'submitted',
+        text: 'One. Two.',
+        verdict: { status: 'rejected', reason: 'too fast', wer: 0.5, durationMs: 1000 },
+        record: expect.objectContaining({
+          runner: 'desktop',
+          reason: 'submitted',
+          appVersion: '0.1.2',
+          device: 'Apple M3 arm64',
+          background: true,
+          loadMs: 700,
+          synthMs: 500,
+          encodeMs: 20,
+          cpuMs: 3500,
+          peakMemMb: 900,
+          chargingStart: true,
+          chargingEnd: false,
+          thermalStart: 'nominal',
+          thermalEnd: 'fair',
+          bytes: 8,
+          durationMs: 1000,
+          rtf: 0.5,
+          uploadMs: expect.any(Number),
+        }),
+      }),
+    ]);
+    expect(host.keepAudio).toHaveBeenCalledWith(
+      'books',
+      'j1',
+      expect.objectContaining({ meta: { segments: [[0, 4, 0, 1]] } }),
+    );
+    const sent = fetch.mock.calls.find(([url]) => url.endsWith('/events'))!;
+    expect(JSON.parse(String(sent[1]!.body)).events).toEqual([
+      { jobId: 'j1', ...history[0]!.record },
+    ]);
     expect(contribute.state.apps).toEqual([
       { appId: 'books', oneliner: 'Free books', open: 3, problem: null },
       {
@@ -138,7 +218,9 @@ describe('Contribute', () => {
       ['GET', `${api}/generation/open`],
       ['POST', `${api}/apps/books/generation/claim`],
       ['PUT', `${api}/apps/books/generation/jobs/j1/result`],
+      ['POST', `${api}/apps/books/generation/events`],
       ['POST', `${api}/apps/books/generation/claim`],
+      ['GET', `${api}/apps/books/generation/submissions`],
     ]);
     for (const [, init] of fetch.mock.calls)
       expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer ndev_x');
@@ -277,5 +359,53 @@ describe('device pairing', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('history (#827)', () => {
+  it('keeps the latest 20 attempts’ audio, the newest first, and reads it back', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fas-history-'));
+    try {
+      const item = (jobId: string) =>
+        ({
+          appId: 'books',
+          jobId,
+          key: jobId,
+          at: 0,
+          outcome: 'submitted',
+          reason: null,
+          text: '',
+          chars: 0,
+          record: { runner: 'desktop', reason: 'submitted' },
+          verdict: null,
+        }) as HistoryItem;
+      let items: HistoryItem[] = [];
+      for (let i = 0; i < 22; i++) {
+        keepAudio(dir, 'books', `j${i}`, new Uint8Array([i]), { segments: [] });
+        items = saveHistory(dir, [item(`j${i}`), ...items]);
+      }
+      expect(loadHistory(dir)).toHaveLength(22);
+      expect(readAudio(dir, 'books', 'j21')).toEqual({
+        audio: new Uint8Array([21]),
+        meta: { segments: [] },
+      });
+      expect(readAudio(dir, 'books', 'j2')).not.toBeNull();
+      expect(readAudio(dir, 'books', 'j1')).toBeNull();
+      expect(readAudio(dir, 'books', 'j0')).toBeNull();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('maps how a job ended to the #813 reasons', () => {
+    expect(endReason('submitted', null)).toBe('submitted');
+    expect(endReason('skipped', 'audio exceeds maxBytes')).toBe('too_large');
+    expect(endReason('skipped', 'unknown voice zz')).toBe('unsupported');
+    expect(endReason('stopped', 'the lease ran out before it finished')).toBe('lease_cap');
+    expect(endReason('stopped', 'stopped before it finished')).toBe('user_stop');
+    expect(endReason('failed', 'Failed to fetch', new TypeError('Failed to fetch'))).toBe(
+      'network',
+    );
+    expect(endReason('failed', 'worker crashed')).toBe('other');
   });
 });

@@ -1,14 +1,21 @@
-import { Generation, type GenerationOpenApp } from '@freeappstore/sdk';
+import {
+  Generation,
+  type GenerationAttemptRecord,
+  type GenerationJob,
+  type GenerationOpenApp,
+} from '@freeappstore/sdk';
 import {
   contributeKokoroApps,
   KOKORO_DOWNLOAD_BYTES,
   type KokoroDevice,
   type KokoroEvent,
+  type KokoroResult,
   KokoroRunner,
   type KokoroRunnerOptions,
   kokoroProblem,
 } from '@freeappstore/sdk/generation-kokoro';
 import { API_ORIGIN } from './device.js';
+import { endReason, type HistoryItem, TEXT_CHARS } from './history.js';
 
 /**
  * Contribute on the desktop (#826): this computer generates community jobs (narration) for the
@@ -68,6 +75,41 @@ export interface ContributeHost {
   /** The device credential was refused (expired or revoked). */
   signedOut(): void;
   changed(): void;
+  /** This computer now, for the attempt records (#827). */
+  probe(): Reading;
+  /** The app version, OS and device the records name. */
+  context(): Pick<GenerationAttemptRecord, 'appVersion' | 'os' | 'device'>;
+  /** The history, newest first, and its replacement (`history.ts`). */
+  history(): HistoryItem[];
+  setHistory(items: HistoryItem[]): void;
+  /** Keep a job's audio and segments for playback. */
+  keepAudio(appId: string, jobId: string, result: KokoroResult): Promise<void>;
+}
+
+/** What the host reads of this computer at an attempt's start, each sentence and its end. */
+export interface Reading {
+  /** CPU time of every FreeAppStore process so far. */
+  cpuMs?: number;
+  /** Memory of every FreeAppStore process now. */
+  memMb?: number;
+  /** Plugged in (Electron tells power source, not battery level). */
+  charging?: boolean;
+  thermal?: string;
+  /** The FreeAppStore window is shown and focused. */
+  foreground: boolean;
+}
+
+/** The job in hand and what has been measured so far. */
+interface Attempt {
+  appId: string;
+  generation: Generation;
+  job: GenerationJob;
+  at: number;
+  start: Reading;
+  peakMemMb: number;
+  background: boolean;
+  result: KokoroResult | null;
+  generatedAt: number | null;
 }
 
 export interface ContributeApp {
@@ -99,6 +141,8 @@ export interface ContributeState {
   submitted: number;
   skipped: number;
   failed: number;
+  /** Bumped when the history changes, so the window reads it again. */
+  historyVersion: number;
 }
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
@@ -114,6 +158,7 @@ export class Contribute {
     submitted: 0,
     skipped: 0,
     failed: 0,
+    historyVersion: 0,
   };
   private controller: AbortController | null = null;
   private wakeUp: () => void = () => {};
@@ -235,6 +280,85 @@ export class Contribute {
       return this.set({ status: 'idle', message });
     }
     await this.run(engine, chosen);
+    await this.verdicts(apps);
+  }
+
+  /** Copy the server's verdicts on this account's submissions into the history. */
+  private async verdicts(apps: { appId: string; generation: Generation }[]) {
+    const items = this.host.history();
+    const wanted = new Set(items.filter((i) => i.outcome === 'submitted').map((i) => i.appId));
+    let changed = false;
+    for (const { appId, generation } of apps) {
+      if (!wanted.has(appId)) continue;
+      const mine = await generation.mySubmissions().catch(() => []);
+      for (const item of items) {
+        const s = mine.find((m) => m.jobId === item.jobId);
+        if (item.appId !== appId || !s) continue;
+        item.verdict = { status: s.status, reason: s.reason, wer: s.wer, durationMs: s.durationMs };
+        changed = true;
+      }
+    }
+    if (changed) this.saveHistory(items);
+  }
+
+  private saveHistory(items: HistoryItem[]) {
+    this.host.setHistory(items);
+    this.set({ historyVersion: this.state.historyVersion + 1 });
+  }
+
+  /** Record how the job in hand ended, here and (the numbers) on the server. */
+  private finish(
+    a: Attempt | null,
+    outcome: HistoryItem['outcome'],
+    reason: string | null,
+    err?: unknown,
+  ) {
+    if (!a) return;
+    const end = this.host.probe();
+    const now = Date.now();
+    const timing = a.result?.timing;
+    const segments = a.result?.meta.segments;
+    const durationMs = segments?.length ? Math.round(segments.at(-1)![3] * 1000) : undefined;
+    const record: GenerationAttemptRecord = {
+      runner: 'desktop',
+      reason: endReason(outcome, reason, err),
+      ...(outcome !== 'submitted' && reason && { error: reason.slice(0, 300) }),
+      ...this.host.context(),
+      background: a.background || !end.foreground,
+      ...(a.start.thermal && { thermalStart: a.start.thermal }),
+      ...(end.thermal && { thermalEnd: end.thermal }),
+      ...(a.start.charging !== undefined && { chargingStart: a.start.charging }),
+      ...(end.charging !== undefined && { chargingEnd: end.charging }),
+      startedAt: a.at,
+      wallMs: now - a.at,
+      ...timing,
+      ...(outcome === 'submitted' && a.generatedAt && { uploadMs: now - a.generatedAt }),
+      ...(a.start.cpuMs !== undefined &&
+        end.cpuMs !== undefined && { cpuMs: Math.max(0, end.cpuMs - a.start.cpuMs) }),
+      ...(a.peakMemMb && { peakMemMb: Math.round(a.peakMemMb) }),
+      ...(a.result && { bytes: a.result.file.size }),
+      ...(durationMs && { durationMs }),
+      ...(durationMs && timing && { rtf: Math.round((timing.synthMs / durationMs) * 1000) / 1000 }),
+    };
+    const { job } = a;
+    this.saveHistory([
+      {
+        appId: a.appId,
+        jobId: job.id,
+        key: job.key,
+        at: a.at,
+        outcome,
+        reason,
+        text: job.input.text.slice(0, TEXT_CHARS),
+        chars: job.input.text.length,
+        record,
+        verdict: null,
+      },
+      ...this.host.history(),
+    ]);
+    a.generation
+      .recordAttempts([{ jobId: job.id, ...record }])
+      .catch((e) => console.warn('contribute: attempt record not sent', e));
   }
 
   private async run(engine: Engine, apps: Parameters<typeof contributeKokoroApps>[0]['apps']) {
@@ -246,12 +370,52 @@ export class Contribute {
       device: engine.device,
     });
     this.set({ status: 'running', message: null, current: null });
+    let attempt: Attempt | null = null;
+    const sample = () => {
+      const r = this.host.probe();
+      if (attempt) {
+        attempt.peakMemMb = Math.max(attempt.peakMemMb, r.memMb ?? 0);
+        attempt.background ||= !r.foreground;
+      }
+      return r;
+    };
+    const start = (appId: string, job: GenerationJob) => {
+      const reading = this.host.probe();
+      attempt = {
+        appId,
+        generation: apps().find((a) => a.appId === appId)!.generation,
+        job,
+        at: Date.now(),
+        start: reading,
+        peakMemMb: reading.memMb ?? 0,
+        background: !reading.foreground,
+        result: null,
+        generatedAt: null,
+      };
+    };
+    const end = (outcome: HistoryItem['outcome'], reason: string | null, err?: unknown) => {
+      this.finish(attempt, outcome, reason, err);
+      attempt = null;
+    };
     const onEvent = (e: KokoroEvent, appId: string) => {
-      if (e.type === 'claimed')
+      if (e.type === 'claimed') {
+        // A job still in hand at the next claim was abandoned when its lease ran out
+        end('stopped', 'the lease ran out before it finished');
+        start(appId, e.job);
         this.set({
           current: { appId, key: e.job.key, sentence: 0, sentences: 0, charsPerSecond: 0 },
         });
-      else if (e.type === 'progress')
+      } else if (e.type === 'generated') {
+        const a = attempt as Attempt | null;
+        if (a?.job.id !== e.job.id) return;
+        a.result = e.result;
+        a.generatedAt = Date.now();
+        sample();
+        this.host
+          .keepAudio(appId, e.job.id, e.result)
+          .catch((err) => console.warn('contribute: audio not kept', err));
+      } else if (e.type === 'progress') {
+        sample();
         this.set({
           current: {
             appId,
@@ -261,19 +425,27 @@ export class Contribute {
             charsPerSecond: e.progress.charsPerSecond,
           },
         });
-      else if (e.type === 'submitted')
+      } else if (e.type === 'submitted') {
+        end('submitted', null);
         this.set({ submitted: this.state.submitted + 1, current: null });
-      else if (e.type === 'skipped') this.set({ skipped: this.state.skipped + 1, current: null });
-      else if (e.type === 'failed') this.set({ failed: this.state.failed + 1, current: null });
+      } else if (e.type === 'skipped' || e.type === 'failed') {
+        if ((attempt as Attempt | null)?.job.id !== e.job.id) start(appId, e.job);
+        end(e.type, e.reason);
+        if (e.type === 'skipped') this.set({ skipped: this.state.skipped + 1, current: null });
+        else this.set({ failed: this.state.failed + 1, current: null });
+      }
     };
     try {
       await contributeKokoroApps({ runner, signal: controller.signal, apps, onEvent });
+      end('stopped', 'stopped before it finished');
       this.set({
         message: controller.signal.aborted
           ? null
           : 'No more work for now. FreeAppStore looks again every 15 minutes.',
       });
     } catch (err) {
+      if (controller.signal.aborted) end('stopped', 'stopped before it finished');
+      else end('failed', errorText(err), err);
       if (errorText(err) === 'Not signed in.') this.host.signedOut();
       else this.set({ message: `Stopped on an error: ${errorText(err)}` });
     } finally {

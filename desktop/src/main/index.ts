@@ -1,3 +1,4 @@
+import { arch, cpus, type as osType, release } from 'node:os';
 import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -12,6 +13,7 @@ import {
   nativeImage,
   nativeTheme,
   net,
+  powerMonitor,
   shell,
   Tray,
   type WebContents,
@@ -25,6 +27,7 @@ import {
   saveDeviceToken,
   unpairDevice,
 } from './device.js';
+import { type HistoryItem, keepAudio, loadHistory, readAudio, saveHistory } from './history.js';
 import { Hub, type Peer } from './hub.js';
 import { type ClientId, Integrations, type StdioEntry } from './integrations.js';
 import { APP_ID, appOrigin, DEFAULT_PORT, HOST } from './security.js';
@@ -384,6 +387,7 @@ let engineWindow: BrowserWindow | null = null;
 let engineReady: Promise<Engine> | null = null;
 let relay: RelayWorker | null = null;
 let modelDeleted: (() => void) | null = null;
+let history: HistoryItem[] | null = null;
 const contribute = new Contribute(
   {
     token: () => deviceToken,
@@ -413,9 +417,42 @@ const contribute = new Contribute(
       pushState();
     },
     changed: () => pushState(),
+    probe: () => {
+      const metrics = app.getAppMetrics();
+      return {
+        cpuMs: Math.round(metrics.reduce((n, m) => n + (m.cpu.cumulativeCPUUsage ?? 0), 0) * 1000),
+        memMb: metrics.reduce((n, m) => n + m.memory.workingSetSize, 0) / 1024,
+        charging: !powerMonitor.isOnBatteryPower(),
+        ...(process.platform === 'darwin' && { thermal: powerMonitor.getCurrentThermalState() }),
+        foreground: !!home && !home.isDestroyed() && home.isVisible() && home.isFocused(),
+      };
+    },
+    context: () => ({
+      appVersion: app.getVersion(),
+      os: `${osType()} ${release()}`,
+      device: `${cpus()[0]?.model ?? 'unknown CPU'} ${arch()}`,
+    }),
+    history: () => historyItems(),
+    setHistory: (items) => {
+      history = saveHistory(app.getPath('userData'), items);
+    },
+    keepAudio: async (appId, jobId, result) =>
+      keepAudio(
+        app.getPath('userData'),
+        appId,
+        jobId,
+        new Uint8Array(await result.file.arrayBuffer()),
+        result.meta,
+      ),
   },
   apiOrigin,
 );
+
+/** This computer's Contribute history (#827), read from userData once. */
+function historyItems(): HistoryItem[] {
+  if (!history) history = loadHistory(app.getPath('userData'));
+  return history;
+}
 
 function contributeState() {
   return {
@@ -524,6 +561,12 @@ function disconnectDevice(revoke: boolean) {
   engineWindow?.destroy();
 }
 
+ipcMain.handle('home:contribute-history', (event) => (fromHome(event) ? historyItems() : []));
+ipcMain.handle('home:contribute-audio', (event, appId: unknown, jobId: unknown) => {
+  if (!fromHome(event) || typeof appId !== 'string' || typeof jobId !== 'string') return null;
+  if (!APP_ID.test(appId) || !/^[A-Za-z0-9_-]{1,128}$/.test(jobId)) return null;
+  return readAudio(app.getPath('userData'), appId, jobId);
+});
 ipcMain.handle('home:contribute-connect', (event) => {
   if (fromHome(event)) void connectDevice();
 });

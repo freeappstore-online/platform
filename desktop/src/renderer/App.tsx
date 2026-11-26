@@ -7,12 +7,13 @@ import {
   TextSizeToggle,
   ThemeToggle,
 } from '@freeappstore/sdk/ui';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type {
   ClientId,
   ClientStatus,
   DesktopContribute,
   DesktopState,
+  HistoryItem,
   OpenApp,
   RegistryApp,
 } from './desktop.js';
@@ -476,6 +477,7 @@ function Contribute({ state }: { state: DesktopContribute }) {
       <ContributeStatus state={state} />
       <ContributeModel state={state} />
       <ContributeApps state={state} />
+      <ContributeHistory version={state.historyVersion} />
     </Section>
   );
 }
@@ -641,6 +643,178 @@ function ContributeApps({ state }: { state: DesktopContribute }) {
         </ul>
       )}
     </section>
+  );
+}
+
+type Segment = [number, number, number, number];
+const ms = (n: number) =>
+  n >= 10_000
+    ? `${(n / 1000).toFixed(0)} s`
+    : n >= 1000
+      ? `${(n / 1000).toFixed(1)} s`
+      : `${Math.round(n)} ms`;
+const OUTCOME: Record<HistoryItem['outcome'], string> = {
+  submitted: 'Uploaded',
+  skipped: 'Skipped',
+  stopped: 'Stopped',
+  failed: 'Failed',
+};
+const VERDICT_TONE = {
+  accepted: 'success',
+  pending: 'default',
+  rejected: 'danger',
+  superseded: 'warning',
+} as const;
+
+/** An attempt's numbers (#827) as label/value rows: only those it has. */
+function attemptRows(item: HistoryItem): [string, string][] {
+  const r = item.record;
+  const stages = (
+    [
+      ['load', r.loadMs],
+      ['synthesis', r.synthMs],
+      ['encode', r.encodeMs],
+      ['upload', r.uploadMs],
+    ] as const
+  )
+    .filter(([, n]) => n !== undefined)
+    .map(([name, n]) => `${name} ${ms(n!)}`);
+  const span = (a?: string, b?: string) => (a === b || !b ? a : `${a ?? '?'} → ${b}`);
+  const plug = (c?: boolean) => (c === undefined ? undefined : c ? 'plugged in' : 'on battery');
+  const v = item.verdict;
+  const rows: [string, string | undefined][] = [
+    [
+      'Verdict',
+      v
+        ? `${v.status}${v.reason ? `: ${v.reason}` : ''}${v.wer !== null ? ` · error rate ${(v.wer * 100).toFixed(1)}%` : ''}`
+        : undefined,
+    ],
+    ['Ended', r.error ? `${r.reason}: ${r.error}` : r.reason],
+    ['Ran', r.background ? 'in the background' : 'in the foreground'],
+    [
+      'Computer',
+      [r.device, r.os, r.appVersion && `FreeAppStore ${r.appVersion}`].filter(Boolean).join(' · '),
+    ],
+    ['Wall time', r.wallMs === undefined ? undefined : ms(r.wallMs)],
+    ['Stages', stages.join(' · ') || undefined],
+    ['CPU time', r.cpuMs === undefined ? undefined : ms(r.cpuMs)],
+    ['Speed', r.rtf === undefined ? undefined : `${r.rtf.toFixed(2)}× real time to synthesize`],
+    ['Peak memory', r.peakMemMb === undefined ? undefined : `${r.peakMemMb} MB`],
+    ['Power', span(plug(r.chargingStart), plug(r.chargingEnd))],
+    ['Thermal', span(r.thermalStart, r.thermalEnd)],
+    [
+      'Audio',
+      r.durationMs === undefined
+        ? undefined
+        : `${(r.durationMs / 1000).toFixed(1)} s · ${Math.round((r.bytes ?? 0) / 1024)} KB`,
+    ],
+  ];
+  return rows.filter((row): row is [string, string] => !!row[1]);
+}
+
+/** This computer's attempts (#827): what it generated, how it went, and playback of its audio. */
+function ContributeHistory({ version }: { version: number }) {
+  const [items, setItems] = useState<HistoryItem[] | null>(null);
+  const [open, setOpen] = useState<HistoryItem | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `version` says the history changed
+  useEffect(() => {
+    void desktop.contribute.history().then(setItems);
+  }, [version]);
+  return (
+    <section className={`${card} mt-6 p-5`} aria-label="History">
+      <h3 className="mt-0 mb-3 text-base font-bold">History</h3>
+      {!items?.length ? (
+        <p className="m-0 text-sm text-muted">Nothing generated on this computer yet.</p>
+      ) : (
+        <ul className="m-0 p-0 list-none divide-y divide-line">
+          {items.map((item) => (
+            <li key={`${item.appId}/${item.jobId}/${item.at}`}>
+              <button
+                type="button"
+                onClick={() => setOpen(open === item ? null : item)}
+                aria-expanded={open === item}
+                className="w-full text-left py-2 flex flex-wrap items-center gap-x-3 gap-y-1 cursor-pointer bg-transparent border-0 text-ink"
+              >
+                <Badge variant={item.verdict ? VERDICT_TONE[item.verdict.status] : 'default'}>
+                  {item.verdict?.status ?? OUTCOME[item.outcome]}
+                </Badge>
+                <span className="font-bold">{item.appId}</span>
+                <span className="font-code text-sm break-all min-w-0">{item.key}</span>
+                <span className="ml-auto text-xs text-muted">
+                  {new Date(item.at).toLocaleString()}
+                </span>
+              </button>
+              {open === item && <HistoryDetail item={item} />}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function HistoryDetail({ item }: { item: HistoryItem }) {
+  const [audio, setAudio] = useState<{ url: string; segments: Segment[] } | null | undefined>();
+  const [time, setTime] = useState(-1);
+  const markRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    let url: string | null = null;
+    void desktop.contribute.audio(item.appId, item.jobId).then((kept) => {
+      if (!kept) return setAudio(null);
+      url = URL.createObjectURL(new Blob([kept.audio as BlobPart], { type: 'audio/mp4' }));
+      const segments = (kept.meta as { segments?: Segment[] }).segments ?? [];
+      setAudio({ url, segments });
+    });
+    return () => {
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [item.appId, item.jobId]);
+  const current = audio?.segments.find(([, , start, end]) => time >= start && time < end);
+  const marked = current && current[1] <= item.text.length ? current : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follow the sentence being read
+  useEffect(() => {
+    markRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [marked?.[0]]);
+  return (
+    <div className="pb-4">
+      <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+        {attemptRows(item).map(([name, value]) => (
+          <div key={name} className="contents">
+            <dt className="text-muted">{name}</dt>
+            <dd className="m-0 break-words min-w-0">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {audio ? (
+        // biome-ignore lint/a11y/useMediaCaption: generated narration of the text shown below
+        <audio
+          controls
+          src={audio.url}
+          onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)}
+          className="mt-3 w-full"
+        />
+      ) : (
+        audio === null && (
+          <p className="mt-3 mb-0 text-xs text-muted">
+            Its audio is no longer kept (only the latest 20 are).
+          </p>
+        )
+      )}
+      <p className="mt-2 mb-0 text-sm text-muted whitespace-pre-line break-words max-h-48 overflow-y-auto">
+        {marked ? (
+          <>
+            {item.text.slice(0, marked[0])}
+            <mark ref={markRef} className="bg-accent-soft text-ink rounded">
+              {item.text.slice(marked[0], marked[1])}
+            </mark>
+            {item.text.slice(marked[1])}
+          </>
+        ) : (
+          item.text
+        )}
+        {item.text.length < item.chars ? '…' : ''}
+      </p>
+    </div>
   );
 }
 

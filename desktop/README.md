@@ -115,7 +115,12 @@ window is closed, as long as FreeAppStore runs in the tray.
   file crosses IPC as bytes. The worker is disposed after each run, freeing the model's memory. Electron 45 on macOS
   refuses 24 kHz AAC, so the audio is 32 kbps mono at 48 kHz (the SDK's fallback).
 - The **Contribute** page shows the status (running with app, job and sentence n of N, idle and why, or paused), the
-  counts since the app started, the model and the apps with their switches. Per-job history is #827.
+  counts since the app started, the model and the apps with their switches, and the **History** (#827): every job this
+  computer tried (`userData/contribute-history.json`, 200 newest) with the server's verdict and the attempt's numbers
+  (how it ended, foreground or background, wall time per stage, CPU time and memory of all FreeAppStore processes from
+  `app.getAppMetrics()`, plugged in or on battery and the macOS thermal state from `powerMonitor`), and playback with
+  sentence highlighting of the 20 latest attempts' audio (`userData/contribute-audio`). The numbers, not the text or
+  audio, go to `…/generation/events` (`src/main/history.ts`).
 
 ## Security
 
