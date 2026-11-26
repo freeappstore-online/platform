@@ -554,6 +554,19 @@ final class ContributeTests: XCTestCase {
                        "an app with nothing left leaves the rotation")
     }
 
+    /// #828: once a Run now's app leaves the screen, the job in hand finishes and nothing more is claimed.
+    func testNothingIsClaimedOnceClaimsStop() async throws {
+        server.jobs = [job("b1"), job("b2")]
+        var claims = true
+        synth.say = { _, keepGoing in
+            claims = false // the app left the screen while the first job was generated
+            return keepGoing() ? Audio(samples: [0], sampleRate: 24_000) : nil
+        }
+        let submitted = try await contributor().run(["books"], keepGoing: { true }, mayClaim: { claims })
+        XCTAssertEqual(submitted, 1)
+        XCTAssertEqual(server.claimed, ["books"])
+    }
+
     func testAnAppTurnedOffLeavesTheRotation() async throws {
         server.jobs = [job("b1"), job("b2")]
         server.appJobs = ["dialogue": [job("d1"), job("d2")]]

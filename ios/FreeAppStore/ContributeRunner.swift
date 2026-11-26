@@ -1,15 +1,19 @@
 import BackgroundTasks
 import Foundation
+import OSLog
 import UIKit
 
 /// Contribute (#733), the iOS counterpart of the Android ContributeWorker: downloads the voice model when asked, then
 /// works through the opted-in apps' open jobs, one app at a time in turn. Runs as a BGProcessingTask, which iOS starts
 /// only while the phone is on external power with a network connection, and on Run now while the app is open. iOS ending
 /// either (the task's expiration, or the app leaving the foreground) stops the job in hand without uploading it; a Run
-/// now cut short that way asks for the background run at once.
+/// now cut short that way asks for the background run at once, and claims nothing more once the app has left the screen
+/// (#828). The server refuses a claim once the day's contribution limit is reached; the run then ends. Each run logs how
+/// it ended.
 @MainActor
 final class ContributeRunner: ObservableObject {
     static let taskId = "online.freeappstore.companion.contribute"
+    private static let logger = Logger(subsystem: "online.freeappstore.companion", category: "Contribute")
 
     /// What the run is doing, nil while idle.
     @Published private(set) var status: String?
@@ -90,8 +94,14 @@ final class ContributeRunner: ObservableObject {
         }
         let idle = UIApplication.shared.isIdleTimerDisabled
         UIApplication.shared.isIdleTimerDisabled = true
+        // Out of the foreground only seconds are left: the job in hand may finish, but none is claimed after it.
+        let left = StopFlag()
+        let observer = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in
+            left.stop("left_app")
+        }
         Task {
-            await run(flag, background: false)
+            await run(flag, background: false, mayClaim: { !left.stopped })
+            NotificationCenter.default.removeObserver(observer)
             if flag.reason == "background_expired" { schedule(soon: true) }
             UIApplication.shared.isIdleTimerDisabled = idle
             if id.value != .invalid { UIApplication.shared.endBackgroundTask(id.value) }
@@ -116,11 +126,18 @@ final class ContributeRunner: ObservableObject {
         try await NetworkRetry().attempts(keepGoing: keepGoing) { try await client.refresh(app, log: local) }
     }
 
-    private func run(_ flag: StopFlag, background: Bool) async {
+    private func run(_ flag: StopFlag, background: Bool, mayClaim: @escaping () -> Bool = { true }) async {
         guard stopFlag == nil, repository.token() != nil else { return }
         stopFlag = flag
         lastError = ""
         lastStop = nil
+        let began = Date()
+        var submitted = 0
+        var failed: String?
+        defer {
+            let end = flag.reason ?? failed ?? (mayClaim() ? "no_work" : "left_app")
+            Self.logger.notice("Run ended: \(end, privacy: .public) · \(submitted) submitted (\(background ? "background task" : "run now", privacy: .public), \(Int(Date().timeIntervalSince(began))) s)")
+        }
         defer { stopFlag = nil; status = nil; app = nil; cooling = false; job = nil; sentences = nil; speed = nil; downloaded = nil; lastStop = flag.reason }
         // A background run asked for external power: unplugging stops it (iOS would end it soon anyway).
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -169,14 +186,16 @@ final class ContributeRunner: ObservableObject {
                     self.speed = done > 0 && elapsed > 0 ? audio / elapsed : nil
                 }
             }, probes: .phone(path: path, background: { background || appState.now }), audio: AttemptAudio(dir: AttemptAudio.defaultDirectory))
-            _ = try await contributor.run(apps, keepGoing: keepGoing, optedIn: { local.contributeApps().contains($0) }) { app, job in
+            submitted = try await contributor.run(apps, keepGoing: keepGoing, optedIn: { local.contributeApps().contains($0) }, mayClaim: mayClaim) { app, job in
                 started.value = Date()
                 Task { @MainActor in self.app = app; self.job = job.key; self.sentences = nil; self.speed = nil; self.status = "Generating \(job.key)" }
             }
         } catch let failure as ApiFailure where failure.status == 401 {
+            failed = "401"
             try? await repository.sync() // the connection expired: the sync marks it, and the expired card says so
         } catch {
             lastError = error.localizedDescription
+            failed = ((error as? ApiFailure).map { "\($0.status) " } ?? "") + lastError
         }
     }
 }

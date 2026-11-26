@@ -413,14 +413,16 @@ final class Contributor {
 
     /// Takes one job from each app in turn (#819), so every app moves forward, until none has a job left or `keepGoing`
     /// turns false. An app leaves the rotation when it has no open job, `optedIn` turns false for it, or a job of it is
-    /// not submitted (that job keeps its lease until expiry, so a later run continues). Returns how many were submitted.
-    /// A `401` is thrown, and so is a claim that still fails after its network retries.
+    /// not submitted (that job keeps its lease until expiry, so a later run continues). Nothing is claimed once `mayClaim`
+    /// turns false (a Run now whose app left the screen, #828); the job in hand still finishes. Returns how many were
+    /// submitted. A `401` is thrown, and so is a claim that still fails after its network retries (or the daily limit's `429`).
     func run(_ apps: [String], keepGoing: @escaping () -> Bool, optedIn: @escaping (String) -> Bool = { _ in true },
-             progress: (String, GenerationJob) -> Void = { _, _ in }) async throws -> Int {
+             mayClaim: @escaping () -> Bool = { true }, progress: (String, GenerationJob) -> Void = { _, _ in }) async throws -> Int {
         var submitted = 0
         var rotation = apps
-        while !rotation.isEmpty && keepGoing() {
+        while !rotation.isEmpty && keepGoing() && mayClaim() {
             for app in rotation {
+                if !mayClaim() { break }
                 let go = { keepGoing() && optedIn(app) }
                 var stays = false
                 while hot() && go() { try await Task.sleep(for: coolDown) }
