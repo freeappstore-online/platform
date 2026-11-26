@@ -257,7 +257,7 @@ enum GenerationPolicy {
     static let sentencePause = 0.4
     static let paragraphPause = 0.8
     /// Audio shorter than this gets silence at the end (#812), so a two-character phrase such as 对。 is well within the
-    /// server's characters-per-second floor and Whisper hears it whole. Audio up to 3 s is never too long for its text.
+    /// server's characters-per-second floor. Audio up to 3 s is never too long for its text.
     static let minSeconds = 1.0
 
     /// Network retries (#819): the first wait, doubled each time up to the longest.

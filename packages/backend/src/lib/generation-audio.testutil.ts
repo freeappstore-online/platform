@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 
 const fixture = (name: string) =>
   new Uint8Array(readFileSync(new URL(`../../test-fixtures/generation/${name}`, import.meta.url)));
-/** 70 s of real AAC-in-MP4 and Opus-in-Ogg from ffmpeg (a tone; Whisper is mocked). */
+/** 70 s of real AAC-in-MP4 and Opus-in-Ogg from ffmpeg (a tone). */
 export const M4A = fixture('narration.m4a');
 export const OGG = fixture('narration.ogg');
 

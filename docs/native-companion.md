@@ -219,7 +219,7 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   chapter is never held in memory.
 - **Record**: `generation_jobs` in the protected, backup-excluded queue database, refreshed from `GET …/generation/submissions`
   when the app opens and on pull to refresh in Activity. Since #820 (migration 1, `PRAGMA user_version`) it also keeps the
-  job's text and set, the audio's length and size, and the server's error rate; a refresh also takes the measured duration and, for a row without it, the text (#824). The opt-ins and the record are
+  job's text and set, the audio's length and size, and (migration 3, #831) the submission id and this phone's Good / Not good report; a refresh also takes the measured duration and, for a row without it, the text (#824). The opt-ins and the record are
   cleared by **Disconnect**.
 - **Attestation**: the `Attestation` hook is where an App Attest assertion for `X-Attestation` goes (#732); it returns
   nothing yet, so nothing is sent.
