@@ -43,4 +43,18 @@ describe('getOAuth2Token', () => {
     expect(await getOAuth2Token(opts)).toBe('t1');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it('keeps separate tokens per tokenUrl and drops them when credentials rotate (#769)', async () => {
+    let n = 0;
+    const fetchMock = vi.fn(async () => token(`t${++n}`));
+    vi.stubGlobal('fetch', fetchMock);
+    const getOAuth2Token = await load();
+    expect(await getOAuth2Token(opts)).toBe('t1');
+    const otherProvider = { ...opts, tokenUrl: 'https://other.example/token' };
+    expect(await getOAuth2Token(otherProvider)).toBe('t2');
+    expect(await getOAuth2Token(opts)).toBe('t1');
+    expect(await getOAuth2Token(otherProvider)).toBe('t2');
+    expect(await getOAuth2Token({ ...opts, clientSecret: 'rotated' })).toBe('t3');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });

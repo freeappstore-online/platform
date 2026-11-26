@@ -15,7 +15,9 @@ interface CachedToken {
   expiresAt: number; // epoch ms
 }
 
-// Per-isolate in-memory cache keyed by "appId:secretName"
+// Per-isolate in-memory cache keyed by the caller's cacheKey plus a hash of
+// tokenUrl and the credentials, so a rotated secret or a changed tokenUrl
+// never reuses a token minted for the old ones (#769).
 const tokenCache = new Map<string, CachedToken>();
 
 /**
@@ -28,7 +30,13 @@ export async function getOAuth2Token(opts: {
   clientId: string;
   clientSecret: string;
 }): Promise<string> {
-  const { cacheKey, tokenUrl, clientId, clientSecret } = opts;
+  const { tokenUrl, clientId, clientSecret } = opts;
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(JSON.stringify([tokenUrl, clientId, clientSecret])),
+  );
+  const hash = Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+  const cacheKey = `${opts.cacheKey}:${hash}`;
 
   // Check memory cache
   const cached = tokenCache.get(cacheKey);
