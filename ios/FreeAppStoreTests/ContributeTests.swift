@@ -19,8 +19,11 @@ final class ContributeTests: XCTestCase {
         var rows: [String: Contribution] = [:]
         func handled(_ jobId: String) -> Bool { rows[jobId] != nil }
         func record(_ contribution: Contribution) { rows[contribution.jobId] = contribution }
-        func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?) {
-            rows[jobId]?.status = status; rows[jobId]?.reason = reason; if let wer { rows[jobId]?.wer = wer }
+        func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) {
+            rows[jobId]?.status = status; rows[jobId]?.reason = reason
+            if let wer { rows[jobId]?.wer = wer }
+            if let durationMs { rows[jobId]?.durationMs = durationMs }
+            if let input, rows[jobId]?.input == "" { rows[jobId]?.input = input }
         }
     }
 
@@ -621,9 +624,11 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(log.rows["j1"]?.wer, 0.1, "kept when the server gives none")
         XCTAssertNil(log.rows["other"], "only this phone's jobs")
         XCTAssertEqual(log.rows["j2"], Contribution(jobId: "j2", appId: "books", key: "book/j2", at: now, status: "accepted", reason: ""))
-        server.submissions = [["jobId": "j1", "status": "rejected", "reason": "wer", "wer": 0.42]]
+        server.submissions = [["jobId": "j1", "status": "rejected", "reason": "wer", "wer": 0.42, "durationMs": 2_500, "input": ["text": "Hello."]]]
         try await client.refresh("books", log: log)
-        XCTAssertEqual(log.rows["j1"]?.wer, 0.42, "the error rate when the server gives one (#820)")
+        XCTAssertEqual(log.rows["j1"]?.wer, 0.42, "the error rate when the server gives one (#820, #824)")
+        XCTAssertEqual(log.rows["j1"]?.durationMs, 2_500)
+        XCTAssertEqual(log.rows["j1"]?.input, "Hello.", "the text of a row recorded without it")
     }
 
     /// #820: Settings' open-job counts, only for sets this phone runs and app ids the contributor routes take.
@@ -842,8 +847,10 @@ final class ContributionStoreTests: XCTestCase {
         // #820: Activity's fields, today's counts by status and the apps on the record.
         try local.record(Contribution(jobId: "j3", appId: "dialogue", key: "d/1", at: 300, status: "pending", input: "Hola.", setId: "s1",
                                       durationMs: 1_200, bytes: 4_096))
-        try local.updateStatus("j3", status: "rejected", reason: "wer", wer: 0.5)
+        try local.updateStatus("j3", status: "rejected", reason: "wer", wer: 0.5, durationMs: nil, input: "Other text.")
         try local.updateStatus("j3", status: "rejected", reason: "wer")
+        try local.updateStatus("j1", status: "accepted", reason: "", wer: nil, durationMs: 900, input: "Server text.")
+        XCTAssertEqual(try local.contributions().last.map { [$0.input, String($0.durationMs)] }, ["Server text.", "900"])
         XCTAssertEqual(try local.contributions().first, Contribution(jobId: "j3", appId: "dialogue", key: "d/1", at: 300, status: "rejected", reason: "wer",
                                                                       input: "Hola.", setId: "s1", durationMs: 1_200, bytes: 4_096, wer: 0.5))
         XCTAssertEqual(try local.contributionCounts(since: 150), ["skipped": 1, "rejected": 1])

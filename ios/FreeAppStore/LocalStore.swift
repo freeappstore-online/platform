@@ -531,8 +531,10 @@ extension LocalStore: ContributionLog {
                   contribution.wer ?? NSNull()])
     }
 
-    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?) throws {
-        try exec("UPDATE generation_jobs SET status = ?, reason = ?, wer = COALESCE(?, wer) WHERE job_id = ?",
-                 [status, String(reason.prefix(120)), wer ?? NSNull(), jobId])
+    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) throws {
+        try exec("""
+            UPDATE generation_jobs SET status = ?, reason = ?, wer = COALESCE(?, wer), duration_ms = COALESCE(?, duration_ms),
+              input = CASE WHEN input = '' THEN COALESCE(?, '') ELSE input END WHERE job_id = ?
+            """, [status, String(reason.prefix(120)), wer ?? NSNull(), durationMs ?? NSNull(), input ?? NSNull(), jobId])
     }
 }

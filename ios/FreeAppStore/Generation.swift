@@ -48,12 +48,15 @@ protocol ContributionLog: AnyObject {
     /// Whether this job was ever started on this phone. Such a job is never generated or uploaded again.
     func handled(_ jobId: String) -> Bool
     func record(_ contribution: Contribution) throws
-    /// `wer` nil keeps the one recorded.
-    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?) throws
+    /// The server's measures (#824), each nil to keep the one recorded: `wer`, `durationMs` (the audio's length as
+    /// verification measured it) and `input`, which only fills a row recorded without its text.
+    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) throws
 }
 
 extension ContributionLog {
-    func updateStatus(_ jobId: String, status: String, reason: String) throws { try updateStatus(jobId, status: status, reason: reason, wer: nil) }
+    func updateStatus(_ jobId: String, status: String, reason: String) throws {
+        try updateStatus(jobId, status: status, reason: reason, wer: nil, durationMs: nil, input: nil)
+    }
 }
 
 /// The `X-Attestation` hook (#732): an App Attest assertion (`DCAppAttestService`) bound to the job, or nil. The server
@@ -135,7 +138,8 @@ final class GenerationClient: @unchecked Sendable {
         for s in result["submissions"] as? [[String: Any]] ?? [] {
             guard let jobId = s["jobId"] as? String, !jobId.isEmpty else { continue }
             try log.updateStatus(jobId, status: s["status"] as? String ?? "", reason: String((s["reason"] as? String ?? "").prefix(120)),
-                                 wer: (s["wer"] as? NSNumber)?.doubleValue)
+                                 wer: (s["wer"] as? NSNumber)?.doubleValue, durationMs: (s["durationMs"] as? NSNumber)?.int64Value,
+                                 input: (s["input"] as? [String: Any])?["text"] as? String)
         }
     }
 

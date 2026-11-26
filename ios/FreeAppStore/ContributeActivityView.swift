@@ -109,7 +109,9 @@ struct ContributionDetailView: View {
                     field(device ? "Why" : "Reason", ContributeText.reasons[contribution.reason] ?? contribution.reason)
                 }
                 if let wer = contribution.wer { field("Error rate", wer.formatted(.percent.precision(.fractionLength(0...1)))) }
-                if contribution.status == "accepted" {
+                // `superseded`: another contributor's audio was accepted first; it plays from the same URL (#824).
+                if ["accepted", "superseded"].contains(contribution.status) {
+                    if contribution.status == "superseded" { Text("Another contributor's audio was accepted for this job.").font(.footnote).foregroundStyle(.secondary) }
                     Button(player.playing ? "Pause" : "Play", systemImage: player.playing ? "pause.fill" : "play.fill") {
                         player.toggle(appId: contribution.appId, jobId: contribution.jobId)
                     }

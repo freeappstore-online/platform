@@ -138,7 +138,7 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   phone tried, newest first, grouped by day, filtered by status (All · Accepted · Checking · Rejected · Not done) and by
   app; pull to refresh reads the server's verdicts for every app on the record. A row opens the job: app, key, when, the
   audio's length and size, this phone's reason or the server's verdict and reason (and error rate when the server sends
-  `wer`), the job's text, and **Play** for an accepted job from the public artifact URL, marking each sentence from the
+  `wer`), the job's text, and **Play** for an accepted job (or, on a superseded one, the winning audio) from the public artifact URL, marking each sentence from the
   public meta's `segments` as it plays. The gear opens **Contribute settings**: the apps opted in or with open jobs
   (`GET /generation/open`, Kokoro sets only) with their switch and open-job count, the voice model download, progress
   and delete, **Only while charging** (on by default; off, the background task no longer asks for external power and
@@ -183,7 +183,7 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   chapter is never held in memory.
 - **Record**: `generation_jobs` in the protected, backup-excluded queue database, refreshed from `GET …/generation/submissions`
   when the app opens and on pull to refresh in Activity. Since #820 (migration 1, `PRAGMA user_version`) it also keeps the
-  job's text and set, the audio's length and size, and the server's error rate when given. The opt-ins and the record are
+  job's text and set, the audio's length and size, and the server's error rate; a refresh also takes the measured duration and, for a row without it, the text (#824). The opt-ins and the record are
   cleared by **Disconnect**.
 - **Attestation**: the `Attestation` hook is where an App Attest assertion for `X-Attestation` goes (#732); it returns
   nothing yet, so nothing is sent.
