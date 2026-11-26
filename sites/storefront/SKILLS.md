@@ -678,7 +678,7 @@ import {
 | `Avatar` | GitHub avatar with colored-initial fallback | `user`, `size` (px, default 32) |
 | `SignInButton` | Provider sign-in button. `ProfilePage` uses it for GitHub and Google. Not the Shell header | `app`, `label`, `provider` |
 | `ThemeToggle` | Sun/moon button cycling system/light/dark | none (reads theme from context) |
-| `TextSizeToggle` | A/A+/A- button cycling default/large/small text | none |
+| `TextSizeToggle` | Button cycling five text sizes: default (A) → large (A+) → extra large (A++) → huge (A+++) → small (A−); Profile lists all five | none |
 | `ProfileMenu` | Legacy dropdown (username, theme, API keys, sign out, delete account). `Shell` does not mount it | `app`, `showThemeToggle` |
 | `ProfilePage` | Profile page `Shell` renders at `/profile` unless `profileHref` is set (avatar, username, theme, sign out, delete account, then About with the app's FreeAppStore listing link) | `app`, `showThemeToggle`, `appName`, `about` |
 
