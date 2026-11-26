@@ -19,9 +19,11 @@ final class ContributeTests: XCTestCase {
         var rows: [String: Contribution] = [:]
         func handled(_ jobId: String) -> Bool { rows[jobId] != nil }
         func record(_ contribution: Contribution) { rows[contribution.jobId] = contribution }
-        func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) {
+        func updateStatus(_ jobId: String, status: String, reason: String, submissionId: String?, durationMs: Int64?, input: String?,
+                          report: SubmissionReport?) {
             rows[jobId]?.status = status; rows[jobId]?.reason = reason
-            if let wer { rows[jobId]?.wer = wer }
+            if let submissionId { rows[jobId]?.submissionId = submissionId }
+            if let report { rows[jobId]?.report = report }
             if let durationMs { rows[jobId]?.durationMs = durationMs }
             if let input, rows[jobId]?.input == "" { rows[jobId]?.input = input }
         }
@@ -228,6 +230,7 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(upload.file.count, 24_000, "padded with silence to minSeconds")
         XCTAssertEqual(segments(upload), [[0, 14, 0, 0.001]])
         XCTAssertEqual(log.rows["j1"]?.status, "pending")
+        XCTAssertEqual(log.rows["j1"]?.submissionId, "sub-1", "kept for the report (#831)")
         XCTAssertEqual(log.rows["j1"]?.key, "book/j1")
         XCTAssertFalse(FileManager.default.fileExists(atPath: dir.appendingPathComponent("contribution.m4a").path), "the temp file is removed")
     }
@@ -773,18 +776,51 @@ final class ContributeTests: XCTestCase {
             ["jobId": "other", "status": "accepted"],
             ["id": "s2", "jobId": "j2", "status": "accepted", "reason": NSNull(), "createdAt": now],
         ]
-        log.rows["j1"]?.wer = 0.1
+        let sent = SubmissionReport(good: false, note: "Clipped", at: now)
+        log.rows["j1"]?.report = sent
         try await client.refresh("books", log: log)
         XCTAssertEqual(log.rows["j1"]?.status, "rejected")
         XCTAssertEqual(log.rows["j1"]?.reason, "transcript_mismatch")
-        XCTAssertEqual(log.rows["j1"]?.wer, 0.1, "kept when the server gives none")
+        XCTAssertEqual(log.rows["j1"]?.submissionId, "s1")
+        XCTAssertEqual(log.rows["j1"]?.report, sent, "kept when the server gives none")
         XCTAssertNil(log.rows["other"], "only this phone's jobs")
         XCTAssertEqual(log.rows["j2"], Contribution(jobId: "j2", appId: "books", key: "book/j2", at: now, status: "accepted", reason: ""))
-        server.submissions = [["jobId": "j1", "status": "rejected", "reason": "wer", "wer": 0.42, "durationMs": 2_500, "input": ["text": "Hello."]]]
+        server.submissions = [["submissionId": "s1", "jobId": "j1", "status": "accepted", "reason": NSNull(), "durationMs": 2_500,
+                               "input": ["text": "Hello."], "report": ["good": true, "note": NSNull(), "at": now + 5]]]
         try await client.refresh("books", log: log)
-        XCTAssertEqual(log.rows["j1"]?.wer, 0.42, "the error rate when the server gives one (#820, #824)")
+        XCTAssertEqual(log.rows["j1"]?.report, SubmissionReport(good: true, note: nil, at: now + 5), "the server's report (#831)")
         XCTAssertEqual(log.rows["j1"]?.durationMs, 2_500)
         XCTAssertEqual(log.rows["j1"]?.input, "Hello.", "the text of a row recorded without it")
+    }
+
+    /// #831: Good / Not good with an optional note, on this account's own upload, with the device credential.
+    func testReportSendsGoodAndNote() async throws {
+        var bodies: [[String: Any]] = []
+        StubProtocol.handler = { request in
+            XCTAssertEqual(request.httpMethod, "PUT")
+            XCTAssertEqual(request.url?.path, "/v1/apps/books/generation/submissions/sub-1/report")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer ndev_test")
+            let body = (try? JSONSerialization.jsonObject(with: FakeServer.body(request))) as? [String: Any] ?? [:]
+            bodies.append(body)
+            return .init(json: ["report": ["good": body["good"] as? Bool ?? false, "note": body["note"] ?? NSNull(), "at": 42]])
+        }
+        let report = try await client.report("books", submissionId: "sub-1", good: false, note: "  Skips a word. ")
+        XCTAssertEqual(report, SubmissionReport(good: false, note: "Skips a word.", at: 42))
+        XCTAssertEqual(bodies.last?["note"] as? String, "Skips a word.")
+        let good = try await client.report("books", submissionId: "sub-1", good: true, note: " ")
+        XCTAssertEqual(good, SubmissionReport(good: true, note: nil, at: 42))
+        XCTAssertNil(bodies.last?["note"], "no note when it is blank")
+        _ = try await client.report("books", submissionId: "sub-1", good: true, note: String(repeating: "a", count: 600))
+        XCTAssertEqual((bodies.last?["note"] as? String)?.count, 500)
+        do {
+            _ = try await client.report("books", submissionId: "../x", good: true, note: "")
+            XCTFail("an odd submission id is refused")
+        } catch is CompanionError {}
+        StubProtocol.handler = { _ in .init(status: 404, json: ["error": "submission not found"]) }
+        do {
+            _ = try await client.report("books", submissionId: "sub-2", good: true, note: "")
+            XCTFail("a 404 must be thrown")
+        } catch let failure as ApiFailure { XCTAssertEqual(failure.status, 404) }
     }
 
     /// #820: Settings' open-job counts, only for sets this phone runs and app ids the contributor routes take.
@@ -1003,12 +1039,20 @@ final class ContributionStoreTests: XCTestCase {
         // #820: Activity's fields, today's counts by status and the apps on the record.
         try local.record(Contribution(jobId: "j3", appId: "dialogue", key: "d/1", at: 300, status: "pending", input: "Hola.", setId: "s1",
                                       durationMs: 1_200, bytes: 4_096))
-        try local.updateStatus("j3", status: "rejected", reason: "wer", wer: 0.5, durationMs: nil, input: "Other text.")
-        try local.updateStatus("j3", status: "rejected", reason: "wer")
-        try local.updateStatus("j1", status: "accepted", reason: "", wer: nil, durationMs: 900, input: "Server text.")
+        try local.updateStatus("j3", status: "rejected", reason: "params", submissionId: "s3", durationMs: nil, input: "Other text.", report: nil)
+        try local.updateStatus("j3", status: "rejected", reason: "params")
+        try local.updateStatus("j1", status: "accepted", reason: "", submissionId: nil, durationMs: 900, input: "Server text.", report: nil)
         XCTAssertEqual(try local.contributions().last.map { [$0.input, String($0.durationMs)] }, ["Server text.", "900"])
-        XCTAssertEqual(try local.contributions().first, Contribution(jobId: "j3", appId: "dialogue", key: "d/1", at: 300, status: "rejected", reason: "wer",
-                                                                      input: "Hola.", setId: "s1", durationMs: 1_200, bytes: 4_096, wer: 0.5))
+        XCTAssertEqual(try local.contributions().first, Contribution(jobId: "j3", appId: "dialogue", key: "d/1", at: 300, status: "rejected", reason: "params",
+                                                                      input: "Hola.", setId: "s1", durationMs: 1_200, bytes: 4_096, submissionId: "s3"))
+        // #831: this phone's report, kept with the row; a refresh without one leaves it, one with it replaces it.
+        let report = SubmissionReport(good: false, note: "Clipped at the end.", at: 400)
+        try local.saveReport("j3", report)
+        try local.updateStatus("j3", status: "rejected", reason: "params")
+        XCTAssertEqual(try local.contributions().first?.report, report)
+        try local.updateStatus("j3", status: "rejected", reason: "params", submissionId: "s3", durationMs: nil, input: nil,
+                               report: SubmissionReport(good: true, note: nil, at: 500))
+        XCTAssertEqual(try local.contributions().first?.report, SubmissionReport(good: true, note: nil, at: 500))
         XCTAssertEqual(try local.contributionCounts(since: 150), ["skipped": 1, "rejected": 1])
         XCTAssertEqual(try local.contributionApps(), ["books", "dialogue"])
         // #827: the attempt's record, kept with the row; a verdict leaves it as it is.

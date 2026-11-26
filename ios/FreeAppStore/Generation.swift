@@ -35,15 +35,32 @@ struct Contribution: Equatable {
     let at: Int64
     var status: String
     var reason = ""
-    /// What the Activity screen shows (#820): the job's input and set, the audio this phone made (length and file size),
-    /// and the server's word error rate for its submission when the server gives one.
+    /// What the Activity screen shows (#820): the job's input and set, and the audio this phone made (length and file size).
     var input = ""
     var setId = ""
     var durationMs: Int64 = 0
     var bytes: Int64 = 0
-    var wer: Double?
     /// How this phone's last attempt at the job went (#827), once it ended.
     var record: AttemptRecord?
+    /// The server's id of this phone's upload, empty until it has one, and this phone's report on it (#831).
+    var submissionId = ""
+    var report: SubmissionReport?
+}
+
+/// What a person on this phone said of its upload (#831): Good or Not good, with an optional note. No AI judges it.
+struct SubmissionReport: Equatable {
+    static let noteChars = 500
+    let good: Bool
+    let note: String?
+    let at: Int64
+
+    /// The server's `{ good, note, at }`, or nil when it is null or not that.
+    init?(_ any: Any?) {
+        guard let r = any as? [String: Any], let good = r["good"] as? Bool, let at = (r["at"] as? NSNumber)?.int64Value else { return nil }
+        self.init(good: good, note: r["note"] as? String, at: at)
+    }
+
+    init(good: Bool, note: String?, at: Int64) { self.good = good; self.note = note; self.at = at }
 }
 
 /// Where the record lives: `LocalStore` on the phone, a dictionary in tests.
@@ -51,16 +68,17 @@ protocol ContributionLog: AnyObject {
     /// Whether this job was ever started on this phone. Such a job is never generated or uploaded again.
     func handled(_ jobId: String) -> Bool
     func record(_ contribution: Contribution) throws
-    /// The server's measures (#824), each nil to keep the one recorded: `wer`, `durationMs` (the audio's length as
-    /// verification measured it) and `input`, which only fills a row recorded without its text.
-    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) throws
+    /// The server's record (#824, #831), each nil to keep the one recorded: `submissionId`, `durationMs` (the audio's
+    /// length as verification measured it), `input`, which only fills a row recorded without its text, and `report`.
+    func updateStatus(_ jobId: String, status: String, reason: String, submissionId: String?, durationMs: Int64?, input: String?,
+                      report: SubmissionReport?) throws
     /// Keeps the record of the job's attempt with its row (#827).
     func saveAttempt(_ jobId: String, _ record: AttemptRecord) throws
 }
 
 extension ContributionLog {
     func updateStatus(_ jobId: String, status: String, reason: String) throws {
-        try updateStatus(jobId, status: status, reason: reason, wer: nil, durationMs: nil, input: nil)
+        try updateStatus(jobId, status: status, reason: reason, submissionId: nil, durationMs: nil, input: nil, report: nil)
     }
 }
 
@@ -137,6 +155,20 @@ final class GenerationClient: @unchecked Sendable {
         return id
     }
 
+    /// This phone's report on its own upload (#831); sending again changes it. `404`: not this account's submission.
+    func report(_ appId: String, submissionId: String, good: Bool, note: String) async throws -> SubmissionReport {
+        guard Self.jobIdPattern.firstMatch(in: submissionId, range: NSRange(location: 0, length: submissionId.utf16.count)) != nil else {
+            throw CompanionError("Unexpected submission id.")
+        }
+        var body: [String: Any] = ["good": good]
+        let note = note.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !note.isEmpty { body["note"] = String(note.prefix(SubmissionReport.noteChars)) }
+        let result = try await api.request("PUT", "/apps/\(appId)/generation/submissions/\(submissionId)/report", token: try token(),
+                                           body: try JSONSerialization.data(withJSONObject: body))
+        guard let report = SubmissionReport(result["report"]) else { throw CompanionError("Unexpected response from FreeAppStore.") }
+        return report
+    }
+
     /// Extends the job's lease (#783) and returns its new expiry. `403`: the lease is gone; `409`: it is at its cap.
     func extend(_ appId: String, job: GenerationJob) async throws -> Int64 {
         let result = try await api.request("POST", "/apps/\(appId)/generation/jobs/\(job.id)/lease", token: try token(),
@@ -158,8 +190,8 @@ final class GenerationClient: @unchecked Sendable {
         for s in result["submissions"] as? [[String: Any]] ?? [] {
             guard let jobId = s["jobId"] as? String, !jobId.isEmpty else { continue }
             try log.updateStatus(jobId, status: s["status"] as? String ?? "", reason: String((s["reason"] as? String ?? "").prefix(120)),
-                                 wer: (s["wer"] as? NSNumber)?.doubleValue, durationMs: (s["durationMs"] as? NSNumber)?.int64Value,
-                                 input: (s["input"] as? [String: Any])?["text"] as? String)
+                                 submissionId: s["submissionId"] as? String, durationMs: (s["durationMs"] as? NSNumber)?.int64Value,
+                                 input: (s["input"] as? [String: Any])?["text"] as? String, report: SubmissionReport(s["report"]))
         }
     }
 
@@ -507,14 +539,14 @@ final class Contributor {
             try log.record(made)
             meter.stage = .upload
             // The same file, sent again after a network failure while the lease leaves time (#819); never generated again.
-            _ = try await meter.time(\.uploadMs) {
+            let submissionId = try await meter.time(\.uploadMs) {
                 try await retry.run(keepGoing: keepGoing, more: { _, wait in retried = true; return lease.held(after: wait) }) { attempt in
                     if attempt > 0 { try await lease.renew() }
                     return try await self.client.submit(appId, job: job, file: file, contentType: GenerationPolicy.contentType, meta: meta,
                                                         attestation: self.attestation.token(appId, job))
                 }
             }
-            try log.updateStatus(job.id, status: "pending", reason: "")
+            try log.updateStatus(job.id, status: "pending", reason: "", submissionId: submissionId, durationMs: nil, input: nil, report: nil)
             meter.reason = "submitted"
             return true
         } catch is RetryStopped {

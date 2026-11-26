@@ -55,9 +55,10 @@ final class ScreenshotTests: XCTestCase {
         try local.setContributing("sayback", true)
         let chapter = "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife."
         try local.record(Contribution(jobId: "j1", appId: "books", key: "pride-and-prejudice/ch-01", at: now - 3_600_000, status: "accepted",
-                                      input: chapter, setId: "s1", durationMs: 7_400, bytes: 31_000, wer: 0.04))
+                                      input: chapter, setId: "s1", durationMs: 7_400, bytes: 31_000, submissionId: "sub-1",
+                                      report: SubmissionReport(good: true, note: "Clear and steady.", at: now - 1_800_000)))
         try local.record(Contribution(jobId: "j0", appId: "books", key: "pride-and-prejudice/ch-00", at: now - 90_000_000, status: "rejected",
-                                      reason: "wer", input: chapter, durationMs: 7_100, bytes: 30_000, wer: 0.41))
+                                      reason: "too_fast", input: chapter, durationMs: 7_100, bytes: 30_000, submissionId: "sub-0"))
         try local.record(Contribution(jobId: "j2", appId: "books", key: "pride-and-prejudice/ch-02", at: now - 600_000, status: "pending"))
         try local.record(Contribution(jobId: "j3", appId: "sayback", key: "es/hola", at: now - 300_000, status: "skipped", reason: "params"))
         let configuration = URLSessionConfiguration.ephemeral
@@ -112,7 +113,7 @@ final class ScreenshotTests: XCTestCase {
             let accepted = try XCTUnwrap(model.allContributions().first { $0.jobId == "j1" })
             let screens: [(String, AnyView)] = [
                 ("activity", AnyView(ContributeActivityView(model: model, catalogue: catalogue))),
-                ("job", AnyView(ContributionDetailView(contribution: accepted, appName: catalogue.name("books")))),
+                ("job", AnyView(ContributionDetailView(contribution: accepted, appName: catalogue.name("books")) { try await model.report(accepted, good: $0, note: $1) })),
                 ("settings", AnyView(ContributeSettingsView(model: model, runner: model.contribute, catalogue: catalogue))),
             ]
             for (screen, view) in screens {

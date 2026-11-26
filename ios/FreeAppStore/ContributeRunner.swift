@@ -120,6 +120,13 @@ final class ContributeRunner: ObservableObject {
         for app in local.contributeApps().union((try? local.contributionApps()) ?? []).sorted() { try? await refresh(app, keepGoing: { true }) }
     }
 
+    /// Sends this phone's report on one of its uploads (#831) and keeps it with the row.
+    func report(_ contribution: Contribution, good: Bool, note: String) async throws -> SubmissionReport {
+        let report = try await client.report(contribution.appId, submissionId: contribution.submissionId, good: good, note: note)
+        try local.saveReport(contribution.jobId, report)
+        return report
+    }
+
     /// One app's verdicts, tried again after passing network failures (#819).
     private func refresh(_ app: String, keepGoing: () -> Bool) async throws {
         let (client, local) = (client, local)

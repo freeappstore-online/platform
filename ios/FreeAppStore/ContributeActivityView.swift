@@ -54,7 +54,7 @@ struct ContributeActivityView: View {
             ForEach(days, id: \.day) { group in
                 Section(group.day.formatted(date: .complete, time: .omitted)) {
                     ForEach(group.rows, id: \.jobId) { row in
-                        NavigationLink { ContributionDetailView(contribution: row, appName: catalogue.name(row.appId)) } label: {
+                        NavigationLink { ContributionDetailView(contribution: row, appName: catalogue.name(row.appId)) { try await model.report(row, good: $0, note: $1) } } label: {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("\(catalogue.name(row.appId)) · \(row.key)").font(.subheadline.weight(.semibold))
                                 Text((ContributeText.labels[row.status] ?? row.status) + " · "
@@ -86,12 +86,20 @@ struct ContributeActivityView: View {
 }
 
 /// One job (#820): what it was, what this phone made, why it was not done or what the server said, how this phone's
-/// attempt went (#827), and its audio: this phone's own while kept, else the accepted audio.
+/// attempt went (#827), its audio: this phone's own while kept, else the accepted audio, and for an upload this phone's
+/// Good / Not good report on it (#831).
 struct ContributionDetailView: View {
     let contribution: Contribution
     let appName: String
     var kept = AttemptAudio(dir: AttemptAudio.defaultDirectory)
+    /// Sends the report and answers the one the server kept.
+    let send: (_ good: Bool, _ note: String) async throws -> SubmissionReport
     @StateObject private var player = ArtifactPlayer()
+    @State private var report: SubmissionReport?
+    @State private var good: Bool?
+    @State private var note = ""
+    @State private var sending = false
+    @State private var sendError = ""
 
     private var device: Bool { ["skipped", "failed"].contains(contribution.status) }
     private var playable: Bool { kept.load(contribution.jobId) != nil || ["accepted", "superseded"].contains(contribution.status) }
@@ -110,7 +118,6 @@ struct ContributionDetailView: View {
                 if !contribution.reason.isEmpty {
                     field(device ? "Why" : "Reason", ContributeText.reasons[contribution.reason] ?? contribution.reason)
                 }
-                if let wer = contribution.wer { field("Error rate", wer.formatted(.percent.precision(.fractionLength(0...1)))) }
                 // `superseded`: another contributor's audio was accepted first; it plays from the same URL (#824) once this
                 // phone no longer keeps its own.
                 if playable {
@@ -125,6 +132,7 @@ struct ContributionDetailView: View {
                     Text("Text").font(.headline)
                     Text(player.highlighted(contribution.input)).textSelection(.enabled)
                 }
+                if !contribution.submissionId.isEmpty { reportControls }
                 if let record = contribution.record {
                     Text("On this phone").font(.headline)
                     ForEach(Self.facts(record), id: \.label) { field($0.label, $0.value) }
@@ -136,6 +144,42 @@ struct ContributionDetailView: View {
         .navigationTitle(contribution.key)
         .navigationBarTitleDisplayMode(.inline)
         .onDisappear { player.stop() }
+        .onAppear {
+            guard report == nil, let saved = contribution.report else { return }
+            report = saved; good = saved.good; note = saved.note ?? ""
+        }
+    }
+
+    /// Whether this upload sounds right, judged by a person listening (#831): no AI checks it.
+    @ViewBuilder private var reportControls: some View {
+        Text("Your report").font(.headline)
+        if let report {
+            field("Reported " + Date(timeIntervalSince1970: Double(report.at) / 1000).formatted(date: .abbreviated, time: .shortened),
+                  (report.good ? "Good" : "Not good") + (report.note.map { " · \($0)" } ?? ""))
+        } else {
+            Text("Listen, then say whether it is good.").font(.footnote).foregroundStyle(.secondary)
+        }
+        Picker("Quality", selection: $good) {
+            Text("Good").tag(Bool?.some(true))
+            Text("Not good").tag(Bool?.some(false))
+        }
+        .pickerStyle(.segmented)
+        TextField("Note (optional)", text: $note, axis: .vertical)
+            .textFieldStyle(.roundedBorder)
+            .lineLimit(1...4)
+            .onChange(of: note) { if note.count > SubmissionReport.noteChars { note = String(note.prefix(SubmissionReport.noteChars)) } }
+        Button(sending ? "Sending…" : report == nil ? "Send" : "Change report") {
+            guard let good else { return }
+            sending = true
+            sendError = ""
+            Task {
+                do { report = try await send(good, note) } catch { sendError = error.localizedDescription }
+                sending = false
+            }
+        }
+        .buttonStyle(.bordered)
+        .disabled(good == nil || sending)
+        if !sendError.isEmpty { Text(sendError).foregroundStyle(.red) }
     }
 
     /// The attempt's record (#827), as label and value, leaving out what it did not measure.

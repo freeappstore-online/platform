@@ -201,6 +201,12 @@ final class CompanionModel: NSObject, ObservableObject, ASWebAuthenticationPrese
     func allContributions() -> [Contribution] { (try? local.contributions(limit: 100_000)) ?? [] }
     /// Pull to refresh on Activity: the server's verdicts on this phone's submissions.
     func refreshVerdicts() async { await contribute.refreshVerdicts(); refresh() }
+    /// Good / Not good on one of this phone's uploads (#831).
+    func report(_ contribution: Contribution, good: Bool, note: String) async throws -> SubmissionReport {
+        let report = try await contribute.report(contribution, good: good, note: note)
+        refresh()
+        return report
+    }
     func loadOpenJobs() async {
         if let counts = try? await contribute.openJobs() { openJobs = counts }
     }

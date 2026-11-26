@@ -71,6 +71,16 @@ final class LocalStore: @unchecked Sendable {
                 try exec("PRAGMA user_version = 2")
             }
         }
+        // Migration 3 (#831): the upload's submission id and this phone's report on it. The `wer` column of migration 1
+        // stays, unused: the server no longer measures an error rate.
+        if (try query("PRAGMA user_version") { sqlite3_column_int64($0, 0) }.first ?? 0) < 3 {
+            try transaction {
+                for column in ["submission_id TEXT NOT NULL DEFAULT ''", "report_good INTEGER", "report_note TEXT", "reported_at INTEGER"] {
+                    try exec("ALTER TABLE generation_jobs ADD COLUMN \(column)")
+                }
+                try exec("PRAGMA user_version = 3")
+            }
+        }
         for path in [fileURL.path, fileURL.path + "-wal", fileURL.path + "-shm"] where FileManager.default.fileExists(atPath: path) {
             try FileManager.default.setAttributes(protection, ofItemAtPath: path)
         }
@@ -437,7 +447,8 @@ final class LocalStore: @unchecked Sendable {
     /// Newest first.
     func contributions(limit: Int = 30) throws -> [Contribution] {
         try query("""
-            SELECT job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer, record FROM generation_jobs
+            SELECT job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, record, submission_id,
+              report_good, report_note, reported_at FROM generation_jobs
             ORDER BY at DESC LIMIT ?
             """, [Int64(limit)]) { row in
             Contribution(jobId: String(cString: sqlite3_column_text(row, 0)), appId: String(cString: sqlite3_column_text(row, 1)),
@@ -445,8 +456,12 @@ final class LocalStore: @unchecked Sendable {
                          status: String(cString: sqlite3_column_text(row, 4)), reason: String(cString: sqlite3_column_text(row, 5)),
                          input: String(cString: sqlite3_column_text(row, 6)), setId: String(cString: sqlite3_column_text(row, 7)),
                          durationMs: sqlite3_column_int64(row, 8), bytes: sqlite3_column_int64(row, 9),
-                         wer: sqlite3_column_type(row, 10) == SQLITE_NULL ? nil : sqlite3_column_double(row, 10),
-                         record: sqlite3_column_type(row, 11) == SQLITE_NULL ? nil : AttemptRecord.decode(String(cString: sqlite3_column_text(row, 11))))
+                         record: sqlite3_column_type(row, 10) == SQLITE_NULL ? nil : AttemptRecord.decode(String(cString: sqlite3_column_text(row, 10))),
+                         submissionId: String(cString: sqlite3_column_text(row, 11)),
+                         report: sqlite3_column_type(row, 12) == SQLITE_NULL ? nil
+                            : SubmissionReport(good: sqlite3_column_int64(row, 12) != 0,
+                                               note: sqlite3_column_type(row, 13) == SQLITE_NULL ? nil : String(cString: sqlite3_column_text(row, 13)),
+                                               at: sqlite3_column_int64(row, 14)))
         }
     }
 
@@ -537,21 +552,31 @@ extension LocalStore: ContributionLog {
 
     func record(_ contribution: Contribution) throws {
         try exec("""
-            INSERT OR REPLACE INTO generation_jobs(job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, wer, record)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO generation_jobs(job_id, app_id, job_key, at, status, reason, input, set_id, duration_ms, bytes, record,
+              submission_id, report_good, report_note, reported_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [contribution.jobId, contribution.appId, String(contribution.key.prefix(200)), contribution.at, contribution.status,
                   String(contribution.reason.prefix(120)), contribution.input, contribution.setId, contribution.durationMs, contribution.bytes,
-                  contribution.wer ?? NSNull(), contribution.record?.json ?? NSNull()])
+                  contribution.record?.json ?? NSNull(), contribution.submissionId, contribution.report.map { Int64($0.good ? 1 : 0) } ?? NSNull(),
+                  contribution.report?.note ?? NSNull(), contribution.report?.at ?? NSNull()])
+    }
+
+    /// This phone's report on the job's upload (#831), kept with its row so it shows offline.
+    func saveReport(_ jobId: String, _ report: SubmissionReport) throws {
+        try exec("UPDATE generation_jobs SET report_good = ?, report_note = ?, reported_at = ? WHERE job_id = ?",
+                 [Int64(report.good ? 1 : 0), report.note ?? NSNull(), report.at, jobId])
     }
 
     func saveAttempt(_ jobId: String, _ record: AttemptRecord) throws {
         try exec("UPDATE generation_jobs SET record = ? WHERE job_id = ?", [record.json, jobId])
     }
 
-    func updateStatus(_ jobId: String, status: String, reason: String, wer: Double?, durationMs: Int64?, input: String?) throws {
+    func updateStatus(_ jobId: String, status: String, reason: String, submissionId: String?, durationMs: Int64?, input: String?,
+                      report: SubmissionReport?) throws {
         try exec("""
-            UPDATE generation_jobs SET status = ?, reason = ?, wer = COALESCE(?, wer), duration_ms = COALESCE(?, duration_ms),
+            UPDATE generation_jobs SET status = ?, reason = ?, submission_id = COALESCE(?, submission_id), duration_ms = COALESCE(?, duration_ms),
               input = CASE WHEN input = '' THEN COALESCE(?, '') ELSE input END WHERE job_id = ?
-            """, [status, String(reason.prefix(120)), wer ?? NSNull(), durationMs ?? NSNull(), input ?? NSNull(), jobId])
+            """, [status, String(reason.prefix(120)), submissionId ?? NSNull(), durationMs ?? NSNull(), input ?? NSNull(), jobId])
+        if let report { try saveReport(jobId, report) }
     }
 }

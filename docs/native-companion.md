@@ -164,9 +164,12 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   as chips (Accepted, Checking, Rejected, Not done) that open **Activity** filtered. **Activity** lists every job this
   phone tried, newest first, grouped by day, filtered by status (All · Accepted · Checking · Rejected · Not done) and by
   app; pull to refresh reads the server's verdicts for every app on the record. A row opens the job: app, key, when, the
-  audio's length and size, this phone's reason or the server's verdict and reason (and error rate when the server sends
-  `wer`), the job's text, and **Play** for an accepted job (or, on a superseded one, the winning audio) from the public artifact URL, marking each sentence from the
-  public meta's `segments` as it plays. The gear opens **Contribute settings**: the apps opted in or with open jobs
+  audio's length and size, this phone's reason or the server's verdict and reason, the job's text, and **Play** for an accepted job (or, on a superseded one, the winning audio) from the public artifact URL, marking each sentence from the
+  public meta's `segments` as it plays. For a job this phone uploaded, **Your report** (#831): **Good** / **Not good** with an
+  optional note (at most 500 characters) and **Send**, which calls `PUT /v1/apps/:appId/generation/submissions/:submissionId/report`
+  with the device credential. No AI judges the audio; a person listening does. The row keeps the upload's submission id and
+  the last report (sent from here or read from the submissions route's `report` on refresh), so it shows offline and can
+  be changed. The gear opens **Contribute settings**: the apps opted in or with open jobs
   (`GET /generation/open`, Kokoro sets only) with their switch and open-job count, the voice model download, progress
   and delete, **Only while charging** (on by default; off, the background task no longer asks for external power and
   unplugging no longer stops it), and the space the model and the record take. A **Contribute from this phone** switch
