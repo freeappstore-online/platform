@@ -21,7 +21,7 @@ jobs:
           echo "$XCODEGEN_SHA256  $RUNNER_TEMP/xcodegen.zip" | shasum -a 256 -c -
           unzip -q "$RUNNER_TEMP/xcodegen.zip" -d "$RUNNER_TEMP"
           cd ios && "$RUNNER_TEMP/xcodegen/bin/xcodegen" generate && git diff --exit-code -- FreeAppStore.xcodeproj
-      # Build number = workflow run number and FAS_COMMIT = short SHA (both default in Config/Version.xcconfig
+      # Build number = workflow run number, FAS_COMMIT = short SHA and FAS_DEV_BUILD=NO (all default in Config/Version.xcconfig
       # for local builds). Ad-hoc signed, not CODE_SIGNING_ALLOWED=NO: an unsigned test host has no Keychain entitlement
       # (errSecMissingEntitlement, -34018), which SecureStoreTests and FasApiTests need.
       # Runner images change which simulators exist, so a fixed device name fails at random. Use the
@@ -32,6 +32,6 @@ jobs:
           UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; ios=sorted((k for k in d if "iOS" in k), key=lambda k: [int(x) for x in k.rsplit("iOS-",1)[1].split("-")]); print(next(x["udid"] for k in reversed(ios) for x in d[k] if x["name"].startswith("iPhone")))')
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
       - name: Unit tests (simulator, ad-hoc signed)
-        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'id=${{ steps.sim.outputs.udid }}' -derivedDataPath build/ios test CODE_SIGN_IDENTITY=- CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT=${GITHUB_SHA::7}
+        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'id=${{ steps.sim.outputs.udid }}' -derivedDataPath build/ios test CODE_SIGN_IDENTITY=- CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT=${GITHUB_SHA::7} FAS_DEV_BUILD=NO
       - name: Device build (unsigned)
-        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'generic/platform=iOS' -derivedDataPath build/ios build CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT=${GITHUB_SHA::7}
+        run: xcodebuild -project ios/FreeAppStore.xcodeproj -scheme FreeAppStore -destination 'generic/platform=iOS' -derivedDataPath build/ios build CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION=${{ github.run_number }} FAS_COMMIT=${GITHUB_SHA::7} FAS_DEV_BUILD=NO

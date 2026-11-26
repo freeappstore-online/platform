@@ -1,5 +1,10 @@
-// The one place the app's version lives. CI overrides CURRENT_PROJECT_VERSION with the workflow run number
-// and FAS_COMMIT with the short commit SHA; local builds keep the values below.
+// The one place the app's version lives (#832, docs/versioning.md): scripts/app-release.sh bumps MARKETING_VERSION.
+// CI sets CURRENT_PROJECT_VERSION to the workflow run number, FAS_COMMIT to the short commit SHA and FAS_DEV_BUILD
+// to NO. A local build keeps build 1 and says "dev"; its commit comes from the untracked Commit.xcconfig, which the
+// scheme's build pre-action writes (scripts/write-commit.sh).
 MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 FAS_COMMIT = dev
+FAS_DEV_BUILD = YES
+
+#include? "Commit.xcconfig"

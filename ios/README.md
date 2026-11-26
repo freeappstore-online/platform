@@ -23,7 +23,7 @@ Device installs are signed in Xcode with your own team. `DEVELOPMENT_TEAM` is ne
 
 ## Version and branding
 
-`Config/Version.xcconfig` is the only version source: `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION` and `FAS_COMMIT`. `Info.plist` reads all three; CI passes the workflow run number as the build number and the short SHA as the commit, local builds show build `1` and commit `dev`. The About section displays them.
+`Config/Version.xcconfig` is the only version source: `MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`, `FAS_COMMIT` and `FAS_DEV_BUILD`. `Info.plist` reads them; CI passes the workflow run number as the build number, the short SHA as the commit and `FAS_DEV_BUILD=NO`. A local build shows build `dev` and its commit, which the scheme's pre-action `scripts/write-commit.sh` writes to the untracked `Config/Commit.xcconfig`. The About section displays them with a "What's new" link; releases: [docs/versioning.md](../docs/versioning.md).
 
 `Assets.xcassets` holds the app icon, `AccentColor` (the app tint, kit accent `#2563eb` / dark `#60a5fa`) and `LaunchBackground` (design-system `--paper`, `#f8fafc` / `#0f172a`). `AppIcon-1024.png` is the brand kit's maskable icon composition (the one behind `icon-512.png`) rendered at 1024×1024 with the kit's own `generate.py` and flattened to RGB, because App Store icons must have no alpha channel. Never redraw it: regenerate from the kit and register it in the workspace `brand/destinations.json` (`renders`).
 

@@ -23,6 +23,22 @@
                </EnvironmentBuildable>
             </ActionContent>
          </ExecutionAction>
+         <ExecutionAction
+            ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+            <ActionContent
+               title = "Record the commit"
+               scriptText = "&quot;$SRCROOT/scripts/write-commit.sh&quot;">
+               <EnvironmentBuildable>
+                  <BuildableReference
+                     BuildableIdentifier = "primary"
+                     BlueprintIdentifier = "09DFAB51E8D5769297FCAD83"
+                     BuildableName = "FreeAppStore.app"
+                     BlueprintName = "FreeAppStore"
+                     ReferencedContainer = "container:FreeAppStore.xcodeproj">
+                  </BuildableReference>
+               </EnvironmentBuildable>
+            </ActionContent>
+         </ExecutionAction>
       </PreActions>
       <BuildActionEntries>
          <BuildActionEntry

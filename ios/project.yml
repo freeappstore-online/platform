@@ -51,5 +51,8 @@ schemes:
         - name: Fetch sherpa-onnx
           script: '"$SRCROOT/scripts/fetch-sherpa-onnx.sh"'
           settingsTarget: FreeAppStore
+        - name: Record the commit
+          script: '"$SRCROOT/scripts/write-commit.sh"'
+          settingsTarget: FreeAppStore
     test:
       targets: [FreeAppStoreTests]

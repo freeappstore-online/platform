@@ -90,8 +90,8 @@ struct DeviceProbes {
         return rc == KERN_SUCCESS ? Int(info.phys_footprint / 1_048_576) : 0
     }
 
-    /// "1.4 (12)", from Config/Version.xcconfig through Info.plist.
-    static var appVersion: String { "\(AppInfo.current.version) (\(AppInfo.current.build))" }
+    /// "1.4 (12, abc1234)", from Config/Version.xcconfig through Info.plist.
+    static var appVersion: String { AppInfo.current.label }
 
     static var os: String {
         let v = ProcessInfo.processInfo.operatingSystemVersion

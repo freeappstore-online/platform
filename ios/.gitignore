@@ -4,3 +4,4 @@ build/
 Config/Local.xcconfig
 # sherpa-onnx, fetched and checked by scripts/fetch-sherpa-onnx.sh (#733)
 Vendor/
+Config/Commit.xcconfig

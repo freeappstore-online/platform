@@ -73,6 +73,7 @@ struct SettingsView: View {
             .font(.subheadline)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        Button("What's new") { open(AppInfo.current.notesLink) }
         Button("How your data is used") { open("https://docs.freeappstore.online/native-companion/") }
         Button("Privacy policy") { open("https://freeappstore.online/privacy") }
     }
