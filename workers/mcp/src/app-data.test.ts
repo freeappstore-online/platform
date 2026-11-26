@@ -1,3 +1,4 @@
+import type { Schema } from "@cfworker/json-schema";
 import { describe, expect, it } from "vitest";
 import {
   declaredCollection,
@@ -10,7 +11,7 @@ import {
   validateDocument,
 } from "./app-data.js";
 
-const deckSchema = {
+const deckSchema: Schema = {
   type: "object",
   required: ["title", "slides"],
   properties: {
@@ -63,7 +64,7 @@ describe("validateDocument", () => {
   });
 
   it("caps the number of errors reported", () => {
-    const schema = { type: "object", properties: { items: { type: "array", items: { type: "string" } } } };
+    const schema: Schema = { type: "object", properties: { items: { type: "array", items: { type: "string" } } } };
     const errors = validateDocument(schema, { items: Array.from({ length: 50 }, (_, i) => i) });
     expect(errors.length).toBe(21);
     expect(errors.at(-1)).toMatch(/more$/);
