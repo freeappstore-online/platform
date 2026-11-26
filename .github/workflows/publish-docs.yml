@@ -92,6 +92,7 @@ jobs:
             - Proxy & Keys: proxy-and-keys.md
             - Temporary photos: photo-uploads.md
             - Phone companion: native-companion.md
+            - Community generation: community-generation.md
             - Limits: platform-limits.md
             - Browser Capabilities: capabilities.md
             - Permissions: permissions.md

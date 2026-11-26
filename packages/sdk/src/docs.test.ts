@@ -112,6 +112,7 @@ const DEVELOPER_DOCS = [
   'docs/platform-limits.md',
   'docs/photo-uploads.md',
   'docs/native-companion.md',
+  'docs/community-generation.md',
   'docs/capabilities.md',
   'docs/permissions.md',
   'docs/architecture.md',
