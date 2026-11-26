@@ -95,10 +95,14 @@ and verifies every upload; the phone is never trusted.
 - **Loop** (WorkManager, hourly and on **Run now**; by default only while plugged in on an unmetered network, which the
   user can relax; foreground notification with Stop, and in-app download progress for the model). "Plugged in" is
   `BatteryManager.EXTRA_PLUGGED != 0`, not "charging", which Android reports unsatisfied once the battery is full (#806).
-  The work is scheduled with battery-not-low only: the worker checks plugged-in before starting and between sentences, and
-  the network before starting and before each claim, because a WorkManager constraint that lapses stops running work
-  part-way. Unplugged, it stops without uploading. A run in progress is never replaced by **Run now** or a settings
-  change. A job stopped part-way is recorded and never retried on this phone, which Activity says.
+  The work is scheduled with battery-not-low and a *connected* network only: the worker checks plugged-in before starting
+  and between sentences, and unmetered before starting and before each claim, because a WorkManager constraint that lapses
+  stops running work part-way. The connected constraint is needed (#828): Android 17 blocks the network of an app in the
+  background (`blocked=APP_BACKGROUND`) except for a job that asked for one. Unplugged, it stops without uploading. A run
+  in progress is never replaced by **Run now** or a settings change; otherwise the hourly work takes the current
+  constraints. If Android refuses the foreground service, the run is a plain job and claims only in its first 5 minutes.
+  The daily limit's `429` at the claim ends the run. Each run logs `ContributeWorker: Run ended: <reason>`. A job stopped
+  part-way is recorded and never retried on this phone, which Activity says.
   The run takes one job from each opted-in app in turn (#819), skipping apps with no open job, rather than finishing one
   app's jobs before the next; an app turned off mid-run is left out from its next turn.
   Each job: `POST …/generation/claim` with the device credential → synthesize the
@@ -172,8 +176,10 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   app's background time running out after leaving it), the job in hand stops between sentences and is not uploaded.
   Leaving the app during **Run now**, or Run now ending with `background_expired`, submits the background task request
   with no earliest start (#819), so the work goes on as soon as iOS allows on external power; the tab says plainly that
-  Run now needs the app on screen and background runs happen while charging.
-  Unplugging stops a background run. A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
+  Run now needs the app on screen and background runs happen while charging. Once the app has left the screen, Run now
+  claims nothing more (#828): the job in hand may finish in the seconds left, then the background task carries on.
+  The daily limit's `429` at the claim ends a run; each run logs `Run ended: <reason>` (subsystem
+  `online.freeappstore.companion`, category `Contribute`). Unplugging stops a background run. A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
   `unplugged`, `opted_out` or `lease_expired`, shown in the tab's recent results.
 - **Order** (#819): one job per opted-in app in turn (Books, then Dialogue, then Books, …), so every app moves forward;
   an app leaves the rotation for the run when it has no open job, is turned off, or a job of it is not submitted.
