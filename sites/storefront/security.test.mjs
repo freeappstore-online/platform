@@ -62,6 +62,28 @@ it('a session this browser did not ask for needs the person to accept it (#564)'
   assert.equal(own.stored.length, 1);
 });
 
+it('every sign-in redirect carries client_state, so the return does not ask "Sign in as …?" (#753)', () => {
+  const window = { location: { hash: '', pathname: '/', search: '', href: 'https://freeappstore.online/apps/x' } };
+  runInNewContext(readFileSync(new URL('./auth.js', import.meta.url), 'utf8'), {
+    document: { querySelectorAll: () => [], querySelector: () => null, getElementById: () => null, createElement: node, documentElement: node() },
+    window, history: { replaceState() {} },
+    localStorage: { getItem: key => key === 'fas:auth-state' ? 'abc' : null, setItem() {}, removeItem() {} },
+    crypto: globalThis.crypto, URL,
+  });
+  window.fasSignIn();
+  const url = new URL(window.location.href);
+  assert.equal(url.pathname, '/v1/auth/github/start');
+  assert.equal(url.searchParams.get('client_state'), 'abc');
+  assert.equal(url.searchParams.get('return_to'), 'https://freeappstore.online/apps/x');
+  window.fasSignIn('https://freeappstore.online/ideas#idea-1');
+  assert.equal(new URL(window.location.href).searchParams.get('return_to'), 'https://freeappstore.online/ideas#idea-1');
+  for (const file of ['storefront.js', 'detail-page.js', 'ideas-claims.js']) {
+    const source = readFileSync(new URL(`./${file}`, import.meta.url), 'utf8');
+    assert.ok(!source.includes('/v1/auth/github/start'), `${file} builds its own sign-in URL`);
+    assert.ok(source.includes('window.fasSignIn('), `${file} uses auth.js sign-in`);
+  }
+});
+
 const XSS_PAYLOADS = [
   '<script>alert(1)</script>',
   '<img onerror=alert(1) src=x>',

@@ -20,11 +20,7 @@
     return t ? { Authorization: 'Bearer ' + t } : {};
   }
   function signIn(ideaId) {
-    var back = location.origin + location.pathname + '#idea-' + ideaId;
-    var url = new URL('/v1/auth/github/start', API);
-    url.searchParams.set('app_id', 'store');
-    url.searchParams.set('return_to', back);
-    location.href = url.toString();
+    window.fasSignIn(location.origin + location.pathname + '#idea-' + ideaId); // auth.js
   }
   function countText(n) {
     if (!n) return '';

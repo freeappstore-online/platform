@@ -13,6 +13,17 @@ function classList() {
   return { toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }, has(name) { return classes.has(name); } };
 }
 
+// auth.js's window.fasSignIn (#753), which these page scripts call to sign in.
+function withSignIn(window) {
+  window.fasSignIn = () => {
+    const url = new URL("/v1/auth/github/start", "https://api.freeappstore.online");
+    url.searchParams.set("app_id", "store");
+    url.searchParams.set("return_to", window.location.href);
+    window.location.href = url.toString();
+  };
+  return window;
+}
+
 function flush() {
   return new Promise((resolve) => setImmediate(resolve));
 }
@@ -38,7 +49,7 @@ function runStorefrontVotes({ token = "session-token", response = { votes: { tim
   const windowHandlers = {};
   const status = { textContent: "", hidden: true };
   const context = {
-    window: { location: { href: "https://freeappstore.online/" }, addEventListener(type, fn) { windowHandlers[type] = fn; } }, CSS: { escape: (value) => value }, localStorage: { getItem: () => token ? JSON.stringify({ token }) : null, removeItem() { token = null; } },
+    window: withSignIn({ location: { href: "https://freeappstore.online/" }, addEventListener(type, fn) { windowHandlers[type] = fn; } }), CSS: { escape: (value) => value }, localStorage: { getItem: () => token ? JSON.stringify({ token }) : null, removeItem() { token = null; } },
     document: {
       querySelector(selector) { return selector.indexOf(".app-card") === 0 ? card : null; },
       querySelectorAll(selector) { return selector.indexOf(".vote-btn") === 0 ? [button] : []; },
@@ -69,7 +80,7 @@ function runDetailVotes({ token = "session-token", aggregate } = {}) {
   const requests = [];
   const resolveMutations = [];
   const context = {
-    window: { location: { href: "https://freeappstore.online/apps/timer" }, addEventListener(type, fn) { windowHandlers[type] = fn; } }, URL,
+    window: withSignIn({ location: { href: "https://freeappstore.online/apps/timer" }, addEventListener(type, fn) { windowHandlers[type] = fn; } }), URL,
     localStorage: { getItem: () => token ? JSON.stringify({ token }) : null, removeItem() { token = null; } },
     document: {
       getElementById(id) { return { "page-data": { textContent: '{"id":"timer"}' }, "rate-vote": button, "vote-count": count, "rating-status": status }[id]; },

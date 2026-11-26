@@ -45,10 +45,7 @@
   }
 
   function triggerSignIn() {
-    var url = new URL("/v1/auth/github/start", API);
-    url.searchParams.set("app_id", "store");
-    url.searchParams.set("return_to", window.location.href);
-    window.location.href = url.toString();
+    window.fasSignIn(); // auth.js
   }
 
   function setVoteState(nextVoted, nextCount) {

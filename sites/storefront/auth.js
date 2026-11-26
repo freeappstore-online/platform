@@ -33,6 +33,18 @@
     } catch (e) { return false; }
   }
 
+  // The one sign-in redirect for every page script (votes, idea claims), so
+  // each carries client_state; without it the return asks "Sign in as …?" (#753).
+  function signIn(returnTo) {
+    var url = new URL("/v1/auth/github/start", API);
+    url.searchParams.set("app_id", "store");
+    url.searchParams.set("return_to", returnTo || window.location.href);
+    var state = clientState();
+    if (state) url.searchParams.set("client_state", state);
+    window.location.href = url.toString();
+  }
+  window.fasSignIn = signIn;
+
   // ── Icon fallback (runs on every page that has .app-icon elements) ──
   // If an apple-touch-icon fails to load, swap the <img> for a text node
   // containing the first letter (stored on the parent as data-letter).
@@ -225,12 +237,7 @@
 
   function startSignIn(e) {
     if (e) e.preventDefault();
-    var url = new URL("/v1/auth/github/start", API);
-    url.searchParams.set("app_id", "store");
-    url.searchParams.set("return_to", window.location.href);
-    var state = clientState();
-    if (state) url.searchParams.set("client_state", state);
-    window.location.href = url.toString();
+    signIn();
   }
 
   function showUser(user) {
