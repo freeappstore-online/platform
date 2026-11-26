@@ -53,14 +53,41 @@ describe('Roles', () => {
     expect(auth.handleUnauthorized).toHaveBeenCalledWith('tok');
   });
 
-  it('list filters listAll by role', async () => {
-    mockFetch(200, {
-      roles: [
-        { userId: 'u1', roleName: 'editor', grantedBy: null, grantedAt: 1 },
-        { userId: 'u2', roleName: 'viewer', grantedBy: null, grantedAt: 1 },
-      ],
+  it('list asks the server for one role', async () => {
+    const fetchMock = mockFetch(200, {
+      roles: [{ userId: 'u1', roleName: 'editor', grantedBy: null, grantedAt: 1 }],
+      nextOffset: null,
     });
     const list = await new Roles('a', 'https://api.example', fakeAuth('tok')).list('editor');
     expect(list.map((r) => r.userId)).toEqual(['u1']);
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      'https://api.example/v1/apps/a/roles?role=editor&offset=0',
+    );
+  });
+
+  it('listAll follows nextOffset across pages (#765)', async () => {
+    const page = (ids: string[], nextOffset: number | null) =>
+      new Response(
+        JSON.stringify({
+          roles: ids.map((userId) => ({
+            userId,
+            roleName: 'member',
+            grantedBy: null,
+            grantedAt: 1,
+          })),
+          nextOffset,
+        }),
+      );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(page(['u1', 'u2'], 2))
+      .mockResolvedValueOnce(page(['u3'], null));
+    globalThis.fetch = fetchMock;
+    const all = await new Roles('a', 'https://api.example', fakeAuth('tok')).listAll();
+    expect(all.map((r) => r.userId)).toEqual(['u1', 'u2', 'u3']);
+    expect(fetchMock.mock.calls.map((c) => c[0])).toEqual([
+      'https://api.example/v1/apps/a/roles?offset=0',
+      'https://api.example/v1/apps/a/roles?offset=2',
+    ]);
   });
 });

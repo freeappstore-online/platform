@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { appExists } from '../lib/apps.js';
 import { assertAppOwner, FAS_APP_ROWS, isAppOwner, requireAppUser } from '../lib/auth.js';
+import { queryLimit, queryOffset } from '../lib/paging.js';
 import { hmac, timingSafeEqual } from '../lib/session.js';
 import type { Env } from '../types.js';
 
@@ -23,17 +24,28 @@ const MAX_ROLE_ROWS_PER_APP = 5000;
 
 export const rolesRoutes = new Hono<{ Bindings: Env }>();
 
-/** List all role assignments for an app. Caller must be app owner or admin. */
+/**
+ * List an app's role assignments, one page at a time: every user who opens
+ * the app has a `member` row, so the full list is unbounded (#765).
+ * `?role=` filters by role; `nextOffset` is null on the last page.
+ * Caller must be app owner or admin.
+ */
 rolesRoutes.get('/apps/:appId/roles', async (c) => {
   const user = await requireAppUser(c, c.req.param('appId'));
   const appId = c.req.param('appId');
   await assertAppOwner(c.env, user, appId, { allowAdmin: true });
+  const role = c.req.query('role');
+  const limit = queryLimit(c.req.query('limit'), 500, 1000);
+  const offset = queryOffset(c.req.query('offset'));
 
   const { results } = await c.env.DB.prepare(
-    'SELECT user_id, role_name, granted_by, granted_at FROM app_roles WHERE app_id = ? ORDER BY granted_at',
+    `SELECT user_id, role_name, granted_by, granted_at FROM app_roles
+     WHERE app_id = ?${role ? ' AND role_name = ?' : ''}
+     ORDER BY granted_at, user_id, role_name LIMIT ? OFFSET ?`,
   )
-    .bind(appId)
+    .bind(...(role ? [appId, role] : [appId]), limit, offset)
     .all<{ user_id: string; role_name: string; granted_by: string | null; granted_at: number }>();
+  const nextOffset = (results ?? []).length === limit ? offset + limit : null;
 
   // Map to the camelCase shape the SDK's RoleAssignment expects. Without this
   // every field reads back undefined and Roles.list(role) — which filters on
@@ -44,21 +56,24 @@ rolesRoutes.get('/apps/:appId/roles', async (c) => {
     grantedBy: r.granted_by,
     grantedAt: r.granted_at,
   }));
-  // 'owner' isn't stored in app_roles — it is apps.owner_id (#672).
-  const owner = await c.env.DB.prepare(
-    `SELECT owner_id, created_at FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`,
-  )
-    .bind(appId)
-    .first<{ owner_id: string | null; created_at: number }>();
-  if (owner?.owner_id)
-    roles.unshift({
-      userId: owner.owner_id,
-      roleName: 'owner',
-      grantedBy: null,
-      grantedAt: owner.created_at,
-    });
+  // 'owner' isn't stored in app_roles — it is apps.owner_id (#672). It leads
+  // the first page.
+  if (offset === 0 && (!role || role === 'owner')) {
+    const owner = await c.env.DB.prepare(
+      `SELECT owner_id, created_at FROM apps WHERE id = ? AND ${FAS_APP_ROWS}`,
+    )
+      .bind(appId)
+      .first<{ owner_id: string | null; created_at: number }>();
+    if (owner?.owner_id)
+      roles.unshift({
+        userId: owner.owner_id,
+        roleName: 'owner',
+        grantedBy: null,
+        grantedAt: owner.created_at,
+      });
+  }
 
-  return c.json({ roles });
+  return c.json({ roles, nextOffset });
 });
 
 /** List roles for a specific user in an app. Any authenticated user can check their own roles. */

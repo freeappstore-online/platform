@@ -57,18 +57,32 @@ export class Roles {
     return data.has;
   }
 
-  /** List all role assignments for this app. Caller must be app owner or admin. */
+  /**
+   * List all role assignments for this app. Caller must be app owner or admin.
+   * Every user who opens the app holds `member`, so this can be large; prefer
+   * list(role) when you need one role.
+   */
   async listAll(): Promise<RoleAssignment[]> {
-    const res = await authedFetch(this.auth, this.url());
-    if (!res.ok) throw new Error(`roles.listAll failed: ${res.status}`);
-    const data = (await res.json()) as { roles: RoleAssignment[] };
-    return data.roles;
+    return this.fetchPages('listAll', '');
   }
 
   /** List all users with a specific role. Caller must be app owner or admin. */
   async list(role: string): Promise<RoleAssignment[]> {
-    const all = await this.listAll();
-    return all.filter((r) => r.roleName === role);
+    return this.fetchPages('list', `role=${encodeURIComponent(role)}&`);
+  }
+
+  /** The server returns one page at a time (#765); follow nextOffset to the end. */
+  private async fetchPages(name: string, query: string): Promise<RoleAssignment[]> {
+    const all: RoleAssignment[] = [];
+    let offset: number | null | undefined = 0;
+    while (offset != null) {
+      const res = await authedFetch(this.auth, `${this.url()}?${query}offset=${offset}`);
+      if (!res.ok) throw new Error(`roles.${name} failed: ${res.status}`);
+      const data = (await res.json()) as { roles: RoleAssignment[]; nextOffset?: number | null };
+      all.push(...data.roles);
+      offset = data.nextOffset;
+    }
+    return all;
   }
 
   /** Get the current user's roles in this app. */

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { app } from '../index.js';
 import { hmac, signSession } from '../lib/session.js';
+import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
 
@@ -373,5 +374,50 @@ describe('roles routes', () => {
       expect((await assign({ role: 'Bad Role' })).res.status).toBe(400);
       expect((await assign({ nonce: 'short' })).res.status).toBe(400);
     });
+  });
+});
+
+describe.skipIf(!hasSqlite)('GET /v1/apps/:appId/roles pages (#765)', () => {
+  function setup() {
+    const { db, d1 } = sqliteD1();
+    db.prepare(
+      "INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES ('gh:1', 1, 'owner', NULL, 0)",
+    ).run();
+    db.prepare("INSERT INTO apps (id, owner_login, created_at) VALUES ('timer', 'owner', 5)").run();
+    const role = db.prepare(
+      "INSERT INTO app_roles (app_id, user_id, role_name, granted_by, granted_at) VALUES ('timer', ?, ?, ?, ?)",
+    );
+    role.run('gh:2', 'member', null, 10);
+    role.run('gh:3', 'member', null, 20);
+    role.run('gh:4', 'editor', 'gh:1', 30);
+    const get = async (query: string) => {
+      const res = await app.request(
+        `/v1/apps/timer/roles${query}`,
+        { headers: { Authorization: await authHeader('gh:1') } },
+        env(d1),
+      );
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as {
+        roles: { userId: string; roleName: string }[];
+        nextOffset: number | null;
+      };
+      return { ids: data.roles.map((r) => `${r.userId}/${r.roleName}`), next: data.nextOffset };
+    };
+    return { get };
+  }
+
+  it('returns a page with the owner first and a nextOffset until the last page', async () => {
+    const { get } = setup();
+    expect(await get('?limit=2')).toEqual({
+      ids: ['gh:1/owner', 'gh:2/member', 'gh:3/member'],
+      next: 2,
+    });
+    expect(await get('?limit=2&offset=2')).toEqual({ ids: ['gh:4/editor'], next: null });
+  });
+
+  it('filters by role', async () => {
+    const { get } = setup();
+    expect(await get('?role=editor')).toEqual({ ids: ['gh:4/editor'], next: null });
+    expect(await get('?role=owner')).toEqual({ ids: ['gh:1/owner'], next: null });
   });
 });

@@ -77,6 +77,7 @@ describe.skipIf(!hasSqlite)('ownership by immutable id against real SQLite', () 
     expect(await (await get('/v1/apps/timer/roles/me', 'gh:2')).json()).toEqual({ roles: [] });
     expect(await (await get('/v1/apps/timer/roles', 'gh:1')).json()).toEqual({
       roles: [{ userId: 'gh:1', roleName: 'owner', grantedBy: null, grantedAt: 0 }],
+      nextOffset: null,
     });
   });
 
