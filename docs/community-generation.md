@@ -33,9 +33,15 @@ artifact or block a contributor. Highlighting follows the whole text, which the 
 Any signed-in creator can generate for every store app from the console's **Generate** page
 (`freeappstore.online/app/generate`, desktop browsers with WebCodecs AAC): it lists the apps with open
 work from discovery, runs Kokoro sets (`kokoro` `v1.0`, `audio/mp4`) for the apps they opt in to, after
-they agree to download the model, and shows the job in progress and their submissions. It uses the
-SDK's shared browser runner, `@freeappstore/sdk/generation-kokoro` (also used by Books), and runs only
-while the window is open.
+they agree to download the model. It uses the SDK's shared browser runner,
+`@freeappstore/sdk/generation-kokoro` (also used by Books), and runs only while the window is open.
+The page has three tabs (#820): **Status** (running, idle or paused and why; the current app, job,
+sentence n/N and speed; Start/Stop; today's accepted, checking, rejected and not-done counts, which
+open Activity filtered), **Activity** (the account's `mySubmissions()` for every app it may have worked
+for, plus this browser's own run records in localStorage for jobs it skipped, stopped or failed;
+filter by status and app, grouped by day; a row opens its detail with the verdict and reason, size,
+duration, and Play with sentence highlighting for accepted ones, from the set's public manifest) and
+**Settings** (apps with open work and the per-app opt-in, the model download/delete, storage used).
 
 ## API (base `https://api.freeappstore.online/v1`)
 

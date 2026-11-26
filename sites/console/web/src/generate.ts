@@ -5,7 +5,7 @@
  * not stop a run; it stops with Stop, when there is no more work, or when the window closes.
  */
 import { useSyncExternalStore } from 'react'
-import { Generation, type FreeAppStore, type GenerationOpenApp } from '@freeappstore/sdk'
+import { Generation, type FreeAppStore, type GenerationJob, type GenerationOpenApp } from '@freeappstore/sdk'
 import {
   contributeKokoro,
   deleteKokoroModel,
@@ -18,6 +18,10 @@ import { API_URL, authHeaders } from './builder/lib/api'
 
 const OPT_IN_KEY = 'fas:generate-apps'
 const MODEL_KEY = 'fas:generate-model'
+const RUNS_KEY = 'fas:generate-runs'
+/** Run records kept, newest first, and the input text each keeps (for the Activity detail). */
+const MAX_RUNS = 200
+const RUN_TEXT_CHARS = 4000
 
 function read(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
@@ -51,6 +55,33 @@ export async function fetchOpenWork(token: string | null): Promise<GenerationOpe
 /** The app's sets this runner can generate exactly (Kokoro v1.0, audio/mp4, voice/speed). */
 export const runnableSets = (app: GenerationOpenApp) => app.sets.filter(s => !kokoroProblem(s))
 
+/**
+ * A job this browser tried (#820): kept in localStorage so Activity can list the jobs that never
+ * reached the server (skipped, stopped, failed) and show an uploaded job's text and timing.
+ */
+export interface RunRecord {
+  appId: string
+  setId: string
+  jobId: string
+  key: string
+  /** When the job was claimed (ms epoch). */
+  at: number
+  outcome: 'submitted' | 'skipped' | 'stopped' | 'failed'
+  reason: string | null
+  /** Wall time from claim to upload or give-up. */
+  ms: number
+  /** The input, cut at RUN_TEXT_CHARS; `chars` is its whole length. */
+  text: string
+  chars: number
+}
+
+function loadRuns(): RunRecord[] {
+  try {
+    const runs = JSON.parse(read(RUNS_KEY) ?? '[]')
+    return Array.isArray(runs) ? (runs as RunRecord[]) : []
+  } catch { return [] }
+}
+
 export interface GenerateState {
   running: boolean
   /** Model download progress (0-1) while loading, else null. */
@@ -61,13 +92,22 @@ export interface GenerateState {
   skipped: number
   /** How the last run ended, or why it failed. */
   message: string | null
+  /** This browser's run records, newest first. */
+  runs: RunRecord[]
 }
 
-let state: GenerateState = { running: false, loading: null, current: null, submitted: 0, skipped: 0, message: null }
+let state: GenerateState = {
+  running: false, loading: null, current: null, submitted: 0, skipped: 0, message: null, runs: loadRuns(),
+}
 const listeners = new Set<() => void>()
 function set(next: Partial<GenerateState>) {
   state = { ...state, ...next }
   for (const listener of listeners) listener()
+}
+
+/** Re-read the run records (another console tab may have added some). */
+export function reloadRuns() {
+  if (!state.running) set({ runs: loadRuns() })
 }
 
 export function useGenerate(): GenerateState {
@@ -92,6 +132,16 @@ function getRunner(encoder: AudioEncoderConfig, device: KokoroDevice): KokoroRun
     runnerKey = key
   }
   return runner
+}
+
+function record(appId: string, job: GenerationJob, at: number, outcome: RunRecord['outcome'], reason: string | null) {
+  const run: RunRecord = {
+    appId, setId: job.setId, jobId: job.id, key: job.key, at, outcome, reason, ms: Date.now() - at,
+    text: job.input.text.slice(0, RUN_TEXT_CHARS), chars: job.input.text.length,
+  }
+  const runs = [run, ...state.runs].slice(0, MAX_RUNS)
+  write(RUNS_KEY, JSON.stringify(runs))
+  set({ runs })
 }
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -135,6 +185,12 @@ export async function startGenerating(
   // A screen that turns off would put the window to sleep
   const wakeLock = await navigator.wakeLock?.request('screen').catch(() => null) ?? null
   const work = getRunner(encoder, device)
+  // The job in hand, recorded when it ends however it ends
+  let pending: { appId: string; job: GenerationJob; at: number } | null = null
+  const finish = (outcome: RunRecord['outcome'], reason: string | null) => {
+    if (pending) record(pending.appId, pending.job, pending.at, outcome, reason)
+    pending = null
+  }
   try {
     for (const app of apps) {
       const generation = new Generation(app.appId, API_URL, fas.auth)
@@ -146,18 +202,30 @@ export async function startGenerating(
           signal,
           onEvent: e => {
             if (e.type === 'loading') set({ loading: e.progress })
-            else if (e.type === 'claimed') set({ loading: null, current: { appId: app.appId, key: e.job.key, progress: null } })
-            else if (e.type === 'progress') set({ current: { appId: app.appId, key: e.job.key, progress: e.progress } })
+            else if (e.type === 'claimed') {
+              // A job still in hand at the next claim was abandoned when its lease ran out
+              finish('stopped', 'the lease ran out before it finished')
+              pending = { appId: app.appId, job: e.job, at: Date.now() }
+              set({ loading: null, current: { appId: app.appId, key: e.job.key, progress: null } })
+            } else if (e.type === 'progress') set({ current: { appId: app.appId, key: e.job.key, progress: e.progress } })
             else if (e.type === 'submitted') {
+              finish('submitted', null)
               set({ submitted: state.submitted + 1, current: null })
               onSubmitted(app.appId)
-            } else set({ skipped: state.skipped + 1, current: null })
+            } else {
+              if (pending?.job.id !== e.job.id) pending = { appId: app.appId, job: e.job, at: Date.now() }
+              finish('skipped', e.reason)
+              set({ skipped: state.skipped + 1, current: null })
+            }
           },
         })
       }
     }
+    finish('stopped', 'stopped before it finished')
     set({ message: signal.aborted ? 'Stopped.' : 'No more work for now.' })
   } catch (err) {
+    if (signal.aborted) finish('stopped', 'stopped before it finished')
+    else finish('failed', errorText(err))
     set({ message: signal.aborted ? 'Stopped.' : `Stopped on an error: ${errorText(err)}` })
   } finally {
     wakeLock?.release().catch(() => {})

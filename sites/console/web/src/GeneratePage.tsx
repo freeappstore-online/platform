@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Generation, type FreeAppStore, type GenerationOpenApp, type GenerationSubmission } from '@freeappstore/sdk'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { Generation, type FreeAppStore, type GenerationOpenApp } from '@freeappstore/sdk'
 import {
   isKokoroDownloaded,
   KOKORO_DOWNLOAD_BYTES,
@@ -10,37 +10,41 @@ import {
 } from '@freeappstore/sdk/generation-kokoro'
 import { ConfirmDialog, ProgressBar } from '@freeappstore/sdk/ui'
 import { API_URL } from './builder/lib/api'
-import { formatTimeAgo } from './deploy-status'
 import {
   deleteModel,
   downloadModel,
   fetchOpenWork,
   modelConsented,
   optedInApps,
+  reloadRuns,
   runnableSets,
   setOptIn,
   startGenerating,
   stopGenerating,
   useGenerate,
 } from './generate'
+import { activityItems, BUCKETS, BUCKET_TONE, GenerateActivity, isToday, type Bucket, type Mine } from './GenerateActivity'
 
 const DOCS_URL = 'https://github.com/freeappstore-online/platform/blob/main/docs/community-generation.md'
 const DEVICE_LABEL: Record<KokoroDevice, string> = { webgpu: 'WebGPU', wasm: 'WebAssembly' }
-const megabytes = (bytes: number) => `${Math.round(bytes / 1_000_000)} MB`
-
-type Mine = GenerationSubmission & { appId: string }
+const megabytes = (bytes: number) => `${Math.round(bytes / 1_000_000).toLocaleString()} MB`
 
 const card = 'rounded-2xl border border-line bg-panel p-5 sm:p-6'
 const heading = 'text-sm font-semibold text-muted uppercase tracking-wide mb-3'
 const primary = 'rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 min-h-[44px]'
 const secondary = 'rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink hover:bg-panel-hover min-h-[44px]'
 
+type Tab = 'status' | 'activity' | 'settings'
+const TABS: [Tab, string][] = [['status', 'Status'], ['activity', 'Activity'], ['settings', 'Settings']]
+
 /**
  * Generate (#795): any signed-in creator lends this desktop browser to the store's community
- * generation. It lists apps with open work, generates for the ones opted in to, with the SDK's
- * shared Kokoro runner, and shows the creator's own submissions.
+ * generation, with the SDK's shared Kokoro runner. Three tabs (#820): Status (the run, Start/Stop,
+ * today's counts), Activity (this account's submissions and the jobs this browser didn't upload)
+ * and Settings (apps with open work and opt-ins, the model, storage).
  */
 export function GeneratePage({ fas }: { fas: FreeAppStore }) {
+  const [tab, setTab] = useState<Tab>('status')
   const [encoder, setEncoder] = useState<AudioEncoderConfig | null | undefined>(undefined)
   const [device, setDevice] = useState<KokoroDevice>('wasm')
   const [downloaded, setDownloaded] = useState(false)
@@ -48,10 +52,13 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
   const [error, setError] = useState('')
   const [optIns, setOptIns] = useState(optedInApps)
   const [mine, setMine] = useState<Mine[]>([])
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [loadingMine, setLoadingMine] = useState(false)
+  const [bucket, setBucket] = useState<Bucket | ''>('')
+  const [appFilter, setAppFilter] = useState('')
   const run = useGenerate()
 
   useEffect(() => {
+    reloadRuns()
     kokoroEncoder().then(setEncoder)
     kokoroDevice().then(setDevice)
     isKokoroDownloaded().then(cached => setDownloaded(cached && modelConsented()))
@@ -66,38 +73,39 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
     }
   }, [fas])
 
-  const loadMine = useCallback(async (appIds: string[]) => {
-    const lists = await Promise.all(appIds.map(appId =>
+  // Every app this account may have worked for: opted in, with open work, or run in this browser
+  const appIds = useMemo(
+    () => [...new Set([...optIns, ...(apps ?? []).map(a => a.appId), ...run.runs.map(r => r.appId)])].sort(),
+    [optIns, apps, run.runs],
+  )
+  const appIdsKey = appIds.join(',')
+
+  const loadMine = useCallback(async () => {
+    setLoadingMine(true)
+    const lists = await Promise.all(appIdsKey.split(',').filter(Boolean).map(appId =>
       new Generation(appId, API_URL, fas.auth).mySubmissions()
         .then(list => list.map(s => ({ ...s, appId })))
         .catch(() => [] as Mine[]),
     ))
-    setMine(lists.flat().sort((a, b) => b.createdAt - a.createdAt).slice(0, 50))
-  }, [fas])
+    setMine(lists.flat())
+    setLoadingMine(false)
+  }, [fas, appIdsKey])
 
   useEffect(() => { loadApps() }, [loadApps])
-  useEffect(() => { loadMine(optIns) }, [loadMine, optIns])
+  useEffect(() => { loadMine() }, [loadMine])
   // The run ended: the open counts changed
   useEffect(() => { if (!run.running && run.message) loadApps() }, [run.running, run.message, loadApps])
 
+  const items = useMemo(() => activityItems(mine, run.runs), [mine, run.runs])
+  const today = items.filter(i => isToday(i.at))
   const toggle = (appId: string, on: boolean) => {
     setOptIn(appId, on)
     setOptIns(optedInApps())
   }
-
-  if (encoder === null) {
-    return (
-      <div className="space-y-4">
-        <Intro />
-        <div className={card}>
-          <p className="text-sm text-ink font-semibold">This browser can't generate.</p>
-          <p className="mt-1 text-sm text-muted">
-            Generating needs an AAC audio encoder (WebCodecs), which this browser doesn't have (Firefox,
-            for example). Open the console in a desktop Chrome, Edge or Safari to generate.
-          </p>
-        </div>
-      </div>
-    )
+  const openActivity = (b: Bucket) => {
+    setBucket(b)
+    setAppFilter('')
+    setTab('activity')
   }
 
   const chosen = (apps ?? []).filter(a => optIns.includes(a.appId) && runnableSets(a).length > 0)
@@ -105,124 +113,251 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
     if (!encoder) return
     startGenerating(fas, chosen, encoder, device, () => {
       setDownloaded(true)
-      loadMine(optedInApps())
+      loadMine()
     }).then(() => setDownloaded(modelConsented()))
-  }
-  const download = async () => {
-    if (!encoder) return
-    await downloadModel(encoder, device)
-    setDownloaded(modelConsented())
   }
 
   return (
     <div className="space-y-4">
       <Intro />
-
-      <div className={card}>
-        <h3 className={heading}>Model</h3>
-        <p className="text-sm text-ink">
-          Kokoro TTS v1.0 on {DEVICE_LABEL[device]} · {megabytes(KOKORO_DOWNLOAD_BYTES[device])}
-        </p>
-        {downloaded ? (
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <span className="text-sm text-success font-semibold">Downloaded and kept in this browser</span>
-            <button onClick={() => setConfirmDelete(true)} className="text-sm text-danger hover:underline min-h-[44px] px-2">
-              Delete model
-            </button>
-          </div>
-        ) : (
-          <div className="mt-3">
-            <p className="text-sm text-muted">
-              Generating downloads the model ({megabytes(KOKORO_DOWNLOAD_BYTES[device])}) from Hugging Face once and keeps it
-              in this browser's storage until you delete it.
-            </p>
-            {run.loading !== null ? (
-              <div className="mt-3"><ProgressBar value={Math.round(run.loading * 100)} max={100} label={`Downloading the model: ${Math.round(run.loading * 100)}%`} /></div>
-            ) : (
-              <button onClick={download} className={`${primary} mt-3`}>
-                Download the model ({megabytes(KOKORO_DOWNLOAD_BYTES[device])})
-              </button>
+      <TabBar tab={tab} onTab={setTab} />
+      <div role="tabpanel" id={`generate-panel-${tab}`} aria-labelledby={`generate-tab-${tab}`} className="space-y-4">
+        {tab === 'status' && (
+          <StatusCard
+            encoder={encoder}
+            downloaded={downloaded}
+            appsLoaded={apps !== null}
+            canStart={chosen.length > 0}
+            onStart={start}
+            todayCounts={BUCKETS.map(([b, label]) => [b, label, today.filter(i => i.bucket === b).length])}
+            onOpenActivity={openActivity}
+          />
+        )}
+        {tab === 'activity' && (
+          <GenerateActivity
+            fas={fas}
+            items={items}
+            appIds={appIds}
+            onelinerOf={appId => apps?.find(a => a.appId === appId)?.oneliner ?? null}
+            bucket={bucket}
+            onBucket={setBucket}
+            app={appFilter}
+            onApp={setAppFilter}
+            loading={loadingMine}
+            onRefresh={() => { loadMine(); loadApps() }}
+          />
+        )}
+        {tab === 'settings' && (
+          <>
+            <div className={card}>
+              <h3 className={heading}>Apps with open work</h3>
+              {error && <p className="text-sm text-danger mb-3">{error}</p>}
+              {!apps && !error && <p className="text-sm text-muted">Loading…</p>}
+              {apps?.length === 0 && <p className="text-sm text-muted">No app has open work for you right now.</p>}
+              <div className="space-y-3">
+                {apps?.map(app => (
+                  <AppRow key={app.appId} app={app} optedIn={optIns.includes(app.appId)} onToggle={on => toggle(app.appId, on)} />
+                ))}
+              </div>
+            </div>
+            {encoder && (
+              <ModelCard encoder={encoder} device={device} downloaded={downloaded} onChanged={() => setDownloaded(modelConsented())} />
             )}
+            <StorageCard downloaded={downloaded} />
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Tabs in the console's pill style, with the ARIA tabs pattern (arrow keys, Home, End). */
+function TabBar({ tab, onTab }: { tab: Tab; onTab: (tab: Tab) => void }) {
+  const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({})
+  const onKeyDown = (e: KeyboardEvent) => {
+    const i = TABS.findIndex(([t]) => t === tab)
+    const next =
+      e.key === 'ArrowRight' ? (i + 1) % TABS.length
+      : e.key === 'ArrowLeft' ? (i + TABS.length - 1) % TABS.length
+      : e.key === 'Home' ? 0
+      : e.key === 'End' ? TABS.length - 1
+      : -1
+    if (next < 0) return
+    e.preventDefault()
+    const t = TABS[next]![0]
+    onTab(t)
+    refs.current[t]?.focus()
+  }
+  return (
+    <div role="tablist" aria-label="Generate" onKeyDown={onKeyDown} className="flex flex-wrap gap-1">
+      {TABS.map(([t, label]) => (
+        <button
+          key={t}
+          ref={el => { refs.current[t] = el }}
+          role="tab"
+          id={`generate-tab-${t}`}
+          aria-selected={tab === t}
+          aria-controls={`generate-panel-${t}`}
+          tabIndex={tab === t ? 0 : -1}
+          onClick={() => onTab(t)}
+          className={`px-4 py-1 rounded-full text-sm font-semibold min-h-[44px] ${tab === t ? 'bg-ink text-paper' : 'text-muted border border-line hover:text-ink'}`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function StatusCard({ encoder, downloaded, appsLoaded, canStart, onStart, todayCounts, onOpenActivity }: {
+  encoder: AudioEncoderConfig | null | undefined
+  downloaded: boolean
+  appsLoaded: boolean
+  canStart: boolean
+  onStart: () => void
+  todayCounts: [Bucket, string, number][]
+  onOpenActivity: (bucket: Bucket) => void
+}) {
+  const { running, loading, current, submitted, skipped, message } = useGenerate()
+  const p = current?.progress
+  // Paused: something keeps this browser from generating
+  const paused =
+    encoder === null
+      ? "This browser can't generate: it has no AAC audio encoder (WebCodecs), Firefox for example. Open the console in a desktop Chrome, Edge or Safari."
+      : !downloaded ? "The voice model isn't downloaded yet: download it in Settings."
+      : appsLoaded && !canStart ? 'No app you opted in to has work this browser can do: opt in to one in Settings.'
+      : null
+  const phase = running ? 'Running' : paused ? 'Paused' : 'Idle'
+  const why = running ? null : paused ?? (appsLoaded ? message ?? 'Ready to generate for the apps you opted in to.' : 'Looking for open work…')
+
+  return (
+    <div className={card}>
+      <h3 className={heading}>Status</h3>
+      <div role="status" className="space-y-2 text-sm">
+        <p className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${running ? 'border-success text-success' : paused ? 'border-danger text-danger' : 'border-line text-muted'}`}>
+            {phase}
+          </span>
+          {why && <span className="text-muted">{why}</span>}
+        </p>
+        {running && loading !== null && (
+          <ProgressBar value={Math.round(loading * 100)} max={100} label={`Loading the model: ${Math.round(loading * 100)}%`} />
+        )}
+        {running && !current && loading === null && <p className="text-muted">Claiming a job…</p>}
+        {current && (
+          <div>
+            <p className="text-ink">
+              <span className="font-semibold">{current.appId}</span> · <span className="font-mono break-all">{current.key}</span>
+            </p>
+            {p ? (
+              <>
+                <div className="mt-2"><ProgressBar value={p.chars} max={Math.max(1, p.totalChars)} label={`Sentence ${p.sentence} of ${p.sentences}`} /></div>
+                <p className="mt-1 text-xs text-muted">{p.charsPerSecond.toFixed(1)} characters per second · {p.chars.toLocaleString()} of {p.totalChars.toLocaleString()}</p>
+              </>
+            ) : <p className="text-xs text-muted">Starting…</p>}
           </div>
         )}
-        <ConfirmDialog
-          open={confirmDelete}
-          variant="danger"
-          title="Delete the model?"
-          message="Stops generating and frees the model's storage in this browser. You can download it again later."
-          confirmLabel="Delete"
-          onCancel={() => setConfirmDelete(false)}
-          onConfirm={() => {
-            setConfirmDelete(false)
-            deleteModel().then(() => setDownloaded(false))
-          }}
-        />
+        {(submitted > 0 || skipped > 0) && (
+          <p className="text-xs text-muted">This session: {submitted} submitted{skipped ? `, ${skipped} skipped (this browser couldn't do them exactly)` : ''}.</p>
+        )}
       </div>
-
-      <div className={card}>
-        <h3 className={heading}>Apps with open work</h3>
-        {error && <p className="text-sm text-danger mb-3">{error}</p>}
-        {!apps && !error && <p className="text-sm text-muted">Loading…</p>}
-        {apps?.length === 0 && <p className="text-sm text-muted">No app has open work for you right now.</p>}
-        <div className="space-y-3">
-          {apps?.map(app => (
-            <AppRow key={app.appId} app={app} optedIn={optIns.includes(app.appId)} onToggle={on => toggle(app.appId, on)} />
-          ))}
-        </div>
-      </div>
-
-      <div className={card}>
-        <h3 className={heading}>Generate</h3>
-        <p className="text-sm text-muted">
-          Generating runs only while this window stays open (install the console as an app to keep it in its own
-          window). Each job is checked by the platform before anyone hears it.
-        </p>
+      {encoder !== null && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
-          {run.running ? (
+          {running ? (
             <button onClick={stopGenerating} className={secondary}>Stop</button>
           ) : (
-            <button onClick={start} disabled={!downloaded || chosen.length === 0} className={primary}>Start</button>
+            <button onClick={onStart} disabled={!encoder || !downloaded || !canStart} className={primary}>Start</button>
           )}
-          {!run.running && !downloaded && <span className="text-xs text-muted">Download the model first.</span>}
-          {!run.running && downloaded && chosen.length === 0 && <span className="text-xs text-muted">Opt in to an app with work this browser can do.</span>}
         </div>
-        <RunStatus />
+      )}
+      <p className="mt-3 text-xs text-muted">
+        Generating runs only while this window stays open (install the console as an app to keep it in its own
+        window). Each job is checked by the platform before anyone hears it.
+      </p>
+      <h4 className="mt-4 mb-2 text-xs font-semibold text-muted uppercase tracking-wide">Today</h4>
+      <div className="flex flex-wrap gap-2">
+        {todayCounts.map(([b, label, n]) => (
+          <button
+            key={b}
+            onClick={() => onOpenActivity(b)}
+            aria-label={`${n} ${label.toLowerCase()} today, show in Activity`}
+            className={`rounded-full border px-3 py-1 text-sm font-semibold min-h-[44px] hover:bg-panel-hover ${BUCKET_TONE[b]}`}
+          >
+            {label} {n}
+          </button>
+        ))}
       </div>
+    </div>
+  )
+}
 
-      <div className={card}>
-        <h3 className={heading}>Your submissions</h3>
-        {mine.length === 0 ? (
-          <p className="text-sm text-muted">None yet{optIns.length ? '' : ': opt in to an app to see yours'}.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-muted">
-                  <th className="font-semibold pr-3 pb-1">App</th>
-                  <th className="font-semibold pr-3 pb-1">Job</th>
-                  <th className="font-semibold pr-3 pb-1">Status</th>
-                  <th className="font-semibold pr-3 pb-1">Size</th>
-                  <th className="font-semibold pr-3 pb-1">Submitted</th>
-                </tr>
-              </thead>
-              <tbody>
-                {mine.map(s => (
-                  <tr key={s.submissionId} className="border-t border-line align-top">
-                    <td className="pr-3 py-1 text-ink">{s.appId}</td>
-                    <td className="pr-3 py-1 text-ink font-mono break-all">{s.key}</td>
-                    <td className="pr-3 py-1">
-                      <span className={s.status === 'accepted' ? 'text-success' : s.status === 'rejected' ? 'text-danger' : 'text-ink'}>{s.status}</span>
-                      {s.reason && <span className="block text-muted">{s.reason}</span>}
-                    </td>
-                    <td className="pr-3 py-1 text-ink">{Math.round(s.bytes / 1024)} KB</td>
-                    <td className="pr-3 py-1 text-muted whitespace-nowrap">{formatTimeAgo(new Date(s.createdAt))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+function ModelCard({ encoder, device, downloaded, onChanged }: {
+  encoder: AudioEncoderConfig
+  device: KokoroDevice
+  downloaded: boolean
+  onChanged: () => void
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const { loading } = useGenerate()
+  const size = megabytes(KOKORO_DOWNLOAD_BYTES[device])
+  return (
+    <div className={card}>
+      <h3 className={heading}>Voice model</h3>
+      <p className="text-sm text-ink">Kokoro TTS v1.0 on {DEVICE_LABEL[device]} · {size}</p>
+      {downloaded ? (
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-success font-semibold">Downloaded and kept in this browser</span>
+          <button onClick={() => setConfirmDelete(true)} className="text-sm text-danger hover:underline min-h-[44px] px-2">
+            Delete model
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <p className="text-sm text-muted">
+            Generating downloads the model ({size}) from Hugging Face once and keeps it in this browser's storage
+            until you delete it.
+          </p>
+          {loading !== null ? (
+            <div className="mt-3"><ProgressBar value={Math.round(loading * 100)} max={100} label={`Downloading the model: ${Math.round(loading * 100)}%`} /></div>
+          ) : (
+            <button onClick={() => downloadModel(encoder, device).then(onChanged)} className={`${primary} mt-3`}>
+              Download the model ({size})
+            </button>
+          )}
+        </div>
+      )}
+      <ConfirmDialog
+        open={confirmDelete}
+        variant="danger"
+        title="Delete the model?"
+        message="Stops generating and frees the model's storage in this browser. You can download it again later."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDelete(false)}
+        onConfirm={() => {
+          setConfirmDelete(false)
+          deleteModel().then(onChanged)
+        }}
+      />
+    </div>
+  )
+}
+
+function StorageCard({ downloaded }: { downloaded: boolean }) {
+  const [estimate, setEstimate] = useState<StorageEstimate | null>(null)
+  useEffect(() => {
+    navigator.storage?.estimate?.().then(setEstimate, () => setEstimate(null))
+  }, [downloaded])
+  return (
+    <div className={card}>
+      <h3 className={heading}>Storage</h3>
+      {estimate?.usage !== undefined ? (
+        <p className="text-sm text-ink">
+          The console uses {megabytes(estimate.usage)} of this browser's storage
+          {estimate.quota ? ` (of ${megabytes(estimate.quota)} available)` : ''}{downloaded ? ', most of it the voice model' : ''}.
+        </p>
+      ) : (
+        <p className="text-sm text-muted">This browser doesn't report its storage use.</p>
+      )}
     </div>
   )
 }
@@ -242,15 +377,17 @@ function Intro() {
 
 function AppRow({ app, optedIn, onToggle }: { app: GenerationOpenApp; optedIn: boolean; onToggle: (on: boolean) => void }) {
   const runnable = runnableSets(app).length > 0
+  const open = app.sets.reduce((n, s) => n + s.open, 0)
   return (
     <div className="rounded-xl border border-line bg-paper p-4">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink truncate">{app.appId}</p>
-          {app.oneliner && <p className="text-xs text-muted truncate">{app.oneliner}</p>}
+          <p className="text-sm font-semibold text-ink break-words">{app.appId}</p>
+          {app.oneliner && <p className="text-xs text-muted break-words">{app.oneliner}</p>}
+          <p className="text-xs text-muted">{open.toLocaleString()} open job{open === 1 ? '' : 's'}</p>
         </div>
         <label className={`flex items-center gap-2 text-xs font-semibold min-h-[44px] ${runnable ? 'text-ink' : 'text-muted'}`}>
-          <input type="checkbox" checked={optedIn} disabled={!runnable} onChange={e => onToggle(e.currentTarget.checked)} className="size-4 accent-accent" />
+          <input type="checkbox" checked={optedIn} disabled={!runnable} onChange={e => onToggle(e.currentTarget.checked)} aria-label={`Generate for ${app.appId}`} className="size-4 accent-accent" />
           Generate for this app
         </label>
       </div>
@@ -265,36 +402,6 @@ function AppRow({ app, optedIn, onToggle }: { app: GenerationOpenApp; optedIn: b
           )
         })}
       </ul>
-    </div>
-  )
-}
-
-function RunStatus() {
-  const { running, loading, current, submitted, skipped, message } = useGenerate()
-  const p = current?.progress
-  return (
-    <div role="status" className="mt-3 space-y-2 text-sm">
-      {running && loading !== null && (
-        <ProgressBar value={Math.round(loading * 100)} max={100} label={`Loading the model: ${Math.round(loading * 100)}%`} />
-      )}
-      {running && !current && loading === null && <p className="text-muted">Claiming a job…</p>}
-      {current && (
-        <div>
-          <p className="text-ink">
-            <span className="font-semibold">{current.appId}</span> · <span className="font-mono break-all">{current.key}</span>
-          </p>
-          {p ? (
-            <>
-              <div className="mt-2"><ProgressBar value={p.chars} max={Math.max(1, p.totalChars)} label={`Sentence ${p.sentence} of ${p.sentences}`} /></div>
-              <p className="mt-1 text-xs text-muted">{p.charsPerSecond.toFixed(1)} characters per second · {p.chars.toLocaleString()} of {p.totalChars.toLocaleString()}</p>
-            </>
-          ) : <p className="text-xs text-muted">Starting…</p>}
-        </div>
-      )}
-      {(submitted > 0 || skipped > 0) && (
-        <p className="text-xs text-muted">This session: {submitted} submitted{skipped ? `, ${skipped} skipped (this browser couldn't do them exactly)` : ''}.</p>
-      )}
-      {!running && message && <p className="text-muted">{message}</p>}
     </div>
   )
 }

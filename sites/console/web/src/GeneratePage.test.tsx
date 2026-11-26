@@ -33,19 +33,27 @@ const other: GenerationOpenApp = {
   sets: [{ setId: 's2', kind: 'tts', model: 'piper', modelVersion: '1', params: {}, formats: ['audio/ogg'], maxBytes: 1, open: 3 }],
 }
 const submission = {
-  submissionId: 'x1', jobId: 'j1', setId: 's1', key: 'alice/0', status: 'rejected', reason: 'asr mismatch',
+  submissionId: 'x1', jobId: 'j1', setId: 's1', key: 'alice/0', status: 'rejected',
+  reason: 'transcript does not match the text (word error rate 0.41)',
   bytes: 4096, contentType: 'audio/mp4', createdAt: Date.now(), decidedAt: Date.now(),
 }
+let submissions: unknown[]
 
 beforeEach(() => {
   localStorage.clear()
+  submissions = [submission]
   container = document.createElement('div')
   document.body.append(container)
   root = createRoot(container)
   vi.mocked(kokoro.kokoroEncoder).mockResolvedValue(encoder)
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === `${api}/generation/open`) return new Response(JSON.stringify({ apps: [books, other] }))
-    if (url === `${api}/apps/books/generation/submissions`) return new Response(JSON.stringify({ submissions: [submission] }))
+    if (url === `${api}/apps/books/generation/submissions`) return new Response(JSON.stringify({ submissions }))
+    if (url === `${api}/apps/books/generation/sets/s1/manifest`) {
+      return new Response(JSON.stringify({
+        artifacts: [{ key: 'alice/1', jobId: 'j2', url: '/v1/apps/books/generation/artifacts/j2?v=1', bytes: 9000, contentType: 'audio/mp4', durationMs: 12_300, sha256: 'x', model: 'kokoro', modelVersion: 'v1.0', acceptedAt: 1 }],
+      }))
+    }
     return new Response('not found', { status: 404 })
   }))
 })
@@ -64,67 +72,149 @@ const render = async () => {
   await act(async () => root.render(<GeneratePage fas={fas} />))
   await flush()
 }
+const click = async (el: HTMLElement) => {
+  await act(async () => el.click())
+  await flush()
+}
+const tab = (name: string) =>
+  click([...document.querySelectorAll<HTMLElement>('[role=tab]')].find((t) => t.textContent === name)!)
 
 it('explains and hides the runner where WebCodecs AAC is missing', async () => {
   vi.mocked(kokoro.kokoroEncoder).mockResolvedValue(null)
   await render()
+  expect(container.textContent).toContain('Paused')
   expect(container.textContent).toContain("This browser can't generate")
   expect(container.textContent).toContain('AAC')
   expect(button('Start')).toBeUndefined()
+  await tab('Settings')
   expect(button('Download')).toBeUndefined()
+})
+
+it('splits the page into Status, Activity and Settings tabs, with arrow keys between them', async () => {
+  await render()
+  const tabs = [...container.querySelectorAll<HTMLElement>('[role=tab]')]
+  expect(tabs.map((t) => t.textContent)).toEqual(['Status', 'Activity', 'Settings'])
+  expect(tabs[0]!.getAttribute('aria-selected')).toBe('true')
+  expect(container.querySelector('[role=tabpanel]')!.getAttribute('aria-labelledby')).toBe(tabs[0]!.id)
+  await act(async () => tabs[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })))
+  expect(tabs[2]!.getAttribute('aria-selected')).toBe('true')
+  expect(document.activeElement).toBe(tabs[2])
+  expect(container.textContent).toContain('Apps with open work')
 })
 
 it('lists apps with open work, opts in per app, and downloads the model only after the creator agrees', async () => {
   await render()
+  expect(container.textContent).toContain("The voice model isn't downloaded yet")
+  expect(button('Start')!.disabled).toBe(true)
+
+  await tab('Settings')
   expect(container.textContent).toContain('books')
-  expect(container.textContent).toContain('12 open')
+  expect(container.textContent).toContain('12 open jobs')
   expect(container.textContent).toContain("can't run it (model piper 1)")
   const boxes = container.querySelectorAll<HTMLInputElement>('input[type=checkbox]')
+  expect(boxes[0]!.getAttribute('aria-label')).toBe('Generate for books')
   expect(boxes[1]!.disabled).toBe(true)
-  expect(container.textContent).toContain('window stays open')
 
   // Nothing is downloaded until the creator asks, with the size shown
   expect(load).not.toHaveBeenCalled()
   expect(button('Download the model (326 MB)')).toBeDefined()
-  expect(button('Start')!.disabled).toBe(true)
 
-  await act(async () => boxes[0]!.click())
-  await flush()
+  await click(boxes[0]!)
   expect(JSON.parse(localStorage.getItem('fas:generate-apps')!)).toEqual(['books'])
-  expect(container.textContent).toContain('asr mismatch')
-  expect(container.textContent).toContain('alice/0')
 
-  await act(async () => button('Download the model')!.click())
-  await flush()
+  await click(button('Download the model')!)
   expect(load).toHaveBeenCalledOnce()
   expect(container.textContent).toContain('Downloaded and kept in this browser')
+
+  await tab('Status')
+  expect(container.textContent).toContain('window stays open')
+  expect(container.textContent).toContain('Idle')
   expect(button('Start')!.disabled).toBe(false)
 })
 
-it('generates for the opted-in apps’ runnable sets, shows progress, and stops', async () => {
+it('generates for the opted-in apps’ runnable sets, shows progress, stops, and records the unfinished job', async () => {
   localStorage.setItem('fas:generate-apps', JSON.stringify(['books', 'radio']))
   localStorage.setItem('fas:generate-model', '1')
   vi.mocked(kokoro.isKokoroDownloaded).mockResolvedValue(true)
   let finish = () => {}
   vi.mocked(kokoro.contributeKokoro).mockImplementation(async (_generation, opts) => {
-    const job = { key: 'alice/3' } as never
+    const job = { id: 'j3', setId: 's1', key: 'alice/3', input: { text: 'Once upon a time.' } } as never
     opts.onEvent?.({ type: 'claimed', job })
     opts.onEvent?.({ type: 'progress', job, progress: { sentence: 4, sentences: 10, chars: 400, totalChars: 1000, charsPerSecond: 21.5 } })
     await new Promise<void>((resolve) => { finish = resolve; opts.signal.addEventListener('abort', () => resolve()) })
     return { submitted: 0, stopped: 'aborted' }
   })
   await render()
-  await act(async () => button('Start')!.click())
-  await flush()
+  await click(button('Start')!)
   expect(kokoro.contributeKokoro).toHaveBeenCalledOnce()
   expect(vi.mocked(kokoro.contributeKokoro).mock.calls[0]![1].setId).toBe('s1')
+  expect(container.textContent).toContain('Running')
   expect(container.textContent).toContain('alice/3')
   expect(container.textContent).toContain('Sentence 4 of 10')
   expect(container.textContent).toContain('21.5 characters per second')
 
-  await act(async () => button('Stop')!.click())
-  await flush()
+  await click(button('Stop')!)
   expect(container.textContent).toContain('Stopped.')
   expect(button('Start')).toBeDefined()
+  expect(button('Not done 1')).toBeDefined()
+  const runs = JSON.parse(localStorage.getItem('fas:generate-runs')!)
+  expect(runs).toMatchObject([{ appId: 'books', jobId: 'j3', key: 'alice/3', outcome: 'stopped', text: 'Once upon a time.' }])
   finish()
+})
+
+it('opens Activity filtered from today’s chips, filters by app, and plays an accepted job in its detail', async () => {
+  const now = Date.now()
+  submissions = [
+    submission,
+    { ...submission, submissionId: 'x2', jobId: 'j2', key: 'alice/1', status: 'accepted', reason: null, bytes: 9216 },
+  ]
+  localStorage.setItem('fas:generate-runs', JSON.stringify([
+    { appId: 'books', setId: 's1', jobId: 'j2', key: 'alice/1', at: now - 1, outcome: 'submitted', reason: null, ms: 42_000, text: 'Hello there. General Kenobi.', chars: 28 },
+    { appId: 'books', setId: 's1', jobId: 'j4', key: 'alice/4', at: now - 2, outcome: 'skipped', reason: 'voice bf_emma is not English (US)', ms: 10, text: 'Cheerio.', chars: 8 },
+    { appId: 'poems', setId: 's9', jobId: 'j9', key: 'bob/9', at: now - 3 * 86_400_000, outcome: 'failed', reason: 'network down', ms: 10, text: 'Roses.', chars: 6 },
+  ]))
+  await render()
+  expect(button('Accepted 1')).toBeDefined()
+  expect(button('Rejected 1')).toBeDefined()
+  expect(button('Not done 1')!.getAttribute('aria-label')).toBe('1 not done today, show in Activity')
+
+  await click(button('Not done 1')!)
+  expect(container.querySelector('[role=tab][aria-selected=true]')!.textContent).toBe('Activity')
+  expect(button('Not done')!.getAttribute('aria-pressed')).toBe('true')
+  expect(container.textContent).toContain('voice bf_emma is not English (US)')
+  expect(container.textContent).toContain('network down')
+  expect(container.textContent).not.toContain('word error rate')
+
+  // By app
+  const select = container.querySelector('select')!
+  await act(async () => {
+    select.value = 'poems'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  expect(container.textContent).toContain('bob/9')
+  expect(container.textContent).not.toContain('alice/4')
+
+  await act(async () => {
+    select.value = ''
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  })
+  await click(button('All')!)
+  expect(container.textContent).toContain('Today')
+  expect(container.textContent).toContain('word error rate 0.41')
+
+  // Detail of the accepted job: verdict, size, duration from the manifest, Play with its text
+  const row = [...container.querySelectorAll('li button')].find((b) => b.textContent?.includes('alice/1')) as HTMLElement
+  await click(row)
+  const dialog = document.querySelector('[role=dialog]')!
+  expect(dialog.getAttribute('aria-modal')).toBe('true')
+  expect(dialog.textContent).toContain('books · Free books')
+  expect(dialog.textContent).toContain('Accepted')
+  expect(dialog.textContent).toContain('9 KB')
+  expect(dialog.textContent).toContain('12.3 s')
+  expect(dialog.textContent).toContain('42.0 s')
+  expect(dialog.querySelector('audio')!.getAttribute('src')).toBe('https://api.freeappstore.online/v1/apps/books/generation/artifacts/j2?v=1')
+  expect(dialog.textContent).toContain('Hello there. General Kenobi.')
+
+  await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+  expect(document.querySelector('[role=dialog]')).toBeNull()
 })
