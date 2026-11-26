@@ -27,13 +27,21 @@ class ContributeTest {
         override fun record(contribution: Contribution) { rows[contribution.jobId] = contribution }
         override fun updateStatus(jobId: String, status: String, reason: String) { rows[jobId]?.let { rows[jobId] = it.copy(status = status, reason = reason) } }
     }
-    class Upload(val path: String, val token: String, val headers: Map<String, String>, val bytes: ByteArray, val contentType: String)
+    class Upload(val path: String, val token: String, val headers: Map<String, String>, val bytes: ByteArray, val contentType: String, val meta: JSONObject?)
     inner class FakeApi : FasApi() {
         val jobs = ArrayDeque<JSONObject>()
         val claims = mutableListOf<JSONObject>()
         val uploads = mutableListOf<Upload>()
         var uploadFailure: Exception? = null
         var submissions = JSONArray()
+        /** Lease extensions asked for (path to `X-Lease-Token`), and what the next one answers: a new expiry or a failure. */
+        val extensions = mutableListOf<Pair<String, String?>>()
+        var extend: () -> Long = { error("no extension expected") }
+        override fun post(path: String, token: String, headers: Map<String, String>): JSONObject {
+            assertEquals("ndev_test", token)
+            extensions += path to headers["X-Lease-Token"]
+            return JSONObject().put("leaseExpiresAt", extend())
+        }
         override fun request(method: String, path: String, token: String?, body: JSONObject?): JSONObject {
             assertEquals("ndev_test", token)
             return when {
@@ -45,7 +53,7 @@ class ContributeTest {
         override fun upload(method: String, path: String, token: String, headers: Map<String, String>, file: File, contentType: String, meta: JSONObject?): JSONObject {
             uploadFailure?.let { throw it }
             assertEquals("PUT", method)
-            uploads += Upload(path, token, headers, file.readBytes(), contentType)
+            uploads += Upload(path, token, headers, file.readBytes(), contentType, meta)
             return JSONObject().put("submissionId", "sub-${uploads.size}").put("status", "pending")
         }
     }
@@ -82,6 +90,7 @@ class ContributeTest {
         assertFalse("no attestation until #732", "X-Attestation" in upload.headers)
         assertEquals("audio/mp4", upload.contentType)
         assertEquals("First chapter.".length, upload.bytes.size)
+        assertEquals("[[0,14,0,0.001]]", upload.meta!!.getJSONArray("segments").toString())
         assertEquals("pending", log.rows["j1"]!!.status)
         assertEquals("book/j1", log.rows["j1"]!!.key)
         assertFalse("the temp file is removed", File(dir, "contribution.m4a").exists())
@@ -156,6 +165,86 @@ class ContributeTest {
         api.jobs += job("j1")
         api.uploadFailure = ApiFailure(401, "expired")
         assertThrows(ApiFailure::class.java) { contributor().run("books", { true }) }
+    }
+    @Test fun splitsSentencesLikeBooks() {
+        // Expected: Books' scripts/audio/segments.py (`sentences`, then `utf16`) on the same texts.
+        fun s(start: Int, end: Int, paragraph: Boolean) = Sentences.Sentence(start, end, paragraph)
+        val en = "Mr. Brown met L. Frank Baum.  “Oh dear!” said the Rabbit. It was I.\n\nA new paragraph… Then more?! Yes 😀 indeed. (Quite.)\n \n* * *\n\nEnd"
+        assertEquals(listOf(s(0, 28, false), s(30, 57, false), s(58, 67, true), s(69, 85, false), s(86, 97, false), s(98, 112, false), s(113, 121, true),
+            s(124, 129, true), s(131, 134, true)), Sentences.split(en, spanish = false))
+        val es = "—¿Quién es? —dijo el Sr. Pérez. Nadie respondió.\n\nD. Juan llegó. —Hola —dijo. ¡Ya!"
+        assertEquals(listOf(s(0, 31, false), s(32, 48, true), s(50, 64, false), s(65, 77, false), s(78, 82, true)), Sentences.split(es, spanish = true))
+        assertTrue(Sentences.split(" \n\n ", spanish = false).isEmpty())
+        assertTrue(KokoroModel.spanish(JSONObject().put("voice", "ef_dora")))
+        assertFalse(KokoroModel.spanish(JSONObject().put("voice", "af_heart")))
+    }
+    @Test fun narratesASentenceAtATimeAndSendsBooksTimings() {
+        api.jobs += job("j1", text = "One two. Three!\n\n* * *\n\nFour.")
+        val tenthPerChar = object : Synthesizer by synth { // 0.1 s per character, nothing for "* * *"
+            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio {
+                synth.spoken += text; return Audio(FloatArray(if (text == "* * *") 0 else text.length * 2_400), 24_000)
+            }
+        }
+        Contributor(GenerationClient(api) { "ndev_test" }, log, tenthPerChar, { a, f -> f.writeBytes(ByteArray(a.samples.size)) }, dir, now = { now }).run("books", { true })
+        assertEquals(listOf("One two.", "Three!", "* * *", "Four."), synth.spoken)
+        // 0.8 s, 0.4 s pause, 0.6 s, 0.8 s paragraph pause, "* * *" left out, 0.5 s; no pause at the end.
+        val segments = api.uploads.single().meta!!.getJSONArray("segments")
+        val expected = listOf(listOf(0, 8, 0.0, 0.8), listOf(9, 15, 1.2, 1.8), listOf(24, 29, 2.6, 3.1))
+        assertEquals(expected.size, segments.length())
+        for ((i, e) in expected.withIndex()) {
+            val got = segments.getJSONArray(i)
+            assertEquals(e, listOf(got.getInt(0), got.getInt(1), got.getDouble(2), got.getDouble(3)))
+        }
+        assertEquals(3.1 * 24_000, api.uploads.single().bytes.size.toDouble(), 0.5)
+    }
+    @Test fun metaOverTheServerLimitIsNotSubmitted() {
+        api.jobs += job("j1", text = "Go. ".repeat(4_000).trim(), maxBytes = Long.MAX_VALUE)
+        val tiny = object : Synthesizer by synth { // 10 Hz keeps the audio small; 4,000 segments are about 100 KB of JSON
+            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean) = Audio(FloatArray(1), 10)
+        }
+        assertEquals(0, Contributor(GenerationClient(api) { "ndev_test" }, log, tiny, { a, f -> f.writeBytes(ByteArray(a.samples.size)) }, dir, now = { now }).run("books", { true }))
+        assertTrue(api.uploads.isEmpty())
+        assertEquals("too_large", log.rows["j1"]!!.reason)
+    }
+
+    private var t = now
+    /** A job of [sentences] sentences, each taking [minutes] of the 15-minute lease to say. */
+    private fun timedRun(sentences: Int, minutes: Int): Int {
+        api.jobs += job("j1", text = (1..sentences).joinToString(" ") { "Sentence $it." })
+        val timed = object : Synthesizer by synth {
+            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? {
+                synth.spoken += text; t += minutes * 60_000L; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null
+            }
+        }
+        return Contributor(GenerationClient(api) { "ndev_test" }, log, timed, { a, f -> f.writeBytes(ByteArray(a.samples.size)) }, dir, now = { t }).run("books", { true })
+    }
+    @Test fun extendsTheLeaseWithinFiveMinutesOfExpiry() {
+        api.extend = { t + 15 * 60_000 }
+        // 6 min a sentence: the lease is extended before the third (3 min left) and lasts to the upload.
+        assertEquals(1, timedRun(sentences = 3, minutes = 6))
+        assertEquals(listOf("/apps/books/generation/jobs/j1/lease" to "lease-j1"), api.extensions)
+        assertEquals("pending", log.rows["j1"]!!.status)
+    }
+    @Test fun aLeaseTheServerRefusesStopsWithoutUploading() {
+        api.extend = { throw ApiFailure(403, "Lease expired.") }
+        assertEquals(0, timedRun(sentences = 6, minutes = 2))
+        assertEquals(1, api.extensions.size)
+        assertTrue(api.uploads.isEmpty())
+        assertEquals("lease_expired", log.rows["j1"]!!.reason)
+    }
+    @Test fun aLeaseAtItsCapIsUsedWhileItLasts() {
+        api.extend = { throw ApiFailure(409, "Lease cap reached.") }
+        assertEquals(1, timedRun(sentences = 6, minutes = 2)) // done at 12 of 15 minutes
+        assertEquals("no retry after 409", 1, api.extensions.size)
+    }
+    @Test fun otherExtensionFailuresAreRetriedAndDoNotStop() {
+        api.extend = { throw ApiFailure(500, "Try again.") }
+        assertEquals(1, timedRun(sentences = 6, minutes = 2))
+        assertEquals("before the last sentence and before the upload", 2, api.extensions.size)
+    }
+    @Test fun anExpiredConnectionWhileExtendingIsThrown() {
+        api.extend = { throw ApiFailure(401, "expired") }
+        assertThrows(ApiFailure::class.java) { timedRun(sentences = 6, minutes = 2) }
     }
     @Test fun refreshCopiesVerdicts() {
         log.record(Contribution("j1", "books", "book/j1", now, "pending"))

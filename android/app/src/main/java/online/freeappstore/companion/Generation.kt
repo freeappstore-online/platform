@@ -57,10 +57,13 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
         return api.request("POST", "/apps/$appId/generation/claim", token(), body).optJSONObject("job")?.let(::parseJob)
     }
     /** Returns the submission id. */
-    fun submit(appId: String, job: GenerationJob, file: File, contentType: String, attestation: String?): String {
+    fun submit(appId: String, job: GenerationJob, file: File, contentType: String, meta: JSONObject, attestation: String?): String {
         val headers = buildMap { put("X-Lease-Token", job.leaseToken); attestation?.let { put("X-Attestation", it) } }
-        return api.upload("PUT", "/apps/$appId/generation/jobs/${job.id}/result", token(), headers, file, contentType).getString("submissionId")
+        return api.upload("PUT", "/apps/$appId/generation/jobs/${job.id}/result", token(), headers, file, contentType, meta).getString("submissionId")
     }
+    /** Extends the job's lease (#783) and returns its new expiry. `403`: the lease is gone; `409`: it is at its cap. */
+    fun extend(appId: String, job: GenerationJob): Long =
+        epochMs(api.post("/apps/$appId/generation/jobs/${job.id}/lease", token(), mapOf("X-Lease-Token" to job.leaseToken)).get("leaseExpiresAt"))
     /** Copies the server's verdicts on this account's submissions into [log]. */
     fun refresh(appId: String, log: ContributionLog) {
         val list = api.request("GET", "/apps/$appId/generation/submissions", token()).optJSONArray("submissions") ?: return
@@ -76,7 +79,6 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
             val id = j.getString("id").also { require(ID.matches(it)) { "Unexpected job id." } }
             val input = j.getJSONObject("input")
             val formats = j.optJSONArray("formats") ?: JSONArray()
-            val expires = j.get("leaseExpiresAt")
             return GenerationJob(
                 id, j.optString("setId"), j.optString("key"),
                 text = if (input.length() == 1) input.optString("text") else "",
@@ -84,9 +86,10 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
                 params = j.optJSONObject("params") ?: JSONObject(),
                 formats = (0 until formats.length()).map { formats.getString(it) },
                 maxBytes = j.optLong("maxBytes"), leaseToken = j.getString("leaseToken"),
-                leaseExpiresAt = if (expires is Number) expires.toLong() else Instant.parse(expires.toString()).toEpochMilli(),
+                leaseExpiresAt = epochMs(j.get("leaseExpiresAt")),
             )
         }
+        private fun epochMs(value: Any) = if (value is Number) value.toLong() else Instant.parse(value.toString()).toEpochMilli()
     }
 }
 
@@ -94,6 +97,13 @@ object GenerationPolicy {
     const val CONTENT_TYPE = "audio/mp4"
     /** An upload must start at least this long before the lease runs out. */
     const val LEASE_MARGIN_MS = 30_000L
+    /** While generating, the lease is extended once it is this close to expiry (#783). */
+    const val EXTEND_WITHIN_MS = 5 * 60_000L
+    /** The largest `meta` part the server takes. */
+    const val MAX_META_BYTES = 64 * 1024
+    /** Silence after a sentence and after a paragraph, in seconds: Books' `SENTENCE_PAUSE` and `PARAGRAPH_PAUSE`. */
+    const val SENTENCE_PAUSE = 0.4
+    const val PARAGRAPH_PAUSE = 0.8
     /** Why this phone will not generate the job, or null when it will. */
     fun refusal(job: GenerationJob, synth: Synthesizer, handled: Boolean, now: Long): String? = when {
         handled -> "already_handled"
@@ -104,6 +114,45 @@ object GenerationPolicy {
         job.maxBytes <= 0 -> "max_bytes"
         job.leaseExpiresAt - LEASE_MARGIN_MS <= now -> "lease_expired"
         else -> null
+    }
+}
+
+/**
+ * The sentences Books narrates one at a time (#785), ported from its `scripts/audio/segments.py` with the `END` and
+ * `ABBREVIATION` of its English and Spanish profiles: a sentence ends at . ! ? or … (with any closing quotes or
+ * brackets) followed by space and not by a lowercase word, but not after an abbreviation such as Mr. or an initial;
+ * blank lines end paragraphs. Offsets are string indices, so UTF-16 code units like Books' timings.
+ */
+object Sentences {
+    data class Sentence(val start: Int, val end: Int, val endsParagraph: Boolean)
+    /** Python's `\s`, spelled out so the JVM and Android's ICU regex engine agree. */
+    private const val S = """\t\n\u000b\f\r\u001c-\u001f \u0085   -     　"""
+    private val PARAGRAPH = Regex("""[^$S].*?(?=[$S]*\n[$S]*\n|[$S]*$)""", RegexOption.DOT_MATCHES_ALL)
+    private val SPACE = Regex("[$S]*").toPattern()
+    /** Python's `\b` before a word. */
+    private const val B = """(?<![\p{L}\p{N}_])"""
+    private val EN = Regex("""[.!?…]+[”’"')\]]*(?=[$S]+(?![a-z]))""").toPattern() to
+        Regex("""$B(Mr|Mrs|Ms|Dr|St|Jr|Sr|Prof|Rev|Capt|Col|Gen|Lt|Mt|[A-HJ-Z])$""").toPattern()
+    private const val LOWER = "a-záéíóúüñ"
+    private val ES = Regex("""[.!?…]+[”’"')\]»]*(?=[$S]+(?![$LOWER]|[—-]+[$S]?[$LOWER]))""").toPattern() to
+        Regex("""$B(Sr|Sra|Srta|Sres|Srs|Dr|Dra|Dña|Ud|Uds|Vd|Vds|Vmd|Excmo|Excma|Ilmo|Ilma|Rvdo|Sto|Sta|Fr|Pbro|[A-ZÁÉÍÓÚÑ])$""").toPattern()
+
+    fun split(text: String, spanish: Boolean): List<Sentence> {
+        val (end, abbreviation) = if (spanish) ES else EN
+        val out = mutableListOf<Sentence>()
+        for (para in PARAGRAPH.findAll(text)) {
+            val paraEnd = para.range.last + 1
+            var start = para.range.first
+            val m = end.matcher(text).region(start, paraEnd)
+            while (m.find()) {
+                if (m.group() == "." && abbreviation.matcher(text).region(start, m.start()).useTransparentBounds(true).find()) continue
+                out += Sentence(start, m.end(), false)
+                start = SPACE.matcher(text).region(m.end(), paraEnd).apply { lookingAt() }.end()
+            }
+            if (start < paraEnd) out += Sentence(start, paraEnd, false)
+            out[out.lastIndex] = out.last().copy(endsParagraph = true)
+        }
+        return out
     }
 }
 
@@ -134,23 +183,26 @@ class Contributor(
             return false
         }
         val file = File(workDir, "contribution.m4a")
+        val lease = Lease(appId, job)
         try {
-            // The job's own input, verbatim: the only text this path can generate.
-            val audio = synth.synthesize(job.text, job.params) { keepGoing() && now() < job.leaseExpiresAt - GenerationPolicy.LEASE_MARGIN_MS }
-            if (audio == null) {
+            val narration = narrate(job, lease, keepGoing)
+            if (narration == null) {
                 log.record(Contribution(job.id, appId, job.key, now(), "skipped", if (keepGoing()) "lease_expired" else "stopped"))
                 return false
             }
+            val (audio, segments) = narration
+            val meta = JSONObject().put("segments", segments)
             encode(audio, file)
+            lease.renew()
             val refusal = when {
-                file.length() > job.maxBytes -> "too_large"
-                now() >= job.leaseExpiresAt - GenerationPolicy.LEASE_MARGIN_MS -> "lease_expired"
+                file.length() > job.maxBytes || meta.toString().toByteArray().size > GenerationPolicy.MAX_META_BYTES -> "too_large"
+                !lease.held -> "lease_expired"
                 else -> null
             }
             if (refusal != null) { log.record(Contribution(job.id, appId, job.key, now(), "skipped", refusal)); return false }
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
             log.record(Contribution(job.id, appId, job.key, now(), "uploading"))
-            client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, attestation.token(appId, job))
+            client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
             log.updateStatus(job.id, "pending", "")
             return true
         } catch (e: Exception) {
@@ -160,5 +212,51 @@ class Contributor(
             else log.record(Contribution(job.id, appId, job.key, now(), "failed", reason.take(120)))
             return false
         } finally { file.delete() }
+    }
+    /**
+     * The job's own input, verbatim: the only text this path can generate. Narrated a sentence at a time as Books does
+     * (#785), the sentences joined by its pauses, with `[charStart, charEnd, startSec, endSec]` for each. Null when
+     * stopped or the lease ran out.
+     */
+    private fun narrate(job: GenerationJob, lease: Lease, keepGoing: () -> Boolean): Pair<Audio, JSONArray>? {
+        val parts = mutableListOf<FloatArray>()
+        val segments = JSONArray()
+        var length = 0
+        var rate = 24_000
+        for (s in Sentences.split(job.text, KokoroModel.spanish(job.params))) {
+            lease.renew()
+            val audio = synth.synthesize(job.text.substring(s.start, s.end), job.params) { keepGoing() && lease.held } ?: return null
+            if (audio.samples.isEmpty()) continue // nothing to say, e.g. "* * *"
+            rate = audio.sampleRate
+            segments.put(JSONArray().put(s.start).put(s.end).put(seconds(length, rate)).put(seconds(length + audio.samples.size, rate)))
+            val pause = FloatArray(((if (s.endsParagraph) GenerationPolicy.PARAGRAPH_PAUSE else GenerationPolicy.SENTENCE_PAUSE) * rate).toInt())
+            parts += audio.samples; parts += pause
+            length += audio.samples.size + pause.size
+        }
+        parts.removeLastOrNull() // no pause after the last sentence
+        val samples = FloatArray(parts.sumOf { it.size })
+        var at = 0
+        for (part in parts) { part.copyInto(samples, at); at += part.size }
+        return Audio(samples, rate) to segments
+    }
+    private fun seconds(samples: Int, rate: Int) = Math.round(samples * 1000.0 / rate) / 1000.0
+
+    /**
+     * The job's lease while this phone works on it (#783): extended between sentences once within
+     * [GenerationPolicy.EXTEND_WITHIN_MS] of expiry. `403` means it is gone, so the job stops; `409` means it is at its
+     * cap, so the work goes on only while it lasts. Any other failure is tried again after the next sentence.
+     */
+    private inner class Lease(private val appId: String, private val job: GenerationJob) {
+        private var expiresAt = job.leaseExpiresAt
+        private var extendable = true
+        /** Whether there is still time to finish and upload. */
+        val held get() = now() < expiresAt - GenerationPolicy.LEASE_MARGIN_MS
+        fun renew() {
+            if (!extendable || now() < expiresAt - GenerationPolicy.EXTEND_WITHIN_MS) return
+            try { expiresAt = client.extend(appId, job) } catch (e: Exception) {
+                if (DeviceConnection.expired(e)) throw e
+                when ((e as? ApiFailure)?.status) { 403 -> expiresAt = 0; 409 -> extendable = false }
+            }
+        }
     }
 }

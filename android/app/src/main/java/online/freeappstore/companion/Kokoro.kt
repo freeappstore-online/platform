@@ -45,6 +45,8 @@ class KokoroModel(private val dir: File) {
             val speed = if (params.has("speed")) (params.opt("speed") as? Number)?.toFloat() ?: return null else 1f
             return if (speed in 0.5f..2f) sid to speed else null
         }
+        /** Whether the job's voice is a Spanish one (`ef_…`, `em_…`), so its text is split into sentences the Spanish way. */
+        fun spanish(params: JSONObject) = (params.opt("voice") as? String)?.startsWith("e") == true
     }
     val root = File(dir, ROOT)
     private val marker = File(dir, "installed")

@@ -24,6 +24,8 @@ open class FasApi {
                 connection.outputStream.use { it.write(body.toString().toByteArray()) }
             }
         }
+    /** A `POST` without a body and with extra [headers] (the lease extension, #783). */
+    open fun post(path: String, token: String, headers: Map<String, String>): JSONObject = send("POST", path, token, headers) { }
     /** A multipart `PUT`/`POST` with one `file` part (streamed from disk) and an optional `meta` JSON part (#727). */
     open fun upload(method: String, path: String, token: String, headers: Map<String, String>, file: File, contentType: String, meta: JSONObject? = null): JSONObject =
         send(method, path, token, headers) { connection ->

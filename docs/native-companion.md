@@ -94,9 +94,19 @@ and verifies every upload; the phone is never trusted.
   than `{ text }` is skipped, never approximated.
 - **Loop** (WorkManager, hourly and on **Run now**; by default only while charging on an unmetered network, which the user
   can relax; foreground notification with Stop): `POST …/generation/claim` with the device credential → synthesize the
-  job's `input.text` verbatim → AAC-LC mono 64 kbps in MP4 (`MediaCodec` + `MediaMuxer`) → `PUT …/jobs/:jobId/result`
-  multipart (`file`, `audio/mp4`) with `X-Lease-Token`. Nothing is uploaded after the lease is within 30 s of expiry or
-  above `maxBytes`. A job is recorded before its upload starts and is never generated or uploaded again on this phone.
+  job's `input.text` verbatim, a sentence at a time → AAC-LC mono 64 kbps in MP4 (`MediaCodec` + `MediaMuxer`) →
+  `PUT …/jobs/:jobId/result` multipart (`file`, `audio/mp4`, and `meta`) with `X-Lease-Token`. Nothing is uploaded after
+  the lease is within 30 s of expiry, above `maxBytes`, or with `meta` over 64 KB. A job is recorded before its upload
+  starts and is never generated or uploaded again on this phone.
+- **Sentence timings** (#785): the text is split into sentences exactly as Books' `scripts/audio/segments.py` does (its
+  English rules, or its Spanish ones for an `e…` voice), each sentence is synthesized alone, and they are joined with
+  Books' pauses (0.4 s, 0.8 s after a paragraph). A sentence with no audio (`* * *`) is left out. `meta` is
+  `{ "segments": [[charStart, charEnd, startSec, endSec], …] }`, offsets in UTF-16 code units into `input.text`, like
+  Books' `timings.json`.
+- **Lease extension** (#783): between sentences, once the lease is within 5 minutes of expiry, the phone calls
+  `POST …/jobs/:jobId/lease` with `X-Lease-Token` and takes the returned `leaseExpiresAt`. A `403` stops the job without
+  uploading; a `409` (the 2-hour cap) stops extending, so the job finishes only if the lease still allows. Other failures
+  are retried after the next sentence.
 - **Record**: `generation_jobs` in the backup-excluded database (job key, status, reason), refreshed from
   `GET …/generation/submissions`; the tab shows today's count per app and recent results. Cleared by **Disconnect**.
 - **Attestation**: `X-Attestation` is sent when the `Attestation` hook returns a token; none until #732.
