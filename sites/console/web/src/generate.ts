@@ -85,7 +85,7 @@ function getRunner(encoder: AudioEncoderConfig, device: KokoroDevice): KokoroRun
   if (!runner || key !== runnerKey) {
     runner?.dispose()
     runner = new KokoroRunner({
-      createWorker: () => new Worker(new URL('./generate.worker.ts', import.meta.url), { type: 'module' }),
+      createWorker: () => new Worker(new URL('./model.worker.ts', import.meta.url), { type: 'module' }),
       encoder,
       device,
     })
