@@ -38,6 +38,7 @@ import { startServer } from './server.js';
 import { loadSettings, type Settings, saveSettings } from './settings.js';
 import { loadToken, regenerateToken } from './token.js';
 import { trayMenu, trayStatus } from './tray.js';
+import { loadBuildInfo, releaseNotesUrl, versionLabel } from './version.js';
 
 // Tests and side-by-side dev runs use their own profile and port.
 const userDataOverride = process.env.FAS_DESKTOP_USER_DATA;
@@ -52,6 +53,11 @@ const devOrigin = dev ? process.env.FAS_DEV_APP_ORIGIN : undefined;
 // Dev builds can point Contribute at a local API (the e2e test's stand-in).
 const apiOrigin = (dev && process.env.FAS_DEV_API_ORIGIN) || API_ORIGIN;
 const REGISTRY = 'https://freeappstore.online/registry.json';
+// "0.3.0 (57, abc1234)": package.json's version with the build number and commit (#832).
+const version = versionLabel(
+  app.getVersion(),
+  loadBuildInfo(fileURLToPath(new URL('../build-info.json', import.meta.url))),
+);
 
 // Windows start hidden on the theme's paper colour (DESIGN-SYSTEM tokens) and show on first
 // paint, so a dark Mac never sees Electron's default white window (#814).
@@ -117,7 +123,8 @@ function state() {
     serverError,
     paused: settings.paused,
     openAtLogin: settings.openAtLogin,
-    version: app.getVersion(),
+    version,
+    releaseNotes: releaseNotesUrl(app.getVersion()),
     openApps: hub.openApps(),
     log: hub.log,
   };
@@ -429,7 +436,7 @@ const contribute = new Contribute(
       };
     },
     context: () => ({
-      appVersion: app.getVersion(),
+      appVersion: version,
       os: `${osType()} ${release()}`,
       device: `${cpus()[0]?.model ?? 'unknown CPU'} ${arch()}`,
     }),

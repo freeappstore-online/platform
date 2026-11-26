@@ -1,0 +1,55 @@
+name: App release
+
+# Cuts a release of the Android or iOS app (#832, docs/versioning.md). It writes the version to the app's version
+# file on main (scripts/app-release.sh cut), tags that commit <app>-v<version>, publishes a GitHub release whose notes
+# list the app's commits since its previous release, and runs the app's build workflow on main, which builds that
+# version (Android: signed and uploaded to Play when its secrets and ANDROID_PLAY_PUBLISH_ENABLED are set).
+# The desktop app has its own release workflow: desktop-release.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: App to release
+        type: choice
+        options: [android, ios]
+      version:
+        description: 'Version, e.g. 0.2.0 (semver; never lower than the committed one)'
+        required: true
+
+permissions: { contents: read }
+
+concurrency:
+  group: app-release-${{ inputs.app }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      APP: ${{ inputs.app }}
+      VERSION: ${{ inputs.version }}
+      TAG: ${{ inputs.app }}-v${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          fetch-depth: 0
+      - run: bash scripts/app-release.sh cut "$APP" "$VERSION"
+      - name: GitHub release
+        run: |
+          name=$([ "$APP" = ios ] && echo iOS || echo Android)
+          bash scripts/app-release.sh notes "$APP" "$TAG" > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --verify-tag --title "FreeAppStore $name $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest=false
+      # A push made with the workflow token starts no workflows, so the build of the new version is started here.
+      - name: Build the release
+        run: |
+          if [ "$APP" = android ]; then
+            gh workflow run android.yml --ref main -f publish=${{ vars.ANDROID_PLAY_PUBLISH_ENABLED == 'true' }} -f status=completed
+          else
+            gh workflow run ios.yml --ref main
+          fi

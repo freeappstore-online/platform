@@ -3,6 +3,10 @@ name: Desktop release
 # Unsigned installers for the desktop app (desktop/, #805): macOS dmg + zip (x64, arm64; ad-hoc signed),
 # Windows NSIS exe, Linux AppImage. Signing, notarization and auto-update need credentials: #799.
 #
+# The version is desktop/package.json (#832, docs/versioning.md). Run this workflow with a version: it writes that
+# version to desktop/package.json on main (scripts/app-release.sh cut), tags the commit desktop-v<version> and builds
+# the tag. A pushed tag desktop-v<version> builds as long as it matches the package.json at that tag.
+#
 # Each run publishes a versioned release `desktop-v<version>` and refreshes the fixed release `desktop-latest`,
 # whose download URLs never change:
 #   https://github.com/freeappstore-online/platform/releases/download/desktop-latest/<asset>
@@ -14,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version, e.g. 0.1.0 (creates tag desktop-v<version> on this commit if missing)'
+        description: 'Version, e.g. 0.3.0: written to desktop/package.json on main and tagged desktop-v<version> (an existing tag is rebuilt)'
         required: true
 
 permissions:
@@ -38,22 +42,26 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then version="$INPUT_VERSION"; else version="${GITHUB_REF_NAME#desktop-v}"; fi
-          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::Not a semver version: $version"; exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=desktop-v$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || github.ref }}
+          fetch-depth: 0
+      # An existing tag is built again as it is; a new version is written to main and tagged.
       - if: github.event_name == 'workflow_dispatch'
         env:
-          GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.v.outputs.tag }}
         run: |
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG exists; building it."
-          else
-            gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" >/dev/null
-            echo "Created tag $TAG at $GITHUB_SHA."
-          fi
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then git checkout -q "$TAG"
+          else bash scripts/app-release.sh cut desktop "${{ steps.v.outputs.version }}"; fi
+      - name: desktop/package.json matches the tag
+        run: |
+          committed=$(bash scripts/app-release.sh version desktop)
+          [ "$committed" = "${{ steps.v.outputs.version }}" ] || { echo "::error::desktop/package.json is $committed at this tag"; exit 1; }
 
   build:
     needs: tag
@@ -86,8 +94,10 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
-      - run: npm pkg set version=${{ needs.tag.outputs.version }}
+      # The build number the app shows next to its version (scripts/build-info.mjs); without it a build says "dev".
       - run: pnpm build
+        env:
+          FAS_BUILD_NUMBER: ${{ github.run_number }}
       - run: pnpm exec electron-builder ${{ matrix.target }} --publish never
       - name: Collect installers
         run: |
@@ -111,6 +121,10 @@ jobs:
       TAG: ${{ needs.tag.outputs.tag }}
       VERSION: ${{ needs.tag.outputs.version }}
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: refs/tags/${{ needs.tag.outputs.tag }}
+          fetch-depth: 0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: out
@@ -124,11 +138,12 @@ jobs:
           done
       - name: Publish desktop-v${{ needs.tag.outputs.version }}
         run: |
-          notes="FreeAppStore desktop $VERSION, a preview build. Unsigned: see https://freeappstore.online/download for first-launch steps."
+          { echo "FreeAppStore desktop $VERSION, a preview build. Unsigned: see https://freeappstore.online/download for first-launch steps."
+            echo; bash scripts/app-release.sh notes desktop "$TAG"; } > "$RUNNER_TEMP/notes.md"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" out/* --clobber
           else
-            gh release create "$TAG" out/* --verify-tag --title "FreeAppStore desktop $VERSION" --notes "$notes" --latest
+            gh release create "$TAG" out/* --verify-tag --title "FreeAppStore desktop $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest
           fi
       - name: Refresh desktop-latest
         run: |

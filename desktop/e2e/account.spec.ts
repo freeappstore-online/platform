@@ -82,6 +82,12 @@ test('shows the account in the header and in full, and Sign out revokes this com
     'href',
     'https://freeappstore.online/app/settings?delete-account=1',
   );
+  // A local build: package.json's version, "dev" and the commit, with its release notes (#832).
+  await expect(home.getByTestId('app-version')).toHaveText(/^\d+\.\d+\.\d+ \(dev, [0-9a-f]{7}\)$/);
+  await expect(home.getByRole('link', { name: "What's new" })).toHaveAttribute(
+    'href',
+    /\/releases\/tag\/desktop-v\d+\.\d+\.\d+$/,
+  );
   await home.screenshot({ path: join(SHOTS, 'account.png') });
 
   await home.getByRole('button', { name: 'Sign out' }).click();

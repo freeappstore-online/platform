@@ -102,7 +102,10 @@ export function App() {
         ) : page === 'contribute' ? (
           <Contribute state={state.contribute} />
         ) : page === 'account' ? (
-          <Account state={state} />
+          <>
+            <Account state={state} />
+            <About state={state} />
+          </>
         ) : (
           <Activity state={state} />
         )}
@@ -1022,6 +1025,29 @@ function Account({ state }: { state: DesktopState }) {
           void desktop.contribute.disconnect();
         }}
       />
+    </Section>
+  );
+}
+
+/** This build's version, build number and commit, and its release notes (#832). */
+function About({ state }: { state: DesktopState }) {
+  return (
+    <Section title="About">
+      <section className={`${card} p-5`} aria-label="About">
+        <dl className="m-0 divide-y divide-line">
+          <Row label="Version" value={<span data-testid="app-version">{state.version}</span>} />
+        </dl>
+      </section>
+      <div className="mt-4 text-sm">
+        <a
+          href={state.releaseNotes}
+          target="_blank"
+          rel="noreferrer"
+          className="text-accent font-semibold hover:underline"
+        >
+          What's new
+        </a>
+      </div>
     </Section>
   );
 }

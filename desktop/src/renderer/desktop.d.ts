@@ -25,7 +25,10 @@ export interface DesktopState {
   serverError: string | null;
   paused: boolean;
   openAtLogin: boolean;
+  /** "0.3.0 (57, abc1234)", or "0.3.0 (dev, abc1234)" for a local build (#832). */
   version: string;
+  /** The GitHub release notes for this version. */
+  releaseNotes: string;
   openApps: OpenApp[];
   log: LogEntry[];
   /** The signed-in account (#829); `avatar` is a data: URL. Null until loaded or when not connected. */

@@ -177,14 +177,15 @@ pnpm --dir desktop dist:mac   # unsigned, ad-hoc signed: release/FreeAppStore-ma
 ### Release
 
 `.github/workflows/desktop-release.yml` builds the installers on GitHub Actions: macOS dmg + zip (x64 and arm64,
-ad-hoc signed so Apple Silicon starts them), Windows NSIS `.exe` and Linux AppImage. Start it by pushing a tag, or
-run the workflow by hand with a version (it creates the tag):
+ad-hoc signed so Apple Silicon starts them), Windows NSIS `.exe` and Linux AppImage. `package.json`'s version is the
+app's version; run the workflow with the next version and it writes that to `package.json` on `main` and tags the
+commit (see [docs/versioning.md](../docs/versioning.md)):
 
 ```bash
-git tag desktop-v0.1.1 && git push origin desktop-v0.1.1
+gh workflow run desktop-release.yml --repo freeappstore-online/platform --ref main -f version=0.3.0
 ```
 
-CI sets `package.json`'s version from the tag. Each run publishes the release `desktop-v<version>` and refreshes
+Each run publishes the release `desktop-v<version>` and refreshes
 `desktop-latest`, whose asset URLs never change; the download page links there:
 `https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-mac-x64.dmg`
 (also `-mac-arm64.dmg`, `-mac-{x64,arm64}.zip`, `-win-x64.exe`, `-linux-x86_64.AppImage`).
