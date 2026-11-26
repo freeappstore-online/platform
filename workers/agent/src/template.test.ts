@@ -58,8 +58,8 @@ describe("getTemplateFiles", () => {
     expect(appsFiles["web/index.html"]).toContain("FreeAppStore");
   });
 
-  it("apps starter links to freeappstore.online", () => {
-    expect(appsFiles["web/src/App.tsx"]).toContain("freeappstore.online");
+  it("apps starter names FreeAppStore in About; Profile links the listing (#722)", () => {
+    expect(appsFiles["web/src/App.tsx"]).toContain("is a free app on FreeAppStore.");
   });
 
   it("apps LICENSE says FreeAppStore", () => {
@@ -109,7 +109,7 @@ describe("getTemplateFiles", () => {
       const files = getTemplateFiles(appsConfig, archetype, "connected");
       const app = files["web/src/App.tsx"];
       const draft = files["web/src/components/ConnectedDraft.tsx"];
-      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.19.0"');
+      expect(files["web/package.json"]).toContain('"@freeappstore/sdk": "^0.19.1"');
       expect(files["fas-capabilities/cloud-data.md"]).toContain("Room-restricted");
       expect(draft).toContain("useConnectedKvDraft");
       expect(draft).toContain("draft.retry");
@@ -254,21 +254,24 @@ describe("apps scaffold: the SDK Shell with real navigation from first render (#
   it("App.tsx wraps the app in Shell from @freeappstore/sdk/ui, not a local component", () => {
     expect(app).toMatch(/import \{[^}]*\bShell\b[^}]*\} from "@freeappstore\/sdk\/ui"/);
     expect(app).toMatch(/const fas = initApp\(\{ appId: "APPID" \}\)/);
-    expect(app).toMatch(/<Shell app=\{fas\} appName=\{"APPNAME_JS"\} nav=\{NAV\} onNavigate=\{navigate\}>/);
+    expect(app).toMatch(/<Shell app=\{fas\} appName=\{"APPNAME_JS"\} nav=\{NAV\} onNavigate=\{navigate\} about=\{ABOUT\}>/);
     expect(app).not.toMatch(/from "\.\/components\/Shell"/);
   });
 
   it("declares real nav items, each with a screen App renders", () => {
     const hrefs = [...app.matchAll(/\{ label: "[^"]+", href: "([^"]+)", title: "[^"]+" \}/g)].map((m) => m[1]);
-    expect(hrefs).toEqual(["/", "/about"]);
-    expect(app).toContain('path === "/about" ? <About /> : <Home />');
+    expect(hrefs).toEqual(["/"]);
+    expect(app).toContain('const SCREENS: Record<string, () => ReactNode> = { "/": Home };');
+    // About is never a screen or nav item; it goes to the bottom of Profile (#722).
+    expect(app).not.toContain("/about");
+    expect(app).toContain('const ABOUT = "APPNAME_JS is a free app on FreeAppStore.";');
     // Client-side routing follows back/forward.
     expect(app).toContain('addEventListener("popstate"');
     expect(app).toContain("history.pushState");
   });
 
   it("each starter screen opens with PageHeader (its single h1)", () => {
-    expect(app.match(/<PageHeader /g)).toHaveLength(2);
+    expect(app.match(/<PageHeader /g)).toHaveLength(1);
     expect(app).not.toMatch(/<h1\b/);
   });
 
@@ -326,7 +329,7 @@ describe("connected preset (#368)", () => {
     expect(files["web/src/App.tsx"]).toContain("<ConnectedDraft app={fas} />");
     expect(files["web/src/App.tsx"]).not.toContain("requireAuth");
     expect(files["web/src/components/ConnectedDraft.tsx"]).toContain("if (!draft.user)");
-    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.19.0");
+    expect(JSON.parse(files["web/package.json"]).dependencies["@freeappstore/sdk"]).toBe("^0.19.1");
   });
 
   it("does not change the standalone template", () => {

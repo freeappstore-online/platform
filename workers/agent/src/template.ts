@@ -130,7 +130,12 @@ root unless the user asks for a custom frame. Shell provides:
   in the header. There is no store logo and no attribution bar.
 - The main navigation from the \`nav\` prop: a <nav aria-label="Main"> with the current screen
   highlighted, collapsing to a menu on phones. Declare each primary screen in \`NAV\` (label + href, and
-  a \`title\` for the browser tab); switch screens on \`path\` in App. Detail routes do not need a NAV entry.
+  a \`title\` for the browser tab); map each href to its component in \`SCREENS\`. Detail routes do not need a NAV entry.
+- About lives at the bottom of Profile, never as its own screen or NAV item: set Shell's \`about\`
+  (the \`ABOUT\` text in App.tsx) to describe the app. Profile always follows it with a link to the
+  app's FreeAppStore listing.
+- A narrow bottom status bar: "Save to home screen" in a browser tab, the app's address once
+  installed. Keep it; \`statusBar={false}\` only for a full-bleed canvas or the app's own bottom bar.
 - An error boundary (a crashing screen shows "Try again", not a white page), a loading spinner
   for React.lazy screens, an offline banner, and a skip link.
 - Feedback: \`const toast = useToast(); toast.show("Saved", { variant: "success" })\`.
@@ -221,7 +226,7 @@ proxy. The developer's API key is configured once in the platform and injected s
 ## Saved data and storage ownership
 Choose storage by product requirements, not layout or preset:
 - Device-local: use validated helpers from "@freeappstore/sdk/persist": getPreference/setPreference for namespaced preferences and openStore/putRecord for IndexedDB records. localStorage is per-device, cleared with browser data and is not a backup. Check the returned ok/reason; surface quota, unavailable, corrupt and validation failures without silently resetting data or claiming success. Use "@freeappstore/sdk/backup" for app-chosen export/import.
-- Private-account: fas.kv stores the signed-in user's keys for this app. Share the app-owned fas instance via props; never initialize a second instance in a feature, because profile sign-out must revoke its access too. Keep Home/About public; gate private data rather than Shell. Use useAuth from "@freeappstore/sdk/hooks" and SDK sign-in UI.
+- Private-account: fas.kv stores the signed-in user's keys for this app. Share the app-owned fas instance via props; never initialize a second instance in a feature, because profile sign-out must revoke its access too. Keep public screens public; gate private data rather than Shell. Use useAuth from "@freeappstore/sdk/hooks" and SDK sign-in UI.
   await fas.kv.set("notes", notesArray); await fas.kv.get("notes"); fas.kv.list({ prefix }); fas.kv.delete(key).
   Free limits: 64KB per value, 1MB per user, 100 keys. Handle auth/network failures and account changes; stale responses from an earlier account must not overwrite current state.
 - Shared documents: fas.collections is owner-only until the app owner shares the collection with \`fas db share <collection>\`; shared collections have public reads and owner writes. Never store private data in a shared collection or describe hidden UI as confidentiality. Another user's documents, the owner filter and _owner are not available from a private collection.

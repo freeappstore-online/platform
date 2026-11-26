@@ -653,6 +653,8 @@ Props:
 - `requireAuth` -- if `true`, shows a sign-in screen instead of the app when not authenticated. Only for apps where everything needs an account; there is no paid tier or upgrade screen. The frame and profile route stay reachable
 - `profileHref` -- optional app-owned profile route for both auth states. Omit it to use the built-in `/profile` page (`ProfilePage`)
 - `showThemeToggle` -- theme toggle in the topbar while signed out, and on `ProfilePage` while signed in (default `true`). It is not a `ProfileMenu` dropdown
+- `about` -- what the app is. Shown at the very bottom of the built-in Profile page, followed by an always-present link to the app's FreeAppStore listing (`https://freeappstore.online/apps/<app-id>`)
+- `statusBar` -- the narrow bottom strip: "Save to home screen" in a browser tab, the app's address once installed (default `true`)
 - `renderError` / `renderLoading` -- replace the error / loading fallback
 
 Each screen starts with `<PageHeader title description? actions? />` (its single h1, and the focus target after navigation). `useToast()` raises feedback, `useDocumentTitle()` sets a screen's tab title, `useOnline()` reports the connection. Full guide: https://docs.freeappstore.online/getting-started/#build-your-app-on-the-shell
@@ -678,7 +680,7 @@ import {
 | `ThemeToggle` | Sun/moon button cycling system/light/dark | none (reads theme from context) |
 | `TextSizeToggle` | A/A+/A- button cycling default/large/small text | none |
 | `ProfileMenu` | Legacy dropdown (username, theme, API keys, sign out, delete account). `Shell` does not mount it | `app`, `showThemeToggle` |
-| `ProfilePage` | Profile page `Shell` renders at `/profile` unless `profileHref` is set (avatar, username, theme, sign out, delete account) | `app`, `showThemeToggle` |
+| `ProfilePage` | Profile page `Shell` renders at `/profile` unless `profileHref` is set (avatar, username, theme, sign out, delete account, then About with the app's FreeAppStore listing link) | `app`, `showThemeToggle`, `appName`, `about` |
 
 **Reusable building blocks:**
 
@@ -726,6 +728,7 @@ import { useAuth, useTheme } from '@freeappstore/sdk/hooks'
 - Do NOT drop the accessibility, platform-identity, or security contracts to get a custom frame. No payments, ads, tracking, or upgrade screen. Page zoom stays on.
 - Do NOT mount `SignInButton` or `ProfileMenu` in the header. The avatar opens `ProfilePage` or the `profileHref` route.
 - Do NOT add a compulsory store attribution bar. `Footer` is opt-in.
+- Do NOT give About its own screen, route or nav item. Pass the app's description as `Shell`'s `about`; it appears at the bottom of Profile with the link to the app's FreeAppStore listing.
 - Do NOT handle sign-out or account deletion by bypassing the SDK account actions. `ProfilePage` covers that lifecycle, including data cleanup.
 - Do NOT build custom modals, spinners, tabs, badges, or search inputs. Use the SDK components.
 - Do NOT build custom API key entry UI. Use `KeyPrompt` to redirect users to the platform key management page.

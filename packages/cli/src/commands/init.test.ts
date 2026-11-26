@@ -36,14 +36,14 @@ describe('fresh scaffold capability checks', () => {
     await expect(readFile(join(root, '.fas-capabilities.json'))).rejects.toThrow();
   });
 
-  it('uses SDK 0.19.0 as the fresh Shell baseline (status bar, #718)', () => {
+  it('uses SDK 0.19.1 as the fresh Shell baseline (status bar #718, Profile About #722)', () => {
     const files = getTemplateFiles(
       { store: 'apps', nounPlural: 'apps', r2Bucket: 'fas-apps' },
       'generic',
       'standalone',
     );
     expect(JSON.parse(files['web/package.json']!).dependencies['@freeappstore/sdk']).toBe(
-      '^0.19.0',
+      '^0.19.1',
     );
     expect(files['CLAUDE.md']).toContain('/docs/starter-release.md');
   });
@@ -130,9 +130,9 @@ describe('starter display name substitution', () => {
     collectStrings(source);
     expect(embeddedStrings).toContain(displayName);
     expect(embeddedStrings).toContain(`Welcome to ${displayName}`);
+    expect(embeddedStrings).toContain(`${displayName} is a free app on FreeAppStore.`);
     expect(app).toContain('appId: "review-notes"');
     expect(app).not.toContain('APPNAME_JS');
-    expect(app).not.toContain('APPNAME_TEXT');
     if (!displayName.includes('APPID')) expect(app).not.toContain('APPID');
     if (!displayName.includes('APPNAME')) expect(app).not.toContain('APPNAME');
   });

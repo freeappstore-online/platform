@@ -81,6 +81,8 @@ export type { DataAccessModel, FasInitOptions, Unsubscribe, User } from './types
 
 /** Root SDK instance — provides auth, kv, collections, counters, rooms, proxy, push and the other sub-clients. */
 export class FreeAppStore {
+  /** The id passed to `initApp`; also the app's FreeAppStore listing slug. */
+  readonly appId: string;
   readonly auth: Auth;
   readonly kv: Kv;
   readonly collections: Collections;
@@ -99,6 +101,7 @@ export class FreeAppStore {
 
   constructor(opts: FasInitOptions) {
     const apiBase = opts.apiBase ?? 'https://api.freeappstore.online';
+    this.appId = opts.appId;
     this.auth = new Auth(opts.appId, apiBase);
     this.kv = new Kv(opts.appId, apiBase, this.auth);
     this.collections = new Collections(opts.appId, apiBase, this.auth);

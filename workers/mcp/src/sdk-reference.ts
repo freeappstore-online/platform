@@ -105,6 +105,7 @@ function Tags() {
 | \`renderNav(ctx)\` | Replace the built-in navbar. |
 | \`requireAuth\` | Show a sign-in screen until the user signs in. Default false. |
 | \`showThemeToggle\` | Default true. |
+| \`about\` | What the app is. Shown at the very bottom of the built-in Profile, followed by a link to the app's FreeAppStore listing. About is never its own screen or nav item. |
 | \`statusBar\` | Default true. Bottom strip: "Save to home screen" in a browser tab, the app's address once installed. \`false\` removes it. |
 | \`renderError(ctx)\` / \`renderLoading()\` | Replace the error / loading fallback. |
 
@@ -118,7 +119,7 @@ Everything below imports from '@freeappstore/sdk/ui'. Components use the CSS tok
 so they follow the app's light/dark theme. Prefer them to hand-rolled equivalents.
 
 **App frame and screens**
-- \`Shell\` (alias \`FasShell\`) — the app frame; see feature "shell". Props: app, appName?, nav?, onNavigate?, headerActions?, profileHref?, renderNav?, requireAuth?, showThemeToggle?, renderError?, renderLoading?
+- \`Shell\` (alias \`FasShell\`) — the app frame; see feature "shell". Props: app, appName?, nav?, onNavigate?, headerActions?, profileHref?, renderNav?, requireAuth?, showThemeToggle?, about?, statusBar?, renderError?, renderLoading?
 - \`PageHeader\` — a screen's single h1. Props: title, description?, actions?
 - \`NavBar\` — the navbar Shell renders from \`nav\`, for custom layouts. Props: items, currentPath?, onNavigate?
 - \`activeHref(items, path)\` — which nav item is current. \`useCurrentPath()\` — [path, setPath], follows back/forward.
@@ -151,7 +152,7 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 - \`SignInButton\` — app, label?, provider?. Used on \`ProfilePage\` for GitHub and Google. Not the Shell header.
 - \`Avatar\` — user, size?. The compact profile link.
 - \`ProfileMenu\` — app, showThemeToggle?, children?. Legacy dropdown. Shell does not mount it.
-- \`ProfilePage\` — app, showThemeToggle?. The page Shell renders at \`/profile\` unless \`profileHref\` is set.
+- \`ProfilePage\` — app, showThemeToggle?, appName?, about?. The page Shell renders at \`/profile\` unless \`profileHref\` is set. It ends with About: \`about\`, then a link to the app's FreeAppStore listing.
 - \`ThemeToggle\`, \`TextSizeToggle\` — no props. \`useTextSize()\` — the text size preference.
 
 **Friends**

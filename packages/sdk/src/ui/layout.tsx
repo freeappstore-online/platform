@@ -90,6 +90,12 @@ export interface ShellProps {
    */
   headerAppearance?: boolean;
   /**
+   * What the app is. Shown at the bottom of the built-in Profile page, above a
+   * link to the app's FreeAppStore listing. Don't give About its own screen or
+   * nav item.
+   */
+  about?: ReactNode;
+  /**
    * The narrow strip at the bottom of the app: "Save to home screen" in a
    * browser tab, the app's address once installed. Default `true`.
    */
@@ -121,6 +127,7 @@ export function Shell({
   showThemeToggle = true,
   headerAppearance = true,
   statusBar = true,
+  about,
 }: ShellProps) {
   const { user, loading } = useAuth(app);
   const [currentLocation, setCurrentLocation] = useCurrentLocation();
@@ -279,7 +286,12 @@ export function Shell({
           <ShellErrorBoundary app={app} renderError={renderError} resetKey={currentLocation}>
             <Suspense fallback={loadingNode}>
               {builtInProfile ? (
-                <ProfilePage app={app} showThemeToggle={showThemeToggle} />
+                <ProfilePage
+                  app={app}
+                  showThemeToggle={showThemeToggle}
+                  appName={displayAppName}
+                  about={about}
+                />
               ) : requireAuth && !user && !isProfile ? (
                 <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
                   <h1 className="text-2xl font-bold text-ink mb-2">

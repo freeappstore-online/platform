@@ -267,6 +267,14 @@ export interface ProfilePageProps {
   showThemeToggle?: boolean;
   /** App-specific settings, rendered after the built-in account sections. */
   children?: ReactNode;
+  /** Names the About section at the bottom ("About Notes"). */
+  appName?: string | undefined;
+  /**
+   * What the app is, shown in the About section at the very bottom, above the
+   * link to the app's FreeAppStore listing. An app's About belongs here, never
+   * on its own page or nav item.
+   */
+  about?: ReactNode;
 }
 
 function InstallAppSection() {
@@ -300,8 +308,14 @@ function InstallAppSection() {
   );
 }
 
-/** Full-page profile & preferences: avatar, theme, text size, friends, sign out, delete. */
-export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePageProps) {
+/** Full-page profile & preferences: avatar, theme, text size, friends, sign out, delete, About. */
+export function ProfilePage({
+  app,
+  showThemeToggle = true,
+  children,
+  appName,
+  about,
+}: ProfilePageProps) {
   const { user, loading, signOut, deleteAccount } = useAuth(app);
   const { preference, setPreference } = useTheme();
   const { size: textSize, setSize: setTextSize } = useTextSize();
@@ -443,6 +457,18 @@ export function ProfilePage({ app, showThemeToggle = true, children }: ProfilePa
       )}
 
       {children}
+
+      <ProfileSection title={appName ? `About ${appName}` : 'About'}>
+        {about && <div className="text-[0.9rem] text-ink mb-3">{about}</div>}
+        <a
+          href={`https://freeappstore.online/apps/${encodeURIComponent(app.appId)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[0.9rem] font-semibold text-accent underline"
+        >
+          {appName ?? 'This app'} on FreeAppStore
+        </a>
+      </ProfileSection>
 
       <Modal
         open={friendsOpen}

@@ -12,8 +12,10 @@ Builder capability changes use the `install_capabilities` chat tool and the sess
 
 | Starter | Default data/auth behavior | Generated product example |
 | --- | --- | --- |
-| `standalone` | No sign-in gate; device-local app | Public Home and About screens |
-| `connected` | Auth is available, but public screens stay public; private draft data is gated at its feature boundary | Public Home/About and a signed-in private draft |
+| `standalone` | No sign-in gate; device-local app | Public Home screen; About at the bottom of Profile |
+| `connected` | Auth is available, but public screens stay public; private draft data is gated at its feature boundary | Public Home, About at the bottom of Profile, and a signed-in private draft |
+
+An app's About is never its own screen or nav item. It goes in `Shell`'s `about` and shows at the bottom of Profile, which always adds a link to the app's FreeAppStore listing (#722).
 
 `connected` does not make every screen private. The Profile route remains reachable while signed out. Game templates are separate from these app presets.
 

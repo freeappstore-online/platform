@@ -1430,3 +1430,28 @@ for (const signedIn of [false, true]) {
     },
   );
 }
+
+for (const signedIn of [false, true]) {
+  it(
+    'ends Profile with About and the store listing link, signedIn=' + signedIn + ' (#722)',
+    async () => {
+      const { app } = fakeApp(signedIn);
+      await mount(
+        <Shell app={app} appName="Notes" about={<p>Quick notes, kept on this device.</p>}>
+          <p>App content</p>
+        </Shell>,
+      );
+      history.replaceState(null, '', '/profile');
+      await act(async () => window.dispatchEvent(new PopStateEvent('popstate')));
+      const sections = container.querySelectorAll('main .bg-panel.border.rounded.p-5');
+      const last = sections[sections.length - 1];
+      expect(last?.textContent).toContain('About Notes');
+      expect(last?.textContent).toContain('Quick notes, kept on this device.');
+      const link = last?.querySelector('a');
+      expect(link?.getAttribute('href')).toBe('https://freeappstore.online/apps/demo');
+      expect(link?.getAttribute('target')).toBe('_blank');
+      expect(link?.textContent).toBe('Notes on FreeAppStore');
+      history.replaceState(null, '', '/');
+    },
+  );
+}

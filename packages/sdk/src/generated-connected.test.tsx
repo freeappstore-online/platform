@@ -134,8 +134,9 @@ it.each(APP_ARCHETYPES)(
     expect(container.textContent).toContain('Welcome to Test App');
     expect(container.querySelector('textarea')).toBeNull();
     expect(container.textContent).not.toContain('private saved text');
+    // About lives at the bottom of Profile, not on its own screen (#722).
     await act(async () => {
-      history.pushState(null, '', '/about');
+      history.pushState(null, '', '/profile');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     expect(container.textContent).toContain('Test App is a free app');
@@ -272,7 +273,7 @@ it.each(APP_ARCHETYPES)(
     let recording = true;
     const removeMediaGuard = registerMediaBusyGuard(pwa, () => recording);
     await act(async () => {
-      history.pushState(null, '', '/about');
+      history.pushState(null, '', '/profile');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     expect(container.querySelector('textarea')).toBeNull();

@@ -69,14 +69,13 @@ test('produced artifact renders navigation and persists a real theme change', as
   await expect(page.getByRole('status', { name: 'Task count' })).toHaveText('0');
   await page.getByRole('button', { name: 'Add task', exact: true }).click();
   await expect(page.getByRole('status', { name: 'Task count' })).toHaveText('1');
-  const menu = page.getByRole('button', { name: 'Menu', exact: true });
-  if (await menu.isVisible()) await menu.click();
-  await page.getByRole('navigation').getByRole('link', { name: 'About', exact: true }).click();
-  await expect(
-    page.getByRole('main').getByRole('heading', { name: 'About', exact: true }),
-  ).toBeVisible();
   await page.locator('header a[aria-label="Profile"]').click();
   await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
+  // About lives at the bottom of Profile with the store listing link (#722).
+  await expect(page.getByRole('link', { name: /on FreeAppStore$/ })).toHaveAttribute(
+    'href',
+    /^https:\/\/freeappstore\.online\/apps\//,
+  );
   await expect(page.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
   if (connected) {

@@ -180,19 +180,11 @@ test('fresh scaffold: public screens, feature-level sign-in and Profile preferen
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
   await openMenu(page);
-  await page.getByRole('navigation').getByRole('link', { name: 'About', exact: true }).click();
-  await expect(page).toHaveURL(/\/about$/);
   await expect(
-    page.getByRole('main').getByRole('heading', { name: 'About', exact: true }),
-  ).toBeVisible();
-  await expect(page.getByRole('main')).toBeVisible();
-  await expect(
-    page.getByRole('main').getByRole('heading', { name: 'About', exact: true }),
-  ).toBeFocused();
-  await openMenu(page);
-  await expect(
-    page.getByRole('navigation').getByRole('link', { name: 'About', exact: true }),
+    page.getByRole('navigation').getByRole('link', { name: 'Home', exact: true }),
   ).toHaveAttribute('aria-current', 'page');
+  // About is never a screen or nav item: it lives at the bottom of Profile (#722).
+  await expect(page.getByRole('navigation').getByRole('link', { name: 'About' })).toHaveCount(0);
   const menu = page.getByRole('button', { name: 'Menu', exact: true });
   if (await menu.isVisible()) {
     await page.keyboard.press('Escape');
@@ -207,6 +199,13 @@ test('fresh scaffold: public screens, feature-level sign-in and Profile preferen
   ).toBeFocused();
   await expect(page.getByRole('button', { name: 'Sign in with GitHub' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
+  const listing = page.getByRole('main').getByRole('link', { name: /on FreeAppStore$/ });
+  await expect(listing).toHaveAttribute(
+    'href',
+    /^https:\/\/freeappstore\.online\/apps\/[a-z0-9-]+$/,
+  );
+  await expect(listing).toHaveAttribute('target', '_blank');
+  await expect(page.getByRole('main').getByText(/is a free app on FreeAppStore\./)).toBeVisible();
   await page.getByRole('button', { name: 'Dark', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const originalSize = await page.locator('html').evaluate((el) => getComputedStyle(el).fontSize);
@@ -519,7 +518,7 @@ test('long account names fit narrow screens (#338)', async ({ page }) => {
 });
 
 test('profile returns to the originating URL after reload and OAuth', async ({ page }) => {
-  const origin = '/about?sort=recent#saved';
+  const origin = '/notes?sort=recent#saved';
   await page.goto(origin);
   await page
     .locator('header > div')
@@ -531,9 +530,9 @@ test('profile returns to the originating URL after reload and OAuth', async ({ p
   await page.reload();
   await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute('href', origin);
   await page.getByRole('link', { name: 'Close profile' }).click();
-  await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
-  if (!connected)
-    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/notes\?sort=recent#saved$/);
+  // Unknown paths show Home in the starter.
+  await expect(page.getByRole('heading', { name: /Welcome/ })).toBeVisible();
   await page
     .locator('header > div')
     .last()
@@ -550,41 +549,44 @@ test('query and hash navigation keeps the current screen after Profile return (#
   page,
 }) => {
   const original = await readFile(appFile, 'utf8');
-  const instrumented = original.replace(
-    '{ label: "About", href: "/about", title: "About — ',
-    '{ label: "About", href: "/about?sort=recent#saved", title: "About — ',
-  );
+  // The starter has one screen; add a second (#722 removed the About screen).
+  const instrumented = original
+    .replace(
+      'const NAV: NavItem[] = [',
+      'const NAV: NavItem[] = [{ label: "Notes", href: "/notes?sort=recent#saved", title: "Notes" }, ',
+    )
+    .replace('{ "/": Home }', '{ "/": Home, "/notes": () => <PageHeader title="Notes" /> }');
   try {
     await writeFile(appFile, instrumented);
     await expect
       .poll(async () =>
-        (await (await page.request.get('/src/App.tsx')).text()).includes('sort=recent'),
+        (await (await page.request.get('/src/App.tsx')).text()).includes('/notes?sort=recent'),
       )
       .toBe(true);
     await page.goto('/');
     await openMenu(page);
-    await page.getByRole('link', { name: 'About', exact: true }).click();
-    await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
-    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Notes', exact: true }).click();
+    await expect(page).toHaveURL(/\/notes\?sort=recent#saved$/);
+    await expect(page.getByRole('heading', { name: 'Notes', exact: true })).toBeVisible();
     await page.locator('header a[aria-label="Profile"]').click();
     await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
     const close = page.getByRole('link', { name: 'Close profile', exact: true });
-    await expect(close).toHaveAttribute('href', '/about?sort=recent#saved');
+    await expect(close).toHaveAttribute('href', '/notes?sort=recent#saved');
     await expect(close.locator('svg')).toHaveAttribute('width', '24');
     await expect(close.locator('svg')).toHaveAttribute('height', '24');
     await expect(page.getByRole('link', { name: 'Back to app' })).toHaveCount(0);
     await expect(page.getByRole('link', { name: 'Close profile' })).toHaveAttribute(
       'href',
-      '/about?sort=recent#saved',
+      '/notes?sort=recent#saved',
     );
     await page.reload();
     await page.getByRole('link', { name: 'Close profile' }).click();
-    await expect(page).toHaveURL(/\/about\?sort=recent#saved$/);
-    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/notes\?sort=recent#saved$/);
+    await expect(page.getByRole('heading', { name: 'Notes', exact: true })).toBeVisible();
     await page.goBack();
     await expect(page.getByRole('heading', { name: 'Profile', exact: true })).toBeVisible();
     await page.goForward();
-    await expect(page.getByRole('heading', { name: 'About', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Notes', exact: true })).toBeVisible();
   } finally {
     await writeFile(appFile, original);
   }

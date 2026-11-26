@@ -82,6 +82,7 @@ What you get, with nothing to enable:
 | **Skip link** | "Skip to content", the first focusable element, hidden until focused. |
 | **Route changes** | With `onNavigate`: forward navigation follows a fragment target or scrolls to the top; back/forward restores the position. Without a fragment, focus moves to the screen's `PageHeader` (else `<main>`). |
 | **Status bar** | A narrow strip at the very bottom. In a browser tab it says **Save to home screen** and opens the browser's install prompt, or the steps for that device. Installed to the home screen, it shows the app's address (`timer.freeappstore.online`), which opens the app in a browser tab. It pads for the home indicator. `statusBar={false}` removes it. |
+| **About** | The built-in Profile page ends with **About {appName}**: your `about` text, then a link to the app's FreeAppStore listing (`https://freeappstore.online/apps/<app-id>`), always present. An app's About never gets its own screen or nav item. |
 | **Bottom safe area** | Padding for the home indicator: the status bar's, or the frame's own with `statusBar={false}`. No platform attribution bar in browser or installed mode. |
 
 FreeAppStore is free, so there is no subscription or upgrade screen: the only
@@ -100,6 +101,7 @@ gate is the optional sign-in gate.
 | `profileHref` | Optional app-owned profile route, e.g. `/account`, accessible in both auth states. Omit to use the built-in `/profile` page with GitHub/Google sign-in choices and account management. Avatar clicks navigate using `onNavigate` when supplied; modified clicks retain native behavior. A custom profile route must render its own signed-out and signed-in UI. |
 | `requireAuth` | Protect app content until sign-in; the topbar and profile route remain accessible. Default `false`. |
 | `showThemeToggle` | Default `true`. The topbar shows it while signed out. `ProfilePage` shows it while signed in. |
+| `about` | What the app is, shown at the very bottom of the built-in Profile page above the always-present link to the app's FreeAppStore listing. Put About here; never as a screen or nav item. |
 | `statusBar` | Default `true`. The bottom strip: **Save to home screen** in a browser tab, the app's address once installed. Set `false` for a full-bleed canvas or an app with its own bottom bar. |
 | `headerAppearance` | Default `true`. With an app-owned `profileHref`, the topbar shows the text-size and theme buttons. Set `false` when that profile page offers them itself, for example by rendering `ProfilePage`. |
 | `renderError({ error, reset })` | Replace the error fallback. |
@@ -207,7 +209,7 @@ uses:
 - `SkipLink` plus `<main id="main" tabIndex={-1}>`.
 - `useRouteChangeEffects(location, mainRef, true)` for focus and scroll on client-side moves.
 - `AccountSection` for identity. Signed out, it offers GitHub and Google and an avatar link to the profile. Signed in, the avatar and name link to the profile. Pass `children` for app-specific settings. The avatar never calls sign-in.
-- `ProfilePage` accepts `children` after its built-in account sections when the app keeps the built-in profile route.
+- `ProfilePage` accepts `children` after its built-in account sections when the app keeps the built-in profile route. It ends with About (`about`, then the app's FreeAppStore listing link). An app's About goes there, never on its own screen or nav item.
 - `StatusBar` as the last child of the frame, below `main`, so people can save the app to their home screen and see its address once installed. It pads for the bottom safe area itself.
 - `Footer` stays the opt-in attribution. Neither `Shell` nor `AccountSection` mounts it.
 
@@ -299,7 +301,7 @@ or `maximum-scale` on the document.
 | `PageHeader` | `title`, `description?`, `actions?` | A screen's single `<h1>` |
 | `AccountSection` | `app`, `profileHref?`, `onNavigate?`, `location?`, `children?` | Embeddable account block. GitHub and Google when signed out. Avatar and name link to the profile in both auth states. `children` is app-specific settings. |
 | `ProfileMenu` | `app`, `showThemeToggle?`, `children?` | Legacy dropdown with profile, settings, sign out, and deletion feedback; Shell uses the separate Profile page |
-| `ProfilePage` | `app`, `showThemeToggle?`, `children?` | Full profile page. `children` render after the built-in account sections. |
+| `ProfilePage` | `app`, `showThemeToggle?`, `children?`, `appName?`, `about?` | Full profile page. `children` render after the built-in account sections. It ends with the About section: `about`, then a link to the app's FreeAppStore listing. |
 | `ToastProvider` | `children` | Toast queue for a custom frame. `Shell` already includes one. |
 | `ShellErrorBoundary` | `app`, `resetKey`, `renderError?` | Render-error boundary `Shell` uses around the screen. |
 | `SkipLink` | `mainRef` | Skip link targeting `<main id="main">`. |
