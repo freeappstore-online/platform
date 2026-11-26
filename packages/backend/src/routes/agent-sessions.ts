@@ -40,8 +40,17 @@ async function overQuota(
   isNew: boolean,
   newBytes: number,
 ): Promise<Response | null> {
+  // Every stored text column counts, not just messages: deploy_state alone can
+  // be ~2 MB per session (#766), and the agent worker also writes deploy_log/errors.
   const used = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS n, COALESCE(SUM(LENGTH(CAST(messages AS BLOB))), 0) AS bytes
+    `SELECT COUNT(*) AS n, COALESCE(SUM(
+       COALESCE(LENGTH(CAST(messages AS BLOB)), 0) +
+       COALESCE(LENGTH(CAST(deploy_state AS BLOB)), 0) +
+       COALESCE(LENGTH(CAST(deploy_log AS BLOB)), 0) +
+       COALESCE(LENGTH(CAST(errors AS BLOB)), 0) +
+       COALESCE(LENGTH(CAST(name AS BLOB)), 0) +
+       COALESCE(LENGTH(CAST(app_url AS BLOB)), 0)
+     ), 0) AS bytes
      FROM agent_sessions WHERE user_id = ? AND session_id != ?`,
   )
     .bind(userId, sessionId)

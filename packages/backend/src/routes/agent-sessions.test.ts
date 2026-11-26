@@ -349,4 +349,16 @@ describe.skipIf(!hasSqlite)('PUT /v1/agent/sessions/:id validation (#491)', () =
     expect((await put('gh:1', 'next', { messages: big })).status).toBe(413);
     expect((await put('gh:2', 'bobs', { messages: big })).status).toBe(200);
   }, 30_000);
+
+  it('counts deployState against the 100 MB cap, not just messages (#766)', async () => {
+    const { put } = setup();
+    const deployState = { log: 'x'.repeat(1_900_000) };
+    let status = 200;
+    let n = 0;
+    while (status === 200 && n < 60)
+      status = (await put('gh:1', `d${n++}`, { deployState })).status;
+    expect(status).toBe(413);
+    expect(n).toBeLessThanOrEqual(53);
+    expect((await put('gh:2', 'bobs', { deployState })).status).toBe(200);
+  }, 60_000);
 });
