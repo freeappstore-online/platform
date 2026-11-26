@@ -23,6 +23,12 @@ Epic: [#727](https://github.com/freeappstore-online/platform/issues/727). Implem
 Attestation (`X-Attestation`) is recorded as `unverified` until #732 lands. Sets created with
 `requireAttestation: true` are not claimable until then.
 
+Owners see their sets in the Creator Console: an app's **Generation** tab
+(`freeappstore.online/app/`) shows each set's progress, its jobs (filter by status, page with
+*Load more*), plays accepted audio with sentence highlighting from the meta `segments`, lists the
+latest submissions (status, reason, WER, contributor, device and attestation) and can withdraw an
+artifact or block a contributor.
+
 ## API (base `https://api.freeappstore.online/v1`)
 
 Owner: the app owner's session (the app's own or a console session), or a GitHub Actions OIDC token

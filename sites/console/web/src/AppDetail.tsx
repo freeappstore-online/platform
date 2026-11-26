@@ -4,6 +4,7 @@ import { RolesManager } from './RolesManager'
 import { useIsAdmin } from './SiteNav'
 import { SecretsManager } from './SecretsManager'
 import { WebhooksManager } from './WebhooksManager'
+import { GenerationManager } from './GenerationManager'
 import { LogsViewer } from './LogsViewer'
 import {
   type AppDeployStatus,
@@ -29,7 +30,9 @@ interface AppAnalytics {
   unique_paths: number
 }
 
-type AppTab = 'overview' | 'data'
+type AppTab = 'overview' | 'generation' | 'data'
+
+const TAB_LABELS: Record<AppTab, string> = { overview: 'Overview', generation: 'Generation', data: 'Admin' }
 
 export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }: Props) {
   const [appTab, setAppTab] = useState<AppTab>('overview')
@@ -103,8 +106,8 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
       <div className="flex items-center gap-4">
         <button onClick={onBack} className="text-sm text-accent font-medium hover:underline min-h-[44px] flex items-center">&larr; Back</button>
         <div className="flex gap-1 ml-auto">
-          {/* The data browser reads platform-admin endpoints; to an owner it showed "no data" (#591). */}
-          {admin && (['overview', 'data'] as AppTab[]).map(t => (
+          {/* The Admin data browser reads platform-admin endpoints; to an owner it showed "no data" (#591). */}
+          {(admin ? ['overview', 'generation', 'data'] as const : ['overview', 'generation'] as const).map(t => (
             <button
               key={t}
               onClick={() => setAppTab(t)}
@@ -114,7 +117,7 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
                   : 'text-muted border border-line'
               }`}
             >
-              {t === 'data' ? 'Admin' : 'Overview'}
+              {TAB_LABELS[t]}
             </button>
           ))}
         </div>
@@ -122,6 +125,8 @@ export function AppDetail({ appId, appName, getToken, onBack, onOpenInVibeCode }
 
       {appTab === 'data' ? (
         <AppDataView appId={appId} getToken={getToken} />
+      ) : appTab === 'generation' ? (
+        <GenerationManager appId={appId} getToken={getToken} />
       ) : (
       <>
 

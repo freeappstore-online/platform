@@ -7,6 +7,7 @@ describe("AppDetail", () => {
     const html = renderToStaticMarkup(<AppDetail appId="demo" appName="Demo app" getToken={() => null} onBack={() => {}} onOpenInVibeCode={() => {}} />);
     expect(html).toContain("Demo app");
     expect(html).toContain("demo.freeappstore.online");
+    expect(html).toContain(">Generation<");
     expect(html).not.toContain("style=");
   });
 });

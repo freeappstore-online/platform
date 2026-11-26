@@ -1,0 +1,409 @@
+import { useState, useEffect, useCallback } from 'react'
+import { ConfirmDialog, ProgressBar } from '@freeappstore/sdk/ui'
+import { API_URL, authHeaders } from './builder/lib/api'
+import { formatTimeAgo } from './deploy-status'
+
+// Response shapes of the owner generation endpoints (#794,
+// packages/backend/src/routes/generation.ts). The console pins an SDK release
+// that predates its Generation types, so they are declared here.
+
+interface Contributor {
+  id: string
+  login: string | null
+}
+
+export interface GenerationSet {
+  id: string
+  kind: string
+  model: string
+  modelVersion: string
+  replicas: number
+  requireAttestation: boolean
+  createdAt: number
+  counts: {
+    jobs: number
+    open: number
+    accepted: number
+    leased: number
+    pending: number
+    rejected: number
+    withdrawn: number
+  }
+}
+
+interface Submission {
+  id: string
+  contributor: Contributor | null
+  deviceKind: string
+  attestation: string
+  status: string
+  reason: string | null
+  wer: number | null
+  durationMs: number | null
+  createdAt: number
+  decidedAt: number | null
+}
+
+export interface GenerationJob {
+  id: string
+  key: string
+  status: 'open' | 'accepted'
+  inputPreview: string
+  inputChars: number
+  createdAt: number
+  artifact: {
+    url: string
+    durationMs: number | null
+    bytes: number
+    contributor: Contributor | null
+    acceptedAt: number
+  } | null
+  submissions: Submission[]
+}
+
+/** Books-style sentence timings: [charStart, charEnd, startSec, endSec]. */
+type Segment = [number, number, number, number]
+
+type Pending =
+  | { kind: 'withdraw'; jobId: string; key: string }
+  | { kind: 'block'; userId: string; login: string | null }
+
+const DOCS_URL = 'https://github.com/freeappstore-online/platform/blob/main/docs/community-generation.md'
+
+interface Props {
+  appId: string
+  getToken: () => string | null
+}
+
+/** Owner view of the app's community generation: sets, jobs, artifacts, submissions (#795). */
+export function GenerationManager({ appId, getToken }: Props) {
+  const [sets, setSets] = useState<GenerationSet[] | null>(null)
+  const [error, setError] = useState('')
+  const [openSet, setOpenSet] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setError('')
+    try {
+      const res = await fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/generation/sets`, {
+        headers: authHeaders(getToken()),
+      })
+      if (!res.ok) { setError(`Couldn't load generation sets (HTTP ${res.status}).`); return }
+      setSets(((await res.json()) as { sets: GenerationSet[] }).sets ?? [])
+    } catch {
+      setError("Couldn't load generation sets.")
+    }
+  }, [appId, getToken])
+
+  useEffect(() => { load() }, [load])
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-line bg-panel p-5 sm:p-6">
+        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">Generation sets</h3>
+        {error && <p className="text-sm text-danger mb-3">{error}</p>}
+        {!sets && !error && <p className="text-sm text-muted">Loading…</p>}
+        {sets?.length === 0 && (
+          <div>
+            <p className="text-sm text-ink">This app has no generation sets yet.</p>
+            <p className="mt-1 text-sm text-muted">
+              Create a set (model, version, params) and add jobs with the API or
+              <code className="mx-1 text-xs bg-paper px-1.5 py-0.5 rounded">fas.generation.createSet()</code>
+              and <code className="text-xs bg-paper px-1.5 py-0.5 rounded">addJobs()</code>. Signed-in users' devices then
+              generate them, and every upload is verified before it is published.
+            </p>
+            <a href={DOCS_URL} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-sm text-accent font-medium hover:underline">
+              How community generation works &rarr;
+            </a>
+          </div>
+        )}
+        <div className="space-y-3">
+          {sets?.map(set => (
+            <SetCard
+              key={set.id}
+              appId={appId}
+              set={set}
+              getToken={getToken}
+              open={openSet === set.id}
+              onToggle={() => setOpenSet(openSet === set.id ? null : set.id)}
+              onChanged={load}
+            />
+          ))}
+        </div>
+      </div>
+      {/* #787 adds the private pilot's manual review of exact asset versions here. */}
+    </div>
+  )
+}
+
+function SetCard({ appId, set, getToken, open, onToggle, onChanged }: {
+  appId: string
+  set: GenerationSet
+  getToken: () => string | null
+  open: boolean
+  onToggle: () => void
+  onChanged: () => void
+}) {
+  const c = set.counts
+  const stats: [string, number][] = [
+    ['open', c.open], ['leased', c.leased], ['pending', c.pending],
+    ['accepted', c.accepted], ['rejected', c.rejected], ['withdrawn', c.withdrawn],
+  ]
+  return (
+    <div className="rounded-xl border border-line bg-paper p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink truncate">
+            {set.kind.toUpperCase()} · {set.model} {set.modelVersion}
+          </p>
+          <p className="text-xs text-muted font-mono truncate">
+            {set.id} · {set.replicas} replica{set.replicas === 1 ? '' : 's'}
+            {set.requireAttestation ? ' · attestation required' : ''} · {formatTimeAgo(new Date(set.createdAt))}
+          </p>
+        </div>
+        <button onClick={onToggle} className="text-xs font-semibold text-accent hover:underline min-h-[44px] px-2 flex-shrink-0">
+          {open ? 'Hide jobs' : 'Jobs'}
+        </button>
+      </div>
+      <div className="mt-3">
+        <ProgressBar value={c.accepted} max={Math.max(1, c.jobs)} label={`${c.accepted} of ${c.jobs} jobs accepted`} />
+      </div>
+      <dl className="mt-3 grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {stats.map(([name, n]) => (
+          <div key={name}>
+            <dt className="text-xs text-muted">{name}</dt>
+            <dd className="text-sm font-semibold text-ink">{n}</dd>
+          </div>
+        ))}
+      </dl>
+      {open && <SetJobs appId={appId} setId={set.id} getToken={getToken} onChanged={onChanged} />}
+    </div>
+  )
+}
+
+const STATUS_FILTERS = [['', 'All'], ['open', 'Open'], ['accepted', 'Accepted']] as const
+
+function SetJobs({ appId, setId, getToken, onChanged }: {
+  appId: string
+  setId: string
+  getToken: () => string | null
+  onChanged: () => void
+}) {
+  const [status, setStatus] = useState<'' | 'open' | 'accepted'>('')
+  const [jobs, setJobs] = useState<GenerationJob[]>([])
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [pending, setPending] = useState<Pending | null>(null)
+  const base = `${API_URL}/v1/apps/${encodeURIComponent(appId)}/generation`
+
+  const fetchPage = useCallback(async (after: string | null) => {
+    setLoading(true)
+    setError('')
+    const query = new URLSearchParams()
+    if (status) query.set('status', status)
+    if (after) query.set('cursor', after)
+    const qs = query.toString()
+    try {
+      const res = await fetch(`${base}/sets/${encodeURIComponent(setId)}/jobs${qs ? `?${qs}` : ''}`, {
+        headers: authHeaders(getToken()),
+      })
+      if (!res.ok) { setError(`Couldn't load jobs (HTTP ${res.status}).`); return }
+      const data = (await res.json()) as { jobs: GenerationJob[]; nextCursor: string | null }
+      setJobs(prev => (after ? [...prev, ...data.jobs] : data.jobs))
+      setCursor(data.nextCursor)
+    } catch {
+      setError("Couldn't load jobs.")
+    } finally {
+      setLoading(false)
+    }
+  }, [base, setId, status, getToken])
+
+  useEffect(() => { fetchPage(null) }, [fetchPage])
+
+  const confirm = async () => {
+    if (!pending) return
+    const action = pending
+    setPending(null)
+    const res = await fetch(
+      action.kind === 'withdraw'
+        ? `${base}/artifacts/${encodeURIComponent(action.jobId)}`
+        : `${base}/contributors/${encodeURIComponent(action.userId)}/block`,
+      { method: action.kind === 'withdraw' ? 'DELETE' : 'POST', headers: authHeaders(getToken()) },
+    ).catch(() => null)
+    if (!res?.ok) {
+      setError(action.kind === 'withdraw' ? "Couldn't withdraw the artifact." : "Couldn't block the contributor.")
+      return
+    }
+    onChanged()
+    fetchPage(null)
+  }
+
+  return (
+    <div className="mt-4 border-t border-line pt-4">
+      <div className="flex gap-1 mb-3">
+        {STATUS_FILTERS.map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setStatus(value)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${status === value ? 'bg-ink text-paper' : 'text-muted border border-line'}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {error && <p className="text-sm text-danger mb-3">{error}</p>}
+      {!loading && jobs.length === 0 && !error && <p className="text-sm text-muted">No jobs.</p>}
+      <div className="space-y-3">
+        {jobs.map(job => <JobRow key={job.id} job={job} onAction={setPending} />)}
+      </div>
+      {loading && <p className="mt-2 text-sm text-muted">Loading…</p>}
+      {!loading && cursor && (
+        <button onClick={() => fetchPage(cursor)} className="mt-3 text-xs font-semibold text-accent hover:underline min-h-[44px] px-2">
+          Load more
+        </button>
+      )}
+      <ConfirmDialog
+        open={pending !== null}
+        variant="danger"
+        onCancel={() => setPending(null)}
+        onConfirm={confirm}
+        title={pending?.kind === 'block' ? 'Block contributor?' : 'Withdraw artifact?'}
+        confirmLabel={pending?.kind === 'block' ? 'Block' : 'Withdraw'}
+        message={
+          pending?.kind === 'block'
+            ? `${pending.login ?? 'This user'} can no longer contribute to this app, and everything they contributed is withdrawn.`
+            : `The artifact for ${pending?.kind === 'withdraw' ? pending.key : ''} is removed and its job reopens for other contributors.`
+        }
+      />
+    </div>
+  )
+}
+
+const percent = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)}%`)
+const seconds = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)}s`)
+
+function JobRow({ job, onAction }: { job: GenerationJob; onAction: (p: Pending) => void }) {
+  const a = job.artifact
+  return (
+    <div className="rounded-lg border border-line p-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-mono text-ink break-all">{job.key}</span>
+        <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${job.status === 'accepted' ? 'border-success text-success' : 'border-line text-muted'}`}>
+          {job.status}
+        </span>
+        <span className="text-xs text-muted">{job.inputChars} chars</span>
+      </div>
+      {a ? (
+        <div className="mt-2">
+          <ArtifactPlayer url={a.url} preview={job.inputPreview} />
+          <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-muted">
+            <span>{seconds(a.durationMs)} · {Math.round(a.bytes / 1024)} KB · by {a.contributor?.login ?? 'deleted account'} · {formatTimeAgo(new Date(a.acceptedAt))}</span>
+            <button
+              onClick={() => onAction({ kind: 'withdraw', jobId: job.id, key: job.key })}
+              className="text-xs text-danger hover:underline min-h-[36px] px-2"
+            >
+              Withdraw
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted break-words">{job.inputPreview}{job.inputChars > job.inputPreview.length ? '…' : ''}</p>
+      )}
+      {job.submissions.length > 0 && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-muted">
+                <th className="font-semibold pr-3 pb-1">Status</th>
+                <th className="font-semibold pr-3 pb-1">WER</th>
+                <th className="font-semibold pr-3 pb-1">Duration</th>
+                <th className="font-semibold pr-3 pb-1">Contributor</th>
+                <th className="font-semibold pr-3 pb-1">Device</th>
+                <th className="font-semibold pr-3 pb-1">Submitted</th>
+              </tr>
+            </thead>
+            <tbody>
+              {job.submissions.map(s => (
+                <tr key={s.id} className="border-t border-line align-top">
+                  <td className="pr-3 py-1">
+                    <span className={s.status === 'accepted' ? 'text-success' : s.status === 'rejected' ? 'text-danger' : 'text-ink'}>{s.status}</span>
+                    {s.reason && <span className="block text-muted">{s.reason}</span>}
+                  </td>
+                  <td className="pr-3 py-1 text-ink">{percent(s.wer)}</td>
+                  <td className="pr-3 py-1 text-ink">{seconds(s.durationMs)}</td>
+                  <td className="pr-3 py-1 text-ink">
+                    {s.contributor ? (
+                      <>
+                        {s.contributor.login ?? s.contributor.id}
+                        <button
+                          onClick={() => onAction({ kind: 'block', userId: s.contributor!.id, login: s.contributor!.login })}
+                          className="ml-2 text-danger hover:underline"
+                        >
+                          Block
+                        </button>
+                      </>
+                    ) : 'deleted account'}
+                  </td>
+                  <td className="pr-3 py-1 text-ink">{s.deviceKind} · {s.attestation}</td>
+                  <td className="pr-3 py-1 text-muted whitespace-nowrap">{formatTimeAgo(new Date(s.createdAt))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The artifact's meta sits beside it: same path plus `/meta`, same `?v=`. */
+export const metaUrlOf = (url: string) => url.replace(/(\?|$)/, '/meta$1')
+
+/**
+ * Plays an accepted artifact and highlights the sentence being read, from the
+ * meta's `segments`. Only the first 200 characters of the input are available
+ * here, so a sentence beyond the preview is shown by number instead.
+ */
+export function ArtifactPlayer({ url, preview }: { url: string; preview: string }) {
+  const [segments, setSegments] = useState<Segment[] | null>(null)
+  const [time, setTime] = useState(-1)
+
+  const loadMeta = () => {
+    if (segments) return
+    setSegments([])
+    fetch(metaUrlOf(url))
+      .then(r => (r.ok ? r.json() : null))
+      .then((meta: { segments?: unknown } | null) => {
+        if (Array.isArray(meta?.segments)) setSegments(meta.segments as Segment[])
+      })
+      .catch(() => {})
+  }
+
+  const index = segments ? segments.findIndex(([, , start, end]) => time >= start && time < end) : -1
+  const current = index >= 0 ? segments![index] : null
+
+  return (
+    <div>
+      <audio
+        controls
+        preload="none"
+        src={url}
+        onPlay={loadMeta}
+        onTimeUpdate={e => setTime(e.currentTarget.currentTime)}
+        className="w-full"
+      />
+      <p className="mt-1 text-sm text-muted break-words">
+        {current && current[1] <= preview.length ? (
+          <>
+            {preview.slice(0, current[0])}
+            <mark className="bg-accent/20 text-ink rounded">{preview.slice(current[0], current[1])}</mark>
+            {preview.slice(current[1])}
+          </>
+        ) : preview}
+      </p>
+      {current && current[1] > preview.length && (
+        <p className="mt-1 text-xs text-accent font-semibold">Sentence {index + 1} of {segments!.length} (beyond the preview)</p>
+      )}
+    </div>
+  )
+}
