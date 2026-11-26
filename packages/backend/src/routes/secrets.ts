@@ -392,11 +392,13 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
     const host = c.req.param('host')!;
 
     // Reconstruct upstream URL: /v1/apps/:appId/proxy/<host>/<rest...>
+    // A path that ends at the host (`…/proxy/<host>?q=1`) is the host root (#746).
     const prefix = `/v1/apps/${appId}/proxy/${host}/`;
-    if (!c.req.path.startsWith(prefix)) {
+    const path = c.req.path === prefix.slice(0, -1) ? prefix : c.req.path;
+    if (!path.startsWith(prefix)) {
       return c.json({ error: 'malformed proxy path' }, 400);
     }
-    const restPath = c.req.path.slice(prefix.length);
+    const restPath = path.slice(prefix.length);
     const incomingUrl = new URL(c.req.url);
     const upstreamUrl = `https://${host}/${restPath}${incomingUrl.search}`;
 

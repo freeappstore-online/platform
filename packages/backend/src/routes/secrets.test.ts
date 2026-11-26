@@ -1430,6 +1430,31 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
     expect(vary).toContain('Origin');
   });
 
+  it('forwards a target with no path to the host root (#746)', async () => {
+    const data = freshData();
+    await realSeed(data, 'GH_TOKEN', 'ghp_secret', {
+      pattern: 'https://api.github.com/',
+      inject_kind: 'bearer',
+      inject_name: '',
+      secret_name: 'GH_TOKEN',
+      secret_name_2: null,
+      token_url: null,
+      methods: 'GET',
+    });
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn(async (url) => {
+      urls.push(String(url));
+      return new Response('{}');
+    }) as typeof fetch;
+    const res = await app.request(
+      '/v1/apps/weather/proxy/api.github.com?q=1',
+      { headers: { Authorization: await ownerAuth() } },
+      baseEnv(fakeDB(data)),
+    );
+    expect(res.status).toBe(200);
+    expect(urls).toEqual(['https://api.github.com/?q=1']);
+  });
+
   it('injects a Bearer token (no other headers leaked)', async () => {
     const data = freshData();
     await realSeed(data, 'GH_TOKEN', 'ghp_secret', {
