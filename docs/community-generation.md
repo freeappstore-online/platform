@@ -45,7 +45,7 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 
 | Call | Body | Result |
 |---|---|---|
-| `POST /apps/:appId/generation/sets` | `{ kind: 'tts', model, modelVersion, params, formats, maxBytes, replicas, requireAttestation?, minCharsPerSecond?, maxCharsPerSecond?, maxWer? }` | `201 { set }` |
+| `POST /apps/:appId/generation/sets` | `{ kind: 'tts', model, modelVersion, params, formats, maxBytes, replicas, requireAttestation?, language?, minCharsPerSecond?, maxCharsPerSecond?, maxWer? }` | `201 { set }` |
 | `POST /apps/:appId/generation/sets/:setId/jobs` | `{ jobs: [{ key, input: { text } }] }`, 1-500 | `{ jobs: [{ id, key, status }] }`; `409 { error, keys }` if a key exists with another input |
 | `DELETE /apps/:appId/generation/artifacts/:jobId` | | `{ withdrawn: 1 }`; the job reopens |
 | `POST /apps/:appId/generation/contributors/:userId/block` | | `{ blocked: true, withdrawn: n }` |
@@ -55,8 +55,12 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 
 `formats` is a non-empty subset of `audio/mp4`, `audio/ogg`, `audio/wav`; `maxBytes` at most
 25,000,000; `replicas` 1-3. Keys are 1-200 characters of `A-Za-z0-9._:/-`; `text` at most 100,000
-characters. Verification thresholds default to 8-30 characters per second and a word error rate
-of 0.25 (see [Verification](#verification)). Re-sending a job with the same key and input is a no-op that returns its status
+characters. `language` is an optional BCP 47 tag of the input text (`en`, `es`, `zh`, `zh-Hans`,
+`pt-BR`, …) whose primary subtag Whisper must know (otherwise `400`); sets, claimed jobs and
+discovery echo it, `null` when the set has none. Verification thresholds default to the language's
+characters-per-second band (`zh` and `yue` 2-9, `ja` 3-15, anything else or no language 8-30) and an
+error rate of 0.25 (see [Verification](#verification)); `minCharsPerSecond`, `maxCharsPerSecond` and
+`maxWer` override them. Re-sending a job with the same key and input is a no-op that returns its status
 (`open` or `accepted`).
 
 Set counts: `open` and `accepted` count jobs by status, `leased` live leases, and `pending`, `rejected`
@@ -76,7 +80,7 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
 
 | Call | Body | Result |
 |---|---|---|
-| `POST /apps/:appId/generation/claim` | `{ setId?, models: [{ model, modelVersion }] }` | `{ job: { id, setId, key, input, model, modelVersion, params, formats, maxBytes, leaseToken, leaseExpiresAt } }` or `204` |
+| `POST /apps/:appId/generation/claim` | `{ setId?, models: [{ model, modelVersion }] }` | `{ job: { id, setId, key, input, model, modelVersion, params, formats, maxBytes, language, leaseToken, leaseExpiresAt } }` or `204` |
 | `POST /apps/:appId/generation/jobs/:jobId/lease` | header `X-Lease-Token` | `{ leaseExpiresAt }`; `409 { error, leaseExpiresAt }` at the cap |
 | `PUT /apps/:appId/generation/jobs/:jobId/result` | multipart `file` + optional `meta` (JSON object, at most 64 KB); header `X-Lease-Token`; optional `X-Attestation` | `202 { submissionId, status }` |
 | `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt }] }`, newest 100 |
@@ -90,7 +94,7 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   the previous one. A user is never given the same job twice (even after a release or rejection).
 - A job has at most `replicas` open leases plus pending submissions at a time, each a different user.
 - Discovery: `GET /generation/open` → `{ apps: [{ appId, oneliner, sets: [{ setId, kind, model,
-  modelVersion, params, formats, maxBytes, open }] }] }`, the sets with jobs the caller could claim
+  modelVersion, params, formats, maxBytes, language, open }] }] }`, the sets with jobs the caller could claim
   now, by app id. `open` counts them under the claim's own rules: not blocked by the app, no
   attestation required, never held by the caller, a free replica slot. Models are not matched: the
   device skips sets it cannot run. A console session or a native device sees every store app;
@@ -120,12 +124,18 @@ that retries anything unfinished, in `packages/backend/src/lib/generation-verify
    duration from the last granule). The parsed format must equal the declared content type;
    truncated files are rejected.
 2. **Plausibility**: the input text's length divided by the duration must lie within the set's
-   characters-per-second band. If `meta` has Books-style sentence timings
+   characters-per-second band, except that audio up to 3 s is never too long (a two-character
+   phrase with silence around it passes). If `meta` has Books-style sentence timings
    (`segments: [[charStart, charEnd, startSec, endSec], …]`), they must be monotonic, inside the text,
    and end within the duration (0.5 s slack).
-3. **Content**: Workers AI Whisper (`@cf/openai/whisper-large-v3-turbo`) transcribes the audio and
-   the transcript is compared with the input text by word error rate (lowercased words, punctuation
-   and diacritics dropped). Audio up to 60 s is transcribed whole. Longer audio is checked as three
+3. **Content**: Workers AI Whisper (`@cf/openai/whisper-large-v3-turbo`) transcribes the audio,
+   told the set's language (its primary subtag, e.g. `zh`) when the set has one, and the transcript
+   is compared with the input text by word error rate (lowercased words, punctuation and diacritics
+   dropped). Scripts written without spaces (Han, Hiragana, Katakana, Thai, Lao, Khmer, Myanmar)
+   count each letter as a token, so their error rate is a character error rate, and Traditional
+   Chinese is read as Simplified (OpenCC's character table), so either form Whisper writes matches.
+   Mandarin phrases from 2 to 12 characters spoken by macOS `say` and transcribed by the real model
+   passed at an error rate of 0 to 0.1, with or without the language hint (#810). Audio up to 60 s is transcribed whole. Longer audio is checked as three
    20-second windows, each matched against the best-fitting stretch of the text. Window positions
    are random fractions of the audio, drawn once per job (devices never see them), so every replica
    of a job is sampled at the same points. MP4 windows are re-framed as ADTS AAC, Ogg windows keep
@@ -145,6 +155,37 @@ other users. Each submission records the measured duration and word error rate.
 Verification is capped at 2,000 per app per UTC day (Workers AI cost). Over the budget, or when
 Whisper fails, a submission stays `pending` and is retried later; after 6 days it is rejected as
 expired.
+
+## Models and runners
+
+A set may name any `model` and `modelVersion`, but a job is only claimed by a device that runs
+exactly that model: a set naming a model no runner supports is accepted and its jobs are never
+claimed. Runners today:
+
+| Runner | Model | Format | Params | Voices and languages |
+|---|---|---|---|---|
+| Android companion ([#731](https://github.com/freeappstore-online/platform/issues/731)) | `kokoro` `v1.0` (sherpa-onnx `kokoro-multi-lang-v1_0`) | `audio/mp4` (AAC-LC 64 kbps, 24 kHz mono) | `{ voice, speed? }` (speed 0.5-2, default 1) | All 54 Kokoro v1.0 voices: English (`af_`, `am_`, `bf_`, `bm_`), Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin (`zf_`, `zm_`) |
+| iOS companion ([#733](https://github.com/freeappstore-online/platform/issues/733)) | same | same | same | same |
+| Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC) | same | English voices only |
+
+A runner skips any job it would not generate exactly: another model or version, no `audio/mp4` in
+`formats`, params other than `voice` and `speed`, or a voice it doesn't have. The native runners split
+text into sentences the English or Spanish way; Mandarin sentence splitting and tests on Android, iOS
+and an explicit skip of non-English sets in the browser are
+[#812](https://github.com/freeappstore-online/platform/issues/812). Browser Mandarin needs sherpa-onnx
+WASM (kokoro-js phonemizes English only); Kokoro v1.1-zh (more Mandarin voices) is held in reserve
+([ADR-003](https://github.com/freeappstore-online/platform/blob/main/docs/adr/003-cross-app-community-generation.md#3-approved-model-catalogue)).
+
+To use a model no runner supports (for example better Mandarin TTS), open an issue on
+[freeappstore-online/platform](https://github.com/freeappstore-online/platform/issues) naming the model,
+version, licence, languages and what your app needs. Models become runnable through the reviewed
+catalogue planned in [#788](https://github.com/freeappstore-online/platform/issues/788) (ADR-003):
+model id, version, tasks, languages, runtimes, licence, download size and checksum. Devices never
+download a model a job names.
+
+Set `language` on sets whose text is not English (#810): it tells Whisper the language and picks the
+characters-per-second band; text in scripts without spaces is compared by character error rate
+whether or not it is set.
 
 ## Limits
 

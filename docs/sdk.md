@@ -438,8 +438,9 @@ Devices of signed-in users generate pregenerated assets (today: TTS narration) w
 ```ts
 // Owner (app owner session; CI can call the same API with GitHub Actions OIDC)
 const set = await fas.generation.createSet({
-  kind: 'tts', model: 'kokoro', modelVersion: '1.0', params: { voice: 'af_heart' },
-  formats: ['audio/ogg'], maxBytes: 5_000_000, replicas: 1,
+  kind: 'tts', model: 'kokoro', modelVersion: 'v1.0', params: { voice: 'af_heart' },
+  formats: ['audio/mp4'], maxBytes: 5_000_000, replicas: 1,
+  language: 'en', // optional BCP 47 tag; 'zh' for Mandarin
 });
 await fas.generation.addJobs(set.id, [{ key: 'ch1:p1', input: { text: 'Call me Ishmael.' } }]); // 1-500; same key + different input → 409
 await fas.generation.withdraw(jobId);           // the job reopens
@@ -453,17 +454,19 @@ const job = await fas.generation.getJob(set.id, jobId); // one job as listed, pl
 const controller = new AbortController();
 const { submitted, stopped } = await fas.generation.contribute({
   setId: set.id,
-  models: [{ model: 'kokoro', modelVersion: '1.0' }],
+  models: [{ model: 'kokoro', modelVersion: 'v1.0' }],
   generate: async (job) => ({ file: await synthesize(job.input.text, job.params), meta: { timings } }),
   signal: controller.signal,
   onProgress: ({ stage, job, submitted }) => console.log(stage, job.key, submitted),
 }); // stopped: 'no-work' | 'aborted' | 'lease-expired'
 const mine = await fas.generation.mySubmissions(); // newest 100: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt }]
-const work = await fas.generation.openWork();      // this app's sets the user could claim now: [{ setId, kind, model, modelVersion, params, formats, maxBytes, open }]
+const work = await fas.generation.openWork();      // this app's sets the user could claim now: [{ setId, kind, model, modelVersion, params, formats, maxBytes, language, open }]
 
 // Public, no sign-in: accepted artifacts with absolute URLs
 const artifacts = await fas.generation.manifest(set.id); // [{ key, jobId, url, metaUrl?, bytes, contentType, durationMs, sha256, model, modelVersion, acceptedAt }]
 ```
+
+Runners exist today only for `kokoro` `v1.0` with `audio/mp4` and params `{ voice, speed? }`: the Android and iOS companions (all Kokoro v1.0 voices, Mandarin included) and the browser runner below (English voices only). A set naming another model is accepted but never claimed; to ask for a model, open an issue on the platform repo. `language` (BCP 47, e.g. `en`, `es`, `zh`; `null` when omitted) is passed to Whisper and picks the default characters-per-second band (`zh` 2-9, `ja` 3-15, others 8-30); Chinese, Japanese, Thai and other scripts without spaces are verified by character error rate, Traditional and Simplified Chinese alike. `minCharsPerSecond`, `maxCharsPerSecond` and `maxWer` (0.25) override the defaults. See [Models and runners](community-generation.md#models-and-runners).
 
 The step-by-step calls are `claim({ setId?, models })` (a 15-minute lease, or `null` when there is no work) and `submit(job, file, { meta?, attestation? })` (`202`, status `pending`), plus `extendLease(job)`, which pushes `job.leaseExpiresAt` to 15 minutes from now (at most 2 hours after the claim; throws at the cap or once the lease is invalid). Submissions move to `accepted`, `rejected` (with a `reason`) or `superseded`. While `generate` runs, `contribute` extends the lease within 5 minutes of its expiry; a job is abandoned (back to the pool) only if extending fails and the lease runs out before the result is ready.
 
