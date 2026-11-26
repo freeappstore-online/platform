@@ -575,6 +575,24 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
       .prepare('INSERT INTO app_proxy_usage (app_id, day, count) VALUES (?, ?, ?)')
       .run('genuser:u2', new Date().toISOString().slice(0, 10), GENERATION_LIMITS.userDaily);
     expect((await s.submit('u2', job.id, job.leaseToken)).status).toBe(429);
+    // Once at the cap, a claim leases nothing (#828): the upload would be refused.
+    await s.addJobs(setId, [{ key: 'b', input: { text: 'B.' } }]);
+    const leases = () =>
+      (
+        s.db.prepare("SELECT COUNT(*) AS n FROM generation_leases WHERE user_id = 'u2'").get() as {
+          n: number;
+        }
+      ).n;
+    const before = leases();
+    const refused = await s.request('/claim', {
+      method: 'POST',
+      user: 'u2',
+      json: { models: [MODEL] },
+    });
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('Retry-After')).toBeNull();
+    expect(leases()).toBe(before);
+    expect(await s.claim('u3')).not.toBeNull();
   });
 
   it('unknown or non-FAS apps are 404; the manifest of an unknown set is 404', async () => {

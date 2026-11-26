@@ -33,6 +33,9 @@ import { APP_ORG_ID, DEPLOY_AUDIENCE } from './deploy.js';
 
 type Ctx = Context<{ Bindings: Env }>;
 
+/** The daily cap's `429` (no `Retry-After`: runners treat it as final until the next UTC day). */
+const DAILY_LIMIT = 'daily contribution limit reached; try tomorrow';
+
 export const GENERATION_LIMITS = {
   leaseMs: 15 * 60_000,
   /** Extensions (#783) never take a lease past this long after its claim. */
@@ -664,6 +667,15 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
     throw new HttpError(400, 'invalid claim');
   }
   const now = Date.now();
+  // A claim the upload would refuse (the daily cap) leases nothing (#828): a runner that claimed
+  // anyway generated the job, was refused, and that user could never take the job again.
+  const usage = d1UsageStore(c.env.DB);
+  if (
+    (await usage.read(`genuser:${who.id}`, dayKey(now))) >= GENERATION_LIMITS.userDaily ||
+    (await usage.read(`genapp:${appId}`, dayKey(now))) >= GENERATION_LIMITS.appDaily
+  ) {
+    throw new HttpError(429, DAILY_LIMIT);
+  }
   const token = `glt_${nativeRandom()}`;
   // One open lease per runner (#825): a new claim releases this runner's
   // previous one, whose job that user can never be given again. The user's
@@ -850,7 +862,7 @@ generationRoutes.put('/apps/:appId/generation/jobs/:jobId/result', async (c) => 
     !(await usage.bumpIfBelow!(`genuser:${who.id}`, dayKey(now), 1, GENERATION_LIMITS.userDaily)) ||
     !(await usage.bumpIfBelow!(`genapp:${appId}`, dayKey(now), 1, GENERATION_LIMITS.appDaily))
   ) {
-    throw new HttpError(429, 'daily contribution limit reached; try tomorrow');
+    throw new HttpError(429, DAILY_LIMIT);
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const id = crypto.randomUUID();

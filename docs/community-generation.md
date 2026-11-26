@@ -239,7 +239,9 @@ whether or not it is set.
 
 ## Limits
 
-- 200 submissions per user per UTC day across all apps; 5,000 per app per UTC day.
+- 200 submissions per user per UTC day across all apps; 5,000 per app per UTC day. Uploads past either are `429`
+  (no `Retry-After`), and once either is reached a claim is `429` too and leases nothing, so a runner
+  never generates a job it cannot upload ([#828](https://github.com/freeappstore-online/platform/issues/828)).
 - Leases: 15 minutes, extendable to at most 2 hours after the claim; one open per user.
 - Verifications: 2,000 per app per UTC day.
 - Jobs: 1-500 per request; text at most 100,000 characters (8 MB per request). Sets: `maxBytes` at most 25 MB.
