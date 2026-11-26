@@ -85,6 +85,8 @@ final class ContributeTests: XCTestCase {
         /// Attempt records posted (#827), and whether that route fails.
         var events: [[String: Any]] = []
         var eventsFail = false
+        /// Each events request's own timeout (#828).
+        var eventTimeouts: [TimeInterval] = []
         /// Lease extensions asked for (path, `X-Lease-Token`), and what the next one answers: an expiry or a failure.
         var extensions: [(String, String?)] = []
         var extend: () -> Result<Int64, ApiFailure> = { .failure(ApiFailure(status: 500, message: "no extension expected")) }
@@ -105,6 +107,7 @@ final class ContributeTests: XCTestCase {
                 }
                 return jobs.isEmpty ? .init(status: 204) : .init(json: ["job": jobs.removeFirst()])
             case ("POST", _) where path.hasSuffix("/generation/events"):
+                eventTimeouts.append(request.timeoutInterval)
                 if eventsFail { return .init(status: 500, json: ["error": "down"]) }
                 let posted = ((try? JSONSerialization.jsonObject(with: Self.body(request))) as? [String: Any])?["events"] as? [[String: Any]] ?? []
                 events += posted
@@ -295,6 +298,7 @@ final class ContributeTests: XCTestCase {
         XCTAssertTrue(server.uploads.isEmpty)
         XCTAssertEqual(log.rows["j1"]?.reason, "user_stop", "the runner's reason is recorded")
         XCTAssertEqual(server.events.first?["reason"] as? String, "user_stop")
+        XCTAssertEqual(server.eventTimeouts, [2], "#828: a stopped run sends its record with a short timeout")
     }
 
     /// A hot phone pauses the work and keeps the lease alive; it goes on once cool, rather than stopping.

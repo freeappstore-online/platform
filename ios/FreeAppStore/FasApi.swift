@@ -35,8 +35,11 @@ final class FasApi: Sendable {
         return URL(string: "\(ORIGIN)/v1\(path)")
     }
 
-    func request(_ method: String, _ path: String, token: String? = nil, body: Data? = nil, headers: [String: String] = [:]) async throws -> [String: Any] {
+    /// `timeout`, when given, bounds this request instead of the session's 15 s (a best-effort send, #828).
+    func request(_ method: String, _ path: String, token: String? = nil, body: Data? = nil, headers: [String: String] = [:],
+                 timeout: TimeInterval? = nil) async throws -> [String: Any] {
         var request = Self.request(method, path, token: token, headers: headers)
+        if let timeout { request.timeoutInterval = timeout }
         if let body {
             request.httpBody = body
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")

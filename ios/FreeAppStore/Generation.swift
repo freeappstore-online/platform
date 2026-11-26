@@ -146,9 +146,9 @@ final class GenerationClient: @unchecked Sendable {
 
     /// Attempt records (#813, #827) of jobs this phone leased. Returns how many the server recorded.
     @discardableResult
-    func events(_ appId: String, records: [(jobId: String, record: AttemptRecord)]) async throws -> Int {
+    func events(_ appId: String, records: [(jobId: String, record: AttemptRecord)], timeout: TimeInterval? = nil) async throws -> Int {
         let body = try JSONSerialization.data(withJSONObject: ["events": try records.map { try $0.record.event($0.jobId) }])
-        let result = try await api.request("POST", "/apps/\(appId)/generation/events", token: try token(), body: body)
+        let result = try await api.request("POST", "/apps/\(appId)/generation/events", token: try token(), body: body, timeout: timeout)
         return (result["recorded"] as? NSNumber)?.intValue ?? 0
     }
 
@@ -457,7 +457,9 @@ final class Contributor {
         if let audio, let segments, FileManager.default.fileExists(atPath: file.path) {
             do { try audio.save(job.id, file: file, segments: segments) } catch { Self.logger.error("audio not kept: \(error.localizedDescription, privacy: .public)") }
         }
-        do { try await client.events(appId, records: [(job.id, record)]) }
+        // Best effort and short (#828): after iOS ends a background run only seconds are left before the task must
+        // complete, so a slow network can't hold it; the record stays with the job's row either way.
+        do { try await client.events(appId, records: [(job.id, record)], timeout: keepGoing() ? 5 : 2) }
         catch { Self.logger.error("attempt record not sent: \(error.localizedDescription, privacy: .public)") } // best effort: never fails the job
         return submitted
     }
