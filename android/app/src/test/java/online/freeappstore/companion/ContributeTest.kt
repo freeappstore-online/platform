@@ -32,9 +32,11 @@ class ContributeTest {
         override fun handled(jobId: String) = jobId in rows
         override fun record(contribution: Contribution) { rows[contribution.jobId] = contribution }
         override fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict?) {
-            rows[jobId]?.let { rows[jobId] = it.copy(status = status, reason = reason, wer = server?.wer ?: it.wer, durationMs = server?.durationMs ?: it.durationMs,
-                artifactUrl = server?.artifactUrl ?: it.artifactUrl, metaUrl = server?.metaUrl ?: it.metaUrl) }
+            rows[jobId]?.let { rows[jobId] = it.copy(status = status, reason = reason, durationMs = server?.durationMs ?: it.durationMs,
+                artifactUrl = server?.artifactUrl ?: it.artifactUrl, metaUrl = server?.metaUrl ?: it.metaUrl,
+                submissionId = server?.submissionId ?: it.submissionId, report = server?.report ?: it.report) }
         }
+        override fun report(jobId: String, report: Report) { rows[jobId]?.let { rows[jobId] = it.copy(report = report) } }
     }
     class Upload(val path: String, val token: String, val headers: Map<String, String>, val bytes: ByteArray, val contentType: String, val meta: JSONObject?)
     inner class FakeApi : FasApi() {
@@ -53,6 +55,8 @@ class ContributeTest {
         var submissions = JSONArray()
         /** Attempt records sent (#827), and what each upload does to the clock first. */
         val events = mutableListOf<JSONObject>()
+        /** Reports sent (#831): the path and body. */
+        val reports = mutableListOf<Pair<String, JSONObject>>()
         var onUpload: () -> Unit = {}
         /** Lease extensions asked for (path to `X-Lease-Token`), and what the next one answers: a new expiry or a failure. */
         val extensions = mutableListOf<Pair<String, String?>>()
@@ -78,6 +82,10 @@ class ContributeTest {
                     val list = body!!.getJSONArray("events")
                     (0 until list.length()).forEach { events += list.getJSONObject(it) }
                     JSONObject().put("recorded", list.length())
+                }
+                method == "PUT" && path.matches(Regex("^/apps/books/generation/submissions/[^/]+/report$")) -> {
+                    reports += path to body!!
+                    JSONObject().put("report", JSONObject().put("good", body.getBoolean("good")).put("note", body.opt("note") ?: JSONObject.NULL).put("at", now))
                 }
                 else -> error("unexpected $method $path")
             }
@@ -147,6 +155,7 @@ class ContributeTest {
         assertEquals("padded with silence to MIN_SECONDS", 24_000, upload.bytes.size)
         assertEquals("[[0,14,0,0.001]]", upload.meta!!.getJSONArray("segments").toString())
         assertEquals("pending", log.rows["j1"]!!.status)
+        assertEquals("the upload's submission id, for the report (#831)", "sub-1", log.rows["j1"]!!.submissionId)
         assertEquals("book/j1", log.rows["j1"]!!.key)
         assertFalse("the temp file is removed", File(dir, "contribution.m4a").exists())
     }
@@ -453,19 +462,39 @@ class ContributeTest {
     @Test fun refreshCopiesVerdicts() {
         log.record(Contribution("j1", "books", "book/j1", now, "pending"))
         log.record(Contribution("j2", "books", "book/j2", now, "pending"))
-        api.submissions = JSONArray().put(JSONObject().put("submissionId", "s1").put("jobId", "j1").put("status", "rejected").put("reason", "transcript_mismatch").put("wer", 0.42))
+        api.submissions = JSONArray().put(JSONObject().put("submissionId", "s1").put("jobId", "j1").put("status", "rejected").put("reason", "too_fast")
+            .put("report", JSONObject().put("good", false).put("note", "Skips a word.").put("at", now)))
             .put(JSONObject().put("jobId", "other").put("status", "accepted"))
-            .put(JSONObject().put("id", "s2").put("jobId", "j2").put("status", "accepted").put("reason", JSONObject.NULL).put("createdAt", now)
-                .put("wer", JSONObject.NULL).put("durationMs", 2_400).put("input", JSONObject().put("text", "Whole text."))
+            .put(JSONObject().put("submissionId", "s2").put("jobId", "j2").put("status", "accepted").put("reason", JSONObject.NULL).put("createdAt", now)
+                .put("report", JSONObject.NULL).put("durationMs", 2_400).put("input", JSONObject().put("text", "Whole text."))
                 .put("artifact", JSONObject().put("url", "https://api.freeappstore.online/v1/apps/books/generation/artifacts/j2?v=ab").put("metaUrl", JSONObject.NULL)))
         GenerationClient(api) { "ndev_test" }.refresh("books", log)
         assertEquals("rejected", log.rows["j1"]!!.status)
-        assertEquals("transcript_mismatch", log.rows["j1"]!!.reason)
-        assertEquals("the error rate, when the server sends one (#820)", 0.42, log.rows["j1"]!!.wer!!, 0.0)
+        assertEquals("too_fast", log.rows["j1"]!!.reason)
+        assertEquals("s1", log.rows["j1"]!!.submissionId)
+        assertEquals("this phone's report, as the server has it (#831)", Report(false, "Skips a word.", now), log.rows["j1"]!!.report)
         assertNull("only this phone's jobs", log.rows["other"])
-        assertEquals("reason null (#727 comment); #824's duration and artifact", Contribution("j2", "books", "book/j2", now, "accepted", "", durationMs = 2_400,
-            artifactUrl = "https://api.freeappstore.online/v1/apps/books/generation/artifacts/j2?v=ab"), log.rows["j2"])
+        assertEquals("reason null (#727 comment); #824's duration and artifact; no report yet", Contribution("j2", "books", "book/j2", now, "accepted", "", durationMs = 2_400,
+            artifactUrl = "https://api.freeappstore.online/v1/apps/books/generation/artifacts/j2?v=ab", submissionId = "s2"), log.rows["j2"])
         assertEquals("Whole text.", GenerationClient(api) { "ndev_test" }.inputText("books", "j2"))
+    }
+    @Test fun sendsAReportOnItsOwnSubmission() {
+        val client = GenerationClient(api) { "ndev_test" }
+        assertEquals(Report(true, "Clear.", now), client.report("books", "s1", true, "  Clear. "))
+        assertEquals("/apps/books/generation/submissions/s1/report", api.reports[0].first)
+        assertTrue(api.reports[0].second.getBoolean("good"))
+        assertEquals("trimmed", "Clear.", api.reports[0].second.getString("note"))
+        assertEquals("a blank note is not sent", Report(false, null, now), client.report("books", "s1", false, " "))
+        assertFalse(api.reports[1].second.has("note"))
+        client.report("books", "s1", false, "x".repeat(600))
+        assertEquals("at most 500 characters", Report.NOTE_CHARS, api.reports[2].second.getString("note").length)
+    }
+    @Test fun parsesReports() {
+        assertEquals(Report(true, null, 5), Report.parse(JSONObject().put("good", true).put("note", JSONObject.NULL).put("at", 5)))
+        assertNull(Report.parse(null))
+        assertNull("good must be a boolean", Report.parse(JSONObject().put("good", "yes")))
+        val r = Report(false, "Too quiet.", 9)
+        assertEquals("round-trips as stored on the phone", r, Report.parse(r.json()))
     }
     @Test fun parsesIsoLeaseExpiryAndRejectsOddJobIds() {
         val parsed = GenerationClient.parseJob(job("j1", expires = "2026-11-26T12:00:00Z"))

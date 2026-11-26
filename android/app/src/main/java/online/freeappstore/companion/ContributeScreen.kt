@@ -116,7 +116,7 @@ internal fun ContributeScreen(state: CompanionState, catalogue: CatalogueState, 
         ContributePage.Settings -> ContributeSettings(state, name, actions) { show(ContributePage.Status) }
         is ContributePage.Activity -> ContributeActivity(state, page, name, actions.refreshContributions, show)
         is ContributePage.Detail -> state.contributions.find { it.jobId == page.jobId }?.let { c ->
-            ContributionDetail(c, name(c.appId), actions.loadPlayback, actions.keptAudio) { show(page.from) }
+            ContributionDetail(c, name(c.appId), actions.loadPlayback, actions.keptAudio, actions.sendReport) { show(page.from) }
         } ?: LaunchedEffect(page) { show(page.from) }
     }
 }
@@ -226,10 +226,13 @@ internal fun attemptLines(record: JSONObject): List<Pair<String, String>> {
     ).mapNotNull { (label, value) -> value?.let { label to it } }
 }
 
-/** One job: what it was, what happened to it, how the attempt went, and its audio: kept on this phone, or once accepted. */
+/**
+ * One job: what it was, what happened to it, how the attempt went, its audio (kept on this phone, or once accepted) and,
+ * for an upload, this phone's report on it (#831).
+ */
 @Composable
 private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>>,
-                               keptAudio: (Contribution) -> String?, back: () -> Unit) {
+                               keptAudio: (Contribution) -> String?, sendReport: suspend (Contribution, Boolean, String) -> Unit, back: () -> Unit) {
     Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         BackRow("Activity", back)
         Text(appName, style = MaterialTheme.typography.headlineMedium)
@@ -242,7 +245,6 @@ private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: s
                 c.bytes?.let { Labeled("Size", byteSize(it)) }
                 val onPhone = c.status == "skipped" || c.status == "failed"
                 if (c.reason.isNotBlank()) Labeled(if (onPhone) "Reason on this phone" else "Server's reason", c.reason)
-                c.wer?.let { Labeled("Error rate", "${Math.round(it * 100)}%") }
                 if (onPhone) Text("Not retried on this phone.", style = MaterialTheme.typography.bodySmall)
             }
         }
@@ -257,7 +259,42 @@ private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: s
         val url = remember(c.jobId) { keptAudio(c) } ?: c.artifactUrl?.takeIf { c.status == "accepted" }
         if (url != null) Playback(c, url, loadPlayback)
         else if (c.inputPreview.isNotBlank()) InputText(c.inputPreview, null)
+        if (c.submissionId != null) ReportCard(c, sendReport)
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** Good / Not good on this phone's own upload, with an optional note (#831): people judge quality. Sending again changes it. */
+@Composable
+private fun ReportCard(c: Contribution, send: suspend (Contribution, Boolean, String) -> Unit) {
+    var good by remember(c.jobId) { mutableStateOf(c.report?.good) }
+    var note by remember(c.jobId) { mutableStateOf(c.report?.note.orEmpty()) }
+    var sending by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Your report", style = MaterialTheme.typography.titleLarge)
+            Text("Listen, then say whether it was good. The app's owner sees your report.", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(good == true, { good = true }, { Text("Good") })
+                FilterChip(good == false, { good = false }, { Text("Not good") })
+            }
+            OutlinedTextField(note, { note = it.take(Report.NOTE_CHARS) }, Modifier.fillMaxWidth(), label = { Text("Note (optional)") },
+                supportingText = { Text("${note.length}/${Report.NOTE_CHARS}") })
+            Button(onClick = {
+                val g = good ?: return@Button
+                scope.launch {
+                    sending = true; error = ""
+                    try { send(c, g, note) } catch (e: Exception) { error = e.message ?: "Could not send it." } finally { sending = false }
+                }
+            }, enabled = good != null && !sending) { Text(if (c.report == null) "Send" else "Change") }
+            c.report?.let {
+                Text("Sent ${Format.dateTime(it.at)}: ${if (it.good) "Good" else "Not good"}", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 

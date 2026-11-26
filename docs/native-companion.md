@@ -138,18 +138,22 @@ and verifies every upload; the phone is never trusted.
   uploading; a `409` (the 2-hour cap) stops extending, so the job finishes only if the lease still allows. Other failures
   are retried after the next sentence.
 - **Record**: `generation_jobs` in the backup-excluded database (job key, status, reason, and since #820 the first
-  200 characters of the input, the uploaded audio's length and size, and from #824 the server's `wer`, measured
-  `durationMs` and the accepted `artifact` URLs), refreshed from `GET …/generation/submissions` for every app on the
-  record. Cleared by **Disconnect**.
+  200 characters of the input, the uploaded audio's length and size, and from #824 the server's measured `durationMs`
+  and the accepted `artifact` URLs; since #831, database version 7, the upload's `submissionId` and this phone's
+  `report`), refreshed from `GET …/generation/submissions` for every app on the record. No AI checks the audio and the
+  server sends no `wer`; a version 5 or 6 table keeps an unused `wer` column. Cleared by **Disconnect**.
 - **Screens** (#820): the **Contribute** tab is one status card (running with app, job, sentence n of N and speed as
   seconds of audio per second of work; or paused or idle and why: no model, no apps, not plugged in, no connection, not on
   Wi‑Fi) with **Run now** / **Stop**, and today's counts (accepted, checking, rejected, not done) as chips that open
   **Activity** filtered. **Activity** lists every job this phone tried, newest first and by day, with status chips (All ·
   Accepted · Checking · Rejected · Not done; "Not needed" counts as Not done) and app chips, and pull to refresh the
   verdicts. A row opens the job: app, key, input preview, time, length and size, the phone's reason or the server's
-  verdict, reason and error rate, and for an accepted job **Play**, which streams `artifact.url` and highlights the
+  verdict and reason, and for an accepted job **Play**, which streams `artifact.url` and highlights the
   sentence being spoken in the job's whole `input.text` (fetched from the submissions route when the detail opens; the
-  stored preview when offline) from the `artifact.metaUrl` timings. **Settings** (gear icon): the apps opted in, plus apps with open jobs for this phone from
+  stored preview when offline) from the `artifact.metaUrl` timings. For a job this phone uploaded, **Your report**
+  (#831): **Good** / **Not good**, an optional note (at most 500 characters) and **Send** (**Change** once sent), which
+  calls `PUT …/generation/submissions/:submissionId/report` with the device credential; the report is kept on the row,
+  so it shows offline, and a refresh takes the server's `report`. The app's owner sees it in the console. **Settings** (gear icon): the apps opted in, plus apps with open jobs for this phone from
   `GET /generation/open` (sets in `kokoro` `v1.0` and `audio/mp4`), each with its switch and open-job count; the voice
   model with download progress and delete; **Only while plugged in on Wi‑Fi**; and the storage the model and the record use.
 - **Attestation**: `X-Attestation` is sent when the `Attestation` hook returns a token; none until #732.

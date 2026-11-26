@@ -25,21 +25,34 @@ data class GenerationJob(
 /**
  * One job on this phone's contribution record. `status`: uploading, then the server's pending/accepted/rejected/superseded;
  * or skipped/failed locally. For the Activity detail (#820): the first [Contribution.PREVIEW] characters of the input,
- * the audio's length (as encoded, then as the server measured it) and size, and from the server's verdict (#824) the
- * word error rate and the job's accepted artifact.
+ * the audio's length (as encoded, then as the server measured it) and size, from the server's verdict (#824) the job's
+ * accepted artifact, and the upload's submission id with this phone's Good / Not good report on it (#831).
  */
 data class Contribution(
     val jobId: String, val appId: String, val key: String, val at: Long, val status: String, val reason: String = "",
-    val inputPreview: String = "", val durationMs: Long? = null, val bytes: Long? = null, val wer: Double? = null,
+    val inputPreview: String = "", val durationMs: Long? = null, val bytes: Long? = null,
     val artifactUrl: String? = null, val metaUrl: String? = null,
     /** The attempt record (#827) as stored ([Attempt.end]), or null for a job tried before it existed. */
     val record: String? = null,
+    val submissionId: String? = null, val report: Report? = null,
 ) {
     companion object { const val PREVIEW = 200 }
 }
 
-/** What `GET …/generation/submissions` measured and links (#824); a null field keeps what is recorded. */
-data class ServerVerdict(val wer: Double? = null, val durationMs: Long? = null, val artifactUrl: String? = null, val metaUrl: String? = null)
+/** What `GET …/generation/submissions` measured and links (#824), and the submission and its report (#831); a null field keeps what is recorded. */
+data class ServerVerdict(val durationMs: Long? = null, val artifactUrl: String? = null, val metaUrl: String? = null,
+                         val submissionId: String? = null, val report: Report? = null)
+
+/** This phone's judgement of its own upload (#831): Good / Not good and an optional note. People judge quality, not AI. */
+data class Report(val good: Boolean, val note: String?, val at: Long) {
+    fun json(): JSONObject = JSONObject().put("good", good).put("note", note ?: JSONObject.NULL).put("at", at)
+    companion object {
+        const val NOTE_CHARS = 500
+        /** `{ good, note, at }`, or null for null or anything else. */
+        fun parse(j: JSONObject?): Report? = j?.takeIf { it.opt("good") is Boolean }
+            ?.let { Report(it.getBoolean("good"), if (it.isNull("note")) null else it.optString("note"), it.optLong("at")) }
+    }
+}
 
 /** One sentence of an artifact's `meta` (#785): its characters in the input and when it is spoken. */
 data class Segment(val start: Int, val end: Int, val startMs: Long, val endMs: Long)
@@ -52,6 +65,8 @@ interface ContributionLog {
     fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict? = null)
     /** Keeps the attempt record (#827) with the job's row. */
     fun attempt(jobId: String, record: JSONObject) {}
+    /** Keeps the report sent on the job's upload (#831). */
+    fun report(jobId: String, report: Report) {}
 }
 
 /**
@@ -111,9 +126,16 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
             if (jobId.isBlank()) continue
             val artifact = s.optJSONObject("artifact")
             log.updateStatus(jobId, s.optString("status"), if (s.isNull("reason")) "" else s.optString("reason").take(120), ServerVerdict(
-                if (s.isNull("wer")) null else s.optDouble("wer"), if (s.isNull("durationMs")) null else s.optLong("durationMs"),
-                artifact?.optString("url")?.ifBlank { null }, artifact?.takeUnless { it.isNull("metaUrl") }?.optString("metaUrl")?.ifBlank { null }))
+                if (s.isNull("durationMs")) null else s.optLong("durationMs"),
+                artifact?.optString("url")?.ifBlank { null }, artifact?.takeUnless { it.isNull("metaUrl") }?.optString("metaUrl")?.ifBlank { null },
+                s.optString("submissionId").ifBlank { null }, Report.parse(s.optJSONObject("report"))))
         }
+    }
+    /** Sends this phone's report on its own submission (#831) and returns it as the server stored it; sending again changes it. */
+    fun report(appId: String, submissionId: String, good: Boolean, note: String): Report {
+        val body = JSONObject().put("good", good).apply { note.trim().take(Report.NOTE_CHARS).ifBlank { null }?.let { put("note", it) } }
+        return Report.parse(api.request("PUT", "/apps/$appId/generation/submissions/$submissionId/report", token(), body).optJSONObject("report"))
+            ?: throw IOException("Unexpected answer.")
     }
     /** The whole input of one of this account's jobs (#824), for highlighting; null when it is not among the newest 100. */
     fun inputText(appId: String, jobId: String): String? =
@@ -183,7 +205,7 @@ object GenerationPolicy {
     const val PARAGRAPH_PAUSE = 0.8
     /**
      * Audio shorter than this gets silence at the end (#812), so a two-character phrase such as 对。 is well within the
-     * server's characters-per-second floor and Whisper hears it whole. Audio up to 3 s is never too long for its text.
+     * server's characters-per-second floor. Audio up to 3 s is never too long for its text.
      */
     const val MIN_SECONDS = 1.0
     /** Why this phone will not generate the job, or null when it will. */
@@ -352,12 +374,12 @@ class Contributor(
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
             log.record(row("uploading", durationMs = durationMs, bytes = file.length()))
             // The same file, again, while the lease (extended as it runs low) still leaves time to upload (#819).
-            attempt.timed(Attempt.UPLOAD, { attempt.uploadMs = it }) {
+            val submissionId = attempt.timed(Attempt.UPLOAD, { attempt.uploadMs = it }) {
                 retrying({ lease.deadline }, keepGoing, beforeRetry = lease::renew) {
                     client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
                 }
             }
-            log.updateStatus(job.id, "pending", "")
+            log.updateStatus(job.id, "pending", "", ServerVerdict(submissionId = submissionId))
             attempt.reason = "submitted"
             return true
         } catch (e: Exception) {

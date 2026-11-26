@@ -136,11 +136,13 @@ class CompanionTest {
     /** #820: the status card, today's chips opening Activity filtered, a job's detail, and Settings behind the gear. */
     @Test fun contributeTabSplitsStatusActivityAndSettings() {
         val now = System.currentTimeMillis()
-        val rejected = Contribution("j1", "run", "book/1", now, "rejected", "transcript_mismatch", "It was a bright cold day.", 3_000, 12_000, 0.42)
+        val rejected = Contribution("j1", "run", "book/1", now, "rejected", "transcript_mismatch", "It was a bright cold day.", 3_000, 12_000, submissionId = "s1")
         val accepted = Contribution("j2", "run", "book/2", now - 1, "accepted", "", "Then it rained.", artifactUrl = "https://api.freeappstore.online/v1/apps/run/generation/artifacts/j2")
         var refreshed = 0
+        val reports = mutableListOf<Triple<String, Boolean, String>>()
         screen(CompanionState(signedIn = true, now = now, contributeApps = setOf("run"), contributedToday = mapOf("run" to 2), contributions = listOf(rejected, accepted)),
-            CompanionActions(openJobs = { mapOf("run" to 3, "hanzi-practice" to 1) }, refreshContributions = { refreshed++ }), tab = Tab.CONTRIBUTE)
+            CompanionActions(openJobs = { mapOf("run" to 3, "hanzi-practice" to 1) }, refreshContributions = { refreshed++ },
+                sendReport = { c, good, note -> reports += Triple(c.jobId, good, note) }), tab = Tab.CONTRIBUTE)
         compose.onNodeWithText("Paused").assertIsDisplayed()
         compose.onNodeWithText("No voice model. Download it in Settings.").assertIsDisplayed()
         compose.onNodeWithText("1 accepted").assertIsDisplayed()
@@ -149,14 +151,19 @@ class CompanionTest {
         compose.onNodeWithText("Run · book/2").assertDoesNotExist()
         compose.onNodeWithText("Run · book/1").performClick()
         compose.onNodeWithText("transcript_mismatch").assertIsDisplayed()
-        compose.onNodeWithText("42%").assertIsDisplayed()
+        compose.onNodeWithText("Error rate").assertDoesNotExist() // people judge quality, no AI (#831)
         compose.onNodeWithText("0:03").assertIsDisplayed()
         compose.onNodeWithText("It was a bright cold day.").assertIsDisplayed()
         compose.onNodeWithText("Play").assertDoesNotExist() // only accepted jobs play
+        compose.onNodeWithText("Not good").performScrollTo().performClick()
+        compose.onNodeWithText("Send").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals("this phone's own upload gets a report (#831)", listOf(Triple("j1", false, "")), reports)
         compose.onNodeWithText("‹ Activity").performClick()
         compose.onNodeWithText("All").performClick()
         compose.onNodeWithText("Run · book/2").performClick()
         compose.onNodeWithText("Play").assertIsDisplayed()
+        compose.onNodeWithText("Your report").assertDoesNotExist() // not uploaded from this phone
         compose.onNodeWithText("‹ Activity").performClick()
         compose.onNodeWithText("‹ Contribute").performClick()
         compose.onNodeWithContentDescription("Contribute settings").performClick()

@@ -12,10 +12,11 @@ import org.json.JSONObject
  * `share_events` (when sharing was enabled, paused or turned off, and the activity log's problems) and `share_points`
  * (a 30-day copy of what was shared with each app). Both are in the same backup-excluded database as the queue and
  * never leave the phone. Version 4 adds `generation_jobs`, this phone's contribution record (#731); version 5 its input
- * preview, audio length and size, the server's error rate and the accepted artifact's URLs, for the Activity detail (#820);
- * version 6 its attempt record (#827).
+ * preview, audio length and size and the accepted artifact's URLs, for the Activity detail (#820); version 6 its attempt
+ * record (#827); version 7 its submission id and this phone's Good / Not good report (#831). A version 5 or 6 table also
+ * has a `wer` column, no longer read or written (#831).
  */
-class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 6), ContributionLog {
+class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 7), ContributionLog {
     private val prefs = context.getSharedPreferences("native-settings", Context.MODE_PRIVATE)
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE points(id TEXT PRIMARY KEY, at INTEGER NOT NULL, payload TEXT NOT NULL)")
@@ -24,11 +25,12 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
     }
     /**
      * Version 2 added the history, version 3 its `(app_id, sent_at)` index, version 4 `generation_jobs` (each step
-     * `IF NOT EXISTS`), versions 5 and 6 the columns [createHistory] creates `generation_jobs` with, added to an older table.
+     * `IF NOT EXISTS`), versions 5 to 7 the columns [createHistory] creates `generation_jobs` with, added to an older table.
      */
     override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) {
         if (old == 4) GENERATION_V5.forEach { db.execSQL("ALTER TABLE generation_jobs ADD COLUMN $it") }
         if (old in 4..5) GENERATION_V6.forEach { db.execSQL("ALTER TABLE generation_jobs ADD COLUMN $it") }
+        if (old in 4..6) GENERATION_V7.forEach { db.execSQL("ALTER TABLE generation_jobs ADD COLUMN $it") }
         createHistory(db)
     }
     private fun createHistory(db: SQLiteDatabase) {
@@ -38,7 +40,7 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
         db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_at ON share_points(app_id, at)")
         // pendingCount and lastUpload run on every screen refresh; without it each scans the app's whole history.
         db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_sent ON share_points(app_id, sent_at)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS generation_jobs(job_id TEXT PRIMARY KEY, app_id TEXT NOT NULL, job_key TEXT NOT NULL, at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', ${(GENERATION_V5 + GENERATION_V6).joinToString()})")
+        db.execSQL("CREATE TABLE IF NOT EXISTS generation_jobs(job_id TEXT PRIMARY KEY, app_id TEXT NOT NULL, job_key TEXT NOT NULL, at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', ${(GENERATION_V5 + GENERATION_V6 + GENERATION_V7).joinToString()})")
         db.execSQL("CREATE INDEX IF NOT EXISTS generation_jobs_at ON generation_jobs(at)")
     }
 
@@ -308,28 +310,34 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
             put("job_id", contribution.jobId); put("app_id", contribution.appId); put("job_key", contribution.key.take(200))
             put("at", contribution.at); put("status", contribution.status); put("reason", contribution.reason.take(120))
             put("input_preview", contribution.inputPreview.take(Contribution.PREVIEW))
-            put("duration_ms", contribution.durationMs); put("bytes", contribution.bytes); put("wer", contribution.wer)
+            put("duration_ms", contribution.durationMs); put("bytes", contribution.bytes)
             put("artifact_url", contribution.artifactUrl); put("meta_url", contribution.metaUrl)
+            put("submission_id", contribution.submissionId); put("report", contribution.report?.json()?.toString())
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
     @Synchronized override fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict?) {
         writableDatabase.update("generation_jobs", ContentValues().apply {
             put("status", status); put("reason", reason.take(120))
-            server?.wer?.let { put("wer", it) }; server?.durationMs?.let { put("duration_ms", it) }
+            server?.durationMs?.let { put("duration_ms", it) }
             server?.artifactUrl?.let { put("artifact_url", it) }; server?.metaUrl?.let { put("meta_url", it) }
+            server?.submissionId?.let { put("submission_id", it) }; server?.report?.let { put("report", it.json().toString()) }
         }, "job_id = ?", arrayOf(jobId))
+    }
+    @Synchronized override fun report(jobId: String, report: Report) {
+        writableDatabase.update("generation_jobs", ContentValues().apply { put("report", report.json().toString()) }, "job_id = ?", arrayOf(jobId))
     }
     @Synchronized override fun attempt(jobId: String, record: JSONObject) {
         writableDatabase.update("generation_jobs", ContentValues().apply { put("record", record.toString()) }, "job_id = ?", arrayOf(jobId))
     }
     /** Newest first: every job this phone tried, up to [limit] (#820). */
     @Synchronized fun contributions(limit: Int = 2_000): List<Contribution> = readableDatabase.rawQuery(
-        "SELECT job_id, app_id, job_key, at, status, reason, input_preview, duration_ms, bytes, wer, artifact_url, meta_url, record FROM generation_jobs ORDER BY at DESC LIMIT ?",
+        "SELECT job_id, app_id, job_key, at, status, reason, input_preview, duration_ms, bytes, artifact_url, meta_url, record, submission_id, report FROM generation_jobs ORDER BY at DESC LIMIT ?",
         arrayOf(limit.toString())).use { c ->
         buildList {
             while (c.moveToNext()) add(Contribution(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), c.getString(5), c.getString(6),
-                if (c.isNull(7)) null else c.getLong(7), if (c.isNull(8)) null else c.getLong(8), if (c.isNull(9)) null else c.getDouble(9),
-                if (c.isNull(10)) null else c.getString(10), if (c.isNull(11)) null else c.getString(11), if (c.isNull(12)) null else c.getString(12)))
+                if (c.isNull(7)) null else c.getLong(7), if (c.isNull(8)) null else c.getLong(8),
+                if (c.isNull(9)) null else c.getString(9), if (c.isNull(10)) null else c.getString(10), if (c.isNull(11)) null else c.getString(11),
+                if (c.isNull(12)) null else c.getString(12), if (c.isNull(13)) null else runCatching { Report.parse(JSONObject(c.getString(13))) }.getOrNull()))
         }
     }
     /** Apps with a job on the record, for the verdict refresh (#820): an app turned off still gets its verdicts. */
@@ -349,10 +357,12 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
     }
 }
 
-/** `generation_jobs` columns added in version 5 (#820). */
-private val GENERATION_V5 = listOf("input_preview TEXT NOT NULL DEFAULT ''", "duration_ms INTEGER", "bytes INTEGER", "wer REAL", "artifact_url TEXT", "meta_url TEXT")
+/** `generation_jobs` columns added in version 5 (#820); its `wer REAL` is no longer created (#831). */
+private val GENERATION_V5 = listOf("input_preview TEXT NOT NULL DEFAULT ''", "duration_ms INTEGER", "bytes INTEGER", "artifact_url TEXT", "meta_url TEXT")
 /** `generation_jobs` column added in version 6 (#827): the attempt record, as JSON. */
 private val GENERATION_V6 = listOf("record TEXT")
+/** `generation_jobs` columns added in version 7 (#831): the upload's submission id and this phone's report on it, as JSON. */
+private val GENERATION_V7 = listOf("submission_id TEXT", "report TEXT")
 
 private fun parseApps(array: JSONArray): List<ConnectedApp> = (0 until array.length()).map { i ->
     val a = array.getJSONObject(i); val g = a.optJSONObject("grant")
