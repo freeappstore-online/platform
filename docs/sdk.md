@@ -427,6 +427,9 @@ const set = await fas.generation.createSet({
 await fas.generation.addJobs(set.id, [{ key: 'ch1:p1', input: { text: 'Call me Ishmael.' } }]); // 1-500; same key + different input → 409
 await fas.generation.withdraw(jobId);           // the job reopens
 await fas.generation.blockContributor(userId);  // withdraws everything they contributed
+const sets = await fas.generation.listSets();   // [{ ...set, createdAt, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }]
+const { jobs, nextCursor } = await fas.generation.listJobs(set.id, { status: 'accepted', cursor, limit: 50 });
+// jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact: { url, durationMs, bytes, contributor, acceptedAt } | null, submissions }]
 
 // Contributor: claim → generate → submit until there is no work
 const controller = new AbortController();
@@ -438,6 +441,7 @@ const { submitted, stopped } = await fas.generation.contribute({
   onProgress: ({ stage, job, submitted }) => console.log(stage, job.key, submitted),
 }); // stopped: 'no-work' | 'aborted' | 'lease-expired'
 const mine = await fas.generation.mySubmissions(); // [{ id, jobId, status, reason, createdAt }]
+const work = await fas.generation.openWork();      // this app's sets the user could claim now: [{ setId, kind, model, modelVersion, params, formats, maxBytes, open }]
 
 // Public, no sign-in: accepted artifacts with absolute URLs
 const artifacts = await fas.generation.manifest(set.id); // [{ key, jobId, url, metaUrl?, bytes, contentType, durationMs, sha256, model, modelVersion, acceptedAt }]

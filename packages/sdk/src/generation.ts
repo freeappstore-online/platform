@@ -64,6 +64,71 @@ export interface GenerationArtifact extends GenerationModel {
   acceptedAt: number;
 }
 
+/** Who contributed; null once their account is deleted. */
+export interface GenerationContributor {
+  id: string;
+  login: string | null;
+}
+
+/** A set with its progress (`listSets`). */
+export interface GenerationSetSummary extends GenerationSet {
+  createdAt: number;
+  counts: {
+    jobs: number;
+    /** Jobs by status. */
+    open: number;
+    accepted: number;
+    /** Live leases. */
+    leased: number;
+    /** Submissions by outcome; `withdrawn` are those the owner withdrew. */
+    pending: number;
+    rejected: number;
+    withdrawn: number;
+  };
+}
+
+/** A job as the owner sees it (`listJobs`). */
+export interface GenerationJobSummary {
+  id: string;
+  key: string;
+  status: 'open' | 'accepted';
+  /** The first 200 characters of the input text. */
+  inputPreview: string;
+  inputChars: number;
+  createdAt: number;
+  artifact: {
+    url: string;
+    durationMs: number | null;
+    bytes: number;
+    contributor: GenerationContributor | null;
+    acceptedAt: number;
+  } | null;
+  /** The 5 latest, newest first. */
+  submissions: {
+    id: string;
+    contributor: GenerationContributor | null;
+    deviceKind: 'web' | 'native';
+    attestation: 'none' | 'unverified' | 'verified';
+    status: GenerationSubmissionStatus;
+    reason: string | null;
+    wer: number | null;
+    durationMs: number | null;
+    createdAt: number;
+    decidedAt: number | null;
+  }[];
+}
+
+/** A set with jobs the caller could claim now (`openWork`). */
+export interface GenerationOpenSet extends GenerationModel {
+  setId: string;
+  kind: 'tts';
+  params: Record<string, unknown>;
+  formats: GenerationFormat[];
+  maxBytes: number;
+  /** Jobs this user could claim. */
+  open: number;
+}
+
 export interface ContributeOptions {
   setId?: string;
   models: GenerationModel[];
@@ -106,6 +171,28 @@ export class Generation {
         jobs: { id: string; key: string; status: string }[];
       }
     ).jobs;
+  }
+
+  /** The app's sets, newest first, with progress counts. */
+  async listSets(): Promise<GenerationSetSummary[]> {
+    return ((await (await this.request('/sets', {})).json()) as { sets: GenerationSetSummary[] })
+      .sets;
+  }
+
+  /** A page of a set's jobs by key; pass `nextCursor` back as `cursor` for the next page. */
+  async listJobs(
+    setId: string,
+    opts: { status?: 'open' | 'accepted'; cursor?: string; limit?: number } = {},
+  ): Promise<{ jobs: GenerationJobSummary[]; nextCursor: string | null }> {
+    const query = new URLSearchParams();
+    for (const [name, value] of Object.entries(opts))
+      if (value !== undefined) query.set(name, String(value));
+    const qs = query.toString();
+    const path = `/sets/${encodeURIComponent(setId)}/jobs${qs ? `?${qs}` : ''}`;
+    return (await (await this.request(path, {})).json()) as {
+      jobs: GenerationJobSummary[];
+      nextCursor: string | null;
+    };
   }
 
   /** Remove an artifact; its job reopens. */
@@ -162,6 +249,15 @@ export class Generation {
     });
     job.leaseExpiresAt = ((await response.json()) as { leaseExpiresAt: number }).leaseExpiresAt;
     return job.leaseExpiresAt;
+  }
+
+  /** This app's sets with jobs the user could claim now. The device picks the models it can run. */
+  async openWork(): Promise<GenerationOpenSet[]> {
+    const url = `${this.apiBase}/v1/generation/open?appId=${encodeURIComponent(this.appId)}`;
+    const { apps } = (await (await this.send(url, {})).json()) as {
+      apps: { sets: GenerationOpenSet[] }[];
+    };
+    return apps[0]?.sets ?? [];
   }
 
   async mySubmissions(): Promise<GenerationSubmission[]> {
@@ -253,11 +349,12 @@ export class Generation {
     return response.json();
   }
 
-  private async request(
-    suffix: string,
-    init: Parameters<typeof authedFetch>[2],
-  ): Promise<Response> {
-    const response = await authedFetch(this.auth, this.url(suffix), init);
+  private request(suffix: string, init: Parameters<typeof authedFetch>[2]): Promise<Response> {
+    return this.send(this.url(suffix), init);
+  }
+
+  private async send(url: string, init: Parameters<typeof authedFetch>[2]): Promise<Response> {
+    const response = await authedFetch(this.auth, url, init);
     if (!response.ok)
       throw new Error((await response.text()) || `Generation request failed (${response.status}).`);
     return response;

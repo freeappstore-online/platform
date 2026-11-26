@@ -7,10 +7,17 @@
  */
 import { type Context, Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
-import { FAS_APP_ROWS, HttpError, requireAppOwner, requireAppUser } from '../lib/auth.js';
+import {
+  FAS_APP_ROWS,
+  HttpError,
+  requireAppOwner,
+  requireAppUser,
+  requireConsoleUser,
+} from '../lib/auth.js';
 import { agree, type Verdict, verdict, WINDOWS, whisper } from '../lib/generation-verify.js';
 import { verifyGithubOidc } from '../lib/github-oidc.js';
 import { nativeBody, nativeDevice, nativeHash, nativeRandom } from '../lib/native-companion.js';
+import { queryLimit } from '../lib/paging.js';
 import { d1UsageStore, dayKey } from '../lib/proxy-rate-limit.js';
 import type { Env } from '../types.js';
 import { APP_ORG_ID, DEPLOY_AUDIENCE } from './deploy.js';
@@ -41,6 +48,7 @@ export const GENERATION_LIMITS = {
 const FORMATS = ['audio/mp4', 'audio/ogg', 'audio/wav'];
 const KEY_RE = /^[A-Za-z0-9._:/-]{1,200}$/;
 const NAME_RE = /^[A-Za-z0-9._:/@+-]{1,120}$/;
+const WITHDRAWN = 'withdrawn by the app owner';
 
 export interface SetRow {
   id: string;
@@ -136,6 +144,22 @@ const setRow = (db: D1Database, appId: string, setId: string) =>
     .bind(setId, appId)
     .first<SetRow>();
 
+/**
+ * Jobs (`j`, of set `s`) the user may be given now: open, in a set that needs
+ * no attestation (#732), in an app that has not blocked the user, never leased
+ * to the user before, with a free replica slot. Claim and discovery (#794)
+ * share it; `user` and `now` name the SQL parameters.
+ */
+const claimable = (user: string, now: string) => `j.status = 'open' AND s.require_attestation = 0
+  AND NOT EXISTS (SELECT 1 FROM generation_blocks b WHERE b.app_id = j.app_id AND b.user_id = ${user})
+  AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.job_id = j.id AND l.user_id = ${user})
+  AND (SELECT COUNT(*) FROM generation_leases l WHERE l.job_id = j.id AND l.state = 'open' AND l.expires_at > ${now})
+    + (SELECT COUNT(*) FROM generation_submissions x WHERE x.job_id = j.id AND x.status = 'pending') < s.replicas`;
+
+/** Public URL of a job's artifact (or its `/meta`). `?v=` pins it to these exact bytes. */
+const artifactUrl = (c: Ctx, a: Pick<ArtifactRow, 'app_id' | 'job_id' | 'sha256'>, path = '') =>
+  `${new URL(c.req.url).origin}/v1/apps/${a.app_id}/generation/artifacts/${a.job_id}${path}?v=${a.sha256.slice(0, 16)}`;
+
 const audit = (db: D1Database, appId: string, actor: string, action: string, target: string) =>
   db
     .prepare(
@@ -167,8 +191,11 @@ async function owner(c: Ctx, appId: string): Promise<string> {
   return `repo:${claims.repository}`;
 }
 
-/** An app-audience session, or a native companion device (`ndev_`). */
-async function contributor(c: Ctx, appId: string) {
+/**
+ * An app-audience session, or a native companion device (`ndev_`). Without an
+ * app (cross-app discovery) the session must be first-party (#495).
+ */
+async function contributor(c: Ctx, appId?: string) {
   let id: string, device: 'web' | 'native';
   if (c.req.header('Authorization')?.startsWith('Bearer ndev_')) {
     const d = await nativeDevice(c);
@@ -177,9 +204,10 @@ async function contributor(c: Ctx, appId: string) {
     id = d.user_id;
     device = 'native';
   } else {
-    id = (await requireAppUser(c, appId)).id;
+    id = (appId ? await requireAppUser(c, appId) : await requireConsoleUser(c)).id;
     device = 'web';
   }
+  if (!appId) return { id, device };
   const blocked = await c.env.DB.prepare(
     'SELECT 1 FROM generation_blocks WHERE app_id = ? AND user_id = ?',
   )
@@ -326,6 +354,147 @@ generationRoutes.post('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
   });
 });
 
+/**
+ * The app's sets, newest first, with progress (#794): jobs by status, live
+ * leases, and submissions pending, rejected and withdrawn by the owner.
+ */
+generationRoutes.get('/apps/:appId/generation/sets', async (c) => {
+  const appId = c.req.param('appId');
+  await owner(c, appId);
+  const jobs = (where: string) =>
+    `(SELECT COUNT(*) FROM generation_jobs j WHERE j.set_id = s.id${where})`;
+  const submissions = (where: string) =>
+    `(SELECT COUNT(*) FROM generation_jobs j JOIN generation_submissions x ON x.job_id = j.id WHERE j.set_id = s.id AND ${where})`;
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.*, ${jobs('')} AS n_jobs, ${jobs(" AND j.status = 'open'")} AS n_open,
+       ${jobs(" AND j.status = 'accepted'")} AS n_accepted,
+       (SELECT COUNT(*) FROM generation_jobs j JOIN generation_leases l ON l.job_id = j.id
+         WHERE j.set_id = s.id AND l.state = 'open' AND l.expires_at > ?2) AS n_leased,
+       ${submissions("x.status = 'pending'")} AS n_pending,
+       ${submissions("x.status = 'rejected' AND x.reason IS NOT ?3")} AS n_rejected,
+       ${submissions("x.status = 'rejected' AND x.reason = ?3")} AS n_withdrawn
+     FROM generation_sets s WHERE s.app_id = ?1 ORDER BY s.created_at DESC, s.id`,
+  )
+    .bind(appId, Date.now(), WITHDRAWN)
+    .all<SetRow & Record<`n_${string}`, number>>();
+  return c.json({
+    sets: results.map((r) => ({
+      ...setInfo(r),
+      counts: {
+        jobs: r.n_jobs,
+        open: r.n_open,
+        leased: r.n_leased,
+        pending: r.n_pending,
+        accepted: r.n_accepted,
+        rejected: r.n_rejected,
+        withdrawn: r.n_withdrawn,
+      },
+    })),
+  });
+});
+
+const PREVIEW_CHARS = 200;
+/** Who contributed: user id (for blocking) and GitHub login; null once the account is deleted. */
+const contributorInfo = (id: string | null, login: string | null) => (id ? { id, login } : null);
+
+/**
+ * A set's jobs by key, paged with `cursor` (the last key of the previous page)
+ * and `limit` (50, at most 200); `status` filters by `open` or `accepted`.
+ * Each job carries its accepted artifact and its 5 latest submissions (#794).
+ */
+generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
+  const appId = c.req.param('appId');
+  await owner(c, appId);
+  const set = await setRow(c.env.DB, appId, c.req.param('setId'));
+  if (!set) throw new HttpError(404, 'set not found');
+  const status = c.req.query('status');
+  if (status !== undefined && status !== 'open' && status !== 'accepted')
+    throw new HttpError(400, 'status must be open or accepted');
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
+  const { results: rows } = await c.env.DB.prepare(
+    `SELECT j.id, j.key, j.status, j.created_at,
+       substr(json_extract(j.input, '$.text'), 1, ?5) AS preview, length(json_extract(j.input, '$.text')) AS chars,
+       a.sha256, a.bytes, a.duration_ms, a.user_id, u.github_login, a.accepted_at
+     FROM generation_jobs j LEFT JOIN generation_artifacts a ON a.job_id = j.id
+     LEFT JOIN users u ON u.id = a.user_id
+     WHERE j.set_id = ?1 AND (?2 IS NULL OR j.status = ?2) AND j.key > ?3 ORDER BY j.key LIMIT ?4`,
+  )
+    .bind(set.id, status ?? null, c.req.query('cursor') ?? '', limit + 1, PREVIEW_CHARS)
+    .all<{
+      id: string;
+      key: string;
+      status: string;
+      created_at: number;
+      preview: string;
+      chars: number;
+      sha256: string | null;
+      bytes: number;
+      duration_ms: number | null;
+      user_id: string | null;
+      github_login: string | null;
+      accepted_at: number;
+    }>();
+  const page = rows.slice(0, limit);
+  const { results: subs } = await c.env.DB.prepare(
+    `SELECT * FROM (
+       SELECT x.id, x.job_id, x.user_id, u.github_login, x.device_kind, x.attestation, x.status, x.reason,
+         x.wer, x.duration_ms, x.created_at, x.decided_at,
+         ROW_NUMBER() OVER (PARTITION BY x.job_id ORDER BY x.created_at DESC, x.id) AS n
+       FROM generation_submissions x LEFT JOIN users u ON u.id = x.user_id
+       WHERE x.job_id IN (SELECT value FROM json_each(?))
+     ) WHERE n <= 5 ORDER BY created_at DESC, id`,
+  )
+    .bind(JSON.stringify(page.map((j) => j.id)))
+    .all<{
+      id: string;
+      job_id: string;
+      user_id: string;
+      github_login: string | null;
+      device_kind: string;
+      attestation: string;
+      status: string;
+      reason: string | null;
+      wer: number | null;
+      duration_ms: number | null;
+      created_at: number;
+      decided_at: number | null;
+    }>();
+  return c.json({
+    jobs: page.map((j) => ({
+      id: j.id,
+      key: j.key,
+      status: j.status,
+      inputPreview: j.preview,
+      inputChars: j.chars,
+      createdAt: j.created_at,
+      artifact: j.sha256
+        ? {
+            url: artifactUrl(c, { app_id: appId, job_id: j.id, sha256: j.sha256 }),
+            durationMs: j.duration_ms,
+            bytes: j.bytes,
+            contributor: contributorInfo(j.user_id, j.github_login),
+            acceptedAt: j.accepted_at,
+          }
+        : null,
+      submissions: subs
+        .filter((x) => x.job_id === j.id)
+        .map((x) => ({
+          id: x.id,
+          contributor: contributorInfo(x.user_id, x.github_login),
+          deviceKind: x.device_kind,
+          attestation: x.attestation,
+          status: x.status,
+          reason: x.reason,
+          wer: x.wer,
+          durationMs: x.duration_ms,
+          createdAt: x.created_at,
+          decidedAt: x.decided_at,
+        })),
+    })),
+    nextCursor: rows.length > limit ? page.at(-1)!.key : null,
+  });
+});
+
 generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
   const appId = c.req.param('appId');
   const who = await contributor(c, appId);
@@ -355,14 +524,10 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
     `INSERT INTO generation_leases (job_id, user_id, app_id, token_hash, state, created_at, expires_at)
      SELECT j.id, ?1, ?2, ?3, 'open', ?4, ?5
      FROM generation_jobs j JOIN generation_sets s ON s.id = j.set_id
-     WHERE j.app_id = ?2 AND j.status = 'open' AND (?6 IS NULL OR j.set_id = ?6)
-       AND s.require_attestation = 0
+     WHERE j.app_id = ?2 AND (?6 IS NULL OR j.set_id = ?6) AND ${claimable('?1', '?4')}
        AND EXISTS (SELECT 1 FROM json_each(?7) m WHERE json_extract(m.value, '$.model') = s.model
          AND json_extract(m.value, '$.modelVersion') = s.model_version)
-       AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.job_id = j.id AND l.user_id = ?1)
        AND NOT EXISTS (SELECT 1 FROM generation_leases l WHERE l.user_id = ?1 AND l.state = 'open' AND l.expires_at > ?4)
-       AND (SELECT COUNT(*) FROM generation_leases l WHERE l.job_id = j.id AND l.state = 'open' AND l.expires_at > ?4)
-         + (SELECT COUNT(*) FROM generation_submissions x WHERE x.job_id = j.id AND x.status = 'pending') < s.replicas
      ORDER BY j.created_at, j.rowid LIMIT 1
      RETURNING job_id`,
   )
@@ -592,6 +757,46 @@ generationRoutes.get('/apps/:appId/generation/submissions', async (c) => {
   });
 });
 
+/**
+ * Discovery (#794): the sets with jobs the caller could claim right now, by
+ * app, under the claim's own rules. A console session or a native device
+ * (`ndev_`) sees every app; `?appId=` narrows to one app and then takes the
+ * claim's auth exactly (that app's session too). Models are not matched here:
+ * each set names its model, and the device decides what it can run.
+ */
+generationRoutes.get('/generation/open', async (c) => {
+  c.header('Cache-Control', 'private, no-store');
+  const appId = c.req.query('appId');
+  if (appId !== undefined && !APP_ID_RE.test(appId)) throw new HttpError(400, 'invalid appId');
+  const who = await contributor(c, appId);
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.app_id, a.oneliner, s.id, s.kind, s.model, s.model_version, s.params, s.formats, s.max_bytes,
+       COUNT(*) AS open
+     FROM generation_sets s JOIN apps a ON a.id = s.app_id AND ${FAS_APP_ROWS}
+     JOIN generation_jobs j ON j.set_id = s.id
+     WHERE (?3 IS NULL OR s.app_id = ?3) AND ${claimable('?1', '?2')}
+     GROUP BY s.id ORDER BY s.app_id, s.created_at, s.id`,
+  )
+    .bind(who.id, Date.now(), appId ?? null)
+    .all<SetRow & { oneliner: string | null; open: number }>();
+  const apps = new Map<string, { appId: string; oneliner: string | null; sets: unknown[] }>();
+  for (const r of results) {
+    if (!apps.has(r.app_id))
+      apps.set(r.app_id, { appId: r.app_id, oneliner: r.oneliner, sets: [] });
+    apps.get(r.app_id)!.sets.push({
+      setId: r.id,
+      kind: r.kind,
+      model: r.model,
+      modelVersion: r.model_version,
+      params: JSON.parse(r.params),
+      formats: JSON.parse(r.formats),
+      maxBytes: r.max_bytes,
+      open: r.open,
+    });
+  }
+  return c.json({ apps: [...apps.values()] });
+});
+
 generationRoutes.get('/apps/:appId/generation/sets/:setId/manifest', async (c) => {
   const appId = c.req.param('appId');
   const set = await setRow(c.env.DB, appId, c.req.param('setId'));
@@ -601,17 +806,15 @@ generationRoutes.get('/apps/:appId/generation/sets/:setId/manifest', async (c) =
   )
     .bind(set.id)
     .all<ArtifactRow>();
-  const base = `${new URL(c.req.url).origin}/v1/apps/${appId}/generation/artifacts`;
   c.header('Cache-Control', 'public, max-age=60');
   return c.json({
     artifacts: results.map((a) => {
       // The version pins the URL to these exact bytes, so it may be cached forever.
-      const v = `?v=${a.sha256.slice(0, 16)}`;
       return {
         key: a.key,
         jobId: a.job_id,
-        url: `${base}/${a.job_id}${v}`,
-        ...(a.meta_key ? { metaUrl: `${base}/${a.job_id}/meta${v}` } : {}),
+        url: artifactUrl(c, a),
+        ...(a.meta_key ? { metaUrl: artifactUrl(c, a, '/meta') } : {}),
         bytes: a.bytes,
         contentType: a.content_type,
         durationMs: a.duration_ms,
@@ -681,10 +884,10 @@ async function withdraw(
       .bind(appId, value),
     db
       .prepare(
-        `UPDATE generation_submissions SET status = 'rejected', reason = 'withdrawn by the app owner', decided_at = ?3
+        `UPDATE generation_submissions SET status = 'rejected', reason = ?4, decided_at = ?3
          WHERE id IN (SELECT submission_id FROM generation_artifacts WHERE ${where})`,
       )
-      .bind(appId, value, Date.now()),
+      .bind(appId, value, Date.now(), WITHDRAWN),
     audit(db, appId, actor, action, value),
     db.prepare(`DELETE FROM generation_artifacts WHERE ${where}`).bind(appId, value),
   ]);

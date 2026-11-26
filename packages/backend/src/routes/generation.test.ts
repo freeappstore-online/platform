@@ -558,6 +558,194 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
   });
 });
 
+describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)', () => {
+  type Listed = {
+    jobs: {
+      key: string;
+      status: string;
+      inputPreview: string;
+      inputChars: number;
+      artifact: Record<string, unknown> | null;
+      submissions: Record<string, unknown>[];
+    }[];
+    nextCursor: string | null;
+  };
+  const open = async (
+    s: Awaited<ReturnType<typeof setup>>,
+    o: { user?: string; aud?: string; token?: string; appId?: string } = {},
+  ) => {
+    const token = o.token ?? (await signSession(o.user ?? 'u2', KEY, { aud: o.aud ?? 'console' }));
+    return app.request(
+      `/v1/generation/open${o.appId ? `?appId=${o.appId}` : ''}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+      s.env,
+    );
+  };
+
+  it('owner lists sets with progress counts', async () => {
+    const s = await setup();
+    const setId = await s.createSet({ replicas: 2 });
+    await s.addJobs(setId, [
+      { key: 'a', input: { text: 'A.' } },
+      { key: 'b', input: { text: 'B.' } },
+      { key: 'c', input: { text: 'C.' } },
+    ]);
+    const accept = async (user: string) => {
+      const job = (await s.claim(user, { setId }))!;
+      const { submissionId } = await s.submissionId(await s.submit(user, job.id, job.leaseToken));
+      return { job, submissionId };
+    };
+    const a = await accept('u2'); // a: pending
+    await accept('u3'); // a: second replica, pending
+    await acceptSubmission(s.env as never, a.submissionId, 1000); // a accepted, u3's superseded
+    const b = await accept('u4'); // b: pending
+    s.db
+      .prepare("UPDATE generation_submissions SET status = 'rejected', reason = 'x' WHERE id = ?")
+      .run(b.submissionId);
+    await s.claim('u2', { setId }); // b: leased by u2
+    expect((await s.request(`/artifacts/${a.job.id}`, { method: 'DELETE' })).status).toBe(200);
+    expect((await s.request('/sets', { user: 'u2' })).status).toBe(403);
+    const r = await s.request('/sets');
+    expect(r.headers.get('cache-control')).toBe('private, no-store');
+    const { sets } = (await r.json()) as { sets: Record<string, unknown>[] };
+    expect(sets).toEqual([
+      expect.objectContaining({
+        id: setId,
+        appId: 'books',
+        model: 'kokoro',
+        replicas: 2,
+        counts: {
+          jobs: 3,
+          open: 3,
+          leased: 1,
+          pending: 0,
+          accepted: 0,
+          rejected: 1,
+          withdrawn: 1,
+        },
+      }),
+    ]);
+  });
+
+  it('owner pages jobs with artifacts and latest submissions, filtered by status', async () => {
+    const s = await setup();
+    const setId = await s.createSet();
+    await s.addJobs(setId, [
+      { key: 'a', input: { text: 'x'.repeat(300) } },
+      { key: 'b', input: { text: 'B.' } },
+      { key: 'c', input: { text: 'C.' } },
+    ]);
+    const job = (await s.claim('u2', { setId }))!;
+    const sub = await s.submissionId(await s.submit('u2', job.id, job.leaseToken));
+    await acceptSubmission(s.env as never, sub.submissionId, 1500);
+    expect((await s.request(`/sets/${setId}/jobs`, { user: 'u2' })).status).toBe(403);
+    expect((await s.request(`/sets/nope/jobs`)).status).toBe(404);
+    expect((await s.request(`/sets/${setId}/jobs?status=leased`)).status).toBe(400);
+    const first = (await (await s.request(`/sets/${setId}/jobs?limit=2`)).json()) as Listed;
+    expect(first.jobs.map((j) => j.key)).toEqual(['a', 'b']);
+    expect(first.nextCursor).toBe('b');
+    const [a] = first.jobs;
+    expect(a).toEqual(
+      expect.objectContaining({
+        status: 'accepted',
+        inputChars: 300,
+        createdAt: expect.any(Number),
+      }),
+    );
+    expect(a!.inputPreview).toHaveLength(200);
+    expect(a!.artifact).toEqual({
+      url: expect.stringMatching(new RegExp(`/v1/apps/books/generation/artifacts/${job.id}\\?v=`)),
+      durationMs: 1500,
+      bytes: AUDIO.length,
+      contributor: { id: 'u2', login: 'bob' },
+      acceptedAt: expect.any(Number),
+    });
+    expect(a!.submissions).toEqual([
+      {
+        id: sub.submissionId,
+        contributor: { id: 'u2', login: 'bob' },
+        deviceKind: 'web',
+        attestation: 'none',
+        status: 'accepted',
+        reason: null,
+        wer: null,
+        durationMs: null,
+        createdAt: expect.any(Number),
+        decidedAt: expect.any(Number),
+      },
+    ]);
+    expect(first.jobs[1]).toEqual(expect.objectContaining({ artifact: null, submissions: [] }));
+    const rest = (await (await s.request(`/sets/${setId}/jobs?limit=2&cursor=b`)).json()) as Listed;
+    expect(rest.jobs.map((j) => j.key)).toEqual(['c']);
+    expect(rest.nextCursor).toBeNull();
+    const accepted = (await (
+      await s.request(`/sets/${setId}/jobs?status=accepted`)
+    ).json()) as Listed;
+    expect(accepted.jobs.map((j) => j.key)).toEqual(['a']);
+  });
+
+  it('discovery shows what the caller could claim, under the claim rules', async () => {
+    const s = await setup();
+    const setId = await s.createSet({ replicas: 2 });
+    await s.addJobs(setId, [
+      { key: 'a', input: { text: 'A.' } },
+      { key: 'b', input: { text: 'B.' } },
+    ]);
+    const attested = await s.createSet({ requireAttestation: true });
+    await s.addJobs(attested, [{ key: 'a', input: { text: 'A.' } }]);
+    s.db.exec(`INSERT INTO generation_sets (id, app_id, kind, model, model_version, params, formats, max_bytes, replicas, created_by, created_at)
+      VALUES ('s-other', 'other', 'tts', 'm', 'v', '{}', '["audio/ogg"]', 10, 1, 'u1', 0);
+      INSERT INTO generation_jobs (id, set_id, app_id, key, input, status, created_at)
+      VALUES ('j-other', 's-other', 'other', 'k', '{"text":"K."}', 'open', 0);`);
+    const sets = async (o: Parameters<typeof open>[1] = {}) => {
+      const r = await open(s, o);
+      expect(r.status).toBe(200);
+      return (
+        (await r.json()) as { apps: { appId: string; sets: { setId: string; open: number }[] }[] }
+      ).apps;
+    };
+    const all = await sets();
+    expect(all).toEqual([
+      {
+        appId: 'books',
+        oneliner: null,
+        sets: [
+          {
+            setId,
+            kind: 'tts',
+            model: 'kokoro',
+            modelVersion: '1.0',
+            params: { voice: 'af' },
+            formats: ['audio/wav'],
+            maxBytes: 1000,
+            open: 2,
+          },
+        ],
+      },
+      expect.objectContaining({ appId: 'other', sets: [expect.objectContaining({ open: 1 })] }),
+    ]);
+    // A job the caller held once is never offered again; replica slots are shared.
+    await s.claim('u2', { setId }); // u2 leases a
+    await s.claim('u3', { setId }); // u3 leases a (second replica)
+    expect((await sets())[0]!.sets[0]!.open).toBe(1); // u2: only b
+    expect((await sets({ user: 'u4' }))[0]!.sets[0]!.open).toBe(1); // u4: a is full
+    // One app only, with that app's session; an app session cannot see across apps.
+    expect((await sets({ aud: 'books', appId: 'books' })).map((a) => a.appId)).toEqual(['books']);
+    expect((await open(s, { aud: 'books' })).status).toBe(403);
+    expect((await open(s, { aud: 'books', appId: 'other' })).status).toBe(403);
+    expect((await open(s, { appId: 'Bad App' })).status).toBe(400);
+    // Native devices discover with their ndev_ credential.
+    expect((await sets({ token: DEVICE })).map((a) => a.appId)).toEqual(['books', 'other']);
+    // Blocked: that app disappears; asking for it is the claim's 403.
+    await s.request('/contributors/u2/block', { method: 'POST' });
+    expect((await sets()).map((a) => a.appId)).toEqual(['other']);
+    expect((await open(s, { appId: 'books' })).status).toBe(403);
+    // Unpublished apps are not offered.
+    s.db.exec("UPDATE apps SET store = 'apps_pro' WHERE id = 'other'");
+    expect(await sets()).toEqual([]);
+  });
+});
+
 describe.skipIf(!hasSqlite)('community generation owner calls from GitHub Actions OIDC', () => {
   const b64url = (bytes: Uint8Array) =>
     btoa(String.fromCharCode(...bytes))

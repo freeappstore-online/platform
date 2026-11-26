@@ -68,6 +68,37 @@ describe('generation SDK', () => {
     expect(fetch.mock.calls[0]![1].headers.Authorization).toBe('Bearer tok');
   });
 
+  it('owner lists sets and pages jobs', async () => {
+    const sets = [{ id: 's1', counts: { jobs: 2, open: 1 } }];
+    const page = { jobs: [{ id: 'j1', key: 'a' }], nextCursor: 'a' };
+    const fetch = mockFetch(json({ sets }), json(page), json({ jobs: [], nextCursor: null }));
+    const gen = client();
+    expect(await gen.listSets()).toEqual(sets);
+    expect(await gen.listJobs('s 1', { status: 'accepted', cursor: 'ch1:a', limit: 2 })).toEqual(
+      page,
+    );
+    await gen.listJobs('s1');
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([
+      `${base}/sets`,
+      `${base}/sets/s%201/jobs?status=accepted&cursor=ch1%3Aa&limit=2`,
+      `${base}/sets/s1/jobs`,
+    ]);
+    expect(fetch.mock.calls[0]![1].headers.Authorization).toBe('Bearer tok');
+  });
+
+  it('openWork returns this app’s claimable sets', async () => {
+    const set = { setId: 's1', kind: 'tts', ...models[0], params: {}, open: 3 };
+    const fetch = mockFetch(
+      json({ apps: [{ appId: 'books', oneliner: null, sets: [set] }] }),
+      json({ apps: [] }),
+      new Response('blocked from contributing to this app', { status: 403 }),
+    );
+    expect(await client().openWork()).toEqual([set]);
+    expect(await client().openWork()).toEqual([]);
+    await expect(client().openWork()).rejects.toThrow('blocked');
+    expect(fetch.mock.calls[0]![0]).toBe('https://api.example/v1/generation/open?appId=books');
+  });
+
   it('surfaces a 409 for a key re-added with different input', async () => {
     mockFetch(new Response('key a exists with a different input', { status: 409 }));
     await expect(client().addJobs('s1', [{ key: 'a', input: { text: 'x' } }])).rejects.toThrow(

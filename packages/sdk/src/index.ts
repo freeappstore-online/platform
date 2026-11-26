@@ -56,11 +56,15 @@ export type { Friend, FriendSearchResult, FriendshipStatus } from './friends.js'
 export type {
   ContributeOptions,
   GenerationArtifact,
+  GenerationContributor,
   GenerationFormat,
   GenerationJob,
+  GenerationJobSummary,
   GenerationModel,
+  GenerationOpenSet,
   GenerationSet,
   GenerationSetOptions,
+  GenerationSetSummary,
   GenerationSubmission,
   GenerationSubmissionStatus,
 } from './generation.js';

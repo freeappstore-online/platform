@@ -330,6 +330,8 @@ const set = await fas.generation.createSet({ kind: 'tts', model: 'kokoro', model
 await fas.generation.addJobs(set.id, [{ key: 'ch1:p1', input: { text: 'Hello.' } }])  // 1-500 per call
 await fas.generation.withdraw(jobId)            // job reopens
 await fas.generation.blockContributor(userId)   // withdraws all their artifacts
+await fas.generation.listSets()                 // [{ ...set, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }]
+await fas.generation.listJobs(set.id, { status: 'open', cursor })  // { jobs: [{ key, status, inputPreview, artifact, submissions }], nextCursor }
 
 // Contributor: claim → generate → submit until no work, abort, or lease expiry
 const { submitted, stopped } = await fas.generation.contribute({
@@ -339,6 +341,7 @@ const { submitted, stopped } = await fas.generation.contribute({
 await fas.generation.claim({ models: [{ model: 'kokoro', modelVersion: '1.0' }] })  // job | null (15-min lease)
 await fas.generation.extendLease(job)          // +15 min, at most 2 h after the claim; contribute() does this itself
 await fas.generation.mySubmissions()            // [{ id, jobId, status, reason, createdAt }]
+await fas.generation.openWork()                 // this app's sets the user could claim now: [{ setId, model, modelVersion, params, open, ... }]
 
 // Public, no sign-in
 const artifacts = await fas.generation.manifest(set.id)  // [{ key, url, metaUrl?, contentType, durationMs, sha256, ... }]

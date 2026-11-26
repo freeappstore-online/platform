@@ -35,12 +35,26 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 | `POST /apps/:appId/generation/sets/:setId/jobs` | `{ jobs: [{ key, input: { text } }] }`, 1-500 | `{ jobs: [{ id, key, status }] }`; `409 { error, keys }` if a key exists with another input |
 | `DELETE /apps/:appId/generation/artifacts/:jobId` | | `{ withdrawn: 1 }`; the job reopens |
 | `POST /apps/:appId/generation/contributors/:userId/block` | | `{ blocked: true, withdrawn: n }` |
+| `GET /apps/:appId/generation/sets` | | `{ sets: [{ ...set, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }] }`, newest first |
+| `GET /apps/:appId/generation/sets/:setId/jobs?status=&cursor=&limit=` | | `{ jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact, submissions }], nextCursor }` |
 
 `formats` is a non-empty subset of `audio/mp4`, `audio/ogg`, `audio/wav`; `maxBytes` at most
 25,000,000; `replicas` 1-3. Keys are 1-200 characters of `A-Za-z0-9._:/-`; `text` at most 100,000
 characters. Verification thresholds default to 8-30 characters per second and a word error rate
 of 0.25 (see [Verification](#verification)). Re-sending a job with the same key and input is a no-op that returns its status
 (`open` or `accepted`).
+
+Set counts: `open` and `accepted` count jobs by status, `leased` live leases, and `pending`, `rejected`
+and `withdrawn` submissions (`withdrawn`: rejected because the owner withdrew the artifact or blocked
+its contributor; `rejected` excludes those).
+
+Jobs are ordered by key. `status` is `open` or `accepted`; `limit` is 50 by default, at most 200; pass
+`nextCursor` (the page's last key, `null` on the last page) as `cursor`. `inputPreview` is the first 200
+characters of the text and `inputChars` its length. `artifact` is `null` or `{ url, durationMs, bytes,
+contributor, acceptedAt }` (`url` as in the manifest). `submissions` are the job's 5 latest, newest
+first: `{ id, contributor, deviceKind, attestation, status, reason, wer, durationMs, createdAt,
+decidedAt }`. A `contributor` is `{ id, login }` (the user id `block` takes and the GitHub login), or
+`null` once the account is deleted.
 
 Contributor: a session delivered to the app (or a console session), or a native companion device
 credential (`Bearer ndev_…`). Blocked contributors get `403`.
@@ -60,6 +74,13 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   uploads all use the extended expiry. A user holds one open lease: claiming again releases
   the previous one. A user is never given the same job twice (even after a release or rejection).
 - A job has at most `replicas` open leases plus pending submissions at a time, each a different user.
+- Discovery: `GET /generation/open` → `{ apps: [{ appId, oneliner, sets: [{ setId, kind, model,
+  modelVersion, params, formats, maxBytes, open }] }] }`, the sets with jobs the caller could claim
+  now, by app id. `open` counts them under the claim's own rules: not blocked by the app, no
+  attestation required, never held by the caller, a free replica slot. Models are not matched: the
+  device skips sets it cannot run. A console session or a native device sees every store app;
+  `?appId=` narrows to one app and then authenticates exactly like claim (that app's session too,
+  `403` if blocked).
 - The `file` part's content type must be one of the set's `formats`, non-empty and at most
   `maxBytes`. Without a valid lease the upload is `403`.
 - Submission statuses: `pending`, `accepted`, `rejected` (with `reason`), `superseded` (another
