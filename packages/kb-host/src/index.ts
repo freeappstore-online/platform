@@ -89,6 +89,11 @@ export function keyForPath(pathname: string, hostname = 'kb.freeappstore.online'
   return key;
 }
 
+/** A pretty page URL missing its trailing slash: `/timer/setup`, not `/timer/app.css`. */
+export function isSlashlessPage(pathname: string): boolean {
+  return !pathname.endsWith('/') && !pathname.split('/').pop()!.includes('.');
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -121,6 +126,13 @@ export default {
       (url.pathname === '/platform' || url.pathname.startsWith('/platform/'))
     ) {
       url.pathname = url.pathname.replace(/^\/platform/, '') || '/';
+      return Response.redirect(url.toString(), 301);
+    }
+
+    // A page URL without its trailing slash would load, but Zensical's links are
+    // relative (`../assets/…`), so they'd resolve one directory too high (#740).
+    if (isSlashlessPage(url.pathname)) {
+      url.pathname += '/';
       return Response.redirect(url.toString(), 301);
     }
 

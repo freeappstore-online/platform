@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import worker, { type Env, keyForPath, timingSafeEqual } from './index.js';
+import worker, { type Env, isSlashlessPage, keyForPath, timingSafeEqual } from './index.js';
 
 describe('keyForPath', () => {
   it('maps app KB paths by slug on the KB host', () => {
@@ -167,5 +167,35 @@ describe('GET serving (#687)', () => {
       bucket({}),
     );
     expect(post.status).toBe(405);
+  });
+});
+
+describe('trailing-slash redirect for pages (#740)', () => {
+  const env = {
+    KB_R2: { get: async () => null } as unknown as R2Bucket,
+    KB_INGEST_TOKEN: 't',
+  } as Env;
+
+  it.each([
+    [
+      'https://docs.freeappstore.online/adr/001-tailwind-on-fas-tokens',
+      'https://docs.freeappstore.online/adr/001-tailwind-on-fas-tokens/',
+    ],
+    [
+      'https://kb.freeappstore.online/timer/setup?x=1',
+      'https://kb.freeappstore.online/timer/setup/?x=1',
+    ],
+    ['https://kb.freeappstore.online/timer', 'https://kb.freeappstore.online/timer/'],
+  ])('%s → 301 %s', async (from, to) => {
+    const res = await worker.fetch(new Request(from), env);
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe(to);
+  });
+
+  it('leaves files, directory URLs and the root alone', () => {
+    expect(isSlashlessPage('/timer/assets/app.css')).toBe(false);
+    expect(isSlashlessPage('/timer/setup/')).toBe(false);
+    expect(isSlashlessPage('/')).toBe(false);
+    expect(isSlashlessPage('/timer/setup')).toBe(true);
   });
 });
