@@ -1,6 +1,5 @@
-import { useEffect, useId, useState } from 'react'
-import { Generation, type FreeAppStore, type GenerationArtifact, type GenerationSubmission } from '@freeappstore/sdk'
-import { API_URL } from './builder/lib/api'
+import { useId, useState } from 'react'
+import type { GenerationSubmission } from '@freeappstore/sdk'
 import { formatTimeAgo } from './deploy-status'
 import { ArtifactPlayer } from './GenerationManager'
 import type { RunRecord } from './generate'
@@ -26,6 +25,14 @@ export interface ActivityItem {
   status: string
   reason: string | null
   bytes: number | null
+  /** The job's input (the server's, else this browser's, cut at its RUN_TEXT_CHARS) and its whole length. */
+  text: string
+  chars: number
+  /** What verification measured; null until verified, and for jobs never uploaded. */
+  wer: number | null
+  durationMs: number | null
+  /** The job's accepted artifact: this submission's own only when `bucket` is accepted. */
+  artifact: GenerationSubmission['artifact']
   /** This browser's record of the job, when it ran here. */
   run: RunRecord | null
 }
@@ -42,7 +49,7 @@ const RUN_STATUS: Record<RunRecord['outcome'], string> = {
 
 /**
  * The account's submissions (every device) merged with this browser's run records: an uploaded
- * run adds its text and timing to its submission; the others are the jobs that were not done.
+ * run adds its generating time to its submission; the others are the jobs that were not done.
  */
 export function activityItems(mine: Mine[], runs: RunRecord[]): ActivityItem[] {
   const local = new Map(runs.filter(r => r.outcome === 'submitted').map(r => [`${r.appId}/${r.jobId}`, r]))
@@ -53,7 +60,8 @@ export function activityItems(mine: Mine[], runs: RunRecord[]): ActivityItem[] {
     const [bucket, status] = SUBMISSION_STATUS[s.status] ?? ['checking', s.status]
     return {
       id: s.submissionId, appId: s.appId, setId: s.setId, jobId: s.jobId, key: s.key, at: s.createdAt,
-      bucket, status, bytes: s.bytes, run: local.get(id) ?? null,
+      bucket, status, bytes: s.bytes, text: s.input.text, chars: s.input.text.length,
+      wer: s.wer, durationMs: s.durationMs, artifact: s.artifact, run: local.get(id) ?? null,
       reason: s.reason ?? (s.status === 'superseded' ? 'another upload for this job was accepted first' : null),
     }
   })
@@ -63,7 +71,7 @@ export function activityItems(mine: Mine[], runs: RunRecord[]): ActivityItem[] {
     items.push({
       id: `run:${r.appId}/${r.jobId}/${r.at}`, appId: r.appId, setId: r.setId, jobId: r.jobId, key: r.key, at: r.at,
       bucket: r.outcome === 'submitted' ? 'checking' : 'not-done', status: RUN_STATUS[r.outcome],
-      reason: r.reason, bytes: null, run: r,
+      reason: r.reason, bytes: null, text: r.text, chars: r.chars, wer: null, durationMs: null, artifact: null, run: r,
     })
   }
   return items.sort((a, b) => b.at - a.at)
@@ -90,10 +98,10 @@ const chip = (on: boolean) =>
   `px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${on ? 'bg-ink text-paper' : 'text-muted border border-line hover:text-ink'}`
 const kilobytes = (bytes: number) => `${Math.round(bytes / 1024).toLocaleString()} KB`
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`
+const percent = (n: number) => `${(n * 100).toFixed(1)}%`
 
 /** Activity (#820): every job this browser tried and every submission of this account, filterable. */
-export function GenerateActivity({ fas, items, appIds, onelinerOf, bucket, onBucket, app, onApp, loading, onRefresh }: {
-  fas: FreeAppStore
+export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, app, onApp, loading, onRefresh }: {
   items: ActivityItem[]
   appIds: string[]
   onelinerOf: (appId: string) => string | null
@@ -173,28 +181,19 @@ export function GenerateActivity({ fas, items, appIds, onelinerOf, bucket, onBuc
           </section>
         ))}
       </div>
-      {open && <ActivityDetail fas={fas} item={open} oneliner={onelinerOf(open.appId)} onClose={() => setOpen(null)} />}
+      {open && <ActivityDetail item={open} oneliner={onelinerOf(open.appId)} onClose={() => setOpen(null)} />}
     </div>
   )
 }
 
-function ActivityDetail({ fas, item, oneliner, onClose }: {
-  fas: FreeAppStore
+function ActivityDetail({ item, oneliner, onClose }: {
   item: ActivityItem
   oneliner: string | null
   onClose: () => void
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>(onClose)
   const titleId = useId()
-  // The accepted artifact, from the set's public manifest: undefined while loading, null if missing
-  const [artifact, setArtifact] = useState<GenerationArtifact | null | undefined>(undefined)
-  useEffect(() => {
-    if (item.bucket !== 'accepted') return
-    new Generation(item.appId, API_URL, fas.auth).manifest(item.setId)
-      .then(list => setArtifact(list.find(a => a.jobId === item.jobId) ?? null), () => setArtifact(null))
-  }, [fas, item])
-
-  const run = item.run
+  const { run, artifact } = item
   const rows: [string, string][] = [
     ['App', oneliner ? `${item.appId} · ${oneliner}` : item.appId],
     ['Job', item.key],
@@ -202,11 +201,12 @@ function ActivityDetail({ fas, item, oneliner, onClose }: {
     ...(item.reason ? [['Reason', item.reason] as [string, string]] : []),
     ['When', new Date(item.at).toLocaleString()],
     ...(item.bytes !== null ? [['Size', kilobytes(item.bytes)] as [string, string]] : []),
-    ...(artifact ? [['Duration', seconds(artifact.durationMs)] as [string, string]] : []),
+    ...(item.durationMs !== null ? [['Duration', seconds(item.durationMs)] as [string, string]] : []),
+    ...(item.wer !== null ? [['Error rate', percent(item.wer)] as [string, string]] : []),
     ...(run ? [['Generating took', seconds(run.ms)] as [string, string]] : []),
-    ...(run ? [['Input', `${run.chars.toLocaleString()} characters`] as [string, string]] : []),
+    ['Input', `${item.chars.toLocaleString()} characters`],
   ]
-  const fullText = run && run.text.length === run.chars ? run.text : null
+  const whole = item.text.length === item.chars
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
@@ -233,25 +233,23 @@ function ActivityDetail({ fas, item, oneliner, onClose }: {
             </div>
           ))}
         </dl>
-        {item.bucket === 'accepted' && (
+        {artifact ? (
           <div className="mt-4">
-            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Play</h4>
-            {artifact === undefined && <p className="text-sm text-muted">Loading…</p>}
-            {artifact === null && <p className="text-sm text-muted">The audio isn't in the app's manifest (it may have been withdrawn).</p>}
-            {artifact && (
-              <ArtifactPlayer
-                url={artifact.url}
-                preview={run?.text ?? ''}
-                loadText={() => (fullText ? Promise.resolve(fullText) : Promise.reject(new Error('not kept')))}
-              />
-            )}
+            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
+              {item.bucket === 'accepted' ? 'Play' : 'Play the accepted audio (another contributor’s)'}
+            </h4>
+            <ArtifactPlayer
+              url={artifact.url}
+              metaUrl={artifact.metaUrl}
+              preview={item.text}
+              loadText={() => (whole ? Promise.resolve(item.text) : Promise.reject(new Error('not kept')))}
+            />
           </div>
-        )}
-        {item.bucket !== 'accepted' && run && (
+        ) : (
           <div className="mt-4">
             <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Input</h4>
             <p className="text-sm text-muted break-words whitespace-pre-line max-h-48 overflow-y-auto">
-              {run.text}{run.text.length < run.chars ? '…' : ''}
+              {item.text}{whole ? '' : '…'}
             </p>
           </div>
         )}

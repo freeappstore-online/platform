@@ -323,8 +323,10 @@ export const metaUrlOf = (url: string) => url.replace(/(\?|$)/, '/meta$1')
  * the text is there (or if it can't load) it shows the 200-character preview and
  * a sentence beyond it by number.
  */
-export function ArtifactPlayer({ url, preview, loadText }: {
+export function ArtifactPlayer({ url, metaUrl = metaUrlOf(url), preview, loadText }: {
   url: string
+  /** The artifact's meta, when the server gave it (null: it has none); else beside `url`. */
+  metaUrl?: string | null
   preview: string
   loadText: () => Promise<string>
 }) {
@@ -336,7 +338,7 @@ export function ArtifactPlayer({ url, preview, loadText }: {
   const load = () => {
     if (segments) return
     setSegments([])
-    fetch(metaUrlOf(url))
+    if (metaUrl) fetch(metaUrl)
       .then(r => (r.ok ? r.json() : null))
       .then((meta: { segments?: unknown } | null) => {
         if (Array.isArray(meta?.segments)) setSegments(meta.segments as Segment[])

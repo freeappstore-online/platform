@@ -26,16 +26,17 @@ const api = 'https://api.freeappstore.online/v1'
 
 const books: GenerationOpenApp = {
   appId: 'books', oneliner: 'Free books',
-  sets: [{ setId: 's1', kind: 'tts', model: 'kokoro', modelVersion: 'v1.0', params: { voice: 'af_heart' }, formats: ['audio/mp4'], maxBytes: 25_000_000, open: 12 }],
+  sets: [{ setId: 's1', kind: 'tts', language: 'en-US', model: 'kokoro', modelVersion: 'v1.0', params: { voice: 'af_heart' }, formats: ['audio/mp4'], maxBytes: 25_000_000, open: 12 }],
 }
 const other: GenerationOpenApp = {
   appId: 'radio', oneliner: null,
-  sets: [{ setId: 's2', kind: 'tts', model: 'piper', modelVersion: '1', params: {}, formats: ['audio/ogg'], maxBytes: 1, open: 3 }],
+  sets: [{ setId: 's2', kind: 'tts', language: null, model: 'piper', modelVersion: '1', params: {}, formats: ['audio/ogg'], maxBytes: 1, open: 3 }],
 }
 const submission = {
   submissionId: 'x1', jobId: 'j1', setId: 's1', key: 'alice/0', status: 'rejected',
   reason: 'transcript does not match the text (word error rate 0.41)',
   bytes: 4096, contentType: 'audio/mp4', createdAt: Date.now(), decidedAt: Date.now(),
+  wer: 0.41, durationMs: 3000, input: { text: 'Call me Ishmael.' }, artifact: null,
 }
 let submissions: unknown[]
 
@@ -49,10 +50,8 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === `${api}/generation/open`) return new Response(JSON.stringify({ apps: [books, other] }))
     if (url === `${api}/apps/books/generation/submissions`) return new Response(JSON.stringify({ submissions }))
-    if (url === `${api}/apps/books/generation/sets/s1/manifest`) {
-      return new Response(JSON.stringify({
-        artifacts: [{ key: 'alice/1', jobId: 'j2', url: '/v1/apps/books/generation/artifacts/j2?v=1', bytes: 9000, contentType: 'audio/mp4', durationMs: 12_300, sha256: 'x', model: 'kokoro', modelVersion: 'v1.0', acceptedAt: 1 }],
-      }))
+    if (url === `${api}/apps/books/generation/artifacts/j2/meta?v=1`) {
+      return new Response(JSON.stringify({ segments: [[0, 12, 0, 1], [13, 28, 1, 2]] }))
     }
     return new Response('not found', { status: 404 })
   }))
@@ -164,12 +163,16 @@ it('generates for the opted-in apps’ runnable sets, shows progress, stops, and
 
 it('opens Activity filtered from today’s chips, filters by app, and plays an accepted job in its detail', async () => {
   const now = Date.now()
+  const artifact = { url: `${api}/apps/books/generation/artifacts/j2?v=1`, metaUrl: `${api}/apps/books/generation/artifacts/j2/meta?v=1` }
   submissions = [
     submission,
-    { ...submission, submissionId: 'x2', jobId: 'j2', key: 'alice/1', status: 'accepted', reason: null, bytes: 9216 },
+    {
+      ...submission, submissionId: 'x2', jobId: 'j2', key: 'alice/1', status: 'accepted', reason: null, bytes: 9216,
+      wer: 0.025, durationMs: 12_300, input: { text: 'Hello there. General Kenobi.' }, artifact,
+    },
   ]
   localStorage.setItem('fas:generate-runs', JSON.stringify([
-    { appId: 'books', setId: 's1', jobId: 'j2', key: 'alice/1', at: now - 1, outcome: 'submitted', reason: null, ms: 42_000, text: 'Hello there. General Kenobi.', chars: 28 },
+    { appId: 'books', setId: 's1', jobId: 'j2', key: 'alice/1', at: now - 1, outcome: 'submitted', reason: null, ms: 42_000, text: '', chars: 0 },
     { appId: 'books', setId: 's1', jobId: 'j4', key: 'alice/4', at: now - 2, outcome: 'skipped', reason: 'voice bf_emma is not English (US)', ms: 10, text: 'Cheerio.', chars: 8 },
     { appId: 'poems', setId: 's9', jobId: 'j9', key: 'bob/9', at: now - 3 * 86_400_000, outcome: 'failed', reason: 'network down', ms: 10, text: 'Roses.', chars: 6 },
   ]))
@@ -202,7 +205,8 @@ it('opens Activity filtered from today’s chips, filters by app, and plays an a
   expect(container.textContent).toContain('Today')
   expect(container.textContent).toContain('word error rate 0.41')
 
-  // Detail of the accepted job: verdict, size, duration from the manifest, Play with its text
+  // Detail of the accepted job: verdict, size, the server's duration, error rate and text, Play
+  // with sentence highlighting from its meta
   const row = [...container.querySelectorAll('li button')].find((b) => b.textContent?.includes('alice/1')) as HTMLElement
   await click(row)
   const dialog = document.querySelector('[role=dialog]')!
@@ -211,10 +215,32 @@ it('opens Activity filtered from today’s chips, filters by app, and plays an a
   expect(dialog.textContent).toContain('Accepted')
   expect(dialog.textContent).toContain('9 KB')
   expect(dialog.textContent).toContain('12.3 s')
+  expect(dialog.textContent).toContain('2.5%')
   expect(dialog.textContent).toContain('42.0 s')
-  expect(dialog.querySelector('audio')!.getAttribute('src')).toBe('https://api.freeappstore.online/v1/apps/books/generation/artifacts/j2?v=1')
+  const audio = dialog.querySelector('audio')!
+  expect(audio.getAttribute('src')).toBe(artifact.url)
   expect(dialog.textContent).toContain('Hello there. General Kenobi.')
+  await act(async () => audio.dispatchEvent(new Event('play')))
+  await flush()
+  expect(fetch).toHaveBeenCalledWith(artifact.metaUrl)
+  Object.defineProperty(audio, 'currentTime', { value: 1.5, configurable: true })
+  await act(async () => audio.dispatchEvent(new Event('timeupdate')))
+  expect(dialog.querySelector('mark')!.textContent).toBe('General Kenobi.')
 
   await act(async () => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
   expect(document.querySelector('[role=dialog]')).toBeNull()
+})
+
+it('shows the text, error rate and duration of a job another device ran, which this browser has no record of', async () => {
+  await render()
+  await tab('Activity')
+  const row = [...container.querySelectorAll('li button')].find((b) => b.textContent?.includes('alice/0')) as HTMLElement
+  await click(row)
+  const dialog = document.querySelector('[role=dialog]')!
+  expect(dialog.textContent).toContain('Rejected')
+  expect(dialog.textContent).toContain('41.0%')
+  expect(dialog.textContent).toContain('3.0 s')
+  expect(dialog.textContent).toContain('Call me Ishmael.')
+  expect(dialog.textContent).not.toContain('Generating took')
+  expect(dialog.querySelector('audio')).toBeNull()
 })

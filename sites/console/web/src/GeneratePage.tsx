@@ -135,7 +135,6 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
         )}
         {tab === 'activity' && (
           <GenerateActivity
-            fas={fas}
             items={items}
             appIds={appIds}
             onelinerOf={appId => apps?.find(a => a.appId === appId)?.oneliner ?? null}
