@@ -2636,3 +2636,19 @@ pre[class*="language-"] {
 .catalog-categories { margin: 2.5rem 0 1rem; }
 .catalog-categories h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
 a.tag { text-decoration: none; }
+
+/* ---- Desktop app download page (/download, download.html + download.js) ---- */
+.dl-primary { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1rem; }
+.page-content .dl-primary h2 { margin-top: 0.25rem; }
+.page-content .dl-primary p { margin-bottom: 0; color: var(--ink); }
+.dl-badge { display: inline-block; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--accent); }
+.dl-buttons { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+.dl-buttons:empty { display: none; }
+.page-content .dl-buttons a { text-decoration: none; text-align: center; }
+.page-content .dl-buttons .btn-primary { color: #fff; }
+.page-content .dl-buttons .app-btn-secondary { color: var(--ink); }
+.page-content .dl-list { list-style: none; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.dl-list li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.75rem 1rem; margin: 0; border-top: 1px solid var(--line); }
+.dl-list li:first-child { border-top: none; }
+.dl-list span { color: var(--muted); font-family: var(--font-mono); font-size: 0.85rem; }
+@media (max-width: 480px) { .dl-buttons a { width: 100%; } }

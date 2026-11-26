@@ -593,7 +593,7 @@ Set the same variables in your GitHub repo: Settings > Secrets and variables > A
 ### Local AI access (`@freeappstore/sdk/bridge`)
 
 Let an AI client on the user's computer (Claude Code, Claude Desktop) work on the app's local data through the
-FreeAppStore desktop app. The app defines tools; the AI calls them with the desktop app's MCP tools
+FreeAppStore desktop app (users install it from https://freeappstore.online/download). The app defines tools; the AI calls them with the desktop app's MCP tools
 `list_open_apps`, `app_tools`, `app_call` and `open_app`. FAS keeps no app data on a server, so this is how an
 AI reaches it.
 

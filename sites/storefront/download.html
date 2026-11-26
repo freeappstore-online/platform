@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Download the FreeAppStore desktop app for Mac, Windows and Linux | FreeAppStore</title>
+  <meta name="description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer, with your data staying on your device. Preview builds for Mac, Windows and Linux." />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Download the FreeAppStore desktop app for Mac, Windows and Linux | FreeAppStore" />
+  <meta property="og:description" content="The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer, with your data staying on your device. Preview builds for Mac, Windows and Linux." />
+  <meta property="og:url" content="https://freeappstore.online/download" />
+  <meta property="og:image" content="https://freeappstore.online/og-image.png?v=2026-11-18" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="FreeAppStore: everyday apps, rebuilt for the web. Nothing to download, no ads, no trials, no subscriptions." />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="canonical" href="https://freeappstore.online/download" />
+  <script type="application/ld+json">{
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": "https://freeappstore.online/download#page",
+    "url": "https://freeappstore.online/download",
+    "name": "Download the FreeAppStore desktop app",
+    "description": "The FreeAppStore desktop app lets AI apps like Claude Code work in your FreeAppStore apps, on your computer, with your data staying on your device.",
+    "isPartOf": {
+      "@id": "https://freeappstore.online/#website"
+    },
+    "about": {
+      "@id": "https://freeappstore.online/#org"
+    }
+  }</script>
+  <link rel="icon" href="/favicon.svg?v=2026-11-18" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2026-11-18" />
+  {{SETTINGS_BOOTSTRAP}}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{STYLE_CSS_URL}}" />
+</head>
+<body>
+
+  {{HEADER}}
+
+
+  <main class="container">
+    <div class="page-header">
+      <h1>FreeAppStore for desktop</h1>
+      <p>Let AI apps like Claude Code work in your FreeAppStore apps, on your computer. Your data stays on your device.</p>
+    </div>
+    <div class="page-content">
+      <section class="dl-primary" aria-labelledby="dl-primary-title">
+        <p class="dl-badge">Preview build</p>
+        <h2 id="dl-primary-title">Download</h2>
+        <p id="dl-detected">Choose the installer for your computer below.</p>
+        <div class="dl-buttons" id="dl-buttons"></div>
+      </section>
+
+      <h2 id="all">All installers</h2>
+      <ul class="dl-list">
+        <li><a href="https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-mac-arm64.dmg" data-asset="mac-arm64">Mac, Apple Silicon (M1–M4)</a> <span>.dmg</span></li>
+        <li><a href="https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-mac-x64.dmg" data-asset="mac-x64">Mac, Intel</a> <span>.dmg</span></li>
+        <li><a href="https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-win-x64.exe" data-asset="win-x64">Windows (64-bit)</a> <span>.exe</span></li>
+        <li><a href="https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-linux-x86_64.AppImage" data-asset="linux-x64">Linux (x86-64)</a> <span>.AppImage</span></li>
+      </ul>
+      <p>Not sure which Mac you have? Open the Apple menu › <strong>About This Mac</strong>: "Chip: Apple M…" means Apple Silicon, "Processor: … Intel" means Intel. Zip builds for Mac, and every earlier version, are on the <a href="https://github.com/freeappstore-online/platform/releases/tag/desktop-latest">release page</a>.</p>
+
+      <h2 id="what">What it does</h2>
+      <ul>
+        <li><strong>AI in your apps:</strong> apps that turn on <strong>Allow AI access</strong> offer tools (for example, the spreadsheet lets an AI read and edit your workbook). An AI app on your computer, such as Claude Code or Claude Desktop, uses those tools through the desktop app.</li>
+        <li><strong>Local only:</strong> the desktop app talks to AI apps on this computer only (127.0.0.1), protected by a key only you have. FreeAppStore keeps no copy of your app data.</li>
+        <li><strong>Apps in their own windows:</strong> open any FreeAppStore app from the desktop app's Store, or keep using it in your browser.</li>
+      </ul>
+
+      <h2 id="first-launch">First launch</h2>
+      <p>These preview builds aren't signed by Apple or Microsoft yet, so your computer warns you the first time. That's expected.</p>
+      <h3 id="mac">Mac</h3>
+      <ol>
+        <li>Open the .dmg and drag <strong>FreeAppStore</strong> to <strong>Applications</strong>.</li>
+        <li>Open FreeAppStore from Applications. macOS blocks it the first time; click <strong>Done</strong> (or <strong>OK</strong>).</li>
+        <li>Open <strong>System Settings</strong> › <strong>Privacy &amp; Security</strong>, scroll down and click <strong>Open Anyway</strong> next to the FreeAppStore message. Confirm with your password.</li>
+      </ol>
+      <p>If macOS says the app "is damaged and can't be opened", run this once in Terminal, then open it again:</p>
+      <pre><code>xattr -dr com.apple.quarantine /Applications/FreeAppStore.app</code></pre>
+      <h3 id="windows">Windows</h3>
+      <ol>
+        <li>Run <strong>FreeAppStore-win-x64.exe</strong>.</li>
+        <li>If Windows SmartScreen shows "Windows protected your PC", click <strong>More info</strong>, then <strong>Run anyway</strong>.</li>
+      </ol>
+      <h3 id="linux">Linux</h3>
+      <p>Make the AppImage executable, then run it:</p>
+      <pre><code>chmod +x FreeAppStore-linux-x86_64.AppImage
+./FreeAppStore-linux-x86_64.AppImage</code></pre>
+
+      <h2 id="claude-code">Connect Claude Code</h2>
+      <ol>
+        <li>Open the desktop app. Its <strong>Home</strong> screen shows a <code>claude mcp add …</code> command with your key. Click <strong>Copy</strong>.</li>
+        <li>Paste it into a terminal and run it once.</li>
+        <li>Open an app (from the desktop app's <strong>Store</strong>, or in your browser with <strong>Allow AI access</strong> on), then ask Claude Code, for example, "list my open FreeAppStore apps".</li>
+      </ol>
+      <p>Keep the desktop app running while you use it. <strong>Regenerate token</strong> on the Home screen disconnects every AI app that has the old key.</p>
+
+      <h2 id="preview">About this preview</h2>
+      <p>This is an early build for trying things out: it doesn't update itself yet, so come back here for new versions. Signed installers and automatic updates are coming. Found a problem? <a href="https://github.com/freeappstore-online/platform/issues">Open an issue</a>.</p>
+
+      <p><a href="/">Browse free apps</a> · <a href="/install">Install apps without the desktop app</a> · <a href="https://docs.freeappstore.online/mcp/">Docs: local AI access</a></p>
+    </div>
+  </main>
+  {{FOOTER}}
+
+  <script src="/auth.js?v={{VER_AUTH_JS}}" integrity="{{SRI_AUTH_JS}}"></script>
+  <script src="/download.js?v={{VER_DOWNLOAD_JS}}" integrity="{{SRI_DOWNLOAD_JS}}" defer></script>
+</body>
+</html>

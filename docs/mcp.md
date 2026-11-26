@@ -174,7 +174,7 @@ Write tools (`create_app`, `update_files`) additionally verify app ownership via
 ## Local AI access to app data (FreeAppStore desktop)
 
 AI clients work on an app's data through the **FreeAppStore desktop app**, not through a server: the app's
-data stays on the device. The desktop app runs a loopback MCP server at `http://127.0.0.1:47821/mcp`,
+data stays on the device ([download the desktop app](https://freeappstore.online/download)). The desktop app runs a loopback MCP server at `http://127.0.0.1:47821/mcp`,
 protected by a per-install token. Its home screen shows the exact setup command:
 
 ```bash

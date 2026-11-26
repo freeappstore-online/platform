@@ -1,4 +1,5 @@
-# Local, unsigned builds only. Signing, notarization and releases: #799.
+# Unsigned builds (#805), published by .github/workflows/desktop-release.yml. Signing, notarization and
+# auto-update: #799. Asset names carry no version so the download page can link to them stably.
 appId: online.freeappstore.desktop
 productName: FreeAppStore
 directories:
@@ -9,7 +10,29 @@ files:
 mac:
   category: public.app-category.productivity
   icon: build/icon.png
-  identity: null
+  # Ad-hoc signature ("-"): no certificate, but Apple Silicon refuses to start an unsigned app at all.
+  identity: "-"
+  artifactName: FreeAppStore-mac-${arch}.${ext}
   target:
-    - zip
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+dmg:
+  artifactName: FreeAppStore-mac-${arch}.${ext}
+win:
+  icon: build/icon.png
+  artifactName: FreeAppStore-win-${arch}.${ext}
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  artifactName: FreeAppStore-win-${arch}.${ext}
+linux:
+  icon: build/icon.png
+  category: Utility
+  artifactName: FreeAppStore-linux-${arch}.${ext}
+  target:
+    - target: AppImage
+      arch: [x64]
 publish: null

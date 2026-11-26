@@ -11,6 +11,10 @@ Claude Code ──HTTP MCP──▶ desktop app (127.0.0.1:47821/mcp) ──IPC�
 
 A self-contained pnpm project outside the root workspace, like `workers/*`.
 
+**Install:** download the preview installer for Mac, Windows or Linux from
+[freeappstore.online/download](https://freeappstore.online/download), which also has the first-launch steps for
+these unsigned builds.
+
 ## Run
 
 ```bash
@@ -70,11 +74,26 @@ keep its screenshots.
 ## Build
 
 ```bash
-pnpm --dir desktop dist:mac   # unsigned: release/FreeAppStore-<version>-mac.zip
+pnpm --dir desktop dist:mac   # unsigned, ad-hoc signed: release/FreeAppStore-mac-{x64,arm64}.{dmg,zip}
 ```
 
-The build is not signed or notarized, so macOS Gatekeeper blocks it on other machines (right-click → Open).
-Signing, notarization, auto-update and the download page are #799.
+### Release
+
+`.github/workflows/desktop-release.yml` builds the installers on GitHub Actions: macOS dmg + zip (x64 and arm64,
+ad-hoc signed so Apple Silicon starts them), Windows NSIS `.exe` and Linux AppImage. Start it by pushing a tag, or
+run the workflow by hand with a version (it creates the tag):
+
+```bash
+git tag desktop-v0.1.1 && git push origin desktop-v0.1.1
+```
+
+CI sets `package.json`'s version from the tag. Each run publishes the release `desktop-v<version>` and refreshes
+`desktop-latest`, whose asset URLs never change; the download page links there:
+`https://github.com/freeappstore-online/platform/releases/download/desktop-latest/FreeAppStore-mac-x64.dmg`
+(also `-mac-arm64.dmg`, `-mac-{x64,arm64}.zip`, `-win-x64.exe`, `-linux-x86_64.AppImage`).
+
+The builds are not signed with a certificate or notarized, so macOS Gatekeeper and Windows SmartScreen warn on
+first launch. Signing, notarization and auto-update are #799.
 
 ## Layout
 
