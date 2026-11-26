@@ -48,6 +48,10 @@ data class CompanionState(
     val expired: Boolean = false, val expiresInDays: Int? = null,
     /** The system's label for background location access (`backgroundPermissionOptionLabel`), localised (#650). */
     val backgroundOption: String = "Allow all the time",
+    // Contribute (#731).
+    val contributeApps: Set<String> = emptySet(), val contributeAnyTime: Boolean = false, val model: ModelState = ModelState.NONE,
+    /** What the contribute work is doing, null while idle. */
+    val contributing: String? = null, val contributions: List<Contribution> = emptyList(), val contributedToday: Map<String, Int> = emptyMap(),
 )
 
 data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false)
@@ -63,10 +67,14 @@ data class CompanionActions(
     /** The on-device sharing history (#649): clear it, and read tracks off the main thread. */
     val clearHistory: () -> Unit = {},
     val loadTracks: suspend (List<String>, LongRange) -> Map<String, List<TrackSample>> = { _, _ -> emptyMap() },
+    /** Contribute (#731): opt an app in or out, the voice model, when it runs, and the current run. */
+    val contribute: (String, Boolean) -> Unit = { _, _ -> }, val downloadModel: () -> Unit = {}, val deleteModel: () -> Unit = {},
+    val contributeAnyTime: (Boolean) -> Unit = {}, val contributeNow: () -> Unit = {}, val stopContributing: () -> Unit = {},
 )
 
 enum class Tab(val label: String, val icon: Int) {
-    STORE("Store", R.drawable.ic_store), SHARING("Sharing", R.drawable.ic_location), SETTINGS("Settings", R.drawable.ic_settings)
+    STORE("Store", R.drawable.ic_store), SHARING("Sharing", R.drawable.ic_location), CONTRIBUTE("Contribute", R.drawable.ic_contribute),
+    SETTINGS("Settings", R.drawable.ic_settings)
 }
 
 class MainActivity : ComponentActivity() {
@@ -78,6 +86,8 @@ class MainActivity : ComponentActivity() {
     private var working by mutableStateOf(false)
     private var permissionExplanation by mutableStateOf(false)
     private var linkedApp: String? = null
+    /** `freeappstore://native/contribute/<id>`: asks before opting in, never opts in by itself. */
+    private var linkedContribute by mutableStateOf<String?>(null)
     private var refreshJob: Job? = null
     private val version by lazy { packageManager.getPackageInfo(packageName, 0).let { "${it.versionName} (${it.longVersionCode})" } }
     private val permissionRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { refresh(); maybeStart() }
@@ -108,6 +118,20 @@ class MainActivity : ComponentActivity() {
             refreshCatalogue = ::refreshCatalogue,
             clearHistory = { runCatching { graph.local.clearHistory() }.onFailure { error = it.message ?: "Could not clear history." }; refresh() },
             loadTracks = { ids, range -> withContext(Dispatchers.IO) { ids.associateWith { graph.local.track(it, range.first, range.last) } } },
+            contribute = { id, on ->
+                graph.local.setContributing(id, on)
+                // Asking for an app also asks for the model it needs; the work downloads it under the same constraints.
+                if (on && !graph.kokoro.installed) graph.local.modelWanted = true
+                graph.scheduleWork(now = on); refresh()
+            },
+            downloadModel = { graph.local.modelWanted = true; graph.scheduleWork(now = true); refresh() },
+            deleteModel = {
+                graph.local.modelWanted = false; ContributeWorker.stop(this)
+                lifecycleScope.launch { withContext(Dispatchers.IO) { graph.kokoro.delete() }; graph.scheduleWork(); refresh() }
+            },
+            contributeAnyTime = { graph.local.contributeAnyTime = it; graph.scheduleWork(now = true); refresh() },
+            contributeNow = { graph.scheduleWork(now = true); refresh() },
+            stopContributing = { ContributeWorker.stop(this); refresh() },
         )
         // Sharing when any app has a grant or the connection expired, otherwise the Store.
         val initialTab = if (state.expired || state.apps.any { it.grantId != null }) Tab.SHARING else Tab.STORE
@@ -122,6 +146,11 @@ class MainActivity : ComponentActivity() {
                     text = { Text("FreeAppStore collects location data to enable route recording for apps you enable, even when the app is closed or not in use. Updates go to FreeAppStore and only your enabled apps. On the next screen, choose Precise location, then “${state.backgroundOption}”. You can pause or revoke access here.") },
                     confirmButton = { TextButton(onClick = { permissionExplanation = false; requestLocation() }) { Text("Continue") } },
                     dismissButton = { TextButton(onClick = { permissionExplanation = false }) { Text("Not now") } })
+                linkedContribute?.takeIf { state.signedIn }?.let { id ->
+                    ContributeDialog(catalogue.apps.find { it.id == id }?.name ?: id, { linkedContribute = null }) {
+                        linkedContribute = null; actions.contribute(id, true)
+                    }
+                }
             }
         }
     }
@@ -130,9 +159,17 @@ class MainActivity : ComponentActivity() {
         refresh(); maybeStart(); refreshCatalogue()
         refreshJob?.cancel()
         refreshJob = lifecycleScope.launch {
-            try { graph.repository.finishSignIn(); if (graph.repository.token() != null) graph.repository.sync(); error = "" }
+            try {
+                graph.repository.finishSignIn()
+                if (graph.repository.token() != null) {
+                    graph.repository.sync()
+                    // The server's verdicts on this phone's contributions (#731). A refresh only.
+                    withContext(Dispatchers.IO) { graph.local.contributeApps().forEach { runCatching { graph.generation.refresh(it, graph.local) } } }
+                }
+                error = ""
+            }
             catch (e: Exception) { if (e is CancellationException) throw e; if (!DeviceConnection.expired(e)) error = failure(e, "Could not connect.") }
-            graph.scheduleUploads() // pairing finished, or the sync found the connection expired
+            graph.scheduleWork() // pairing finished, or the sync found the connection expired
             refresh(); maybeStart(); showLinkedDisclosure()
             while (isActive) { delay(2_000); refresh() }
         }
@@ -145,6 +182,7 @@ class MainActivity : ComponentActivity() {
         if (uri.scheme != "freeappstore" || uri.host != "native") return
         val parts = uri.pathSegments
         if (parts.size == 2 && parts[0] == "apps") linkedApp = parts[1]
+        if (parts.size == 2 && parts[0] == "contribute" && Regex("^[a-z0-9][a-z0-9-]{0,62}$").matches(parts[1])) linkedContribute = parts[1]
     }
     private fun showLinkedDisclosure() {
         val id = linkedApp ?: return
@@ -172,7 +210,11 @@ class MainActivity : ComponentActivity() {
             lastFix = LocationService.lastFix,
             version = version,
             expired = local.expired, backgroundOption = backgroundOption(),
-            expiresInDays = if (signedIn) DeviceConnection.expiresInDays(local.deviceExpiresAt, System.currentTimeMillis()) else null)
+            expiresInDays = if (signedIn) DeviceConnection.expiresInDays(local.deviceExpiresAt, System.currentTimeMillis()) else null,
+            contributeApps = local.contributeApps(), contributeAnyTime = local.contributeAnyTime,
+            model = when { graph.kokoro.installed -> ModelState.INSTALLED; local.modelWanted -> ModelState.WAITING; else -> ModelState.NONE },
+            contributing = ContributeWorker.status, contributions = local.contributions(),
+            contributedToday = local.contributeApps().associateWith { local.contributedSince(it, SharingTimeline.today().first) })
         if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
     }
     /** Foreground only: no background budget is spent on the catalogue. */
@@ -192,7 +234,7 @@ class MainActivity : ComponentActivity() {
                 if (e is CancellationException) throw e
                 if (!DeviceConnection.expired(e)) error = failure(e, "Please try again.") // the expired card says it
             }
-            finally { working = false; graph.scheduleUploads(); refresh() } // Disconnect and expiry cancel the upload work
+            finally { working = false; graph.scheduleWork(); refresh() } // Disconnect and expiry cancel the upload work
         }
     }
     /** Network failures get a plain sentence, not the exception's text (host names, errno). */
@@ -281,6 +323,7 @@ internal fun FasScreen(
                     } ?: LaunchedEffect(page) { sharingPage = SharingPage.Dashboard } // the app left /native/me
                     is SharingPage.Activity -> ActivityScreen(state, page.appId) { sharingPage = page.from }
                 }
+                Tab.CONTRIBUTE -> ContributeScreen(state, catalogue, actions)
                 Tab.SETTINGS -> SettingsScreen(state, actions.connect, actions.permissions, actions.disconnect, actions.privacy, actions.account,
                     actions.clearHistory, actions.open, actions.reconnect)
             }

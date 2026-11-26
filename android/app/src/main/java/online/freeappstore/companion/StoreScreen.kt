@@ -143,6 +143,13 @@ private fun AppDetail(
         Button(onClick = { open(app) }, Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { contentDescription = "Open ${app.name}" }) { Text("Open") }
         if (app.description.isNotEmpty()) Text(app.description)
         state.apps.find { it.id == app.id }?.let { connected -> CompanionCard(connected, state, actions, askConsent) }
+        if (state.signedIn) Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ContributeSwitch(app.id, app.name, state, actions.contribute)
+                Text("Generate ${app.name}'s published jobs, such as narration, on this phone. Nothing happens if it has none.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
         app.permissions?.let { permissions ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Permissions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)

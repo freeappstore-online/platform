@@ -18,10 +18,16 @@ tools. Protocol and deep links: [docs/native-companion.md](../docs/native-compan
   `/v1/native/`). Featured, Yours, category rows, search, All apps and an app page. Icons are the registry's emoji on
   its `iconBg`. **Open** goes to `<appUrl>/?install=1`, where the host shows an Install button (`workers/host`).
 
+- **Contribute tab** (#731): opt in per app to generate its published jobs (narration) on the phone with Kokoro via
+  sherpa-onnx, then upload them for the server to verify. The voice model downloads on demand (pinned URL and SHA-256,
+  no-backup storage, deletable); WorkManager runs it while charging on an unmetered network by default, with a
+  foreground notification. Protocol: [docs/native-companion.md](../docs/native-companion.md#contribute-android-731).
+
 ## Build
 
 JDK 17+ and Android SDK platform 36. Set `ANDROID_HOME` or put `sdk.dir=/path/to/sdk` in an untracked
 `local.properties`.
+The first build downloads the pinned sherpa-onnx AAR (52 MB) into `app/libs/` (untracked) and checks its SHA-256.
 
 ```sh
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug

@@ -6,23 +6,35 @@ import androidx.work.*
 import java.util.concurrent.TimeUnit
 
 class FasApplication : Application() {
+    private val api = FasApi()
     val local by lazy { LocalStore(this) }
-    val repository by lazy { CompanionRepository(local, SecureStore(this), FasApi()) }
+    val repository by lazy { CompanionRepository(local, SecureStore(this), api) }
+    /** Contribute (#731): the voice model in no-backup storage, and the contributor routes with the device credential. */
+    val kokoro by lazy { KokoroModel(java.io.File(noBackupFilesDir, "kokoro")) }
+    val generation by lazy { GenerationClient(api, repository::token) }
     /** Outside LocalStore, so pairing and disconnect keep the Store tab's cache. */
     val catalogue by lazy { CatalogueStore(java.io.File(noBackupFilesDir, "fas-catalogue")) }
     override fun onCreate() {
         super.onCreate()
-        scheduleUploads()
+        scheduleWork()
     }
-    /** Upload work exists only while paired (#657): no wakeups, which Android vitals counts, without a credential. */
-    fun scheduleUploads() = UploadWorker.schedule(this, repository.token() != null)
+    /**
+     * Upload and contribute work exist only while paired (#657): no wakeups, which Android vitals counts, without a
+     * credential. Contribute work also needs an opted-in app or a model download to do. [now] runs contributions soon.
+     */
+    fun scheduleWork(now: Boolean = false) {
+        val paired = repository.token() != null
+        UploadWorker.schedule(this, paired)
+        val todo = local.contributeApps().isNotEmpty() || (local.modelWanted && !kokoro.installed)
+        ContributeWorker.schedule(this, paired && todo, local.contributeAnyTime, now)
+    }
 }
 class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val graph = applicationContext as FasApplication
         return try { graph.repository.sync(); Result.success() }
         catch (_: Exception) { Result.retry() }
-        finally { graph.scheduleUploads() } // a 401 during sync expired the connection: stop the schedule
+        finally { graph.scheduleWork() } // a 401 during sync expired the connection: stop the schedule
     }
     companion object {
         const val NAME = "native-upload"

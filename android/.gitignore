@@ -5,3 +5,4 @@ local.properties
 *.jks
 *.keystore
 captures/
+app/libs/

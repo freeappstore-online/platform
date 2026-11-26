@@ -11,16 +11,16 @@ import org.json.JSONObject
  * Private queue and settings. Version 2 adds the on-device sharing history (#649, ported from iOS LocalStore.swift):
  * `share_events` (when sharing was enabled, paused or turned off, and the activity log's problems) and `share_points`
  * (a 30-day copy of what was shared with each app). Both are in the same backup-excluded database as the queue and
- * never leave the phone.
+ * never leave the phone. Version 4 adds `generation_jobs`, this phone's contribution record (#731).
  */
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 3) {
+class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 4), ContributionLog {
     private val prefs = context.getSharedPreferences("native-settings", Context.MODE_PRIVATE)
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE points(id TEXT PRIMARY KEY, at INTEGER NOT NULL, payload TEXT NOT NULL)")
         db.execSQL("CREATE INDEX points_at ON points(at)")
         createHistory(db)
     }
-    /** Every step is `IF NOT EXISTS`: version 2 added the history, version 3 its `(app_id, sent_at)` index. */
+    /** Every step is `IF NOT EXISTS`: version 2 added the history, version 3 its `(app_id, sent_at)` index, version 4 `generation_jobs`. */
     override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) = createHistory(db)
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS share_events(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, app_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '')")
@@ -29,6 +29,8 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
         db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_at ON share_points(app_id, at)")
         // pendingCount and lastUpload run on every screen refresh; without it each scans the app's whole history.
         db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_sent ON share_points(app_id, sent_at)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS generation_jobs(job_id TEXT PRIMARY KEY, app_id TEXT NOT NULL, job_key TEXT NOT NULL, at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '')")
+        db.execSQL("CREATE INDEX IF NOT EXISTS generation_jobs_at ON generation_jobs(at)")
     }
 
     /** Pause all. A change is recorded as `paused_all` / `resumed_all`; a forced stop goes through [stop]. */
@@ -191,7 +193,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
     @Synchronized fun count(): Int = readableDatabase.rawQuery("SELECT COUNT(*) FROM points", null).use { it.moveToFirst(); it.getInt(0) }
     /** Disconnect, or pairing a different account: everything. */
     @Synchronized fun clear() {
-        transaction { db -> listOf("points", "share_events", "share_points").forEach { db.delete(it, null, null) } }
+        transaction { db -> listOf("points", "share_events", "share_points", "generation_jobs").forEach { db.delete(it, null, null) } }
         check(prefs.edit().clear().commit())
     }
     /**
@@ -271,6 +273,42 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
         granted.filter { it.id in paused }.forEach { record(ShareEvent.Kind.PAUSED, it.id, detail, now) }
         if (this.paused) record(ShareEvent.Kind.PAUSED_ALL, detail = detail, at = now)
     }
+    // Contribute (#731)
+
+    /** Apps this phone generates jobs for. */
+    @Synchronized fun contributeApps(): Set<String> = prefs.getStringSet("contributeApps", emptySet())!!.toSet()
+    @Synchronized fun setContributing(appId: String, on: Boolean) {
+        check(prefs.edit().putStringSet("contributeApps", if (on) contributeApps() + appId else contributeApps() - appId).commit())
+    }
+    /** Off by default: only while charging on an unmetered network. */
+    var contributeAnyTime: Boolean
+        get() = prefs.getBoolean("contributeAnyTime", false)
+        set(value) { check(prefs.edit().putBoolean("contributeAnyTime", value).commit()) }
+    /** The user asked for the voice model; the contribute work downloads it under the same constraints. */
+    var modelWanted: Boolean
+        get() = prefs.getBoolean("modelWanted", false)
+        set(value) { check(prefs.edit().putBoolean("modelWanted", value).commit()) }
+    @Synchronized override fun handled(jobId: String): Boolean =
+        readableDatabase.rawQuery("SELECT 1 FROM generation_jobs WHERE job_id = ?", arrayOf(jobId)).use { it.moveToFirst() }
+    @Synchronized override fun record(contribution: Contribution) {
+        writableDatabase.insertWithOnConflict("generation_jobs", null, ContentValues().apply {
+            put("job_id", contribution.jobId); put("app_id", contribution.appId); put("job_key", contribution.key.take(200))
+            put("at", contribution.at); put("status", contribution.status); put("reason", contribution.reason.take(120))
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+    @Synchronized override fun updateStatus(jobId: String, status: String, reason: String) {
+        writableDatabase.update("generation_jobs", ContentValues().apply { put("status", status); put("reason", reason.take(120)) }, "job_id = ?", arrayOf(jobId))
+    }
+    /** Newest first. */
+    @Synchronized fun contributions(limit: Int = 30): List<Contribution> = readableDatabase.rawQuery(
+        "SELECT job_id, app_id, job_key, at, status, reason FROM generation_jobs ORDER BY at DESC LIMIT ?", arrayOf(limit.toString())).use { c ->
+        buildList { while (c.moveToNext()) add(Contribution(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), c.getString(5))) }
+    }
+    /** Jobs uploaded for [appId] since [from], whatever the verdict. */
+    @Synchronized fun contributedSince(appId: String, from: Long): Int = readableDatabase.rawQuery(
+        "SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('skipped', 'failed')", arrayOf(appId, from.toString()))
+        .use { it.moveToFirst(); it.getInt(0) }
+
     private fun <T> transaction(body: (SQLiteDatabase) -> T): T {
         val db = writableDatabase
         db.beginTransaction()

@@ -1,3 +1,5 @@
+import java.net.URI
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -53,7 +55,27 @@ gradle.taskGraph.whenReady {
         }
     }
 }
+// Kokoro TTS for Contribute (#731): the official sherpa-onnx Android AAR (Apache-2.0). It ships only as a GitHub release
+// asset (not on Maven Central), so it is fetched once into app/libs (untracked) and must match the pinned SHA-256.
+val sherpaOnnxVersion = "2.0.3"
+val sherpaOnnxSha256 = "4c766e2e74c9d33d595338c21fe3b305c73ba45d47e96a235675c33142a2ec50"
+val sherpaOnnxAar = file("libs/sherpa-onnx-$sherpaOnnxVersion.aar")
+fun sha256(file: File) = MessageDigest.getInstance("SHA-256").let { md ->
+    file.inputStream().use { input -> val buffer = ByteArray(1 shl 16); while (true) { val n = input.read(buffer); if (n < 0) break; md.update(buffer, 0, n) } }
+    md.digest().joinToString("") { "%02x".format(it) }
+}
+if (!sherpaOnnxAar.isFile || sha256(sherpaOnnxAar) != sherpaOnnxSha256) {
+    sherpaOnnxAar.parentFile.mkdirs()
+    val part = File(sherpaOnnxAar.path + ".part")
+    URI("https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaOnnxVersion/sherpa-onnx-$sherpaOnnxVersion.aar").toURL()
+        .openStream().use { input -> part.outputStream().use { input.copyTo(it) } }
+    check(sha256(part) == sherpaOnnxSha256) { part.delete(); "sherpa-onnx $sherpaOnnxVersion AAR does not match its pinned SHA-256" }
+    check(part.renameTo(sherpaOnnxAar))
+}
 dependencies {
+    implementation(files(sherpaOnnxAar))
+    // Unpacks the voice model's .tar.bz2 (#731).
+    implementation("org.apache.commons:commons-compress:1.28.0")
     val composeBom = platform("androidx.compose:compose-bom:2025.10.00")
     implementation(composeBom)
     implementation("androidx.compose.material3:material3")

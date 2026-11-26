@@ -75,3 +75,29 @@ browser pages on the API origin, opened by the phone.
 - Its **Store** tab lists `https://freeappstore.online/registry.json` (cached, revalidated, fetched without
   credentials). **Open** goes to the app at `?install=1`. The host then adds `/.fas/install.js`, which shows an
   **Install** button when Chrome offers to install the app. Without the parameter, apps are served unchanged.
+
+## Contribute (Android, #731)
+
+Part of community generation ([#727](https://github.com/freeappstore-online/platform/issues/727)). A paired phone can
+generate an app's published jobs (narration today) and upload them for everyone. The server decides what is generated
+and verifies every upload; the phone is never trusted.
+
+- **Opt in per app**: the **Contribute from this phone** switch on an app's Store page, the Contribute tab, or the deep
+  link `freeappstore://native/contribute/<appId>`. Each asks first; a link never opts in by itself.
+- **Model**: Kokoro v1.0 (multi-language, the weights Books' CI uses) through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
+  (Apache-2.0). The runtime is the pinned sherpa-onnx `2.0.3` AAR (fetched by Gradle into `android/app/libs` and checked
+  against its SHA-256). The model (`kokoro-multi-lang-v1_0.tar.bz2`, 350 MB download, 401 MB unpacked) is downloaded only
+  when asked, from the pinned sherpa-onnx `tts-models` release URL, refused unless its SHA-256 matches, unpacked into
+  no-backup storage, and can be deleted. Claims declare `{ model: "kokoro", modelVersion: "v1.0" }`.
+- **Job params** the phone honours: `{ voice, speed? }`, `voice` a Kokoro voice name (`af_heart`, …), `speed` 0.5-2
+  (default 1). A job with any other param, another model or version, a format list without `audio/mp4`, or an input other
+  than `{ text }` is skipped, never approximated.
+- **Loop** (WorkManager, hourly and on **Run now**; by default only while charging on an unmetered network, which the user
+  can relax; foreground notification with Stop): `POST …/generation/claim` with the device credential → synthesize the
+  job's `input.text` verbatim → AAC-LC mono 64 kbps in MP4 (`MediaCodec` + `MediaMuxer`) → `PUT …/jobs/:jobId/result`
+  multipart (`file`, `audio/mp4`) with `X-Lease-Token`. Nothing is uploaded after the lease is within 30 s of expiry or
+  above `maxBytes`. A job is recorded before its upload starts and is never generated or uploaded again on this phone.
+- **Record**: `generation_jobs` in the backup-excluded database (job key, status, reason), refreshed from
+  `GET …/generation/submissions`; the tab shows today's count per app and recent results. Cleared by **Disconnect**.
+- **Attestation**: `X-Attestation` is sent when the `Attestation` hook returns a token; none until #732.
+
