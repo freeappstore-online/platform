@@ -191,6 +191,7 @@ Implementation and configuration define the limits:
 - `packages/backend/src/routes/friends.ts`: friends
 - `packages/backend/src/routes/logs.ts` and the daily prune in `index.ts`: logs
 - `packages/backend/src/routes/data-rooms.ts`: data rooms
+- `packages/backend/src/routes/generation.ts`: community generation
 - `packages/backend/src/routes/agent-sessions.ts`: VibeCode sessions
 - `packages/backend/src/lib/session.ts`: session lifetime
 - `packages/backend/src/do/room.ts` and `routes/rooms.ts`: realtime limits
@@ -203,3 +204,7 @@ Browser APIs are a separate concern: see [Browser Capabilities](capabilities.md)
 ## Temporary photo uploads
 
 See [Photo uploads](photo-uploads.md): 640 px maximum edge, 200,000 bytes, JPEG/WebP only, 90-day retention, private by default.
+
+## Community generation
+
+See [Community generation](community-generation.md): 200 submissions per user and 5,000 per app per UTC day, 15-minute leases (one open per user), 1-500 jobs per request, text at most 10,000 characters, `maxBytes` at most 25 MB, meta at most 64 KB, quarantine expires after 7 days.

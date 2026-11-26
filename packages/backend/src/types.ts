@@ -15,6 +15,8 @@ export interface Env {
   APPS_BUCKET?: R2Bucket;
   /** Small user photos, automatically expired by a 90-day R2 lifecycle. */
   UPLOADS?: R2Bucket;
+  /** Community generation (#727): quarantine `q/` (7-day lifecycle) and write-once artifacts `a/`. */
+  GENERATED?: R2Bucket;
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   GOOGLE_CLIENT_ID?: string;

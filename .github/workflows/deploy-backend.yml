@@ -74,6 +74,15 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
+      - name: Ensure community generation bucket and quarantine expiry
+        working-directory: packages/backend
+        run: |
+          pnpm exec wrangler r2 bucket info fas-generated > /dev/null 2>&1 || pnpm exec wrangler r2 bucket create fas-generated
+          pnpm exec wrangler r2 bucket lifecycle set fas-generated --file config/generated-lifecycle.json --force
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
       - name: Deploy Worker
         working-directory: packages/backend
         run: pnpm exec wrangler deploy

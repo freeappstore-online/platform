@@ -107,3 +107,10 @@ service = "freeappstore-admin"
 [[r2_buckets]]
 binding = "UPLOADS"
 bucket_name = "fas-uploads"
+
+# Community generation (#727): `q/` quarantine expires after 7 days
+# (config/generated-lifecycle.json), `a/` artifacts are permanent. Private:
+# read only through the API.
+[[r2_buckets]]
+binding = "GENERATED"
+bucket_name = "fas-generated"

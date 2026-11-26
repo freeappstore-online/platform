@@ -990,6 +990,11 @@ authRoutes.delete('/auth/me', async (c) => {
     // too, and no foreign key removes it.
     db.prepare('DELETE FROM native_devices WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM native_pairings WHERE user_id = ?').bind(user.id),
+    // Community generation (#728): accepted artifacts stay public for everyone,
+    // without the contributor; quarantined objects expire by R2 lifecycle.
+    db.prepare('UPDATE generation_artifacts SET user_id = NULL WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM generation_submissions WHERE user_id = ?').bind(user.id),
+    db.prepare('DELETE FROM generation_leases WHERE user_id = ?').bind(user.id),
     db.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
   ]);
   return c.json({ ok: true });

@@ -23,6 +23,7 @@ import { emailRoutes } from './routes/email.js';
 import { exchangeRoutes } from './routes/exchange.js';
 import { fleetAuditRoutes } from './routes/fleet-audit.js';
 import { friendsRoutes } from './routes/friends.js';
+import { generationRoutes, pruneGenerated } from './routes/generation.js';
 import { ideaBuildersRoutes } from './routes/idea-builders.js';
 import { keysRoutes } from './routes/keys.js';
 import { kvRoutes } from './routes/kv.js';
@@ -68,7 +69,8 @@ app.use(
   cors({
     origin: (origin) => (isAllowedOrigin(origin) ? origin : null),
     allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Authorization', 'Content-Type'],
+    // X-Lease-Token / X-Attestation: community generation uploads (#728).
+    allowHeaders: ['Authorization', 'Content-Type', 'X-Lease-Token', 'X-Attestation'],
     maxAge: 600,
   }),
 );
@@ -145,6 +147,7 @@ v1.route('/', votesRoutes);
 v1.route('/', ideaBuildersRoutes);
 v1.route('/', pushRoutes);
 v1.route('/', photoRoutes);
+v1.route('/', generationRoutes);
 v1.route('/', nativeAuthRoutes);
 v1.route('/', nativeRoutes);
 app.route('/v1', v1);
@@ -160,6 +163,7 @@ export default {
         runUptimeChecks(env),
         runPushDelivery(env),
         prunePhotos(env),
+        pruneGenerated(env),
         pruneNativeData(env.DB, Date.now()),
       ]);
       for (const job of jobs)
