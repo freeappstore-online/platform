@@ -87,7 +87,7 @@ function categoryIntro(group, escapeHtml) {
 }
 
 /**
- * A card that is itself a link to the app's detail page. Reuses the
+ * A card that is itself a link to the app's detail page (category and creator pages). Reuses the
  * homepage's compact card classes (.app-card.compact is styled to work as an
  * <a>); data-id keeps the per-app icon background from card-styles.css.
  * No vote button or Open link: those need storefront.js, and a nested <a>
@@ -171,6 +171,7 @@ module.exports = {
   categoryTitle,
   categoryDescription,
   renderCategoryPage,
+  renderCategoryCard,
   TITLE_MAX,
   INDEX_MIN_APPS,
   DESCRIPTION_MAX,

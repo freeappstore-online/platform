@@ -27,7 +27,7 @@ const { isPublicListing } = require('./lib/discovery.cjs');
 const { CROSS_STORE_REGISTRY_PATH, crossStoreItems } = require('./lib/cross-store.cjs');
 const { appSeo } = require('./lib/app-seo.cjs');
 const appKinds = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'app-kinds.json'), 'utf8'));
-const { groupCategories, renderCategoryPage } = require('./lib/categories.cjs');
+const { groupCategories, renderCategoryCard, renderCategoryPage } = require('./lib/categories.cjs');
 const apps = registry.apps.filter(isPublicListing);
 
 // --- Registry shape validator (security: stop malformed/malicious entries at
@@ -1122,7 +1122,9 @@ function renderBadges(badges) {
 
 uniqueAuthors.forEach(username => {
   const authorApps = apps.filter(a => a.creatorGithub === username);
-  const appCardsHtml = authorApps.map(renderAppCard).join('\n\n');
+  // Link cards: author.html loads no storefront.js, which the homepage card's
+  // button role, vote button and click handling depend on (#752).
+  const appCardsHtml = authorApps.map((app) => renderCategoryCard(app, { escapeHtml, categoryLabel })).join('\n');
   const badges = computeAuthorBadges(authorApps);
   let html = injectSettingsBootstrap(authorTemplate, 'templates/author.html')
     .replace('__CF_BEACON__', CF_BEACON_SNIPPET)

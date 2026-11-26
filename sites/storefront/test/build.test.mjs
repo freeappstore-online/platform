@@ -700,3 +700,22 @@ test("registry text with $ replacement patterns is copied verbatim into built pa
     rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test("creator pages render link cards that work without storefront.js (#752)", () => {
+  const { tmp, tmpDist, registry } = runBuild();
+  try {
+    const authors = [...new Set(registry.apps.map((app) => app.creatorGithub).filter(Boolean))];
+    assert.ok(authors.length > 0);
+    for (const author of authors) {
+      const html = readFileSync(join(tmpDist, "u", `${author}.html`), "utf8");
+      assert.ok(!/data-published="\d+"/.test(html), `${author}: data-published is an array index`);
+      assert.ok(!html.includes('class="app-card compact" role="button"'), `${author}: button card without storefront.js`);
+      assert.ok(!html.includes('class="vote-btn"'), `${author}: vote button without storefront.js`);
+      for (const app of registry.apps.filter((a) => a.creatorGithub === author)) {
+        assert.ok(html.includes(`<a class="app-card compact" href="/apps/${app.id}"`), `${author}: ${app.id} card links to its page`);
+      }
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
