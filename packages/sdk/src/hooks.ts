@@ -108,7 +108,8 @@ export function useAuth(app: FreeAppStore) {
 }
 
 /**
- * Friends hook — fetches friends + incoming requests on mount.
+ * Friends hook — fetches friends + incoming requests for the signed-in user.
+ * Refetches when the account changes and clears on sign-out.
  *
  * Usage:
  * ```tsx
@@ -116,26 +117,49 @@ export function useAuth(app: FreeAppStore) {
  * ```
  */
 export function useFriends(app: FreeAppStore) {
+  const { user, loading: authLoading } = useAuth(app);
+  const userId = user?.id ?? null;
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
+  const latest = useRef(0);
 
   const refresh = useCallback(() => {
+    const request = ++latest.current;
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     Promise.all([app.friends.list('accepted'), app.friends.requests()])
       .then(([f, r]) => {
+        if (request !== latest.current) return;
         setFriends(f);
         setRequests(r);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
-  }, [app]);
+      .catch(() => {
+        if (request === latest.current) setLoading(false);
+      });
+  }, [app, userId]);
 
   useEffect(() => {
+    // A different account (or none) must never see the previous one's lists.
+    setFriends([]);
+    setRequests([]);
     refresh();
+    return () => {
+      latest.current++;
+    };
   }, [refresh]);
 
-  return { friends, requests, loading, requestCount: requests.length, refresh };
+  return {
+    friends,
+    requests,
+    loading: loading || authLoading,
+    requestCount: requests.length,
+    refresh,
+  };
 }
 
 export interface ConnectedDraftState<T> {

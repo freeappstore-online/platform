@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `useFriends` follows sign-in and sign-out (platform#775): it loads for the signed-in account, clears on sign-out and ignores responses superseded by an account change. `useVoiceInput` no longer calls `onResult` after unmount.
 - `fas.generation`: sets take an optional `language` (BCP 47, platform#810), echoed on claimed jobs and `openWork()` sets; `createSet` options also type `minCharsPerSecond`, `maxCharsPerSecond` and `maxWer`.
 - Add `@freeappstore/sdk/generation-kokoro` (platform#795): the browser Kokoro TTS runner for `fas.generation` (kokoro-js in a Web Worker, sentence timings, WebCodecs AAC in MP4), shared by Books and the Creator Console. `kokoro-js` and `mp4-muxer` are optional peer dependencies.
 - Add `fas.generation.getJob(setId, jobId)`: one job with its whole input, for the owner.

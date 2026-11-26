@@ -114,6 +114,11 @@ export function useVoiceInput(onResult?: (text: string) => void): UseVoiceInputR
     recognitionRef.current = recognition;
 
     return () => {
+      // Detach first: abort() still fires onend, which would hand a partial
+      // transcript to the unmounted parent's onResult.
+      recognition.onresult = null;
+      recognition.onend = null;
+      recognition.onerror = null;
       recognition.abort();
     };
   }, []);
