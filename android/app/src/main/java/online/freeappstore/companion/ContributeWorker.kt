@@ -63,7 +63,17 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             if (local.contributeApps().isEmpty()) return@withContext Result.success()
             show("Looking for jobs")
             KokoroSynthesizer(graph.kokoro).use { synth ->
-                val contributor = Contributor(graph.generation, local, synth, ::AacEncoder, applicationContext.cacheDir)
+                // Why keepGoing turned false, for the attempt record (#827): the notification's Stop cancels the work.
+                val whyStopped = {
+                    when {
+                        stopRequested || isStopped && Build.VERSION.SDK_INT >= 31 && stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP -> "user_stop"
+                        isStopped -> "background_expired"
+                        !power -> "unplugged"
+                        else -> "user_stop" // the app was turned off
+                    }
+                }
+                val contributor = Contributor(graph.generation, local, synth, ::AacEncoder, applicationContext.cacheDir,
+                    probes = androidProbes(applicationContext, whyStopped), kept = graph.kept)
                 for (app in local.contributeApps()) {
                     if (!keepGoing()) break
                     runCatching { contributor.refresh(app, keepGoing) }.onFailure { if (DeviceConnection.expired(it)) throw it }

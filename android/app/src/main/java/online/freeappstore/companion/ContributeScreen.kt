@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 
 /** The voice model on this phone (#731). */
 enum class ModelState { NONE, WAITING, INSTALLED }
@@ -115,7 +116,7 @@ internal fun ContributeScreen(state: CompanionState, catalogue: CatalogueState, 
         ContributePage.Settings -> ContributeSettings(state, name, actions) { show(ContributePage.Status) }
         is ContributePage.Activity -> ContributeActivity(state, page, name, actions.refreshContributions, show)
         is ContributePage.Detail -> state.contributions.find { it.jobId == page.jobId }?.let { c ->
-            ContributionDetail(c, name(c.appId), actions.loadPlayback) { show(page.from) }
+            ContributionDetail(c, name(c.appId), actions.loadPlayback, actions.keptAudio) { show(page.from) }
         } ?: LaunchedEffect(page) { show(page.from) }
     }
 }
@@ -201,9 +202,34 @@ private fun ContributeActivity(state: CompanionState, page: ContributePage.Activ
     }
 }
 
-/** One job: what it was, what happened to it, and the audio once accepted. */
+/**
+ * The attempt record's numbers for the job detail (#827), in reading order; fields it does not have are left out. Times
+ * are wall time per stage, CPU the process CPU time over the attempt, real-time factor synthesis time over audio length.
+ */
+internal fun attemptLines(record: JSONObject): List<Pair<String, String>> {
+    fun text(key: String) = if (record.has(key)) record.get(key).toString() else null
+    fun ms(key: String) = if (record.has(key)) record.getLong(key).let { if (it < 1_000) "$it ms" else "%.1f s".format(Locale.ROOT, it / 1000.0) } else null
+    fun device(at: String): String? {
+        val battery = text("battery$at")?.let { "$it%" }
+        val charging = if (record.has("charging$at")) if (record.getBoolean("charging$at")) "charging" else "on battery" else null
+        return listOfNotNull(battery, charging, text("thermal$at")?.let { "thermal $it" }).joinToString(" · ").ifBlank { null }
+    }
+    return listOf(
+        "Runner" to text("runner"), "App version" to text("appVersion"), "OS" to text("os"), "Device" to text("device"),
+        "Network" to text("network"),
+        "Ran" to if (record.has("background")) if (record.getBoolean("background")) "In the background at times" else "In the foreground" else null,
+        "End reason" to text("reason"), "Error" to text("error"),
+        "Wall time" to ms("wallMs"), "Model load" to ms("loadMs"), "Synthesis" to ms("synthMs"), "Encoding" to ms("encodeMs"),
+        "Upload" to ms("uploadMs"), "CPU time" to ms("cpuMs"),
+        "Real-time factor" to if (record.has("rtf")) "%.2f".format(Locale.ROOT, record.getDouble("rtf")) else null,
+        "Peak memory" to text("peakMemMb")?.let { "$it MB" }, "At start" to device("Start"), "At end" to device("End"),
+    ).mapNotNull { (label, value) -> value?.let { label to it } }
+}
+
+/** One job: what it was, what happened to it, how the attempt went, and its audio: kept on this phone, or once accepted. */
 @Composable
-private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>>, back: () -> Unit) {
+private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>>,
+                               keptAudio: (Contribution) -> String?, back: () -> Unit) {
     Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         BackRow("Activity", back)
         Text(appName, style = MaterialTheme.typography.headlineMedium)
@@ -220,8 +246,16 @@ private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: s
                 if (onPhone) Text("Not retried on this phone.", style = MaterialTheme.typography.bodySmall)
             }
         }
-        val url = c.artifactUrl
-        if (c.status == "accepted" && url != null) Playback(c, url, loadPlayback)
+        c.record?.let { runCatching { attemptLines(JSONObject(it)) }.getOrNull() }?.takeIf { it.isNotEmpty() }?.let { lines ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("On this phone", style = MaterialTheme.typography.titleLarge)
+                    lines.forEach { (label, value) -> Labeled(label, value) }
+                }
+            }
+        }
+        val url = remember(c.jobId) { keptAudio(c) } ?: c.artifactUrl?.takeIf { c.status == "accepted" }
+        if (url != null) Playback(c, url, loadPlayback)
         else if (c.inputPreview.isNotBlank()) InputText(c.inputPreview, null)
         Spacer(Modifier.height(24.dp))
     }
@@ -243,7 +277,7 @@ private fun InputText(text: String, highlight: IntRange?) {
     }, style = MaterialTheme.typography.bodyLarge)
 }
 
-/** Plays the public artifact [url], highlighting the sentence being spoken in the whole input from its `meta` timings. */
+/** Plays [url] (this phone's kept file, or the public artifact), highlighting the sentence being spoken in the whole input from its `meta` timings. */
 @Composable
 private fun Playback(c: Contribution, url: String, loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>>) {
     val player = remember(c.jobId) { MediaPlayer() }

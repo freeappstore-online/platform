@@ -84,6 +84,8 @@ data class CompanionActions(
     val contributeStorage: suspend () -> Pair<Long, Long> = { 0L to 0L },
     /** An accepted job's whole input (the preview when unavailable) and its sentence timings, for Play (#820, #824). */
     val loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>> = { it.inputPreview to emptyList() },
+    /** The audio this phone kept of a job (#827), a local path, or null when it is not kept. */
+    val keptAudio: (Contribution) -> String? = { null },
 )
 
 enum class Tab(val label: String, val icon: Int) {
@@ -151,10 +153,12 @@ class MainActivity : ComponentActivity() {
             contributeStorage = { withContext(Dispatchers.IO) { graph.kokoro.bytes() to graph.local.databaseBytes() } },
             loadPlayback = { c ->
                 withContext(Dispatchers.IO) {
+                    graph.kept.playback(c.jobId)?.let { return@withContext it } // this phone's own audio and timings (#827)
                     val text = runCatching { graph.generation.inputText(c.appId, c.jobId) }.getOrNull() ?: c.inputPreview
                     text to (c.metaUrl?.let { runCatching { graph.generation.segments(it) }.getOrNull() } ?: emptyList())
                 }
             },
+            keptAudio = { graph.kept.audio(it.jobId)?.path },
         )
         // Sharing when any app has a grant or the connection expired, otherwise the Store.
         val initialTab = if (state.expired || state.apps.any { it.grantId != null }) Tab.SHARING else Tab.STORE

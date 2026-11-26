@@ -32,6 +32,8 @@ data class Contribution(
     val jobId: String, val appId: String, val key: String, val at: Long, val status: String, val reason: String = "",
     val inputPreview: String = "", val durationMs: Long? = null, val bytes: Long? = null, val wer: Double? = null,
     val artifactUrl: String? = null, val metaUrl: String? = null,
+    /** The attempt record (#827) as stored ([Attempt.end]), or null for a job tried before it existed. */
+    val record: String? = null,
 ) {
     companion object { const val PREVIEW = 200 }
 }
@@ -48,6 +50,8 @@ interface ContributionLog {
     fun handled(jobId: String): Boolean
     fun record(contribution: Contribution)
     fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict? = null)
+    /** Keeps the attempt record (#827) with the job's row. */
+    fun attempt(jobId: String, record: JSONObject) {}
 }
 
 /**
@@ -80,6 +84,8 @@ interface Synthesizer {
     fun language(params: JSONObject, language: String?): Language?
     /** The audio for [text], or null when [keepGoing] turned false part-way. */
     fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio?
+    /** How long the last [synthesize] spent loading the model (#827): 0 when it was loaded already. */
+    val loadedMs: Long get() = 0
 }
 
 /** The contributor routes, with the device credential. */
@@ -121,13 +127,17 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
     /** An accepted artifact's sentence timings from its public [metaUrl] (an API URL); empty for any other URL. */
     fun segments(metaUrl: String): List<Segment> {
         val path = metaUrl.removePrefix("${FasApi.ORIGIN}/v1").takeIf { it != metaUrl } ?: return emptyList()
-        val list = api.request("GET", path).optJSONArray("segments") ?: return emptyList()
-        return (0 until list.length()).mapNotNull { i ->
+        return parseSegments(api.request("GET", path).optJSONArray("segments") ?: return emptyList())
+    }
+    /** Sends attempt records (#827) and returns how many the server recorded. */
+    fun events(appId: String, records: List<JSONObject>): Int =
+        api.request("POST", "/apps/$appId/generation/events", token(), JSONObject().put("events", JSONArray(records))).optInt("recorded")
+    companion object {
+        /** `meta.segments` (`[charStart, charEnd, startSec, endSec]` each) as [Segment]s. */
+        internal fun parseSegments(list: JSONArray): List<Segment> = (0 until list.length()).mapNotNull { i ->
             val s = list.optJSONArray(i)?.takeIf { it.length() == 4 } ?: return@mapNotNull null
             Segment(s.getInt(0), s.getInt(1), (s.getDouble(2) * 1000).toLong(), (s.getDouble(3) * 1000).toLong())
         }
-    }
-    companion object {
         internal fun parseOpen(j: JSONObject, model: ModelId): Map<String, Int> {
             val apps = j.optJSONArray("apps") ?: return emptyMap()
             return (0 until apps.length()).associate { i ->
@@ -260,6 +270,7 @@ class Contributor(
     private val encoder: (File, Int) -> AudioSink, private val workDir: File,
     private val attestation: Attestation = Attestation.NONE, private val now: () -> Long = System::currentTimeMillis,
     private val sleep: (Long) -> Unit = Thread::sleep,
+    private val probes: DeviceProbes = DeviceProbes(), private val kept: KeptAudio? = null,
 ) {
     /**
      * Takes one job from each of [apps] in turn (#819), until none has work left, [keepGoing] turns false or [mayClaim]
@@ -310,19 +321,26 @@ class Contributor(
         fun row(status: String, reason: String = "", durationMs: Long? = null, bytes: Long? = null) =
             Contribution(job.id, appId, job.key, now(), status, reason, job.text.take(Contribution.PREVIEW), durationMs, bytes)
         val handled = log.handled(job.id)
+        val attempt = Attempt(job.id, probes, now)
         GenerationPolicy.refusal(job, synth, handled, now())?.let { reason ->
-            if (!handled) log.record(row("skipped", reason))
+            if (handled) return false // already on the record: this attempt is not, and is not sent either
+            log.record(row("skipped", reason))
+            finish(appId, attempt.end(AttemptReason.refusal(reason)))
             return false
         }
         val file = File(workDir, "contribution.m4a")
         val lease = Lease(appId, job)
+        var narration: Pair<JSONArray, Long>? = null
         try {
-            val narration = narrate(job, file, lease, sentence, keepGoing)
+            narration = narrate(job, file, lease, attempt, sentence, keepGoing)
             if (narration == null) {
-                log.record(row("skipped", if (keepGoing()) "lease_expired" else "stopped"))
+                val stopped = !keepGoing()
+                log.record(row("skipped", if (stopped) "stopped" else "lease_expired"))
+                attempt.reason = if (stopped) probes.stopReason() else lease.endReason
                 return false
             }
             val (segments, durationMs) = narration
+            attempt.durationMs = durationMs; attempt.bytes = file.length()
             val meta = JSONObject().put("segments", segments)
             lease.renew()
             val refusal = when {
@@ -330,14 +348,17 @@ class Contributor(
                 !lease.held -> "lease_expired"
                 else -> null
             }
-            if (refusal != null) { log.record(row("skipped", refusal)); return false }
+            if (refusal != null) { log.record(row("skipped", refusal)); attempt.reason = if (refusal == "too_large") refusal else lease.endReason; return false }
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
             log.record(row("uploading", durationMs = durationMs, bytes = file.length()))
             // The same file, again, while the lease (extended as it runs low) still leaves time to upload (#819).
-            retrying({ lease.deadline }, keepGoing, beforeRetry = lease::renew) {
-                client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
+            attempt.timed(Attempt.UPLOAD, { attempt.uploadMs = it }) {
+                retrying({ lease.deadline }, keepGoing, beforeRetry = lease::renew) {
+                    client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
+                }
             }
             log.updateStatus(job.id, "pending", "")
+            attempt.reason = "submitted"
             return true
         } catch (e: Exception) {
             if (DeviceConnection.expired(e)) throw e
@@ -346,8 +367,20 @@ class Contributor(
                 else ((e as? ApiFailure)?.let { "${it.status} " } ?: "") + (e.message ?: e.javaClass.simpleName)
             if (uploading) log.updateStatus(job.id, "failed", reason.take(120))
             else log.record(row("failed", reason.take(120)))
+            attempt.reason = AttemptReason.failure(e, attempt.stage)
+            attempt.error = "${e.javaClass.name}: ${e.message}"
             return false
-        } finally { file.delete() }
+        } finally {
+            // A finished file is kept for playback (#827), uploaded or not; a stopped one is incomplete.
+            narration?.let { n -> runCatching { kept?.save(job.id, file, job.text, n.first) } }
+            file.delete()
+            if (attempt.reason != null) finish(appId, attempt.end(attempt.reason!!))
+        }
+    }
+    /** Keeps the attempt record with the job's row and sends it (#827), best-effort: a failure never fails the job. */
+    private fun finish(appId: String, record: JSONObject) {
+        runCatching { log.attempt(record.getString("jobId"), record) }.onFailure { System.err.println("Could not keep the attempt record: $it") }
+        runCatching { client.events(appId, listOf(record)) }.onFailure { System.err.println("Could not send the attempt record: $it") }
     }
     /**
      * The job's own input, verbatim: the only text this path can generate. Narrated a sentence at a time as Books does
@@ -355,7 +388,7 @@ class Contributor(
      * Returns `[charStart, charEnd, startSec, endSec]` for each sentence and the audio's length in milliseconds, or null
      * when stopped or the lease ran out. [sentence] hears each sentence's number, the count and the seconds so far (#820).
      */
-    private fun narrate(job: GenerationJob, file: File, lease: Lease, sentence: (Int, Int, Double) -> Unit, keepGoing: () -> Boolean): Pair<JSONArray, Long>? {
+    private fun narrate(job: GenerationJob, file: File, lease: Lease, attempt: Attempt, sentence: (Int, Int, Double) -> Unit, keepGoing: () -> Boolean): Pair<JSONArray, Long>? {
         val segments = JSONArray()
         var sink: AudioSink? = null
         var rate = 24_000
@@ -366,19 +399,27 @@ class Contributor(
             val sentences = Sentences.split(job.text, language)
             for ((i, s) in sentences.withIndex()) {
                 sentence(i + 1, sentences.size, length.toDouble() / rate)
+                attempt.sample()
                 lease.renew()
-                val audio = synth.synthesize(job.text.substring(s.start, s.end), job.params, language) { keepGoing() && lease.held } ?: return null
+                val audio = attempt.timed(Attempt.SYNTH, { attempt.loadMs += synth.loadedMs; attempt.synthMs += it - synth.loadedMs }) {
+                    synth.synthesize(job.text.substring(s.start, s.end), job.params, language) { keepGoing() && lease.held }
+                } ?: return null
                 if (audio.samples.isEmpty()) continue // nothing to say, e.g. "* * *"
-                val out = sink ?: encoder(file, audio.sampleRate).also { sink = it; rate = audio.sampleRate }
-                if (pause > 0) { out.write(FloatArray(pause)); length += pause }
-                segments.put(JSONArray().put(s.start).put(s.end).put(seconds(length, rate)).put(seconds(length + audio.samples.size, rate)))
-                out.write(audio.samples)
+                attempt.timed(Attempt.ENCODE, { attempt.encodeMs += it }) {
+                    val out = sink ?: encoder(file, audio.sampleRate).also { sink = it; rate = audio.sampleRate }
+                    if (pause > 0) { out.write(FloatArray(pause)); length += pause }
+                    segments.put(JSONArray().put(s.start).put(s.end).put(seconds(length, rate)).put(seconds(length + audio.samples.size, rate)))
+                    out.write(audio.samples)
+                }
                 length += audio.samples.size
                 pause = ((if (s.endsParagraph) GenerationPolicy.PARAGRAPH_PAUSE else GenerationPolicy.SENTENCE_PAUSE) * rate).toInt()
             }
-            val short = (GenerationPolicy.MIN_SECONDS * rate).toInt() - length
-            if (short > 0) sink?.let { it.write(FloatArray(short)); length += short }
-            (sink ?: encoder(file, rate).also { sink = it }).finish()
+            attempt.sample()
+            attempt.timed(Attempt.ENCODE, { attempt.encodeMs += it }) {
+                val short = (GenerationPolicy.MIN_SECONDS * rate).toInt() - length
+                if (short > 0) sink?.let { it.write(FloatArray(short)); length += short }
+                (sink ?: encoder(file, rate).also { sink = it }).finish()
+            }
             return segments to length * 1000L / rate
         } finally { sink?.close() }
     }
@@ -392,6 +433,9 @@ class Contributor(
     private inner class Lease(private val appId: String, private val job: GenerationJob) {
         private var expiresAt = job.leaseExpiresAt
         private var extendable = true
+        /** The #813 reason when it ran out: the server refused it (`403`), or it reached its cap or expiry. */
+        val endReason get() = if (refused) "lease_403" else "lease_cap"
+        private var refused = false
         /** The last moment an upload may start. */
         val deadline get() = expiresAt - GenerationPolicy.LEASE_MARGIN_MS
         /** Whether there is still time to finish and upload. */
@@ -400,8 +444,111 @@ class Contributor(
             if (!extendable || now() < expiresAt - GenerationPolicy.EXTEND_WITHIN_MS) return
             try { expiresAt = client.extend(appId, job) } catch (e: Exception) {
                 if (DeviceConnection.expired(e)) throw e
-                when ((e as? ApiFailure)?.status) { 403 -> expiresAt = 0; 409 -> extendable = false }
+                when ((e as? ApiFailure)?.status) { 403 -> { expiresAt = 0; refused = true }; 409 -> extendable = false }
             }
         }
     }
+}
+
+/**
+ * What an attempt record (#827) says about the device, each probe read at the attempt's start, at sentence boundaries
+ * or at its end. The defaults know nothing, so [Contributor] stays plain JVM; [androidProbes] reads the phone.
+ * [stopReason] says why `keepGoing` turned false: `user_stop`, `unplugged`, `thermal` or `background_expired`.
+ */
+class DeviceProbes(
+    val appVersion: String? = null, val os: String? = null, val device: String? = null,
+    val reading: () -> DeviceReading = { DeviceReading() }, val network: () -> String? = { null },
+    val background: () -> Boolean? = { null }, val cpuMs: () -> Long? = { null }, val memMb: () -> Long? = { null },
+    val stopReason: () -> String = { "user_stop" },
+)
+
+/** Battery percentage, whether it is charging and `PowerManager` thermal status name; null when unknown. */
+data class DeviceReading(val battery: Int? = null, val charging: Boolean? = null, val thermal: String? = null)
+
+/** The local end of an attempt in #813's vocabulary. */
+object AttemptReason {
+    /** A [GenerationPolicy.refusal] or a pre-upload check: too big, the lease too short, otherwise a job this phone cannot run. */
+    fun refusal(code: String) = when (code) { "too_large" -> "too_large"; "lease_expired" -> "lease_cap"; else -> "unsupported" }
+    /** A failure during [stage]: the voice model or the encoder threw, or the upload failed. */
+    fun failure(e: Throwable, stage: String) = when {
+        stage == Attempt.SYNTH -> "model_error"
+        stage == Attempt.ENCODE -> "encode_error"
+        e is IOException -> "network"
+        e is ApiFailure && e.status == 403 -> "lease_403"
+        e is ApiFailure && e.status in 400..499 -> "server_4xx"
+        e is ApiFailure && e.status >= 500 -> "server_5xx"
+        else -> "other"
+    }
+}
+
+/**
+ * One attempt at a claimed job (#827), from the claim to its end: the time each stage took, process CPU time, peak
+ * memory, battery, charging and thermal state at both ends, the network and whether the app was ever in the background.
+ */
+class Attempt(private val jobId: String, private val probes: DeviceProbes, private val now: () -> Long) {
+    private val startedAt = now()
+    private val cpuStart = probes.cpuMs()
+    private val start = probes.reading()
+    private val network = probes.network()
+    private var background: Boolean? = null
+    private var peakMemMb: Long? = null
+    /** The stage running now, for [AttemptReason.failure]. */
+    var stage = "prepare"
+        private set
+    var reason: String? = null
+    var error: String? = null
+    var loadMs = 0L; var synthMs = 0L; var encodeMs = 0L
+    var uploadMs: Long? = null; var bytes: Long? = null; var durationMs: Long? = null
+    init { sample() }
+    /** Reads the cheap probes: memory and foreground. */
+    fun sample() {
+        probes.background()?.let { background = background == true || it }
+        probes.memMb()?.let { m -> peakMemMb = maxOf(peakMemMb ?: m, m) }
+    }
+    /** Runs [call] as [stage], handing [add] the milliseconds it took, whether or not it threw. */
+    fun <T> timed(stage: String, add: (Long) -> Unit, call: () -> T): T {
+        this.stage = stage
+        val t = now()
+        try { return call() } finally { add(now() - t) }
+    }
+    /** The record for `POST …/generation/events`, ending with [reason]; fields that are unknown are left out. */
+    fun end(reason: String): JSONObject {
+        sample()
+        val end = probes.reading()
+        val cpu = probes.cpuMs()
+        fun JSONObject.field(key: String, value: Any?) = apply { if (value != null) put(key, if (value is String) value.take(300) else value) }
+        return JSONObject().put("jobId", jobId).put("runner", "android").put("reason", reason)
+            .field("error", error).field("appVersion", probes.appVersion).field("os", probes.os).field("device", probes.device).field("network", network)
+            .field("thermalStart", start.thermal).field("thermalEnd", end.thermal).field("background", background)
+            .field("chargingStart", start.charging).field("chargingEnd", end.charging).field("batteryStart", start.battery).field("batteryEnd", end.battery)
+            .put("startedAt", startedAt).put("wallMs", now() - startedAt).field("loadMs", loadMs.takeIf { it > 0 })
+            .field("synthMs", synthMs.takeIf { it > 0 }).field("encodeMs", encodeMs.takeIf { it > 0 }).field("uploadMs", uploadMs)
+            .field("cpuMs", if (cpu != null && cpuStart != null) maxOf(0, cpu - cpuStart) else null).field("peakMemMb", peakMemMb)
+            .field("rtf", durationMs?.takeIf { it > 0 && synthMs > 0 }?.let { Math.round(synthMs * 1000.0 / it) / 1000.0 })
+            .field("bytes", bytes).field("durationMs", durationMs)
+    }
+    companion object { const val SYNTH = "synth"; const val ENCODE = "encode"; const val UPLOAD = "upload" }
+}
+
+/**
+ * The audio this phone produced for its latest [KEEP] attempts (#827), with the job's text and sentence timings, so its
+ * own items can be played back even when rejected. Files are named by job id, which [GenerationClient.parseJob] checked.
+ */
+class KeptAudio(private val dir: File) {
+    fun save(jobId: String, file: File, text: String, segments: JSONArray) {
+        dir.mkdirs()
+        val audio = File(dir, "$jobId.m4a")
+        if (!file.renameTo(audio)) file.copyTo(audio, overwrite = true)
+        File(dir, "$jobId.json").writeText(JSONObject().put("text", text).put("segments", segments).toString())
+        dir.listFiles { f -> f.name.endsWith(".m4a") }.orEmpty().sortedByDescending { it.lastModified() }.drop(KEEP)
+            .forEach { it.delete(); File(dir, it.nameWithoutExtension + ".json").delete() }
+    }
+    fun audio(jobId: String): File? = File(dir, "$jobId.m4a").takeIf { it.isFile }
+    /** The whole input and its sentence timings, or null when this job's audio is not kept. */
+    fun playback(jobId: String): Pair<String, List<Segment>>? {
+        if (audio(jobId) == null) return null
+        val j = runCatching { JSONObject(File(dir, "$jobId.json").readText()) }.getOrNull() ?: return null
+        return j.optString("text") to GenerationClient.parseSegments(j.optJSONArray("segments") ?: JSONArray())
+    }
+    companion object { const val KEEP = 20 }
 }

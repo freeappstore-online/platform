@@ -125,9 +125,11 @@ class KokoroModel(private val dir: File) {
 class KokoroSynthesizer(private val files: KokoroModel) : Synthesizer, AutoCloseable {
     override val model = KokoroModel.ID
     private var engine: Pair<Boolean, OfflineTts>? = null
+    override var loadedMs = 0L
     private fun tts(mandarin: Boolean): OfflineTts {
         engine?.let { (m, tts) -> if (m == mandarin) return tts; tts.release(); engine = null }
-        return load(mandarin).also { engine = mandarin to it }
+        val t = System.nanoTime()
+        return load(mandarin).also { engine = mandarin to it; loadedMs = (System.nanoTime() - t) / 1_000_000 }
     }
     private fun load(mandarin: Boolean): OfflineTts {
         val root = files.root
@@ -146,6 +148,7 @@ class KokoroSynthesizer(private val files: KokoroModel) : Synthesizer, AutoClose
     override fun language(params: JSONObject, language: String?) = KokoroModel.language(params, language)
     override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? {
         val (sid, speed) = KokoroModel.params(params) ?: return null
+        loadedMs = 0
         val callback = TtsCallback(keepGoing)
         val audio = tts(language == Language.MANDARIN).generateWithCallback(text, sid, speed, callback)
         return if (callback.stopped) null else Audio(audio.samples, audio.sampleRate)

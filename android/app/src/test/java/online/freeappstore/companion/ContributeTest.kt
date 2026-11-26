@@ -27,6 +27,8 @@ class ContributeTest {
 
     class FakeLog : ContributionLog {
         val rows = LinkedHashMap<String, Contribution>()
+        val attempts = LinkedHashMap<String, JSONObject>()
+        override fun attempt(jobId: String, record: JSONObject) { attempts[jobId] = record }
         override fun handled(jobId: String) = jobId in rows
         override fun record(contribution: Contribution) { rows[contribution.jobId] = contribution }
         override fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict?) {
@@ -49,6 +51,9 @@ class ContributeTest {
         val claimFailures = ArrayDeque<Exception>()
         var uploadAttempts = 0
         var submissions = JSONArray()
+        /** Attempt records sent (#827), and what each upload does to the clock first. */
+        val events = mutableListOf<JSONObject>()
+        var onUpload: () -> Unit = {}
         /** Lease extensions asked for (path to `X-Lease-Token`), and what the next one answers: a new expiry or a failure. */
         val extensions = mutableListOf<Pair<String, String?>>()
         var extend: () -> Long = { error("no extension expected") }
@@ -69,11 +74,17 @@ class ContributeTest {
                     job?.let { JSONObject().put("job", it) } ?: JSONObject()
                 }
                 method == "GET" && path == "/apps/books/generation/submissions" -> JSONObject().put("submissions", submissions)
+                method == "POST" && path.matches(Regex("^/apps/[a-z]+/generation/events$")) -> {
+                    val list = body!!.getJSONArray("events")
+                    (0 until list.length()).forEach { events += list.getJSONObject(it) }
+                    JSONObject().put("recorded", list.length())
+                }
                 else -> error("unexpected $method $path")
             }
         }
         override fun upload(method: String, path: String, token: String, headers: Map<String, String>, file: File, contentType: String, meta: JSONObject?): JSONObject {
             uploadAttempts++
+            onUpload()
             uploadFailures.removeFirstOrNull()?.let { throw it }
             uploadFailure?.let { throw it }
             assertEquals("PUT", method)
@@ -169,6 +180,7 @@ class ContributeTest {
         assertTrue(api.uploads.isEmpty())
         assertTrue(synth.spoken.isEmpty())
         assertEquals("uploading", log.rows["j1"]!!.status) // untouched
+        assertTrue("an attempt already on the record is not sent again", api.events.isEmpty())
     }
     @Test fun tooLargeIsNotSubmitted() {
         api.jobs += job("j1", text = "A long sentence here.", maxBytes = 5)
@@ -204,6 +216,8 @@ class ContributeTest {
         assertEquals("failed", log.rows["j1"]!!.status)
         assertEquals("409 Lease expired.", log.rows["j1"]!!.reason)
         assertNull(log.rows["j2"])
+        assertEquals("server_4xx", api.events.single().getString("reason"))
+        assertEquals("online.freeappstore.companion.ApiFailure: Lease expired.", api.events.single().getString("error"))
     }
     @Test fun expiredConnectionIsThrown() {
         api.jobs += job("j1")
@@ -234,6 +248,7 @@ class ContributeTest {
         assertEquals(Contribution("j1", "books", "book/j1", now, "failed", "network", "It was a bright cold day in April.", 1_000, 24_000),
             log.rows["j1"]!!.copy(at = now))
         assertFalse("the file is removed once given up", File(dir, "contribution.m4a").exists())
+        assertEquals("network", api.events.single().getString("reason"))
         api.uploadFailure = null; api.jobs += job("j1")
         assertEquals("never generated or uploaded again", 0, contributor().run(books, { true }))
         assertEquals(1, synth.spoken.size)
@@ -415,6 +430,7 @@ class ContributeTest {
         assertEquals(1, api.extensions.size)
         assertTrue(api.uploads.isEmpty())
         assertEquals("lease_expired", log.rows["j1"]!!.reason)
+        assertEquals("lease_403", api.events.single().getString("reason"))
         val sink = sinks.single() // stopped part-way: the encoder is closed unfinished and its file removed
         assertTrue(sink.closed && !sink.finished)
         assertFalse(File(dir, "contribution.m4a").exists())
@@ -422,6 +438,7 @@ class ContributeTest {
     @Test fun aLeaseAtItsCapIsUsedWhileItLasts() {
         api.extend = { throw ApiFailure(409, "Lease cap reached.") }
         assertEquals(1, timedRun(sentences = 6, minutes = 2)) // done at 12 of 15 minutes
+        assertEquals("submitted", api.events.single().getString("reason"))
         assertEquals("no retry after 409", 1, api.extensions.size)
     }
     @Test fun otherExtensionFailuresAreRetriedAndDoNotStop() {
@@ -617,5 +634,98 @@ class ContributeTest {
     @Test fun pinnedModel() {
         assertTrue(KokoroModel.URL.startsWith("https://github.com/k2-fsa/sherpa-onnx/releases/download/"))
         assertTrue(Regex("^[0-9a-f]{64}$").matches(KokoroModel.SHA256))
+    }
+
+    /** #827: each attempt's record, kept with the job's row and sent, with the time each stage took and the device's state. */
+    @Test fun eachAttemptIsRecordedWithItsStageTimesAndSent() {
+        api.jobs += job("j1", "One. Two.")
+        var load = 300L
+        val timed = object : Synthesizer by synth { // a second a sentence, the first loading the model for 0.3 s more
+            override var loadedMs = 0L
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio {
+                loadedMs = load; load = 0; t += 1_000 + loadedMs; return Audio(FloatArray(12_000), 24_000)
+            }
+        }
+        val slow = { f: File, rate: Int -> val sink = encoder(f, rate); object : AudioSink by sink { override fun write(samples: FloatArray) { t += 50; sink.write(samples) } } }
+        api.onUpload = { t += 700 }
+        val cpu = ArrayDeque(listOf(100L, 2_600L))
+        val readings = ArrayDeque(listOf(DeviceReading(80, true, "none"), DeviceReading(78, false, "light")))
+        val memory = ArrayDeque(listOf(100L, 150L, 120L, 110L))
+        val foreground = ArrayDeque(listOf(false, true))
+        val probes = DeviceProbes(appVersion = "1.4 (40)", os = "Android 15 (API 35)", device = "Google Pixel 8", reading = { readings.removeFirst() },
+            network = { "wifi" }, background = { foreground.removeFirstOrNull() ?: false }, cpuMs = { cpu.removeFirst() }, memMb = { memory.removeFirstOrNull() ?: 0 })
+        val kept = KeptAudio(File(dir, "kept"))
+        assertEquals(1, Contributor(GenerationClient(api) { "ndev_test" }, log, timed, slow, dir, now = { t }, sleep = sleep, probes = probes, kept = kept).run(books, { true }))
+        val sent = api.events.single()
+        assertEquals(mapOf("jobId" to "j1", "runner" to "android", "reason" to "submitted", "appVersion" to "1.4 (40)", "os" to "Android 15 (API 35)",
+            "device" to "Google Pixel 8", "network" to "wifi", "thermalStart" to "none", "thermalEnd" to "light", "background" to true,
+            "chargingStart" to true, "chargingEnd" to false, "batteryStart" to 80, "batteryEnd" to 78, "startedAt" to now,
+            // 0.3 s load, 2 s synthesis, 3 encoder writes of 50 ms, 0.7 s upload; 0.5 s + 0.4 s pause + 0.5 s of audio
+            "wallMs" to 3_150L, "loadMs" to 300L, "synthMs" to 2_000L, "encodeMs" to 150L, "uploadMs" to 700L, "cpuMs" to 2_500L, "peakMemMb" to 150L,
+            "rtf" to 1.429, "bytes" to 33_600L, "durationMs" to 1_400L), sent.keys().asSequence().associateWith { sent.get(it) })
+        assertSame("kept with the job's row", sent, log.attempts["j1"])
+        assertEquals("the audio stays on the phone for playback", 33_600L, kept.audio("j1")!!.length())
+        assertEquals("One. Two." to listOf(Segment(0, 4, 0, 500), Segment(5, 9, 900, 1_400)), kept.playback("j1"))
+        assertFalse(File(dir, "contribution.m4a").exists())
+    }
+    @Test fun attemptEndsUseTheDiagnosticVocabulary() {
+        assertEquals("too_large", AttemptReason.refusal("too_large"))
+        assertEquals("lease_cap", AttemptReason.refusal("lease_expired"))
+        for (code in listOf("model", "format", "input", "params", "language", "max_bytes")) assertEquals(code, "unsupported", AttemptReason.refusal(code))
+        assertEquals("model_error", AttemptReason.failure(IllegalStateException("onnx"), Attempt.SYNTH))
+        assertEquals("encode_error", AttemptReason.failure(IOException("codec"), Attempt.ENCODE))
+        assertEquals("network", AttemptReason.failure(SocketTimeoutException("timeout"), Attempt.UPLOAD))
+        assertEquals("lease_403", AttemptReason.failure(ApiFailure(403, "Lease expired."), Attempt.UPLOAD))
+        assertEquals("server_4xx", AttemptReason.failure(ApiFailure(429, "Slow down."), Attempt.UPLOAD))
+        assertEquals("server_5xx", AttemptReason.failure(ApiFailure(503, "Unavailable."), Attempt.UPLOAD))
+        assertEquals("other", AttemptReason.failure(IllegalArgumentException("x"), Attempt.UPLOAD))
+        // A refused job is sent as unsupported; a stop says why the worker stopped.
+        api.jobs += job("a", model = "piper")
+        contributor().run(books, { true })
+        assertEquals("unsupported", api.events.single().getString("reason"))
+        api.jobs += job("b")
+        var go = true
+        val stopping = object : Synthesizer by synth {
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { go = false; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
+        }
+        Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }, probes = DeviceProbes(stopReason = { "unplugged" })).run(books, { go })
+        assertEquals("unplugged", api.events.last().getString("reason"))
+        val broken = object : Synthesizer by synth { override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? = error("model crashed") }
+        api.jobs += job("c")
+        Contributor(GenerationClient(api) { "ndev_test" }, log, broken, encoder, dir, now = { now }).run(books, { true })
+        assertEquals("model_error", api.events.last().getString("reason"))
+        assertEquals("java.lang.IllegalStateException: model crashed", api.events.last().getString("error"))
+    }
+    @Test fun aFailedSendNeverFailsTheJob() {
+        api.jobs += job("j1")
+        val noEvents = object : FasApi() {
+            override fun request(method: String, path: String, token: String?, body: JSONObject?) =
+                if (path.endsWith("/events")) throw ApiFailure(429, "Too many records.") else api.request(method, path, token, body)
+            override fun upload(method: String, path: String, token: String, headers: Map<String, String>, file: File, contentType: String, meta: JSONObject?) =
+                api.upload(method, path, token, headers, file, contentType, meta)
+        }
+        assertEquals(1, Contributor(GenerationClient(noEvents) { "ndev_test" }, log, synth, encoder, dir, now = { now }).run(books, { true }))
+        assertEquals("pending", log.rows["j1"]!!.status)
+        assertEquals("still kept on the phone", "submitted", log.attempts["j1"]!!.getString("reason"))
+    }
+    @Test fun keepsTheLatestAttemptsAudioOnly() {
+        val kept = KeptAudio(File(dir, "kept"))
+        for (i in 1..KeptAudio.KEEP + 2) {
+            val f = File(dir, "a.m4a").apply { writeText("audio $i") }
+            kept.save("j$i", f, "Text $i.", JSONArray().put(JSONArray("[0,7,0,0.5]")))
+            File(dir, "kept/j$i.m4a").setLastModified(now + i * 1_000L)
+        }
+        assertNull(kept.audio("j1")); assertNull(kept.audio("j2")); assertNull(kept.playback("j2"))
+        assertFalse(File(dir, "kept/j1.json").exists())
+        assertEquals("audio 22", kept.audio("j22")!!.readText())
+        assertEquals(KeptAudio.KEEP, File(dir, "kept").listFiles { f -> f.name.endsWith(".m4a") }!!.size)
+    }
+    @Test fun theDetailShowsTheAttemptNumbers() {
+        val record = JSONObject().put("jobId", "j1").put("runner", "android").put("reason", "submitted").put("appVersion", "1.4 (40)")
+            .put("network", "wifi").put("background", false).put("wallMs", 3_400).put("loadMs", 300).put("cpuMs", 950).put("rtf", 1.4286)
+            .put("peakMemMb", 150).put("batteryStart", 80).put("chargingStart", true).put("thermalStart", "none").put("chargingEnd", false)
+        assertEquals(listOf("Runner" to "android", "App version" to "1.4 (40)", "Network" to "wifi", "Ran" to "In the foreground",
+            "End reason" to "submitted", "Wall time" to "3.4 s", "Model load" to "300 ms", "CPU time" to "950 ms", "Real-time factor" to "1.43",
+            "Peak memory" to "150 MB", "At start" to "80% · charging · thermal none", "At end" to "on battery"), attemptLines(record))
     }
 }
