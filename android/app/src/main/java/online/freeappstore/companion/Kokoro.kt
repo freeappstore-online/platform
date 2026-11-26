@@ -48,8 +48,25 @@ class KokoroModel(private val dir: File) {
         /** Download progress for the screen (#806), such as "120 of 350 MB (34%)". */
         fun progress(bytes: Long, total: Long = DOWNLOAD_BYTES): String =
             "${bytes / 1_000_000} of ${total / 1_000_000} MB (${(bytes * 100 / total).coerceIn(0, 100)}%)"
-        /** Whether the job's voice is a Spanish one (`ef_…`, `em_…`), so its text is split into sentences the Spanish way. */
-        fun spanish(params: JSONObject) = (params.opt("voice") as? String)?.startsWith("e") == true
+        /**
+         * How a job is spoken (#812). A set naming no language goes by the voice: Mandarin for `zf_`/`zm_`, Spanish for
+         * `ef_`/`em_`, otherwise English sentences as before. A set naming one (#810) must be English (`en`, with an
+         * `a…`/`b…` voice), Spanish (`es`, `e…`) or Mandarin (`zh`, e.g. `zh-Hans`, `z…`); anything else is null.
+         */
+        fun language(params: JSONObject, tag: String?): Language? {
+            val voice = (params.opt("voice") as? String)?.firstOrNull() ?: return null
+            val byVoice = when (voice) { 'z' -> Language.MANDARIN; 'e' -> Language.SPANISH; else -> Language.ENGLISH }
+            val named = when (tag?.substringBefore('-')?.lowercase()) {
+                null -> return byVoice
+                "en" -> Language.ENGLISH.takeIf { voice == 'a' || voice == 'b' }
+                "es" -> Language.SPANISH
+                "zh" -> Language.MANDARIN
+                else -> null
+            }
+            return named?.takeIf { it == byVoice }
+        }
+        /** Mandarin text normalisers in the model package: dates, phone numbers, then other numbers read as Chinese. */
+        val MANDARIN_RULES = listOf("date-zh.fst", "phone-zh.fst", "number-zh.fst")
     }
     val root = File(dir, ROOT)
     private val marker = File(dir, "installed")
@@ -98,30 +115,40 @@ class KokoroModel(private val dir: File) {
     fun delete() { dir.deleteRecursively() }
 }
 
-/** Kokoro through sherpa-onnx's offline TTS (JNI, CPU). Loads the model on first use; [close] frees it. */
+/**
+ * Kokoro through sherpa-onnx's offline TTS (JNI, CPU). Loads the model on first use; [close] frees it. Mandarin gets its
+ * own engine with the Mandarin number and date rules (which would read digits in English text as Chinese), loaded in
+ * place of the other one when the language changes.
+ */
 class KokoroSynthesizer(private val files: KokoroModel) : Synthesizer, AutoCloseable {
     override val model = KokoroModel.ID
-    private val tts by lazy {
+    private var engine: Pair<Boolean, OfflineTts>? = null
+    private fun tts(mandarin: Boolean): OfflineTts {
+        engine?.let { (m, tts) -> if (m == mandarin) return tts; tts.release(); engine = null }
+        return load(mandarin).also { engine = mandarin to it }
+    }
+    private fun load(mandarin: Boolean): OfflineTts {
         val root = files.root
         val kokoro = OfflineTtsKokoroModelConfig(
             model = File(root, "model.onnx").path, voices = File(root, "voices.bin").path, tokens = File(root, "tokens.txt").path,
-            // No dataDir: sherpa-onnx 2.x ignores espeak-ng-data and phonemizes through the lexicons.
+            // No dataDir: sherpa-onnx 2.x ignores espeak-ng-data and phonemizes through the lexicons; Mandarin is
+            // looked up in lexicon-zh character by character, longest phrase first (its `lang` is ignored too).
             lexicon = listOf("lexicon-us-en.txt", "lexicon-zh.txt").joinToString(",") { File(root, it).path },
             dictDir = File(root, "dict").takeIf { it.isDirectory }?.path ?: "",
         )
         val threads = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
-        OfflineTts(config = OfflineTtsConfig(model = OfflineTtsModelConfig(kokoro = kokoro, numThreads = threads)))
+        val rules = if (mandarin) KokoroModel.MANDARIN_RULES.joinToString(",") { File(root, it).path } else ""
+        return OfflineTts(config = OfflineTtsConfig(model = OfflineTtsModelConfig(kokoro = kokoro, numThreads = threads), ruleFsts = rules))
     }
-    private var loaded = false
     override fun accepts(params: JSONObject) = KokoroModel.params(params) != null
-    override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? {
+    override fun language(params: JSONObject, language: String?) = KokoroModel.language(params, language)
+    override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? {
         val (sid, speed) = KokoroModel.params(params) ?: return null
-        loaded = true
         val callback = TtsCallback(keepGoing)
-        val audio = tts.generateWithCallback(text, sid, speed, callback)
+        val audio = tts(language == Language.MANDARIN).generateWithCallback(text, sid, speed, callback)
         return if (callback.stopped) null else Audio(audio.samples, audio.sampleRate)
     }
-    override fun close() { if (loaded) tts.release() }
+    override fun close() { engine?.second?.release(); engine = null }
 }
 
 /**

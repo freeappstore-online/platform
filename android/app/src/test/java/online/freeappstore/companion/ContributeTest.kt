@@ -61,9 +61,11 @@ class ContributeTest {
         override val model = KokoroModel.ID
         val spoken = mutableListOf<String>()
         var stop = false
+        val languages = mutableListOf<Language>()
         override fun accepts(params: JSONObject) = KokoroModel.params(params) != null
-        override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? {
-            spoken += text
+        override fun language(params: JSONObject, language: String?) = KokoroModel.language(params, language)
+        override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? {
+            spoken += text; languages += language
             return if (stop || !keepGoing()) null else Audio(FloatArray(text.length), 24_000)
         }
     }
@@ -81,9 +83,10 @@ class ContributeTest {
     private val encoder = { file: File, rate: Int -> FakeSink(file, rate).also { sinks += it } }
     private fun job(id: String, text: String = "It was a bright cold day in April.", model: String = "kokoro", version: String = "v1.0",
                     params: JSONObject = JSONObject().put("voice", "af_heart"), formats: List<String> = listOf("audio/mp4"),
-                    maxBytes: Long = 1_000_000, expires: Any = now + 15 * 60_000, input: JSONObject = JSONObject().put("text", text)) =
+                    maxBytes: Long = 1_000_000, expires: Any = now + 15 * 60_000, input: JSONObject = JSONObject().put("text", text), language: String? = null) =
         JSONObject().put("id", id).put("setId", "set1").put("key", "book/$id").put("input", input).put("model", model).put("modelVersion", version)
-            .put("params", params).put("formats", JSONArray(formats)).put("maxBytes", maxBytes).put("leaseToken", "lease-$id").put("leaseExpiresAt", expires)
+            .put("params", params).put("formats", JSONArray(formats)).put("maxBytes", maxBytes).put("language", language ?: JSONObject.NULL)
+            .put("leaseToken", "lease-$id").put("leaseExpiresAt", expires)
     private fun contributor(attestation: Attestation = Attestation.NONE, clock: () -> Long = { now }) =
         Contributor(GenerationClient(api) { "ndev_test" }, log, synth, encoder, dir, attestation, clock)
 
@@ -101,7 +104,7 @@ class ContributeTest {
         assertEquals("lease-j1", upload.headers["X-Lease-Token"])
         assertFalse("no attestation until #732", "X-Attestation" in upload.headers)
         assertEquals("audio/mp4", upload.contentType)
-        assertEquals("First chapter.".length, upload.bytes.size)
+        assertEquals("padded with silence to MIN_SECONDS", 24_000, upload.bytes.size)
         assertEquals("[[0,14,0,0.001]]", upload.meta!!.getJSONArray("segments").toString())
         assertEquals("pending", log.rows["j1"]!!.status)
         assertEquals("book/j1", log.rows["j1"]!!.key)
@@ -149,7 +152,7 @@ class ContributeTest {
         api.jobs += job("j1")
         // The clock passes the lease margin before generation ends.
         val slow = object : Synthesizer by synth {
-            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? { t += 15 * 60_000; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { t += 15 * 60_000; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
         }
         Contributor(GenerationClient(api) { "ndev_test" }, log, slow, encoder, dir, now = { t }).run("books", { true })
         assertTrue(api.uploads.isEmpty())
@@ -159,7 +162,7 @@ class ContributeTest {
         api.jobs += job("j1")
         var go = true
         val stopping = object : Synthesizer by synth {
-            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? { go = false; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { go = false; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
         }
         Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }).run("books", { go })
         assertTrue(api.uploads.isEmpty())
@@ -183,17 +186,84 @@ class ContributeTest {
         fun s(start: Int, end: Int, paragraph: Boolean) = Sentences.Sentence(start, end, paragraph)
         val en = "Mr. Brown met L. Frank Baum.  “Oh dear!” said the Rabbit. It was I.\n\nA new paragraph… Then more?! Yes 😀 indeed. (Quite.)\n \n* * *\n\nEnd"
         assertEquals(listOf(s(0, 28, false), s(30, 57, false), s(58, 67, true), s(69, 85, false), s(86, 97, false), s(98, 112, false), s(113, 121, true),
-            s(124, 129, true), s(131, 134, true)), Sentences.split(en, spanish = false))
+            s(124, 129, true), s(131, 134, true)), Sentences.split(en, Language.ENGLISH))
         val es = "—¿Quién es? —dijo el Sr. Pérez. Nadie respondió.\n\nD. Juan llegó. —Hola —dijo. ¡Ya!"
-        assertEquals(listOf(s(0, 31, false), s(32, 48, true), s(50, 64, false), s(65, 77, false), s(78, 82, true)), Sentences.split(es, spanish = true))
-        assertTrue(Sentences.split(" \n\n ", spanish = false).isEmpty())
-        assertTrue(KokoroModel.spanish(JSONObject().put("voice", "ef_dora")))
-        assertFalse(KokoroModel.spanish(JSONObject().put("voice", "af_heart")))
+        assertEquals(listOf(s(0, 31, false), s(32, 48, true), s(50, 64, false), s(65, 77, false), s(78, 82, true)), Sentences.split(es, Language.SPANISH))
+        assertTrue(Sentences.split(" \n\n ", Language.ENGLISH).isEmpty())
+    }
+    /** #812: Dialogue's lines (web/src/dialogue/phrases.json and scenarios); offsets are UTF-16 code units. */
+    @Test fun splitsMandarinSentences() {
+        fun s(start: Int, end: Int, paragraph: Boolean = false) = Sentences.Sentence(start, end, paragraph)
+        fun split(text: String) = Sentences.split(text, Language.MANDARIN)
+        assertEquals(listOf(s(0, 2, true)), split("对。"))
+        assertEquals(listOf(s(0, 4), s(4, 8, true)), split("八号线。八，八。"))
+        assertEquals(listOf(s(0, 6), s(6, 13, true)), split("三点以后……四点半可以吗？"))
+        assertEquals(listOf(s(0, 15), s(15, 23, true)), split("不好意思，明天上午已经约满了。下午两点可以吗？"))
+        assertEquals(listOf(s(0, 9), s(9, 12, true)), split("二号口，出去左转。谢谢！"))
+        assertEquals("no comma or colon ends one", listOf(s(0, 26, true)), split("可以约的时间有三个：明天两点、明天四点半、后天十点。"))
+        assertEquals(listOf(s(0, 3), s(3, 6, true)), split("好的；谢谢。"))
+        assertEquals("closing quotes stay; ASCII marks; a decimal point", listOf(s(0, 7), s(7, 10), s(10, 13), s(13, 18, true)),
+            split("他说：“好。”好的!谢谢?3.5元。"))
+        assertEquals("spaces and paragraphs", listOf(s(0, 3), s(4, 7, true), s(9, 12, true)), split("你好！ 谢谢。\n\n再见。"))
+        assertEquals("a character outside the BMP is two code units", listOf(s(0, 4), s(4, 7, true)), split("𠀀好。你好！"))
+    }
+    @Test fun kokoroLanguageFromTheSetOrTheVoice() {
+        fun lang(voice: String, tag: String?) = KokoroModel.language(JSONObject().put("voice", voice), tag)
+        assertEquals(Language.MANDARIN, lang("zf_xiaobei", "zh"))
+        assertEquals(Language.MANDARIN, lang("zm_yunxi", "zh-Hans"))
+        assertEquals(Language.MANDARIN, lang("zm_yunxi", "ZH-cn"))
+        assertEquals("no language: by voice", Language.MANDARIN, lang("zf_xiaobei", null))
+        assertEquals(Language.SPANISH, lang("ef_dora", null))
+        assertEquals(Language.SPANISH, lang("em_alex", "es-MX"))
+        assertEquals(Language.ENGLISH, lang("af_heart", null))
+        assertEquals(Language.ENGLISH, lang("bm_george", "en-GB"))
+        assertEquals("unchanged for sets naming no language", Language.ENGLISH, lang("ff_siwis", null))
+        for ((voice, tag) in listOf("af_heart" to "zh", "zf_xiaobei" to "en", "zf_xiaobei" to "yue", "jf_alpha" to "ja", "ff_siwis" to "fr",
+            "ff_siwis" to "en", "ef_dora" to "en", "af_heart" to "es")) assertNull("$voice $tag", lang(voice, tag))
+        assertNull(KokoroModel.language(JSONObject(), null))
+        assertEquals("zh-Hans", GenerationClient.parseJob(job("j1", language = "zh-Hans")).language)
+        assertNull(GenerationClient.parseJob(job("j1")).language)
+        assertNull("absent, as before #810", GenerationClient.parseJob(job("j1").apply { remove("language") }).language)
+    }
+    @Test fun mandarinSetsAreSpokenAMandarinSentenceAtATime() {
+        api.jobs += job("j1", "一号线，三站。明白了，谢谢！", params = JSONObject().put("voice", "zm_yunxi"), language = "zh")
+        api.jobs += job("j2", "请问，洗手间在哪里？", params = JSONObject().put("voice", "zf_xiaobei")) // no language: the voice says
+        assertEquals(2, contributor().run("books", { true }))
+        assertEquals(listOf("一号线，三站。", "明白了，谢谢！", "请问，洗手间在哪里？"), synth.spoken)
+        assertEquals(List(3) { Language.MANDARIN }, synth.languages)
+        val segments = api.uploads[0].meta!!.getJSONArray("segments")
+        assertEquals(listOf(0 to 7, 7 to 14), (0 until segments.length()).map { segments.getJSONArray(it).let { s -> s.getInt(0) to s.getInt(1) } })
+    }
+    @Test fun skipsSetsInALanguageItCannotSpeak() {
+        val cases = listOf(job("a", "你好！", language = "zh"), job("b", "こんにちは。", params = JSONObject().put("voice", "jf_alpha"), language = "ja"),
+            job("c", "你好！", params = JSONObject().put("voice", "zf_xiaobei"), language = "yue"),
+            job("d", "Hello.", params = JSONObject().put("voice", "zf_xiaobei"), language = "en"))
+        for (j in cases) {
+            api.jobs.clear(); api.jobs += j
+            assertEquals(0, contributor().run("books", { true }))
+            assertEquals(j.getString("id"), "language", log.rows[j.getString("id")]!!.reason)
+        }
+        assertTrue(synth.spoken.isEmpty())
+        assertTrue(api.uploads.isEmpty())
+    }
+    @Test fun aTwoCharacterPhrasePassesTheServerDurationChecks() {
+        api.jobs += job("j1", "对。", params = JSONObject().put("voice", "zf_xiaobei"), language = "zh")
+        val short = object : Synthesizer by synth { // Kokoro says 对。 in about a quarter of a second
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean) = Audio(FloatArray(6_000), 24_000)
+        }
+        assertEquals(1, Contributor(GenerationClient(api) { "ndev_test" }, log, short, encoder, dir, now = { now }).run("books", { true }))
+        val upload = api.uploads.single()
+        val seconds = upload.bytes.size / 24_000.0
+        assertEquals("the speech, then silence to a second", 1.0, seconds, 0.0)
+        assertEquals(listOf(6_000, 18_000), sinks.single().writes)
+        // generation-verify.ts: at most 9 characters a second for zh, and audio up to 3 s is never too long.
+        assertTrue("对。".length / seconds <= 9 && seconds <= 3)
+        assertEquals("[[0,2,0,0.25]]", upload.meta!!.getJSONArray("segments").toString())
     }
     @Test fun narratesASentenceAtATimeAndSendsBooksTimings() {
         api.jobs += job("j1", text = "One two. Three!\n\n* * *\n\nFour.")
         val tenthPerChar = object : Synthesizer by synth { // 0.1 s per character, nothing for "* * *"
-            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio {
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio {
                 synth.spoken += text; return Audio(FloatArray(if (text == "* * *") 0 else text.length * 2_400), 24_000)
             }
         }
@@ -217,7 +287,7 @@ class ContributeTest {
     @Test fun metaOverTheServerLimitIsNotSubmitted() {
         api.jobs += job("j1", text = "Go. ".repeat(4_000).trim(), maxBytes = Long.MAX_VALUE)
         val tiny = object : Synthesizer by synth { // 10 Hz keeps the audio small; 4,000 segments are about 100 KB of JSON
-            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean) = Audio(FloatArray(1), 10)
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean) = Audio(FloatArray(1), 10)
         }
         assertEquals(0, Contributor(GenerationClient(api) { "ndev_test" }, log, tiny, encoder, dir, now = { now }).run("books", { true }))
         assertTrue(api.uploads.isEmpty())
@@ -229,7 +299,7 @@ class ContributeTest {
     private fun timedRun(sentences: Int, minutes: Int): Int {
         api.jobs += job("j1", text = (1..sentences).joinToString(" ") { "Sentence $it." })
         val timed = object : Synthesizer by synth {
-            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? {
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? {
                 synth.spoken += text; t += minutes * 60_000L; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null
             }
         }
@@ -359,7 +429,7 @@ class ContributeTest {
         api.jobs += job("j1"); api.jobs += job("j2")
         var online = true
         val dropsDuringTheJob = object : Synthesizer by synth {
-            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? { online = false; return synth.synthesize(text, params, keepGoing) }
+            override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { online = false; return synth.synthesize(text, params, language, keepGoing) }
         }
         val n = Contributor(GenerationClient(api) { "ndev_test" }, log, dropsDuringTheJob, encoder, dir, now = { now }).run("books", { true }, mayClaim = { online })
         assertEquals("the job in hand finishes and uploads; no second claim", 1, n)

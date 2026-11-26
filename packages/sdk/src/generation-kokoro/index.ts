@@ -6,7 +6,8 @@
  * dependencies, needed only by apps that import the worker.
  *
  * It generates exactly what a job asks for, or gives the job back: Kokoro v1.0 only, `audio/mp4`
- * only, params `{ voice, speed? }` only, within the job's `maxBytes` and the 64 KB meta limit.
+ * only, params `{ voice, speed? }` only, English only (kokoro-js phonemizes English), within the
+ * job's `maxBytes` and the 64 KB meta limit.
  */
 import type {
   Generation,
@@ -30,6 +31,8 @@ export const KOKORO_DOWNLOAD_BYTES: Record<KokoroDevice, number> = {
 
 const FORMAT: GenerationFormat = 'audio/mp4';
 const PARAMS = new Set(['voice', 'speed']);
+/** kokoro-js's voices: American and British English (`af_`, `am_`, `bf_`, `bm_`) */
+const ENGLISH_VOICE = /^[ab][fm]_/;
 /** The platform's limit on a submission's meta (docs/community-generation.md) */
 const META_BYTES = 64 * 1024;
 /** Upper bound of one segment's JSON, e.g. `[99999,100000,99999.999,99999.999],` */
@@ -85,13 +88,17 @@ export interface KokoroWork extends GenerationModel {
   params: Record<string, unknown>;
   formats: GenerationFormat[];
   maxBytes: number;
+  /** The set's BCP 47 language tag (null or absent: none named). */
+  language?: string | null;
   input?: { text: string };
 }
 
 /**
  * Why this runner can't generate `work` exactly, or null when it can. A set is checked for its
- * model, format and params; a claimed job (with `input` and `encoder`) also for the size of its
- * audio and meta. The voice itself is checked once the model is loaded.
+ * model, format, params and language: English only, so a set naming another language (such as
+ * `zh`) or using a non-English voice is skipped (platform#812; the phone runners speak Mandarin).
+ * A claimed job (with `input` and `encoder`) is also checked for the size of its audio and meta.
+ * That the voice exists is checked once the model is loaded.
  */
 export function kokoroProblem(work: KokoroWork, encoder?: AudioEncoderConfig): string | null {
   if (work.model !== KOKORO_MODEL.model || work.modelVersion !== KOKORO_MODEL.modelVersion)
@@ -102,6 +109,11 @@ export function kokoroProblem(work: KokoroWork, encoder?: AudioEncoderConfig): s
   const { voice, speed = 1 } = work.params;
   if (typeof voice !== 'string' || !voice) return 'no voice';
   if (typeof speed !== 'number' || !(speed > 0) || !Number.isFinite(speed)) return 'invalid speed';
+  const language = work.language?.split('-')[0]?.toLowerCase();
+  if (language && language !== 'en')
+    return `language ${work.language}: this browser runner speaks English only`;
+  if (!ENGLISH_VOICE.test(voice))
+    return `voice ${voice} is not English: this browser runner speaks English only`;
   if (!work.input || !encoder) return null;
   const { text } = work.input;
   const bytes = (((text.length / CHARS_PER_SECOND / speed) * (encoder.bitrate ?? 0)) / 8) * 1.1;

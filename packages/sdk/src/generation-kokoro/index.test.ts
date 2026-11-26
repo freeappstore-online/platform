@@ -19,6 +19,7 @@ const job = (over: Partial<GenerationJob> = {}): GenerationJob => ({
   params: { voice: 'af_heart' },
   formats: ['audio/mp4'],
   maxBytes: 1_000_000,
+  language: null,
   leaseToken: 'lease',
   leaseExpiresAt: Date.now() + 15 * 60_000,
   ...over,
@@ -66,6 +67,28 @@ describe('kokoroProblem', () => {
     expect(kokoroProblem(job({ params: {} }))).toBe('no voice');
     expect(kokoroProblem(job({ params: { voice: 'af_heart', speed: '2' } }))).toBe('invalid speed');
     expect(kokoroProblem(job({ params: { voice: 'af_heart', speed: 0 } }))).toBe('invalid speed');
+  });
+
+  it('skips sets that are not English, with the reason (platform#812)', () => {
+    expect(kokoroProblem(job({ language: 'en' }))).toBeNull();
+    expect(kokoroProblem(job({ language: 'en-GB', params: { voice: 'bf_emma' } }))).toBeNull();
+    // Dialogue's Mandarin sets: kokoro v1.0, language zh, voices zf_xiaobei / zm_yunxi
+    const mandarin = { input: { text: '请问，洗手间在哪里？' }, params: { voice: 'zf_xiaobei' } };
+    expect(kokoroProblem(job({ ...mandarin, language: 'zh' }), encoder)).toBe(
+      'language zh: this browser runner speaks English only',
+    );
+    expect(kokoroProblem(job({ ...mandarin, language: 'zh-Hans' }))).toBe(
+      'language zh-Hans: this browser runner speaks English only',
+    );
+    expect(kokoroProblem(job({ ...mandarin, language: null }))).toBe(
+      'voice zf_xiaobei is not English: this browser runner speaks English only',
+    );
+    expect(kokoroProblem(job({ params: { voice: 'zm_yunxi' }, language: 'en' }))).toBe(
+      'voice zm_yunxi is not English: this browser runner speaks English only',
+    );
+    expect(kokoroProblem(job({ params: { voice: 'ef_dora' }, language: 'es' }))).toBe(
+      'language es: this browser runner speaks English only',
+    );
   });
 
   it('refuses a job whose audio or sentence timings would be too large', () => {

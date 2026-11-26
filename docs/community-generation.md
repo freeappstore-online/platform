@@ -169,10 +169,18 @@ claimed. Runners today:
 | Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC) | same | English voices only |
 
 A runner skips any job it would not generate exactly: another model or version, no `audio/mp4` in
-`formats`, params other than `voice` and `speed`, or a voice it doesn't have. The native runners split
-text into sentences the English or Spanish way; Mandarin sentence splitting and tests on Android, iOS
-and an explicit skip of non-English sets in the browser are
-[#812](https://github.com/freeappstore-online/platform/issues/812). Browser Mandarin needs sherpa-onnx
+`formats`, params other than `voice` and `speed`, or a voice it doesn't have. Language
+([#812](https://github.com/freeappstore-online/platform/issues/812)):
+
+- **Android and iOS** take a set's `language` when it names one: `en` with an English voice, `es` with
+  `ef_`/`em_`, or `zh` (any `zh-…` tag) with `zf_`/`zm_`; any other language, or a voice of another
+  language, is skipped with reason `language`. A set naming none goes by the voice as before
+  (`zf_`/`zm_` are Mandarin). English and Spanish text is split into sentences as Books does;
+  Mandarin at 。！？；… (and `. ! ? ;`), with Mandarin number and date reading. Audio under a second
+  gets silence at the end, so a two-character phrase such as `对。` passes verification.
+- **Browser** speaks English only: `kokoroProblem` skips a set naming a language other than `en`, or
+  using a non-English voice, with the reason (for example `language zh: this browser runner speaks
+  English only`). Browser Mandarin needs sherpa-onnx
 WASM (kokoro-js phonemizes English only); Kokoro v1.1-zh (more Mandarin voices) is held in reserve
 ([ADR-003](https://github.com/freeappstore-online/platform/blob/main/docs/adr/003-cross-app-community-generation.md#3-approved-model-catalogue)).
 

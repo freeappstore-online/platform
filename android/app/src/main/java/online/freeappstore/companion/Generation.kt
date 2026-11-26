@@ -12,10 +12,13 @@ import org.json.JSONObject
  */
 data class ModelId(val model: String, val version: String)
 
-/** A claimed job. [text] is the job's whole input; a job whose input is anything else has a blank [text] and is refused. */
+/**
+ * A claimed job. [text] is the job's whole input; a job whose input is anything else has a blank [text] and is refused.
+ * [language] is its set's BCP 47 tag (#810), or null when the set names none.
+ */
 data class GenerationJob(
     val id: String, val setId: String, val key: String, val text: String, val model: ModelId, val params: JSONObject,
-    val formats: List<String>, val maxBytes: Long, val leaseToken: String, val leaseExpiresAt: Long,
+    val formats: List<String>, val maxBytes: Long, val language: String?, val leaseToken: String, val leaseExpiresAt: Long,
 )
 
 /** One job on this phone's contribution record. `status`: uploading, then the server's pending/accepted/rejected/superseded; or skipped/failed locally. */
@@ -40,6 +43,9 @@ fun interface Attestation {
 
 class Audio(val samples: FloatArray, val sampleRate: Int)
 
+/** How a job's text is split into sentences and spoken (#812). */
+enum class Language { ENGLISH, SPANISH, MANDARIN }
+
 /** Where narration goes as it is synthesized (#793): [AacEncoder] on the phone, writing to a file. */
 interface AudioSink : AutoCloseable {
     /** Appends mono samples in -1..1. */
@@ -52,8 +58,10 @@ interface Synthesizer {
     val model: ModelId
     /** Whether this model can honour the job's `params` exactly. */
     fun accepts(params: JSONObject): Boolean
+    /** How it speaks a job with these `params` from a set naming [language], or null when it can't speak that (#812). */
+    fun language(params: JSONObject, language: String?): Language?
     /** The audio for [text], or null when [keepGoing] turned false part-way. */
-    fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio?
+    fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio?
 }
 
 /** The contributor routes, with the device credential. */
@@ -93,7 +101,8 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
                 model = ModelId(j.getString("model"), j.getString("modelVersion")),
                 params = j.optJSONObject("params") ?: JSONObject(),
                 formats = (0 until formats.length()).map { formats.getString(it) },
-                maxBytes = j.optLong("maxBytes"), leaseToken = j.getString("leaseToken"),
+                maxBytes = j.optLong("maxBytes"), language = if (j.isNull("language")) null else j.getString("language"),
+                leaseToken = j.getString("leaseToken"),
                 leaseExpiresAt = epochMs(j.get("leaseExpiresAt")),
             )
         }
@@ -112,6 +121,11 @@ object GenerationPolicy {
     /** Silence after a sentence and after a paragraph, in seconds: Books' `SENTENCE_PAUSE` and `PARAGRAPH_PAUSE`. */
     const val SENTENCE_PAUSE = 0.4
     const val PARAGRAPH_PAUSE = 0.8
+    /**
+     * Audio shorter than this gets silence at the end (#812), so a two-character phrase such as 对。 is well within the
+     * server's characters-per-second floor and Whisper hears it whole. Audio up to 3 s is never too long for its text.
+     */
+    const val MIN_SECONDS = 1.0
     /** Why this phone will not generate the job, or null when it will. */
     fun refusal(job: GenerationJob, synth: Synthesizer, handled: Boolean, now: Long): String? = when {
         handled -> "already_handled"
@@ -119,6 +133,7 @@ object GenerationPolicy {
         CONTENT_TYPE !in job.formats -> "format"
         job.text.isBlank() -> "input"
         !synth.accepts(job.params) -> "params"
+        synth.language(job.params, job.language) == null -> "language"
         job.maxBytes <= 0 -> "max_bytes"
         job.leaseExpiresAt - LEASE_MARGIN_MS <= now -> "lease_expired"
         else -> null
@@ -129,7 +144,9 @@ object GenerationPolicy {
  * The sentences Books narrates one at a time (#785), ported from its `scripts/audio/segments.py` with the `END` and
  * `ABBREVIATION` of its English and Spanish profiles: a sentence ends at . ! ? or … (with any closing quotes or
  * brackets) followed by space and not by a lowercase word, but not after an abbreviation such as Mr. or an initial;
- * blank lines end paragraphs. Offsets are string indices, so UTF-16 code units like Books' timings.
+ * blank lines end paragraphs. Mandarin (#812) has no spaces: a sentence ends at 。！？；… or their ASCII forms (with
+ * any closing quotes or brackets) whatever follows, except a full stop before a digit (3.5). Offsets are string
+ * indices, so UTF-16 code units like Books' timings.
  */
 object Sentences {
     data class Sentence(val start: Int, val end: Int, val endsParagraph: Boolean)
@@ -144,16 +161,17 @@ object Sentences {
     private const val LOWER = "a-záéíóúüñ"
     private val ES = Regex("""[.!?…]+[”’"')\]»]*(?=[$S]+(?![$LOWER]|[—-]+[$S]?[$LOWER]))""").toPattern() to
         Regex("""$B(Sr|Sra|Srta|Sres|Srs|Dr|Dra|Dña|Ud|Uds|Vd|Vds|Vmd|Excmo|Excma|Ilmo|Ilma|Rvdo|Sto|Sta|Fr|Pbro|[A-ZÁÉÍÓÚÑ])$""").toPattern()
+    private val ZH = Regex("""(?:[。！？；…!?;]|\.(?!\d))+[”’"')\]）」』】》]*""").toPattern() to null
 
-    fun split(text: String, spanish: Boolean): List<Sentence> {
-        val (end, abbreviation) = if (spanish) ES else EN
+    fun split(text: String, language: Language): List<Sentence> {
+        val (end, abbreviation) = when (language) { Language.ENGLISH -> EN; Language.SPANISH -> ES; Language.MANDARIN -> ZH }
         val out = mutableListOf<Sentence>()
         for (para in PARAGRAPH.findAll(text)) {
             val paraEnd = para.range.last + 1
             var start = para.range.first
             val m = end.matcher(text).region(start, paraEnd)
             while (m.find()) {
-                if (m.group() == "." && abbreviation.matcher(text).region(start, m.start()).useTransparentBounds(true).find()) continue
+                if (m.group() == "." && abbreviation != null && abbreviation.matcher(text).region(start, m.start()).useTransparentBounds(true).find()) continue
                 out += Sentence(start, m.end(), false)
                 start = SPACE.matcher(text).region(m.end(), paraEnd).apply { lookingAt() }.end()
             }
@@ -232,9 +250,10 @@ class Contributor(
         var length = 0
         var pause = 0 // written before the next sentence, so none follows the last
         try {
-            for (s in Sentences.split(job.text, KokoroModel.spanish(job.params))) {
+            val language = checkNotNull(synth.language(job.params, job.language))
+            for (s in Sentences.split(job.text, language)) {
                 lease.renew()
-                val audio = synth.synthesize(job.text.substring(s.start, s.end), job.params) { keepGoing() && lease.held } ?: return null
+                val audio = synth.synthesize(job.text.substring(s.start, s.end), job.params, language) { keepGoing() && lease.held } ?: return null
                 if (audio.samples.isEmpty()) continue // nothing to say, e.g. "* * *"
                 val out = sink ?: encoder(file, audio.sampleRate).also { sink = it; rate = audio.sampleRate }
                 if (pause > 0) { out.write(FloatArray(pause)); length += pause }
@@ -243,6 +262,8 @@ class Contributor(
                 length += audio.samples.size
                 pause = ((if (s.endsParagraph) GenerationPolicy.PARAGRAPH_PAUSE else GenerationPolicy.SENTENCE_PAUSE) * rate).toInt()
             }
+            val short = (GenerationPolicy.MIN_SECONDS * rate).toInt() - length
+            if (short > 0) sink?.write(FloatArray(short))
             (sink ?: encoder(file, rate).also { sink = it }).finish()
             return segments
         } finally { sink?.close() }
