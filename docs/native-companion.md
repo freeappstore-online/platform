@@ -99,13 +99,21 @@ and verifies every upload; the phone is never trusted.
   the network before starting and before each claim, because a WorkManager constraint that lapses stops running work
   part-way. Unplugged, it stops without uploading. A run in progress is never replaced by **Run now** or a settings
   change. A job stopped part-way is recorded and never retried on this phone, which Recent results says.
+  The run takes one job from each opted-in app in turn (#819), skipping apps with no open job, rather than finishing one
+  app's jobs before the next; an app turned off mid-run is left out from its next turn.
   Each job: `POST …/generation/claim` with the device credential → synthesize the
   job's `input.text` verbatim, a sentence at a time, each sentence and pause fed to the encoder as it is synthesized
-  (#793; the chapter is never held in memory, only a temp file in the cache) → AAC-LC mono 64 kbps in MP4
-  (`MediaCodec` + `MediaMuxer`) →
+  (#793; the chapter is never held in memory, only a temp file in the cache) → AAC-LC mono 32 kbps at Kokoro's 24 kHz in
+  MP4 (#798; `MediaCodec` + `MediaMuxer`) →
   `PUT …/jobs/:jobId/result` multipart (`file`, `audio/mp4`, and `meta`) with `X-Lease-Token`. Nothing is uploaded after
   the lease is within 30 s of expiry, above `maxBytes`, or with `meta` over 64 KB. A job is recorded before its upload
   starts and is never generated or uploaded again on this phone.
+- **Network retries** (#819): a claim, the verdict refresh or an upload that fails with a transient error (no
+  connection, DNS, timeout, connection reset, any `5xx`, or a `429` with `Retry-After`) is tried again after 2, 4, 8, 16,
+  32, then 60 s (or the `Retry-After`). Claims and the refresh try for up to a minute. An upload sends the same encoded
+  file again, extending the lease as it runs low, until it goes through or the lease is within 30 s of expiry; then the
+  file is deleted and the job recorded `failed` with reason `network`. A `429` without `Retry-After` (the daily limit) and
+  any other `4xx` are final.
 - **Sentence timings** (#785): the text is split into sentences exactly as Books' `scripts/audio/segments.py` does (its
   English rules, or its Spanish ones for an `e…` voice), each sentence is synthesized alone, and they are joined with
   Books' pauses (0.4 s, 0.8 s after a paragraph). A sentence with no audio (`* * *`) is left out. `meta` is

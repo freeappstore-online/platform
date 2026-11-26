@@ -13,7 +13,8 @@ import java.nio.ByteOrder
  */
 class AacEncoder(out: File, private val sampleRate: Int) : AudioSink {
     private companion object {
-        const val BIT_RATE = 64_000
+        /** Speech at 32 kbps mono (#798), so a long chapter fits a set's 25 MB. */
+        const val BIT_RATE = 32_000
         const val TIMEOUT_US = 10_000L
     }
     private val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)

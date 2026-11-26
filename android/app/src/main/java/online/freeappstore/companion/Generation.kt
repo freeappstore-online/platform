@@ -1,6 +1,7 @@
 package online.freeappstore.companion
 
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 import org.json.JSONArray
 import org.json.JSONObject
@@ -141,6 +142,28 @@ object GenerationPolicy {
 }
 
 /**
+ * Transient network failures (#819): a lost connection, DNS failure, timeout or reset (any [IOException]), a `5xx`, or a
+ * `429` that says when to come back (`Retry-After`). Their calls are tried again after a bounded backoff while there is
+ * time; any other failure is final.
+ */
+object NetworkRetry {
+    const val FIRST_MS = 2_000L
+    const val MAX_MS = 60_000L
+    /** How long a claim or the verdict refresh keeps trying; an upload keeps trying while its lease allows. */
+    const val REQUEST_WINDOW_MS = 60_000L
+    /** The reason recorded for a job whose upload never got through. */
+    const val REASON = "network"
+    /** The wait before trying again a call that failed with [e] on attempt [attempt] (from 0), or null when [e] is final. */
+    fun delayMs(e: Throwable, attempt: Int): Long? = when {
+        e is IOException -> backoff(attempt)
+        e is ApiFailure && e.status == 429 -> e.retryAfterMs
+        e is ApiFailure && e.status in 500..599 -> e.retryAfterMs ?: backoff(attempt)
+        else -> null
+    }
+    private fun backoff(attempt: Int) = minOf(MAX_MS, FIRST_MS shl minOf(attempt, 5))
+}
+
+/**
  * The sentences Books narrates one at a time (#785), ported from its `scripts/audio/segments.py` with the `END` and
  * `ABBREVIATION` of its English and Spanish profiles: a sentence ends at . ! ? or … (with any closing quotes or
  * brackets) followed by space and not by a lowercase word, but not after an abbreviation such as Mr. or an initial;
@@ -182,26 +205,56 @@ object Sentences {
     }
 }
 
-/** The claim → generate → encode → submit loop for one app. */
+/** The claim → generate → encode → submit loop over the opted-in apps. */
 class Contributor(
     private val client: GenerationClient, private val log: ContributionLog, private val synth: Synthesizer,
     private val encoder: (File, Int) -> AudioSink, private val workDir: File,
     private val attestation: Attestation = Attestation.NONE, private val now: () -> Long = System::currentTimeMillis,
+    private val sleep: (Long) -> Unit = Thread::sleep,
 ) {
     /**
-     * Works through [appId]'s open jobs until none is left, [keepGoing] turns false, [mayClaim] (checked before each
-     * claim) turns false, or a job is not submitted (it keeps its lease until expiry, so the next run continues).
-     * Returns how many were submitted. A `401` is thrown.
+     * Takes one job from each of [apps] in turn (#819), until none has work left, [keepGoing] turns false or [mayClaim]
+     * (checked before each claim) turns false. [apps] is read again before each claim, so an app turned off mid-run is
+     * left out. An app leaves the run once it has no open job or one of its jobs is not submitted (that job keeps its
+     * lease until expiry, so the next run continues). Returns how many were submitted. A `401` is thrown, and so is a
+     * claim that still fails after [NetworkRetry]'s retries.
      */
-    fun run(appId: String, keepGoing: () -> Boolean, mayClaim: () -> Boolean = { true }, progress: (GenerationJob) -> Unit = {}): Int {
+    fun run(apps: () -> Set<String>, keepGoing: () -> Boolean, mayClaim: () -> Boolean = { true }, progress: (String, GenerationJob) -> Unit = { _, _ -> }): Int {
+        val done = HashSet<String>()
         var submitted = 0
-        while (keepGoing() && mayClaim()) {
-            val job = client.claim(appId, listOf(synth.model)) ?: break
-            progress(job)
-            if (!process(appId, job, keepGoing)) break
-            submitted++
+        while (true) {
+            val round = apps().filter { it !in done }.sorted()
+            if (round.isEmpty()) return submitted
+            for (appId in round) {
+                if (!keepGoing() || !mayClaim()) return submitted
+                if (appId !in apps()) continue
+                val window = now() + NetworkRetry.REQUEST_WINDOW_MS
+                val job = retrying({ window }, keepGoing) { client.claim(appId, listOf(synth.model)) }
+                if (job == null) { done += appId; continue }
+                progress(appId, job)
+                if (process(appId, job) { keepGoing() && appId in apps() }) submitted++ else done += appId
+            }
         }
-        return submitted
+    }
+    /** Copies the server's verdicts on [appId]'s submissions into the log, retrying a transient failure for a while. */
+    fun refresh(appId: String, keepGoing: () -> Boolean) {
+        val window = now() + NetworkRetry.REQUEST_WINDOW_MS
+        retrying({ window }, keepGoing) { client.refresh(appId, log) }
+    }
+    /**
+     * [call], tried again after [NetworkRetry]'s wait (then [beforeRetry]) while [keepGoing] and the wait ends before
+     * [until]; otherwise its failure is thrown.
+     */
+    private fun <T> retrying(until: () -> Long, keepGoing: () -> Boolean, beforeRetry: () -> Unit = {}, call: () -> T): T {
+        var attempt = 0
+        while (true) {
+            try { return call() } catch (e: Exception) {
+                val wait = NetworkRetry.delayMs(e, attempt++) ?: throw e
+                if (!keepGoing() || now() + wait >= until()) throw e
+                sleep(wait)
+                beforeRetry()
+            }
+        }
     }
     private fun process(appId: String, job: GenerationJob, keepGoing: () -> Boolean): Boolean {
         val handled = log.handled(job.id)
@@ -227,13 +280,18 @@ class Contributor(
             if (refusal != null) { log.record(Contribution(job.id, appId, job.key, now(), "skipped", refusal)); return false }
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
             log.record(Contribution(job.id, appId, job.key, now(), "uploading"))
-            client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
+            // The same file, again, while the lease (extended as it runs low) still leaves time to upload (#819).
+            retrying({ lease.deadline }, keepGoing, beforeRetry = lease::renew) {
+                client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
+            }
             log.updateStatus(job.id, "pending", "")
             return true
         } catch (e: Exception) {
             if (DeviceConnection.expired(e)) throw e
-            val reason = ((e as? ApiFailure)?.let { "${it.status} " } ?: "") + (e.message ?: e.javaClass.simpleName)
-            if (log.handled(job.id)) log.updateStatus(job.id, "failed", reason.take(120))
+            val uploading = log.handled(job.id) // the only network call after this is recorded is the upload
+            val reason = if (uploading && NetworkRetry.delayMs(e, 0) != null) NetworkRetry.REASON
+                else ((e as? ApiFailure)?.let { "${it.status} " } ?: "") + (e.message ?: e.javaClass.simpleName)
+            if (uploading) log.updateStatus(job.id, "failed", reason.take(120))
             else log.record(Contribution(job.id, appId, job.key, now(), "failed", reason.take(120)))
             return false
         } finally { file.delete() }
@@ -278,8 +336,10 @@ class Contributor(
     private inner class Lease(private val appId: String, private val job: GenerationJob) {
         private var expiresAt = job.leaseExpiresAt
         private var extendable = true
+        /** The last moment an upload may start. */
+        val deadline get() = expiresAt - GenerationPolicy.LEASE_MARGIN_MS
         /** Whether there is still time to finish and upload. */
-        val held get() = now() < expiresAt - GenerationPolicy.LEASE_MARGIN_MS
+        val held get() = now() < deadline
         fun renew() {
             if (!extendable || now() < expiresAt - GenerationPolicy.EXTEND_WITHIN_MS) return
             try { expiresAt = client.extend(appId, job) } catch (e: Exception) {

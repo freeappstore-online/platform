@@ -58,7 +58,7 @@ class KokoroMandarinTest {
         jobs += job("english", "It was a bright cold day in April.", "af_heart", null) // the engine switches back
         val done = KokoroSynthesizer(model).use { synth ->
             Contributor(GenerationClient(api) { "t" }, log, synth, ::AacEncoder, InstrumentationRegistry.getInstrumentation().targetContext.cacheDir)
-                .run("dialogue", { true })
+                .run({ setOf("dialogue") }, { true })
         }
         assertEquals(lines.size + 2, done)
         for ((id, text) in lines.map { it.first to it.second } + ("digits" to "我要3杯咖啡，2026年11月26日。")) {

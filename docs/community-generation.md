@@ -169,7 +169,7 @@ claimed. Runners today:
 
 | Runner | Model | Format | Params | Voices and languages |
 |---|---|---|---|---|
-| Android companion ([#731](https://github.com/freeappstore-online/platform/issues/731)) | `kokoro` `v1.0` (sherpa-onnx `kokoro-multi-lang-v1_0`) | `audio/mp4` (AAC-LC 64 kbps, 24 kHz mono) | `{ voice, speed? }` (speed 0.5-2, default 1) | All 54 Kokoro v1.0 voices: English (`af_`, `am_`, `bf_`, `bm_`), Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin (`zf_`, `zm_`) |
+| Android companion ([#731](https://github.com/freeappstore-online/platform/issues/731)) | `kokoro` `v1.0` (sherpa-onnx `kokoro-multi-lang-v1_0`) | `audio/mp4` (AAC-LC 32 kbps, 24 kHz mono; [#798](https://github.com/freeappstore-online/platform/issues/798)) | `{ voice, speed? }` (speed 0.5-2, default 1) | All 54 Kokoro v1.0 voices: English (`af_`, `am_`, `bf_`, `bm_`), Spanish, French, Hindi, Italian, Japanese, Portuguese, Mandarin (`zf_`, `zm_`) |
 | iOS companion ([#733](https://github.com/freeappstore-online/platform/issues/733)) | same | same | same | same |
 | Browser, `@freeappstore/sdk/generation-kokoro` (Books, console Generate page) | `kokoro` `v1.0` (kokoro-js) | `audio/mp4` (WebCodecs AAC-LC 32 kbps mono, 24 kHz, else 48 kHz where the browser refuses 24 kHz) | same | English voices only |
 

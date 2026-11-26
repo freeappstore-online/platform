@@ -2,6 +2,10 @@ package online.freeappstore.companion
 
 import java.io.File
 import java.io.IOException
+import java.net.ConnectException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.nio.file.Files
 import java.security.MessageDigest
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry
@@ -29,10 +33,18 @@ class ContributeTest {
     }
     class Upload(val path: String, val token: String, val headers: Map<String, String>, val bytes: ByteArray, val contentType: String, val meta: JSONObject?)
     inner class FakeApi : FasApi() {
+        /** Books' open jobs; [appJobs] holds other apps'. */
         val jobs = ArrayDeque<JSONObject>()
+        val appJobs = mutableMapOf<String, ArrayDeque<JSONObject>>()
         val claims = mutableListOf<JSONObject>()
+        /** Each claim's app and the job it got, or null (204). */
+        val claimed = mutableListOf<Pair<String, String?>>()
         val uploads = mutableListOf<Upload>()
         var uploadFailure: Exception? = null
+        /** Failures thrown, one per attempt, before the calls go through (#819). */
+        val uploadFailures = ArrayDeque<Exception>()
+        val claimFailures = ArrayDeque<Exception>()
+        var uploadAttempts = 0
         var submissions = JSONArray()
         /** Lease extensions asked for (path to `X-Lease-Token`), and what the next one answers: a new expiry or a failure. */
         val extensions = mutableListOf<Pair<String, String?>>()
@@ -44,13 +56,22 @@ class ContributeTest {
         }
         override fun request(method: String, path: String, token: String?, body: JSONObject?): JSONObject {
             assertEquals("ndev_test", token)
+            val claim = Regex("^/apps/([a-z]+)/generation/claim$").find(path)?.groupValues?.get(1)
             return when {
-                method == "POST" && path == "/apps/books/generation/claim" -> { claims += body!!; jobs.removeFirstOrNull()?.let { JSONObject().put("job", it) } ?: JSONObject() }
+                method == "POST" && claim != null -> {
+                    claimFailures.removeFirstOrNull()?.let { throw it }
+                    claims += body!!
+                    val job = (if (claim == "books") jobs else appJobs.getOrPut(claim) { ArrayDeque() }).removeFirstOrNull()
+                    claimed += claim to job?.getString("id")
+                    job?.let { JSONObject().put("job", it) } ?: JSONObject()
+                }
                 method == "GET" && path == "/apps/books/generation/submissions" -> JSONObject().put("submissions", submissions)
                 else -> error("unexpected $method $path")
             }
         }
         override fun upload(method: String, path: String, token: String, headers: Map<String, String>, file: File, contentType: String, meta: JSONObject?): JSONObject {
+            uploadAttempts++
+            uploadFailures.removeFirstOrNull()?.let { throw it }
             uploadFailure?.let { throw it }
             assertEquals("PUT", method)
             uploads += Upload(path, token, headers, file.readBytes(), contentType, meta)
@@ -87,14 +108,19 @@ class ContributeTest {
         JSONObject().put("id", id).put("setId", "set1").put("key", "book/$id").put("input", input).put("model", model).put("modelVersion", version)
             .put("params", params).put("formats", JSONArray(formats)).put("maxBytes", maxBytes).put("language", language ?: JSONObject.NULL)
             .put("leaseToken", "lease-$id").put("leaseExpiresAt", expires)
-    private fun contributor(attestation: Attestation = Attestation.NONE, clock: () -> Long = { now }) =
-        Contributor(GenerationClient(api) { "ndev_test" }, log, synth, encoder, dir, attestation, clock)
+    private val books = { setOf("books") }
+    /** The test clock; a retry's wait moves it on, and is recorded in [sleeps]. */
+    private var t = now
+    private val sleeps = mutableListOf<Long>()
+    private val sleep = { ms: Long -> sleeps += ms; t += ms }
+    private fun contributor(attestation: Attestation = Attestation.NONE) =
+        Contributor(GenerationClient(api) { "ndev_test" }, log, synth, encoder, dir, attestation, { t }, sleep)
 
     @Before fun setUp() { dir = Files.createTempDirectory("contribute").toFile() }
 
     @Test fun generatesExactlyTheClaimedInputAndSubmitsWithTheLease() {
         api.jobs += job("j1", "First chapter."); api.jobs += job("j2", "Second chapter.")
-        assertEquals(2, contributor().run("books", { true }))
+        assertEquals(2, contributor().run(books, { true }))
         assertEquals(listOf("First chapter.", "Second chapter."), synth.spoken)
         assertEquals(3, api.claims.size) // the third claim found nothing (204)
         assertEquals("kokoro", api.claims[0].getJSONArray("models").getJSONObject(0).getString("model"))
@@ -112,7 +138,7 @@ class ContributeTest {
     }
     @Test fun attestationHookAddsTheHeader() {
         api.jobs += job("j1")
-        contributor(attestation = { app, j -> "token-$app-${j.id}" }).run("books", { true })
+        contributor(attestation = { app, j -> "token-$app-${j.id}" }).run(books, { true })
         assertEquals("token-books-j1", api.uploads.single().headers["X-Attestation"])
     }
     @Test fun refusesJobsItCannotHonourExactly() {
@@ -124,7 +150,7 @@ class ContributeTest {
         )
         for ((name, j) in cases) {
             api.jobs.clear(); api.jobs += j
-            assertEquals(name, 0, contributor().run("books", { true }))
+            assertEquals(name, 0, contributor().run(books, { true }))
             assertEquals(name, "skipped", log.rows[j.getString("id")]!!.status)
         }
         assertTrue(synth.spoken.isEmpty())
@@ -136,14 +162,14 @@ class ContributeTest {
     @Test fun neverUploadsTwiceForOneJob() {
         log.record(Contribution("j1", "books", "book/j1", now, "uploading"))
         api.jobs += job("j1")
-        assertEquals(0, contributor().run("books", { true }))
+        assertEquals(0, contributor().run(books, { true }))
         assertTrue(api.uploads.isEmpty())
         assertTrue(synth.spoken.isEmpty())
         assertEquals("uploading", log.rows["j1"]!!.status) // untouched
     }
     @Test fun tooLargeIsNotSubmitted() {
         api.jobs += job("j1", text = "A long sentence here.", maxBytes = 5)
-        assertEquals(0, contributor().run("books", { true }))
+        assertEquals(0, contributor().run(books, { true }))
         assertTrue(api.uploads.isEmpty())
         assertEquals("too_large", log.rows["j1"]!!.reason)
     }
@@ -154,7 +180,7 @@ class ContributeTest {
         val slow = object : Synthesizer by synth {
             override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { t += 15 * 60_000; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
         }
-        Contributor(GenerationClient(api) { "ndev_test" }, log, slow, encoder, dir, now = { t }).run("books", { true })
+        Contributor(GenerationClient(api) { "ndev_test" }, log, slow, encoder, dir, now = { t }).run(books, { true })
         assertTrue(api.uploads.isEmpty())
         assertEquals("lease_expired", log.rows["j1"]!!.reason)
     }
@@ -164,14 +190,14 @@ class ContributeTest {
         val stopping = object : Synthesizer by synth {
             override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { go = false; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null }
         }
-        Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }).run("books", { go })
+        Contributor(GenerationClient(api) { "ndev_test" }, log, stopping, encoder, dir, now = { now }).run(books, { go })
         assertTrue(api.uploads.isEmpty())
         assertEquals("stopped", log.rows["j1"]!!.reason)
     }
     @Test fun uploadFailureIsRecordedAndEndsTheRun() {
         api.jobs += job("j1"); api.jobs += job("j2")
         api.uploadFailure = ApiFailure(409, "Lease expired.")
-        assertEquals(0, contributor().run("books", { true }))
+        assertEquals(0, contributor().run(books, { true }))
         assertEquals("failed", log.rows["j1"]!!.status)
         assertEquals("409 Lease expired.", log.rows["j1"]!!.reason)
         assertNull(log.rows["j2"])
@@ -179,7 +205,75 @@ class ContributeTest {
     @Test fun expiredConnectionIsThrown() {
         api.jobs += job("j1")
         api.uploadFailure = ApiFailure(401, "expired")
-        assertThrows(ApiFailure::class.java) { contributor().run("books", { true }) }
+        assertThrows(ApiFailure::class.java) { contributor().run(books, { true }) }
+    }
+    /** #819: a network blip after generating no longer loses the work. */
+    @Test fun transientUploadFailuresAreRetriedWithTheSameFile() {
+        api.jobs += job("j1", "First chapter.")
+        api.uploadFailures += listOf(UnknownHostException("Unable to resolve host \"api.freeappstore.online\""), SocketTimeoutException("timeout"),
+            SocketException("Connection reset"), ApiFailure(503, "Unavailable."))
+        assertEquals(1, contributor().run(books, { true }))
+        assertEquals("generated once", listOf("First chapter."), synth.spoken)
+        assertEquals(5, api.uploadAttempts)
+        assertEquals("bounded backoff", listOf(2_000L, 4_000L, 8_000L, 16_000L), sleeps)
+        assertEquals("one upload, the generated file", 24_000, api.uploads.single().bytes.size)
+        assertEquals("pending", log.rows["j1"]!!.status)
+        assertFalse(File(dir, "contribution.m4a").exists())
+    }
+    @Test fun anUploadThatNeverGetsThroughStopsBeforeTheLeaseEndsAsNetwork() {
+        api.jobs += job("j1")
+        api.uploadFailure = UnknownHostException("api.freeappstore.online")
+        api.extend = { throw ApiFailure(409, "Lease cap reached.") }
+        assertEquals(0, contributor().run(books, { true }))
+        assertTrue(api.uploadAttempts > 5)
+        assertTrue("never past the lease margin", t < now + 15 * 60_000 - GenerationPolicy.LEASE_MARGIN_MS)
+        assertTrue(sleeps.all { it <= NetworkRetry.MAX_MS })
+        assertEquals(Contribution("j1", "books", "book/j1", now, "failed", "network"), log.rows["j1"]!!.copy(at = now))
+        assertFalse("the file is removed once given up", File(dir, "contribution.m4a").exists())
+        api.uploadFailure = null; api.jobs += job("j1")
+        assertEquals("never generated or uploaded again", 0, contributor().run(books, { true }))
+        assertEquals(1, synth.spoken.size)
+        assertTrue(api.uploads.isEmpty())
+    }
+    @Test fun a429IsRetriedOnlyWhenItSaysWhen() {
+        api.jobs += job("j1")
+        api.uploadFailures += ApiFailure(429, "Slow down.", retryAfterMs = 7_000)
+        assertEquals(1, contributor().run(books, { true }))
+        assertEquals(listOf(7_000L), sleeps)
+        api.jobs += job("j2")
+        api.uploadFailure = ApiFailure(429, "daily contribution limit reached; try tomorrow")
+        assertEquals(0, contributor().run(books, { true }))
+        assertEquals(3, api.uploadAttempts)
+        assertEquals("429 daily contribution limit reached; try tomorrow", log.rows["j2"]!!.reason)
+        assertEquals(1_000L, FasApi.retryAfterMs("1", 0))
+        assertEquals(90_000L, FasApi.retryAfterMs("Thu, 26 Nov 2026 12:01:30 GMT", java.time.Instant.parse("2026-11-26T12:00:00Z").toEpochMilli()))
+        assertNull(FasApi.retryAfterMs("soon", 0))
+        assertNull(FasApi.retryAfterMs(null, 0))
+    }
+    @Test fun claimsAreRetriedForAWhileThenTheRunEnds() {
+        api.jobs += job("j1")
+        api.claimFailures += ConnectException("Connection refused")
+        assertEquals(1, contributor().run(books, { true }))
+        assertEquals(listOf(2_000L), sleeps)
+        repeat(20) { api.claimFailures += UnknownHostException("api.freeappstore.online") }
+        val from = t
+        assertThrows(UnknownHostException::class.java) { contributor().run(books, { true }) }
+        assertTrue(t - from < NetworkRetry.REQUEST_WINDOW_MS)
+        assertThrows("a final failure is not retried", ApiFailure::class.java) {
+            api.claimFailures.clear(); api.claimFailures += ApiFailure(400, "invalid claim"); contributor().run(books, { true })
+        }
+    }
+    /** #819: one job from each opted-in app in turn, skipping apps with no work, instead of draining one app first. */
+    @Test fun takesOneJobFromEachAppInTurn() {
+        api.jobs += listOf(job("b1"), job("b2"), job("b3"))
+        api.appJobs["dialogue"] = ArrayDeque(listOf(job("d1"), job("d2")))
+        var apps = setOf("books", "chess", "dialogue")
+        val order = mutableListOf<String>()
+        val n = contributor().run({ apps }, { true }) { app, job -> order += "$app/${job.id}"; if (job.id == "d2") apps = apps - "dialogue" }
+        assertEquals(listOf("books/b1", "dialogue/d1", "books/b2", "dialogue/d2", "books/b3"), order)
+        assertEquals("d2 stopped: dialogue was turned off while it ran", 4, n)
+        assertEquals(listOf("books" to "b1", "chess" to null, "dialogue" to "d1", "books" to "b2", "dialogue" to "d2", "books" to "b3", "books" to null), api.claimed)
+        assertEquals("stopped", log.rows["d2"]!!.reason)
     }
     @Test fun splitsSentencesLikeBooks() {
         // Expected: Books' scripts/audio/segments.py (`sentences`, then `utf16`) on the same texts.
@@ -228,7 +322,7 @@ class ContributeTest {
     @Test fun mandarinSetsAreSpokenAMandarinSentenceAtATime() {
         api.jobs += job("j1", "一号线，三站。明白了，谢谢！", params = JSONObject().put("voice", "zm_yunxi"), language = "zh")
         api.jobs += job("j2", "请问，洗手间在哪里？", params = JSONObject().put("voice", "zf_xiaobei")) // no language: the voice says
-        assertEquals(2, contributor().run("books", { true }))
+        assertEquals(2, contributor().run(books, { true }))
         assertEquals(listOf("一号线，三站。", "明白了，谢谢！", "请问，洗手间在哪里？"), synth.spoken)
         assertEquals(List(3) { Language.MANDARIN }, synth.languages)
         val segments = api.uploads[0].meta!!.getJSONArray("segments")
@@ -240,7 +334,7 @@ class ContributeTest {
             job("d", "Hello.", params = JSONObject().put("voice", "zf_xiaobei"), language = "en"))
         for (j in cases) {
             api.jobs.clear(); api.jobs += j
-            assertEquals(0, contributor().run("books", { true }))
+            assertEquals(0, contributor().run(books, { true }))
             assertEquals(j.getString("id"), "language", log.rows[j.getString("id")]!!.reason)
         }
         assertTrue(synth.spoken.isEmpty())
@@ -251,7 +345,7 @@ class ContributeTest {
         val short = object : Synthesizer by synth { // Kokoro says 对。 in about a quarter of a second
             override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean) = Audio(FloatArray(6_000), 24_000)
         }
-        assertEquals(1, Contributor(GenerationClient(api) { "ndev_test" }, log, short, encoder, dir, now = { now }).run("books", { true }))
+        assertEquals(1, Contributor(GenerationClient(api) { "ndev_test" }, log, short, encoder, dir, now = { now }).run(books, { true }))
         val upload = api.uploads.single()
         val seconds = upload.bytes.size / 24_000.0
         assertEquals("the speech, then silence to a second", 1.0, seconds, 0.0)
@@ -267,7 +361,7 @@ class ContributeTest {
                 synth.spoken += text; return Audio(FloatArray(if (text == "* * *") 0 else text.length * 2_400), 24_000)
             }
         }
-        Contributor(GenerationClient(api) { "ndev_test" }, log, tenthPerChar, encoder, dir, now = { now }).run("books", { true })
+        Contributor(GenerationClient(api) { "ndev_test" }, log, tenthPerChar, encoder, dir, now = { now }).run(books, { true })
         assertEquals(listOf("One two.", "Three!", "* * *", "Four."), synth.spoken)
         // 0.8 s, 0.4 s pause, 0.6 s, 0.8 s paragraph pause, "* * *" left out, 0.5 s; no pause at the end.
         val segments = api.uploads.single().meta!!.getJSONArray("segments")
@@ -289,12 +383,11 @@ class ContributeTest {
         val tiny = object : Synthesizer by synth { // 10 Hz keeps the audio small; 4,000 segments are about 100 KB of JSON
             override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean) = Audio(FloatArray(1), 10)
         }
-        assertEquals(0, Contributor(GenerationClient(api) { "ndev_test" }, log, tiny, encoder, dir, now = { now }).run("books", { true }))
+        assertEquals(0, Contributor(GenerationClient(api) { "ndev_test" }, log, tiny, encoder, dir, now = { now }).run(books, { true }))
         assertTrue(api.uploads.isEmpty())
         assertEquals("too_large", log.rows["j1"]!!.reason)
     }
 
-    private var t = now
     /** A job of [sentences] sentences, each taking [minutes] of the 15-minute lease to say. */
     private fun timedRun(sentences: Int, minutes: Int): Int {
         api.jobs += job("j1", text = (1..sentences).joinToString(" ") { "Sentence $it." })
@@ -303,7 +396,7 @@ class ContributeTest {
                 synth.spoken += text; t += minutes * 60_000L; return if (keepGoing()) Audio(FloatArray(1), 24_000) else null
             }
         }
-        return Contributor(GenerationClient(api) { "ndev_test" }, log, timed, encoder, dir, now = { t }).run("books", { true })
+        return Contributor(GenerationClient(api) { "ndev_test" }, log, timed, encoder, dir, now = { t }, sleep = sleep).run(books, { true })
     }
     @Test fun extendsTheLeaseWithinFiveMinutesOfExpiry() {
         api.extend = { t + 15 * 60_000 }
@@ -431,7 +524,7 @@ class ContributeTest {
         val dropsDuringTheJob = object : Synthesizer by synth {
             override fun synthesize(text: String, params: JSONObject, language: Language, keepGoing: () -> Boolean): Audio? { online = false; return synth.synthesize(text, params, language, keepGoing) }
         }
-        val n = Contributor(GenerationClient(api) { "ndev_test" }, log, dropsDuringTheJob, encoder, dir, now = { now }).run("books", { true }, mayClaim = { online })
+        val n = Contributor(GenerationClient(api) { "ndev_test" }, log, dropsDuringTheJob, encoder, dir, now = { now }).run(books, { true }, mayClaim = { online })
         assertEquals("the job in hand finishes and uploads; no second claim", 1, n)
         assertEquals(1, api.claims.size)
     }

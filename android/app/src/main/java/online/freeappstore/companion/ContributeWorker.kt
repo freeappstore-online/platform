@@ -20,7 +20,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
 /**
- * Contribute (#731): downloads the voice model when asked, then works through each opted-in app's open jobs. Runs as
+ * Contribute (#731): downloads the voice model when asked, then takes open jobs from the opted-in apps in turn. Runs as
  * WorkManager work, by default only while plugged in on an unmetered network, with a foreground notification. Its Stop
  * action cancels the work until FreeAppStore is opened again; Stop in the app ends only the current run.
  *
@@ -60,15 +60,17 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                 graph.kokoro.install(progress = { downloaded = it; status = "Downloading the voice model · ${KokoroModel.progress(it)}" }, keepGoing = keepGoing)
             }
             if (!graph.kokoro.installed) return@withContext Result.success()
-            val apps = local.contributeApps()
-            if (apps.isEmpty()) return@withContext Result.success()
+            if (local.contributeApps().isEmpty()) return@withContext Result.success()
             show("Looking for jobs")
             KokoroSynthesizer(graph.kokoro).use { synth ->
                 val contributor = Contributor(graph.generation, local, synth, ::AacEncoder, applicationContext.cacheDir)
-                for (app in apps) {
+                for (app in local.contributeApps()) {
                     if (!keepGoing()) break
-                    runCatching { graph.generation.refresh(app, local) }.onFailure { if (DeviceConnection.expired(it)) throw it }
-                    contributor.run(app, keepGoing = { keepGoing() && app in local.contributeApps() }, mayClaim = network) { job -> status = "Generating ${job.key}" }
+                    runCatching { contributor.refresh(app, keepGoing) }.onFailure { if (DeviceConnection.expired(it)) throw it }
+                }
+                // One job from each app in turn (#819), not one app drained before the next.
+                contributor.run(local::contributeApps, keepGoing, mayClaim = network) { app, job ->
+                    status = "Generating ${graph.catalogue.apps.find { it.id == app }?.name ?: app} · ${job.key}"
                 }
             }
             Result.success()
