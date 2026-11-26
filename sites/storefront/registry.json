@@ -3464,9 +3464,10 @@
       "hostedOn": "r2",
       "type": "standalone",
       "developer": "FreeAppStore",
-      "discoveryStatus": "pending",
+      "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-25T22:10:35.262Z",
-      "creatorGithub": "serge-ivo"
+      "creatorGithub": "serge-ivo",
+      "discoveryDeliveryPending": "05f2b52f-96e2-43b9-ad11-64a17ed6f688"
     },
     {
       "id": "sayback",
