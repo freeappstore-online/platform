@@ -153,7 +153,7 @@ so they follow the app's light/dark theme. Prefer them to hand-rolled equivalent
 - \`Avatar\` — user, size?. The compact profile link.
 - \`ProfileMenu\` — app, showThemeToggle?, children?. Legacy dropdown. Shell does not mount it.
 - \`ProfilePage\` — app, showThemeToggle?, appName?, about?. The page Shell renders at \`/profile\` unless \`profileHref\` is set. It ends with About: \`about\`, then a link to the app's FreeAppStore listing.
-- \`ThemeToggle\`, \`TextSizeToggle\` — no props. \`useTextSize()\` — the text size preference.
+- \`ThemeToggle\`, \`TextSizeToggle\` — no props. \`useTextSize()\` — the text size preference (\`sm\`, \`default\`, \`lg\`, \`xl\`, \`xxl\`); \`TEXT_SIZES\` — those steps with labels and root font-size scale.
 
 **Friends**
 - \`FriendsList\` — app, onSelectFriend?
