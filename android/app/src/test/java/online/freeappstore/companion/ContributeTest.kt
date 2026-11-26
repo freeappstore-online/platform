@@ -334,6 +334,51 @@ class ContributeTest {
         assertFalse(model.install(source = source.toURI().toURL(), sha256 = sha(source), keepGoing = { false }))
         assertFalse(model.installed)
     }
+    /** #806: plugged in, not charging, so a full battery on the charger keeps going; unplugged stops unless any time is allowed. */
+    @Test fun runsWhilePluggedInEvenWhenFull() {
+        val ac = android.os.BatteryManager.BATTERY_PLUGGED_AC
+        for (plugged in listOf(ac, android.os.BatteryManager.BATTERY_PLUGGED_USB, android.os.BatteryManager.BATTERY_PLUGGED_WIRELESS, 8)) {
+            assertTrue("plugged $plugged", ContributePower.mayRun(anyTime = false, plugged = plugged))
+        }
+        assertFalse("on battery", ContributePower.mayRun(anyTime = false, plugged = 0))
+        assertTrue("any time", ContributePower.mayRun(anyTime = true, plugged = 0))
+    }
+    /** #806: Run now or a settings change while a run is working never replaces or reschedules it. */
+    @Test fun aRunningContributionIsNeverReplaced() {
+        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.KEEP to androidx.work.ExistingWorkPolicy.KEEP, ContributeWorker.policies(now = true, running = true))
+        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.KEEP to androidx.work.ExistingWorkPolicy.KEEP, ContributeWorker.policies(now = false, running = true))
+        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.UPDATE to androidx.work.ExistingWorkPolicy.REPLACE, ContributeWorker.policies(now = true, running = false))
+        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.KEEP, ContributeWorker.policies(now = false, running = false).first)
+    }
+    /** #806: the network is checked before each claim, not as a WorkManager constraint that stops a job part-way. */
+    @Test fun networkIsCheckedBeforeEachClaimOnly() {
+        assertTrue(ContributePower.mayClaim(anyTime = false, connected = true, unmetered = true))
+        assertFalse("metered", ContributePower.mayClaim(anyTime = false, connected = true, unmetered = false))
+        assertTrue("metered, any time", ContributePower.mayClaim(anyTime = true, connected = true, unmetered = false))
+        assertFalse("offline", ContributePower.mayClaim(anyTime = true, connected = false, unmetered = false))
+        api.jobs += job("j1"); api.jobs += job("j2")
+        var online = true
+        val dropsDuringTheJob = object : Synthesizer by synth {
+            override fun synthesize(text: String, params: JSONObject, keepGoing: () -> Boolean): Audio? { online = false; return synth.synthesize(text, params, keepGoing) }
+        }
+        val n = Contributor(GenerationClient(api) { "ndev_test" }, log, dropsDuringTheJob, encoder, dir, now = { now }).run("books", { true }, mayClaim = { online })
+        assertEquals("the job in hand finishes and uploads; no second claim", 1, n)
+        assertEquals(1, api.claims.size)
+    }
+    @Test fun downloadProgressShowsBytesAndPercent() {
+        assertEquals("0 of 349 MB (0%)", KokoroModel.progress(0))
+        assertEquals("120 of 349 MB (34%)", KokoroModel.progress(120_000_000))
+        assertEquals("349 of 349 MB (100%)", KokoroModel.progress(KokoroModel.DOWNLOAD_BYTES))
+    }
+    @Test fun recentResultsSayAStoppedJobIsNotRetried() {
+        fun c(status: String, reason: String = "") = contributionDetail(Contribution("j", "books", "k", now, status, reason))
+        assertEquals("stopped · not retried on this phone", c("skipped", "stopped"))
+        assertEquals("409 Lease expired. · not retried on this phone", c("failed", "409 Lease expired."))
+        assertEquals("transcript_mismatch", c("rejected", "transcript_mismatch"))
+        assertEquals("", c("accepted"))
+        assertFalse("no possessive on the app name", contributeDisclosure("Books").contains("Books's"))
+        assertTrue(contributeDisclosure("Books").contains("jobs from Books"))
+    }
     @Test fun pinnedModel() {
         assertTrue(KokoroModel.URL.startsWith("https://github.com/k2-fsa/sherpa-onnx/releases/download/"))
         assertTrue(Regex("^[0-9a-f]{64}$").matches(KokoroModel.SHA256))

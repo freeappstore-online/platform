@@ -17,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.*
@@ -51,7 +53,10 @@ data class CompanionState(
     // Contribute (#731).
     val contributeApps: Set<String> = emptySet(), val contributeAnyTime: Boolean = false, val model: ModelState = ModelState.NONE,
     /** What the contribute work is doing, null while idle. */
-    val contributing: String? = null, val contributions: List<Contribution> = emptyList(), val contributedToday: Map<String, Int> = emptyMap(),
+    val contributing: String? = null,
+    /** Voice model bytes downloaded, null while not downloading (#806). */
+    val modelDownloaded: Long? = null,
+    val contributions: List<Contribution> = emptyList(), val contributedToday: Map<String, Int> = emptyMap(),
 )
 
 data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false)
@@ -213,7 +218,7 @@ class MainActivity : ComponentActivity() {
             expiresInDays = if (signedIn) DeviceConnection.expiresInDays(local.deviceExpiresAt, System.currentTimeMillis()) else null,
             contributeApps = local.contributeApps(), contributeAnyTime = local.contributeAnyTime,
             model = when { graph.kokoro.installed -> ModelState.INSTALLED; local.modelWanted -> ModelState.WAITING; else -> ModelState.NONE },
-            contributing = ContributeWorker.status, contributions = local.contributions(),
+            contributing = ContributeWorker.status, modelDownloaded = ContributeWorker.downloaded, contributions = local.contributions(),
             contributedToday = local.contributeApps().associateWith { local.contributedSince(it, SharingTimeline.today().first) })
         if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
     }
@@ -296,7 +301,11 @@ internal fun FasScreen(
         NavigationBar {
             Tab.entries.forEach { t ->
                 NavigationBarItem(selected = tab == t, onClick = { if (tab == t) sharingPage = SharingPage.Dashboard; tab = t },
-                    icon = { Icon(painterResource(t.icon), contentDescription = null) }, label = { Text(t.label) })
+                    icon = { Icon(painterResource(t.icon), contentDescription = null) }, label = {
+                        // One line at any font size (#806): shrinks to fit rather than breaking "Contribute" mid-word.
+                        Text(t.label, maxLines = 1, softWrap = false,
+                            autoSize = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = LocalTextStyle.current.fontSize))
+                    })
             }
         }
     }) { padding ->

@@ -280,7 +280,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
     @Synchronized fun setContributing(appId: String, on: Boolean) {
         check(prefs.edit().putStringSet("contributeApps", if (on) contributeApps() + appId else contributeApps() - appId).commit())
     }
-    /** Off by default: only while charging on an unmetered network. */
+    /** Off by default: only while plugged in on an unmetered network. */
     var contributeAnyTime: Boolean
         get() = prefs.getBoolean("contributeAnyTime", false)
         set(value) { check(prefs.edit().putBoolean("contributeAnyTime", value).commit()) }

@@ -20,7 +20,7 @@ tools. Protocol and deep links: [docs/native-companion.md](../docs/native-compan
 
 - **Contribute tab** (#731): opt in per app to generate its published jobs (narration) on the phone with Kokoro via
   sherpa-onnx, then upload them for the server to verify. The voice model downloads on demand (pinned URL and SHA-256,
-  no-backup storage, deletable); WorkManager runs it while charging on an unmetered network by default, with a
+  no-backup storage, deletable); WorkManager runs it while plugged in on an unmetered network by default, with a
   foreground notification. Protocol: [docs/native-companion.md](../docs/native-companion.md#contribute-android-731).
 
 ## Build

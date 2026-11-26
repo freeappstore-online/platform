@@ -45,6 +45,9 @@ class KokoroModel(private val dir: File) {
             val speed = if (params.has("speed")) (params.opt("speed") as? Number)?.toFloat() ?: return null else 1f
             return if (speed in 0.5f..2f) sid to speed else null
         }
+        /** Download progress for the screen (#806), such as "120 of 350 MB (34%)". */
+        fun progress(bytes: Long, total: Long = DOWNLOAD_BYTES): String =
+            "${bytes / 1_000_000} of ${total / 1_000_000} MB (${(bytes * 100 / total).coerceIn(0, 100)}%)"
         /** Whether the job's voice is a Spanish one (`ef_…`, `em_…`), so its text is split into sentences the Spanish way. */
         fun spanish(params: JSONObject) = (params.opt("voice") as? String)?.startsWith("e") == true
     }

@@ -146,7 +146,7 @@ private fun AppDetail(
         if (state.signedIn) Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ContributeSwitch(app.id, app.name, state, actions.contribute)
-                Text("Generate ${app.name}'s published jobs, such as narration, on this phone. Nothing happens if it has none.",
+                Text("Generate jobs published by ${app.name}, such as narration, on this phone. Nothing happens if it has none.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

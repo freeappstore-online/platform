@@ -171,12 +171,13 @@ class Contributor(
     private val attestation: Attestation = Attestation.NONE, private val now: () -> Long = System::currentTimeMillis,
 ) {
     /**
-     * Works through [appId]'s open jobs until none is left, [keepGoing] turns false, or a job is not submitted (it
-     * keeps its lease until expiry, so the next run continues). Returns how many were submitted. A `401` is thrown.
+     * Works through [appId]'s open jobs until none is left, [keepGoing] turns false, [mayClaim] (checked before each
+     * claim) turns false, or a job is not submitted (it keeps its lease until expiry, so the next run continues).
+     * Returns how many were submitted. A `401` is thrown.
      */
-    fun run(appId: String, keepGoing: () -> Boolean, progress: (GenerationJob) -> Unit = {}): Int {
+    fun run(appId: String, keepGoing: () -> Boolean, mayClaim: () -> Boolean = { true }, progress: (GenerationJob) -> Unit = {}): Int {
         var submitted = 0
-        while (keepGoing()) {
+        while (keepGoing() && mayClaim()) {
             val job = client.claim(appId, listOf(synth.model)) ?: break
             progress(job)
             if (!process(appId, job, keepGoing)) break

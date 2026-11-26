@@ -86,11 +86,11 @@ internal object Format {
     val permission = mapOf("" to "Not set") + ActivityText.permissionNames
 }
 
+/** A label and its value on one line, or the value on the next line when both do not fit (#806: never squeezed mid-word). */
 @Composable
 internal fun Labeled(label: String, value: String) {
-    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Spacer(Modifier.width(12.dp))
+    FlowRow(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, Modifier.padding(end = 12.dp), style = MaterialTheme.typography.bodyMedium)
         Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

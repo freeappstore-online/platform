@@ -92,8 +92,14 @@ and verifies every upload; the phone is never trusted.
 - **Job params** the phone honours: `{ voice, speed? }`, `voice` a Kokoro voice name (`af_heart`, …), `speed` 0.5-2
   (default 1). A job with any other param, another model or version, a format list without `audio/mp4`, or an input other
   than `{ text }` is skipped, never approximated.
-- **Loop** (WorkManager, hourly and on **Run now**; by default only while charging on an unmetered network, which the user
-  can relax; foreground notification with Stop): `POST …/generation/claim` with the device credential → synthesize the
+- **Loop** (WorkManager, hourly and on **Run now**; by default only while plugged in on an unmetered network, which the
+  user can relax; foreground notification with Stop, and in-app download progress for the model). "Plugged in" is
+  `BatteryManager.EXTRA_PLUGGED != 0`, not "charging", which Android reports unsatisfied once the battery is full (#806).
+  The work is scheduled with battery-not-low only: the worker checks plugged-in before starting and between sentences, and
+  the network before starting and before each claim, because a WorkManager constraint that lapses stops running work
+  part-way. Unplugged, it stops without uploading. A run in progress is never replaced by **Run now** or a settings
+  change. A job stopped part-way is recorded and never retried on this phone, which Recent results says.
+  Each job: `POST …/generation/claim` with the device credential → synthesize the
   job's `input.text` verbatim, a sentence at a time, each sentence and pause fed to the encoder as it is synthesized
   (#793; the chapter is never held in memory, only a temp file in the cache) → AAC-LC mono 64 kbps in MP4
   (`MediaCodec` + `MediaMuxer`) →

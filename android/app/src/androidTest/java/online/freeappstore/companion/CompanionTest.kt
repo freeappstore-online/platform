@@ -2,11 +2,18 @@ package online.freeappstore.companion
 
 import android.content.Context
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import java.io.File
@@ -132,6 +139,29 @@ class CompanionTest {
         compose.onNodeWithText("Download (${KokoroModel.DOWNLOAD_BYTES / 1_000_000} MB)").assertIsDisplayed()
         compose.onNodeWithText("2 today").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Rejected").performScrollTo().assertIsDisplayed()
+    }
+    /** #806: at large font sizes no text breaks inside a word: label/value rows stack, tab labels stay on one line. */
+    @Test fun largeFontsNeverBreakAWord() {
+        val now = System.currentTimeMillis()
+        val state = CompanionState(signedIn = true, now = now, contributeApps = setOf("run"), model = ModelState.WAITING, modelDownloaded = 120_000_000,
+            contributions = listOf(Contribution("j1", "run", "pride-and-prejudice/chapter-12", now, "skipped", "stopped"),
+                Contribution("j2", "run", "pride-and-prejudice/chapter-11", now, "pending")))
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                MaterialTheme { FasScreen(state, catalogue, CompanionActions(), null, {}, Tab.CONTRIBUTE) }
+            }
+        }
+        compose.onNodeWithText("Being checked").performScrollTo()
+        compose.onNodeWithText("stopped · not retried on this phone", substring = true).assertExists()
+        val broken = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes().flatMap { node ->
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
+            val layout = layouts.firstOrNull() ?: return@flatMap emptyList()
+            val text = layout.layoutInput.text.text
+            (0 until layout.lineCount - 1).map { layout.getLineEnd(it) }
+                .filter { it in 1 until text.length && text[it - 1].isLetterOrDigit() && text[it].isLetterOrDigit() }.map { "$text @$it" }
+        }
+        assertEquals(emptyList<String>(), broken)
     }
     @Test fun signedOutDetailOffersSignInInsteadOfTheToggle() {
         var connects = 0
