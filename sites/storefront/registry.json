@@ -3483,6 +3483,22 @@
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-26T01:49:27.815Z",
       "creatorGithub": "serge-ivo"
+    },
+    {
+      "id": "dialogue",
+      "name": "dialogue",
+      "category": "Learning",
+      "icon": "🎲",
+      "iconBg": "#dbeafe",
+      "description": "Practice real conversations with branching, prerecorded role-play in English and Mandarin.",
+      "appUrl": "https://dialogue.freeappstore.online",
+      "repo": "freeappstore-online/dialogue",
+      "hostedOn": "r2",
+      "type": "standalone",
+      "developer": "FreeAppStore",
+      "discoveryStatus": "pending",
+      "discoveryRequestedAt": "2026-11-26T02:06:38.478Z",
+      "creatorGithub": "serge-ivo"
     }
   ]
 }
