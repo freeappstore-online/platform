@@ -33,6 +33,14 @@ windows; **Contribute** generates community jobs ([below](#contribute)); **Activ
 menu shows the status and offers Open, Pause / Resume and Quit, plus Contribute's status and Pause / Resume
 contributing while this computer is connected.
 
+**Account** (#829): once this computer is connected (Contribute's **Connect this computer**, also offered by the
+header's **Sign in**), the header shows the account's avatar and name and the tray menu its name and avatar. The
+Account page shows the avatar, name, `@login` (or the sign-in provider), user id, email, platform roles, the number
+of apps for creators with a console link, and this computer's label, connection date and expiry, all from
+`GET /v1/native/me` with the device credential (held in memory only; the avatar is fetched by the main process and
+handed over as a `data:` URL, since the page's CSP allows no remote images). **Sign out** revokes the device
+credential, like Contribute's **Disconnect**; **Delete account** opens the console's deletion flow.
+
 Development environment variables (dev builds, i.e. not packaged):
 
 | Variable                                   | Effect                                                                                      |
@@ -157,6 +165,9 @@ silent (`ffprobe`/`ffmpeg`). It downloads Kokoro, so it runs only with `FAS_E2E_
 pnpm --dir desktop build && FAS_E2E_MODEL=1 pnpm --dir desktop exec playwright test e2e/contribute.spec.ts
 ```
 
+`e2e/account.spec.ts` checks the header summary and the Account page against a stand-in `/native/me`, and that Sign
+out revokes the credential (`DELETE /v1/native/device`).
+
 ## Build
 
 ```bash
@@ -193,7 +204,7 @@ first launch. Signing, notarization and auto-update are #799.
 | `src/main/integrations.ts`         | Connect / Disconnect for Claude Code and Claude Desktop                                |
 | `src/main/settings.ts`, `tray.ts`  | Pause, open-at-login and Contribute settings; the tray menu                            |
 | `src/main/contribute.ts`           | Contribute's loop and state, `RelayWorker` to the hidden window's model worker         |
-| `src/main/device.ts`               | Device pairing (`ndev_` credential) and its storage                                    |
+| `src/main/device.ts`               | Device pairing (`ndev_` credential), its storage, the account from `/native/me`        |
 | `src/stdio/`                       | The stdio MCP entry (`main.mjs`) and its proxy                                         |
 | `assets/`                          | Tray icons: `trayTemplate*.png` (macOS, from `brand/assets/mark-mono.svg`), `tray.png` |
 | `src/preload/`                     | `app.cts` (app windows: bridge only), `home.cts` (home UI), `contribute.cts`           |

@@ -46,6 +46,16 @@ browser pages on the API origin, opened by the phone.
 - An app changing owner or being deleted revokes its grants.
 - Device credentials expire after 90 days.
 
+## Signed-in profile (#829)
+
+The phones and the desktop app show who they are signed in as, from `GET /native/me` with the device credential:
+avatar, name, `@login` (GitHub) or the sign-in provider, user id, email if any, platform roles (`user`, `creator`,
+`admin`, derived as for `/auth/me`), the creator's app count with a link to the console, and this device's label,
+pairing date and expiry. The endpoint reads only the credential owner's own row and stores nothing new. The phones
+keep the last answer on the device (Settings; avatar and name in the Store header or toolbar), the desktop app in
+memory (Account page; header and tray menu). **Sign out** revokes this device's credential (`DELETE /native/device`);
+**Delete account** opens the console's deletion flow (#653).
+
 ## On the phone (iOS)
 
 - **Pause all** stops new samples. **Pausing one app** stops tagging new samples for that app only; its grant,

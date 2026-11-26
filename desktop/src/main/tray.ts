@@ -1,4 +1,4 @@
-import type { MenuItemConstructorOptions } from 'electron';
+import type { MenuItemConstructorOptions, NativeImage } from 'electron';
 
 export interface TrayState {
   paused: boolean;
@@ -7,6 +7,8 @@ export interface TrayState {
   serverError: string | null;
   /** Contribute (#826), while this computer is connected: its status line and whether it is paused. */
   contribute: { status: string; paused: boolean } | null;
+  /** The signed-in account (#829): its name and a 16 px avatar, once loaded. */
+  account?: { name: string; icon: NativeImage | null } | null;
 }
 
 export interface TrayActions {
@@ -26,7 +28,7 @@ export function trayStatus({ paused, openApps, serverError }: TrayState): string
 
 /**
  * The menu-bar (tray) menu (#815): status, Open, Pause / Resume, then Contribute's status and
- * Pause / Resume while this computer is connected (#826), Quit.
+ * Pause / Resume while this computer is connected (#826), the signed-in account (#829), Quit.
  */
 export function trayMenu(state: TrayState, actions: TrayActions): MenuItemConstructorOptions[] {
   const { contribute } = state;
@@ -44,6 +46,16 @@ export function trayMenu(state: TrayState, actions: TrayActions): MenuItemConstr
           contribute.paused
             ? { label: 'Resume contributing', click: () => actions.setContributePaused(false) }
             : { label: 'Pause contributing', click: () => actions.setContributePaused(true) },
+        ] satisfies MenuItemConstructorOptions[])
+      : []),
+    ...(state.account
+      ? ([
+          { type: 'separator' },
+          {
+            label: state.account.name,
+            ...(state.account.icon ? { icon: state.account.icon } : {}),
+            click: actions.open,
+          },
         ] satisfies MenuItemConstructorOptions[])
       : []),
     { type: 'separator' },

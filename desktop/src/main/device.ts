@@ -84,3 +84,30 @@ export async function unpairDevice(token: string, api = API): Promise<void> {
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => {});
 }
+
+/** The signed-in account and this computer's connection, from `GET /native/me` (#829). */
+export interface Profile {
+  user: {
+    id: string;
+    name: string;
+    /** The GitHub login; null for Google, Apple and email accounts. */
+    login: string | null;
+    provider: string;
+    avatarUrl: string | null;
+    email: string | null;
+    roles: string[];
+    appCount: number;
+  };
+  device: { id: string; label: string; createdAt: number; expiresAt: number };
+}
+
+/** The account behind `token`, or null when the credential was refused (expired or revoked). */
+export async function fetchProfile(token: string, api = API): Promise<Profile | null> {
+  const response = await fetch(`${api}/native/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const { user, device } = (await response.json()) as Profile;
+  return { user, device };
+}

@@ -18,7 +18,7 @@ import type {
   RegistryApp,
 } from './desktop.js';
 
-type Page = 'home' | 'store' | 'contribute' | 'activity';
+type Page = 'home' | 'store' | 'contribute' | 'activity' | 'account';
 const PAGES: { id: Page; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'store', label: 'Store' },
@@ -73,6 +73,24 @@ export function App() {
           <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
             <TextSizeToggle />
+            {state && (
+              <button
+                type="button"
+                data-testid="profile-summary"
+                aria-current={page === 'account' ? 'page' : undefined}
+                onClick={() => setPage('account')}
+                className="flex items-center gap-2 rounded-control px-2 py-1 text-sm font-semibold cursor-pointer text-ink hover:bg-accent-soft"
+              >
+                {state.profile ? (
+                  <>
+                    <Avatar profile={state.profile} size="h-7 w-7" />
+                    <span className="max-w-40 truncate">{state.profile.user.name}</span>
+                  </>
+                ) : (
+                  'Sign in'
+                )}
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -83,6 +101,8 @@ export function App() {
           <Store />
         ) : page === 'contribute' ? (
           <Contribute state={state.contribute} />
+        ) : page === 'account' ? (
+          <Account state={state} />
         ) : (
           <Activity state={state} />
         )}
@@ -434,34 +454,7 @@ function Contribute({ state }: { state: DesktopContribute }) {
     return (
       <Section title="Contribute">
         {intro}
-        <div className={`${card} p-5`}>
-          <p className="mt-0 mb-4 text-sm">
-            Connect this computer to your FreeAppStore account. Your browser opens the device
-            connection page the phone apps use: sign in there and approve.
-          </p>
-          {state.pairError && (
-            <p
-              role="alert"
-              className="mt-0 mb-4 rounded-control bg-danger-soft text-danger p-3 text-sm"
-            >
-              {state.pairError}
-            </p>
-          )}
-          {state.pairing ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-sm text-muted">
-                Waiting for you to approve in your browser…
-              </span>
-              <button type="button" className={secondary} onClick={() => api.cancel()}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <button type="button" className={primary} onClick={() => api.connect()}>
-              Connect this computer
-            </button>
-          )}
-        </div>
+        <ConnectCard state={state} />
       </Section>
     );
   return (
@@ -866,6 +859,169 @@ function Activity({ state }: { state: DesktopState }) {
           </table>
         </div>
       )}
+    </Section>
+  );
+}
+
+/** Connect this computer with the phone apps' device pairing (#826); also the Account page's sign-in. */
+function ConnectCard({ state }: { state: DesktopContribute }) {
+  const api = desktop.contribute;
+  return (
+    <div className={`${card} p-5`}>
+      <p className="mt-0 mb-4 text-sm">
+        Connect this computer to your FreeAppStore account. Your browser opens the device connection
+        page the phone apps use: sign in there and approve.
+      </p>
+      {state.pairError && (
+        <p
+          role="alert"
+          className="mt-0 mb-4 rounded-control bg-danger-soft text-danger p-3 text-sm"
+        >
+          {state.pairError}
+        </p>
+      )}
+      {state.pairing ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-muted">Waiting for you to approve in your browser…</span>
+          <button type="button" className={secondary} onClick={() => api.cancel()}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button type="button" className={primary} onClick={() => api.connect()}>
+          Connect this computer
+        </button>
+      )}
+    </div>
+  );
+}
+
+type DesktopProfile = NonNullable<DesktopState['profile']>;
+
+/** The account's picture (a data: URL from the main process), its initial until it loads. */
+function Avatar({ profile, size }: { profile: DesktopProfile; size: string }) {
+  return profile.avatar ? (
+    <img src={profile.avatar} alt="" className={`${size} shrink-0 rounded-full object-cover`} />
+  ) : (
+    <span
+      aria-hidden="true"
+      className={`${size} shrink-0 inline-flex items-center justify-center rounded-full bg-accent-soft text-accent font-bold`}
+    >
+      {profile.user.name.slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+const PROVIDERS: Record<string, string> = {
+  github: 'GitHub',
+  google: 'Google',
+  apple: 'Apple',
+  email: 'Email',
+};
+const CONSOLE_URL = 'https://freeappstore.online/app/';
+const DELETE_ACCOUNT_URL = 'https://freeappstore.online/app/settings?delete-account=1';
+const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { dateStyle: 'long' });
+
+function Row({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2">
+      <dt className="text-sm font-semibold text-ink">{label}</dt>
+      <dd className="m-0 text-sm text-muted break-all">{value}</dd>
+    </div>
+  );
+}
+
+/** The signed-in account in full, and this computer's connection (#829). */
+function Account({ state }: { state: DesktopState }) {
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
+  const { profile } = state;
+  if (!state.contribute.connected)
+    return (
+      <Section title="Account">
+        <ConnectCard state={state.contribute} />
+      </Section>
+    );
+  if (!profile)
+    return (
+      <Section title="Account">
+        <p className="text-muted">Loading your account…</p>
+      </Section>
+    );
+  const { user, device } = profile;
+  const provider = PROVIDERS[user.provider] ?? user.provider;
+  const link = 'text-accent font-semibold hover:underline';
+  return (
+    <Section
+      title="Account"
+      aside={
+        <button type="button" className={secondary} onClick={() => setConfirmSignOut(true)}>
+          Sign out
+        </button>
+      }
+    >
+      <div className="mb-6 flex items-center gap-4">
+        <Avatar profile={profile} size="h-16 w-16" />
+        <div className="min-w-0">
+          <div data-testid="profile-name" className="text-2xl font-extrabold text-ink-strong">
+            {user.name}
+          </div>
+          <div className="text-muted">{user.login ? `@${user.login}` : provider}</div>
+        </div>
+      </div>
+      <div className="grid gap-6 md:grid-cols-2">
+        <section className={`${card} p-5`} aria-label="Profile">
+          <dl className="m-0 divide-y divide-line">
+            <Row label="Signed in with" value={provider} />
+            <Row label="User ID" value={<span className="font-code">{user.id}</span>} />
+            {user.email && <Row label="Email" value={user.email} />}
+            <Row label="Roles" value={user.roles.join(', ')} />
+            {user.roles.includes('creator') && (
+              <Row
+                label="Your apps"
+                value={
+                  <>
+                    {user.appCount}{' '}
+                    <a href={CONSOLE_URL} target="_blank" rel="noreferrer" className={link}>
+                      Open the console
+                    </a>
+                  </>
+                }
+              />
+            )}
+          </dl>
+        </section>
+        <section className={`${card} p-5`} aria-label="This computer">
+          <dl className="m-0 divide-y divide-line">
+            <Row label="This computer" value={device.label} />
+            <Row label="Connected" value={day(device.createdAt)} />
+            <Row label="Connection expires" value={day(device.expiresAt)} />
+          </dl>
+        </section>
+      </div>
+      <div className="mt-6 flex flex-wrap gap-6 text-sm">
+        <a href={CONSOLE_URL} target="_blank" rel="noreferrer" className={link}>
+          Manage account
+        </a>
+        <a
+          href={DELETE_ACCOUNT_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="text-danger font-semibold hover:underline"
+        >
+          Delete account
+        </a>
+      </div>
+      <ConfirmDialog
+        open={confirmSignOut}
+        title="Sign out of this computer?"
+        message="Stops contributing and removes this computer's connection to your account. You can connect it again any time."
+        confirmLabel="Sign out"
+        onCancel={() => setConfirmSignOut(false)}
+        onConfirm={() => {
+          setConfirmSignOut(false);
+          void desktop.contribute.disconnect();
+        }}
+      />
     </Section>
   );
 }

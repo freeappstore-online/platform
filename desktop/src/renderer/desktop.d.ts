@@ -1,5 +1,6 @@
 // The API the home window's preload (src/preload/home.cts) exposes.
 import type { ContributeState } from '../main/contribute.js';
+import type { Profile } from '../main/device.js';
 import type { HistoryItem } from '../main/history.js';
 import type { LogEntry, OpenApp } from '../main/hub.js';
 import type { ClientId, ClientStatus } from '../main/integrations.js';
@@ -27,6 +28,8 @@ export interface DesktopState {
   version: string;
   openApps: OpenApp[];
   log: LogEntry[];
+  /** The signed-in account (#829); `avatar` is a data: URL. Null until loaded or when not connected. */
+  profile: (Profile & { avatar: string | null }) | null;
 }
 
 /** An entry of https://freeappstore.online/registry.json. */

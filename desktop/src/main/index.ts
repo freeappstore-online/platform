@@ -10,6 +10,7 @@ import {
   type IpcMainInvokeEvent,
   ipcMain,
   Menu,
+  type NativeImage,
   nativeImage,
   nativeTheme,
   net,
@@ -22,7 +23,9 @@ import { Contribute, contributeStatus, type Engine, RelayWorker } from './contri
 import {
   API_ORIGIN,
   deleteDeviceToken,
+  fetchProfile,
   loadDeviceToken,
+  type Profile,
   pairDevice,
   saveDeviceToken,
   unpairDevice,
@@ -108,6 +111,7 @@ function stdioEntry(): StdioEntry {
 function state() {
   return {
     contribute: contributeState(),
+    profile,
     mcpUrl,
     setupCommand: setupCommand(),
     serverError,
@@ -293,6 +297,7 @@ function trayState() {
     contribute: deviceToken
       ? { status: contributeStatus(contribute.state), paused: settings.contributePaused }
       : null,
+    account: profile ? { name: profile.user.name, icon: avatarIcon } : null,
   };
 }
 
@@ -411,11 +416,7 @@ const contribute = new Contribute(
         modelDeleted = resolve;
         engineWindowContents().send('contribute:to-worker', { type: 'delete-model' });
       }),
-    signedOut: () => {
-      disconnectDevice(false);
-      pairError = 'This computer’s connection expired or was removed. Connect it again.';
-      pushState();
-    },
+    signedOut,
     changed: () => pushState(),
     probe: () => {
       const metrics = app.getAppMetrics();
@@ -549,10 +550,55 @@ async function connectDevice() {
     pairing = null;
     pushState();
   }
-  if (deviceToken) contribute.wake();
+  if (deviceToken) {
+    contribute.wake();
+    void refreshProfile();
+  }
+}
+
+function signedOut() {
+  disconnectDevice(false);
+  pairError = 'This computer’s connection expired or was removed. Connect it again.';
+  pushState();
+}
+
+// ── Profile (#829): the signed-in account, in memory only ───────
+
+/** `avatar` is a data: URL (the home window's CSP allows no remote images). */
+let profile: (Profile & { avatar: string | null }) | null = null;
+let avatarIcon: NativeImage | null = null;
+
+async function refreshProfile() {
+  const token = deviceToken;
+  if (!token) return;
+  try {
+    const next = await fetchProfile(token, `${apiOrigin}/v1`);
+    if (token !== deviceToken) return;
+    if (!next) return signedOut();
+    let avatar: string | null = null;
+    let icon: NativeImage | null = null;
+    if (next.user.avatarUrl?.startsWith('https://')) {
+      const response = await net.fetch(next.user.avatarUrl).catch(() => null);
+      const image = response?.ok
+        ? nativeImage.createFromBuffer(Buffer.from(await response.arrayBuffer()))
+        : null;
+      if (image && !image.isEmpty()) {
+        avatar = image.resize({ width: 96, height: 96 }).toDataURL();
+        icon = image.resize({ width: 16, height: 16 });
+      }
+    }
+    if (token !== deviceToken) return;
+    profile = { ...next, avatar };
+    avatarIcon = icon;
+    pushState();
+  } catch {
+    // Offline or the API is down: keep what is shown, the next start or connect tries again.
+  }
 }
 
 function disconnectDevice(revoke: boolean) {
+  profile = null;
+  avatarIcon = null;
   if (deviceToken && revoke) void unpairDevice(deviceToken, `${apiOrigin}/v1`);
   deleteDeviceToken(app.getPath('userData'));
   deviceToken = null;
@@ -650,7 +696,10 @@ if (!app.requestSingleInstanceLock()) {
           : `The local MCP server could not start (${code ?? 'unknown error'}).`;
     }
     createTray();
-    if (deviceToken) contribute.wake();
+    if (deviceToken) {
+      contribute.wake();
+      void refreshProfile();
+    }
     if (hidden) app.dock?.hide();
     else createHome();
     app.on('activate', showHome);

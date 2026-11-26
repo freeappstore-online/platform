@@ -70,4 +70,31 @@ describe('tray menu', () => {
     paused[6]!.click!(undefined as never, undefined, undefined as never);
     expect(actions.setContributePaused).toHaveBeenLastCalledWith(false);
   });
+
+  it('shows the signed-in account, which opens the window (#829)', () => {
+    const actions = {
+      open: vi.fn(),
+      setPaused: vi.fn(),
+      setContributePaused: vi.fn(),
+      quit: vi.fn(),
+    };
+    const menu = trayMenu(
+      {
+        paused: false,
+        openApps: 0,
+        serverError: null,
+        contribute: null,
+        account: { name: 'serge-ivo', icon: null },
+      },
+      actions,
+    );
+    expect(menu.map((item) => item.label ?? item.type).slice(-4)).toEqual([
+      'separator',
+      'serge-ivo',
+      'separator',
+      'Quit FreeAppStore',
+    ]);
+    menu.at(-3)!.click!(undefined as never, undefined, undefined as never);
+    expect(actions.open).toHaveBeenCalled();
+  });
 });
