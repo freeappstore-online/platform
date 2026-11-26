@@ -170,10 +170,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       args.includes('--allow-workflow-changes'),
     );
   } else if (command === 'lock-script') {
-    const { INSTALL_APP_DEPENDENCIES } = await import(
-      '../packages/cli/dist/lib/starter-dependencies.js'
-    );
-    process.stdout.write(INSTALL_APP_DEPENDENCIES);
+    // The mirror sync adopts new canonical manifests, so it must refresh the lock
+    // (stage commits it). The app deploy policy (frozen install) would fail on
+    // every dependency-range change (#744).
+    process.stdout.write('set -euo pipefail\npnpm install --no-frozen-lockfile\n');
   } else if (command === 'stage') {
     const [root] = args;
     const state = JSON.parse(await readFile(resolve(root, '.fas-template/state.json'), 'utf8'));

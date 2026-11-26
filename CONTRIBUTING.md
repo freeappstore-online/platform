@@ -49,7 +49,8 @@ no cross-repository write credential or consumer app update is involved.
 
 Mirrors track reviewed canonical hashes in `.fas-template/state.json`. The sync
 aborts on manual edits, path conflicts, downgrades or a concurrent main push,
-preserves extra infrastructure, and applies the deployment dependency-lock policy.
+preserves extra infrastructure, and refreshes `pnpm-lock.yaml` for the adopted manifests
+(`template-release.mjs lock-script`; app deploys keep the frozen-lock policy).
 It typechecks, tests and builds before committing directly to main, then explicitly
 dispatches CI and compliance for the resulting SHA (token pushes do not trigger
 push workflows). Re-run a failed mirror workflow without re-publishing npm.
@@ -101,7 +102,7 @@ human token into CI. Without it, ordinary file updates still run automatically.
 
 A maintainer with existing workflow-write access can adopt an accepted release
 locally: use the pinned source checkout, run `node scripts/template-release.mjs
-apply <mirror> <preset> <accepted-record> --allow-workflow-changes`, apply the
-standard lock policy, typecheck/test/build, stage through the release script and
+apply <mirror> <preset> <accepted-record> --allow-workflow-changes`, refresh the
+lock (`pnpm install --no-frozen-lockfile`), typecheck/test/build, stage through the release script and
 push directly to main. Verify CI/compliance for the resulting SHA, then rerun the
 mirror workflow to verify its accepted state. Record this as manual adoption.
