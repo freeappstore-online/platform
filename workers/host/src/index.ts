@@ -13,6 +13,7 @@ import {
   type Env,
   etagsMatch,
   isImmutablePath,
+  parseRange,
   policyFor,
   type Route,
   r2KeyFor,
@@ -134,7 +135,7 @@ export default {
       const response =
         url.pathname === INSTALL_SCRIPT_PATH
           ? installScriptResponse(req.method, policyFor(route))
-          : await serve(env.APPS, route, url, req.method, req.headers.get("if-none-match"), ctx);
+          : await serve(env.APPS, route, url, req, ctx);
       if (!isMonitoringFixture(route)) return response;
       // Keep canaries functional and crawlable so crawlers can observe noindex.
       const headers = new Headers(response.headers);
@@ -178,14 +179,9 @@ async function dispatchPlatform(req: Request, env: Env, slug: string, host: stri
   });
 }
 
-async function serve(
-  bucket: R2Bucket,
-  route: Route,
-  url: URL,
-  method: string,
-  ifNoneMatch: string | null,
-  _ctx: ExecutionContext,
-): Promise<Response> {
+async function serve(bucket: R2Bucket, route: Route, url: URL, req: Request, _ctx: ExecutionContext): Promise<Response> {
+  const method = req.method;
+  const ifNoneMatch = req.headers.get("if-none-match");
   if (method !== "GET" && method !== "HEAD") {
     return new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } });
   }
@@ -203,7 +199,13 @@ async function serve(
   if (isCrawl) return appCrawlResponse(bucket, route, url, method, app, ifNoneMatch, policy);
 
   const key = r2KeyFor(route, url.pathname);
-  let obj = await bucket.get(key);
+  const range = requestedRange(key, req);
+  let obj = await getRange(bucket, key, range);
+  if (typeof obj === "number") {
+    const headers = securityHeaders({ htmlCache: !isImmutablePath(url.pathname), ...policy });
+    headers.set("content-range", `bytes */${obj}`);
+    return new Response(null, { status: 416, headers });
+  }
   let servedKey = key;
 
   // SPA fallback: if the requested path has no file extension and missed,
@@ -239,7 +241,50 @@ async function serve(
   }
 
   const response = respond(obj, ct, method, shortCache, policy);
-  return rewrite ? rewrite(response) : response;
+  return rewrite ? rewrite(response) : ranged(response, obj, range);
+}
+
+/**
+ * Byte ranges (#739): Safari only plays <audio>/<video> from a server that
+ * answers them, and seeking needs them everywhere. Never for HTML, which may
+ * be rewritten.
+ */
+function requestedRange(key: string, req: Request): R2Range | null {
+  return contentType(key).startsWith("text/html") ? null : parseRange(req.headers.get("range"));
+}
+
+/** Advertise byte ranges, and turn a range read into its 206. */
+function ranged(response: Response, obj: R2ObjectBody, range: R2Range | null): Response {
+  response.headers.set("accept-ranges", "bytes");
+  // R2 reports a range on every read; only a ranged request gets a 206.
+  if (!range || !obj.range) return response;
+  const { offset, length } = resolvedRange(obj.range, obj.size);
+  response.headers.set("content-range", `bytes ${offset}-${offset + length - 1}/${obj.size}`);
+  return new Response(response.body, { status: 206, headers: response.headers });
+}
+
+/** The object (or the requested range of it), or its size when the range starts past the end. */
+async function getRange(bucket: R2Bucket, key: string, range: R2Range | null): Promise<R2ObjectBody | null | number> {
+  if (!range) return bucket.get(key);
+  try {
+    return await bucket.get(key, { range });
+  } catch (e) {
+    // R2 rejects a range that starts past the end of the object.
+    const head = await bucket.head(key);
+    if (!head) throw e;
+    return head.size;
+  }
+}
+
+/** The absolute offset and length R2 served for a range request. */
+function resolvedRange(range: R2Range, size: number): { offset: number; length: number } {
+  if ("suffix" in range && range.suffix !== undefined) {
+    const length = Math.min(range.suffix, size);
+    return { offset: size - length, length };
+  }
+  const offset = "offset" in range ? (range.offset ?? 0) : 0;
+  const length = "length" in range && range.length !== undefined ? Math.min(range.length, size - offset) : size - offset;
+  return { offset, length };
 }
 
 /**

@@ -7,6 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 
 const INDEX_HTML = "<!doctype html><title>Dict</title>";
 const APP_JS = "console.log('dict')";
+const AUDIO = "0123456789abcdefghij";
 
 const get = (url: string, init?: RequestInit) => exports.default.fetch(new Request(url, init));
 
@@ -33,11 +34,56 @@ beforeAll(async () => {
   await env.APPS.put("apps/seo/index.html", '<!doctype html><html><head><title>My custom title</title><meta name="robots" content="index,follow"><meta property="og:image" content="/my.png"></head><body><div id="root"></div><script>const x="<title>preserved</title>";</script></body></html>');
   await env.APPS.put("apps/dict/assets/app.js", APP_JS);
   await env.APPS.put("apps/dict/manifest.json", "{}");
+  await env.APPS.put("apps/dict/audio/word.mp3", AUDIO);
   await env.APPS.put("apps/agentcoder/index.html", "<!doctype html><title>AgentCoder</title>");
   await env.APPS.put("apps/console/index.html", "<!doctype html><title>Console</title>");
   await env.APPS.put("apps/console/assets/index.js", "console.log('console')");
   await env.APPS.put("apps/wasm/index.html", "<!doctype html><title>Wasm</title>");
   await env.APPS.put("apps/wasm/assets/app.js", "console.log('wasm')");
+});
+
+describe("media: types and byte ranges (#739)", () => {
+  const url = "https://dict.freeappstore.online/audio/word.mp3";
+
+  it("serves audio typed, and says ranges are supported", async () => {
+    const res = await get(url);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("audio/mpeg");
+    expect(res.headers.get("accept-ranges")).toBe("bytes");
+    expect(await res.text()).toBe(AUDIO);
+  });
+
+  it.each([
+    ["bytes=0-1", "01", "bytes 0-1/20"],
+    ["bytes=10-", "abcdefghij", "bytes 10-19/20"],
+    ["bytes=-3", "hij", "bytes 17-19/20"],
+    ["bytes=15-99", "fghij", "bytes 15-19/20"],
+  ])("answers Range %s with 206 and the slice", async (range, body, contentRange) => {
+    const res = await get(url, { headers: { range } });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-range")).toBe(contentRange);
+    expect(res.headers.get("content-type")).toBe("audio/mpeg");
+    expect(res.headers.get("content-security-policy")).toBeTruthy();
+    expect(await res.text()).toBe(body);
+  });
+
+  it("answers 416 for a range past the end", async () => {
+    const res = await get(url, { headers: { range: "bytes=50-60" } });
+    expect(res.status).toBe(416);
+    expect(res.headers.get("content-range")).toBe("bytes */20");
+  });
+
+  it("serves the whole object for a multi-range request", async () => {
+    const res = await get(url, { headers: { range: "bytes=0-1,4-5" } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(AUDIO);
+  });
+
+  it("ignores Range on HTML", async () => {
+    const res = await get("https://dict.freeappstore.online/", { headers: { range: "bytes=0-3" } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(INDEX_HTML);
+  });
 });
 
 describe("serving an app: D1 routes row → R2 object", () => {

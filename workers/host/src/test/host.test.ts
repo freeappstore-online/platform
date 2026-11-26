@@ -9,6 +9,7 @@ import {
   PERMISSIONS_POLICY_BLOCKED,
   PERMISSIONS_POLICY_EMBED,
   PERMISSIONS_POLICY_SELF,
+  parseRange,
   policyFor,
   type Route,
   r2KeyFor,
@@ -141,6 +142,24 @@ describe("r2KeyFor", () => {
   });
 });
 
+describe("parseRange (#739)", () => {
+  it.each([
+    ["bytes=0-10", { offset: 0, length: 11 }],
+    ["bytes=100-", { offset: 100 }],
+    ["bytes=-500", { suffix: 500 }],
+    ["BYTES=5-5", { offset: 5, length: 1 }],
+  ])("%s → %o", (header, expected) => {
+    expect(parseRange(header)).toEqual(expected);
+  });
+
+  it.each([null, "", "bytes=", "bytes=-", "bytes=10-5", "bytes=-0", "bytes=0-1,5-6", "items=0-1", "bytes=a-b"])(
+    "serves the whole object for %o",
+    (header) => {
+      expect(parseRange(header)).toBeNull();
+    },
+  );
+});
+
 describe("contentType", () => {
   it.each([
     ["/index.html", "text/html; charset=utf-8"],
@@ -154,6 +173,18 @@ describe("contentType", () => {
     ["/site.webmanifest", "application/manifest+json"],
     ["/binary.bin", "application/octet-stream"],
     ["/no-extension", "application/octet-stream"],
+    // Media and documents an <audio>/<video>/<embed> needs typed (#739).
+    ["/audio/v2/6b63.mp3", "audio/mpeg"],
+    ["/clip.m4a", "audio/mp4"],
+    ["/beep.wav", "audio/wav"],
+    ["/song.ogg", "audio/ogg"],
+    ["/voice.opus", "audio/opus"],
+    ["/movie.mp4", "video/mp4"],
+    ["/movie.webm", "video/webm"],
+    ["/doc.pdf", "application/pdf"],
+    ["/font.ttf", "font/ttf"],
+    ["/font.otf", "font/otf"],
+    ["/photo.avif", "image/avif"],
   ])("%s → %s", (path, expected) => {
     expect(contentType(path)).toBe(expected);
   });

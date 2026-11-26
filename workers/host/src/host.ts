@@ -387,9 +387,58 @@ export function contentType(path: string): string {
       return "application/manifest+json";
     case "map":
       return "application/json; charset=utf-8";
+    case "ttf":
+      return "font/ttf";
+    case "otf":
+      return "font/otf";
+    case "avif":
+      return "image/avif";
+    case "mp3":
+      return "audio/mpeg";
+    case "m4a":
+      return "audio/mp4";
+    case "aac":
+      return "audio/aac";
+    case "wav":
+      return "audio/wav";
+    case "ogg":
+    case "oga":
+      return "audio/ogg";
+    case "opus":
+      return "audio/opus";
+    case "flac":
+      return "audio/flac";
+    case "mp4":
+    case "m4v":
+      return "video/mp4";
+    case "webm":
+      return "video/webm";
+    case "ogv":
+      return "video/ogg";
+    case "pdf":
+      return "application/pdf";
+    case "csv":
+      return "text/csv; charset=utf-8";
+    case "md":
+      return "text/markdown; charset=utf-8";
     default:
       return "application/octet-stream";
   }
+}
+
+/**
+ * One byte range from a `Range` header, in R2's shape: `bytes=a-b`, `bytes=a-`
+ * or `bytes=-n`. Anything else (several ranges, other units, garbage) is null,
+ * and the caller serves the whole object, which RFC 9110 allows.
+ */
+export function parseRange(header: string | null): R2Range | null {
+  const m = header?.trim().match(/^bytes=(\d*)-(\d*)$/i);
+  if (!m || (!m[1] && !m[2])) return null;
+  if (!m[1]) return Number(m[2]) > 0 ? { suffix: Number(m[2]) } : null;
+  const offset = Number(m[1]);
+  if (!m[2]) return { offset };
+  const end = Number(m[2]);
+  return end >= offset ? { offset, length: end - offset + 1 } : null;
 }
 
 /** Authored crawl files are mutable public assets, with normal conditional/HEAD semantics. */
