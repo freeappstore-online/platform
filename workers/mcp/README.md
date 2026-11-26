@@ -47,11 +47,26 @@ Streamable HTTP transport at `https://mcp.freeappstore.online/mcp`
 | `agent_status` | Own session | Poll an `agent_build` session for progress and live URL |
 | `agent_activity` | Own session | Read your conversation with the build agent for a session |
 | `mcp_audit_log` | FAS token | Your recent MCP audit events (writes, dry-runs, denials), newest first |
+| `app_guide` | None | An app's `mcp.json`: instructions + the collections it exposes, with JSON Schemas |
+| `app_data_list` | FAS token | Your documents in a collection the app's `mcp.json` declares |
+| `app_data_get` | FAS token | One of your documents in a declared collection |
+| `app_data_save` | FAS token | Create (no id) or shallow-merge update (id) one of your documents; the result is validated against the declared schema first |
+| `app_data_delete` | FAS token + `destructive` scope | Delete one of your documents in a declared collection |
 
-`MCP_READ_ONLY=1` refuses every non-read tool server-wide. `create_app`, `update_files` and
-`agent_build` record redacted audit events per user in `OAUTH_KV` (90-day TTL, `src/safety.ts`),
+`MCP_READ_ONLY=1` refuses every non-read tool server-wide. `create_app`, `update_files`,
+`agent_build`, `app_data_save` and `app_data_delete` record redacted audit events per user in `OAUTH_KV` (90-day TTL, `src/safety.ts`),
 read back with `mcp_audit_log`. The write tools and authenticated GitHub reads need the
 `GITHUB_TOKEN` secret.
+
+### App data: `mcp.json` (#734)
+
+An app opts in by shipping `web/public/mcp.json` (`https://<id>.freeappstore.online/mcp.json`):
+`{ "version": 1, "instructions": "…", "collections": { "<name>": { "description": "…", "schema": { …JSON Schema… } } } }`.
+`src/app-data.ts` fetches it (64 KB cap), checks its shape, and validates documents with
+`@cfworker/json-schema` (draft 2020-12); an update validates the merged document. The `app_data_*`
+tools then call the backend collections API (`/v1/apps/:id/db/:collection`) with the user's
+console-audience session, so its owner-only rules apply. Undeclared collections are refused.
+Format and opt-in steps: `docs/mcp.md`.
 
 ### Building apps: the Shell comes first
 

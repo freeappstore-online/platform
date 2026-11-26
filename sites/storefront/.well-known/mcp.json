@@ -54,6 +54,26 @@
         {
           "name": "sdk_reference",
           "description": "Quick @freeappstore/sdk reference"
+        },
+        {
+          "name": "app_guide",
+          "description": "Read an app's mcp.json: what it is and the collections of your data it exposes, with schemas"
+        },
+        {
+          "name": "app_data_list",
+          "description": "List your documents in an app's declared collection"
+        },
+        {
+          "name": "app_data_get",
+          "description": "Read one of your documents in an app"
+        },
+        {
+          "name": "app_data_save",
+          "description": "Create or update one of your documents in an app, validated against its schema"
+        },
+        {
+          "name": "app_data_delete",
+          "description": "Delete one of your documents in an app"
         }
       ]
     }

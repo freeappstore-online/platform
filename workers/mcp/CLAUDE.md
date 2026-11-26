@@ -31,6 +31,10 @@ Remote MCP server for AI agents to interact with the FreeAppStore platform.
 Note: `create_app`/`update_files` need no AI key (the client model is the author);
 `agent_build` needs a funded key in your FreeAppStore vault for the chosen provider.
 
+**App data — the user's own documents in apps that ship `mcp.json` (#734, `src/app-data.ts`):**
+`app_guide`, `app_data_list`, `app_data_get`, `app_data_save` (schema-validated), `app_data_delete` (destructive scope).
+Only collections declared in the app's `mcp.json` are reachable; calls go through the backend collections API as the user.
+
 **Info / inspect:**
 
 | Tool | Auth | Description |

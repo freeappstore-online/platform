@@ -29,6 +29,9 @@ try {
   await client.connect(new StreamableHTTPClientTransport(url));
   const tools = await client.listTools();
   assert(tools.tools.some((tool) => tool.name === 'sdk_reference'));
+  for (const name of ['app_guide', 'app_data_list', 'app_data_get', 'app_data_save', 'app_data_delete']) {
+    assert(tools.tools.some((tool) => tool.name === name), `${name}: not registered`);
+  }
   // AI directories (Claude Connectors, ChatGPT Apps) reject tools without a title
   // and explicit read-only / destructive / open-world hints (#539).
   for (const tool of tools.tools) {

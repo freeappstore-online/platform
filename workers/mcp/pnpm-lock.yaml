@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@cfworker/json-schema':
+        specifier: ^4.1.6
+        version: 4.1.6
       '@cloudflare/workers-oauth-provider':
         specifier: ^0.8.1
         version: 0.8.3
@@ -16,13 +19,13 @@ importers:
         version: 2.4.0
       '@modelcontextprotocol/sdk':
         specifier: 1.32.2
-        version: 1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7)
+        version: 1.32.2(@cfworker/json-schema@4.1.6)(zod@4.6.7)
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0
       agents:
         specifier: 0.33.0
-        version: 0.33.0(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7))(@modelcontextprotocol/server@2.4.0)(ai@6.0.282(zod@4.6.7))(rolldown@1.2.14)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.7)
+        version: 0.33.0(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.6)(zod@4.6.7))(@modelcontextprotocol/server@2.4.0)(ai@6.0.282(zod@4.6.7))(rolldown@1.2.14)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.7)
       ai:
         specifier: ^6.0.0
         version: 6.0.282(zod@4.6.7)
@@ -233,8 +236,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@cfworker/json-schema@4.1.1':
-    resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
+  '@cfworker/json-schema@4.1.6':
+    resolution: {integrity: sha512-YzVGTHXf4bzlyAL5KAvHYCdNbbt6zM5cYkAgxqxQPDQM6aZ4ShIIN5yJ+6q7YeonnevxT8k/LmD2tJi/jOiKkg==}
 
   '@cloudflare/kv-asset-handler@0.5.0':
     resolution: {integrity: sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg==}
@@ -1852,7 +1855,7 @@ snapshots:
   '@biomejs/cli-win32-x64@2.6.9':
     optional: true
 
-  '@cfworker/json-schema@4.1.1': {}
+  '@cfworker/json-schema@4.1.6': {}
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
@@ -2111,7 +2114,7 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
-  '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7)':
+  '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.6)(zod@4.6.7)':
     dependencies:
       '@hono/node-server': 2.1.6(hono@4.13.16)
       ajv: 8.20.0
@@ -2131,7 +2134,7 @@ snapshots:
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     optionalDependencies:
-      '@cfworker/json-schema': 4.1.1
+      '@cfworker/json-schema': 4.1.6
     transitivePeerDependencies:
       - supports-color
 
@@ -2280,10 +2283,10 @@ snapshots:
       mime-types: 3.0.2
       negotiator: 1.1.0
 
-  agents@0.33.0(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7))(@modelcontextprotocol/server@2.4.0)(ai@6.0.282(zod@4.6.7))(rolldown@1.2.14)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.7):
+  agents@0.33.0(@babel/runtime@7.29.7)(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.6)(zod@4.6.7))(@modelcontextprotocol/server@2.4.0)(ai@6.0.282(zod@4.6.7))(rolldown@1.2.14)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(yaml@2.9.1))(zod@4.6.7):
     dependencies:
       '@babel/plugin-proposal-decorators': 8.0.2
-      '@cfworker/json-schema': 4.1.1
+      '@cfworker/json-schema': 4.1.6
       '@modelcontextprotocol/client': 2.4.0
       '@opentelemetry/api': 1.9.1
       '@rolldown/plugin-babel': 0.2.4(@babel/runtime@7.29.7)(rolldown@1.2.14)(vite@8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(yaml@2.9.1))
@@ -2296,7 +2299,7 @@ snapshots:
       yaml: 2.9.1
       zod: 4.6.7
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.1)(zod@4.6.7)
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.6)(zod@4.6.7)
       '@modelcontextprotocol/server': 2.4.0
       ai: 6.0.282(zod@4.6.7)
       vite: 8.3.4(@types/node@25.9.9)(esbuild@0.28.2)(yaml@2.9.1)

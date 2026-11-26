@@ -1083,6 +1083,37 @@ The MCP supports both "I write the code" and "the platform writes the code":
 | `platform_guide` | `()` | Returns this guide. |
 | `sdk_reference` | `(feature?)` | SDK docs, optionally scoped to one feature (`auth`, `kv`, `rooms`, …). |
 
+**App data (auth required; only apps that ship `mcp.json`):**
+
+| Tool | Signature | What it does |
+|---|---|---|
+| `app_guide` | `(app_id)` | The app's instructions and collection schemas from its `mcp.json`. |
+| `app_data_list` | `(app_id, collection, limit?, offset?)` | Your documents in a declared collection. |
+| `app_data_get` | `(app_id, collection, id)` | One of your documents. |
+| `app_data_save` | `(app_id, collection, document, id?)` | Create (no id) or shallow-merge update (id). Validated against the schema; errors come back to fix and retry. |
+| `app_data_delete` | `(app_id, collection, id)` | Delete one of your documents (needs the `destructive` scope). |
+
+### Let AI work on users' data in your app (`mcp.json`)
+
+Ship `web/public/mcp.json` (served at `https://<id>.freeappstore.online/mcp.json`, max 64 KB) and an AI connected to the MCP can read and write the signed-in user's own documents in the collections it declares:
+
+```json
+{
+  "version": 1,
+  "instructions": "Markdown for the AI: what the app is, how its data is used, how to make good content.",
+  "collections": {
+    "decks": {
+      "description": "One document per presentation.",
+      "schema": { "type": "object", "required": ["title", "slides"], "properties": { "title": { "type": "string" } } }
+    }
+  }
+}
+```
+
+- `schema` is JSON Schema (draft 2020-12); every write is validated against it.
+- Each declared collection is a normal `fas.collections` collection: when the user is signed in, the app must load and save that data through `fas.collections.collection('decks')` (not only localStorage), or what the AI writes never shows up.
+- Undeclared collections stay unreachable over MCP. No `mcp.json`, no data access.
+
 ### Examples (one prompt per mode)
 
 ```

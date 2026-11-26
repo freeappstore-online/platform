@@ -71,6 +71,41 @@ Every tool runs over the OAuth connection (see [Authentication](#authentication)
 | `sdk_reference` | Any | SDK reference. Start with `shell` (the standard app frame), then `components`; also auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui |
 | `mcp_audit_log` | Your account | Your recent MCP audit events (writes, dry-runs, denials), newest first |
 
+### App data — your documents inside an app (your account)
+
+Apps that ship an `mcp.json` (see [Expose an app's data](#expose-an-apps-data-mcpjson)) let the AI work on your own data in them, e.g. "make me a 10-slide deck about X in Slides".
+
+| Tool | Access | Description |
+|------|------|-------------|
+| `app_guide` | Any | The app's `mcp.json`: instructions plus each collection's description and JSON Schema |
+| `app_data_list` | Your account | Your documents in one declared collection (`limit` ≤ 100, `offset`) |
+| `app_data_get` | Your account | One of your documents |
+| `app_data_save` | Your account | Create (no `id`) or update (`id`, shallow merge) a document; the result is validated against the schema first and schema errors come back so the AI can fix and retry |
+| `app_data_delete` | Your account, `destructive` scope | Delete one of your documents |
+
+Only collections declared in `mcp.json` are reachable, and only your own documents (the collections API's owner rules, called with your session).
+
+## Expose an app's data (`mcp.json`)
+
+An app opts in by shipping `web/public/mcp.json`, served at `https://<id>.freeappstore.online/mcp.json` (max 64 KB):
+
+```json
+{
+  "version": 1,
+  "instructions": "Markdown for the AI: what the app is, how its data is used, how to make good content.",
+  "collections": {
+    "decks": {
+      "description": "One document per presentation.",
+      "schema": { "type": "object", "required": ["title", "slides"], "properties": { "title": { "type": "string" } } }
+    }
+  }
+}
+```
+
+- `schema` is JSON Schema (draft 2020-12). Documents are validated against it before every write. Response fields (`id`, `_owner`, `_createdAt`, `_updatedAt`) are not part of the document.
+- Each collection is an ordinary `fas.collections` collection. The app must read and write it when the user is signed in (`fas.collections.collection('decks')`), so what the AI saves shows up in the app.
+- Apps without `mcp.json` expose nothing.
+
 ## Workflow Recipes
 
 ### Create and deploy a new app
@@ -112,6 +147,16 @@ Expected tool flow:
 2. agent_status     → poll until live URL is ready
 ```
 
+### Work on your data inside an app
+
+```
+"Make me a 10-slide deck about the solar system in Slides."
+Expected tool flow:
+1. app_guide        → read slides' instructions and the decks schema
+2. app_data_save    → create the deck (fix and retry on schema errors)
+3. app_data_list    → confirm it is there; it shows in the app when signed in
+```
+
 ### Debug a failing deploy
 
 ```
@@ -140,6 +185,9 @@ Expected tool flow:
 - Create new apps (provision + scaffold + deploy)
 - Update files in apps you own (auto-redeploys)
 
+**App data** (your account, apps that ship `mcp.json`):
+- Read, create, update and delete your own documents in declared collections
+
 **Agent** (your account + usable AI provider connection):
 - Trigger VibeCode agent builds
 - Poll agent build status
@@ -151,7 +199,7 @@ Expected tool flow:
 - Billing or subscription changes
 - User account management
 - Platform compliance rule changes
-- Direct database (D1/KV) access
+- Direct database (D1/KV) access, or app data an app's `mcp.json` does not declare
 
 ## Authentication
 
@@ -162,9 +210,9 @@ Write tools (`create_app`, `update_files`) additionally verify app ownership via
 ## Security
 
 - **Scoped tokens**: write tools verify ownership per-app, not blanket write access.
-- **Read-only mode**: server-wide only. When the Worker runs with `MCP_READ_ONLY=1`, every non-read tool (`create_app`, `update_files`, `agent_build`) is refused for all users. There is no per-session read-only switch; to keep a client to reads, grant it only the `read` scope.
+- **Read-only mode**: server-wide only. When the Worker runs with `MCP_READ_ONLY=1`, every non-read tool (`create_app`, `update_files`, `agent_build`, `app_data_save`, `app_data_delete`) is refused for all users. There is no per-session read-only switch; to keep a client to reads, grant it only the `read` scope.
 - **Dry-run**: pass `dry_run: true` to `create_app` or `update_files` to validate inputs, check ownership, and preview what would happen — without executing.
-- **Audit logging**: `create_app`, `update_files` and `agent_build` record each success, dry-run, error and denial (including scope and read-only denials) as a redacted event in KV, keyed to your account and kept for 90 days. Read your own events with the `mcp_audit_log` tool.
+- **Audit logging**: `create_app`, `update_files`, `agent_build`, `app_data_save` and `app_data_delete` record each success, dry-run, error and denial (including scope and read-only denials) as a redacted event in KV, keyed to your account and kept for 90 days. Read your own events with the `mcp_audit_log` tool.
 - **Session isolation**: `agent_build` sessions are namespaced per user; you cannot read or target another user's session.
 - **No generic shell/API proxy**: every tool has a specific, bounded purpose.
 - **OAuth rate limiting**: token endpoint returns 429 on abuse.
