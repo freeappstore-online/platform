@@ -35,7 +35,7 @@ export interface ProxyUsageStore {
  * D1-backed implementation of ProxyUsageStore. Pulled into its own factory
  * so unit tests can pass a fake without spinning up D1.
  */
-export function d1UsageStore(db: D1Database): ProxyUsageStore {
+export function d1UsageStore(db: D1Database): Required<ProxyUsageStore> {
   return {
     async read(appId, day) {
       const row = await db

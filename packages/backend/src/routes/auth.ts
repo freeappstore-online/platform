@@ -624,8 +624,13 @@ authRoutes.post('/auth/email/start', async (c) => {
   if (nowMs - lastSend < EMAIL_SEND_COOLDOWN_MS) {
     return c.json({ ok: true });
   }
+  // Claimed before the first await, so parallel starts in this isolate can't
+  // all pass the check (#759). Released again if nothing is sent.
+  emailSendMap.set(email, nowMs);
   // Keyed by hash, so no address or IP is stored. Silent on refusal, like the
-  // cooldown. Checked here, counted only after a successful send (below).
+  // cooldown. Each cap is reserved atomically before the send (#759), so
+  // parallel starts on other isolates can't all pass a read, and refunded if
+  // the send fails (#570).
   const usage = d1UsageStore(c.env.DB);
   const ip = c.req.header('cf-connecting-ip') ?? 'unknown';
   const day = dayKey(nowMs);
@@ -636,8 +641,17 @@ authRoutes.post('/auth/email/start', async (c) => {
     [`magic:${emailHash}`, MAGIC_LINKS_PER_ADDRESS_PER_DAY],
     [`magicip:${ipHash}`, MAGIC_LINKS_PER_IP_PER_DAY],
   ] as const;
+  const reserved: string[] = [];
+  const release = async () => {
+    if (emailSendMap.get(email) === nowMs) emailSendMap.delete(email);
+    for (const key of reserved) await usage.bump(key, day, -1);
+  };
   for (const [key, limit] of caps) {
-    if ((await usage.read(key, day)) >= limit) return c.json({ ok: true });
+    if (!(await usage.bumpIfBelow(key, day, 1, limit))) {
+      await release();
+      return c.json({ ok: true });
+    }
+    reserved.push(key);
   }
 
   let cookie: string | undefined;
@@ -685,12 +699,10 @@ This link expires in 15 minutes. If you didn't request it, ignore this email.`,
     });
   } catch (err) {
     console.error('Magic-link email send failed', err);
+    // A failed send must be immediately retryable, and not count.
+    await release();
     return c.text('Email delivery temporarily unavailable. Please try again.', 502);
   }
-  // Only throttle after Email Service accepted the message. A failed send must
-  // be immediately retryable rather than returning a misleading success.
-  emailSendMap.set(email, nowMs);
-  for (const [key] of caps) await usage.bump(key, day, 1);
 
   // 200 regardless of whether the email exists — don't leak account presence.
   if (cookie) c.header('Set-Cookie', cookie);

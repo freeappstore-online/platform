@@ -118,6 +118,49 @@ describe('POST /v1/auth/email/start daily caps (#472)', () => {
     expect(emailSend).toHaveBeenCalledTimes(50);
   });
 
+  it('sends one link for parallel starts to one address (#759)', async () => {
+    const counts = new Map<string, number>();
+    const env = makeEnv({}, countingDB(counts));
+    let finish: () => void = () => {};
+    emailSend.mockImplementation(
+      () => new Promise((resolve) => (finish = () => resolve({ messageId: 'm' }))),
+    );
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 8, 12, 0, 0)));
+    const body = JSON.stringify({
+      email: 'p@example.com',
+      appId: 'demo',
+      returnTo: VALID_RETURN_TO,
+    });
+    const pending = Array.from({ length: 20 }, () =>
+      app.request(
+        '/v1/auth/email/start',
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body },
+        env,
+      ),
+    );
+    await vi.waitFor(() => expect(emailSend).toHaveBeenCalled());
+    finish();
+    const statuses = (await Promise.all(pending)).map((r) => r.status);
+    vi.useRealTimers();
+    expect(statuses.every((s) => s === 200)).toBe(true);
+    expect(emailSend).toHaveBeenCalledTimes(1);
+  });
+
+  it('reserves every cap before the send goes out (#759)', async () => {
+    const counts = new Map<string, number>();
+    const env = makeEnv({}, countingDB(counts));
+    const seen: number[] = [];
+    emailSend.mockImplementation(async () => {
+      seen.push(...counts.values());
+      return { messageId: 'm' };
+    });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    expect((await start(env, '9.9.9.9', 200, 'r@example.com')).status).toBe(200);
+    vi.useRealTimers();
+    expect(seen).toEqual([1, 1, 1]);
+  });
+
   it('does not count a failed send against the caps (#570)', async () => {
     const counts = new Map<string, number>();
     const env = makeEnv({}, countingDB(counts));
