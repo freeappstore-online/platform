@@ -474,6 +474,10 @@ keysRoutes.put('/keys/:provider', async (c) => {
   if (!body?.value || typeof body.value !== 'string' || body.value.length > 500) {
     return c.json({ ok: false, error: 'Invalid key value (max 500 chars).' }, 400);
   }
+  // A string of at most 80 chars, as the internal route stores (#771).
+  if (body.label != null && (typeof body.label !== 'string' || body.label.length > 80)) {
+    return c.json({ ok: false, error: 'Invalid label (max 80 chars).' }, 400);
+  }
 
   // Validate provider exists
   const prov = await c.env.DB.prepare('SELECT id, key_prefix FROM key_providers WHERE id = ?')

@@ -269,6 +269,42 @@ describe.skipIf(!hasSqlite)('FAS native companion', () => {
     await authorize(p);
   });
 
+  it('does not report a pairing that expired before the approval write as connected (#771)', async () => {
+    const p = await pairing();
+    const callback = await request(
+      `/native/auth/callback?code=${await signIn(p)}`,
+      'GET',
+      undefined,
+      undefined,
+      { Cookie: p.cookie },
+    );
+    const nonce = (await callback.text()).match(/name="nonce" value="([a-f0-9]+)"/)![1]!;
+    const d1 = env.DB;
+    const expiring = {
+      prepare(sql: string) {
+        if (sql.startsWith('UPDATE native_pairings SET approved'))
+          db.exec('UPDATE native_pairings SET expires_at = 0');
+        return d1.prepare(sql);
+      },
+    } as D1Database;
+    const approve = await app.request(
+      `${API}/v1/native/auth/approve`,
+      {
+        method: 'POST',
+        headers: {
+          Cookie: p.cookie,
+          Origin: API,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: `nonce=${nonce}`,
+      },
+      { ...env, DB: expiring },
+    );
+    expect(approve.status).toBe(409);
+    expect(await approve.text()).not.toContain('Phone connected');
+    expect(rows('SELECT approved FROM native_pairings')).toEqual([{ approved: 0 }]);
+  });
+
   it('a deleted account cannot finish pairing', async () => {
     const p = await pairing();
     const code = await signIn(p, 'gh:9');

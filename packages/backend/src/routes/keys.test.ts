@@ -167,6 +167,24 @@ describe('keys routes', () => {
     },
   );
 
+  it.each([{ label: 5 }, { label: 'x'.repeat(81) }])(
+    'PUT /v1/keys/:provider returns 400 for a bad label (%o) (#771)',
+    async (extra) => {
+      const res = await app.request(
+        '/v1/keys/openai',
+        {
+          method: 'PUT',
+          headers: { Authorization: await authHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: 'sk-test', ...extra }),
+        },
+        env(fakeDB({ user, provider: { id: 'openai', key_prefix: 'sk-' } }), {
+          APP_SECRET_KEK: 'b'.repeat(64),
+        }),
+      );
+      expect(res.status).toBe(400);
+    },
+  );
+
   it('PUT /v1/keys/:provider returns 400 for unknown provider', async () => {
     const res = await app.request(
       '/v1/keys/unknown',

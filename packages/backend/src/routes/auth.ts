@@ -594,7 +594,14 @@ authRoutes.post('/auth/email/start', async (c) => {
   if (!body) return c.text('invalid JSON body', 400);
   const { email: rawEmail, appId, returnTo, responseMode, clientState } = body;
 
-  if (!rawEmail || !appId || !returnTo) {
+  if (
+    !rawEmail ||
+    !appId ||
+    !returnTo ||
+    typeof rawEmail !== 'string' ||
+    typeof appId !== 'string' ||
+    typeof returnTo !== 'string'
+  ) {
     return c.text('missing email, appId, or returnTo', 400);
   }
   if (responseMode !== undefined) {

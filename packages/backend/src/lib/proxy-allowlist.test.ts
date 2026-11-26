@@ -106,6 +106,18 @@ describe('validateRule', () => {
   it('rejects junk methods', () => {
     expect(() => validateRule({ ...base, methods: ['GET ', 'POST'] })).toThrow(/HTTP method/);
   });
+
+  it('rejects non-string methods and over-long pattern / injectName with a 400, not a throw (#771)', () => {
+    expect(() => validateRule({ ...base, methods: [1] as unknown as string[] })).toThrow(
+      AllowlistError,
+    );
+    expect(() =>
+      validateRule({ ...base, pattern: `https://api.example.com/${'a'.repeat(2048)}` }),
+    ).toThrow(/pattern is too long/);
+    expect(() => validateRule({ ...base, injectName: 'x'.repeat(129) })).toThrow(
+      /injectName is too long/,
+    );
+  });
 });
 
 describe('pickRule', () => {

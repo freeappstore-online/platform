@@ -75,6 +75,9 @@ export class AllowlistError extends Error {
   }
 }
 
+const MAX_PATTERN_LEN = 2048;
+const MAX_INJECT_NAME_LEN = 128;
+
 /**
  * Validate a rule about to be inserted. Throws AllowlistError on rejection.
  * Caller is responsible for the auth + ownership checks.
@@ -90,6 +93,12 @@ export function validateRule(input: {
 }): AllowlistRule {
   const { pattern, injectKind, injectName, secretName, methods } = input;
 
+  if (pattern.length > MAX_PATTERN_LEN) {
+    throw new AllowlistError(`pattern is too long (max ${MAX_PATTERN_LEN} chars)`);
+  }
+  if (injectName.length > MAX_INJECT_NAME_LEN) {
+    throw new AllowlistError(`injectName is too long (max ${MAX_INJECT_NAME_LEN} chars)`);
+  }
   if (!pattern.startsWith('https://')) {
     throw new AllowlistError('pattern must start with https://');
   }
@@ -189,10 +198,10 @@ function validateMethods(methods: string[]): string[] {
   if (!Array.isArray(methods) || methods.length === 0) {
     throw new AllowlistError('methods must be a non-empty array');
   }
-  const upperMethods = methods.map((m) => m.toUpperCase());
+  const upperMethods = methods.map((m) => String(m).toUpperCase());
   for (const m of upperMethods) {
     if (!/^[A-Z]+$/.test(m)) {
-      throw new AllowlistError(`invalid HTTP method: ${m}`);
+      throw new AllowlistError(`invalid HTTP method: ${m.slice(0, 20)}`);
     }
   }
   return upperMethods;

@@ -28,6 +28,8 @@ const owner =
 const MAX_ROOMS_PER_USER = 100;
 /** Distinct collection names in one room; names are caller-chosen (#569). */
 const MAX_COLLECTIONS_PER_ROOM = 50;
+/** Members of one room (#771). */
+const MAX_MEMBERS_PER_ROOM = 100;
 
 dataRoomRoutes.post(base, async (c) => {
   const user = await requireAppUser(c, c.req.param('appId'));
@@ -47,11 +49,22 @@ dataRoomRoutes.post(base, async (c) => {
 
 dataRoomRoutes.put(`${room}/members/:userId`, async (c) => {
   const { appId, roomId, userId } = c.req.param();
+  const uid = c.get('uid');
+  // Only real accounts, and a capped number of them (#771, as #469/#568 for app_roles).
   const result = await c.env.DB.prepare(`INSERT INTO data_room_members (app_id, room_id, user_id)
-    SELECT ?, ?, ? WHERE ${owner} ON CONFLICT DO NOTHING`)
-    .bind(appId, roomId, userId, appId, roomId, c.get('uid'))
+    SELECT ?, ?, ? WHERE ${owner} AND EXISTS (SELECT 1 FROM users WHERE id = ?)
+    AND (SELECT COUNT(*) FROM data_room_members WHERE app_id = ? AND room_id = ?) < ?
+    ON CONFLICT DO NOTHING`)
+    .bind(appId, roomId, userId, appId, roomId, uid, userId, appId, roomId, MAX_MEMBERS_PER_ROOM)
     .run();
-  return result.meta.changes ? c.body(null, 204) : c.text('not found or already a member', 404);
+  if (result.meta.changes) return c.body(null, 204);
+  const full = await c.env.DB.prepare(`SELECT 1 WHERE ${owner}
+    AND (SELECT COUNT(*) FROM data_room_members WHERE app_id = ? AND room_id = ?) >= ?`)
+    .bind(appId, roomId, uid, appId, roomId, MAX_MEMBERS_PER_ROOM)
+    .first();
+  return full
+    ? c.text('member limit reached', 429)
+    : c.text('not found, no such user, or already a member', 404);
 });
 
 dataRoomRoutes.delete(`${room}/members/:userId`, async (c) => {

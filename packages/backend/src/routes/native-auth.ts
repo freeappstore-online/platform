@@ -193,11 +193,13 @@ nativeAuthRoutes.post('/native/auth/approve', async (c) => {
   if (form.nonce !== nonce || !pairing.user_id) {
     throw new HttpError(403, 'Invalid connection approval.');
   }
-  await c.env.DB.prepare(
+  const result = await c.env.DB.prepare(
     'UPDATE native_pairings SET approved = 1 WHERE id = ? AND user_id IS NOT NULL AND expires_at > ?',
   )
     .bind(pairing.id, Date.now())
     .run();
+  // Expired or removed since the read: nothing was approved (#771).
+  if (!result.meta.changes) throw new HttpError(409, 'Connection expired. Start again.');
   deleteCookie(c, COOKIE, { secure: true, path: '/' });
   return page(
     c,

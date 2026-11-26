@@ -204,6 +204,24 @@ describe('POST /v1/auth/email/start', () => {
     expect(emailSend).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { email: 1, appId: 'demo', returnTo: VALID_RETURN_TO },
+    { email: 'a@b.com', appId: ['demo'], returnTo: VALID_RETURN_TO },
+    { email: 'a@b.com', appId: 'demo', returnTo: { url: VALID_RETURN_TO } },
+  ])('returns 400 for a non-string field (#771)', async (body) => {
+    const res = await app.request(
+      '/v1/auth/email/start',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+      makeEnv(),
+    );
+    expect(res.status).toBe(400);
+    expect(emailSend).not.toHaveBeenCalled();
+  });
+
   it('returns 400 when email is missing', async () => {
     const res = await app.request(
       '/v1/auth/email/start',

@@ -9,6 +9,10 @@ async function setup() {
   db.exec(
     "INSERT INTO apps (id, owner_login, created_at) VALUES ('demo', 'alice', 0), ('other', 'alice', 0)",
   );
+  // Only real accounts can be added to a room (#771).
+  db.exec(
+    "INSERT INTO users (id, github_id, github_login, created_at) VALUES ('bob', 2, 'bob', 0)",
+  );
   const request = async (
     user: string | null,
     path: string,
@@ -49,6 +53,21 @@ describe.skipIf(!hasSqlite)('durable data room permissions (synthetic identities
     expect((await request('bob', 'demo/data-rooms', 'POST')).status).toBe(201);
     expect((await request('alice', 'other/data-rooms', 'POST')).status).toBe(201);
     expect((await request('alice', 'missing/data-rooms', 'POST')).status).toBe(404);
+  });
+
+  it('adds only real accounts, up to a capped number of members (#771)', async () => {
+    const { db, request, room } = await setup();
+    expect((await request('alice', `${room}/members/ghost`, 'PUT')).status).toBe(404);
+    const user = db.prepare(
+      'INSERT INTO users (id, github_id, github_login, created_at) VALUES (?, ?, ?, 0)',
+    );
+    for (let i = 0; i < 100; i++) {
+      user.run(`u${i}`, 100 + i, `u${i}`);
+      expect((await request('alice', `${room}/members/u${i}`, 'PUT')).status).toBe(204);
+    }
+    expect((await request('alice', `${room}/members/bob`, 'PUT')).status).toBe(429);
+    // The room's full state is the owner's to learn, not anyone's.
+    expect((await request('bob', `${room}/members/bob`, 'PUT')).status).toBe(404);
   });
 
   it('caps the distinct collections in a room (#569)', async () => {
@@ -94,7 +113,7 @@ describe.skipIf(!hasSqlite)('durable data room permissions (synthetic identities
     for (const deletion of ['app', 'owner', 'member']) {
       const { db, request, room } = await setup();
       db.exec(
-        "INSERT INTO users (id, github_id, github_login, created_at) VALUES ('alice', 1, 'alice', 0), ('bob', 2, 'bob', 0)",
+        "INSERT INTO users (id, github_id, github_login, created_at) VALUES ('alice', 1, 'alice', 0)",
       );
       await request('alice', `${room}/members/bob`, 'PUT');
       await request('alice', `${room}/db/votes`, 'POST', '{}');
