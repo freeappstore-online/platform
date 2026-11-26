@@ -34,8 +34,10 @@ import kotlinx.coroutines.withContext
  * background run found no network and ended at once. A switch between Wi-Fi and mobile data keeps it satisfied.
  *
  * Android may refuse the foreground service to work started from the background (#828). The run then goes on as a plain
- * job, which the system stops after about ten minutes, so it claims only within [ContributeWorker.PLAIN_CLAIM_MS] of its
- * start; a job the system stops part-way is recorded `stopped` and its lease lapses. The server refuses a claim once the
+ * job, which the system stops after about ten minutes (on the Pixel 10a, Android 17, the refusal is
+ * `ForegroundServiceStartNotAllowedException`), so it claims only within [ContributeWorker.PLAIN_CLAIM_MS] of its start and
+ * ends itself at [ContributeWorker.PLAIN_RUN_MS], before the system times it out; the job in hand is then recorded
+ * `stopped` and its lease lapses. The server refuses a claim once the
  * day's contribution limit is reached (`429`); the run then ends until the next one. Each run logs how it ended.
  */
 class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
@@ -63,11 +65,13 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
             // A sticky-broadcast read at most once a second: this runs per downloaded buffer and per synthesized chunk.
             val t = SystemClock.elapsedRealtime()
             if (t - checkedAt >= 1_000) { checkedAt = t; power = ContributePower.mayRun(anyTime, plugged()) }
-            !isStopped && !stopRequested && power
+            !isStopped && !stopRequested && power && (foreground || t - started < PLAIN_RUN_MS)
         }
         val mayClaim = { network() && withinBudget(foreground, SystemClock.elapsedRealtime() - started) }
+        /** Why keepGoing is false, for the log line. */
+        val stopped = { if (isStopped) "system_stop" else if (stopRequested) "user_stop" else if (power) "time_budget" else "unplugged" }
         try {
-            if (!keepGoing()) { end = "unplugged"; return@withContext Result.success() } // the next run tries again
+            if (!keepGoing()) { end = stopped(); return@withContext Result.success() } // the next run tries again
             if (!network()) { end = "offline"; return@withContext Result.success() }
             if (local.modelWanted && !graph.kokoro.installed) {
                 downloaded = 0
@@ -103,9 +107,7 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     status = contributeProgress(job, n, total, seconds, (SystemClock.elapsedRealtime() - jobStarted) / 1000.0)
                 })
                 end = when {
-                    isStopped -> "system_stop"
-                    stopRequested -> "user_stop"
-                    !keepGoing() -> "unplugged"
+                    !keepGoing() -> stopped()
                     !network() -> "offline"
                     !mayClaim() -> "time_budget"
                     else -> "no_work"
@@ -144,8 +146,13 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         private const val NOW = "contribute-now"
         private const val CHANNEL = "fas-contribute"
         private const val TAG = "ContributeWorker"
-        /** A run Android kept out of the foreground claims only this long after it starts: a plain job gets about 10 minutes. */
+        /**
+         * A run Android kept out of the foreground claims only this long after it starts, and stops itself (the job in hand
+         * recorded `stopped`) at [PLAIN_RUN_MS]: a plain job gets about 10 minutes, and one the system times out counts
+         * against the app's job-timeout quota (3 a day, `timeout-reg`), after which its jobs are held back.
+         */
         internal const val PLAIN_CLAIM_MS = 5 * 60_000L
+        internal const val PLAIN_RUN_MS = 9 * 60_000L
         /** Whether a run may claim another job [elapsedMs] after it started (#828). */
         internal fun withinBudget(foreground: Boolean, elapsedMs: Long) = foreground || elapsedMs < PLAIN_CLAIM_MS
         private val lock = Mutex()
