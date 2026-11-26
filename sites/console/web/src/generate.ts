@@ -3,11 +3,15 @@
  * creator opted in to, with the SDK's shared Kokoro runner (@freeappstore/sdk/generation-kokoro,
  * also used by Books). The state lives here, not in the page, so moving around the console does
  * not stop a run; it stops with Stop, when there is no more work, or when the window closes.
+ * It keeps going in a hidden tab or a minimised installed console (#826): synthesis and encoding
+ * run in the model worker, each lease is renewed on the worker's messages rather than on the
+ * page's (throttled) timers, and a Web Lock keeps one run per browser profile, which Chromium also
+ * counts against freezing the tab (docs/community-generation.md#running-in-the-background).
  */
 import { useSyncExternalStore } from 'react'
 import { Generation, type FreeAppStore, type GenerationJob, type GenerationOpenApp } from '@freeappstore/sdk'
 import {
-  contributeKokoro,
+  contributeKokoroApps,
   deleteKokoroModel,
   kokoroProblem,
   KokoroRunner,
@@ -169,9 +173,45 @@ export async function deleteModel() {
 }
 
 let controller: AbortController | null = null
+/** One run per browser profile, whichever console tab or window holds it. */
+const LOCK = 'fas:generate'
 
-/** Generate for the opted-in apps' runnable sets, one set after another, until no work or Stop. */
+/** The screen wake lock, taken again whenever the page is shown: the browser drops it on hide. */
+function keepAwake(): () => void {
+  let lock: WakeLockSentinel | null = null
+  const take = () => {
+    if (document.visibilityState !== 'visible' || (lock && !lock.released)) return
+    navigator.wakeLock?.request('screen').then(l => { lock = l }, () => {})
+  }
+  take()
+  document.addEventListener('visibilitychange', take)
+  return () => {
+    document.removeEventListener('visibilitychange', take)
+    lock?.release().catch(() => {})
+  }
+}
+
+/**
+ * Generate for the opted-in apps' runnable sets, one job from each app in turn (as the phones
+ * do), until no work or Stop. Holds the `fas:generate` Web Lock while it runs; when another tab
+ * or window of this browser holds it, says so and does nothing.
+ */
 export async function startGenerating(
+  fas: FreeAppStore,
+  apps: GenerationOpenApp[],
+  encoder: AudioEncoderConfig,
+  device: KokoroDevice,
+  onSubmitted: (appId: string) => void,
+) {
+  if (state.running) return
+  if (!navigator.locks) return run(fas, apps, encoder, device, onSubmitted)
+  await navigator.locks.request(LOCK, { ifAvailable: true }, async lock => {
+    if (lock) await run(fas, apps, encoder, device, onSubmitted)
+    else set({ message: 'Already generating in another console tab or window of this browser.' })
+  })
+}
+
+async function run(
   fas: FreeAppStore,
   apps: GenerationOpenApp[],
   encoder: AudioEncoderConfig,
@@ -182,8 +222,8 @@ export async function startGenerating(
   controller = new AbortController()
   const { signal } = controller
   set({ running: true, current: null, message: null })
-  // A screen that turns off would put the window to sleep
-  const wakeLock = await navigator.wakeLock?.request('screen').catch(() => null) ?? null
+  // A screen that turns off would put the computer to sleep
+  const release = keepAwake()
   const work = getRunner(encoder, device)
   // The job in hand, recorded when it ends however it ends
   let pending: { appId: string; job: GenerationJob; at: number } | null = null
@@ -191,36 +231,36 @@ export async function startGenerating(
     if (pending) record(pending.appId, pending.job, pending.at, outcome, reason)
     pending = null
   }
+  const kokoroApps = apps.map(app => ({
+    appId: app.appId,
+    generation: new Generation(app.appId, API_URL, fas.auth),
+    setIds: runnableSets(app).map(s => s.setId),
+  }))
   try {
-    for (const app of apps) {
-      const generation = new Generation(app.appId, API_URL, fas.auth)
-      for (const s of runnableSets(app)) {
-        if (signal.aborted) break
-        await contributeKokoro(generation, {
-          runner: work,
-          setId: s.setId,
-          signal,
-          onEvent: e => {
-            if (e.type === 'loading') set({ loading: e.progress })
-            else if (e.type === 'claimed') {
-              // A job still in hand at the next claim was abandoned when its lease ran out
-              finish('stopped', 'the lease ran out before it finished')
-              pending = { appId: app.appId, job: e.job, at: Date.now() }
-              set({ loading: null, current: { appId: app.appId, key: e.job.key, progress: null } })
-            } else if (e.type === 'progress') set({ current: { appId: app.appId, key: e.job.key, progress: e.progress } })
-            else if (e.type === 'submitted') {
-              finish('submitted', null)
-              set({ submitted: state.submitted + 1, current: null })
-              onSubmitted(app.appId)
-            } else {
-              if (pending?.job.id !== e.job.id) pending = { appId: app.appId, job: e.job, at: Date.now() }
-              finish('skipped', e.reason)
-              set({ skipped: state.skipped + 1, current: null })
-            }
-          },
-        })
-      }
-    }
+    await contributeKokoroApps({
+      runner: work,
+      signal,
+      // An app turned off in Settings mid-run leaves at its next turn
+      apps: () => kokoroApps.filter(a => optedInApps().includes(a.appId)),
+      onEvent: (e, appId) => {
+        if (e.type === 'loading') set({ loading: e.progress })
+        else if (e.type === 'claimed') {
+          // A job still in hand at the next claim was abandoned when its lease ran out
+          finish('stopped', 'the lease ran out before it finished')
+          pending = { appId, job: e.job, at: Date.now() }
+          set({ loading: null, current: { appId, key: e.job.key, progress: null } })
+        } else if (e.type === 'progress') set({ current: { appId, key: e.job.key, progress: e.progress } })
+        else if (e.type === 'submitted') {
+          finish('submitted', null)
+          set({ submitted: state.submitted + 1, current: null })
+          onSubmitted(appId)
+        } else {
+          if (pending?.job.id !== e.job.id) pending = { appId, job: e.job, at: Date.now() }
+          finish(e.type, e.reason)
+          set(e.type === 'skipped' ? { skipped: state.skipped + 1, current: null } : { current: null })
+        }
+      },
+    })
     finish('stopped', 'stopped before it finished')
     set({ message: signal.aborted ? 'Stopped.' : 'No more work for now.' })
   } catch (err) {
@@ -228,7 +268,7 @@ export async function startGenerating(
     else finish('failed', errorText(err))
     set({ message: signal.aborted ? 'Stopped.' : `Stopped on an error: ${errorText(err)}` })
   } finally {
-    wakeLock?.release().catch(() => {})
+    release()
     controller = null
     set({ running: false, loading: null, current: null })
   }

@@ -270,8 +270,9 @@ function StatusCard({ encoder, downloaded, appsLoaded, canStart, onStart, todayC
         </div>
       )}
       <p className="mt-3 text-xs text-muted">
-        Generating runs only while this window stays open (install the console as an app to keep it in its own
-        window). Each job is checked by the platform before anyone hears it.
+        Generating keeps going in a background tab or a minimised installed console, but only while the browser
+        runs and the computer is awake (what each browser does is in How it works).
+        Each job is checked by the platform before anyone hears it.
       </p>
       <h4 className="mt-4 mb-2 text-xs font-semibold text-muted uppercase tracking-wide">Today</h4>
       <div className="flex flex-wrap gap-2">

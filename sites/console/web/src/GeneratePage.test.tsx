@@ -13,7 +13,7 @@ vi.mock('@freeappstore/sdk/generation-kokoro', async (actual) => ({
   kokoroDevice: vi.fn(async () => 'webgpu'),
   isKokoroDownloaded: vi.fn(async () => false),
   deleteKokoroModel: vi.fn(async () => {}),
-  contributeKokoro: vi.fn(),
+  contributeKokoroApps: vi.fn(),
   KokoroRunner: class { load = load; dispose() {} },
 }))
 
@@ -126,7 +126,7 @@ it('lists apps with open work, opts in per app, and downloads the model only aft
   expect(container.textContent).toContain('Downloaded and kept in this browser')
 
   await tab('Status')
-  expect(container.textContent).toContain('window stays open')
+  expect(container.textContent).toContain('keeps going in a background tab')
   expect(container.textContent).toContain('Idle')
   expect(button('Start')!.disabled).toBe(false)
 })
@@ -136,17 +136,22 @@ it('generates for the opted-in apps’ runnable sets, shows progress, stops, and
   localStorage.setItem('fas:generate-model', '1')
   vi.mocked(kokoro.isKokoroDownloaded).mockResolvedValue(true)
   let finish = () => {}
-  vi.mocked(kokoro.contributeKokoro).mockImplementation(async (_generation, opts) => {
+  vi.mocked(kokoro.contributeKokoroApps).mockImplementation(async (opts) => {
     const job = { id: 'j3', setId: 's1', key: 'alice/3', input: { text: 'Once upon a time.' } } as never
-    opts.onEvent?.({ type: 'claimed', job })
-    opts.onEvent?.({ type: 'progress', job, progress: { sentence: 4, sentences: 10, chars: 400, totalChars: 1000, charsPerSecond: 21.5 } })
+    opts.onEvent?.({ type: 'claimed', job }, 'books')
+    opts.onEvent?.({ type: 'progress', job, progress: { sentence: 4, sentences: 10, chars: 400, totalChars: 1000, charsPerSecond: 21.5 } }, 'books')
     await new Promise<void>((resolve) => { finish = resolve; opts.signal.addEventListener('abort', () => resolve()) })
     return { submitted: 0, stopped: 'aborted' }
   })
   await render()
   await click(button('Start')!)
-  expect(kokoro.contributeKokoro).toHaveBeenCalledOnce()
-  expect(vi.mocked(kokoro.contributeKokoro).mock.calls[0]![1].setId).toBe('s1')
+  expect(kokoro.contributeKokoroApps).toHaveBeenCalledOnce()
+  // Only runnable sets of opted-in apps; radio (piper) has none
+  const opts = vi.mocked(kokoro.contributeKokoroApps).mock.calls[0]![0]
+  expect(opts.apps().map((a) => [a.appId, a.setIds])).toEqual([['books', ['s1']]])
+  // Turned off mid-run: left out from its next turn
+  localStorage.setItem('fas:generate-apps', JSON.stringify([]))
+  expect(opts.apps()).toEqual([])
   expect(container.textContent).toContain('Running')
   expect(container.textContent).toContain('alice/3')
   expect(container.textContent).toContain('Sentence 4 of 10')
@@ -159,6 +164,20 @@ it('generates for the opted-in apps’ runnable sets, shows progress, stops, and
   const runs = JSON.parse(localStorage.getItem('fas:generate-runs')!)
   expect(runs).toMatchObject([{ appId: 'books', jobId: 'j3', key: 'alice/3', outcome: 'stopped', text: 'Once upon a time.' }])
   finish()
+})
+
+it('runs in one tab at a time: another tab holding the Web Lock blocks Start', async () => {
+  localStorage.setItem('fas:generate-apps', JSON.stringify(['books']))
+  localStorage.setItem('fas:generate-model', '1')
+  vi.mocked(kokoro.isKokoroDownloaded).mockResolvedValue(true)
+  const request = vi.fn(async (_name: string, _opts: unknown, cb: (lock: unknown) => Promise<void>) => cb(null))
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: { request } })
+  await render()
+  await click(button('Start')!)
+  expect(request.mock.calls[0]!.slice(0, 2)).toEqual(['fas:generate', { ifAvailable: true }])
+  expect(kokoro.contributeKokoroApps).not.toHaveBeenCalled()
+  expect(container.textContent).toContain('Already generating in another console tab')
+  delete (navigator as { locks?: unknown }).locks
 })
 
 it('opens Activity filtered from today’s chips, filters by app, and plays an accepted job in its detail', async () => {
