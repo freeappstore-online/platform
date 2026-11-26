@@ -758,6 +758,46 @@ describe.skipIf(!hasSqlite)('community generation verification', () => {
     });
   });
 
+  it('long replicas are compared window by window, at the same points of each replica', async () => {
+    // 200 distinct words over 70 s; ADTS (MP4) windows hear one stretch, Ogg windows another.
+    const all = Array.from({ length: 200 }, (_, i) => `word${i}`);
+    for (const [second, type, statuses] of [
+      [M4A, 'audio/mp4', ['accepted', 'superseded']],
+      [OGG, 'audio/ogg', ['pending', 'rejected']],
+    ] as const) {
+      const s = await setup((a) =>
+        (a[0] === 0xff ? all.slice(10, 40) : all.slice(100, 130)).join(' '),
+      );
+      const setId = await s.createSet({ ...WAV_SET, replicas: 2 });
+      await s.addJobs(setId, [{ key: 'k', input: { text: all.join(' ') } }]);
+      const a = (await s.claim('u2'))!;
+      const b = (await s.claim('u3'))!;
+      await s.submit('u2', a.id, a.leaseToken, { file: M4A, type: 'audio/mp4' });
+      await s.settled();
+      await s.submit('u3', b.id, b.leaseToken, { file: second, type });
+      await s.settled();
+      const rows = s.db
+        .prepare(
+          'SELECT status, reason, passed, window_transcripts FROM generation_submissions ORDER BY created_at',
+        )
+        .all() as {
+        status: string;
+        reason: string | null;
+        passed: number;
+        window_transcripts: string;
+      }[];
+      // Each passed against the text on its own; only the comparison tells them apart.
+      expect(rows.map((r) => r.passed)).toEqual([1, 1]);
+      expect(JSON.parse(rows[0]!.window_transcripts)).toHaveLength(3);
+      expect(rows.map((r) => r.status)).toEqual(statuses);
+      if (second === OGG) expect(rows[1]!.reason).toBe('disagrees with other replicas');
+      // Three Whisper calls each; identical files give identical clips (same window points).
+      const clips = s.ai!.run.mock.calls.map(([, input]) => input.audio);
+      expect(clips).toHaveLength(6);
+      if (second === M4A) expect(clips.slice(3)).toEqual(clips.slice(0, 3));
+    }
+  });
+
   it('a correct submission for an already accepted job is superseded and never overwrites', async () => {
     const s = await setup(() => TEXT);
     const { job } = await run(s, NARRATION);

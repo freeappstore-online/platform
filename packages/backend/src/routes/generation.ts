@@ -8,7 +8,7 @@
 import { type Context, Hono } from 'hono';
 import { APP_ID_RE } from '../lib/apps.js';
 import { FAS_APP_ROWS, HttpError, requireAppOwner, requireAppUser } from '../lib/auth.js';
-import { verdict, wer, whisper, words } from '../lib/generation-verify.js';
+import { agree, type Verdict, verdict, WINDOWS, whisper } from '../lib/generation-verify.js';
 import { verifyGithubOidc } from '../lib/github-oidc.js';
 import { nativeBody, nativeDevice, nativeHash, nativeRandom } from '../lib/native-companion.js';
 import { d1UsageStore, dayKey } from '../lib/proxy-rate-limit.js';
@@ -899,13 +899,16 @@ export async function verifySubmission(env: Env, id: string): Promise<void> {
     .prepare('SELECT * FROM generation_sets WHERE id = ?')
     .bind(sub.set_id)
     .first<SetRow>())!;
+  // Window positions are drawn once per job, so every replica is sampled alike.
   const job = (await db
-    .prepare('SELECT input FROM generation_jobs WHERE id = ?')
-    .bind(sub.job_id)
-    .first<{ input: string }>())!;
+    .prepare(
+      'UPDATE generation_jobs SET windows = COALESCE(windows, ?) WHERE id = ? RETURNING input, windows',
+    )
+    .bind(JSON.stringify(Array.from({ length: WINDOWS }, () => Math.random())), sub.job_id)
+    .first<{ input: string; windows: string }>())!;
   const object = await env.GENERATED.get(sub.object_key);
   const metaObject = sub.meta_key ? await env.GENERATED.get(sub.meta_key) : null;
-  let result;
+  let result: Verdict;
   try {
     result = object
       ? await verdict(
@@ -914,6 +917,7 @@ export async function verifySubmission(env: Env, id: string): Promise<void> {
           metaObject ? await metaObject.text() : null,
           (JSON.parse(job.input) as { text: string }).text,
           { minCps: set.min_cps, maxCps: set.max_cps, maxWer: set.max_wer },
+          JSON.parse(job.windows) as number[],
           whisper(env.AI),
         )
       : { ok: false, reason: 'upload missing from quarantine' };
@@ -923,7 +927,7 @@ export async function verifySubmission(env: Env, id: string): Promise<void> {
   }
   await db
     .prepare(
-      `UPDATE generation_submissions SET passed = ?, duration_ms = ?, wer = ?, transcript = ?,
+      `UPDATE generation_submissions SET passed = ?, duration_ms = ?, wer = ?, transcript = ?, window_transcripts = ?,
          status = CASE WHEN ? THEN status ELSE 'rejected' END, reason = ?, decided_at = CASE WHEN ? THEN NULL ELSE ? END
        WHERE id = ? AND status = 'pending'`,
     )
@@ -932,6 +936,7 @@ export async function verifySubmission(env: Env, id: string): Promise<void> {
       result.durationMs ?? null,
       result.wer ?? null,
       result.transcript?.slice(0, 20_000) ?? null,
+      result.windows ? JSON.stringify(result.windows) : null,
       result.ok ? 1 : 0,
       result.reason ?? null,
       result.ok ? 1 : 0,
@@ -959,25 +964,31 @@ export async function verifySubmission(env: Env, id: string): Promise<void> {
 
 /**
  * With every replica in, accept the earliest passing submission if enough
- * distinct users' passing submissions agree with it (duration, and the
- * transcript where audio was transcribed whole). Leases and submissions are
+ * distinct users' passing submissions agree with it: duration, and what
+ * Whisper heard (whole transcripts, or the same sampled windows; #784). Leases and submissions are
  * one per user per job, so passing submissions are from distinct users.
  */
 async function settleJob(env: Env, jobId: string, set: SetRow): Promise<void> {
   const { results } = await env.DB.prepare(
-    `SELECT id, duration_ms, transcript FROM generation_submissions
+    `SELECT id, duration_ms, transcript, window_transcripts FROM generation_submissions
      WHERE job_id = ? AND status = 'pending' AND passed = 1 ORDER BY created_at, id`,
   )
     .bind(jobId)
-    .all<{ id: string; duration_ms: number; transcript: string | null }>();
-  const [first, ...rest] = results;
+    .all<{
+      id: string;
+      duration_ms: number;
+      transcript: string | null;
+      window_transcripts: string | null;
+    }>();
+  const heard = results.map((r) => ({
+    ...r,
+    windows: r.window_transcripts ? (JSON.parse(r.window_transcripts) as string[]) : null,
+  }));
+  const [first, ...rest] = heard;
   if (!first) return;
-  const agrees = (r: (typeof results)[number]) =>
+  const agrees = (r: (typeof heard)[number]) =>
     Math.abs(r.duration_ms - first.duration_ms) <=
-      GENERATION_LIMITS.replicaDurationSlack * first.duration_ms &&
-    (r.transcript === null ||
-      first.transcript === null ||
-      wer(words(r.transcript), words(first.transcript)) <= set.max_wer);
+      GENERATION_LIMITS.replicaDurationSlack * first.duration_ms && agree(first, r, set.max_wer);
   const agreeing = rest.filter(agrees);
   if (1 + agreeing.length >= set.replicas) {
     await acceptSubmission(env, first.id, first.duration_ms);

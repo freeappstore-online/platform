@@ -90,13 +90,18 @@ that retries anything unfinished, in `packages/backend/src/lib/generation-verify
 3. **Content**: Workers AI Whisper (`@cf/openai/whisper-large-v3-turbo`) transcribes the audio and
    the transcript is compared with the input text by word error rate (lowercased words, punctuation
    and diacritics dropped). Audio up to 60 s is transcribed whole. Longer audio is checked as three
-   20-second windows at random offsets, each matched against the best-fitting stretch of the text.
-   MP4 windows are re-framed as ADTS AAC, Ogg windows keep the Opus header pages.
+   20-second windows, each matched against the best-fitting stretch of the text. Window positions
+   are random fractions of the audio, drawn once per job (devices never see them), so every replica
+   of a job is sampled at the same points. MP4 windows are re-framed as ADTS AAC, Ogg windows keep
+   the Opus header pages. Whisper accepts all of these: whole M4A (AAC-LC) and Ogg Opus files and
+   both kinds of window were checked against the real model (#784).
 4. **Replicas**: with `replicas > 1`, a passing submission waits until `replicas` distinct users have
-   passing submissions that agree with the earliest one (durations within 15%, transcripts within
-   `maxWer` where audio was transcribed whole). The earliest becomes the artifact; the others are
-   `superseded`. If every replica passed but they disagree, the dissenters are rejected so others can
-   claim the job.
+   passing submissions that agree with the earliest one: durations within 15%, and what Whisper
+   heard within `maxWer` (whole transcripts against each other; for long audio each window against
+   the earliest submission's same window, ignoring the words cut at the window edges). This reuses
+   the transcripts from step 3, so replicas cost no extra Whisper calls. The earliest becomes the
+   artifact; the others are `superseded`. If every replica passed but they disagree, the dissenters
+   are rejected so others can claim the job.
 
 A failed check sets `rejected` with the reason, deletes the quarantined bytes and reopens the job for
 other users. Each submission records the measured duration and word error rate.

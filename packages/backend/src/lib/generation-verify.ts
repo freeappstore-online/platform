@@ -9,7 +9,8 @@ const WHISPER_MODEL = '@cf/openai/whisper-large-v3-turbo';
 /** Audio up to this long is transcribed whole; longer audio as sampled windows. */
 const WHOLE_MS = 60_000;
 const WINDOW_MS = 20_000;
-const WINDOWS = 3;
+/** Sampled windows per long submission (one Whisper call each). */
+export const WINDOWS = 3;
 /** Timings may overrun the measured duration by this much (encoder padding). */
 const SEGMENT_SLACK_S = 0.5;
 
@@ -26,6 +27,14 @@ export interface Verdict {
   wer?: number;
   /** The whole-file transcript; null when only windows were transcribed. */
   transcript?: string | null;
+  /** Each sampled window's transcript; null when the audio was transcribed whole. */
+  windows?: string[] | null;
+}
+
+/** What Whisper heard in a passing submission, for comparing replicas. */
+export interface Heard {
+  transcript: string | null;
+  windows: string[] | null;
 }
 
 export type Transcribe = (audio: Uint8Array) => Promise<string>;
@@ -103,6 +112,11 @@ export async function verdict(
   meta: string | null,
   text: string,
   limits: VerifyLimits,
+  /**
+   * Window positions as fractions of the audio, drawn once per job: devices
+   * cannot know them, and every replica of a job is sampled at the same points.
+   */
+  windowAt: number[],
   transcribe: Transcribe,
 ): Promise<Verdict> {
   let audio;
@@ -122,20 +136,21 @@ export async function verdict(
   const segments = checkSegments(meta, text.length, durationMs / 1000);
   if (segments) return { ok: false, durationMs, reason: segments };
   const reference = words(text);
-  let result: { wer: number; transcript: string | null };
+  let result: { wer: number } & Heard;
   if (durationMs <= WHOLE_MS) {
     const transcript = await transcribe(bytes);
-    result = { wer: wer(words(transcript), reference), transcript };
+    result = { wer: wer(words(transcript), reference), transcript, windows: null };
   } else {
-    // Random offsets, so a device cannot know which stretches are checked.
+    // Proportional offsets: replicas at a slightly different pace still line up.
     let worst = 0;
-    for (let i = 0; i < WINDOWS; i++) {
-      const start = Math.floor(Math.random() * (durationMs - WINDOW_MS));
-      const heard = words(await transcribe(audio.window(start, WINDOW_MS)));
-      // Window edges cut words: ignore the first and last heard word.
-      worst = Math.max(worst, wer(heard.slice(1, -1), reference, true));
+    const windows: string[] = [];
+    for (const at of windowAt) {
+      const start = Math.floor(at * (durationMs - WINDOW_MS));
+      const heard = await transcribe(audio.window(start, WINDOW_MS));
+      windows.push(heard);
+      worst = Math.max(worst, wer(trimEdges(heard), reference, true));
     }
-    result = { wer: worst, transcript: null };
+    result = { wer: worst, transcript: null, windows };
   }
   const rounded = Math.round(result.wer * 1000) / 1000;
   if (result.wer > limits.maxWer)
@@ -144,9 +159,42 @@ export async function verdict(
       durationMs,
       wer: rounded,
       transcript: result.transcript,
+      windows: result.windows,
       reason: `transcript does not match the text (word error rate ${rounded})`,
     };
-  return { ok: true, durationMs, wer: rounded, transcript: result.transcript };
+  return {
+    ok: true,
+    durationMs,
+    wer: rounded,
+    transcript: result.transcript,
+    windows: result.windows,
+  };
+}
+
+/** A window's words without the first and last, which the window edges cut. */
+const trimEdges = (heard: string) => words(heard).slice(1, -1);
+
+/**
+ * Whether two passing replicas of a job say the same thing (#784): whole
+ * transcripts within `maxWer` of each other; sampled windows (the same
+ * fractions of each replica) each within `maxWer` of the other's same window;
+ * a window against a whole transcript, anywhere in it.
+ */
+export function agree(a: Heard, b: Heard, maxWer: number): boolean {
+  if (a.transcript !== null && b.transcript !== null)
+    return wer(words(b.transcript), words(a.transcript)) <= maxWer;
+  if (a.windows && b.windows) {
+    const other = b.windows;
+    return (
+      a.windows.length === other.length &&
+      a.windows.every((w, i) => wer(trimEdges(other[i]!), words(w), true) <= maxWer)
+    );
+  }
+  const whole = a.transcript ?? b.transcript;
+  const windows = a.windows ?? b.windows;
+  // Verified before window transcripts were kept (#784): only durations compare.
+  if (whole === null || !windows) return true;
+  return windows.every((w) => wer(trimEdges(w), words(whole), true) <= maxWer);
 }
 
 export function whisper(ai: Ai): Transcribe {
