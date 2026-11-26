@@ -329,6 +329,60 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     ).toEqual([]);
   });
 
+  it('extends an open lease to 15 minutes from now, capped at 2 hours after the claim', async () => {
+    const s = await setup();
+    const setId = await s.createSet();
+    await s.addJobs(setId, [
+      { key: 'a', input: { text: 'A.' } },
+      { key: 'b', input: { text: 'B.' } },
+    ]);
+    const job = (await s.claim('u2'))!;
+    const extend = (user: string | null, lease: string, jobId = job.id, token?: string) =>
+      s.request(`/jobs/${jobId}/lease`, {
+        method: 'POST',
+        user,
+        token,
+        headers: { 'X-Lease-Token': lease },
+      });
+    const lease = (expiresAt: number, createdAt: number) =>
+      s.db
+        .prepare('UPDATE generation_leases SET expires_at = ?, created_at = ? WHERE job_id = ?')
+        .run(expiresAt, createdAt, job.id);
+    expect((await extend(null, job.leaseToken)).status).toBe(401);
+    expect((await extend('u2', `glt_${'0'.repeat(64)}`)).status).toBe(403);
+    expect((await extend('u2', 'nope')).status).toBe(403);
+    expect((await extend('u3', job.leaseToken)).status).toBe(403);
+    const before = Date.now();
+    const r = await extend('u2', job.leaseToken);
+    expect(r.status).toBe(200);
+    const { leaseExpiresAt } = (await r.json()) as { leaseExpiresAt: number };
+    expect(leaseExpiresAt).toBeGreaterThanOrEqual(before + GENERATION_LIMITS.leaseMs);
+    // Near the cap, the extension stops at claim + 2 h; then it is 409.
+    const claimedAt = Date.now() - GENERATION_LIMITS.leaseMaxMs + 5 * 60_000;
+    lease(Date.now() + 60_000, claimedAt);
+    const capped = (await (await extend('u2', job.leaseToken)).json()) as {
+      leaseExpiresAt: number;
+    };
+    expect(capped.leaseExpiresAt).toBe(claimedAt + GENERATION_LIMITS.leaseMaxMs);
+    const refused = await extend('u2', job.leaseToken);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual(
+      expect.objectContaining({ leaseExpiresAt: claimedAt + GENERATION_LIMITS.leaseMaxMs }),
+    );
+    // An extended lease still holds the job past the first 15 minutes: no one
+    // else claims it, and the upload is accepted.
+    lease(Date.now() + 10 * 60_000, Date.now() - 60 * 60_000);
+    const b = (await s.claim('u3'))!;
+    expect(b.key).toBe('b');
+    await s.submissionId(await s.submit('u2', job.id, job.leaseToken));
+    // A used lease cannot be extended, nor an expired one.
+    expect((await extend('u2', job.leaseToken)).status).toBe(403);
+    s.db
+      .prepare('UPDATE generation_leases SET expires_at = ? WHERE job_id = ?')
+      .run(Date.now() - 1, b.id);
+    expect((await extend('u3', b.leaseToken, b.id)).status).toBe(403);
+  });
+
   it('accepted artifacts are write-once and public; later submissions are superseded', async () => {
     const s = await setup();
     const setId = await s.createSet({ replicas: 2 });

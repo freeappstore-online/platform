@@ -19,6 +19,8 @@ type Ctx = Context<{ Bindings: Env }>;
 
 export const GENERATION_LIMITS = {
   leaseMs: 15 * 60_000,
+  /** Extensions (#783) never take a lease past this long after its claim. */
+  leaseMaxMs: 2 * 60 * 60_000,
   userDaily: 200,
   appDaily: 5_000,
   jobsPerRequest: 500,
@@ -396,6 +398,39 @@ generationRoutes.post('/apps/:appId/generation/claim', async (c) => {
       leaseExpiresAt: now + GENERATION_LIMITS.leaseMs,
     },
   });
+});
+
+/**
+ * Extend an open lease while the device is still generating (#783): to 15
+ * minutes from now, never past 2 hours after the claim. The token stays the
+ * same. `409` once the cap is reached; `403` for an invalid, used, released or
+ * expired lease.
+ */
+generationRoutes.post('/apps/:appId/generation/jobs/:jobId/lease', async (c) => {
+  const appId = c.req.param('appId');
+  const jobId = c.req.param('jobId');
+  const who = await contributor(c, appId);
+  const leaseToken = c.req.header('X-Lease-Token') ?? '';
+  if (!/^glt_[a-f0-9]{64}$/.test(leaseToken))
+    throw new HttpError(403, 'no valid lease for this job');
+  const now = Date.now();
+  const lease = `job_id = ?1 AND user_id = ?2 AND app_id = ?3 AND token_hash = ?4 AND state = 'open' AND expires_at > ?5`;
+  const binds = [jobId, who.id, appId, await nativeHash(leaseToken), now] as const;
+  const extended = await c.env.DB.prepare(
+    `UPDATE generation_leases SET expires_at = MAX(expires_at, MIN(?5 + ?6, created_at + ?7))
+     WHERE ${lease} AND expires_at < created_at + ?7 RETURNING expires_at`,
+  )
+    .bind(...binds, GENERATION_LIMITS.leaseMs, GENERATION_LIMITS.leaseMaxMs)
+    .first<{ expires_at: number }>();
+  if (extended) return c.json({ leaseExpiresAt: extended.expires_at });
+  const capped = await c.env.DB.prepare(`SELECT expires_at FROM generation_leases WHERE ${lease}`)
+    .bind(...binds)
+    .first<{ expires_at: number }>();
+  if (!capped) throw new HttpError(403, 'no valid lease for this job');
+  return c.json(
+    { error: 'the lease cannot be extended further', leaseExpiresAt: capped.expires_at },
+    409,
+  );
 });
 
 /** The request body, or null once it exceeds `max` bytes (Content-Length is not trusted). */

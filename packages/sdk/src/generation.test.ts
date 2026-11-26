@@ -161,6 +161,71 @@ describe('generation SDK', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('extendLease posts the lease token and updates the job; a 409 at the cap throws', async () => {
+    const fetch = mockFetch(
+      json({ leaseExpiresAt: 123 }),
+      new Response('{"error":"the lease cannot be extended further"}', { status: 409 }),
+    );
+    const j = job('j1');
+    expect(await client().extendLease(j)).toBe(123);
+    expect(j.leaseExpiresAt).toBe(123);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect([init.method, url]).toEqual(['POST', `${base}/jobs/j1/lease`]);
+    expect(init.headers).toMatchObject({ 'X-Lease-Token': 'lease-j1' });
+    await expect(client().extendLease(j)).rejects.toThrow('cannot be extended');
+  });
+
+  describe('contribute keeps a long job leased', () => {
+    afterEach(() => vi.useRealTimers());
+    const minutes = (n: number) => n * 60_000;
+
+    it('extends within 5 minutes of expiry while generating, then submits', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const now = Date.now();
+      const fetch = mockFetch(
+        json({ job: job('j1', now + minutes(15)) }),
+        json({ leaseExpiresAt: now + minutes(25) }),
+        json({ leaseExpiresAt: now + minutes(35) }),
+        json({ submissionId: 's1', status: 'pending' }, 202),
+        new Response(null, { status: 204 }),
+      );
+      const generate = async () => {
+        await vi.advanceTimersByTimeAsync(minutes(25)); // past the original 15-minute lease
+        return { file: new Blob(['x']) };
+      };
+      // No onProgress: the count must not depend on it.
+      expect(await client().contribute({ models, generate })).toEqual({
+        submitted: 1,
+        stopped: 'no-work',
+      });
+      expect(fetch.mock.calls.map(([url]) => url.slice(base.length))).toEqual([
+        '/claim',
+        '/jobs/j1/lease',
+        '/jobs/j1/lease',
+        '/jobs/j1/result',
+        '/claim',
+      ]);
+    });
+
+    it('abandons the job only once extending fails', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+      const now = Date.now();
+      const fetch = mockFetch(
+        json({ job: job('j1', now + minutes(15)) }),
+        new Response('{"error":"cap"}', { status: 409 }),
+      );
+      const generate = async () => {
+        await vi.advanceTimersByTimeAsync(minutes(20));
+        return { file: new Blob(['x']) };
+      };
+      expect(await client().contribute({ models, generate })).toEqual({
+        submitted: 0,
+        stopped: 'lease-expired',
+      });
+      expect(fetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('manifest is public and returns absolute URLs', async () => {
     const fetch = mockFetch(
       json({

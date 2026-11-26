@@ -48,10 +48,16 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
 | Call | Body | Result |
 |---|---|---|
 | `POST /apps/:appId/generation/claim` | `{ setId?, models: [{ model, modelVersion }] }` | `{ job: { id, setId, key, input, model, modelVersion, params, formats, maxBytes, leaseToken, leaseExpiresAt } }` or `204` |
+| `POST /apps/:appId/generation/jobs/:jobId/lease` | header `X-Lease-Token` | `{ leaseExpiresAt }`; `409 { error, leaseExpiresAt }` at the cap |
 | `PUT /apps/:appId/generation/jobs/:jobId/result` | multipart `file` + optional `meta` (JSON object, at most 64 KB); header `X-Lease-Token`; optional `X-Attestation` | `202 { submissionId, status }` |
 | `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt }] }`, newest 100 |
 
-- A lease lasts 15 minutes and uploads once. A user holds one open lease: claiming again releases
+- A lease lasts 15 minutes and uploads once. While still generating, the holder can extend it
+  (`…/lease`, same `X-Lease-Token`, which does not change) to 15 minutes from now, but never past
+  2 hours after the claim; at the cap the call is `409` with the final `leaseExpiresAt`. An invalid,
+  used, released or expired lease is `403`. Clients extend when within 5 minutes of expiry
+  ([#783](https://github.com/freeappstore-online/platform/issues/783)). Claims, replica counts and
+  uploads all use the extended expiry. A user holds one open lease: claiming again releases
   the previous one. A user is never given the same job twice (even after a release or rejection).
 - A job has at most `replicas` open leases plus pending submissions at a time, each a different user.
 - The `file` part's content type must be one of the set's `formats`, non-empty and at most
@@ -102,7 +108,7 @@ expired.
 ## Limits
 
 - 200 submissions per user per UTC day across all apps; 5,000 per app per UTC day.
-- Leases: 15 minutes, one open per user.
+- Leases: 15 minutes, extendable to at most 2 hours after the claim; one open per user.
 - Verifications: 2,000 per app per UTC day.
 - Jobs: 1-500 per request; text at most 100,000 characters (8 MB per request). Sets: `maxBytes` at most 25 MB.
 

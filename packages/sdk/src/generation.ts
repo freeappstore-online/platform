@@ -1,6 +1,9 @@
 import type { Auth } from './auth.js';
 import { authedFetch } from './authed-fetch.js';
 
+/** `contribute` extends a lease this close to its expiry while `generate` still runs (#783). */
+const LEASE_MARGIN_MS = 5 * 60_000;
+
 export type GenerationFormat = 'audio/mp4' | 'audio/ogg' | 'audio/wav';
 
 /** A local model a device can run. */
@@ -147,6 +150,20 @@ export class Generation {
     return (await response.json()) as { submissionId: string; status: 'pending' };
   }
 
+  /**
+   * Extend the job's lease while still generating: to 15 minutes from now, at
+   * most 2 hours after the claim. Updates and returns `job.leaseExpiresAt`;
+   * throws once the cap is reached (409) or the lease is no longer valid (403).
+   */
+  async extendLease(job: GenerationJob): Promise<number> {
+    const response = await this.request(`/jobs/${encodeURIComponent(job.id)}/lease`, {
+      method: 'POST',
+      headers: { 'X-Lease-Token': job.leaseToken },
+    });
+    job.leaseExpiresAt = ((await response.json()) as { leaseExpiresAt: number }).leaseExpiresAt;
+    return job.leaseExpiresAt;
+  }
+
   async mySubmissions(): Promise<GenerationSubmission[]> {
     return (
       (await (await this.request('/submissions', {})).json()) as {
@@ -157,7 +174,9 @@ export class Generation {
 
   /**
    * Claim → generate → submit until there is no work, `signal` aborts, or a
-   * lease expires before its result is ready (that job is abandoned).
+   * lease expires before its result is ready (that job is abandoned). While
+   * `generate` runs, the lease is extended within 5 minutes of its expiry; a
+   * job is abandoned only once extending fails (e.g. the 2-hour cap).
    */
   async contribute(
     opts: ContributeOptions,
@@ -168,13 +187,43 @@ export class Generation {
       const job = await this.claim(query);
       if (!job) return { submitted, stopped: 'no-work' };
       onProgress?.({ stage: 'generating', job, submitted });
-      const { file, meta } = await generate(job);
+      const stopExtending = this.keepLeased(job);
+      let result;
+      try {
+        result = await generate(job);
+      } finally {
+        stopExtending();
+      }
+      const { file, meta } = result;
       if (signal?.aborted) break;
       if (Date.now() >= job.leaseExpiresAt) return { submitted, stopped: 'lease-expired' };
       await this.submit(job, file, { meta });
-      onProgress?.({ stage: 'submitted', job, submitted: ++submitted });
+      submitted++;
+      onProgress?.({ stage: 'submitted', job, submitted });
     }
     return { submitted, stopped: 'aborted' };
+  }
+
+  /** Extend `job`'s lease each time it nears expiry, until stopped or an extension fails. */
+  private keepLeased(job: GenerationJob): () => void {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let stopped = false;
+    const schedule = () => {
+      timer = setTimeout(
+        () => {
+          this.extendLease(job).then(
+            () => !stopped && schedule(),
+            () => {},
+          );
+        },
+        Math.max(0, job.leaseExpiresAt - LEASE_MARGIN_MS - Date.now()),
+      );
+    };
+    schedule();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
   }
 
   // ── Public ──

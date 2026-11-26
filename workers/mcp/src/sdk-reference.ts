@@ -337,6 +337,7 @@ const { submitted, stopped } = await fas.generation.contribute({
   generate: async (job) => ({ file: await synthesize(job.input.text), meta: undefined }),
 })
 await fas.generation.claim({ models: [{ model: 'kokoro', modelVersion: '1.0' }] })  // job | null (15-min lease)
+await fas.generation.extendLease(job)          // +15 min, at most 2 h after the claim; contribute() does this itself
 await fas.generation.mySubmissions()            // [{ id, jobId, status, reason, createdAt }]
 
 // Public, no sign-in
