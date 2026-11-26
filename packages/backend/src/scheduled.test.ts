@@ -189,6 +189,11 @@ describe('scheduled() — 0 3 cron (daily prunes)', () => {
     const ran = calls.map((c) => c.sql);
     expect(ran).toContain('DELETE FROM consumed_tokens WHERE expires_at < ?');
     expect(ran).toContain('DELETE FROM auth_codes WHERE expires_at < ?');
+    // Webhook delivery records are kept 7 days (#764).
+    const deliveries = calls.find(
+      (c) => c.sql === 'DELETE FROM webhook_deliveries WHERE created_at < ?',
+    );
+    expect(deliveries?.binds[0]?.[0]).toBeCloseTo(Date.now() / 1000 - 7 * 86400, -1);
     expect(error.mock.calls.some(([, reason]) => String(reason).includes('D1 down'))).toBe(true);
     error.mockRestore();
   });

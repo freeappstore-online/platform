@@ -25,6 +25,7 @@ describe.skipIf(!hasSqlite)('friend webhook delivery (#568)', () => {
     role.run('chess', 'u1', 'editor', 'owner-id');
     role.run('chess', 'u2', 'member', 'owner-id');
     const bodies: string[] = [];
+    const deliveryIds: string[] = [];
     vi.stubGlobal(
       'fetch',
       vi.fn(async (u: string, init?: RequestInit) => {
@@ -32,15 +33,23 @@ describe.skipIf(!hasSqlite)('friend webhook delivery (#568)', () => {
           return Response.json({ Answer: [{ type: 1, data: '93.184.216.34' }] });
         }
         bodies.push(String(init?.body));
+        deliveryIds.push(new Headers(init?.headers).get('X-FAS-Delivery-Id') ?? '');
         return new Response('ok');
       }),
     );
-    return { d1, bodies };
+    return { db, d1, bodies, deliveryIds };
   }
 
   it('delivers only to apps both users joined themselves', async () => {
     const { d1, bodies } = setup();
     await dispatchWebhookPlatform(d1, 'friend.request', { userId: 'u1', friendId: 'u2' });
     expect(bodies.map((b) => JSON.parse(b).appId)).toEqual(['timer']);
+  });
+
+  it('sends the recorded delivery id as X-FAS-Delivery-Id (#764)', async () => {
+    const { db, d1, deliveryIds } = setup();
+    await dispatchWebhookPlatform(d1, 'friend.request', { userId: 'u1', friendId: 'u2' });
+    const rows = db.prepare('SELECT id, status FROM webhook_deliveries').all();
+    expect(rows).toEqual([{ id: deliveryIds[0], status: 200 }]);
   });
 });

@@ -1,10 +1,19 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../index.js';
 import { signSession } from '../lib/session.js';
 import { hasSqlite, sqliteD1 } from '../lib/sqlite-d1.testutil.js';
 import { mutationRateMap, requestCooldownMap, requestRateMap, searchRateMap } from './friends.js';
 
 const SIGNING_KEY = 'a'.repeat(64);
+
+// Webhook dispatch runs in waitUntil, after the response (#764).
+const background: Promise<unknown>[] = [];
+const ctx = {
+  waitUntil: (p: Promise<unknown>) => background.push(p),
+  passThroughOnException() {},
+  props: {},
+};
+const request: typeof app.request = (input, init, env) => app.request(input, init, env, ctx);
 
 type FakeRow = Record<string, unknown> | null;
 
@@ -118,7 +127,7 @@ describe('friends routes', () => {
   // ── Auth guard ──────────────────────────────────────────────────
 
   it('POST /v1/friends/request returns 401 without auth', async () => {
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -133,7 +142,7 @@ describe('friends routes', () => {
   // ── Self-friend rejection ──────────────────────────────────────
 
   it('POST /v1/friends/request rejects self-friending', async () => {
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -170,7 +179,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -204,7 +213,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -239,7 +248,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -276,7 +285,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -313,7 +322,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -347,7 +356,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       {
         method: 'POST',
@@ -377,7 +386,7 @@ describe('friends routes', () => {
         display_name: null,
       },
     ];
-    const res = await app.request(
+    const res = await request(
       '/v1/friends',
       {
         headers: { Authorization: await authHeader() },
@@ -403,7 +412,7 @@ describe('friends routes', () => {
         if (sql.includes('FROM friendships f')) paging = args.slice(-2);
       },
     });
-    const res = await app.request(
+    const res = await request(
       `/v1/friends${qs}`,
       { headers: { Authorization: await authHeader() } },
       env(db),
@@ -428,7 +437,7 @@ describe('friends routes', () => {
         display_name: null,
       },
     ];
-    const res = await app.request(
+    const res = await request(
       '/v1/friends?status=pending_incoming',
       {
         headers: { Authorization: await authHeader() },
@@ -456,7 +465,7 @@ describe('friends routes', () => {
         display_name: null,
       },
     ];
-    const res = await app.request(
+    const res = await request(
       '/v1/friends?status=pending_outgoing',
       {
         headers: { Authorization: await authHeader() },
@@ -488,7 +497,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'PATCH',
@@ -523,7 +532,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'PATCH',
@@ -555,7 +564,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'PATCH',
@@ -587,7 +596,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'PATCH',
@@ -617,7 +626,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'PATCH',
@@ -647,7 +656,7 @@ describe('friends routes', () => {
         };
       },
     } as unknown as D1Database;
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/ghost-id',
       {
         method: 'PATCH',
@@ -677,7 +686,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'PATCH',
@@ -714,7 +723,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'DELETE',
@@ -743,7 +752,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'DELETE',
@@ -772,7 +781,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'DELETE',
@@ -800,7 +809,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/u2',
       {
         method: 'DELETE',
@@ -831,7 +840,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/check/u2',
       {
         headers: { Authorization: await authHeader() },
@@ -860,7 +869,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/check/u2',
       {
         headers: { Authorization: await authHeader() },
@@ -890,7 +899,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/check/u2',
       {
         headers: { Authorization: await authHeader() },
@@ -920,7 +929,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/check/u2',
       {
         headers: { Authorization: await authHeader() },
@@ -954,7 +963,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/search?q=bob',
       {
         headers: { Authorization: await authHeader() },
@@ -988,7 +997,7 @@ describe('friends routes', () => {
       },
     } as unknown as D1Database;
 
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/search?q=bob',
       {
         headers: { Authorization: await authHeader() },
@@ -1001,7 +1010,7 @@ describe('friends routes', () => {
   });
 
   it('GET /v1/friends/search rejects short query', async () => {
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/search?q=ab',
       {
         headers: { Authorization: await authHeader() },
@@ -1048,7 +1057,7 @@ describe.skipIf(!hasSqlite)('expired pending requests are gone (#760)', () => {
 
   it('lets the initiator ask again instead of 409', async () => {
     const { env, as, status } = setup(31 * DAY);
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       { method: 'POST', headers: await as('gh:1'), body: JSON.stringify({ userId: 'gh:2' }) },
       env,
@@ -1060,7 +1069,7 @@ describe.skipIf(!hasSqlite)('expired pending requests are gone (#760)', () => {
 
   it('is not auto-accepted by the other side asking', async () => {
     const { env, as, status } = setup(31 * DAY);
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       { method: 'POST', headers: await as('gh:2'), body: JSON.stringify({ userId: 'gh:1' }) },
       env,
@@ -1071,25 +1080,86 @@ describe.skipIf(!hasSqlite)('expired pending requests are gone (#760)', () => {
 
   it('cannot be accepted and is reported as none', async () => {
     const { env, as, status } = setup(31 * DAY);
-    const accept = await app.request(
+    const accept = await request(
       '/v1/friends/gh:1',
       { method: 'PATCH', headers: await as('gh:2'), body: JSON.stringify({ action: 'accept' }) },
       env,
     );
     expect(accept.status).toBe(404);
     expect(status().status).toBe('pending');
-    const check = await app.request('/v1/friends/check/gh:1', { headers: await as('gh:2') }, env);
+    const check = await request('/v1/friends/check/gh:1', { headers: await as('gh:2') }, env);
     expect(await check.json()).toEqual({ status: 'none' });
   });
 
   it('a live request still auto-accepts', async () => {
     const { env, as, status } = setup(DAY);
-    const res = await app.request(
+    const res = await request(
       '/v1/friends/request',
       { method: 'POST', headers: await as('gh:2'), body: JSON.stringify({ userId: 'gh:1' }) },
       env,
     );
     expect(await res.json()).toEqual({ status: 'accepted', autoAccepted: true });
     expect(status().status).toBe('accepted');
+  });
+});
+
+describe.skipIf(!hasSqlite)('friend webhooks do not hold the request (#764)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    requestRateMap.clear();
+  });
+
+  it('answers before a hung hook settles and delivers in the background', async () => {
+    background.length = 0;
+    const { db, d1 } = sqliteD1();
+    for (const [id, githubId, login] of [
+      ['gh:1', 1, 'alice'],
+      ['gh:2', 2, 'bob'],
+    ] as const) {
+      db.prepare(
+        'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, 0)',
+      ).run(id, githubId, login);
+      db.prepare(
+        "INSERT INTO app_roles (app_id, user_id, role_name, granted_by) VALUES ('timer', ?, 'member', NULL)",
+      ).run(id);
+    }
+    db.prepare("INSERT INTO apps (id, owner_login, created_at) VALUES ('timer', 'owner', 1)").run();
+    db.prepare(
+      "INSERT INTO app_webhooks (id, app_id, event, url, secret) VALUES ('w1', 'timer', 'friend.requested', 'https://example.com/h', 's')",
+    ).run();
+    let release = () => {};
+    const hookCalled = new Promise<void>((resolve) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (u: string) => {
+          if (String(u).startsWith('https://cloudflare-dns.com/'))
+            return Response.json({ Answer: [{ type: 1, data: '93.184.216.34' }] });
+          resolve();
+          await new Promise<void>((r) => {
+            release = r;
+          });
+          return new Response('ok');
+        }),
+      );
+    });
+
+    const res = await request(
+      '/v1/friends/request',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${await signSession('gh:1', SIGNING_KEY, { aud: 'console' })}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId: 'gh:2' }),
+      },
+      { DB: d1, SESSION_SIGNING_KEY: SIGNING_KEY },
+    );
+    expect(res.status).toBe(200);
+    expect(background).toHaveLength(1);
+    await hookCalled;
+    release();
+    await Promise.all(background);
+    expect(db.prepare('SELECT status FROM webhook_deliveries').get()).toEqual({ status: 200 });
   });
 });

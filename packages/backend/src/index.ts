@@ -195,6 +195,10 @@ export default {
         // Expired one-time auth codes. Redemption deletes them, so these are
         // the abandoned flows — rows here still hold a live session token.
         env.DB.prepare('DELETE FROM auth_codes WHERE expires_at < ?').bind(nowEpoch).run(),
+        // Webhook delivery records (payload holds user ids) older than 7 days (#764).
+        env.DB.prepare('DELETE FROM webhook_deliveries WHERE created_at < ?')
+          .bind(nowEpoch - 7 * 24 * 60 * 60)
+          .run(),
       ]);
       for (const job of jobs) if (job.status === 'rejected') console.error('cron 0 3:', job.reason);
     } else if (event.cron === '0 6 * * SUN') {

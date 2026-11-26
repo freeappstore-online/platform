@@ -129,7 +129,13 @@ webhookRoutes.post('/apps/:appId/webhooks/:id/test', async (c) => {
   if (!hook) return c.json({ ok: false, error: 'Webhook not found' }, 404);
 
   const payload = { test: true, event: hook.event, appId, timestamp: Date.now() };
-  const result = await deliverWebhook(hook.url, hook.secret, hook.event, payload);
+  const result = await deliverWebhook(
+    hook.url,
+    hook.secret,
+    hook.event,
+    payload,
+    crypto.randomUUID(),
+  );
   // Only the status: the receiver's response body is not handed back, so this
   // cannot be used to read an arbitrary URL (#465).
   return c.json({ status: result.status });
@@ -162,7 +168,8 @@ export async function dispatchWebhook(
       .bind(deliveryId, hook.id, event, body, Math.floor(Date.now() / 1000))
       .run();
 
-    const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body));
+    // The recorded id is the X-FAS-Delivery-Id the receiver sees (#764).
+    const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body), deliveryId);
 
     // Update delivery status
     await db
@@ -217,7 +224,14 @@ export async function dispatchWebhookPlatform(
         .bind(deliveryId, hook.id, event, body, Math.floor(Date.now() / 1000))
         .run();
 
-      const result = await deliverWebhook(hook.url, hook.secret, event, JSON.parse(body));
+      // The recorded id is the X-FAS-Delivery-Id the receiver sees (#764).
+      const result = await deliverWebhook(
+        hook.url,
+        hook.secret,
+        event,
+        JSON.parse(body),
+        deliveryId,
+      );
 
       await db
         .prepare('UPDATE webhook_deliveries SET status = ?, last_attempt_at = ? WHERE id = ?')
@@ -232,6 +246,7 @@ async function deliverWebhook(
   secret: string,
   event: string,
   payload: unknown,
+  deliveryId: string,
 ): Promise<{ status: number; body: string }> {
   const body = JSON.stringify(payload);
   const encoder = new TextEncoder();
@@ -252,7 +267,6 @@ async function deliverWebhook(
   // receiver can reject a replay: check the timestamp is within 5 minutes and
   // that it has not seen the delivery id before.
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const deliveryId = crypto.randomUUID();
 
   // Re-checked on every delivery: the name may resolve somewhere new since the hook was saved.
   const blocked = await nonPublicResolution(url);

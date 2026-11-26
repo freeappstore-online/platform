@@ -134,10 +134,12 @@ friendsRoutes.post('/friends/request', async (c) => {
         .bind(now, a, b, me.id, me.id, MAX_FRIENDS)
         .run();
       if (!acc.meta.changes) throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
-      await dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
-        userId: me.id,
-        friendId: body.userId,
-      }).catch(() => {});
+      c.executionCtx.waitUntil(
+        dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
+          userId: me.id,
+          friendId: body.userId,
+        }).catch(() => {}),
+      );
       return c.json({ status: 'accepted', autoAccepted: true });
     }
   }
@@ -207,10 +209,12 @@ friendsRoutes.post('/friends/request', async (c) => {
           .bind(now, a, b, me.id, me.id, MAX_FRIENDS)
           .run();
         if (!acc.meta.changes) throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
-        await dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
-          userId: me.id,
-          friendId: body.userId,
-        }).catch(() => {});
+        c.executionCtx.waitUntil(
+          dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
+            userId: me.id,
+            friendId: body.userId,
+          }).catch(() => {}),
+        );
         return c.json({ status: 'accepted', autoAccepted: true });
       }
       throw new HttpError(409, 'request already exists');
@@ -218,10 +222,12 @@ friendsRoutes.post('/friends/request', async (c) => {
     throw err;
   }
 
-  await dispatchWebhookPlatform(c.env.DB, 'friend.requested', {
-    userId: me.id,
-    friendId: body.userId,
-  }).catch(() => {});
+  c.executionCtx.waitUntil(
+    dispatchWebhookPlatform(c.env.DB, 'friend.requested', {
+      userId: me.id,
+      friendId: body.userId,
+    }).catch(() => {}),
+  );
   return c.json({ status: 'pending', autoAccepted: false });
 });
 
@@ -327,10 +333,12 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
       .bind(now, a, b, pendingCutoff, me.id, me.id, MAX_FRIENDS)
       .run();
     if (!acc.meta.changes) throw new HttpError(409, `friend limit reached (${MAX_FRIENDS})`);
-    await dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
-      userId: me.id,
-      friendId: targetId,
-    }).catch(() => {});
+    c.executionCtx.waitUntil(
+      dispatchWebhookPlatform(c.env.DB, 'friend.accepted', {
+        userId: me.id,
+        friendId: targetId,
+      }).catch(() => {}),
+    );
     return c.json({ ok: true, status: 'accepted' });
   }
 
@@ -382,10 +390,12 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
     )
       .bind(a, b, me.id, me.id, now, now, me.id, now)
       .run();
-    await dispatchWebhookPlatform(c.env.DB, 'friend.blocked', {
-      userId: me.id,
-      blockedId: targetId,
-    }).catch(() => {});
+    c.executionCtx.waitUntil(
+      dispatchWebhookPlatform(c.env.DB, 'friend.blocked', {
+        userId: me.id,
+        blockedId: targetId,
+      }).catch(() => {}),
+    );
     return c.json({ ok: true, status: 'blocked' });
   }
 
@@ -430,10 +440,12 @@ friendsRoutes.delete('/friends/:userId', async (c) => {
     .run();
 
   if (row.status === 'accepted') {
-    await dispatchWebhookPlatform(c.env.DB, 'friend.removed', {
-      userId: me.id,
-      friendId: targetId,
-    }).catch(() => {});
+    c.executionCtx.waitUntil(
+      dispatchWebhookPlatform(c.env.DB, 'friend.removed', {
+        userId: me.id,
+        friendId: targetId,
+      }).catch(() => {}),
+    );
   }
   return c.json({ ok: true });
 });
