@@ -37,10 +37,14 @@ const contributor = { id: 'u1', login: 'alice' }
 const job = (key: string): GenerationJobSummary => ({
   id: `j-${key}`, key, status: 'accepted', inputPreview: 'Hello there. General Kenobi.', inputChars: 28,
   createdAt: 0,
-  artifact: { url: `${api}/artifacts/j-${key}?v=abc`, durationMs: 2500, bytes: 4096, contributor, acceptedAt: Date.now() },
+  artifact: {
+    url: `${api}/artifacts/j-${key}?v=abc`, submissionId: `s-${key}`, durationMs: 2500, bytes: 4096, contributor,
+    acceptedAt: Date.now(), review: null,
+  },
   submissions: [{
     id: `s-${key}`, contributor, deviceKind: 'web', attestation: 'unverified', status: 'rejected',
-    reason: 'asr mismatch', wer: 0.42, durationMs: 2400, createdAt: Date.now(), decidedAt: Date.now(),
+    reason: 'audio is too short for the text', durationMs: 2400, createdAt: Date.now(), decidedAt: Date.now(),
+    report: { good: false, note: 'skips the second sentence', at: Date.now() },
     record: {
       runner: 'android', reason: 'submitted', appVersion: '1.4.0', device: 'Google Pixel 10a', os: 'Android 16',
       background: true, wallMs: 12_400, loadMs: 900, synthMs: 8200, cpuMs: 30_100, rtf: 0.35,
@@ -76,8 +80,11 @@ it('shows set progress, pages jobs by cursor with a status filter, and withdraws
 
   act(() => button('Jobs')!.click())
   await flush()
-  expect(container.textContent).toContain('asr mismatch')
-  expect(container.textContent).toContain('42%')
+  expect(container.textContent).toContain('audio is too short for the text')
+  // The contributor's own report (#831), and the version is not reviewed yet
+  expect(container.textContent).toContain('Not good')
+  expect(container.textContent).toContain('skips the second sentence')
+  expect(container.textContent).toContain('Not reviewed')
   expect(container.textContent).toContain('alice')
   // The device's attempt record (#827)
   expect(container.textContent).toContain('Google Pixel 10a · Android 16')
@@ -109,6 +116,33 @@ it('shows set progress, pages jobs by cursor with a status filter, and withdraws
   await flush()
   expect(fetchMock).toHaveBeenCalledWith(`${api}/artifacts/j-a`, expect.objectContaining({ method: 'DELETE' }))
   expect(confirmSpy).not.toHaveBeenCalled()
+})
+
+it('the owner marks the exact version Reviewed or Needs changes with a note (#787, #831)', async () => {
+  const review = { status: 'needs_changes', note: 'wrong tone on 妈', by: 'alice', at: Date.now() }
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.endsWith('/generation/sets')) return json({ sets: [set] })
+    if (init?.method === 'PUT') return json({ review })
+    return json({ jobs: [job('a')], nextCursor: null })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => root.render(<GenerationManager appId="demo" getToken={getToken} />))
+  await flush()
+  act(() => button('Jobs')!.click())
+  await flush()
+  const note = container.querySelector('textarea[aria-label="Review note (optional)"]') as HTMLTextAreaElement
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(note, 'wrong tone on 妈')
+    note.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => button('Needs changes')!.click())
+  await flush()
+  const put = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT')!
+  expect(put[0]).toBe(`${api}/artifacts/j-a/review`)
+  expect(JSON.parse(put[1]!.body as string)).toEqual({ submissionId: 's-a', status: 'needs_changes', note: 'wrong tone on 妈' })
+  expect(container.textContent).toContain('Needs changes')
+  expect(container.textContent).toContain('by alice')
+  expect(container.textContent).not.toContain('Not reviewed')
 })
 
 it('blocks a contributor after confirming', async () => {

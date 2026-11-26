@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { GenerationAttempt, GenerationJobDetail, GenerationJobSummary, GenerationSetSummary } from '@freeappstore/sdk'
+import type {
+  GenerationAttempt, GenerationJobDetail, GenerationJobSummary, GenerationReview, GenerationSetSummary,
+} from '@freeappstore/sdk'
 import { ConfirmDialog, ProgressBar } from '@freeappstore/sdk/ui'
 import { attemptRows } from './attempt'
 import { API_URL, authHeaders } from './builder/lib/api'
@@ -74,7 +76,6 @@ export function GenerationManager({ appId, getToken }: Props) {
           ))}
         </div>
       </div>
-      {/* #787 adds the private pilot's manual review of exact asset versions here. */}
     </div>
   )
 }
@@ -164,6 +165,19 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
 
   useEffect(() => { fetchPage(null) }, [fetchPage])
 
+  /** The owner's review of the exact version listed (#787, #831); a 409 means it was replaced. */
+  const review = async (job: GenerationJobSummary, status: GenerationReview['status'], note: string) => {
+    const res = await fetch(`${base}/artifacts/${encodeURIComponent(job.id)}/review`, {
+      method: 'PUT',
+      headers: { ...authHeaders(getToken()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submissionId: job.artifact!.submissionId, status, note: note || undefined }),
+    })
+    if (res.status === 409) fetchPage(null)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const saved = ((await res.json()) as { review: GenerationReview }).review
+    setJobs(prev => prev.map(j => (j.id === job.id && j.artifact ? { ...j, artifact: { ...j.artifact, review: saved } } : j)))
+  }
+
   /** The job's whole input: the list carries only a 200-character preview. */
   const loadText = async (jobId: string) => {
     const res = await fetch(`${base}/sets/${encodeURIComponent(setId)}/jobs/${encodeURIComponent(jobId)}`, {
@@ -208,7 +222,13 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
       {!loading && jobs.length === 0 && !error && <p className="text-sm text-muted">No jobs.</p>}
       <div className="space-y-3">
         {jobs.map(job => (
-          <JobRow key={job.id} job={job} onAction={setPending} loadText={() => loadText(job.id)} />
+          <JobRow
+            key={job.id}
+            job={job}
+            onAction={setPending}
+            loadText={() => loadText(job.id)}
+            onReview={(status, note) => review(job, status, note)}
+          />
         ))}
       </div>
       {loading && <p className="mt-2 text-sm text-muted">Loading…</p>}
@@ -234,13 +254,13 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
   )
 }
 
-const percent = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)}%`)
 const seconds = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)}s`)
 
-function JobRow({ job, onAction, loadText }: {
+function JobRow({ job, onAction, loadText, onReview }: {
   job: GenerationJobSummary
   onAction: (p: Pending) => void
   loadText: () => Promise<string>
+  onReview: (status: GenerationReview['status'], note: string) => Promise<void>
 }) {
   const a = job.artifact
   return (
@@ -264,6 +284,7 @@ function JobRow({ job, onAction, loadText }: {
               Withdraw
             </button>
           </div>
+          <ReviewForm key={a.submissionId} review={a.review} onSave={onReview} />
         </div>
       ) : (
         <p className="mt-2 text-sm text-muted break-words">{job.inputPreview}{job.inputChars > job.inputPreview.length ? '…' : ''}</p>
@@ -274,7 +295,7 @@ function JobRow({ job, onAction, loadText }: {
             <thead>
               <tr className="text-left text-muted">
                 <th className="font-semibold pr-3 pb-1">Status</th>
-                <th className="font-semibold pr-3 pb-1">WER</th>
+                <th className="font-semibold pr-3 pb-1">Device says</th>
                 <th className="font-semibold pr-3 pb-1">Duration</th>
                 <th className="font-semibold pr-3 pb-1">Contributor</th>
                 <th className="font-semibold pr-3 pb-1">Device</th>
@@ -288,7 +309,14 @@ function JobRow({ job, onAction, loadText }: {
                     <span className={s.status === 'accepted' ? 'text-success' : s.status === 'rejected' ? 'text-danger' : 'text-ink'}>{s.status}</span>
                     {s.reason && <span className="block text-muted">{s.reason}</span>}
                   </td>
-                  <td className="pr-3 py-1 text-ink">{percent(s.wer)}</td>
+                  <td className="pr-3 py-1">
+                    {s.report ? (
+                      <>
+                        <span className={s.report.good ? 'text-success' : 'text-danger'}>{s.report.good ? 'Good' : 'Not good'}</span>
+                        {s.report.note && <span className="block text-muted break-words">{s.report.note}</span>}
+                      </>
+                    ) : <span className="text-muted">—</span>}
+                  </td>
                   <td className="pr-3 py-1 text-ink">{seconds(s.durationMs)}</td>
                   <td className="pr-3 py-1 text-ink">
                     {s.contributor ? (
@@ -328,6 +356,61 @@ function JobRow({ job, onAction, loadText }: {
           </ul>
         </div>
       )}
+    </div>
+  )
+}
+
+const REVIEW_LABEL: Record<GenerationReview['status'], [string, string]> = {
+  reviewed: ['Reviewed', 'border-success text-success'],
+  needs_changes: ['Needs changes', 'border-danger text-danger'],
+}
+
+/**
+ * The owner's review of this exact version (#787, #831): Not reviewed until marked Reviewed or
+ * Needs changes, with a note. A version generated again is a new one and starts unreviewed. A
+ * review never publishes or withdraws anything; Withdraw does that.
+ */
+function ReviewForm({ review, onSave }: {
+  review: GenerationReview | null
+  onSave: (status: GenerationReview['status'], note: string) => Promise<void>
+}) {
+  const [note, setNote] = useState(review?.note ?? '')
+  const [state, setState] = useState<'idle' | 'saving' | 'error'>('idle')
+  const save = async (status: GenerationReview['status']) => {
+    setState('saving')
+    try {
+      await onSave(status, note.trim())
+      setState('idle')
+    } catch {
+      setState('error')
+    }
+  }
+  const [label, tone] = review ? REVIEW_LABEL[review.status] : ['Not reviewed', 'border-line text-muted']
+  return (
+    <div className="mt-2 rounded-lg border border-line p-2">
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <span className={`rounded-full border px-2 py-0.5 font-semibold ${tone}`}>{label}</span>
+        {review && <span className="text-muted">by {review.by} · {formatTimeAgo(new Date(review.at))}</span>}
+      </div>
+      {review?.note && <p className="mt-1 text-xs text-ink break-words">{review.note}</p>}
+      <textarea
+        aria-label="Review note (optional)"
+        value={note}
+        maxLength={500}
+        rows={2}
+        onChange={e => setNote(e.currentTarget.value)}
+        placeholder="Note (optional), e.g. wrong stress on a word"
+        className="mt-2 w-full rounded-lg border border-line bg-paper px-2 py-1 text-xs text-ink"
+      />
+      <div className="mt-1 flex items-center gap-2 flex-wrap">
+        <button onClick={() => save('reviewed')} disabled={state === 'saving'} className="text-xs font-semibold text-success hover:underline disabled:opacity-50 min-h-[36px] px-2">
+          Mark reviewed
+        </button>
+        <button onClick={() => save('needs_changes')} disabled={state === 'saving'} className="text-xs font-semibold text-danger hover:underline disabled:opacity-50 min-h-[36px] px-2">
+          Needs changes
+        </button>
+        {state === 'error' && <span role="status" className="text-xs text-danger">Couldn't save the review.</span>}
+      </div>
     </div>
   )
 }
