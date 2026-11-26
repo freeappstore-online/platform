@@ -40,7 +40,7 @@ internal fun ContributeSwitch(appId: String, name: String, state: CompanionState
 internal fun ContributeDialog(name: String, dismiss: () -> Unit, confirm: () -> Unit) = AlertDialog(onDismissRequest = dismiss,
     title = { Text("Contribute to $name?") },
     text = { Text(contributeDisclosure(name)) },
-    confirmButton = { TextButton(onClick = confirm) { Text("Contribute") } },
+    confirmButton = { TextButton(onClick = confirm) { Text("Contribute to $name") } },
     dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
 
 /** The Contribute tab: voice model, when it runs, the apps opted in and recent results. */

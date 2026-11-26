@@ -103,14 +103,35 @@ class CompanionTest {
         compose.onAllNodesWithText("Run").onFirst().performClick()
         compose.onNodeWithText("Use with companion").assertIsDisplayed()
         compose.onNodeWithText("Permissions").performScrollTo().assertIsDisplayed()
-        compose.onNode(isToggleable()).performScrollTo().assertIsOff().performClick()
+        // The first switch is the companion's; the second, Contribute (#731).
+        compose.onAllNodes(isToggleable()).onFirst().performScrollTo().assertIsOff().performClick()
         compose.onNodeWithText(run.disclosure).assertIsDisplayed()
         assertEquals(0, granted)
         compose.onNodeWithText("Cancel").performClick()
         assertEquals(0, granted)
-        compose.onNode(isToggleable()).performClick()
+        compose.onAllNodes(isToggleable()).onFirst().performClick()
         compose.onNodeWithText("Enable for Run").performClick()
         assertEquals(1, granted)
+    }
+    /** #731: opting in to Contribute asks first; only its button opts in. */
+    @Test fun contributeAsksBeforeOptingIn() {
+        val opted = mutableListOf<Pair<String, Boolean>>()
+        screen(CompanionState(signedIn = true, apps = listOf(run)), CompanionActions(contribute = { id, on -> opted += id to on }), tab = Tab.STORE)
+        compose.onAllNodesWithText("Run").onFirst().performClick()
+        compose.onAllNodes(isToggleable())[1].performScrollTo().assertIsOff().performClick()
+        compose.onNodeWithText(contributeDisclosure("Run")).assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        assertTrue(opted.isEmpty())
+        compose.onAllNodes(isToggleable())[1].performClick()
+        compose.onNodeWithText("Contribute to Run").performClick()
+        assertEquals(listOf("run" to true), opted)
+    }
+    @Test fun contributeTabListsOptedInApps() {
+        val rejected = Contribution("j1", "run", "book/1", System.currentTimeMillis(), "rejected", "transcript_mismatch")
+        screen(CompanionState(signedIn = true, contributeApps = setOf("run"), contributedToday = mapOf("run" to 2), contributions = listOf(rejected)), tab = Tab.CONTRIBUTE)
+        compose.onNodeWithText("Download (${KokoroModel.DOWNLOAD_BYTES / 1_000_000} MB)").assertIsDisplayed()
+        compose.onNodeWithText("2 today").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Rejected").performScrollTo().assertIsDisplayed()
     }
     @Test fun signedOutDetailOffersSignInInsteadOfTheToggle() {
         var connects = 0
