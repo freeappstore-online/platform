@@ -159,7 +159,7 @@ class CompanionTest {
         compose.onNodeWithText("Send").performScrollTo().performClick()
         compose.waitForIdle()
         assertEquals("this phone's own upload gets a report (#831)", listOf(Triple("j1", false, "")), reports)
-        compose.onNodeWithText("‹ Activity").performClick()
+        compose.onNodeWithText("‹ Activity").performScrollTo().performClick() // scrolled down to Send
         compose.onNodeWithText("All").performClick()
         compose.onNodeWithText("Run · book/2").performClick()
         compose.onNodeWithText("Play").assertIsDisplayed()
