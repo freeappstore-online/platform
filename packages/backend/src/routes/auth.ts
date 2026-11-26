@@ -962,9 +962,13 @@ authRoutes.patch('/auth/me/date-of-birth', async (c) => {
   if (age > 120) {
     return c.json({ error: 'invalid date' }, 400);
   }
-  await c.env.DB.prepare('UPDATE users SET date_of_birth = ? WHERE id = ?')
+  // Once only, also against a concurrent call that passed the check above (#761).
+  const set = await c.env.DB.prepare(
+    'UPDATE users SET date_of_birth = ? WHERE id = ? AND date_of_birth IS NULL',
+  )
     .bind(dob, user.id)
     .run();
+  if (!set.meta.changes) return c.json({ error: 'date of birth already set' }, 409);
   return c.json({ ...user, dateOfBirth: dob });
 });
 
@@ -1117,7 +1121,8 @@ async function sha256Hex(value: string): Promise<string> {
 
 function ageFromDob(dob: string): number | null {
   const d = new Date(`${dob}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return null;
+  // Date rolls 2000-02-31 over to 2 March: only a date that round-trips is real (#761).
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== dob) return null;
   const now = new Date();
   let age = now.getUTCFullYear() - d.getUTCFullYear();
   const m = now.getUTCMonth() - d.getUTCMonth();
