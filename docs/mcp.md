@@ -175,11 +175,17 @@ Write tools (`create_app`, `update_files`) additionally verify app ownership via
 
 AI clients work on an app's data through the **FreeAppStore desktop app**, not through a server: the app's
 data stays on the device ([download the desktop app](https://freeappstore.online/download)). The desktop app runs a loopback MCP server at `http://127.0.0.1:47821/mcp`,
-protected by a per-install token. Its home screen shows the exact setup command:
+protected by a per-install token. Users connect Claude Code or Claude Desktop with one click (**Connect** on the
+home screen), which registers a stdio entry: the app's own binary in node mode, proxying to that server and
+reading the token itself, so client configs hold no token. Other clients use the HTTP URL with the token, under
+**Manual setup**:
 
 ```bash
 claude mcp add --transport http fas http://127.0.0.1:47821/mcp --header "Authorization: Bearer <token>"
 ```
+
+The app runs in the background (menu bar / tray, open at login). While the user has paused AI access, every tool
+returns an error saying so.
 
 | Tool | Description |
 |------|-------------|

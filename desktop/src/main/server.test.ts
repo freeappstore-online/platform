@@ -4,6 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WebSocket from 'ws';
 import { Hub } from './hub.js';
+import { PAUSED } from './mcp.js';
 import { startServer } from './server.js';
 
 const TOKEN = 'test-token-0123456789';
@@ -11,6 +12,7 @@ let server: Awaited<ReturnType<typeof startServer>>;
 let hub: Hub;
 let base: string;
 let opened: string[];
+let paused = false;
 const sockets: WebSocket[] = [];
 const clients: Client[] = [];
 
@@ -24,6 +26,7 @@ async function start(dev = false, timeoutMs = 30_000) {
     token: () => TOKEN,
     openApp: (id) => opened.push(id),
     openWaitMs: 50,
+    paused: () => paused,
   });
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
@@ -36,6 +39,7 @@ function stop() {
 beforeEach(() => start());
 
 afterEach(async () => {
+  paused = false;
   for (const ws of sockets.splice(0)) ws.terminate();
   for (const client of clients.splice(0)) await client.close();
   await stop();
@@ -166,6 +170,41 @@ describe('loopback server', () => {
     const bad = await client.callTool({ name: 'open_app', arguments: { app_id: '../x' } });
     expect(bad.isError).toBe(true);
     expect(opened).toEqual(['notes']);
+  });
+});
+
+describe('pause', () => {
+  it('fails every tool with the paused message and runs no app tool, until resumed', async () => {
+    let calls = 0;
+    const { ready } = tab('https://toy.freeappstore.online', 'toy', (args) => {
+      calls++;
+      return { echoed: args.text };
+    });
+    await ready;
+    await vi.waitFor(() => expect(hub.find('toy')).toBeDefined());
+    const client = await mcp();
+    paused = true;
+    for (const [name, args] of [
+      ['list_open_apps', {}],
+      ['app_tools', { app_id: 'toy' }],
+      ['app_call', { app_id: 'toy', tool: 'echo', args: { text: 'hi' } }],
+      ['open_app', { app_id: 'notes' }],
+    ] as const) {
+      const result = await client.callTool({ name, arguments: args });
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toBe(PAUSED);
+    }
+    expect(calls).toBe(0);
+    expect(opened).toEqual([]);
+    expect(hub.log[0]).toMatchObject({ tool: 'open_app', ok: false, error: PAUSED });
+    // The app stays registered while paused, so resuming works at once.
+    paused = false;
+    const result = await client.callTool({
+      name: 'app_call',
+      arguments: { app_id: 'toy', tool: 'echo', args: { text: 'hi' } },
+    });
+    expect(JSON.parse(textOf(result))).toEqual({ echoed: 'hi' });
+    expect(calls).toBe(1);
   });
 });
 

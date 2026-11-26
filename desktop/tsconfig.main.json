@@ -11,6 +11,6 @@
     "outDir": "dist",
     "sourceMap": true
   },
-  "include": ["src/main", "src/preload"],
+  "include": ["src/main", "src/preload", "src/stdio"],
   "exclude": ["src/**/*.test.ts"]
 }

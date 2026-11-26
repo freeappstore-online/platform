@@ -1,3 +1,4 @@
+import { sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   app,
@@ -7,20 +8,30 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
+  Menu,
+  nativeImage,
   nativeTheme,
   net,
   shell,
+  Tray,
   type WebContents,
 } from 'electron';
 import { Hub, type Peer } from './hub.js';
+import { type ClientId, Integrations, type StdioEntry } from './integrations.js';
 import { APP_ID, appOrigin, DEFAULT_PORT, HOST } from './security.js';
 import { startServer } from './server.js';
+import { loadSettings, type Settings, saveSettings } from './settings.js';
 import { loadToken, regenerateToken } from './token.js';
+import { trayMenu, trayStatus } from './tray.js';
 
 // Tests and side-by-side dev runs use their own profile and port.
-if (process.env.FAS_DESKTOP_USER_DATA) app.setPath('userData', process.env.FAS_DESKTOP_USER_DATA);
+const userDataOverride = process.env.FAS_DESKTOP_USER_DATA;
+if (userDataOverride) app.setPath('userData', userDataOverride);
 const port = Number(process.env.FAS_DESKTOP_PORT) || DEFAULT_PORT;
 const dev = !app.isPackaged;
+// Open at login is registered for the real install only: never for dev builds or for a test or
+// side-by-side profile (FAS_DESKTOP_USER_DATA), which would leave a login item pointing at a copy.
+const manageLoginItem = app.isPackaged && !userDataOverride;
 // Dev builds can load every app from a local dev server (e.g. http://localhost:5173).
 const devOrigin = dev ? process.env.FAS_DEV_APP_ORIGIN : undefined;
 const REGISTRY = 'https://freeappstore.online/registry.json';
@@ -41,21 +52,49 @@ const showWhenPainted = (win: BrowserWindow) => {
 };
 
 const preload = (name: string) => fileURLToPath(new URL(`../preload/${name}.cjs`, import.meta.url));
+const asset = (name: string) => fileURLToPath(new URL(`../../assets/${name}`, import.meta.url));
 const hub = new Hub();
 let token = '';
 let serverError: string | null = null;
 let home: BrowserWindow | null = null;
+let tray: Tray | null = null;
+let settings: Settings;
+let integrations: Integrations;
+/** Set once the user really quits (tray Quit, Cmd+Q); until then closing a window only hides it. */
+let quitting = false;
 const appWindows = new Map<string, BrowserWindow>();
 
 const mcpUrl = `http://${HOST}:${port}/mcp`;
 const setupCommand = () =>
   `claude mcp add --transport http fas ${mcpUrl} --header "Authorization: Bearer ${token}"`;
 
+/**
+ * How AI clients launch the stdio entry (#815): this app's own binary in node mode running
+ * dist/stdio/main.mjs, which electron-builder unpacks from the asar archive (a plain file that
+ * node mode can run). Overrides the app runs with are passed on, so the proxy finds the same
+ * profile and port. Holds no token.
+ */
+function stdioEntry(): StdioEntry {
+  const script = fileURLToPath(new URL('../stdio/main.mjs', import.meta.url)).replace(
+    `${sep}app.asar${sep}`,
+    `${sep}app.asar.unpacked${sep}`,
+  );
+  const env: Record<string, string> = { ELECTRON_RUN_AS_NODE: '1' };
+  if (userDataOverride) env.FAS_DESKTOP_USER_DATA = app.getPath('userData');
+  if (port !== DEFAULT_PORT) env.FAS_DESKTOP_PORT = String(port);
+  // A dev build's binary is plain Electron: the proxy must name the app directory to start it.
+  if (dev) env.FAS_DESKTOP_APP_PATH = app.getAppPath();
+  return { command: process.execPath, args: [script], env };
+}
+
 function state() {
   return {
     mcpUrl,
     setupCommand: setupCommand(),
     serverError,
+    paused: settings.paused,
+    openAtLogin: settings.openAtLogin,
+    version: app.getVersion(),
     openApps: hub.openApps(),
     log: hub.log,
   };
@@ -83,6 +122,7 @@ function openAppWindow(appId: string): void {
     return;
   }
   const origin = appOrigin(appId, devOrigin);
+  void app.dock?.show();
   const win = new BrowserWindow({
     width: 1200,
     height: 820,
@@ -124,6 +164,7 @@ function openAppWindow(appId: string): void {
   win.on('closed', () => {
     hub.disconnect(peerId);
     if (appWindows.get(appId) === win) appWindows.delete(appId);
+    updateDock();
   });
   void win.loadURL(`${origin}/`);
 }
@@ -179,10 +220,77 @@ function createHome(): void {
     event.preventDefault();
     openExternal(event.url);
   });
+  // Closing the window only hides it: the app keeps running in the menu bar (tray) and keeps
+  // serving AI clients. Quit from the tray or with Cmd+Q.
+  home.on('close', (event) => {
+    if (quitting || !home) return;
+    event.preventDefault();
+    home.hide();
+    updateDock();
+  });
   home.on('closed', () => {
     home = null;
   });
   void home.loadFile(fileURLToPath(new URL('../renderer/index.html', import.meta.url)));
+}
+
+function showHome(): void {
+  void app.dock?.show();
+  if (!home) {
+    createHome();
+    return;
+  }
+  if (home.isMinimized()) home.restore();
+  home.show();
+  home.focus();
+}
+
+/** macOS: a dock icon only while a window is showing; otherwise the app lives in the menu bar. */
+function updateDock(): void {
+  if (!app.dock || quitting) return;
+  if (BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isVisible())) return;
+  app.dock.hide();
+}
+
+// ── Pause, open at login, tray ──────────────────────────────────
+
+function setPaused(paused: boolean): void {
+  settings.paused = paused;
+  saveSettings(app.getPath('userData'), settings);
+  pushState();
+}
+
+function applyLoginItem(): void {
+  // `args` is for Windows; macOS reports a login launch through wasOpenedAtLogin.
+  if (manageLoginItem)
+    app.setLoginItemSettings({ openAtLogin: settings.openAtLogin, args: ['--hidden'] });
+}
+
+function trayState() {
+  return { paused: settings.paused, openApps: hub.openApps().length, serverError };
+}
+
+function createTray(): void {
+  // macOS: a monochrome template image (from brand/assets/mark-mono.svg) that follows the menu
+  // bar's appearance; elsewhere the colour icon.
+  const icon = nativeImage.createFromPath(
+    asset(process.platform === 'darwin' ? 'trayTemplate.png' : 'tray.png'),
+  );
+  tray = new Tray(icon);
+  // Windows and Linux open the app on click; macOS shows the menu.
+  if (process.platform !== 'darwin') tray.on('click', showHome);
+  updateTray();
+}
+
+function updateTray(): void {
+  if (!tray) return;
+  const current = trayState();
+  tray.setToolTip(trayStatus(current));
+  tray.setContextMenu(
+    Menu.buildFromTemplate(
+      trayMenu(current, { open: showHome, setPaused, quit: () => app.quit() }),
+    ),
+  );
 }
 
 const fromHome = (event: IpcMainInvokeEvent) => home !== null && event.sender === home.webContents;
@@ -208,6 +316,23 @@ ipcMain.handle('home:regenerate-token', async (event) => {
   token = regenerateToken(app.getPath('userData'));
   pushState();
 });
+ipcMain.handle('home:set-paused', (event, paused: unknown) => {
+  if (fromHome(event) && typeof paused === 'boolean') setPaused(paused);
+});
+ipcMain.handle('home:set-open-at-login', (event, open: unknown) => {
+  if (!fromHome(event) || typeof open !== 'boolean') return;
+  settings.openAtLogin = open;
+  saveSettings(app.getPath('userData'), settings);
+  applyLoginItem();
+  pushState();
+});
+const isClient = (id: unknown): id is ClientId => id === 'claude-code' || id === 'claude-desktop';
+ipcMain.handle('home:clients', (event) => (fromHome(event) ? integrations.status() : null));
+ipcMain.handle('home:connect', async (event, id: unknown, connect: unknown) => {
+  if (!fromHome(event) || !isClient(id)) return null;
+  await (connect === false ? integrations.disconnect(id) : integrations.connect(id));
+  return integrations.status();
+});
 ipcMain.handle('home:registry', async (event) => {
   if (!fromHome(event)) return null;
   const response = await net.fetch(REGISTRY);
@@ -217,6 +342,7 @@ ipcMain.handle('home:registry', async (event) => {
 
 function pushState() {
   if (home && !home.isDestroyed()) home.webContents.send('home:state', state());
+  updateTray();
 }
 hub.on('change', pushState);
 
@@ -225,16 +351,44 @@ hub.on('change', pushState);
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (!home) return createHome();
-    if (home.isMinimized()) home.restore();
-    home.focus();
+  // Opening the app again (Finder, Start menu, the stdio proxy) shows the running one.
+  app.on('second-instance', (_event, argv) => {
+    if (!argv.includes('--hidden')) showHome();
+  });
+  app.on('before-quit', () => {
+    quitting = true;
   });
 
   app.whenReady().then(async () => {
-    token = loadToken(app.getPath('userData'));
+    const userData = app.getPath('userData');
+    const loaded = loadSettings(userData);
+    settings = loaded.settings;
+    if (loaded.firstRun) {
+      saveSettings(userData, settings);
+      applyLoginItem();
+    }
+    // Started at login or by an AI client's stdio proxy: run in the background, no window.
+    const hidden =
+      process.argv.includes('--hidden') ||
+      (manageLoginItem &&
+        process.platform === 'darwin' &&
+        app.getLoginItemSettings().wasOpenedAtLogin);
+    integrations = new Integrations({
+      entry: stdioEntry(),
+      appData: app.getPath('appData'),
+      home: app.getPath('home'),
+    });
+    token = loadToken(userData);
     try {
-      await startServer({ hub, port, dev, token: () => token, openApp: openAppWindow });
+      await startServer({
+        hub,
+        port,
+        dev,
+        token: () => token,
+        openApp: openAppWindow,
+        paused: () => settings.paused,
+        version: app.getVersion(),
+      });
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       serverError =
@@ -242,13 +396,12 @@ if (!app.requestSingleInstanceLock()) {
           ? `Port ${port} is in use, so AI clients can't connect. Quit the other program using it and restart FreeAppStore.`
           : `The local MCP server could not start (${code ?? 'unknown error'}).`;
     }
-    createHome();
-    app.on('activate', () => {
-      if (!home) createHome();
-    });
+    createTray();
+    if (hidden) app.dock?.hide();
+    else createHome();
+    app.on('activate', showHome);
   });
 
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-  });
+  // The app keeps running in the tray with no window open.
+  app.on('window-all-closed', () => {});
 }

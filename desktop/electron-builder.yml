@@ -6,7 +6,11 @@ directories:
   output: release
 files:
   - dist/**
+  - assets/**
   - package.json
+# The stdio MCP entry (#815) runs as a plain file in node mode (ELECTRON_RUN_AS_NODE), outside the archive.
+asarUnpack:
+  - dist/stdio/**
 mac:
   category: public.app-category.productivity
   icon: build/icon.png

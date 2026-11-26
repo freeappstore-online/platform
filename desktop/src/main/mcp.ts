@@ -10,7 +10,13 @@ export interface McpDeps {
   openApp(appId: string): void;
   /** How long open_app waits for the app to register its tools. */
   openWaitMs?: number;
+  /** AI access is paused: every tool call fails with PAUSED and no app tool runs (#815). */
+  paused?(): boolean;
+  version?: string;
 }
+
+export const PAUSED =
+  'FreeAppStore AI access is paused. Ask the user to resume it from the FreeAppStore menu-bar icon or Home screen, then try again.';
 
 // Every tool carries a title and all four hints as explicit booleans, as in workers/mcp (#539).
 // openWorldHint is false throughout: the tools only reach apps open on this machine.
@@ -29,8 +35,14 @@ const appId = z
 const badAppId = (id: string) =>
   toolError(`Invalid app_id "${id}": use the id from the app's URL, e.g. 'spreadsheet'.`);
 
-export function createMcpServer({ hub, openApp, openWaitMs = 15_000 }: McpDeps): McpServer {
-  const server = new McpServer({ name: 'FreeAppStore desktop', version: '0.1.0' });
+export function createMcpServer({
+  hub,
+  openApp,
+  openWaitMs = 15_000,
+  paused = () => false,
+  version = '0.0.0',
+}: McpDeps): McpServer {
+  const server = new McpServer({ name: 'FreeAppStore desktop', version });
 
   /** Runs a tool body, turning failures into MCP tool errors, and logs the call. */
   async function logged(
@@ -40,7 +52,7 @@ export function createMcpServer({ hub, openApp, openWaitMs = 15_000 }: McpDeps):
   ): Promise<CallToolResult> {
     let result: CallToolResult;
     try {
-      result = await run();
+      result = paused() ? toolError(PAUSED) : await run();
     } catch (error) {
       result = toolError(
         error instanceof BridgeError ? error.message : `Unexpected error: ${String(error)}`,

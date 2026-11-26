@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import {
   _electron,
@@ -16,6 +17,8 @@ import {
 } from '@playwright/test';
 import ts from 'typescript';
 import WebSocket from 'ws';
+import { PAUSED } from '../src/main/mcp.js';
+import { defaultUserData } from '../src/stdio/proxy.mjs';
 
 const here = new URL('.', import.meta.url);
 // The SDK bridge source from this repo, compiled on the fly: the test page runs the real code.
@@ -31,6 +34,10 @@ let home: Page;
 let browser: Browser;
 let mcp: Client;
 let token: string;
+// Stand-ins for the AI clients' configs: tests never touch the real ones.
+let claudeHome: string;
+let desktopConfig: string;
+let claudeLog: string;
 
 async function freePort(): Promise<number> {
   const server = createServer().listen(0, '127.0.0.1');
@@ -78,18 +85,34 @@ test.beforeAll(async () => {
   fixtureOrigin = `http://localhost:${(fixture.address() as AddressInfo).port}`;
   port = await freePort();
   userData = mkdtempSync(join(tmpdir(), 'fas-desktop-e2e-'));
+  const clients = mkdtempSync(join(tmpdir(), 'fas-desktop-e2e-clients-'));
+  claudeHome = join(clients, 'home');
+  mkdirSync(join(claudeHome, '.claude-work'), { recursive: true });
+  writeFileSync(join(claudeHome, '.claude.json'), JSON.stringify({ numStartups: 1 }));
+  writeFileSync(join(claudeHome, '.claude-work', '.claude.json'), '{}');
+  mkdirSync(join(clients, 'Claude'));
+  desktopConfig = join(clients, 'Claude', 'claude_desktop_config.json');
+  writeFileSync(desktopConfig, JSON.stringify({ mcpServers: { other: { command: 'other-mcp' } } }));
+  claudeLog = join(clients, 'claude.log');
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    FAS_DESKTOP_PORT: String(port),
+    FAS_DESKTOP_USER_DATA: userData,
+    FAS_DEV_APP_ORIGIN: fixtureOrigin,
+    FAS_DESKTOP_CLAUDE_DESKTOP_CONFIG: desktopConfig,
+    FAS_DESKTOP_CLAUDE_CLI: new URL('fixture/fake-claude.mjs', here).pathname,
+    FAS_DESKTOP_CLAUDE_HOME: claudeHome,
+    FAS_FAKE_CLAUDE_LOG: claudeLog,
+  };
+  // Whatever profile this test runs under must not leak into the app.
+  delete env.CLAUDE_CONFIG_DIR;
   electron = await _electron.launch({
     args: ['.'],
     cwd: new URL('..', here).pathname,
-    env: {
-      ...process.env,
-      FAS_DESKTOP_PORT: String(port),
-      FAS_DESKTOP_USER_DATA: userData,
-      FAS_DEV_APP_ORIGIN: fixtureOrigin,
-    },
+    env: env as Record<string, string>,
   });
   home = await electron.firstWindow();
-  await home.waitForSelector('[data-testid="setup-command"]');
+  await expect(home.getByTestId('status')).toHaveText('AI access is on');
   token = readFileSync(join(userData, 'mcp-token'), 'utf8');
   mcp = await connect(token);
   // evil.test resolves to the fixture server, so a real page can try from a foreign origin.
@@ -102,20 +125,170 @@ test.afterAll(async () => {
   await electron?.close();
   fixture?.close();
   rmSync(userData, { recursive: true, force: true });
+  rmSync(join(claudeHome, '..'), { recursive: true, force: true });
 });
 
-test('home screen shows the setup command, in light and dark', async () => {
+const client = (id: string) => home.getByTestId(`client-${id}`);
+const setTheme = (theme: string) =>
+  home.evaluate((t) => {
+    if (t === 'dark') document.documentElement.dataset.theme = 'dark';
+    else delete document.documentElement.dataset.theme;
+  }, theme);
+
+test('home leads with the status and Connect buttons, in light and dark', async () => {
+  await expect(client('claude-code')).toContainText('Not connected');
+  await expect(client('claude-desktop')).toContainText('Not connected');
+  await expect(client('claude-code').getByRole('button', { name: 'Connect' })).toBeEnabled();
+  await expect(home.getByText('No apps connected')).toBeVisible();
+  // The token is tucked away under Manual setup.
+  await expect(home.getByTestId('setup-command')).toBeHidden();
+  for (const theme of ['light', 'dark']) {
+    await setTheme(theme);
+    await home.screenshot({ path: join(SHOTS, `home-${theme}.png`), fullPage: true });
+  }
+  await home.getByText('Manual setup (other AI apps)').click();
   await expect(home.getByTestId('setup-command')).toHaveText(
     `claude mcp add --transport http fas http://127.0.0.1:${port}/mcp --header "Authorization: Bearer ${token}"`,
   );
-  await expect(home.getByText('No apps connected')).toBeVisible();
+  await home.getByText('Manual setup (other AI apps)').click();
+});
+
+test('Connect and Disconnect Claude Desktop and Claude Code, keeping their other settings', async () => {
+  await client('claude-desktop').getByRole('button', { name: 'Connect' }).click();
+  await expect(client('claude-desktop')).toContainText('Connected');
+  const config = JSON.parse(readFileSync(desktopConfig, 'utf8'));
+  expect(Object.keys(config.mcpServers)).toEqual(['other', 'freeappstore']);
+  const entry = config.mcpServers.freeappstore;
+  expect(entry.command).toBe(await electron.evaluate(() => process.execPath));
+  expect(entry.args).toEqual([new URL('../dist/stdio/main.mjs', here).pathname]);
+  expect(entry.env).toMatchObject({
+    ELECTRON_RUN_AS_NODE: '1',
+    FAS_DESKTOP_USER_DATA: userData,
+    FAS_DESKTOP_PORT: String(port),
+  });
+  // No token anywhere in a client config.
+  expect(readFileSync(desktopConfig, 'utf8')).not.toContain(token);
+
+  await client('claude-code').getByRole('button', { name: 'Connect' }).click();
+  await expect(client('claude-code')).toContainText('Connected in ~/.claude.json, ~/.claude-work');
+  const calls = readFileSync(claudeLog, 'utf8')
+    .trim()
+    .split('\n')
+    .map((l) => JSON.parse(l));
+  expect(calls.map((c) => [c.args.slice(0, 5).join(' '), c.configDir])).toEqual([
+    ['mcp add-json --scope user freeappstore', null],
+    ['mcp add-json --scope user freeappstore', join(claudeHome, '.claude-work')],
+  ]);
+  expect(JSON.parse(calls[0].args[5])).toEqual({ type: 'stdio', ...entry });
   for (const theme of ['light', 'dark']) {
-    await home.evaluate((t) => {
-      if (t === 'dark') document.documentElement.dataset.theme = 'dark';
-      else delete document.documentElement.dataset.theme;
-    }, theme);
-    await home.screenshot({ path: join(SHOTS, `home-${theme}.png`) });
+    await setTheme(theme);
+    await home.screenshot({
+      path: join(SHOTS, `home-clients-connected-${theme}.png`),
+      fullPage: true,
+    });
   }
+
+  await client('claude-code').getByRole('button', { name: 'Disconnect' }).click();
+  await expect(client('claude-code')).toContainText('Not connected');
+  expect(JSON.parse(readFileSync(join(claudeHome, '.claude.json'), 'utf8'))).toEqual({
+    numStartups: 1,
+    mcpServers: {},
+  });
+});
+
+test('the stdio entry works with a real MCP client launching the app binary in node mode', async () => {
+  // Exactly what Claude Desktop would run, from the config Connect wrote.
+  const entry = JSON.parse(readFileSync(desktopConfig, 'utf8')).mcpServers.freeappstore;
+  const stdio = new Client({ name: 'e2e-stdio', version: '1.0.0' });
+  await stdio.connect(
+    new StdioClientTransport({
+      command: entry.command,
+      args: entry.args,
+      env: { ...entry.env, PATH: process.env.PATH ?? '' },
+      stderr: 'pipe',
+    }),
+  );
+  const { tools } = await stdio.listTools();
+  expect(tools.map((t) => t.name).sort()).toEqual([
+    'app_call',
+    'app_tools',
+    'list_open_apps',
+    'open_app',
+  ]);
+  const result = await stdio.callTool({ name: 'list_open_apps', arguments: {} });
+  expect((result.content as { text: string }[])[0]!.text).toBe('[]');
+  // Still the one GUI: the node-mode process opened no window of its own.
+  expect(electron.windows()).toHaveLength(1);
+  await stdio.close();
+
+  // The proxy's default profile is where Electron keeps userData.
+  const [appData, name] = await electron.evaluate(({ app }) => [
+    app.getPath('appData'),
+    app.getName(),
+  ]);
+  expect(defaultUserData()).toBe(join(appData!, name!));
+
+  await client('claude-desktop').getByRole('button', { name: 'Disconnect' }).click();
+  await expect(client('claude-desktop')).toContainText('Not connected');
+  expect(JSON.parse(readFileSync(desktopConfig, 'utf8'))).toEqual({
+    mcpServers: { other: { command: 'other-mcp' } },
+  });
+});
+
+test('Pause makes every tool fail with the paused message; Resume brings it back', async () => {
+  const tab = await browser.newPage();
+  await tab.goto(`${fixtureOrigin}/?app=toyweb&ws=ws://127.0.0.1:${port}/bridge`);
+  await expect.poll(async () => (await openApps()).length).toBe(1);
+  const echo = () => call('app_call', { app_id: 'toyweb', tool: 'echo', args: { text: 'hi' } });
+
+  await home.getByRole('button', { name: 'Pause AI access' }).click();
+  await expect(home.getByTestId('status')).toHaveText('AI access is paused');
+  expect(await echo()).toEqual({ isError: true, text: PAUSED });
+  expect(await call('list_open_apps')).toEqual({ isError: true, text: PAUSED });
+  expect(JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8'))).toMatchObject({
+    paused: true,
+  });
+  for (const theme of ['light', 'dark']) {
+    await setTheme(theme);
+    await home.screenshot({ path: join(SHOTS, `home-paused-${theme}.png`) });
+  }
+
+  await home.getByRole('button', { name: 'Resume AI access' }).click();
+  await expect(home.getByTestId('status')).toHaveText('AI access is on');
+  const resumed = await echo();
+  expect(resumed.isError).toBe(false);
+  expect(JSON.parse(resumed.text)).toEqual({ echoed: 'hi', where: 'browser' });
+  await tab.close();
+  await expect.poll(openApps).toEqual([]);
+});
+
+test('Open at login is on by default and the toggle persists (no login item in dev)', async () => {
+  const toggle = home.getByRole('checkbox', { name: /Open at login/ });
+  await expect(toggle).toBeChecked();
+  // A controlled checkbox: it follows the state the main process pushes back.
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  expect(JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8'))).toMatchObject({
+    openAtLogin: false,
+  });
+  // Dev builds and test profiles never register a real login item.
+  expect(await electron.evaluate(({ app }) => app.getLoginItemSettings().openAtLogin)).toBe(false);
+  await toggle.click();
+  await expect(toggle).toBeChecked();
+});
+
+test('closing the window hides it and the server keeps answering', async () => {
+  await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.close());
+  await expect
+    .poll(() =>
+      electron.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().map((w) => w.isVisible()),
+      ),
+    )
+    .toEqual([false]);
+  expect(await openApps()).toEqual([]);
+  await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.show());
+  await expect(home.getByTestId('status')).toBeVisible();
 });
 
 test('the Store tab lists apps from registry.json (needs the network)', async () => {

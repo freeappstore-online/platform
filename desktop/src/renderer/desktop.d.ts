@@ -1,12 +1,16 @@
 // The API the home window's preload (src/preload/home.cts) exposes.
 import type { LogEntry, OpenApp } from '../main/hub.js';
+import type { ClientId, ClientStatus } from '../main/integrations.js';
 
-export type { LogEntry, OpenApp };
+export type { ClientId, ClientStatus, LogEntry, OpenApp };
 
 export interface DesktopState {
   mcpUrl: string;
   setupCommand: string;
   serverError: string | null;
+  paused: boolean;
+  openAtLogin: boolean;
+  version: string;
   openApps: OpenApp[];
   log: LogEntry[];
 }
@@ -29,6 +33,11 @@ declare global {
       openApp(appId: string): Promise<void>;
       copySetupCommand(): Promise<void>;
       regenerateToken(): Promise<void>;
+      setPaused(paused: boolean): Promise<void>;
+      setOpenAtLogin(open: boolean): Promise<void>;
+      clients(): Promise<ClientStatus[]>;
+      /** Connect (true) or disconnect (false) a client; resolves with every client's new status. */
+      setConnected(id: ClientId, connect: boolean): Promise<ClientStatus[]>;
       registry(): Promise<{ apps: RegistryApp[] }>;
     };
   }
