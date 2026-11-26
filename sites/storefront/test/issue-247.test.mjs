@@ -31,9 +31,7 @@ test("issue #247: instrument-tuner stays delisted and its old page redirects to 
 
   const { tmp, dist } = buildStorefront();
   try {
-    const redirects = readFileSync(join(dist, "_redirects"), "utf8");
-    assert.match(redirects, /^\/apps\/instrument-tuner\s+\/apps\/forktuner\s+301$/m);
-    assert.match(redirects, /^\/apps\/instrument-tuner\.html\s+\/apps\/forktuner\s+301$/m);
+    // The redirect lives in functions/apps/[[path]].js (see publication-route.test.mjs, #768).
     // A built page would shadow the redirect on Pages.
     assert.ok(!existsSync(join(dist, "apps", "instrument-tuner.html")));
     assert.ok(existsSync(join(dist, "apps", "forktuner.html")));

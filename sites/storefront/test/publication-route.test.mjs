@@ -42,3 +42,12 @@ test('eligible clean and legacy detail URLs preserve normal Pages behavior; HEAD
   assert.equal(head.status, 404);
   assert.equal(await head.text(), '');
 });
+
+test('#768: renamed app URLs 301 to the new listing (the Function shadows _redirects)', async () => {
+  for (const path of ['instrument-tuner', 'instrument-tuner.html', 'instrument-tuner/']) {
+    const response = await onRequest({ request: new Request(`https://freeappstore.online/apps/${path}`), next() { throw new Error('Must redirect'); } });
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), 'https://freeappstore.online/apps/forktuner');
+  }
+  assert.doesNotMatch(readFileSync(new URL('../_redirects', import.meta.url), 'utf8'), /instrument-tuner/);
+});
