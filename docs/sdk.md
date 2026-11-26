@@ -495,7 +495,7 @@ await runner.load((p) => console.log(p)); // optional: download (unless cached) 
 const sets = (await fas.generation.openWork()).filter((s) => !kokoroProblem(s));
 const { submitted, stopped } = await contributeKokoro(fas.generation, {
   runner, setId: sets[0].setId, signal: controller.signal,
-  onEvent: (e) => console.log(e), // loading | claimed | progress { sentence, sentences, chars, totalChars, charsPerSecond } | submitted | skipped
+  onEvent: (e) => console.log(e), // loading | claimed | progress { sentence, sentences, chars, totalChars, charsPerSecond } | generated { result: { file, meta, timing: { loadMs, synthMs, encodeMs } } } | submitted | skipped
 }); // stopped: 'no-work' | 'aborted'
 runner.dispose();          // frees the model's memory
 await deleteKokoroModel(); // frees its storage

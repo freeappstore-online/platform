@@ -22,9 +22,16 @@ export type WorkerRequest =
   | { type: 'load'; id: number; device: KokoroDevice }
   | { type: 'cancel' };
 
+/** Wall time of a narration's stages in the worker (#827): model load, synthesis, AAC encode + mux. */
+export interface KokoroTiming {
+  loadMs: number;
+  synthMs: number;
+  encodeMs: number;
+}
+
 export type WorkerReply =
   | { type: 'loading'; progress: number }
   | { type: 'loaded'; id: number }
   | { type: 'progress'; id: number; done: number; total: number; chars: number }
-  | { type: 'done'; id: number; file: Blob; segments: KokoroSegment[] }
+  | { type: 'done'; id: number; file: Blob; segments: KokoroSegment[]; timing?: KokoroTiming }
   | { type: 'error'; id: number; message: string; skip: boolean };

@@ -16,7 +16,7 @@
  * main → worker: { type: 'narrate', id, text, voice, speed, config, device } | { type: 'load', id, device }
  *              | { type: 'cancel' }
  * worker → main: { type: 'loading', progress } | { type: 'loaded', id } | { type: 'progress', id, done, total, chars }
- *              | { type: 'done', id, file: Blob, segments } | { type: 'error', id, message, skip? }
+ *              | { type: 'done', id, file: Blob, segments, timing } | { type: 'error', id, message, skip? }
  * A new narrate, or cancel, stops the text in progress at its next sentence.
  */
 import { env, KokoroTTS } from 'kokoro-js';
@@ -26,6 +26,7 @@ import {
   KOKORO_REPO,
   type KokoroDevice,
   type KokoroSegment,
+  type KokoroTiming,
   type WorkerReply,
   type WorkerRequest,
 } from './shared.js';
@@ -140,7 +141,16 @@ async function narrate(
   config: AudioEncoderConfig,
   device: KokoroDevice,
 ) {
+  const timing: KokoroTiming = { loadMs: 0, synthMs: 0, encodeMs: 0 };
+  let t = performance.now();
+  /** Adds the time since the last mark to `stage`. */
+  const mark = (stage: keyof KokoroTiming) => {
+    const now = performance.now();
+    timing[stage] += now - t;
+    t = now;
+  };
   const tts = await model(device);
+  mark('loadMs');
   if (!Object.hasOwn(tts.voices, voice)) throw new Unsupported(`unknown voice ${voice}`);
   const muxer = new Muxer({
     target: new ArrayBufferTarget(),
@@ -177,7 +187,9 @@ async function narrate(
     for (const [n, [start, end, endsParagraph]] of sentences.entries()) {
       if (active !== id) throw new Error('cancelled');
       if (failure) throw failure;
+      mark('encodeMs');
       const samples = await say(tts, text.slice(start, end), voice, speed);
+      mark('synthMs');
       if (samples.length) {
         if (pause) feed(new Float32Array(Math.round(pause * RATE)));
         segments.push([start, end, round(frames / RATE), round((frames + samples.length) / RATE)]);
@@ -192,7 +204,10 @@ async function narrate(
     if (encoder.state !== 'closed') encoder.close();
   }
   muxer.finalize();
-  return { file: new Blob([muxer.target.buffer], { type: 'audio/mp4' }), segments };
+  mark('encodeMs');
+  for (const stage of Object.keys(timing) as (keyof KokoroTiming)[])
+    timing[stage] = Math.round(timing[stage]);
+  return { file: new Blob([muxer.target.buffer], { type: 'audio/mp4' }), segments, timing };
 }
 
 /** Serve narrate/cancel messages from the main thread's `KokoroRunner`. Call once, in a module worker. */

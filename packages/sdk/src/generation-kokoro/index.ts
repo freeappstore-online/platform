@@ -16,10 +16,16 @@ import type {
   GenerationModel,
 } from '../generation.js';
 import { narrationSentences } from './sentences.js';
-import type { KokoroDevice, KokoroSegment, WorkerReply, WorkerRequest } from './shared.js';
+import type {
+  KokoroDevice,
+  KokoroSegment,
+  KokoroTiming,
+  WorkerReply,
+  WorkerRequest,
+} from './shared.js';
 
 export { narrationSentences } from './sentences.js';
-export type { KokoroDevice, KokoroSegment } from './shared.js';
+export type { KokoroDevice, KokoroSegment, KokoroTiming } from './shared.js';
 
 /** The model and version this runner generates with (what devices claim and sets must ask for). */
 export const KOKORO_MODEL: GenerationModel = { model: 'kokoro', modelVersion: 'v1.0' };
@@ -160,6 +166,8 @@ export interface KokoroRunnerOptions {
 export interface KokoroResult {
   file: Blob;
   meta: { segments: KokoroSegment[] };
+  /** Wall time of the worker's stages (#827); absent from a worker built from an older SDK. */
+  timing?: KokoroTiming;
 }
 
 /** Generates jobs one at a time in a Web Worker, which keeps the model loaded between jobs. */
@@ -252,7 +260,9 @@ export class KokoroRunner {
                 ? 'sentence timings exceed 64 KB'
                 : null;
           finish(() =>
-            problem ? reject(new KokoroSkip(job, problem)) : resolve({ file: msg.file, meta }),
+            problem
+              ? reject(new KokoroSkip(job, problem))
+              : resolve({ file: msg.file, meta, ...(msg.timing && { timing: msg.timing }) }),
           );
         } else if (msg.type === 'error') {
           finish(() =>
@@ -285,6 +295,8 @@ export type KokoroEvent =
   | { type: 'loading'; progress: number }
   | { type: 'claimed'; job: GenerationJob }
   | { type: 'progress'; job: GenerationJob; progress: KokoroProgress }
+  /** The job's audio is ready and about to upload (#827): for the device's own history. */
+  | { type: 'generated'; job: GenerationJob; result: KokoroResult }
   | { type: 'submitted'; job: GenerationJob; submitted: number }
   | { type: 'skipped'; job: GenerationJob; reason: string }
   /** `contributeKokoroApps` only: a claimed job that failed (e.g. its upload never got through). */
@@ -317,8 +329,8 @@ async function kokoroTurn(
       models: [KOKORO_MODEL],
       signal,
       limit: 1,
-      generate: (job, lease) =>
-        runner.generate(job, {
+      generate: async (job, lease) => {
+        const result = await runner.generate(job, {
           signal,
           onLoading: (progress) => {
             void lease.renew();
@@ -328,7 +340,10 @@ async function kokoroTurn(
             void lease.renew();
             onEvent?.({ type: 'progress', job, progress });
           },
-        }),
+        });
+        onEvent?.({ type: 'generated', job, result });
+        return result;
+      },
       onProgress: ({ stage, job }) => {
         if (stage === 'generating') {
           claimed = job;

@@ -55,7 +55,8 @@ const narrates = (segments: Segments = [[0, 4, 0, 1]], bytes = 3) =>
     send({ type: 'loading', progress: 0.5 });
     send({ type: 'progress', id: req.id, done: 1, total: 2, chars: 4 });
     const file = new Blob([new Uint8Array(bytes)], { type: 'audio/mp4' });
-    send({ type: 'done', id: req.id, file, segments });
+    const timing = { loadMs: 900, synthMs: 2000, encodeMs: 40 };
+    send({ type: 'done', id: req.id, file, segments, timing });
   });
 
 describe('kokoroProblem', () => {
@@ -171,6 +172,8 @@ describe('KokoroRunner', () => {
     );
     expect(result.meta).toEqual({ segments: [[0, 4, 0, 1]] });
     expect(result.file.type).toBe('audio/mp4');
+    // The worker's stage times (#827)
+    expect(result.timing).toEqual({ loadMs: 900, synthMs: 2000, encodeMs: 40 });
   });
 
   it('loads the model on request, reporting the download', async () => {
@@ -299,12 +302,14 @@ describe('contributeKokoro', () => {
       'claimed:a',
       'loading',
       'progress:a',
+      'generated:a',
       'submitted:a',
       'claimed:b',
       'skipped:b',
       'claimed:c',
       'loading',
       'progress:c',
+      'generated:c',
       'submitted:c',
     ]);
   });
