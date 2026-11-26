@@ -1,13 +1,25 @@
 package online.freeappstore.companion
 
+import android.media.AudioAttributes
+import android.media.MediaPlayer
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /** The voice model on this phone (#731). */
 enum class ModelState { NONE, WAITING, INSTALLED }
@@ -26,7 +38,7 @@ internal val contributionLabels = mapOf(
 )
 
 /**
- * The detail line of a Recent result (#806): the reason, and for a job that was skipped or failed that this phone will
+ * The detail line of an Activity row (#806): the reason, and for a job that was skipped or failed that this phone will
  * not try it again ([ContributionLog.handled]; the server does not offer it to this account again either).
  */
 internal fun contributionDetail(c: Contribution): String = listOfNotNull(
@@ -34,12 +46,54 @@ internal fun contributionDetail(c: Contribution): String = listOfNotNull(
     "not retried on this phone".takeIf { c.status == "skipped" || c.status == "failed" },
 ).joinToString(" · ")
 
+/** Activity's status filters (#820). Each status is under one: superseded ("Not needed") is Not done. */
+internal enum class ContributionFilter(val label: String) {
+    ALL("All"), ACCEPTED("Accepted"), CHECKING("Checking"), REJECTED("Rejected"), NOT_DONE("Not done");
+    fun matches(status: String) = this == ALL || of(status) == this
+    companion object {
+        fun of(status: String) = when (status) {
+            "accepted" -> ACCEPTED
+            "uploading", "pending" -> CHECKING
+            "rejected" -> REJECTED
+            else -> NOT_DONE
+        }
+    }
+}
+
+/** The status card's headline and why (#820): running, or why it is paused or idle. */
+internal fun contributeStatus(state: CompanionState): Pair<String, String> = when {
+    state.contributing != null -> "Running" to state.contributing
+    state.model == ModelState.NONE -> "Paused" to "No voice model. Download it in Settings."
+    state.contributeApps.isEmpty() -> "Paused" to "No apps turned on. Choose them in Settings."
+    !state.contributeAnyTime && !state.plugged -> "Paused" to "Not plugged in. It runs while plugged in on Wi‑Fi."
+    !state.online -> "Paused" to "No connection."
+    !state.contributeAnyTime && !state.unmetered -> "Paused" to "Not on Wi‑Fi. It runs while plugged in on Wi‑Fi."
+    state.model == ModelState.WAITING -> "Idle" to "The voice model downloads on the next run."
+    else -> "Idle" to "Looks for jobs about every hour, or now with Run now."
+}
+
+/** "1:05" for an audio length, "412 KB" or "1.2 MB" for a size (#820). */
+internal fun audioLength(ms: Long): String = ((ms + 500) / 1000).let { "%d:%02d".format(Locale.ROOT, it / 60, it % 60) }
+internal fun byteSize(bytes: Long): String =
+    if (bytes >= 1_000_000) "%.1f MB".format(Locale.getDefault(), bytes / 1_000_000.0) else "${(bytes + 999) / 1000} KB"
+internal fun openJobsText(n: Int) = when (n) { 0 -> "No open jobs"; 1 -> "1 open job"; else -> "$n open jobs" }
+
+/** Where the user is inside the Contribute tab (#820). */
+internal sealed class ContributePage {
+    data object Status : ContributePage()
+    data object Settings : ContributePage()
+    data class Activity(val filter: ContributionFilter = ContributionFilter.ALL, val appId: String? = null) : ContributePage()
+    data class Detail(val jobId: String, val from: Activity) : ContributePage()
+    val back: ContributePage get() = if (this is Detail) from else Status
+}
+
 /** A per-app switch whose turning on asks first. */
 @Composable
-internal fun ContributeSwitch(appId: String, name: String, state: CompanionState, contribute: (String, Boolean) -> Unit) {
+internal fun ContributeSwitch(appId: String, name: String, state: CompanionState, contribute: (String, Boolean) -> Unit,
+                              label: String = "Contribute from this phone") {
     var ask by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("Contribute from this phone", Modifier.weight(1f).padding(end = 12.dp))
+        Text(label, Modifier.weight(1f).padding(end = 12.dp))
         Switch(checked = appId in state.contributeApps, onCheckedChange = { on -> if (on) ask = true else contribute(appId, false) })
     }
     if (ask) ContributeDialog(name, { ask = false }) { ask = false; contribute(appId, true) }
@@ -52,18 +106,204 @@ internal fun ContributeDialog(name: String, dismiss: () -> Unit, confirm: () -> 
     confirmButton = { TextButton(onClick = confirm) { Text("Contribute to $name") } },
     dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } })
 
-/** The Contribute tab: voice model, when it runs, the apps opted in and recent results. */
+/** The Contribute tab (#820): the status, Activity with each job's detail, and Settings. */
 @Composable
-internal fun ContributeScreen(state: CompanionState, catalogue: CatalogueState, actions: CompanionActions) {
+internal fun ContributeScreen(state: CompanionState, catalogue: CatalogueState, actions: CompanionActions, page: ContributePage, show: (ContributePage) -> Unit) {
     val name = { id: String -> catalogue.apps.find { it.id == id }?.name ?: id }
+    when (page) {
+        ContributePage.Status -> ContributeStatus(state, actions, show)
+        ContributePage.Settings -> ContributeSettings(state, name, actions) { show(ContributePage.Status) }
+        is ContributePage.Activity -> ContributeActivity(state, page, name, actions.refreshContributions, show)
+        is ContributePage.Detail -> state.contributions.find { it.jobId == page.jobId }?.let { c ->
+            ContributionDetail(c, name(c.appId), actions.loadPlayback) { show(page.from) }
+        } ?: LaunchedEffect(page) { show(page.from) }
+    }
+}
+
+/** One card: running, paused or idle and why, Run now / Stop; and today's results, each opening Activity filtered. */
+@Composable
+private fun ContributeStatus(state: CompanionState, actions: CompanionActions, show: (ContributePage) -> Unit) {
     Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
-        Text("Contribute", style = MaterialTheme.typography.headlineLarge)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Contribute", Modifier.weight(1f), style = MaterialTheme.typography.headlineLarge)
+            if (state.signedIn) IconButton(onClick = { show(ContributePage.Settings) }) {
+                Icon(painterResource(R.drawable.ic_settings), contentDescription = "Contribute settings")
+            }
+        }
         StatusMessages(state)
         Text("Help apps you use by generating their audio on this phone, such as narration for Books. Apps publish the jobs; your phone does the work while it's plugged in.")
         if (!state.signedIn) {
             Button(onClick = actions.connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }
             return@Column
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val (headline, why) = contributeStatus(state)
+                Text(headline, style = MaterialTheme.typography.titleLarge)
+                Text(why, style = MaterialTheme.typography.bodyMedium)
+                state.modelDownloaded?.let { LinearProgressIndicator({ it.toFloat() / KokoroModel.DOWNLOAD_BYTES }, Modifier.fillMaxWidth()) }
+                Row {
+                    TextButton(onClick = actions.contributeNow, enabled = state.contributing == null && state.contributeApps.isNotEmpty() && state.model == ModelState.INSTALLED) { Text("Run now") }
+                    if (state.contributing != null) TextButton(onClick = actions.stopContributing) { Text("Stop") }
+                }
+            }
+        }
+        Text("Today", style = MaterialTheme.typography.titleLarge)
+        val today = state.contributions.filter { it.at >= SharingTimeline.today(state.now).first }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ContributionFilter.entries.drop(1).forEach { f ->
+                val n = today.count { f.matches(it.status) }
+                AssistChip(onClick = { show(ContributePage.Activity(f)) }, label = { Text("$n ${f.label.lowercase()}") })
+            }
+        }
+        Row(Modifier.fillMaxWidth().clickable { show(ContributePage.Activity()) }.padding(vertical = 8.dp)) {
+            Text("Activity", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text("›", style = MaterialTheme.typography.titleMedium)
+        }
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** Every job this phone tried, newest first and by day, filtered by status and app; pull to refresh the verdicts. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ContributeActivity(state: CompanionState, page: ContributePage.Activity, name: (String) -> String,
+                               refresh: suspend () -> Unit, show: (ContributePage) -> Unit) {
+    var refreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val apps = state.contributions.map { it.appId }.distinct().sortedBy(name)
+    val rows = state.contributions.filter { page.filter.matches(it.status) && (page.appId == null || it.appId == page.appId) }
+    PullToRefreshBox(refreshing, { scope.launch { refreshing = true; try { refresh() } finally { refreshing = false } } }, Modifier.fillMaxSize()) {
+        Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            BackRow("Contribute") { show(ContributePage.Status) }
+            Text("Activity", style = MaterialTheme.typography.headlineMedium)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ContributionFilter.entries.forEach { f -> FilterChip(page.filter == f, { show(page.copy(filter = f)) }, { Text(f.label) }) }
+            }
+            if (apps.size > 1) Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(page.appId == null, { show(page.copy(appId = null)) }, { Text("All apps") })
+                apps.forEach { id -> FilterChip(page.appId == id, { show(page.copy(appId = id)) }, { Text(name(id)) }) }
+            }
+            if (rows.isEmpty()) Text("Nothing on this phone for this filter.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            rows.groupBy { Format.day(it.at) }.forEach { (day, list) ->
+                Text(day, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                list.forEach { c ->
+                    Column(Modifier.fillMaxWidth().clickable { show(ContributePage.Detail(c.jobId, page)) }.padding(vertical = 4.dp)) {
+                        Labeled("${name(c.appId)} · ${c.key}", contributionLabels[c.status] ?: c.status)
+                        Text(listOf(Format.time(c.at), contributionDetail(c)).filter { it.isNotBlank() }.joinToString(" · "),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+            Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/** One job: what it was, what happened to it, and the audio once accepted. */
+@Composable
+private fun ContributionDetail(c: Contribution, appName: String, loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>>, back: () -> Unit) {
+    Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        BackRow("Activity", back)
+        Text(appName, style = MaterialTheme.typography.headlineMedium)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Labeled("Job", c.key)
+                Labeled("Status", contributionLabels[c.status] ?: c.status)
+                Labeled("When", Format.dateTime(c.at))
+                c.durationMs?.let { Labeled("Length", audioLength(it)) }
+                c.bytes?.let { Labeled("Size", byteSize(it)) }
+                val onPhone = c.status == "skipped" || c.status == "failed"
+                if (c.reason.isNotBlank()) Labeled(if (onPhone) "Reason on this phone" else "Server's reason", c.reason)
+                c.wer?.let { Labeled("Error rate", "${Math.round(it * 100)}%") }
+                if (onPhone) Text("Not retried on this phone.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        val url = c.artifactUrl
+        if (c.status == "accepted" && url != null) Playback(c, url, loadPlayback)
+        else if (c.inputPreview.isNotBlank()) InputText(c.inputPreview, null)
+        Spacer(Modifier.height(24.dp))
+    }
+}
+
+/** The input (the stored preview, or the whole text), with [highlight] (a sentence's characters) marked where it falls inside it. */
+@Composable
+private fun InputText(text: String, highlight: IntRange?) {
+    val more = if (text.length == Contribution.PREVIEW) "…" else ""
+    val mark = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+    Text(buildAnnotatedString {
+        val range = highlight?.let { it.first.coerceIn(0, text.length)..it.last.coerceIn(-1, text.length - 1) }
+        if (range == null || range.isEmpty()) append(text) else {
+            append(text.substring(0, range.first))
+            withStyle(SpanStyle(background = mark)) { append(text.substring(range.first, range.last + 1)) }
+            append(text.substring(range.last + 1))
+        }
+        append(more)
+    }, style = MaterialTheme.typography.bodyLarge)
+}
+
+/** Plays the public artifact [url], highlighting the sentence being spoken in the whole input from its `meta` timings. */
+@Composable
+private fun Playback(c: Contribution, url: String, loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>>) {
+    val player = remember(c.jobId) { MediaPlayer() }
+    var phase by remember { mutableStateOf("idle") } // idle, loading, playing, paused, error
+    var position by remember { mutableLongStateOf(-1L) }
+    var text by remember { mutableStateOf(c.inputPreview) }
+    var segments by remember { mutableStateOf(emptyList<Segment>()) }
+    DisposableEffect(player) { onDispose { player.release() } }
+    LaunchedEffect(c.jobId) { loadPlayback(c).let { text = it.first; segments = it.second } }
+    LaunchedEffect(phase) { while (phase == "playing") { position = player.currentPosition.toLong(); delay(100) } }
+    val current = segments.indexOfFirst { position >= it.startMs && position < it.endMs }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(onClick = {
+            when (phase) {
+                "playing" -> { player.pause(); phase = "paused" }
+                "paused" -> { player.start(); phase = "playing" }
+                "loading" -> {}
+                else -> {
+                    player.reset()
+                    player.setAudioAttributes(AudioAttributes.Builder().setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                    player.setOnPreparedListener { it.start(); phase = "playing" }
+                    player.setOnCompletionListener { phase = "paused"; position = -1 }
+                    player.setOnErrorListener { _, _, _ -> phase = "error"; true }
+                    player.setDataSource(url)
+                    player.prepareAsync(); phase = "loading"
+                }
+            }
+        }, enabled = phase != "loading") { Text(if (phase == "playing") "Pause" else "Play") }
+        Text(when {
+            phase == "loading" -> "Loading…"
+            phase == "error" -> "Could not play it."
+            current >= 0 -> "Sentence ${current + 1} of ${segments.size}"
+            else -> ""
+        }, style = MaterialTheme.typography.bodyMedium)
+    }
+    if (text.isNotBlank()) InputText(text, segments.getOrNull(current)?.let { it.start until it.end })
+}
+
+/** The apps (opted in, or with open jobs for this phone), the voice model, when it runs and the storage it uses. */
+@Composable
+private fun ContributeSettings(state: CompanionState, name: (String) -> String, actions: CompanionActions, back: () -> Unit) {
+    var open by remember { mutableStateOf<Map<String, Int>?>(null) }
+    var storage by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    LaunchedEffect(Unit) { open = actions.openJobs() }
+    LaunchedEffect(state.model) { storage = actions.contributeStorage() }
+    Column(Modifier.padding(horizontal = 24.dp).fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        BackRow("Contribute", back)
+        Text("Contribute settings", style = MaterialTheme.typography.headlineMedium)
+        StatusMessages(state)
+        Text("Apps", style = MaterialTheme.typography.titleLarge)
+        val ids = (state.contributeApps + open.orEmpty().filterValues { it > 0 }.keys).sortedBy(name)
+        if (ids.isEmpty()) Text("No apps yet. Turn on Contribute on an app's page in the Store, or from an app that asks for help.")
+        ids.forEach { id ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ContributeSwitch(id, name(id), state, actions.contribute, label = name(id))
+                    val detail = listOfNotNull(open?.let { openJobsText(it[id] ?: 0) }, state.contributedToday[id]?.let { "$it today" })
+                    if (detail.isNotEmpty()) Text(detail.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -90,32 +330,15 @@ internal fun ContributeScreen(state: CompanionState, catalogue: CatalogueState, 
                     Text("Only while plugged in on Wi‑Fi", Modifier.weight(1f).padding(end = 12.dp))
                     Switch(checked = !state.contributeAnyTime, onCheckedChange = { actions.contributeAnyTime(!it) })
                 }
-                Text(state.contributing ?: "Not running", style = MaterialTheme.typography.bodyMedium)
-                Row {
-                    TextButton(onClick = actions.contributeNow, enabled = state.contributing == null && state.contributeApps.isNotEmpty() && state.model == ModelState.INSTALLED) { Text("Run now") }
-                    if (state.contributing != null) TextButton(onClick = actions.stopContributing) { Text("Stop") }
-                }
+                Text(if (state.contributeAnyTime) "Runs on battery and mobile data too." else "Runs only while plugged in and on Wi‑Fi.",
+                    style = MaterialTheme.typography.bodySmall)
             }
         }
-        Text("Apps", style = MaterialTheme.typography.titleLarge)
-        if (state.contributeApps.isEmpty()) Text("No apps yet. Turn on Contribute on an app's page in the Store, or from an app that asks for help.")
-        state.contributeApps.sorted().forEach { id ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(name(id), style = MaterialTheme.typography.titleMedium)
-                    Text("${state.contributedToday[id] ?: 0} today", style = MaterialTheme.typography.bodySmall)
-                    ContributeSwitch(id, name(id), state, actions.contribute)
-                }
-            }
-        }
-        if (state.contributions.isNotEmpty()) {
-            Text("Recent", style = MaterialTheme.typography.titleLarge)
-            state.contributions.forEach { c ->
-                Column(Modifier.fillMaxWidth()) {
-                    Labeled("${name(c.appId)} · ${c.key}", contributionLabels[c.status] ?: c.status)
-                    Text(listOf(Format.relative(c.at, state.now), contributionDetail(c)).filter { it.isNotBlank() }.joinToString(" · "),
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Storage used", style = MaterialTheme.typography.titleLarge)
+                Labeled("Voice model", storage?.let { byteSize(it.first) } ?: "…")
+                Labeled("Activity record", storage?.let { byteSize(it.second) } ?: "…")
             }
         }
         Spacer(Modifier.height(24.dp))

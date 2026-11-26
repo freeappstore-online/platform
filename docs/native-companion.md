@@ -82,7 +82,7 @@ Part of community generation ([#727](https://github.com/freeappstore-online/plat
 generate an app's published jobs (narration today) and upload them for everyone. The server decides what is generated
 and verifies every upload; the phone is never trusted.
 
-- **Opt in per app**: the **Contribute from this phone** switch on an app's Store page, the Contribute tab, or the deep
+- **Opt in per app**: the **Contribute from this phone** switch on an app's Store page, Contribute's Settings, or the deep
   link `freeappstore://native/contribute/<appId>`. Each asks first; a link never opts in by itself.
 - **Model**: Kokoro v1.0 (multi-language, the weights Books' CI uses) through [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)
   (Apache-2.0). The runtime is the pinned sherpa-onnx `2.0.3` AAR (fetched by Gradle into `android/app/libs` and checked
@@ -98,7 +98,7 @@ and verifies every upload; the phone is never trusted.
   The work is scheduled with battery-not-low only: the worker checks plugged-in before starting and between sentences, and
   the network before starting and before each claim, because a WorkManager constraint that lapses stops running work
   part-way. Unplugged, it stops without uploading. A run in progress is never replaced by **Run now** or a settings
-  change. A job stopped part-way is recorded and never retried on this phone, which Recent results says.
+  change. A job stopped part-way is recorded and never retried on this phone, which Activity says.
   The run takes one job from each opted-in app in turn (#819), skipping apps with no open job, rather than finishing one
   app's jobs before the next; an app turned off mid-run is left out from its next turn.
   Each job: `POST …/generation/claim` with the device credential → synthesize the
@@ -123,8 +123,21 @@ and verifies every upload; the phone is never trusted.
   `POST …/jobs/:jobId/lease` with `X-Lease-Token` and takes the returned `leaseExpiresAt`. A `403` stops the job without
   uploading; a `409` (the 2-hour cap) stops extending, so the job finishes only if the lease still allows. Other failures
   are retried after the next sentence.
-- **Record**: `generation_jobs` in the backup-excluded database (job key, status, reason), refreshed from
-  `GET …/generation/submissions`; the tab shows today's count per app and recent results. Cleared by **Disconnect**.
+- **Record**: `generation_jobs` in the backup-excluded database (job key, status, reason, and since #820 the first
+  200 characters of the input, the uploaded audio's length and size, and from #824 the server's `wer`, measured
+  `durationMs` and the accepted `artifact` URLs), refreshed from `GET …/generation/submissions` for every app on the
+  record. Cleared by **Disconnect**.
+- **Screens** (#820): the **Contribute** tab is one status card (running with app, job, sentence n of N and speed as
+  seconds of audio per second of work; or paused or idle and why: no model, no apps, not plugged in, no connection, not on
+  Wi‑Fi) with **Run now** / **Stop**, and today's counts (accepted, checking, rejected, not done) as chips that open
+  **Activity** filtered. **Activity** lists every job this phone tried, newest first and by day, with status chips (All ·
+  Accepted · Checking · Rejected · Not done; "Not needed" counts as Not done) and app chips, and pull to refresh the
+  verdicts. A row opens the job: app, key, input preview, time, length and size, the phone's reason or the server's
+  verdict, reason and error rate, and for an accepted job **Play**, which streams `artifact.url` and highlights the
+  sentence being spoken in the job's whole `input.text` (fetched from the submissions route when the detail opens; the
+  stored preview when offline) from the `artifact.metaUrl` timings. **Settings** (gear icon): the apps opted in, plus apps with open jobs for this phone from
+  `GET /generation/open` (sets in `kokoro` `v1.0` and `audio/mp4`), each with its switch and open-job count; the voice
+  model with download progress and delete; **Only while plugged in on Wi‑Fi**; and the storage the model and the record use.
 - **Attestation**: `X-Attestation` is sent when the `Attestation` hook returns a token; none until #732.
 
 ## Contribute (iOS, #733)

@@ -133,27 +133,43 @@ class CompanionTest {
         compose.onNodeWithText("Contribute to Run").performClick()
         assertEquals(listOf("run" to true), opted)
     }
-    @Test fun contributeTabListsOptedInApps() {
-        val rejected = Contribution("j1", "run", "book/1", System.currentTimeMillis(), "rejected", "transcript_mismatch")
-        screen(CompanionState(signedIn = true, contributeApps = setOf("run"), contributedToday = mapOf("run" to 2), contributions = listOf(rejected)), tab = Tab.CONTRIBUTE)
-        compose.onNodeWithText("Download (${KokoroModel.DOWNLOAD_BYTES / 1_000_000} MB)").assertIsDisplayed()
-        compose.onNodeWithText("2 today").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Rejected").performScrollTo().assertIsDisplayed()
-    }
-    /** #806: at large font sizes no text breaks inside a word: label/value rows stack, tab labels stay on one line. */
-    @Test fun largeFontsNeverBreakAWord() {
+    /** #820: the status card, today's chips opening Activity filtered, a job's detail, and Settings behind the gear. */
+    @Test fun contributeTabSplitsStatusActivityAndSettings() {
         val now = System.currentTimeMillis()
-        val state = CompanionState(signedIn = true, now = now, contributeApps = setOf("run"), model = ModelState.WAITING, modelDownloaded = 120_000_000,
-            contributions = listOf(Contribution("j1", "run", "pride-and-prejudice/chapter-12", now, "skipped", "stopped"),
-                Contribution("j2", "run", "pride-and-prejudice/chapter-11", now, "pending")))
-        compose.setContent {
-            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
-                MaterialTheme { FasScreen(state, catalogue, CompanionActions(), null, {}, Tab.CONTRIBUTE) }
-            }
-        }
-        compose.onNodeWithText("Being checked").performScrollTo()
-        compose.onNodeWithText("stopped · not retried on this phone", substring = true).assertExists()
-        val broken = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes().flatMap { node ->
+        val rejected = Contribution("j1", "run", "book/1", now, "rejected", "transcript_mismatch", "It was a bright cold day.", 3_000, 12_000, 0.42)
+        val accepted = Contribution("j2", "run", "book/2", now - 1, "accepted", "", "Then it rained.", artifactUrl = "https://api.freeappstore.online/v1/apps/run/generation/artifacts/j2")
+        var refreshed = 0
+        screen(CompanionState(signedIn = true, now = now, contributeApps = setOf("run"), contributedToday = mapOf("run" to 2), contributions = listOf(rejected, accepted)),
+            CompanionActions(openJobs = { mapOf("run" to 3, "hanzi-practice" to 1) }, refreshContributions = { refreshed++ }), tab = Tab.CONTRIBUTE)
+        compose.onNodeWithText("Paused").assertIsDisplayed()
+        compose.onNodeWithText("No voice model. Download it in Settings.").assertIsDisplayed()
+        compose.onNodeWithText("1 accepted").assertIsDisplayed()
+        compose.onNodeWithText("1 rejected").performClick()
+        compose.onNodeWithText("Run · book/1").assertIsDisplayed()
+        compose.onNodeWithText("Run · book/2").assertDoesNotExist()
+        compose.onNodeWithText("Run · book/1").performClick()
+        compose.onNodeWithText("transcript_mismatch").assertIsDisplayed()
+        compose.onNodeWithText("42%").assertIsDisplayed()
+        compose.onNodeWithText("0:03").assertIsDisplayed()
+        compose.onNodeWithText("It was a bright cold day.").assertIsDisplayed()
+        compose.onNodeWithText("Play").assertDoesNotExist() // only accepted jobs play
+        compose.onNodeWithText("‹ Activity").performClick()
+        compose.onNodeWithText("All").performClick()
+        compose.onNodeWithText("Run · book/2").performClick()
+        compose.onNodeWithText("Play").assertIsDisplayed()
+        compose.onNodeWithText("‹ Activity").performClick()
+        compose.onNodeWithText("‹ Contribute").performClick()
+        compose.onNodeWithContentDescription("Contribute settings").performClick()
+        compose.onNodeWithText("3 open jobs · 2 today").assertIsDisplayed()
+        compose.onNodeWithText("1 open job").assertIsDisplayed() // an app with work, not opted in
+        compose.onNodeWithText("Download (${KokoroModel.DOWNLOAD_BYTES / 1_000_000} MB)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Only while plugged in on Wi‑Fi").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Storage used").performScrollTo().assertIsDisplayed()
+        assertEquals(0, refreshed)
+    }
+    /** Lines that break inside a word in the texts on screen. */
+    private fun brokenWords(): List<String> =
+        compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes().flatMap { node ->
             val layouts = mutableListOf<TextLayoutResult>()
             node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(layouts)
             val layout = layouts.firstOrNull() ?: return@flatMap emptyList()
@@ -161,7 +177,37 @@ class CompanionTest {
             (0 until layout.lineCount - 1).map { layout.getLineEnd(it) }
                 .filter { it in 1 until text.length && text[it - 1].isLetterOrDigit() && text[it].isLetterOrDigit() }.map { "$text @$it" }
         }
-        assertEquals(emptyList<String>(), broken)
+    /** #806, #820: at large font sizes no text breaks inside a word on any Contribute page: label/value rows stack, tab labels stay on one line. */
+    @Test fun largeFontsNeverBreakAWord() {
+        val now = System.currentTimeMillis()
+        val state = CompanionState(signedIn = true, now = now, contributeApps = setOf("run"), model = ModelState.WAITING, modelDownloaded = 120_000_000,
+            contributing = "Generating Run · pride-and-prejudice/chapter-12 · sentence 3 of 40 · 1.6× real time",
+            contributions = listOf(Contribution("j1", "run", "pride-and-prejudice/chapter-12", now, "skipped", "stopped", "It is a truth universally acknowledged."),
+                Contribution("j2", "run", "pride-and-prejudice/chapter-11", now, "pending", "", "", 63_000, 412_000)))
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                MaterialTheme { FasScreen(state, catalogue, CompanionActions(openJobs = { mapOf("run" to 12) }), null, {}, Tab.CONTRIBUTE) }
+            }
+        }
+        compose.onNodeWithText("Running").assertExists()
+        assertEquals("status", emptyList<String>(), brokenWords())
+        compose.onNodeWithText("Activity").performScrollTo().performClick()
+        compose.onNodeWithText("Being checked").performScrollTo()
+        compose.onNodeWithText("stopped · not retried on this phone", substring = true).assertExists()
+        assertEquals("activity", emptyList<String>(), brokenWords())
+        compose.onNodeWithText("Run · pride-and-prejudice/chapter-11").performScrollTo().performClick()
+        compose.onNodeWithText("1:03").performScrollTo()
+        assertEquals("detail", emptyList<String>(), brokenWords())
+        compose.onNodeWithText("‹ Activity").performClick()
+        compose.onNodeWithText("Run · pride-and-prejudice/chapter-12").performScrollTo().performClick()
+        compose.onNodeWithText("Reason on this phone").performScrollTo()
+        assertEquals("device detail", emptyList<String>(), brokenWords())
+        compose.onNodeWithText("‹ Activity").performClick()
+        compose.onNodeWithText("‹ Contribute").performScrollTo().performClick()
+        compose.onNodeWithContentDescription("Contribute settings").performClick()
+        compose.onNodeWithText("12 open jobs").assertExists()
+        compose.onNodeWithText("Storage used").performScrollTo()
+        assertEquals("settings", emptyList<String>(), brokenWords())
     }
     @Test fun signedOutDetailOffersSignInInsteadOfTheToggle() {
         var connects = 0

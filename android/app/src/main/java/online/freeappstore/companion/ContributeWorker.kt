@@ -69,9 +69,14 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
                     runCatching { contributor.refresh(app, keepGoing) }.onFailure { if (DeviceConnection.expired(it)) throw it }
                 }
                 // One job from each app in turn (#819), not one app drained before the next.
-                contributor.run(local::contributeApps, keepGoing, mayClaim = network) { app, job ->
-                    status = "Generating ${graph.catalogue.apps.find { it.id == app }?.name ?: app} · ${job.key}"
-                }
+                var job = ""
+                var started = 0L
+                contributor.run(local::contributeApps, keepGoing, mayClaim = network, progress = { app, claimed ->
+                    job = "Generating ${graph.catalogue.apps.find { it.id == app }?.name ?: app} · ${claimed.key}"
+                    started = SystemClock.elapsedRealtime(); status = job
+                }, sentence = { n, total, seconds ->
+                    status = contributeProgress(job, n, total, seconds, (SystemClock.elapsedRealtime() - started) / 1000.0)
+                })
             }
             Result.success()
         } catch (e: Exception) {
@@ -132,6 +137,15 @@ class ContributeWorker(context: Context, params: WorkerParameters) : CoroutineWo
         /** Ends the current run after the job in hand stops; the hourly schedule stays. */
         fun stop(context: Context) { stopRequested = true; WorkManager.getInstance(context).cancelUniqueWork(NOW) }
     }
+}
+
+/**
+ * The running job for the status card (#820): "Generating Books · key · sentence 3 of 40 · 1.6× real time", the speed
+ * being seconds of audio per second of work, once there is some of each.
+ */
+internal fun contributeProgress(job: String, sentence: Int, sentences: Int, audioSeconds: Double, elapsedSeconds: Double): String {
+    val speed = if (audioSeconds > 0 && elapsedSeconds > 0) " · ${"%.1f".format(java.util.Locale.ROOT, audioSeconds / elapsedSeconds)}× real time" else ""
+    return "$job · sentence $sentence of $sentences$speed"
 }
 
 /** Contribute's "Only while plugged in on Wi‑Fi" (#806). */

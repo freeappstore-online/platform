@@ -71,6 +71,8 @@ class KokoroModel(private val dir: File) {
     val root = File(dir, ROOT)
     private val marker = File(dir, "installed")
     val installed: Boolean get() = marker.isFile
+    /** What the model folder takes on disk, a download in progress included (#820). */
+    fun bytes(): Long = dir.walk().filter { it.isFile }.sumOf { it.length() }
     /** Downloads, verifies and unpacks. [progress] gets bytes downloaded. Returns false when [keepGoing] stopped it. */
     fun install(progress: (Long) -> Unit = {}, keepGoing: () -> Boolean = { true }, source: URL = URL(URL), sha256: String = SHA256): Boolean {
         if (installed) return true

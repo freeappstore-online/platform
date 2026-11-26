@@ -29,7 +29,10 @@ class ContributeTest {
         val rows = LinkedHashMap<String, Contribution>()
         override fun handled(jobId: String) = jobId in rows
         override fun record(contribution: Contribution) { rows[contribution.jobId] = contribution }
-        override fun updateStatus(jobId: String, status: String, reason: String) { rows[jobId]?.let { rows[jobId] = it.copy(status = status, reason = reason) } }
+        override fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict?) {
+            rows[jobId]?.let { rows[jobId] = it.copy(status = status, reason = reason, wer = server?.wer ?: it.wer, durationMs = server?.durationMs ?: it.durationMs,
+                artifactUrl = server?.artifactUrl ?: it.artifactUrl, metaUrl = server?.metaUrl ?: it.metaUrl) }
+        }
     }
     class Upload(val path: String, val token: String, val headers: Map<String, String>, val bytes: ByteArray, val contentType: String, val meta: JSONObject?)
     inner class FakeApi : FasApi() {
@@ -228,7 +231,8 @@ class ContributeTest {
         assertTrue(api.uploadAttempts > 5)
         assertTrue("never past the lease margin", t < now + 15 * 60_000 - GenerationPolicy.LEASE_MARGIN_MS)
         assertTrue(sleeps.all { it <= NetworkRetry.MAX_MS })
-        assertEquals(Contribution("j1", "books", "book/j1", now, "failed", "network"), log.rows["j1"]!!.copy(at = now))
+        assertEquals(Contribution("j1", "books", "book/j1", now, "failed", "network", "It was a bright cold day in April.", 1_000, 24_000),
+            log.rows["j1"]!!.copy(at = now))
         assertFalse("the file is removed once given up", File(dir, "contribution.m4a").exists())
         api.uploadFailure = null; api.jobs += job("j1")
         assertEquals("never generated or uploaded again", 0, contributor().run(books, { true }))
@@ -269,7 +273,7 @@ class ContributeTest {
         api.appJobs["dialogue"] = ArrayDeque(listOf(job("d1"), job("d2")))
         var apps = setOf("books", "chess", "dialogue")
         val order = mutableListOf<String>()
-        val n = contributor().run({ apps }, { true }) { app, job -> order += "$app/${job.id}"; if (job.id == "d2") apps = apps - "dialogue" }
+        val n = contributor().run({ apps }, { true }, progress = { app, job -> order += "$app/${job.id}"; if (job.id == "d2") apps = apps - "dialogue" })
         assertEquals(listOf("books/b1", "dialogue/d1", "books/b2", "dialogue/d2", "books/b3"), order)
         assertEquals("d2 stopped: dialogue was turned off while it ran", 4, n)
         assertEquals(listOf("books" to "b1", "chess" to null, "dialogue" to "d1", "books" to "b2", "dialogue" to "d2", "books" to "b3", "books" to null), api.claimed)
@@ -432,14 +436,19 @@ class ContributeTest {
     @Test fun refreshCopiesVerdicts() {
         log.record(Contribution("j1", "books", "book/j1", now, "pending"))
         log.record(Contribution("j2", "books", "book/j2", now, "pending"))
-        api.submissions = JSONArray().put(JSONObject().put("submissionId", "s1").put("jobId", "j1").put("status", "rejected").put("reason", "transcript_mismatch"))
+        api.submissions = JSONArray().put(JSONObject().put("submissionId", "s1").put("jobId", "j1").put("status", "rejected").put("reason", "transcript_mismatch").put("wer", 0.42))
             .put(JSONObject().put("jobId", "other").put("status", "accepted"))
-            .put(JSONObject().put("id", "s2").put("jobId", "j2").put("status", "accepted").put("reason", JSONObject.NULL).put("createdAt", now))
+            .put(JSONObject().put("id", "s2").put("jobId", "j2").put("status", "accepted").put("reason", JSONObject.NULL).put("createdAt", now)
+                .put("wer", JSONObject.NULL).put("durationMs", 2_400).put("input", JSONObject().put("text", "Whole text."))
+                .put("artifact", JSONObject().put("url", "https://api.freeappstore.online/v1/apps/books/generation/artifacts/j2?v=ab").put("metaUrl", JSONObject.NULL)))
         GenerationClient(api) { "ndev_test" }.refresh("books", log)
         assertEquals("rejected", log.rows["j1"]!!.status)
         assertEquals("transcript_mismatch", log.rows["j1"]!!.reason)
+        assertEquals("the error rate, when the server sends one (#820)", 0.42, log.rows["j1"]!!.wer!!, 0.0)
         assertNull("only this phone's jobs", log.rows["other"])
-        assertEquals(Contribution("j2", "books", "book/j2", now, "accepted", ""), log.rows["j2"]) // reason null (#727 comment)
+        assertEquals("reason null (#727 comment); #824's duration and artifact", Contribution("j2", "books", "book/j2", now, "accepted", "", durationMs = 2_400,
+            artifactUrl = "https://api.freeappstore.online/v1/apps/books/generation/artifacts/j2?v=ab"), log.rows["j2"])
+        assertEquals("Whole text.", GenerationClient(api) { "ndev_test" }.inputText("books", "j2"))
     }
     @Test fun parsesIsoLeaseExpiryAndRejectsOddJobIds() {
         val parsed = GenerationClient.parseJob(job("j1", expires = "2026-11-26T12:00:00Z"))
@@ -541,6 +550,69 @@ class ContributeTest {
         assertEquals("", c("accepted"))
         assertFalse("no possessive on the app name", contributeDisclosure("Books").contains("Books's"))
         assertTrue(contributeDisclosure("Books").contains("jobs from Books"))
+    }
+    /** #820: what the Activity detail and the status card show. */
+    @Test fun theRecordKeepsThePreviewLengthAndSizeAndTheRunReportsSentences() {
+        val text = "First sentence. Second one here. " + "X".repeat(300)
+        api.jobs += job("j1", text)
+        val heard = mutableListOf<Pair<Int, Int>>()
+        assertEquals(1, contributor().run(books, { true }, sentence = { n, total, _ -> heard += n to total }))
+        val row = log.rows["j1"]!!
+        assertEquals(text.take(Contribution.PREVIEW), row.inputPreview)
+        assertEquals(24_000L, row.bytes) // a byte per sample, padded to a second
+        assertEquals(1_000L, row.durationMs)
+        assertEquals(listOf(1 to 3, 2 to 3, 3 to 3), heard)
+        api.jobs += job("j2", params = JSONObject().put("voice", "nobody"))
+        contributor().run(books, { true })
+        assertEquals("a skipped job keeps its preview too", "It was a bright cold day in April.", log.rows["j2"]!!.inputPreview)
+        assertNull(log.rows["j2"]!!.bytes)
+        assertEquals("Generating Books · b/1 · sentence 3 of 40 · 1.5× real time", contributeProgress("Generating Books · b/1", 3, 40, 6.0, 4.0))
+        assertEquals("Generating Books · b/1 · sentence 1 of 40", contributeProgress("Generating Books · b/1", 1, 40, 0.0, 0.0))
+    }
+    @Test fun openJobsCountOnlySetsThisPhoneRuns() {
+        fun set(open: Int, model: String = "kokoro", version: String = "v1.0", formats: List<String> = listOf("audio/mp4")) =
+            JSONObject().put("setId", "s").put("model", model).put("modelVersion", version).put("formats", JSONArray(formats)).put("open", open)
+        val body = JSONObject().put("apps", JSONArray()
+            .put(JSONObject().put("appId", "books").put("sets", JSONArray().put(set(3)).put(set(4)).put(set(9, model = "piper"))))
+            .put(JSONObject().put("appId", "dialogue").put("sets", JSONArray().put(set(5, version = "v1.1")).put(set(6, formats = listOf("audio/ogg"))))))
+        assertEquals(mapOf("books" to 7, "dialogue" to 0), GenerationClient.parseOpen(body, KokoroModel.ID))
+    }
+    @Test fun segmentsComeFromThePublicMetaUrlOnly() {
+        val paths = mutableListOf<Pair<String, String?>>()
+        val meta = object : FasApi() {
+            override fun request(method: String, path: String, token: String?, body: JSONObject?): JSONObject {
+                paths += path to token
+                return JSONObject().put("segments", JSONArray().put(JSONArray("[0,14,0,1.25]")).put(JSONArray("[15,30,1.65,3]")))
+            }
+        }
+        val client = GenerationClient(meta) { "ndev_test" }
+        assertEquals(listOf(Segment(0, 14, 0, 1_250), Segment(15, 30, 1_650, 3_000)),
+            client.segments("https://api.freeappstore.online/v1/apps/books/generation/artifacts/j1/meta?v=ab"))
+        assertEquals("public: no credential", listOf("/apps/books/generation/artifacts/j1/meta?v=ab" to null), paths)
+        assertEquals("never another origin", emptyList<Segment>(), client.segments("https://example.com/v1/apps/books/generation/artifacts/j1/meta"))
+    }
+    @Test fun activityFiltersPutEachStatusUnderOne() {
+        val of = listOf("accepted", "uploading", "pending", "rejected", "superseded", "skipped", "failed").associateWith { ContributionFilter.of(it) }
+        assertEquals(mapOf("accepted" to ContributionFilter.ACCEPTED, "uploading" to ContributionFilter.CHECKING, "pending" to ContributionFilter.CHECKING,
+            "rejected" to ContributionFilter.REJECTED, "superseded" to ContributionFilter.NOT_DONE, "skipped" to ContributionFilter.NOT_DONE,
+            "failed" to ContributionFilter.NOT_DONE), of)
+        assertTrue(of.keys.all { ContributionFilter.ALL.matches(it) })
+        assertEquals("1:05", audioLength(65_000))
+        assertEquals("0:01", audioLength(1_000))
+        assertEquals("412 KB", byteSize(411_200))
+        assertEquals("No open jobs", openJobsText(0))
+        assertEquals("1 open job", openJobsText(1))
+    }
+    @Test fun theStatusCardSaysWhyItIsNotRunning() {
+        val ready = CompanionState(signedIn = true, model = ModelState.INSTALLED, contributeApps = setOf("books"))
+        fun why(s: CompanionState) = contributeStatus(s).second
+        assertEquals("Running" to "Generating Books", contributeStatus(ready.copy(contributing = "Generating Books")))
+        assertEquals("No voice model. Download it in Settings.", why(ready.copy(model = ModelState.NONE)))
+        assertEquals("No apps turned on. Choose them in Settings.", why(ready.copy(contributeApps = emptySet())))
+        assertEquals("Not plugged in. It runs while plugged in on Wi‑Fi.", why(ready.copy(plugged = false)))
+        assertEquals("Not on Wi‑Fi. It runs while plugged in on Wi‑Fi.", why(ready.copy(unmetered = false)))
+        assertEquals("No connection.", why(ready.copy(online = false, unmetered = false)))
+        assertEquals("Idle", contributeStatus(ready.copy(contributeAnyTime = true, plugged = false, unmetered = false)).first)
     }
     @Test fun pinnedModel() {
         assertTrue(KokoroModel.URL.startsWith("https://github.com/k2-fsa/sherpa-onnx/releases/download/"))

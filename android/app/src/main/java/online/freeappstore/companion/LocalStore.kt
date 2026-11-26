@@ -11,17 +11,24 @@ import org.json.JSONObject
  * Private queue and settings. Version 2 adds the on-device sharing history (#649, ported from iOS LocalStore.swift):
  * `share_events` (when sharing was enabled, paused or turned off, and the activity log's problems) and `share_points`
  * (a 30-day copy of what was shared with each app). Both are in the same backup-excluded database as the queue and
- * never leave the phone. Version 4 adds `generation_jobs`, this phone's contribution record (#731).
+ * never leave the phone. Version 4 adds `generation_jobs`, this phone's contribution record (#731); version 5 its input
+ * preview, audio length and size, the server's error rate and the accepted artifact's URLs, for the Activity detail (#820).
  */
-class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 4), ContributionLog {
+class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-native.db", null, 5), ContributionLog {
     private val prefs = context.getSharedPreferences("native-settings", Context.MODE_PRIVATE)
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE points(id TEXT PRIMARY KEY, at INTEGER NOT NULL, payload TEXT NOT NULL)")
         db.execSQL("CREATE INDEX points_at ON points(at)")
         createHistory(db)
     }
-    /** Every step is `IF NOT EXISTS`: version 2 added the history, version 3 its `(app_id, sent_at)` index, version 4 `generation_jobs`. */
-    override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) = createHistory(db)
+    /**
+     * Version 2 added the history, version 3 its `(app_id, sent_at)` index, version 4 `generation_jobs` (each step
+     * `IF NOT EXISTS`), version 5 the columns [createHistory] creates `generation_jobs` with, added to a version-4 table.
+     */
+    override fun onUpgrade(db: SQLiteDatabase, old: Int, new: Int) {
+        if (old == 4) GENERATION_V5.forEach { db.execSQL("ALTER TABLE generation_jobs ADD COLUMN $it") }
+        createHistory(db)
+    }
     private fun createHistory(db: SQLiteDatabase) {
         db.execSQL("CREATE TABLE IF NOT EXISTS share_events(id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, app_id TEXT, kind TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '')")
         db.execSQL("CREATE INDEX IF NOT EXISTS share_events_app_at ON share_events(app_id, at)")
@@ -29,7 +36,7 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
         db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_at ON share_points(app_id, at)")
         // pendingCount and lastUpload run on every screen refresh; without it each scans the app's whole history.
         db.execSQL("CREATE INDEX IF NOT EXISTS share_points_app_sent ON share_points(app_id, sent_at)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS generation_jobs(job_id TEXT PRIMARY KEY, app_id TEXT NOT NULL, job_key TEXT NOT NULL, at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '')")
+        db.execSQL("CREATE TABLE IF NOT EXISTS generation_jobs(job_id TEXT PRIMARY KEY, app_id TEXT NOT NULL, job_key TEXT NOT NULL, at INTEGER NOT NULL, status TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', ${GENERATION_V5.joinToString()})")
         db.execSQL("CREATE INDEX IF NOT EXISTS generation_jobs_at ON generation_jobs(at)")
     }
 
@@ -294,16 +301,33 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
         writableDatabase.insertWithOnConflict("generation_jobs", null, ContentValues().apply {
             put("job_id", contribution.jobId); put("app_id", contribution.appId); put("job_key", contribution.key.take(200))
             put("at", contribution.at); put("status", contribution.status); put("reason", contribution.reason.take(120))
+            put("input_preview", contribution.inputPreview.take(Contribution.PREVIEW))
+            put("duration_ms", contribution.durationMs); put("bytes", contribution.bytes); put("wer", contribution.wer)
+            put("artifact_url", contribution.artifactUrl); put("meta_url", contribution.metaUrl)
         }, SQLiteDatabase.CONFLICT_REPLACE)
     }
-    @Synchronized override fun updateStatus(jobId: String, status: String, reason: String) {
-        writableDatabase.update("generation_jobs", ContentValues().apply { put("status", status); put("reason", reason.take(120)) }, "job_id = ?", arrayOf(jobId))
+    @Synchronized override fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict?) {
+        writableDatabase.update("generation_jobs", ContentValues().apply {
+            put("status", status); put("reason", reason.take(120))
+            server?.wer?.let { put("wer", it) }; server?.durationMs?.let { put("duration_ms", it) }
+            server?.artifactUrl?.let { put("artifact_url", it) }; server?.metaUrl?.let { put("meta_url", it) }
+        }, "job_id = ?", arrayOf(jobId))
     }
-    /** Newest first. */
-    @Synchronized fun contributions(limit: Int = 30): List<Contribution> = readableDatabase.rawQuery(
-        "SELECT job_id, app_id, job_key, at, status, reason FROM generation_jobs ORDER BY at DESC LIMIT ?", arrayOf(limit.toString())).use { c ->
-        buildList { while (c.moveToNext()) add(Contribution(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), c.getString(5))) }
+    /** Newest first: every job this phone tried, up to [limit] (#820). */
+    @Synchronized fun contributions(limit: Int = 2_000): List<Contribution> = readableDatabase.rawQuery(
+        "SELECT job_id, app_id, job_key, at, status, reason, input_preview, duration_ms, bytes, wer, artifact_url, meta_url FROM generation_jobs ORDER BY at DESC LIMIT ?",
+        arrayOf(limit.toString())).use { c ->
+        buildList {
+            while (c.moveToNext()) add(Contribution(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), c.getString(5), c.getString(6),
+                if (c.isNull(7)) null else c.getLong(7), if (c.isNull(8)) null else c.getLong(8), if (c.isNull(9)) null else c.getDouble(9),
+                if (c.isNull(10)) null else c.getString(10), if (c.isNull(11)) null else c.getString(11)))
+        }
     }
+    /** Apps with a job on the record, for the verdict refresh (#820): an app turned off still gets its verdicts. */
+    @Synchronized fun contributedApps(): Set<String> =
+        readableDatabase.rawQuery("SELECT DISTINCT app_id FROM generation_jobs", null).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
+    /** The database file's size, for Contribute's storage line (#820). */
+    fun databaseBytes(): Long = context.getDatabasePath(databaseName).length()
     /** Jobs uploaded for [appId] since [from], whatever the verdict. */
     @Synchronized fun contributedSince(appId: String, from: Long): Int = readableDatabase.rawQuery(
         "SELECT COUNT(*) FROM generation_jobs WHERE app_id = ? AND at >= ? AND status NOT IN ('skipped', 'failed')", arrayOf(appId, from.toString()))
@@ -315,6 +339,9 @@ class LocalStore(context: Context) : SQLiteOpenHelper(context, "fas-native.db", 
         try { return body(db).also { db.setTransactionSuccessful() } } finally { db.endTransaction() }
     }
 }
+
+/** `generation_jobs` columns added in version 5 (#820). */
+private val GENERATION_V5 = listOf("input_preview TEXT NOT NULL DEFAULT ''", "duration_ms INTEGER", "bytes INTEGER", "wer REAL", "artifact_url TEXT", "meta_url TEXT")
 
 private fun parseApps(array: JSONArray): List<ConnectedApp> = (0 until array.length()).map { i ->
     val a = array.getJSONObject(i); val g = a.optJSONObject("grant")

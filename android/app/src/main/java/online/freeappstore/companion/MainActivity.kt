@@ -2,11 +2,13 @@ package online.freeappstore.companion
 
 import android.Manifest
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
@@ -57,6 +59,8 @@ data class CompanionState(
     /** Voice model bytes downloaded, null while not downloading (#806). */
     val modelDownloaded: Long? = null,
     val contributions: List<Contribution> = emptyList(), val contributedToday: Map<String, Int> = emptyMap(),
+    /** Why Contribute is paused (#820): plugged in (`EXTRA_PLUGGED`) and on an unmetered network. */
+    val plugged: Boolean = true, val unmetered: Boolean = true,
 )
 
 data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false)
@@ -75,6 +79,11 @@ data class CompanionActions(
     /** Contribute (#731): opt an app in or out, the voice model, when it runs, and the current run. */
     val contribute: (String, Boolean) -> Unit = { _, _ -> }, val downloadModel: () -> Unit = {}, val deleteModel: () -> Unit = {},
     val contributeAnyTime: (Boolean) -> Unit = {}, val contributeNow: () -> Unit = {}, val stopContributing: () -> Unit = {},
+    /** Contribute's Activity and Settings (#820): the server's verdicts, open jobs by app (null when unknown), storage, artifact timings. */
+    val refreshContributions: suspend () -> Unit = {}, val openJobs: suspend () -> Map<String, Int>? = { null },
+    val contributeStorage: suspend () -> Pair<Long, Long> = { 0L to 0L },
+    /** An accepted job's whole input (the preview when unavailable) and its sentence timings, for Play (#820, #824). */
+    val loadPlayback: suspend (Contribution) -> Pair<String, List<Segment>> = { it.inputPreview to emptyList() },
 )
 
 enum class Tab(val label: String, val icon: Int) {
@@ -137,6 +146,15 @@ class MainActivity : ComponentActivity() {
             contributeAnyTime = { graph.local.contributeAnyTime = it; graph.scheduleWork(now = true); refresh() },
             contributeNow = { graph.scheduleWork(now = true); refresh() },
             stopContributing = { ContributeWorker.stop(this); refresh() },
+            refreshContributions = { withContext(Dispatchers.IO) { refreshVerdicts() }; refresh() },
+            openJobs = { withContext(Dispatchers.IO) { runCatching { graph.generation.openJobs(KokoroModel.ID) }.getOrNull() } },
+            contributeStorage = { withContext(Dispatchers.IO) { graph.kokoro.bytes() to graph.local.databaseBytes() } },
+            loadPlayback = { c ->
+                withContext(Dispatchers.IO) {
+                    val text = runCatching { graph.generation.inputText(c.appId, c.jobId) }.getOrNull() ?: c.inputPreview
+                    text to (c.metaUrl?.let { runCatching { graph.generation.segments(it) }.getOrNull() } ?: emptyList())
+                }
+            },
         )
         // Sharing when any app has a grant or the connection expired, otherwise the Store.
         val initialTab = if (state.expired || state.apps.any { it.grantId != null }) Tab.SHARING else Tab.STORE
@@ -169,7 +187,7 @@ class MainActivity : ComponentActivity() {
                 if (graph.repository.token() != null) {
                     graph.repository.sync()
                     // The server's verdicts on this phone's contributions (#731). A refresh only.
-                    withContext(Dispatchers.IO) { graph.local.contributeApps().forEach { runCatching { graph.generation.refresh(it, graph.local) } } }
+                    withContext(Dispatchers.IO) { refreshVerdicts() }
                 }
                 error = ""
             }
@@ -194,6 +212,9 @@ class MainActivity : ComponentActivity() {
         linkedApp = null
         state.apps.find { it.id == id && !state.enabled(it) }?.let { consent = it }
     }
+    /** The server's verdicts for every app this phone contributed to or is opted in to. Off the main thread. */
+    private fun refreshVerdicts() =
+        (graph.local.contributeApps() + graph.local.contributedApps()).forEach { runCatching { graph.generation.refresh(it, graph.local) } }
     private fun refresh() {
         val local = graph.local
         LocationService.notePermission(this, local)
@@ -201,6 +222,7 @@ class MainActivity : ComponentActivity() {
         val connectivity = getSystemService(ConnectivityManager::class.java)
         val power = getSystemService(PowerManager::class.java)
         val signedIn = graph.repository.token() != null
+        val network = connectivity.getNetworkCapabilities(connectivity.activeNetwork)
         state = CompanionState(signedIn, local.userName, apps, local.blocked(),
             local.paused, LocationService.running, LocationService.allowed(this), local.count(), local.message,
             pairingCode = graph.repository.pairingCode(), lastSync = local.lastSync, pausedApps = local.pausedApps(),
@@ -208,7 +230,7 @@ class MainActivity : ComponentActivity() {
             pendingByApp = apps.associate { it.id to local.pendingCount(it.id) },
             lastUploadByApp = apps.mapNotNull { app -> local.lastUpload(app.id)?.let { app.id to it } }.toMap(),
             lastSyncAttempt = local.lastSyncAttempt, lastSyncError = local.lastSyncError,
-            online = connectivity.getNetworkCapabilities(connectivity.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
+            online = network?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true,
             permission = LocationService.permissionState(this),
             locationOn = getSystemService(LocationManager::class.java).isLocationEnabled,
             powerSave = power.isPowerSaveMode, batteryOptimized = !power.isIgnoringBatteryOptimizations(packageName),
@@ -219,7 +241,9 @@ class MainActivity : ComponentActivity() {
             contributeApps = local.contributeApps(), contributeAnyTime = local.contributeAnyTime,
             model = when { graph.kokoro.installed -> ModelState.INSTALLED; local.modelWanted -> ModelState.WAITING; else -> ModelState.NONE },
             contributing = ContributeWorker.status, modelDownloaded = ContributeWorker.downloaded, contributions = local.contributions(),
-            contributedToday = local.contributeApps().associateWith { local.contributedSince(it, SharingTimeline.today().first) })
+            contributedToday = local.contributeApps().associateWith { local.contributedSince(it, SharingTimeline.today().first) },
+            plugged = (registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0,
+            unmetered = network?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true)
         if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
     }
     /** Foreground only: no background budget is spent on the catalogue. */
@@ -292,15 +316,20 @@ internal fun FasScreen(
 ) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     var sharingPage by remember { mutableStateOf<SharingPage>(SharingPage.Dashboard) }
+    var contributePage by remember { mutableStateOf<ContributePage>(ContributePage.Status) }
     val openApp = { app: ConnectedApp -> actions.open(companionAppUrl(app, catalogue.apps)) }
     val granted = state.apps.filter { it.grantId != null }
     BackHandler(enabled = tab == Tab.SHARING && sharingPage != SharingPage.Dashboard) {
         sharingPage = (sharingPage as? SharingPage.Activity)?.from ?: SharingPage.Dashboard
     }
+    BackHandler(enabled = tab == Tab.CONTRIBUTE && contributePage != ContributePage.Status) { contributePage = contributePage.back }
     Scaffold(bottomBar = {
         NavigationBar {
             Tab.entries.forEach { t ->
-                NavigationBarItem(selected = tab == t, onClick = { if (tab == t) sharingPage = SharingPage.Dashboard; tab = t },
+                NavigationBarItem(selected = tab == t, onClick = {
+                    if (tab == t) { sharingPage = SharingPage.Dashboard; contributePage = ContributePage.Status }
+                    tab = t
+                },
                     icon = { Icon(painterResource(t.icon), contentDescription = null) }, label = {
                         // One line at any font size (#806): shrinks to fit rather than breaking "Contribute" mid-word.
                         Text(t.label, maxLines = 1, softWrap = false,
@@ -332,7 +361,7 @@ internal fun FasScreen(
                     } ?: LaunchedEffect(page) { sharingPage = SharingPage.Dashboard } // the app left /native/me
                     is SharingPage.Activity -> ActivityScreen(state, page.appId) { sharingPage = page.from }
                 }
-                Tab.CONTRIBUTE -> ContributeScreen(state, catalogue, actions)
+                Tab.CONTRIBUTE -> ContributeScreen(state, catalogue, actions, contributePage) { contributePage = it }
                 Tab.SETTINGS -> SettingsScreen(state, actions.connect, actions.permissions, actions.disconnect, actions.privacy, actions.account,
                     actions.clearHistory, actions.open, actions.reconnect)
             }

@@ -22,15 +22,32 @@ data class GenerationJob(
     val formats: List<String>, val maxBytes: Long, val language: String?, val leaseToken: String, val leaseExpiresAt: Long,
 )
 
-/** One job on this phone's contribution record. `status`: uploading, then the server's pending/accepted/rejected/superseded; or skipped/failed locally. */
-data class Contribution(val jobId: String, val appId: String, val key: String, val at: Long, val status: String, val reason: String = "")
+/**
+ * One job on this phone's contribution record. `status`: uploading, then the server's pending/accepted/rejected/superseded;
+ * or skipped/failed locally. For the Activity detail (#820): the first [Contribution.PREVIEW] characters of the input,
+ * the audio's length (as encoded, then as the server measured it) and size, and from the server's verdict (#824) the
+ * word error rate and the job's accepted artifact.
+ */
+data class Contribution(
+    val jobId: String, val appId: String, val key: String, val at: Long, val status: String, val reason: String = "",
+    val inputPreview: String = "", val durationMs: Long? = null, val bytes: Long? = null, val wer: Double? = null,
+    val artifactUrl: String? = null, val metaUrl: String? = null,
+) {
+    companion object { const val PREVIEW = 200 }
+}
+
+/** What `GET …/generation/submissions` measured and links (#824); a null field keeps what is recorded. */
+data class ServerVerdict(val wer: Double? = null, val durationMs: Long? = null, val artifactUrl: String? = null, val metaUrl: String? = null)
+
+/** One sentence of an artifact's `meta` (#785): its characters in the input and when it is spoken. */
+data class Segment(val start: Int, val end: Int, val startMs: Long, val endMs: Long)
 
 /** Where the record lives: [LocalStore] on the phone, a list in tests. */
 interface ContributionLog {
     /** Whether this job was ever started on this phone. Such a job is never generated or uploaded again. */
     fun handled(jobId: String): Boolean
     fun record(contribution: Contribution)
-    fun updateStatus(jobId: String, status: String, reason: String)
+    fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict? = null)
 }
 
 /**
@@ -83,14 +100,46 @@ class GenerationClient(private val api: FasApi, private val credential: () -> St
         epochMs(api.post("/apps/$appId/generation/jobs/${job.id}/lease", token(), mapOf("X-Lease-Token" to job.leaseToken)).get("leaseExpiresAt"))
     /** Copies the server's verdicts on this account's submissions into [log]. */
     fun refresh(appId: String, log: ContributionLog) {
-        val list = api.request("GET", "/apps/$appId/generation/submissions", token()).optJSONArray("submissions") ?: return
-        for (i in 0 until list.length()) {
-            val s = list.getJSONObject(i)
+        for (s in submissions(appId)) {
             val jobId = s.optString("jobId")
-            if (jobId.isNotBlank()) log.updateStatus(jobId, s.optString("status"), if (s.isNull("reason")) "" else s.optString("reason").take(120))
+            if (jobId.isBlank()) continue
+            val artifact = s.optJSONObject("artifact")
+            log.updateStatus(jobId, s.optString("status"), if (s.isNull("reason")) "" else s.optString("reason").take(120), ServerVerdict(
+                if (s.isNull("wer")) null else s.optDouble("wer"), if (s.isNull("durationMs")) null else s.optLong("durationMs"),
+                artifact?.optString("url")?.ifBlank { null }, artifact?.takeUnless { it.isNull("metaUrl") }?.optString("metaUrl")?.ifBlank { null }))
+        }
+    }
+    /** The whole input of one of this account's jobs (#824), for highlighting; null when it is not among the newest 100. */
+    fun inputText(appId: String, jobId: String): String? =
+        submissions(appId).firstOrNull { it.optString("jobId") == jobId }?.optJSONObject("input")?.takeUnless { it.isNull("text") }?.optString("text")
+    private fun submissions(appId: String): List<JSONObject> {
+        val list = api.request("GET", "/apps/$appId/generation/submissions", token()).optJSONArray("submissions") ?: return emptyList()
+        return (0 until list.length()).map { list.getJSONObject(it) }
+    }
+    /** Open jobs this phone could take now, by app (#820): discovery's counts for sets in [model] and `audio/mp4`. */
+    fun openJobs(model: ModelId): Map<String, Int> = parseOpen(api.request("GET", "/generation/open", token()), model)
+    /** An accepted artifact's sentence timings from its public [metaUrl] (an API URL); empty for any other URL. */
+    fun segments(metaUrl: String): List<Segment> {
+        val path = metaUrl.removePrefix("${FasApi.ORIGIN}/v1").takeIf { it != metaUrl } ?: return emptyList()
+        val list = api.request("GET", path).optJSONArray("segments") ?: return emptyList()
+        return (0 until list.length()).mapNotNull { i ->
+            val s = list.optJSONArray(i)?.takeIf { it.length() == 4 } ?: return@mapNotNull null
+            Segment(s.getInt(0), s.getInt(1), (s.getDouble(2) * 1000).toLong(), (s.getDouble(3) * 1000).toLong())
         }
     }
     companion object {
+        internal fun parseOpen(j: JSONObject, model: ModelId): Map<String, Int> {
+            val apps = j.optJSONArray("apps") ?: return emptyMap()
+            return (0 until apps.length()).associate { i ->
+                val app = apps.getJSONObject(i)
+                val sets = app.optJSONArray("sets") ?: JSONArray()
+                app.getString("appId") to (0 until sets.length()).map { sets.getJSONObject(it) }.filter { set ->
+                    val formats = set.optJSONArray("formats") ?: JSONArray()
+                    set.optString("model") == model.model && set.optString("modelVersion") == model.version &&
+                        (0 until formats.length()).any { formats.optString(it) == GenerationPolicy.CONTENT_TYPE }
+                }.sumOf { it.optInt("open") }
+            }
+        }
         private val ID = Regex("^[A-Za-z0-9_-]{1,128}$")
         internal fun parseJob(j: JSONObject): GenerationJob {
             val id = j.getString("id").also { require(ID.matches(it)) { "Unexpected job id." } }
@@ -219,7 +268,8 @@ class Contributor(
      * lease until expiry, so the next run continues). Returns how many were submitted. A `401` is thrown, and so is a
      * claim that still fails after [NetworkRetry]'s retries.
      */
-    fun run(apps: () -> Set<String>, keepGoing: () -> Boolean, mayClaim: () -> Boolean = { true }, progress: (String, GenerationJob) -> Unit = { _, _ -> }): Int {
+    fun run(apps: () -> Set<String>, keepGoing: () -> Boolean, mayClaim: () -> Boolean = { true }, progress: (String, GenerationJob) -> Unit = { _, _ -> },
+            sentence: (Int, Int, Double) -> Unit = { _, _, _ -> }): Int {
         val done = HashSet<String>()
         var submitted = 0
         while (true) {
@@ -232,7 +282,7 @@ class Contributor(
                 val job = retrying({ window }, keepGoing) { client.claim(appId, listOf(synth.model)) }
                 if (job == null) { done += appId; continue }
                 progress(appId, job)
-                if (process(appId, job) { keepGoing() && appId in apps() }) submitted++ else done += appId
+                if (process(appId, job, sentence) { keepGoing() && appId in apps() }) submitted++ else done += appId
             }
         }
     }
@@ -256,20 +306,23 @@ class Contributor(
             }
         }
     }
-    private fun process(appId: String, job: GenerationJob, keepGoing: () -> Boolean): Boolean {
+    private fun process(appId: String, job: GenerationJob, sentence: (Int, Int, Double) -> Unit, keepGoing: () -> Boolean): Boolean {
+        fun row(status: String, reason: String = "", durationMs: Long? = null, bytes: Long? = null) =
+            Contribution(job.id, appId, job.key, now(), status, reason, job.text.take(Contribution.PREVIEW), durationMs, bytes)
         val handled = log.handled(job.id)
         GenerationPolicy.refusal(job, synth, handled, now())?.let { reason ->
-            if (!handled) log.record(Contribution(job.id, appId, job.key, now(), "skipped", reason))
+            if (!handled) log.record(row("skipped", reason))
             return false
         }
         val file = File(workDir, "contribution.m4a")
         val lease = Lease(appId, job)
         try {
-            val segments = narrate(job, file, lease, keepGoing)
-            if (segments == null) {
-                log.record(Contribution(job.id, appId, job.key, now(), "skipped", if (keepGoing()) "lease_expired" else "stopped"))
+            val narration = narrate(job, file, lease, sentence, keepGoing)
+            if (narration == null) {
+                log.record(row("skipped", if (keepGoing()) "lease_expired" else "stopped"))
                 return false
             }
+            val (segments, durationMs) = narration
             val meta = JSONObject().put("segments", segments)
             lease.renew()
             val refusal = when {
@@ -277,9 +330,9 @@ class Contributor(
                 !lease.held -> "lease_expired"
                 else -> null
             }
-            if (refusal != null) { log.record(Contribution(job.id, appId, job.key, now(), "skipped", refusal)); return false }
+            if (refusal != null) { log.record(row("skipped", refusal)); return false }
             // Recorded before the upload starts, so a crash mid-upload can never lead to a second, different file.
-            log.record(Contribution(job.id, appId, job.key, now(), "uploading"))
+            log.record(row("uploading", durationMs = durationMs, bytes = file.length()))
             // The same file, again, while the lease (extended as it runs low) still leaves time to upload (#819).
             retrying({ lease.deadline }, keepGoing, beforeRetry = lease::renew) {
                 client.submit(appId, job, file, GenerationPolicy.CONTENT_TYPE, meta, attestation.token(appId, job))
@@ -292,16 +345,17 @@ class Contributor(
             val reason = if (uploading && NetworkRetry.delayMs(e, 0) != null) NetworkRetry.REASON
                 else ((e as? ApiFailure)?.let { "${it.status} " } ?: "") + (e.message ?: e.javaClass.simpleName)
             if (uploading) log.updateStatus(job.id, "failed", reason.take(120))
-            else log.record(Contribution(job.id, appId, job.key, now(), "failed", reason.take(120)))
+            else log.record(row("failed", reason.take(120)))
             return false
         } finally { file.delete() }
     }
     /**
      * The job's own input, verbatim: the only text this path can generate. Narrated a sentence at a time as Books does
      * (#785), the sentences joined by its pauses, each one encoded into [file] as soon as it is synthesized (#793).
-     * Returns `[charStart, charEnd, startSec, endSec]` for each sentence, or null when stopped or the lease ran out.
+     * Returns `[charStart, charEnd, startSec, endSec]` for each sentence and the audio's length in milliseconds, or null
+     * when stopped or the lease ran out. [sentence] hears each sentence's number, the count and the seconds so far (#820).
      */
-    private fun narrate(job: GenerationJob, file: File, lease: Lease, keepGoing: () -> Boolean): JSONArray? {
+    private fun narrate(job: GenerationJob, file: File, lease: Lease, sentence: (Int, Int, Double) -> Unit, keepGoing: () -> Boolean): Pair<JSONArray, Long>? {
         val segments = JSONArray()
         var sink: AudioSink? = null
         var rate = 24_000
@@ -309,7 +363,9 @@ class Contributor(
         var pause = 0 // written before the next sentence, so none follows the last
         try {
             val language = checkNotNull(synth.language(job.params, job.language))
-            for (s in Sentences.split(job.text, language)) {
+            val sentences = Sentences.split(job.text, language)
+            for ((i, s) in sentences.withIndex()) {
+                sentence(i + 1, sentences.size, length.toDouble() / rate)
                 lease.renew()
                 val audio = synth.synthesize(job.text.substring(s.start, s.end), job.params, language) { keepGoing() && lease.held } ?: return null
                 if (audio.samples.isEmpty()) continue // nothing to say, e.g. "* * *"
@@ -321,9 +377,9 @@ class Contributor(
                 pause = ((if (s.endsParagraph) GenerationPolicy.PARAGRAPH_PAUSE else GenerationPolicy.SENTENCE_PAUSE) * rate).toInt()
             }
             val short = (GenerationPolicy.MIN_SECONDS * rate).toInt() - length
-            if (short > 0) sink?.write(FloatArray(short))
+            if (short > 0) sink?.let { it.write(FloatArray(short)); length += short }
             (sink ?: encoder(file, rate).also { sink = it }).finish()
-            return segments
+            return segments to length * 1000L / rate
         } finally { sink?.close() }
     }
     private fun seconds(samples: Int, rate: Int) = Math.round(samples * 1000.0 / rate) / 1000.0

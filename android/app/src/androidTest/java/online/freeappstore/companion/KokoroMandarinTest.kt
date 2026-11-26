@@ -34,7 +34,7 @@ class KokoroMandarinTest {
     private val log = object : ContributionLog {
         override fun handled(jobId: String) = false
         override fun record(contribution: Contribution) { assertEquals(contribution.reason, "uploading", contribution.status) }
-        override fun updateStatus(jobId: String, status: String, reason: String) {}
+        override fun updateStatus(jobId: String, status: String, reason: String, server: ServerVerdict?) {}
     }
     private fun job(id: String, text: String, voice: String, language: String?) = JSONObject().put("id", id).put("setId", "s").put("key", id)
         .put("input", JSONObject().put("text", text)).put("model", "kokoro").put("modelVersion", "v1.0").put("params", JSONObject().put("voice", voice))
