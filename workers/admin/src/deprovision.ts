@@ -129,6 +129,14 @@ export const APP_DATA_TABLES = [
   "app_logs",
   "auth_codes",
   "app_deploy_limits",
+  // Community generation (0053). Children first; artifact R2 objects become unreachable.
+  "generation_leases",
+  "generation_submissions",
+  "generation_artifacts",
+  "generation_jobs",
+  "generation_sets",
+  "generation_blocks",
+  "generation_audit",
 ] as const;
 
 /** Delete the D1 rows of an app: the `routes` row the host reads, the `apps`
