@@ -24,6 +24,7 @@ const STYLE_CSS_PATH = process.env.FAS_STYLE_CSS_PATH
 const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
 // Provisioned/retired entries remain in source, but are not public listings.
 const { isPublicListing } = require('./lib/discovery.cjs');
+const { CROSS_STORE_REGISTRY_PATH, crossStoreItems } = require('./lib/cross-store.cjs');
 const { appSeo } = require('./lib/app-seo.cjs');
 const appKinds = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'app-kinds.json'), 'utf8'));
 const { groupCategories, renderCategoryPage } = require('./lib/categories.cjs');
@@ -833,7 +834,7 @@ async function fetchCrossStoreRegistry() {
     const req = https.request(
       {
         hostname: 'raw.githubusercontent.com',
-        path: '/freegamestore-online/freegamestore/main/registry.json',
+        path: CROSS_STORE_REGISTRY_PATH,
         method: 'GET',
       },
       (r) => {
@@ -843,7 +844,7 @@ async function fetchCrossStoreRegistry() {
           try {
             const parsed = JSON.parse(data);
             resolve({
-              items: parsed.games ?? [],
+              items: crossStoreItems(parsed),
               domain: 'freegamestore.online',
               path: 'games',
             });
