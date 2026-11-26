@@ -21,6 +21,9 @@ import { BASE, SiteNav, go } from './SiteNav'
 const BuilderApp = lazy(() => import('./builder/BuilderApp'))
 
 const fas = initApp({ appId: 'console' })
+// Stable identity: panels key their load effects on getToken, so an inline
+// arrow would refetch every panel on each App render (#772).
+const getToken = () => fas.auth.token
 
 type View = 'dashboard' | 'app-detail' | 'publish' | 'generate' | 'ui-library' | 'builder'
 
@@ -197,12 +200,12 @@ export default function App() {
           <AppDetail
             appId={selectedAppId}
             appName={apps.find((a) => a.id === selectedAppId)?.name ?? selectedAppId}
-            getToken={() => fas.auth.token}
+            getToken={getToken}
             onBack={() => navigate('dashboard')}
             onOpenInVibeCode={() => openInVibeCode(selectedAppId)}
           />
         )}
-        {view === 'publish' && <PublishView getToken={() => fas.auth.token} />}
+        {view === 'publish' && <PublishView getToken={getToken} />}
         {view === 'generate' && <GeneratePage fas={fas} />}
         {view === 'ui-library' && <UILibraryView />}
       </main>

@@ -35,6 +35,7 @@ export function LogsViewer({ appId, getToken }: Props) {
     // The expanded row is an index into the list being replaced.
     setExpanded(null)
     setError('')
+    setBuildMeta(null)
     try {
       const params = new URLSearchParams({ limit: String(limit) })
       if (level !== 'all') params.set('level', level)
