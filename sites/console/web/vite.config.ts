@@ -27,7 +27,7 @@ export default defineConfig({
         ignoreURLParametersMatching: [/^v$/, /^utm_/, /^fbclid$/],
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,wasm,json}'],
         // The Generate page's model worker and its runtime (#795) are downloaded only by creators who generate.
-        globIgnores: ['assets/kokoro.worker-*', 'assets/ort-wasm-*'],
+        globIgnores: ['assets/generate.worker-*', 'assets/ort-wasm-*'],
         maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
         runtimeCaching: [
           { urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i, handler: 'CacheFirst',
