@@ -24,17 +24,6 @@ describe('generation audio containers', () => {
     }
     expect(() => parseAudio(new TextEncoder().encode('<html>not audio</html>'))).toThrow(/not WAV/);
   });
-
-  it('cuts standalone windows: PCM WAV, Ogg pages after the headers, AAC as ADTS', () => {
-    const clip = parseAudio(wav(30)).window(5000, 20_000);
-    expect(parseAudio(clip).durationMs).toBe(20_000);
-    const ogg = parseAudio(OGG).window(30_000, 20_000);
-    expect(new TextDecoder().decode(ogg.subarray(0, 4))).toBe('OggS');
-    expect(ogg.length).toBeLessThan(OGG.length / 2);
-    const aac = parseAudio(M4A).window(30_000, 20_000);
-    expect([aac[0], aac[1]! & 0xf6]).toEqual([0xff, 0xf0]);
-    expect(aac.length).toBeLessThan(M4A.length / 2);
-  });
 });
 
 describe('generation verdicts (no AI compute, #831)', () => {

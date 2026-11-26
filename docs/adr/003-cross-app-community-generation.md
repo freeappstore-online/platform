@@ -8,7 +8,8 @@ before #788 and #789 start. Changes no shipped API.
 ## Context
 
 Community generation ships as one public TTS path: `kind: 'tts'`, `{ text }` input,
-public verification with Whisper, and a write-once public artifact per job
+public verification of the file's structure (no AI compute since #831; people judge quality on
+the device and in the console), and a write-once public artifact per job
 ([community-generation.md](../community-generation.md), migrations 0053/0054,
 `packages/backend/src/routes/generation.ts`, `packages/sdk/src/generation.ts`,
 Android `Generation.kt` / `ContributeWorker.kt` / `Kokoro.kt`). Books is its first user.
@@ -115,8 +116,8 @@ Integrity checks on upload (every result): valid lease; content type in `formats
 non-zero and at most `max_bytes`. Audio must parse as WAV or MP4, reusing the container
 parsers in `generation-verify.ts`; the duration is recorded but not judged. Text must be
 valid UTF-8 JSON of exactly `{ text }` with a non-empty string, no control characters other
-than `\n`, and a size limit. Whisper, characters-per-second bands, replicas and language
-checks are not run on private results. A failed check records `integrity: 'failed'` with a
+than `\n`, and a size limit. Characters-per-second bands, replicas and language checks are not
+run on private results, and no AI compute checks anything on FAS (#831). A failed check records `integrity: 'failed'` with a
 reason, keeps the bytes for at most 7 days, and reopens the job.
 
 ### 3. Approved model catalogue

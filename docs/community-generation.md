@@ -26,9 +26,19 @@ Attestation (`X-Attestation`) is recorded as `unverified` until #732 lands. Sets
 Owners see their sets in the Creator Console: an app's **Generation** tab
 (`freeappstore.online/app/`) shows each set's progress, its jobs (filter by status, page with
 *Load more*), plays accepted audio with sentence highlighting from the meta `segments`, lists the
-latest submissions (status, reason, WER, contributor, device and attestation) and can withdraw an
-artifact or block a contributor. Highlighting follows the whole text, which the tab reads with
+latest submissions (status, reason, duration, contributor, device and attestation, and the
+contributor's own Good / Not good report with its note) and can withdraw an artifact or block a
+contributor. Highlighting follows the whole text, which the tab reads with
 `GET …/sets/:setId/jobs/:jobId` when the audio starts.
+
+People judge quality, never AI ([#831](https://github.com/freeappstore-online/platform/issues/831)).
+Each runner's history (Android, iOS, desktop, the console's Generate page) has **Good / Not good** and
+an optional note for every upload the device made; it is sent to `…/submissions/:id/report` and the
+owner sees it on that submission. In the Generation tab the owner listens to the accepted audio and
+marks that exact version **Reviewed** or **Needs changes** with a note (`…/artifacts/:jobId/review`,
+audited), or withdraws it. An artifact is shown as *Not reviewed* until then, and a version generated
+again (after a withdrawal) is a new, unreviewed one: a review is never carried over. A review or report
+never publishes, withdraws or changes the manifest.
 
 Any signed-in creator can generate for every store app from the console's **Generate** page
 (`freeappstore.online/app/generate`, desktop browsers with WebCodecs AAC): it lists the apps with open
@@ -66,6 +76,7 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 | `POST /apps/:appId/generation/sets` | `{ kind: 'tts', model, modelVersion, params, formats, maxBytes, replicas, requireAttestation?, language?, minCharsPerSecond?, maxCharsPerSecond? }` | `201 { set }` |
 | `POST /apps/:appId/generation/sets/:setId/jobs` | `{ jobs: [{ key, input: { text } }] }`, 1-500 | `{ jobs: [{ id, key, status }] }`; `409 { error, keys }` if a key exists with another input |
 | `DELETE /apps/:appId/generation/artifacts/:jobId` | | `{ withdrawn: 1 }`; the job reopens |
+| `PUT /apps/:appId/generation/artifacts/:jobId/review` | `{ submissionId, status: 'reviewed' \| 'needs_changes', note? }`; console session of the owner only | `{ review: { status, note, by, at } }`; `409` when `submissionId` is no longer the job's artifact |
 | `POST /apps/:appId/generation/contributors/:userId/block` | | `{ blocked: true, withdrawn: n }` |
 | `GET /apps/:appId/generation/sets` | | `{ sets: [{ ...set, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }] }`, newest first |
 | `GET /apps/:appId/generation/sets/:setId/jobs?status=&cursor=&limit=` | | `{ jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact, submissions }], nextCursor }` |
@@ -86,10 +97,12 @@ its contributor; `rejected` excludes those).
 
 Jobs are ordered by key. `status` is `open` or `accepted`; `limit` is 50 by default, at most 200; pass
 `nextCursor` (the page's last key, `null` on the last page) as `cursor`. `inputPreview` is the first 200
-characters of the text and `inputChars` its length. `artifact` is `null` or `{ url, durationMs, bytes,
-contributor, acceptedAt }` (`url` as in the manifest). `submissions` are the job's 5 latest, newest
-first: `{ id, contributor, deviceKind, attestation, status, reason, wer, durationMs, createdAt,
-decidedAt, record }`, where `record` is the device's attempt record for that upload (below) or null;
+characters of the text and `inputChars` its length. `artifact` is `null` or `{ url, submissionId,
+durationMs, bytes, contributor, acceptedAt, review }` (`url` as in the manifest; `review` is `{ status,
+note, by, at }` or `null` while not reviewed). `submissions` are the job's 5 latest, newest first:
+`{ id, contributor, deviceKind, attestation, status, reason, durationMs, createdAt, decidedAt, report,
+record }`, where `report` is the contributor's `{ good, note, at }` or null and `record` is the
+device's attempt record for that upload (below) or null;
 `attempts` are the job's 5 latest attempt records that ended without an upload, each with its
 `contributor`. A `contributor` is `{ id, login }` (the user id `block` takes and the GitHub login), or
 `null` once the account is deleted.
@@ -103,7 +116,8 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
 | `POST /apps/:appId/generation/jobs/:jobId/lease` | header `X-Lease-Token` | `{ leaseExpiresAt }`; `409 { error, leaseExpiresAt }` at the cap |
 | `PUT /apps/:appId/generation/jobs/:jobId/result` | multipart `file` + optional `meta` (JSON object, at most 64 KB); header `X-Lease-Token`; optional `X-Attestation` | `202 { submissionId, status }` |
 | `POST /apps/:appId/generation/events` | `{ events: [{ jobId, runner, reason, ...numbers }] }`, 1-50 | `{ recorded }` |
-| `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, wer, durationMs, input: { text }, artifact: { url, metaUrl } \| null }] }`, the caller's own, newest 100 |
+| `GET /apps/:appId/generation/submissions` | | `{ submissions: [{ submissionId, jobId, setId, key, status, reason, bytes, contentType, createdAt, decidedAt, durationMs, report, input: { text }, artifact: { url, metaUrl } \| null }] }`, the caller's own, newest 100 |
+| `PUT /apps/:appId/generation/submissions/:submissionId/report` | `{ good: boolean, note? }` (note at most 500 characters) | `{ report: { good, note, at } }`; the caller's own submission only (else `404`), a resend changes it |
 
 - A lease lasts 15 minutes and uploads once. While still generating, the holder can extend it
   (`…/lease`, same `X-Lease-Token`, which does not change) to 15 minutes from now, but never past
@@ -143,8 +157,8 @@ credential (`Bearer ndev_…`). Blocked contributors get `403`.
   the device keeps the full record (input, output, segments) in its own history, where it can be
   played back; the server already has the text and the upload. Kept 14 days, 1,000 per user per UTC
   day (then `429`). Owners see them in the jobs list.
-- `…/submissions` lists only the caller's own submissions (#824). `wer` and `durationMs` are what
-  verification measured (null until then), `input` is the job's input as the claim returned it (so a
+- `…/submissions` lists only the caller's own submissions (#824). `durationMs` is what
+  verification measured (null until then), `report` the caller's own Good / Not good (#831) or null, `input` is the job's input as the claim returned it (so a
   device can show text for jobs another device of the account ran), and `artifact` is the job's
   accepted artifact (absolute URLs, `metaUrl` null without meta) or null. It may come from another
   user's submission: it is this one's only when `status` is `accepted`.

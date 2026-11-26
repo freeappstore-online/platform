@@ -1,29 +1,17 @@
 /**
  * Container checks for community generation (#729): parse the bytes a device
- * uploaded, reject truncated or mislabelled files, measure the duration, and
- * cut short windows for transcription. Structure only, not a full decoder.
+ * uploaded, reject truncated or mislabelled files and measure the duration.
+ * Structure only, not a full decoder.
  */
 export type AudioType = 'audio/mp4' | 'audio/ogg' | 'audio/wav';
 
 export interface ParsedAudio {
   type: AudioType;
   durationMs: number;
-  /** A standalone clip of about `lengthMs` from `startMs`, for the transcriber. */
-  window(startMs: number, lengthMs: number): Uint8Array;
 }
 
 const str = (b: Uint8Array, p: number, n: number) => String.fromCharCode(...b.subarray(p, p + n));
 const view = (b: Uint8Array) => new DataView(b.buffer, b.byteOffset, b.byteLength);
-
-function concat(parts: Uint8Array[]): Uint8Array {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let offset = 0;
-  for (const p of parts) {
-    out.set(p, offset);
-    offset += p.length;
-  }
-  return out;
-}
 
 export function parseAudio(b: Uint8Array): ParsedAudio {
   if (b.length >= 12 && str(b, 0, 4) === 'RIFF' && str(b, 8, 4) === 'WAVE') return wav(b);
@@ -62,25 +50,7 @@ function wav(b: Uint8Array): ParsedAudio {
     byteRate !== sampleRate * blockAlign
   )
     throw new Error('unsupported WAV format');
-  return {
-    type: 'audio/wav',
-    durationMs: (dataSize / byteRate) * 1000,
-    window(startMs, lengthMs) {
-      const align = (ms: number) => Math.floor((ms / 1000) * sampleRate) * blockAlign;
-      const start = Math.min(align(startMs), dataSize);
-      const pcm = b.subarray(
-        data + 8 + start,
-        data + 8 + Math.min(start + align(lengthMs), dataSize),
-      );
-      // Everything before the data chunk (RIFF, fmt, …), then a data chunk of the slice.
-      const out = concat([b.subarray(0, data), new Uint8Array(8), pcm]);
-      const o = view(out);
-      o.setUint32(4, out.length - 8, true);
-      out.set([0x64, 0x61, 0x74, 0x61], data);
-      o.setUint32(data + 4, pcm.length, true);
-      return out;
-    },
-  };
+  return { type: 'audio/wav', durationMs: (dataSize / byteRate) * 1000 };
 }
 
 function ogg(b: Uint8Array): ParsedAudio {
@@ -109,22 +79,7 @@ function ogg(b: Uint8Array): ParsedAudio {
   // Header pages (OpusHead, OpusTags) carry granule 0; audio pages follow.
   const headers = pages.findIndex((page, i) => i > 0 && page.granule > 0);
   if (headers < 0) throw new Error('Ogg without audio');
-  return {
-    type: 'audio/ogg',
-    durationMs: Math.max(0, last.granule - preSkip) / 48,
-    window(startMs, lengthMs) {
-      const from = startMs * 48 + preSkip,
-        to = from + lengthMs * 48;
-      const picked = pages
-        .slice(headers)
-        .filter(
-          (page) => page.granule === -1 || (page.granule > from && page.granule <= to + 48_000),
-        );
-      return concat(
-        [...pages.slice(0, headers), ...picked].map((page) => b.subarray(page.start, page.end)),
-      );
-    },
-  };
+  return { type: 'audio/ogg', durationMs: Math.max(0, last.granule - preSkip) / 48 };
 }
 
 interface Box {
@@ -217,67 +172,5 @@ function mp4(b: Uint8Array): ParsedAudio {
   }
   if (offsets.length !== count || offsets.some((o, i) => o + sizes[i]! > b.length))
     throw new Error('truncated MP4 media data');
-  const times: number[] = [];
-  for (let i = 0, t = 0; i < v.getUint32(stts.content + 4); i++) {
-    const n = v.getUint32(stts.content + 8 + 8 * i),
-      delta = v.getUint32(stts.content + 12 + 8 * i);
-    for (let k = 0; k < n; k++, t += delta) times.push(t);
-  }
-  return {
-    type: 'audio/mp4',
-    durationMs: (duration / timescale) * 1000,
-    window(startMs, lengthMs) {
-      // AAC frames re-framed as ADTS, which needs no container index.
-      // stsd: version, flags and entry count; mp4a: 28 bytes of sample entry fields.
-      const stsd = table('stsd');
-      const entry = stsd && boxes(b, stsd.content + 8, stsd.end)[0];
-      const esds =
-        entry?.type === 'mp4a'
-          ? boxes(b, entry.content + 28, entry.end).find((x) => x.type === 'esds')
-          : undefined;
-      if (!esds) throw new Error('MP4 audio is not AAC');
-      let p = esds.content + 4;
-      let config = -1;
-      while (p < esds.end) {
-        const tag = b[p++]!;
-        let len = 0;
-        for (let i = 0; i < 4; i++) {
-          const byte = b[p++]!;
-          len = (len << 7) | (byte & 0x7f);
-          if (!(byte & 0x80)) break;
-        }
-        if (tag === 0x05) {
-          config = p;
-          break;
-        }
-        // ES descriptor: id, flags; decoder config: type, stream, buffer, rates.
-        p += tag === 0x03 ? 3 : tag === 0x04 ? 13 : len;
-      }
-      if (config < 0) throw new Error('MP4 audio without decoder config');
-      const object = b[config]! >> 3,
-        rate = ((b[config]! & 7) << 1) | (b[config + 1]! >> 7),
-        channels = (b[config + 1]! >> 3) & 15;
-      const profile = object >= 1 && object <= 4 ? object - 1 : 1;
-      const from = (startMs / 1000) * trackScale,
-        to = from + (lengthMs / 1000) * trackScale;
-      const frames: Uint8Array[] = [];
-      for (let i = 0; i < count; i++) {
-        if (times[i]! < from || times[i]! >= to) continue;
-        const len = 7 + sizes[i]!;
-        frames.push(
-          new Uint8Array([
-            0xff,
-            0xf1,
-            (profile << 6) | (rate << 2) | (channels >> 2),
-            ((channels & 3) << 6) | (len >> 11),
-            (len >> 3) & 0xff,
-            ((len & 7) << 5) | 0x1f,
-            0xfc,
-          ]),
-          b.subarray(offsets[i]!, offsets[i]! + sizes[i]!),
-        );
-      }
-      return concat(frames);
-    },
-  };
+  return { type: 'audio/mp4', durationMs: (duration / timescale) * 1000 };
 }

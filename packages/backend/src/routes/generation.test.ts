@@ -373,8 +373,8 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
         jobId: job.id,
         key: 'a',
         status: 'pending',
-        wer: null,
         durationMs: null,
+        report: null,
         input: { text: 'A.' },
         artifact: null,
       }),
@@ -572,6 +572,87 @@ describe.skipIf(!hasSqlite)('community generation jobs API', () => {
     );
   });
 
+  it('people judge quality: device reports and owner reviews of exact versions (#831, #787)', async () => {
+    const s = await setup({ verify: false });
+    const setId = await s.createSet();
+    await s.addJobs(setId, [{ key: 'a', input: { text: 'A.' } }]);
+    const job = (await s.claim(null, { token: DEVICE }))!;
+    const { submissionId } = await s.submissionId(
+      await s.submit(null, job.id, job.leaseToken, { token: DEVICE }),
+    );
+    type Judged = {
+      jobs: { artifact: Record<string, unknown> | null; submissions: Record<string, unknown>[] }[];
+    };
+    const device = { user: null, token: DEVICE };
+    const report = (json: unknown, o: { user?: string | null; token?: string } = device) =>
+      s.request(`/submissions/${submissionId}/report`, { method: 'PUT', json, ...o });
+    // Only the contributor, about their own upload; the device credential works.
+    expect((await report({ good: false }, { user: 'u2' })).status).toBe(404);
+    expect((await report({ good: false }, { user: null })).status).toBe(401);
+    expect((await report({ good: 'yes' })).status).toBe(400);
+    expect((await report({ good: false, note: 'x'.repeat(501) })).status).toBe(400);
+    expect((await report({ good: false, note: 'skips a line' })).status).toBe(200);
+    const good = { good: true, note: null, at: expect.any(Number) };
+    expect(await (await report({ good: true })).json()).toEqual({ report: good });
+    const mine = (await (await s.request('/submissions', device)).json()) as {
+      submissions: { report: unknown }[];
+    };
+    expect(mine.submissions[0]!.report).toEqual(good);
+
+    // The owner reviews the accepted version on a console session, never an app session.
+    await acceptSubmission(s.env as never, submissionId, 1000);
+    const consoleSession = await signSession('u1', KEY, { aud: 'console' });
+    const review = async (json: unknown, token = consoleSession) =>
+      await s.request(`/artifacts/${job.id}/review`, { method: 'PUT', json, token });
+    const reviewed = { submissionId, status: 'reviewed' };
+    expect((await review(reviewed, await signSession('u1', KEY, { aud: 'books' }))).status).toBe(
+      403,
+    );
+    expect((await review(reviewed, await signSession('u2', KEY, { aud: 'console' }))).status).toBe(
+      403,
+    );
+    expect((await review({ submissionId, status: 'great' })).status).toBe(400);
+    expect((await review({ submissionId: 'other', status: 'reviewed' })).status).toBe(409);
+    const note = 'wrong stress on "record"';
+    const ok = await review({ submissionId, status: 'needs_changes', note });
+    expect(await ok.json()).toEqual({
+      review: { status: 'needs_changes', note, by: 'alice', at: expect.any(Number) },
+    });
+    const listed = (await (await s.request(`/sets/${setId}/jobs`)).json()) as Judged;
+    expect(listed.jobs[0]!.artifact!.review).toEqual(
+      expect.objectContaining({ status: 'needs_changes', by: 'alice' }),
+    );
+    expect(listed.jobs[0]!.submissions[0]!.report).toEqual(good);
+    expect(
+      s.db
+        .prepare(
+          "SELECT actor, target, detail FROM generation_audit WHERE action = 'artifact.review'",
+        )
+        .all(),
+    ).toEqual([
+      {
+        actor: 'u1',
+        target: submissionId,
+        detail: JSON.stringify({ status: 'needs_changes', note }),
+      },
+    ]);
+    // A review changes nothing public.
+    const manifest = await (await s.request(`/sets/${setId}/manifest`, { user: null })).json();
+    expect((manifest as { artifacts: unknown[] }).artifacts).toHaveLength(1);
+
+    // Withdrawn and generated again: the new version is unreviewed; the old review never carries over.
+    expect((await s.request(`/artifacts/${job.id}`, { method: 'DELETE' })).status).toBe(200);
+    expect((await review(reviewed)).status).toBe(404);
+    const again = (await s.claim('u3'))!;
+    const next = await s.submissionId(await s.submit('u3', again.id, again.leaseToken));
+    await acceptSubmission(s.env as never, next.submissionId, 1000);
+    const relisted = (await (await s.request(`/sets/${setId}/jobs`)).json()) as Judged;
+    expect(relisted.jobs[0]!.artifact).toEqual(
+      expect.objectContaining({ submissionId: next.submissionId, review: null }),
+    );
+    expect((await review(reviewed)).status).toBe(409);
+  });
+
   it('the app daily limit is enforced; there is no per-user limit (#830)', async () => {
     const s = await setup();
     const setId = await s.createSet();
@@ -742,8 +823,10 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
       url: expect.stringMatching(new RegExp(`/v1/apps/books/generation/artifacts/${job.id}\\?v=`)),
       durationMs: 1500,
       bytes: AUDIO.length,
+      submissionId: sub.submissionId,
       contributor: { id: 'u2', login: 'bob' },
       acceptedAt: expect.any(Number),
+      review: null,
     });
     expect(a!.submissions).toEqual([
       {
@@ -753,10 +836,10 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
         attestation: 'none',
         status: 'accepted',
         reason: null,
-        wer: null,
         durationMs: null,
         createdAt: expect.any(Number),
         decidedAt: expect.any(Number),
+        report: null,
         record: null,
       },
     ]);

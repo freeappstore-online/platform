@@ -12,6 +12,7 @@ import {
   HttpError,
   requireAppOwner,
   requireAppUser,
+  requireConsoleAppOwner,
   requireConsoleUser,
 } from '../lib/auth.js';
 import { cpsBand, type Verdict, verdict } from '../lib/generation-verify.js';
@@ -42,7 +43,6 @@ export const GENERATION_LIMITS = {
   models: 20,
   /** Quarantine objects expire after 7 days (R2 lifecycle); stop waiting a day earlier. */
   pendingMs: 6 * 24 * 60 * 60_000,
-  /** Verifications (each up to a few Whisper calls) per app per UTC day. */
   /** A verifier that has not finished in this long is presumed dead. */
   verifyLockMs: 10 * 60_000,
   /** Replicas agree when their durations differ by at most this fraction. */
@@ -51,6 +51,8 @@ export const GENERATION_LIMITS = {
   eventsPerRequest: 50,
   eventsDaily: 1_000,
   eventsKeepMs: 14 * 24 * 60 * 60_000,
+  /** A device report's or an owner review's note (#831). */
+  noteChars: 500,
 };
 
 /** How a job attempt ended on the device (#813), the same on every runner; `submitted`: it uploaded. */
@@ -123,7 +125,7 @@ export interface SetRow {
   require_attestation: number;
   created_by: string;
   created_at: number;
-  /** Verification thresholds (#729): characters per second band, word error rate. */
+  /** Verification thresholds (#729): the characters-per-second band. */
   min_cps: number;
   max_cps: number;
   /** BCP 47 tag of the input text (#810); null: unspecified. */
@@ -230,6 +232,44 @@ const audit = (db: D1Database, appId: string, actor: string, action: string, tar
       'INSERT INTO generation_audit (app_id, actor, action, target, created_at) VALUES (?, ?, ?, ?, ?)',
     )
     .bind(appId, actor, action, target, Date.now());
+
+/** A device report's or an owner review's optional note: a string of at most `noteChars`, or null. */
+function note(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || value.length > GENERATION_LIMITS.noteChars)
+    throw new HttpError(
+      400,
+      `note must be a string of at most ${GENERATION_LIMITS.noteChars} characters`,
+    );
+  return value.trim() || null;
+}
+
+/** What the contributor's device said of its own upload (#831); null until it says. */
+const reportInfo = (x: {
+  report_good: number | null;
+  report_note: string | null;
+  reported_at: number | null;
+}) =>
+  x.report_good === null
+    ? null
+    : { good: !!x.report_good, note: x.report_note, at: x.reported_at! };
+
+/** The owner's review of an artifact version (#787, #831); null: not reviewed. */
+const reviewInfo = (x: {
+  review: string | null;
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewer_login: string | null;
+  reviewed_at: number | null;
+}) =>
+  x.review === null
+    ? null
+    : {
+        status: x.review,
+        note: x.review_note,
+        by: x.reviewer_login ?? x.reviewed_by,
+        at: x.reviewed_at!,
+      };
 
 /**
  * The app owner's session, or GitHub Actions OIDC from the app's pinned repo
@@ -484,9 +524,12 @@ async function ownerJobs(
   const { results: rows } = await c.env.DB.prepare(
     `SELECT j.id, j.key, j.status, j.created_at,
        substr(json_extract(j.input, '$.text'), 1, ?5) AS preview, length(json_extract(j.input, '$.text')) AS chars,
-       a.sha256, a.bytes, a.duration_ms, a.user_id, u.github_login, a.accepted_at
+       a.sha256, a.bytes, a.duration_ms, a.user_id, u.github_login, a.accepted_at, a.submission_id,
+       x.review, x.review_note, x.reviewed_by, r.github_login AS reviewer_login, x.reviewed_at
      FROM generation_jobs j LEFT JOIN generation_artifacts a ON a.job_id = j.id
      LEFT JOIN users u ON u.id = a.user_id
+     LEFT JOIN generation_submissions x ON x.id = a.submission_id
+     LEFT JOIN users r ON r.id = x.reviewed_by
      WHERE j.set_id = ?1 AND (?2 IS NULL OR j.status = ?2) AND j.key > ?3 AND (?6 IS NULL OR j.id = ?6)
      ORDER BY j.key LIMIT ?4`,
   )
@@ -504,12 +547,18 @@ async function ownerJobs(
       user_id: string | null;
       github_login: string | null;
       accepted_at: number;
+      submission_id: string | null;
+      review: string | null;
+      review_note: string | null;
+      reviewed_by: string | null;
+      reviewer_login: string | null;
+      reviewed_at: number | null;
     }>();
   const page = rows.slice(0, q.limit);
   const { results: subs } = await c.env.DB.prepare(
     `SELECT * FROM (
        SELECT x.id, x.job_id, x.user_id, u.github_login, x.device_kind, x.attestation, x.status, x.reason,
-         x.wer, x.duration_ms, x.created_at, x.decided_at,
+         x.duration_ms, x.created_at, x.decided_at, x.report_good, x.report_note, x.reported_at,
          ROW_NUMBER() OVER (PARTITION BY x.job_id ORDER BY x.created_at DESC, x.id) AS n
        FROM generation_submissions x LEFT JOIN users u ON u.id = x.user_id
        WHERE x.job_id IN (SELECT value FROM json_each(?))
@@ -525,10 +574,12 @@ async function ownerJobs(
       attestation: string;
       status: string;
       reason: string | null;
-      wer: number | null;
       duration_ms: number | null;
       created_at: number;
       decided_at: number | null;
+      report_good: number | null;
+      report_note: string | null;
+      reported_at: number | null;
     }>();
   // Attempt records (#827), linked to a submission through the lease.
   const { results: events } = await c.env.DB.prepare(
@@ -564,10 +615,12 @@ async function ownerJobs(
     artifact: j.sha256
       ? {
           url: artifactUrl(c, { app_id: appId, job_id: j.id, sha256: j.sha256 }),
+          submissionId: j.submission_id,
           durationMs: j.duration_ms,
           bytes: j.bytes,
           contributor: contributorInfo(j.user_id, j.github_login),
           acceptedAt: j.accepted_at,
+          review: reviewInfo(j),
         }
       : null,
     submissions: subs
@@ -579,10 +632,10 @@ async function ownerJobs(
         attestation: x.attestation,
         status: x.status,
         reason: x.reason,
-        wer: x.wer,
         durationMs: x.duration_ms,
         createdAt: x.created_at,
         decidedAt: x.decided_at,
+        report: reportInfo(x),
         record: ((e) => (e ? record(e) : null))(events.find((e) => e.submission_id === x.id)),
       })),
     // Attempts that ended without an upload, the 5 latest.
@@ -889,7 +942,7 @@ generationRoutes.put('/apps/:appId/generation/jobs/:jobId/result', async (c) => 
 
 /**
  * The caller's own 100 newest submissions to the app (#824): with what
- * verification measured (`wer`, `durationMs`), the job's input text (the
+ * verification measured (`durationMs`), the caller's own report (#831), the job's input text (the
  * caller received it when claiming), and the job's accepted artifact, which may
  * come from another user's submission (then `status` is not `accepted`).
  */
@@ -898,13 +951,13 @@ generationRoutes.get('/apps/:appId/generation/submissions', async (c) => {
   const who = await contributor(c, appId);
   const { results } = await c.env.DB.prepare(
     `SELECT s.id, s.job_id, s.set_id, j.key, s.status, s.reason, s.bytes, s.content_type, s.created_at, s.decided_at,
-       s.wer, s.duration_ms, json_extract(j.input, '$.text') AS text, a.sha256 AS a_sha256, a.meta_key AS a_meta_key
+       s.duration_ms, s.report_good, s.report_note, s.reported_at, json_extract(j.input, '$.text') AS text, a.sha256 AS a_sha256, a.meta_key AS a_meta_key
      FROM generation_submissions s JOIN generation_jobs j ON j.id = s.job_id
      LEFT JOIN generation_artifacts a ON a.job_id = s.job_id
      WHERE s.app_id = ? AND s.user_id = ? ORDER BY s.created_at DESC LIMIT 100`,
   )
     .bind(appId, who.id)
-    .all<Record<string, string | number | null>>();
+    .all<Record<string, string | number | null> & Parameters<typeof reportInfo>[0]>();
   return c.json({
     submissions: results.map((s) => {
       const a = s.a_sha256
@@ -921,8 +974,8 @@ generationRoutes.get('/apps/:appId/generation/submissions', async (c) => {
         contentType: s.content_type,
         createdAt: s.created_at,
         decidedAt: s.decided_at,
-        wer: s.wer,
         durationMs: s.duration_ms,
+        report: reportInfo(s),
         input: { text: s.text },
         artifact: a
           ? { url: artifactUrl(c, a), metaUrl: s.a_meta_key ? artifactUrl(c, a, '/meta') : null }
@@ -930,6 +983,77 @@ generationRoutes.get('/apps/:appId/generation/submissions', async (c) => {
       };
     }),
   });
+});
+
+/**
+ * The contributor's own judgement of an upload (#831): `good` true or false and an optional note,
+ * from the device that generated it (an app session, a console session or `ndev_`). One per
+ * submission, the caller's own only; a resend changes it. No AI and no audio: it is stored on the
+ * submission and shown to the owner.
+ */
+generationRoutes.put('/apps/:appId/generation/submissions/:submissionId/report', async (c) => {
+  const appId = c.req.param('appId');
+  const who = await contributor(c, appId);
+  const b = await nativeBody(c, 4096);
+  if (typeof b.good !== 'boolean') throw new HttpError(400, 'good must be true or false');
+  const report = { good: b.good, note: note(b.note), at: Date.now() };
+  const updated = await c.env.DB.prepare(
+    `UPDATE generation_submissions SET report_good = ?, report_note = ?, reported_at = ?
+     WHERE id = ? AND app_id = ? AND user_id = ?`,
+  )
+    .bind(report.good ? 1 : 0, report.note, report.at, c.req.param('submissionId'), appId, who.id)
+    .run();
+  if (!updated.meta.changes) throw new HttpError(404, 'submission not found');
+  return c.json({ report });
+});
+
+const REVIEWS = ['reviewed', 'needs_changes'];
+
+/**
+ * The owner's review of the job's current artifact (#787, #831), on a console session: `status`
+ * `reviewed` or `needs_changes`, an optional note. `submissionId` names the exact version
+ * reviewed; `409` once the artifact is another (withdrawn and generated again: a new version is
+ * unreviewed). Audited. A review never publishes, withdraws or changes the manifest.
+ */
+generationRoutes.put('/apps/:appId/generation/artifacts/:jobId/review', async (c) => {
+  const appId = c.req.param('appId');
+  const jobId = c.req.param('jobId');
+  const actor = (await requireConsoleAppOwner(c, appId)).id;
+  const b = await nativeBody(c, 4096);
+  if (typeof b.submissionId !== 'string' || !REVIEWS.includes(b.status as string))
+    throw new HttpError(400, 'send submissionId and status reviewed or needs_changes');
+  const review = { status: b.status as string, note: note(b.note) };
+  const now = Date.now();
+  const db = c.env.DB;
+  const current = `EXISTS (SELECT 1 FROM generation_artifacts a
+    WHERE a.submission_id = ?1 AND a.job_id = ?2 AND a.app_id = ?3)`;
+  const [updated] = await db.batch([
+    db
+      .prepare(
+        `UPDATE generation_submissions SET review = ?4, review_note = ?5, reviewed_by = ?6, reviewed_at = ?7
+         WHERE id = ?1 AND ${current}`,
+      )
+      .bind(b.submissionId, jobId, appId, review.status, review.note, actor, now),
+    db
+      .prepare(
+        `INSERT INTO generation_audit (app_id, actor, action, target, detail, created_at)
+         SELECT ?3, ?4, 'artifact.review', ?1, ?5, ?6 WHERE ${current}`,
+      )
+      .bind(b.submissionId, jobId, appId, actor, JSON.stringify(review), now),
+  ]);
+  if (!updated!.meta.changes) {
+    const other = await db
+      .prepare('SELECT 1 FROM generation_artifacts WHERE job_id = ? AND app_id = ?')
+      .bind(jobId, appId)
+      .first();
+    if (other) throw new HttpError(409, 'the artifact is another version now; review that one');
+    throw new HttpError(404, 'artifact not found');
+  }
+  const login = await db
+    .prepare('SELECT github_login FROM users WHERE id = ?')
+    .bind(actor)
+    .first<{ github_login: string | null }>();
+  return c.json({ review: { ...review, by: login?.github_login ?? actor, at: now } });
 });
 
 /** A device's record of one attempt, validated: only RECORD_FIELDS, strings of at most 300 characters. */
