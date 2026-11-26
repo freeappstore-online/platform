@@ -249,8 +249,12 @@ export const CONSOLE_INLINE_SCRIPT_HASHES = [
  * Derived from what the console build loads (sites/console/web): its own
  * bundle + the inline boot scripts, Google Fonts, the platform API (REST +
  * rooms WebSocket), the VibeCode agent, the admin Worker (deploy status),
- * GitHub (org repo list, raw fas.json), app previews in iframes, and the
- * service worker's runtime cache of the font hosts. img-src stays `https:`
+ * GitHub (org repo list, raw fas.json), app previews in iframes, the
+ * service worker's runtime cache of the font hosts, and the Generate page's
+ * local model (#795): Kokoro's weights from Hugging Face (huggingface.co,
+ * redirected to its *.hf.co CDN) and ONNX Runtime's WebAssembly, served
+ * same-origin but compiled, hence 'wasm-unsafe-eval' (WebAssembly only, not
+ * JavaScript eval). img-src stays `https:`
  * because the builder previews arbitrary image URLs from the chat. style-src
  * keeps 'unsafe-inline' because the @freeappstore/sdk UI kit injects its
  * keyframes as a <style id="fas-ui-keyframes"> element at runtime and React
@@ -262,11 +266,13 @@ const CONSOLE_CSP = [
   // static.cloudflareinsights.com: Cloudflare injects the Web Analytics beacon
   // into HTML served on the apex (where /app/ lives), as the storefront's own
   // CSP already allows; it reports to cloudflareinsights.com.
-  `script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")} https://static.cloudflareinsights.com`,
+  `script-src 'self' 'wasm-unsafe-eval' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")} https://static.cloudflareinsights.com`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
-  "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com",
+  // The Generation tab plays accepted artifacts from the API (#795)
+  "media-src 'self' https://api.freeappstore.online",
+  "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com https://huggingface.co https://*.hf.co",
   "worker-src 'self'",
   "frame-src https://*.freeappstore.online",
   "frame-ancestors 'none'",

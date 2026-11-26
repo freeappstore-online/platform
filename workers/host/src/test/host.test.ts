@@ -366,7 +366,7 @@ describe("first-party console policy", () => {
 
   it("allows no inline, eval, or third-party script beyond the hashed boot scripts", () => {
     expect(directive("script-src")).toBe(
-      `script-src 'self' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")} https://static.cloudflareinsights.com`,
+      `script-src 'self' 'wasm-unsafe-eval' ${CONSOLE_INLINE_SCRIPT_HASHES.map((h) => `'${h}'`).join(" ")} https://static.cloudflareinsights.com`,
     );
     expect(directive("script-src")).not.toContain("'unsafe-inline'");
     expect(csp).not.toContain("'unsafe-eval'");
@@ -395,14 +395,15 @@ describe("first-party console policy", () => {
     expect(inline).toEqual([...CONSOLE_INLINE_SCRIPT_HASHES]);
   });
 
-  it("lets the console reach only the platform services and GitHub it calls", () => {
+  it("lets the console reach only the platform services, GitHub and the Generate page's model host", () => {
     expect(directive("connect-src")).toBe(
-      "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com",
+      "connect-src 'self' https://api.freeappstore.online wss://api.freeappstore.online https://agent.freeappstore.online https://admin.freeappstore.online https://api.github.com https://raw.githubusercontent.com https://fonts.googleapis.com https://fonts.gstatic.com https://cloudflareinsights.com https://huggingface.co https://*.hf.co",
     );
     // 'unsafe-inline' for styles only: the SDK UI kit injects a keyframes <style>.
     expect(directive("style-src")).toBe("style-src 'self' 'unsafe-inline' https://fonts.googleapis.com");
     expect(directive("font-src")).toBe("font-src 'self' https://fonts.gstatic.com");
     expect(directive("frame-src")).toBe("frame-src https://*.freeappstore.online");
+    expect(directive("media-src")).toBe("media-src 'self' https://api.freeappstore.online");
   });
 
   it("cannot be framed, posts forms only to itself, and keeps the defence-in-depth locks", () => {
