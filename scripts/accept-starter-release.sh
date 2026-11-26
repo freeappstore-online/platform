@@ -4,7 +4,9 @@ set -euo pipefail
 for workflow in ci.yml scaffold-smoke.yml; do
   deadline=$(( $(date +%s) + 1200 ))
   while true; do
-    result=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&event=push&per_page=10" --jq '.workflow_runs[0] | if .status == "completed" then .conclusion else "pending" end')
+    # Latest non-PR run for the commit: a push run, or a dispatched one when path
+    # filters skipped the push run (accept_only on a later commit, #747).
+    result=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&per_page=20" --jq '[.workflow_runs[] | select(.event != "pull_request")][0] | if . == null then "pending" elif .status == "completed" then .conclusion else "pending" end')
     if [ "$result" = success ]; then break; fi
     if [ "$result" != pending ] && [ "$result" != null ] && [ -n "$result" ]; then
       echo "Source gate $workflow: $result"; exit 1

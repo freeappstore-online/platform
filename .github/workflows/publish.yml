@@ -21,7 +21,12 @@ on:
       - 'scripts/template-release.mjs'
       - 'scripts/accept-starter-release.sh'
       - 'scripts/prepare-sdk-release.sh'
-  workflow_dispatch: # manual trigger — publishes all packages
+  workflow_dispatch: # manual trigger — publishes all packages, unless accept_only
+    inputs:
+      accept_only:
+        description: Publish nothing; re-run starter acceptance for this commit against the versions already on npm (#747)
+        type: boolean
+        default: false
 
 permissions:
   contents: write # push version bumps back to main
@@ -69,7 +74,19 @@ jobs:
 
       - name: Publish packages
         id: publish
+        env:
+          ACCEPT_ONLY: ${{ inputs.accept_only }}
         run: |
+          if [ "$ACCEPT_ONLY" = true ]; then
+            # A publish whose own commit had red CI is never accepted; a later green
+            # commit is accepted here without republishing (#747). accept-starter
+            # still refuses unless the published generator matches this source.
+            SDK_VERSION=$(npm view @freeappstore/sdk version)
+            CLI_VERSION=$(npm view @freeappstore/cli version)
+            echo "Accept only: nothing published; @freeappstore/sdk@$SDK_VERSION @freeappstore/cli@$CLI_VERSION"
+            echo "versions=@freeappstore/sdk@$SDK_VERSION @freeappstore/cli@$CLI_VERSION" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           BUMPED=""
           FAILED=""
           BEFORE="${{ github.event.before }}"

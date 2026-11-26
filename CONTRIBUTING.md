@@ -54,7 +54,12 @@ preserves extra infrastructure, and refreshes `pnpm-lock.yaml` for the adopted m
 It typechecks, tests and builds before committing directly to main, then explicitly
 dispatches CI and compliance for the resulting SHA (token pushes do not trigger
 push workflows). Re-run a failed mirror workflow without re-publishing npm.
-An acceptance-job failure can similarly be re-run independently.
+An acceptance-job failure can similarly be re-run independently. When the publishing
+commit itself had red CI (so re-running cannot pass), fix forward, then on the first
+green `main` commit run `gh workflow run scaffold-smoke.yml --ref main` if that commit
+has no Scaffold smoke run, and `gh workflow run publish.yml --ref main -f accept_only=true`.
+That publishes nothing and records the versions already on npm against that commit; it
+still refuses if the published generator differs from the commit's source.
 
 For intentional manual reconciliation, check out both mirrors on main, build the
 accepted platform revision and run `pnpm --filter @freeappstore/cli sync:templates
