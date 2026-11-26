@@ -398,28 +398,26 @@ const PREVIEW_CHARS = 200;
 const contributorInfo = (id: string | null, login: string | null) => (id ? { id, login } : null);
 
 /**
- * A set's jobs by key, paged with `cursor` (the last key of the previous page)
- * and `limit` (50, at most 200); `status` filters by `open` or `accepted`.
- * Each job carries its accepted artifact and its 5 latest submissions (#794).
+ * The owner's view of a set's jobs by key after `cursor`, at most `limit` (or
+ * only `jobId`): each with its accepted artifact and its 5 latest submissions
+ * (#794). `more` tells whether there are jobs after the page.
  */
-generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
-  const appId = c.req.param('appId');
-  await owner(c, appId);
-  const set = await setRow(c.env.DB, appId, c.req.param('setId'));
-  if (!set) throw new HttpError(404, 'set not found');
-  const status = c.req.query('status');
-  if (status !== undefined && status !== 'open' && status !== 'accepted')
-    throw new HttpError(400, 'status must be open or accepted');
-  const limit = queryLimit(c.req.query('limit'), 50, 200);
+async function ownerJobs(
+  c: Ctx,
+  appId: string,
+  setId: string,
+  q: { status: string | null; cursor: string; limit: number; jobId?: string },
+) {
   const { results: rows } = await c.env.DB.prepare(
     `SELECT j.id, j.key, j.status, j.created_at,
        substr(json_extract(j.input, '$.text'), 1, ?5) AS preview, length(json_extract(j.input, '$.text')) AS chars,
        a.sha256, a.bytes, a.duration_ms, a.user_id, u.github_login, a.accepted_at
      FROM generation_jobs j LEFT JOIN generation_artifacts a ON a.job_id = j.id
      LEFT JOIN users u ON u.id = a.user_id
-     WHERE j.set_id = ?1 AND (?2 IS NULL OR j.status = ?2) AND j.key > ?3 ORDER BY j.key LIMIT ?4`,
+     WHERE j.set_id = ?1 AND (?2 IS NULL OR j.status = ?2) AND j.key > ?3 AND (?6 IS NULL OR j.id = ?6)
+     ORDER BY j.key LIMIT ?4`,
   )
-    .bind(set.id, status ?? null, c.req.query('cursor') ?? '', limit + 1, PREVIEW_CHARS)
+    .bind(setId, q.status, q.cursor, q.limit + 1, PREVIEW_CHARS, q.jobId ?? null)
     .all<{
       id: string;
       key: string;
@@ -434,7 +432,7 @@ generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
       github_login: string | null;
       accepted_at: number;
     }>();
-  const page = rows.slice(0, limit);
+  const page = rows.slice(0, q.limit);
   const { results: subs } = await c.env.DB.prepare(
     `SELECT * FROM (
        SELECT x.id, x.job_id, x.user_id, u.github_login, x.device_kind, x.attestation, x.status, x.reason,
@@ -459,40 +457,75 @@ generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
       created_at: number;
       decided_at: number | null;
     }>();
-  return c.json({
-    jobs: page.map((j) => ({
-      id: j.id,
-      key: j.key,
-      status: j.status,
-      inputPreview: j.preview,
-      inputChars: j.chars,
-      createdAt: j.created_at,
-      artifact: j.sha256
-        ? {
-            url: artifactUrl(c, { app_id: appId, job_id: j.id, sha256: j.sha256 }),
-            durationMs: j.duration_ms,
-            bytes: j.bytes,
-            contributor: contributorInfo(j.user_id, j.github_login),
-            acceptedAt: j.accepted_at,
-          }
-        : null,
-      submissions: subs
-        .filter((x) => x.job_id === j.id)
-        .map((x) => ({
-          id: x.id,
-          contributor: contributorInfo(x.user_id, x.github_login),
-          deviceKind: x.device_kind,
-          attestation: x.attestation,
-          status: x.status,
-          reason: x.reason,
-          wer: x.wer,
-          durationMs: x.duration_ms,
-          createdAt: x.created_at,
-          decidedAt: x.decided_at,
-        })),
-    })),
-    nextCursor: rows.length > limit ? page.at(-1)!.key : null,
+  const jobs = page.map((j) => ({
+    id: j.id,
+    key: j.key,
+    status: j.status,
+    inputPreview: j.preview,
+    inputChars: j.chars,
+    createdAt: j.created_at,
+    artifact: j.sha256
+      ? {
+          url: artifactUrl(c, { app_id: appId, job_id: j.id, sha256: j.sha256 }),
+          durationMs: j.duration_ms,
+          bytes: j.bytes,
+          contributor: contributorInfo(j.user_id, j.github_login),
+          acceptedAt: j.accepted_at,
+        }
+      : null,
+    submissions: subs
+      .filter((x) => x.job_id === j.id)
+      .map((x) => ({
+        id: x.id,
+        contributor: contributorInfo(x.user_id, x.github_login),
+        deviceKind: x.device_kind,
+        attestation: x.attestation,
+        status: x.status,
+        reason: x.reason,
+        wer: x.wer,
+        durationMs: x.duration_ms,
+        createdAt: x.created_at,
+        decidedAt: x.decided_at,
+      })),
+  }));
+  return { jobs, more: rows.length > q.limit };
+}
+
+/**
+ * A set's jobs by key, paged with `cursor` (the last key of the previous page)
+ * and `limit` (50, at most 200); `status` filters by `open` or `accepted`.
+ */
+generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs', async (c) => {
+  const appId = c.req.param('appId');
+  await owner(c, appId);
+  const set = await setRow(c.env.DB, appId, c.req.param('setId'));
+  if (!set) throw new HttpError(404, 'set not found');
+  const status = c.req.query('status');
+  if (status !== undefined && status !== 'open' && status !== 'accepted')
+    throw new HttpError(400, 'status must be open or accepted');
+  const limit = queryLimit(c.req.query('limit'), 50, 200);
+  const { jobs, more } = await ownerJobs(c, appId, set.id, {
+    status: status ?? null,
+    cursor: c.req.query('cursor') ?? '',
+    limit,
   });
+  return c.json({ jobs, nextCursor: more ? jobs.at(-1)!.key : null });
+});
+
+/** One job as the list shows it, plus its whole input (the list has a 200-character preview) (#795). */
+generationRoutes.get('/apps/:appId/generation/sets/:setId/jobs/:jobId', async (c) => {
+  const appId = c.req.param('appId');
+  await owner(c, appId);
+  const set = await setRow(c.env.DB, appId, c.req.param('setId'));
+  if (!set) throw new HttpError(404, 'set not found');
+  const jobId = c.req.param('jobId');
+  const q = { status: null, cursor: '', limit: 1, jobId };
+  const [job] = (await ownerJobs(c, appId, set.id, q)).jobs;
+  if (!job) throw new HttpError(404, 'job not found');
+  const row = await c.env.DB.prepare('SELECT input FROM generation_jobs WHERE id = ?')
+    .bind(jobId)
+    .first<{ input: string }>();
+  return c.json({ job: { ...job, input: JSON.parse(row!.input) as { text: string } } });
 });
 
 generationRoutes.post('/apps/:appId/generation/claim', async (c) => {

@@ -684,6 +684,24 @@ describe.skipIf(!hasSqlite)('community generation listing and discovery (#794)',
     expect(accepted.jobs.map((j) => j.key)).toEqual(['a']);
   });
 
+  it('owner reads one job with its whole input', async () => {
+    const s = await setup();
+    const setId = await s.createSet();
+    const text = 'A sentence. '.repeat(30);
+    await s.addJobs(setId, [{ key: 'a', input: { text } }]);
+    const job = (await s.claim('u2', { setId }))!;
+    const sub = await s.submissionId(await s.submit('u2', job.id, job.leaseToken));
+    await acceptSubmission(s.env as never, sub.submissionId, 1500);
+    expect((await s.request(`/sets/${setId}/jobs/${job.id}`, { user: 'u2' })).status).toBe(403);
+    expect((await s.request(`/sets/nope/jobs/${job.id}`)).status).toBe(404);
+    expect((await s.request(`/sets/${setId}/jobs/nope`)).status).toBe(404);
+    const r = await s.request(`/sets/${setId}/jobs/${job.id}`);
+    expect(r.status).toBe(200);
+    const { job: one } = (await r.json()) as { job: Listed['jobs'][number] & { input: unknown } };
+    const [listed] = ((await (await s.request(`/sets/${setId}/jobs`)).json()) as Listed).jobs;
+    expect(one).toEqual({ ...listed, input: { text } });
+  });
+
   it('discovery shows what the caller could claim, under the claim rules', async () => {
     const s = await setup();
     const setId = await s.createSet({ replicas: 2 });

@@ -124,6 +124,11 @@ export interface GenerationJobSummary {
   }[];
 }
 
+/** One job with its whole input (`getJob`). */
+export interface GenerationJobDetail extends GenerationJobSummary {
+  input: { text: string };
+}
+
 /** A set with jobs the caller could claim now (`openWork`). */
 export interface GenerationOpenSet extends GenerationModel {
   setId: string;
@@ -133,6 +138,13 @@ export interface GenerationOpenSet extends GenerationModel {
   maxBytes: number;
   /** Jobs this user could claim. */
   open: number;
+}
+
+/** An app with open work, as `GET /v1/generation/open` lists them for a console session or device. */
+export interface GenerationOpenApp {
+  appId: string;
+  oneliner: string | null;
+  sets: GenerationOpenSet[];
 }
 
 export interface ContributeOptions {
@@ -199,6 +211,12 @@ export class Generation {
       jobs: GenerationJobSummary[];
       nextCursor: string | null;
     };
+  }
+
+  /** One job as `listJobs` shows it, with its whole input (e.g. to follow its audio's sentence timings). */
+  async getJob(setId: string, jobId: string): Promise<GenerationJobDetail> {
+    const path = `/sets/${encodeURIComponent(setId)}/jobs/${encodeURIComponent(jobId)}`;
+    return ((await (await this.request(path, {})).json()) as { job: GenerationJobDetail }).job;
   }
 
   /** Remove an artifact; its job reopens. */

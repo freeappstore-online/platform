@@ -42,6 +42,14 @@
     "./media": {
       "types": "./dist/media.d.ts",
       "import": "./dist/media.js"
+    },
+    "./generation-kokoro": {
+      "types": "./dist/generation-kokoro/index.d.ts",
+      "import": "./dist/generation-kokoro/index.js"
+    },
+    "./generation-kokoro/worker": {
+      "types": "./dist/generation-kokoro/worker.d.ts",
+      "import": "./dist/generation-kokoro/worker.js"
     }
   },
   "homepage": "https://github.com/freeappstore-online/platform#readme",
@@ -76,13 +84,21 @@
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
-    "vite-plugin-pwa": "^1.0.0"
+    "vite-plugin-pwa": "^1.0.0",
+    "kokoro-js": "^1.2.1",
+    "mp4-muxer": "^5.2.2"
   },
   "peerDependenciesMeta": {
     "react": {
       "optional": true
     },
     "vite-plugin-pwa": {
+      "optional": true
+    },
+    "kokoro-js": {
+      "optional": true
+    },
+    "mp4-muxer": {
       "optional": true
     }
   },
@@ -91,6 +107,8 @@
     "@types/react-dom": "^19.3.0",
     "fake-indexeddb": "^6.2.7",
     "happy-dom": "^21.0.4",
+    "kokoro-js": "1.2.1",
+    "mp4-muxer": "5.2.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^5.9.3",

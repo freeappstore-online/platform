@@ -430,6 +430,7 @@ await fas.generation.blockContributor(userId);  // withdraws everything they con
 const sets = await fas.generation.listSets();   // [{ ...set, createdAt, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }]
 const { jobs, nextCursor } = await fas.generation.listJobs(set.id, { status: 'accepted', cursor, limit: 50 });
 // jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact: { url, durationMs, bytes, contributor, acceptedAt } | null, submissions }]
+const job = await fas.generation.getJob(set.id, jobId); // one job as listed, plus its whole input: { ..., input: { text } }
 
 // Contributor: claim → generate → submit until there is no work
 const controller = new AbortController();
@@ -448,3 +449,33 @@ const artifacts = await fas.generation.manifest(set.id); // [{ key, jobId, url, 
 ```
 
 The step-by-step calls are `claim({ setId?, models })` (a 15-minute lease, or `null` when there is no work) and `submit(job, file, { meta?, attestation? })` (`202`, status `pending`), plus `extendLease(job)`, which pushes `job.leaseExpiresAt` to 15 minutes from now (at most 2 hours after the claim; throws at the cap or once the lease is invalid). Submissions move to `accepted`, `rejected` (with a `reason`) or `superseded`. While `generate` runs, `contribute` extends the lease within 5 minutes of its expiry; a job is abandoned (back to the pool) only if extending fails and the lease runs out before the result is ready.
+
+### Kokoro in the browser (`@freeappstore/sdk/generation-kokoro`)
+
+A ready-made `generate` for TTS sets with `model: 'kokoro'`, `modelVersion: 'v1.0'`, `formats` including `audio/mp4` and `params: { voice, speed? }` (Kokoro's English voices). Books and the Creator Console's Generate page use it. It runs [kokoro-js](https://www.npmjs.com/package/kokoro-js) in a Web Worker (WebGPU fp32, about 326 MB, else WebAssembly q8, about 92 MB; cached in Cache Storage), speaks the text a sentence at a time (`narrationSentences`, the same split as Books' `segments.py`), encodes AAC with WebCodecs into MP4 ([mp4-muxer](https://www.npmjs.com/package/mp4-muxer)) and submits the sentence timings as meta `{ segments: [[charStart, charEnd, startSec, endSec], …] }`. `kokoro-js` and `mp4-muxer` are optional peer dependencies: install them (`kokoro-js@1.2.1`, `mp4-muxer@5.2.2`) only if you use this. The window must stay open while it runs.
+
+It generates exactly the claimed input with the job's model, version and params, or skips the job (the next claim releases it): another model or version, no `audio/mp4`, params other than `voice` and `speed`, a voice Kokoro doesn't have, audio over `maxBytes`, timings over the 64 KB meta limit, or too slow to finish within the lease's 2-hour cap.
+
+```ts
+// kokoro.worker.ts: the app's own worker module, so its bundler builds the model's runtime
+import { serveKokoroWorker } from '@freeappstore/sdk/generation-kokoro/worker';
+serveKokoroWorker(); // or { wasmPaths } to serve ONNX Runtime's .wasm from the app instead of a CDN
+
+// main thread
+import { contributeKokoro, kokoroDevice, kokoroEncoder, kokoroProblem, KokoroRunner,
+  KOKORO_DOWNLOAD_BYTES, isKokoroDownloaded, deleteKokoroModel } from '@freeappstore/sdk/generation-kokoro';
+const encoder = await kokoroEncoder();  // null: no WebCodecs AAC (e.g. Firefox) — hide the feature
+const device = await kokoroDevice();    // 'webgpu' | 'wasm'; show KOKORO_DOWNLOAD_BYTES[device] before the first run
+const runner = new KokoroRunner({
+  createWorker: () => new Worker(new URL('./kokoro.worker.ts', import.meta.url), { type: 'module' }),
+  encoder, device,
+});
+await runner.load((p) => console.log(p)); // optional: download (unless cached) once the user agreed, with progress 0-1
+const sets = (await fas.generation.openWork()).filter((s) => !kokoroProblem(s));
+const { submitted, stopped } = await contributeKokoro(fas.generation, {
+  runner, setId: sets[0].setId, signal: controller.signal,
+  onEvent: (e) => console.log(e), // loading | claimed | progress { sentence, sentences, chars, totalChars, charsPerSecond } | submitted | skipped
+}); // stopped: 'no-work' | 'aborted'
+runner.dispose();          // frees the model's memory
+await deleteKokoroModel(); // frees its storage
+```

@@ -86,6 +86,13 @@ describe('generation SDK', () => {
     expect(fetch.mock.calls[0]![1].headers.Authorization).toBe('Bearer tok');
   });
 
+  it('owner reads one job with its whole input', async () => {
+    const one = { id: 'j 1', key: 'a', input: { text: 'Long.' } };
+    const fetch = mockFetch(json({ job: one }));
+    expect(await client().getJob('s1', 'j 1')).toEqual(one);
+    expect(fetch.mock.calls[0]![0]).toBe(`${base}/sets/s1/jobs/j%201`);
+  });
+
   it('openWork returns this app’s claimable sets', async () => {
     const set = { setId: 's1', kind: 'tts', ...models[0], params: {}, open: 3 };
     const fetch = mockFetch(

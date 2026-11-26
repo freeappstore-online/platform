@@ -27,7 +27,15 @@ Owners see their sets in the Creator Console: an app's **Generation** tab
 (`freeappstore.online/app/`) shows each set's progress, its jobs (filter by status, page with
 *Load more*), plays accepted audio with sentence highlighting from the meta `segments`, lists the
 latest submissions (status, reason, WER, contributor, device and attestation) and can withdraw an
-artifact or block a contributor.
+artifact or block a contributor. Highlighting follows the whole text, which the tab reads with
+`GET …/sets/:setId/jobs/:jobId` when the audio starts.
+
+Any signed-in creator can generate for every store app from the console's **Generate** page
+(`freeappstore.online/app/generate`, desktop browsers with WebCodecs AAC): it lists the apps with open
+work from discovery, runs Kokoro sets (`kokoro` `v1.0`, `audio/mp4`) for the apps they opt in to, after
+they agree to download the model, and shows the job in progress and their submissions. It uses the
+SDK's shared browser runner, `@freeappstore/sdk/generation-kokoro` (also used by Books), and runs only
+while the window is open.
 
 ## API (base `https://api.freeappstore.online/v1`)
 
@@ -43,6 +51,7 @@ pinned to. A repository is pinned by the app's first keyless deploy.
 | `POST /apps/:appId/generation/contributors/:userId/block` | | `{ blocked: true, withdrawn: n }` |
 | `GET /apps/:appId/generation/sets` | | `{ sets: [{ ...set, counts: { jobs, open, accepted, leased, pending, rejected, withdrawn } }] }`, newest first |
 | `GET /apps/:appId/generation/sets/:setId/jobs?status=&cursor=&limit=` | | `{ jobs: [{ id, key, status, inputPreview, inputChars, createdAt, artifact, submissions }], nextCursor }` |
+| `GET /apps/:appId/generation/sets/:setId/jobs/:jobId` | | `{ job: { ...as listed, input: { text } } }`, the whole input |
 
 `formats` is a non-empty subset of `audio/mp4`, `audio/ogg`, `audio/wav`; `maxBytes` at most
 25,000,000; `replicas` 1-3. Keys are 1-200 characters of `A-Za-z0-9._:/-`; `text` at most 100,000
