@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react'
-import type { GenerationSubmission } from '@freeappstore/sdk'
+import type { GenerationReport, GenerationSubmission } from '@freeappstore/sdk'
 import { formatTimeAgo } from './deploy-status'
 import { attemptRows } from './attempt'
 import { ArtifactPlayer } from './GenerationManager'
@@ -30,8 +30,11 @@ export interface ActivityItem {
   text: string
   chars: number
   /** What verification measured; null until verified, and for jobs never uploaded. */
-  wer: number | null
   durationMs: number | null
+  /** This account's Good / Not good for its upload (#831); null until it says, and for jobs never uploaded. */
+  report: GenerationReport | null
+  /** Whether the server has the upload, so it can take a report. */
+  uploaded: boolean
   /** The job's accepted artifact: this submission's own only when `bucket` is accepted. */
   artifact: GenerationSubmission['artifact']
   /** This browser's record of the job, when it ran here. */
@@ -62,7 +65,7 @@ export function activityItems(mine: Mine[], runs: RunRecord[]): ActivityItem[] {
     return {
       id: s.submissionId, appId: s.appId, setId: s.setId, jobId: s.jobId, key: s.key, at: s.createdAt,
       bucket, status, bytes: s.bytes, text: s.input.text, chars: s.input.text.length,
-      wer: s.wer, durationMs: s.durationMs, artifact: s.artifact, run: local.get(id) ?? null,
+      durationMs: s.durationMs, report: s.report ?? null, uploaded: true, artifact: s.artifact, run: local.get(id) ?? null,
       reason: s.reason ?? (s.status === 'superseded' ? 'another upload for this job was accepted first' : null),
     }
   })
@@ -72,7 +75,8 @@ export function activityItems(mine: Mine[], runs: RunRecord[]): ActivityItem[] {
     items.push({
       id: `run:${r.appId}/${r.jobId}/${r.at}`, appId: r.appId, setId: r.setId, jobId: r.jobId, key: r.key, at: r.at,
       bucket: r.outcome === 'submitted' ? 'checking' : 'not-done', status: RUN_STATUS[r.outcome],
-      reason: r.reason, bytes: null, text: r.text, chars: r.chars, wer: null, durationMs: null, artifact: null, run: r,
+      reason: r.reason, bytes: null, text: r.text, chars: r.chars, durationMs: null, report: null, uploaded: false,
+      artifact: null, run: r,
     })
   }
   return items.sort((a, b) => b.at - a.at)
@@ -99,10 +103,9 @@ const chip = (on: boolean) =>
   `px-3 py-1 rounded-full text-xs font-semibold min-h-[32px] ${on ? 'bg-ink text-paper' : 'text-muted border border-line hover:text-ink'}`
 const kilobytes = (bytes: number) => `${Math.round(bytes / 1024).toLocaleString()} KB`
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`
-const percent = (n: number) => `${(n * 100).toFixed(1)}%`
 
 /** Activity (#820): every job this browser tried and every submission of this account, filterable. */
-export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, app, onApp, loading, onRefresh }: {
+export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, app, onApp, loading, onRefresh, onReport }: {
   items: ActivityItem[]
   appIds: string[]
   onelinerOf: (appId: string) => string | null
@@ -112,8 +115,11 @@ export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, 
   onApp: (appId: string) => void
   loading: boolean
   onRefresh: () => void
+  /** Send this account's Good / Not good for an upload (#831). */
+  onReport: (item: ActivityItem, good: boolean, note: string) => Promise<GenerationReport>
 }) {
-  const [open, setOpen] = useState<ActivityItem | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const open = items.find(i => i.id === openId) ?? null
   const appSelect = useId()
   const shown = items.filter(i => (!bucket || i.bucket === bucket) && (!app || i.appId === app))
   const days: [number, ActivityItem[]][] = []
@@ -166,13 +172,18 @@ export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, 
               {list.map(item => (
                 <li key={item.id}>
                   <button
-                    onClick={() => setOpen(item)}
+                    onClick={() => setOpenId(item.id)}
                     aria-haspopup="dialog"
                     className="w-full text-left px-3 py-2 min-h-[44px] flex flex-wrap items-center gap-x-3 gap-y-1 hover:bg-panel-hover rounded-xl"
                   >
                     <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${BUCKET_TONE[item.bucket]}`}>{item.status}</span>
                     <span className="text-sm text-ink font-semibold">{item.appId}</span>
                     <span className="text-sm text-ink font-mono break-all min-w-0">{item.key}</span>
+                    {item.report && (
+                      <span className={`text-xs font-semibold ${item.report.good ? 'text-success' : 'text-danger'}`}>
+                        {item.report.good ? 'Good' : 'Not good'}
+                      </span>
+                    )}
                     <span className="ml-auto text-xs text-muted whitespace-nowrap">{formatTimeAgo(new Date(item.at))}</span>
                     {item.reason && <span className="basis-full text-xs text-muted break-words">{item.reason}</span>}
                   </button>
@@ -182,15 +193,23 @@ export function GenerateActivity({ items, appIds, onelinerOf, bucket, onBucket, 
           </section>
         ))}
       </div>
-      {open && <ActivityDetail item={open} oneliner={onelinerOf(open.appId)} onClose={() => setOpen(null)} />}
+      {open && (
+        <ActivityDetail
+          item={open}
+          oneliner={onelinerOf(open.appId)}
+          onClose={() => setOpenId(null)}
+          onReport={(good, note) => onReport(open, good, note)}
+        />
+      )}
     </div>
   )
 }
 
-function ActivityDetail({ item, oneliner, onClose }: {
+function ActivityDetail({ item, oneliner, onClose, onReport }: {
   item: ActivityItem
   oneliner: string | null
   onClose: () => void
+  onReport: (good: boolean, note: string) => Promise<GenerationReport>
 }) {
   const dialogRef = useModalDialog<HTMLDivElement>(onClose)
   const titleId = useId()
@@ -219,7 +238,6 @@ function ActivityDetail({ item, oneliner, onClose }: {
     ['When', new Date(item.at).toLocaleString()],
     ...(item.bytes !== null ? [['Size', kilobytes(item.bytes)] as [string, string]] : []),
     ...(item.durationMs !== null ? [['Duration', seconds(item.durationMs)] as [string, string]] : []),
-    ...(item.wer !== null ? [['Error rate', percent(item.wer)] as [string, string]] : []),
     ...(run ? [['Generating took', seconds(run.ms)] as [string, string]] : []),
     ['Input', `${item.chars.toLocaleString()} characters`],
   ]
@@ -293,7 +311,78 @@ function ActivityDetail({ item, oneliner, onClose }: {
             </p>
           </div>
         )}
+        {item.uploaded && <ReportForm report={item.report} onSend={onReport} />}
       </div>
     </div>
+  )
+}
+
+const NOTE_CHARS = 500
+
+/**
+ * Good / Not good for this account's own upload, with an optional note (#831): people judge the
+ * audio, no AI does. The app owner sees it with the upload; sending again changes it.
+ */
+export function ReportForm({ report, onSend }: {
+  report: GenerationReport | null
+  onSend: (good: boolean, note: string) => Promise<unknown>
+}) {
+  const [good, setGood] = useState<boolean | null>(report?.good ?? null)
+  const [note, setNote] = useState(report?.note ?? '')
+  const [state, setState] = useState<'idle' | 'sending' | 'error'>('idle')
+  const noteId = useId()
+  const send = async () => {
+    if (good === null) return
+    setState('sending')
+    try {
+      await onSend(good, note.trim())
+      setState('idle')
+    } catch {
+      setState('error')
+    }
+  }
+  const choice = (value: boolean, label: string, tone: string) => (
+    <button
+      aria-pressed={good === value}
+      onClick={() => setGood(value)}
+      className={`rounded-lg border px-3 py-1 text-sm font-semibold min-h-[44px] ${good === value ? tone : 'border-line text-ink hover:bg-panel-hover'}`}
+    >
+      {label}
+    </button>
+  )
+  return (
+    <fieldset className="mt-4">
+      <legend className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Was your upload good?</legend>
+      <div className="flex flex-wrap gap-2">
+        {choice(true, 'Good', 'border-success bg-success-soft text-success')}
+        {choice(false, 'Not good', 'border-danger bg-danger-soft text-danger')}
+      </div>
+      <label htmlFor={noteId} className="mt-2 block text-xs text-muted">Note (optional)</label>
+      <textarea
+        id={noteId}
+        value={note}
+        maxLength={NOTE_CHARS}
+        rows={2}
+        onChange={e => setNote(e.currentTarget.value)}
+        placeholder="What was wrong, e.g. a skipped sentence"
+        className="mt-1 w-full rounded-lg border border-line bg-paper px-2 py-1 text-sm text-ink"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button
+          onClick={send}
+          disabled={good === null || state === 'sending'}
+          className="rounded-lg bg-ink px-3 py-1 text-sm font-semibold text-paper disabled:opacity-50 min-h-[44px]"
+        >
+          {state === 'sending' ? 'Sending…' : report ? 'Change' : 'Send'}
+        </button>
+        <span role="status" className="text-xs text-muted">
+          {state === 'error'
+            ? "Couldn't send it. Try again."
+            : report
+              ? `You said ${report.good ? 'Good' : 'Not good'} ${formatTimeAgo(new Date(report.at))}. The app owner sees it.`
+              : 'The app owner sees what you say. Nothing else checks the audio.'}
+        </span>
+      </div>
+    </fieldset>
   )
 }

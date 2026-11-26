@@ -144,6 +144,11 @@ export function GeneratePage({ fas }: { fas: FreeAppStore }) {
             onApp={setAppFilter}
             loading={loadingMine}
             onRefresh={() => { loadMine(); loadApps() }}
+            onReport={async (item, good, note) => {
+              const report = await new Generation(item.appId, API_URL, fas.auth).report(item.id, good, note || undefined)
+              setMine(list => list.map(s => (s.submissionId === item.id ? { ...s, report } : s)))
+              return report
+            }}
           />
         )}
         {tab === 'settings' && (

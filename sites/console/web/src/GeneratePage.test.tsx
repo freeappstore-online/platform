@@ -35,9 +35,9 @@ const other: GenerationOpenApp = {
 }
 const submission = {
   submissionId: 'x1', jobId: 'j1', setId: 's1', key: 'alice/0', status: 'rejected',
-  reason: 'transcript does not match the text (word error rate 0.41)',
+  reason: 'audio is too long for the text',
   bytes: 4096, contentType: 'audio/mp4', createdAt: Date.now(), decidedAt: Date.now(),
-  wer: 0.41, durationMs: 3000, input: { text: 'Call me Ishmael.' }, artifact: null,
+  durationMs: 3000, report: null, input: { text: 'Call me Ishmael.' }, artifact: null,
 }
 let submissions: unknown[]
 
@@ -51,6 +51,9 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {
     if (url === `${api}/generation/open`) return new Response(JSON.stringify({ apps: [books, other] }))
     if (url === `${api}/apps/books/generation/submissions`) return new Response(JSON.stringify({ submissions }))
+    if (url === `${api}/apps/books/generation/submissions/x1/report`) {
+      return new Response(JSON.stringify({ report: { good: false, note: 'mumbles', at: Date.now() } }))
+    }
     if (url === `${api}/apps/books/generation/artifacts/j2/meta?v=1`) {
       return new Response(JSON.stringify({ segments: [[0, 12, 0, 1], [13, 28, 1, 2]] }))
     }
@@ -232,7 +235,7 @@ it('opens Activity filtered from today’s chips, filters by app, and plays an a
     submission,
     {
       ...submission, submissionId: 'x2', jobId: 'j2', key: 'alice/1', status: 'accepted', reason: null, bytes: 9216,
-      wer: 0.025, durationMs: 12_300, input: { text: 'Hello there. General Kenobi.' }, artifact,
+      durationMs: 12_300, report: { good: true, note: null, at: now }, input: { text: 'Hello there. General Kenobi.' }, artifact,
     },
   ]
   localStorage.setItem('fas:generate-runs', JSON.stringify([
@@ -250,7 +253,7 @@ it('opens Activity filtered from today’s chips, filters by app, and plays an a
   expect(button('Not done')!.getAttribute('aria-pressed')).toBe('true')
   expect(container.textContent).toContain('voice bf_emma is not English (US)')
   expect(container.textContent).toContain('network down')
-  expect(container.textContent).not.toContain('word error rate')
+  expect(container.textContent).not.toContain('audio is too long')
 
   // By app
   const select = container.querySelector('select')!
@@ -267,9 +270,9 @@ it('opens Activity filtered from today’s chips, filters by app, and plays an a
   })
   await click(button('All')!)
   expect(container.textContent).toContain('Today')
-  expect(container.textContent).toContain('word error rate 0.41')
+  expect(container.textContent).toContain('audio is too long for the text')
 
-  // Detail of the accepted job: verdict, size, the server's duration, error rate and text, Play
+  // Detail of the accepted job: verdict, size, the server's duration, this account's report and text, Play
   // with sentence highlighting from its meta
   const row = [...container.querySelectorAll('li button')].find((b) => b.textContent?.includes('alice/1')) as HTMLElement
   await click(row)
@@ -279,7 +282,7 @@ it('opens Activity filtered from today’s chips, filters by app, and plays an a
   expect(dialog.textContent).toContain('Accepted')
   expect(dialog.textContent).toContain('9 KB')
   expect(dialog.textContent).toContain('12.3 s')
-  expect(dialog.textContent).toContain('2.5%')
+  expect(dialog.textContent).toContain('You said Good')
   expect(dialog.textContent).toContain('42.0 s')
   const audio = dialog.querySelector('audio')!
   expect(audio.getAttribute('src')).toBe(artifact.url)
@@ -295,16 +298,32 @@ it('opens Activity filtered from today’s chips, filters by app, and plays an a
   expect(document.querySelector('[role=dialog]')).toBeNull()
 })
 
-it('shows the text, error rate and duration of a job another device ran, which this browser has no record of', async () => {
+it('shows the text and duration of a job another device ran, which this browser has no record of, and takes a report (#831)', async () => {
   await render()
   await tab('Activity')
   const row = [...container.querySelectorAll('li button')].find((b) => b.textContent?.includes('alice/0')) as HTMLElement
   await click(row)
   const dialog = document.querySelector('[role=dialog]')!
   expect(dialog.textContent).toContain('Rejected')
-  expect(dialog.textContent).toContain('41.0%')
   expect(dialog.textContent).toContain('3.0 s')
   expect(dialog.textContent).toContain('Call me Ishmael.')
   expect(dialog.textContent).not.toContain('Generating took')
   expect(dialog.querySelector('audio')).toBeNull()
+
+  // Good / Not good with a note, sent for this account's own upload
+  const inDialog = (text: string) => [...dialog.querySelectorAll('button')].find((b) => b.textContent === text)!
+  expect(inDialog('Send').disabled).toBe(true)
+  await click(inDialog('Not good'))
+  expect(inDialog('Not good').getAttribute('aria-pressed')).toBe('true')
+  const note = dialog.querySelector('textarea')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(note, 'mumbles')
+    note.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await click(inDialog('Send'))
+  const sent = vi.mocked(fetch).mock.calls.find(([u]) => String(u).endsWith('/submissions/x1/report'))!
+  expect(sent[1]).toEqual(expect.objectContaining({ method: 'PUT' }))
+  expect(JSON.parse(sent[1]!.body as string)).toEqual({ good: false, note: 'mumbles' })
+  expect(document.querySelector('[role=dialog]')!.textContent).toContain('You said Not good')
+  expect(container.textContent).toContain('Not good')
 })
