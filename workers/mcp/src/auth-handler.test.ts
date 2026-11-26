@@ -46,7 +46,7 @@ function fakeKv() {
   return { kv: kv as unknown as KVNamespace, store, ttls };
 }
 
-function makeEnv(overrides: { parseThrows?: boolean } = {}) {
+function makeEnv(overrides: { parseThrows?: boolean; clientName?: string } = {}) {
   const { kv, store, ttls } = fakeKv();
   const completeAuthorization = vi.fn(async (_opts: CompleteAuthorizationOptions) => ({
     redirectTo: CLIENT_REDIRECT,
@@ -55,10 +55,16 @@ function makeEnv(overrides: { parseThrows?: boolean } = {}) {
     if (overrides.parseThrows) throw new Error("Invalid code_challenge_method");
     return AUTH_REQUEST;
   });
+  const lookupClient = vi.fn(async (clientId: string) => ({
+    clientId,
+    redirectUris: [AUTH_REQUEST.redirectUri],
+    clientName: overrides.clientName ?? "Claude",
+    tokenEndpointAuthMethod: "none",
+  }));
   const env = {
     OAUTH_KV: kv,
     API_BASE,
-    OAUTH_PROVIDER: { parseAuthRequest, completeAuthorization },
+    OAUTH_PROVIDER: { parseAuthRequest, completeAuthorization, lookupClient },
   };
   return { env, store, ttls, completeAuthorization, parseAuthRequest };
 }
@@ -125,6 +131,21 @@ function callback(env: ReturnType<typeof makeEnv>["env"], url: string, cookie?: 
   return AuthHandler.request(url, cookie ? { headers: { Cookie: cookie } } : {}, env);
 }
 
+/** The user's answer on the consent page: a form POST back to /callback. */
+function decide(env: ReturnType<typeof makeEnv>["env"], flow: Flow, decision: string, cookie?: string, nonce = flow.nonce) {
+  const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+  if (cookie) headers.Cookie = cookie;
+  const url = new URL("/callback", flow.callback).toString();
+  return AuthHandler.request(url, { method: "POST", headers, body: new URLSearchParams({ nonce, decision }).toString() }, env);
+}
+
+/** GET the callback (consent page) and Allow it, as a browser would. */
+async function signIn(env: ReturnType<typeof makeEnv>["env"], flow: Flow, cookie = flow.cookie) {
+  const page = await callback(env, callbackUrl(flow), cookie);
+  expect(page.status).toBe(200);
+  return decide(env, flow, "allow", cookie);
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -149,12 +170,12 @@ describe("GET /callback", () => {
     expect(completeAuthorization).not.toHaveBeenCalled();
   });
 
-  it("accepts a matching nonce, state and cookie, redeems with the PKCE verifier, and completes authorization", async () => {
+  it("accepts a matching nonce, state and cookie, redeems with the PKCE verifier, and completes authorization on Allow", async () => {
     const { env, completeAuthorization } = makeEnv();
     const exchange = stubExchange(() => Response.json({ fas_session: token }));
     const flow = await startFlow(env);
 
-    const res = await callback(env, callbackUrl(flow), flow.cookie);
+    const res = await signIn(env, flow);
 
     expect(res.status).toBe(302);
     expect(res.headers.get("Location")).toBe(CLIENT_REDIRECT);
@@ -230,8 +251,8 @@ describe("GET /callback", () => {
     const flowB = await startFlow(env);
     const both = `${flowA.cookie}; ${flowB.cookie}`;
 
-    expect((await callback(env, callbackUrl(flowB), both)).status).toBe(302);
-    expect((await callback(env, callbackUrl(flowA), both)).status).toBe(302);
+    expect((await signIn(env, flowB, both)).status).toBe(302);
+    expect((await signIn(env, flowA, both)).status).toBe(302);
     expect(completeAuthorization).toHaveBeenCalledTimes(2);
   });
 
@@ -254,12 +275,12 @@ describe("GET /callback", () => {
     const flow = await startFlow(env);
     const url = callbackUrl(flow);
 
-    expect((await callback(env, url, flow.cookie)).status).toBe(302);
+    expect((await callback(env, url, flow.cookie)).status).toBe(200);
     const replay = await callback(env, url, flow.cookie);
 
     expect(replay.status).toBe(400);
     expect(await replay.text()).toBe("invalid or expired nonce");
-    expect(completeAuthorization).toHaveBeenCalledTimes(1);
+    expect(completeAuthorization).not.toHaveBeenCalled();
   });
 
   it("burns the nonce even when a later check fails, so a corrected retry cannot reuse it", async () => {
@@ -401,7 +422,7 @@ describe("GET /callback", () => {
       expect(flow.cookie.startsWith(`fas_mcp_flow_${flow.nonce}=`)).toBe(true);
       expect(flow.setCookie).not.toContain("Secure");
 
-      const res = await callback(env, callbackUrl(flow), flow.cookie);
+      const res = await signIn(env, flow);
       expect(res.status).toBe(302);
       expect(res.headers.get("Set-Cookie")).not.toContain("Secure");
       expect(completeAuthorization).toHaveBeenCalledTimes(1);
@@ -418,6 +439,118 @@ describe("GET /callback", () => {
       expect(res.status).toBe(400);
       expect(completeAuthorization).not.toHaveBeenCalled();
     });
+  });
+});
+
+// ── consent (#738) ──────────────────────────────────────────────
+
+describe("consent step", () => {
+  it("grants nothing on GET /callback: it shows who is asking, for which account and what", async () => {
+    const { env, completeAuthorization } = makeEnv();
+    stubExchange(() => Response.json({ fas_session: SESSION }));
+    const flow = await startFlow(env);
+
+    const res = await callback(env, callbackUrl(flow), flow.cookie);
+
+    expect(res.status).toBe(200);
+    expect(completeAuthorization).not.toHaveBeenCalled();
+    expect(res.headers.get("Content-Type")).toContain("text/html");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(res.headers.get("Content-Security-Policy")).toContain("frame-ancestors 'none'");
+    expect(res.headers.get("X-Frame-Options")).toBe("DENY");
+    const html = await res.text();
+    expect(html).toContain("Allow Claude to use your FreeAppStore account?");
+    expect(html).toContain("<strong>serge</strong>");
+    expect(html).toContain("<strong>client.example</strong>");
+    expect(html).toContain("Create apps and change the code of apps you own");
+    expect(html).toContain(`name="nonce" value="${flow.nonce}"`);
+    // The page itself doesn't leak the session.
+    expect(html).not.toContain(SESSION);
+  });
+
+  it("escapes the client name, which whoever registered the client chooses", async () => {
+    const { env } = makeEnv({ clientName: '<img src=x onerror="alert(1)">' });
+    stubExchange(() => Response.json({ fas_session: SESSION }));
+    const flow = await startFlow(env);
+
+    const html = await (await callback(env, callbackUrl(flow), flow.cookie)).text();
+
+    expect(html).not.toContain("<img");
+    expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+  });
+
+  it("Deny sends the client access_denied with its state and issues no grant", async () => {
+    const { env, store, completeAuthorization } = makeEnv();
+    stubExchange(() => Response.json({ fas_session: SESSION }));
+    const flow = await startFlow(env);
+    await callback(env, callbackUrl(flow), flow.cookie);
+
+    const res = await decide(env, flow, "deny", flow.cookie);
+
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("Location") ?? "");
+    expect(`${location.origin}${location.pathname}`).toBe(AUTH_REQUEST.redirectUri);
+    expect(location.searchParams.get("error")).toBe("access_denied");
+    expect(location.searchParams.get("state")).toBe(AUTH_REQUEST.state);
+    expect(res.headers.get("Set-Cookie")).toContain("Max-Age=0");
+    expect(completeAuthorization).not.toHaveBeenCalled();
+    expect(store.has(`consent:${flow.nonce}`)).toBe(false);
+  });
+
+  it("refuses an Allow without this browser's flow cookie (a cross-site form POST carries none)", async () => {
+    const { env, completeAuthorization } = makeEnv();
+    stubExchange(() => Response.json({ fas_session: SESSION }));
+    const flow = await startFlow(env);
+    await callback(env, callbackUrl(flow), flow.cookie);
+
+    const res = await decide(env, flow, "allow");
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toContain("different browser");
+    expect(completeAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("refuses an Allow carrying another browser's secret", async () => {
+    const { env, completeAuthorization } = makeEnv();
+    stubExchange(() => Response.json({ fas_session: SESSION }));
+    const flow = await startFlow(env);
+    await callback(env, callbackUrl(flow), flow.cookie);
+
+    const res = await decide(env, flow, "allow", `${flow.cookie.split("=")[0]}=attacker-secret`);
+
+    expect(res.status).toBe(400);
+    expect(completeAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("is single-use: a second Allow for the same sign-in is refused", async () => {
+    const { env, completeAuthorization } = makeEnv();
+    stubExchange(() => Response.json({ fas_session: SESSION }));
+    const flow = await startFlow(env);
+
+    expect((await signIn(env, flow)).status).toBe(302);
+    const again = await decide(env, flow, "allow", flow.cookie);
+
+    expect(again.status).toBe(400);
+    expect(completeAuthorization).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses an Allow for a sign-in that never reached the consent page", async () => {
+    const { env, completeAuthorization } = makeEnv();
+    const flow = await startFlow(env);
+
+    const res = await decide(env, flow, "allow", flow.cookie);
+
+    expect(res.status).toBe(400);
+    expect(completeAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("parks the verified grant only for the flow's lifetime", async () => {
+    const { env, ttls } = makeEnv();
+    stubExchange(() => Response.json({ fas_session: SESSION }));
+    const flow = await startFlow(env);
+    await callback(env, callbackUrl(flow), flow.cookie);
+
+    expect(ttls.get(`consent:${flow.nonce}`)).toBe(600);
   });
 });
 

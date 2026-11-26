@@ -155,7 +155,7 @@ Expected tool flow:
 
 ## Authentication
 
-The MCP server authenticates with **OAuth 2.1** (automatic via `mcp-remote`). The OAuth flow redirects to FreeAppStore sign-in and provisions a scoped MCP access token. A raw FAS session token is not accepted as a Bearer token; connect through OAuth.
+The MCP server authenticates with **OAuth 2.1** (automatic via `mcp-remote`). The OAuth flow redirects to FreeAppStore sign-in, then shows a consent page naming the connecting client, where its access will be sent, your account and the scopes it asks for; the scoped MCP access token is issued only after you choose **Allow** (**Deny** returns `access_denied` to the client). A raw FAS session token is not accepted as a Bearer token; connect through OAuth.
 
 Write tools (`create_app`, `update_files`) additionally verify app ownership via the backend `/v1/apps/mine` endpoint. Agent tools (`agent_build`) require a usable AI key in your vault or a supported platform-configured provider connection. The selected provider controls availability and charges.
 
