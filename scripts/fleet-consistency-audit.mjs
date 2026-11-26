@@ -41,6 +41,8 @@ export function workflowProblems(text) {
  *  repos     non-archived org repos: { name, createdAt (ms), empty, deployYml (text|null), fasAppId (string|null) }
  *  registry  storefront registry entries
  *  routeAllowlist  route slugs that legitimately have no apps row (config/non-app-routes.json)
+ *  fixtures  monitoring fixture app ids (config/monitoring-fixtures.json): private repos,
+ *            which the workflow's github.token cannot list, so never registry-without-repo (#745)
  *  siteStatus  { [registryId]: HTTP status of the entry's site }
  *  d1        GET /v1/audit/apps `{ apps: [{ id, repo, r2Prefix }], routesWithoutApps }`,
  *            or null when the D1 half was skipped
@@ -50,6 +52,7 @@ export function auditFleet({
   registry,
   allowlist,
   routeAllowlist = [],
+  fixtures = [],
   siteStatus = {},
   d1 = null,
   now = Date.now(),
@@ -70,7 +73,7 @@ export function auditFleet({
         `registry repo is ${entry.repo}, expected ${ORG}/${entry.id}`,
       );
     }
-    if (!name || !repoByName.has(name)) {
+    if ((!name || !repoByName.has(name)) && !fixtures.includes(entry.id)) {
       add(
         'registry-without-repo',
         entry.id,
@@ -248,6 +251,7 @@ async function main() {
   const registry = JSON.parse(readFileSync('sites/storefront/registry.json', 'utf8')).apps;
   const allowlist = JSON.parse(readFileSync('config/non-app-repos.json', 'utf8')).repos;
   const routeAllowlist = JSON.parse(readFileSync('config/non-app-routes.json', 'utf8')).routes;
+  const fixtures = JSON.parse(readFileSync('config/monitoring-fixtures.json', 'utf8')).appIds;
   const { repos, headers } = await listRepos(process.env.GITHUB_TOKEN);
   const facts = await pool(repos, 10, (repo) => gatherRepoFacts(repo, headers));
   const notes = [];
@@ -264,6 +268,7 @@ async function main() {
     registry,
     allowlist,
     routeAllowlist,
+    fixtures,
     siteStatus: await siteStatuses(registry),
     d1,
   });

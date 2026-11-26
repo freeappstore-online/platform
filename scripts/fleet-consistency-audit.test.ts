@@ -52,6 +52,19 @@ it('flags the renamed repo: registry id spending points at a repo that is now gc
   ]);
 });
 
+it('does not report a private monitoring fixture as registry-without-repo (#745)', () => {
+  expect(
+    audit({
+      registry: [entry('smoke-sandbox')],
+      fixtures: ['smoke-sandbox'],
+      siteStatus: { 'smoke-sandbox': 200 },
+    }),
+  ).toEqual([]);
+  expect(codes(audit({ registry: [entry('smoke-sandbox')] }))).toEqual([
+    'registry-without-repo:smoke-sandbox',
+  ]);
+});
+
 it('flags pulse-stack: an old empty repo that the registry still lists with a dead site', () => {
   const findings = audit({
     repos: [{ ...healthy('pulse-stack'), empty: true, deployYml: null, fasAppId: null }],
