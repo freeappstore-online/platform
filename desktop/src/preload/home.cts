@@ -27,5 +27,7 @@ contextBridge.exposeInMainWorld('fasDesktop', {
     history: () => ipcRenderer.invoke('home:contribute-history'),
     audio: (appId: string, jobId: string) =>
       ipcRenderer.invoke('home:contribute-audio', appId, jobId),
+    report: (appId: string, jobId: string, good: boolean, note: string) =>
+      ipcRenderer.invoke('home:contribute-report', appId, jobId, good, note),
   },
 });

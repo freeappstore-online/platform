@@ -83,6 +83,8 @@ declare global {
         history(): Promise<HistoryItem[]>;
         /** A kept attempt's audio and meta `{ segments }`, or null once pruned. */
         audio(appId: string, jobId: string): Promise<{ audio: Uint8Array; meta: unknown } | null>;
+        /** This account's Good / Not good (and note) for an uploaded attempt (#831). */
+        report(appId: string, jobId: string, good: boolean, note: string): Promise<unknown>;
       };
     };
   }

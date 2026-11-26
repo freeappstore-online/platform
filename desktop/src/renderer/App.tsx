@@ -679,12 +679,7 @@ function attemptRows(item: HistoryItem): [string, string][] {
   const plug = (c?: boolean) => (c === undefined ? undefined : c ? 'plugged in' : 'on battery');
   const v = item.verdict;
   const rows: [string, string | undefined][] = [
-    [
-      'Verdict',
-      v
-        ? `${v.status}${v.reason ? `: ${v.reason}` : ''}${v.wer !== null ? ` · error rate ${(v.wer * 100).toFixed(1)}%` : ''}`
-        : undefined,
-    ],
+    ['Verdict', v ? `${v.status}${v.reason ? `: ${v.reason}` : ''}` : undefined],
     ['Ended', r.error ? `${r.reason}: ${r.error}` : r.reason],
     ['Ran', r.background ? 'in the background' : 'in the foreground'],
     [
@@ -711,7 +706,8 @@ function attemptRows(item: HistoryItem): [string, string][] {
 /** This computer's attempts (#827): what it generated, how it went, and playback of its audio. */
 function ContributeHistory({ version }: { version: number }) {
   const [items, setItems] = useState<HistoryItem[] | null>(null);
-  const [open, setOpen] = useState<HistoryItem | null>(null);
+  // By key, so the detail stays open when the history is read again (a report was sent)
+  const [open, setOpen] = useState<string | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` says the history changed
   useEffect(() => {
     void desktop.contribute.history().then(setItems);
@@ -723,26 +719,36 @@ function ContributeHistory({ version }: { version: number }) {
         <p className="m-0 text-sm text-muted">Nothing generated on this computer yet.</p>
       ) : (
         <ul className="m-0 p-0 list-none divide-y divide-line">
-          {items.map((item) => (
-            <li key={`${item.appId}/${item.jobId}/${item.at}`}>
-              <button
-                type="button"
-                onClick={() => setOpen(open === item ? null : item)}
-                aria-expanded={open === item}
-                className="w-full text-left py-2 flex flex-wrap items-center gap-x-3 gap-y-1 cursor-pointer bg-transparent border-0 text-ink"
-              >
-                <Badge variant={item.verdict ? VERDICT_TONE[item.verdict.status] : 'default'}>
-                  {item.verdict?.status ?? OUTCOME[item.outcome]}
-                </Badge>
-                <span className="font-bold">{item.appId}</span>
-                <span className="font-code text-sm break-all min-w-0">{item.key}</span>
-                <span className="ml-auto text-xs text-muted">
-                  {new Date(item.at).toLocaleString()}
-                </span>
-              </button>
-              {open === item && <HistoryDetail item={item} />}
-            </li>
-          ))}
+          {items.map((item) => {
+            const key = `${item.appId}/${item.jobId}/${item.at}`;
+            return (
+              <li key={key}>
+                <button
+                  type="button"
+                  onClick={() => setOpen(open === key ? null : key)}
+                  aria-expanded={open === key}
+                  className="w-full text-left py-2 flex flex-wrap items-center gap-x-3 gap-y-1 cursor-pointer bg-transparent border-0 text-ink"
+                >
+                  <Badge variant={item.verdict ? VERDICT_TONE[item.verdict.status] : 'default'}>
+                    {item.verdict?.status ?? OUTCOME[item.outcome]}
+                  </Badge>
+                  <span className="font-bold">{item.appId}</span>
+                  <span className="font-code text-sm break-all min-w-0">{item.key}</span>
+                  {item.verdict?.report && (
+                    <span
+                      className={`text-xs font-bold ${item.verdict.report.good ? 'text-success' : 'text-danger'}`}
+                    >
+                      {item.verdict.report.good ? 'Good' : 'Not good'}
+                    </span>
+                  )}
+                  <span className="ml-auto text-xs text-muted">
+                    {new Date(item.at).toLocaleString()}
+                  </span>
+                </button>
+                {open === key && <HistoryDetail item={item} />}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
@@ -810,7 +816,74 @@ function HistoryDetail({ item }: { item: HistoryItem }) {
         )}
         {item.text.length < item.chars ? '…' : ''}
       </p>
+      {item.verdict?.submissionId && <ReportForm item={item} />}
     </div>
+  );
+}
+
+/**
+ * Good / Not good for this computer's upload, with an optional note (#831): people judge the
+ * audio, no AI does. The app owner sees it; sending again changes it.
+ */
+function ReportForm({ item }: { item: HistoryItem }) {
+  const report = item.verdict?.report ?? null;
+  const [good, setGood] = useState<boolean | null>(report?.good ?? null);
+  const [note, setNote] = useState(report?.note ?? '');
+  const [state, setState] = useState<'idle' | 'sending' | 'error'>('idle');
+  const send = async () => {
+    if (good === null) return;
+    setState('sending');
+    try {
+      await desktop.contribute.report(item.appId, item.jobId, good, note.trim());
+      setState('idle');
+    } catch {
+      setState('error');
+    }
+  };
+  const choice = (value: boolean, label: string, tone: string) => (
+    <button
+      type="button"
+      aria-pressed={good === value}
+      onClick={() => setGood(value)}
+      className={`rounded-lg border px-3 py-1 text-sm font-bold cursor-pointer ${good === value ? tone : 'border-line bg-transparent text-ink'}`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <fieldset className="mt-3 border-0 p-0 m-0">
+      <legend className="text-sm font-bold mb-2">Was this upload good?</legend>
+      <div className="flex flex-wrap gap-2">
+        {choice(true, 'Good', 'border-success bg-success-soft text-success')}
+        {choice(false, 'Not good', 'border-danger bg-danger-soft text-danger')}
+      </div>
+      <textarea
+        aria-label="Note (optional)"
+        value={note}
+        maxLength={500}
+        rows={2}
+        onChange={(e) => setNote(e.currentTarget.value)}
+        placeholder="Note (optional), e.g. a skipped sentence"
+        className="mt-2 w-full rounded-lg border border-line bg-paper px-2 py-1 text-sm text-ink"
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={send}
+          disabled={good === null || state === 'sending'}
+          className="rounded-lg border-0 bg-ink px-3 py-1 text-sm font-bold text-paper cursor-pointer disabled:opacity-50"
+        >
+          {state === 'sending' ? 'Sending…' : report ? 'Change' : 'Send'}
+        </button>
+        <span role="status" className="text-xs text-muted">
+          {state === 'error'
+            ? "Couldn't send it. Try again."
+            : report
+              ? `You said ${report.good ? 'Good' : 'Not good'}. The app owner sees it.`
+              : 'The app owner sees what you say. Nothing else checks the audio.'}
+        </span>
+      </div>
+    </fieldset>
   );
 }
 

@@ -148,7 +148,14 @@ describe('Contribute', () => {
       if (url.endsWith('/submissions'))
         return json({
           submissions: [
-            { jobId: 'j1', status: 'rejected', reason: 'too fast', wer: 0.5, durationMs: 1000 },
+            {
+              submissionId: 'x',
+              jobId: 'j1',
+              status: 'rejected',
+              reason: 'too fast',
+              durationMs: 1000,
+              report: null,
+            },
           ],
         });
       return new Response('not found', { status: 404 });
@@ -171,7 +178,13 @@ describe('Contribute', () => {
         jobId: 'j1',
         outcome: 'submitted',
         text: 'One. Two.',
-        verdict: { status: 'rejected', reason: 'too fast', wer: 0.5, durationMs: 1000 },
+        verdict: {
+          submissionId: 'x',
+          status: 'rejected',
+          reason: 'too fast',
+          durationMs: 1000,
+          report: null,
+        },
         record: expect.objectContaining({
           runner: 'desktop',
           reason: 'submitted',
@@ -227,6 +240,18 @@ describe('Contribute', () => {
     // Only the runnable set of the opted-in app is claimed
     expect(JSON.parse(String(fetch.mock.calls[1]![1]!.body)).setId).toBe('s1');
     contribute.stop();
+
+    // Good / Not good for the upload (#831), with the device credential, kept with the item
+    const report = { good: false, note: 'mumbles', at: 1 };
+    fetch.mockImplementationOnce(async () => json({ report }));
+    expect(await contribute.report('books', 'j1', false, 'mumbles')).toEqual(report);
+    const [url, init] = fetch.mock.calls.at(-1)!;
+    expect(url).toBe(`${api}/apps/books/generation/submissions/x/report`);
+    expect(init?.method).toBe('PUT');
+    expect((init!.headers as Record<string, string>).Authorization).toBe('Bearer ndev_x');
+    expect(JSON.parse(String(init!.body))).toEqual({ good: false, note: 'mumbles' });
+    expect(history[0]!.verdict!.report).toEqual(report);
+    await expect(contribute.report('books', 'nope', true, '')).rejects.toThrow(/Nothing uploaded/);
   });
 
   it('says why it is not generating: paused, no model, no apps chosen, no AAC', async () => {

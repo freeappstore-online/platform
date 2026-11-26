@@ -620,6 +620,14 @@ ipcMain.handle('home:contribute-audio', (event, appId: unknown, jobId: unknown) 
   if (!APP_ID.test(appId) || !/^[A-Za-z0-9_-]{1,128}$/.test(jobId)) return null;
   return readAudio(app.getPath('userData'), appId, jobId);
 });
+ipcMain.handle(
+  'home:contribute-report',
+  (event, appId: unknown, jobId: unknown, good: unknown, note: unknown) => {
+    if (!fromHome(event) || typeof appId !== 'string' || typeof jobId !== 'string') return null;
+    if (typeof good !== 'boolean' || typeof note !== 'string' || note.length > 500) return null;
+    return contribute.report(appId, jobId, good, note);
+  },
+);
 ipcMain.handle('home:contribute-connect', (event) => {
   if (fromHome(event)) void connectDevice();
 });

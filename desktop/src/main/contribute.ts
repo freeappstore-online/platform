@@ -3,6 +3,7 @@ import {
   type GenerationAttemptRecord,
   type GenerationJob,
   type GenerationOpenApp,
+  type GenerationReport,
 } from '@freeappstore/sdk';
 import {
   contributeKokoroApps,
@@ -294,11 +295,40 @@ export class Contribute {
       for (const item of items) {
         const s = mine.find((m) => m.jobId === item.jobId);
         if (item.appId !== appId || !s) continue;
-        item.verdict = { status: s.status, reason: s.reason, wer: s.wer, durationMs: s.durationMs };
+        item.verdict = {
+          submissionId: s.submissionId,
+          status: s.status,
+          reason: s.reason,
+          durationMs: s.durationMs,
+          report: s.report,
+        };
         changed = true;
       }
     }
     if (changed) this.saveHistory(items);
+  }
+
+  /**
+   * Send this account's Good / Not good for an upload in the history (#831), with the device
+   * credential, and keep it with the item. People judge the audio; nothing else does.
+   */
+  async report(
+    appId: string,
+    jobId: string,
+    good: boolean,
+    note: string,
+  ): Promise<GenerationReport> {
+    const token = this.host.token();
+    const items = this.host.history();
+    const item = items.find((i) => i.appId === appId && i.jobId === jobId);
+    const submissionId = item?.verdict?.submissionId;
+    if (!token || !item?.verdict || !submissionId)
+      throw new Error('Nothing uploaded to report on.');
+    const generation = new Generation(appId, this.origin, { token, handleUnauthorized: () => {} });
+    const report = await generation.report(submissionId, good, note || undefined);
+    item.verdict.report = report;
+    this.saveHistory(items);
+    return report;
   }
 
   private saveHistory(items: HistoryItem[]) {

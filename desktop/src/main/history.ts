@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type {
   GenerationAttemptRecord,
   GenerationEndReason,
+  GenerationReport,
   GenerationSubmissionStatus,
 } from '@freeappstore/sdk';
 import { GenerationError } from '@freeappstore/sdk';
@@ -25,12 +26,16 @@ export interface HistoryItem {
   text: string;
   chars: number;
   record: GenerationAttemptRecord;
-  /** The server's verdict on the upload, once asked (`mySubmissions`). */
+  /**
+   * The server's verdict on the upload, once asked (`mySubmissions`), with this account's own
+   * Good / Not good for it (#831). Records kept before #831 have no `submissionId` until asked again.
+   */
   verdict: {
+    submissionId?: string;
     status: GenerationSubmissionStatus;
     reason: string | null;
-    wer: number | null;
     durationMs: number | null;
+    report?: GenerationReport | null;
   } | null;
 }
 
