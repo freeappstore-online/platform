@@ -14,6 +14,7 @@ import {
   HOST_TO_PROVIDER,
   injectSecret,
   pickRule,
+  userKeyHeader,
   validateRule,
 } from '../lib/proxy-allowlist.js';
 import { getOAuth2Token } from '../lib/proxy-oauth2.js';
@@ -501,14 +502,13 @@ secretsRoutes.all('/apps/:appId/proxy/:host/*', async (c) => {
       }
       plaintext = userKey;
 
-      // User keys always inject as Bearer token.
       const forwardHeaders = new Headers();
       for (const [k, v] of c.req.raw.headers.entries()) {
         if (!PROXY_FORWARD_SKIP_HEADERS.has(k.toLowerCase())) {
           forwardHeaders.set(k, v);
         }
       }
-      forwardHeaders.set('Authorization', `Bearer ${plaintext}`);
+      forwardHeaders.set(...userKeyHeader(provider, plaintext));
       injectedUrl = upstreamUrl;
       injectedHeaders = forwardHeaders;
     } else {

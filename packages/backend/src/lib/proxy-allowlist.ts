@@ -51,6 +51,23 @@ export const HOST_TO_PROVIDER: Record<string, string> = {
   // on FAS anyway. A developer's own Stripe key still works via an app rule.
 };
 
+/**
+ * The header a vault provider reads its API key from (#742). A provider not
+ * listed takes `Authorization: Bearer <key>` (OpenAI, OpenRouter, Replicate,
+ * Stability).
+ */
+const USER_KEY_HEADERS: Record<string, string> = {
+  anthropic: 'x-api-key',
+  'google-ai': 'x-goog-api-key',
+  elevenlabs: 'xi-api-key',
+};
+
+/** `[name, value]` of the header that carries `key` to `provider`. */
+export function userKeyHeader(provider: string, key: string): [string, string] {
+  const name = USER_KEY_HEADERS[provider];
+  return name ? [name, key] : ['Authorization', `Bearer ${key}`];
+}
+
 export class AllowlistError extends Error {
   constructor(message: string) {
     super(message);

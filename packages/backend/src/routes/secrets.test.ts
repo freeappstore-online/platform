@@ -50,6 +50,8 @@ interface FakeData {
   secrets: SecretRow[];
   allow: AllowRow[];
   usage: UsageRow[];
+  /** Sealed vault keys by `${userId}:${provider}`. */
+  userKeys?: Record<string, { keyCiphertext: Uint8Array; dekWrapped: Uint8Array; iv: Uint8Array }>;
 }
 
 /**
@@ -117,8 +119,11 @@ function first(sql: string, bound: unknown[], d: FakeData): unknown | null {
     const row = d.usage.find((u) => u.app_id === bound[0] && u.day === bound[1]);
     return row ? { count: row.count } : null;
   }
-  // No user has a vault key in these tests: the user-key path ends in `no_key`.
-  if (sql.includes('FROM user_api_keys')) return null;
+  // Without d.userKeys the user-key path ends in `no_key`.
+  if (sql.includes('FROM user_api_keys')) {
+    const k = d.userKeys?.[`${bound[0]}:${bound[1]}`];
+    return k ? { key_ciphertext: k.keyCiphertext, dek_wrapped: k.dekWrapped, iv: k.iv } : null;
+  }
   throw new Error(`fakeDB.first unmatched: ${sql}`);
 }
 
@@ -1269,6 +1274,46 @@ describe('proxy: ANY /v1/apps/:appId/proxy/<host>/<path>', () => {
       );
       expect(await errorOf(res)).toBe('no_key');
     });
+
+    it.each([
+      ['api.anthropic.com', 'anthropic', 'x-api-key'],
+      ['generativelanguage.googleapis.com', 'google-ai', 'x-goog-api-key'],
+      ['api.elevenlabs.io', 'elevenlabs', 'xi-api-key'],
+      ['api.openai.com', 'openai', 'authorization'],
+    ])(
+      'sends the vault key to %s in the header it reads (#742)',
+      async (host, provider, header) => {
+        const { sealSecret } = await import('../lib/encryption.js');
+        const data = freshData();
+        data.userKeys = { [`${owner.id}:${provider}`]: await sealSecret('user-key-1', KEK) };
+        data.allow.push({
+          app_id: 'weather',
+          pattern: `https://${host}/`,
+          inject_kind: 'user_key',
+          inject_name: '',
+          secret_name: '',
+          secret_name_2: null,
+          token_url: null,
+          methods: 'POST',
+          created_at: 0,
+        });
+        const captured: { init?: RequestInit | undefined } = {};
+        globalThis.fetch = vi.fn(async (_url, init) => {
+          captured.init = init;
+          return new Response('{}');
+        }) as typeof fetch;
+        const res = await app.request(
+          `/v1/apps/weather/proxy/${host}/v1/x`,
+          { method: 'POST', headers: { Authorization: await ownerAuth('weather') } },
+          baseEnv(fakeDB(data)),
+        );
+        expect(res.status).toBe(200);
+        const fwd = new Headers(captured.init?.headers);
+        const expected = header === 'authorization' ? 'Bearer user-key-1' : 'user-key-1';
+        expect(fwd.get(header)).toBe(expected);
+        if (header !== 'authorization') expect(fwd.get('authorization')).toBeNull();
+      },
+    );
 
     it("refuses a non-owner's key for an app session: no_grant (per-app grants are #504)", async () => {
       const res = await app.request(
