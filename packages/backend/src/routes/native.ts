@@ -8,7 +8,8 @@
  * app only through that app.
  */
 import { type Context, Hono } from 'hono';
-import { HttpError, requireUser } from '../lib/auth.js';
+import { FAS_APP_ROWS } from '../lib/apps.js';
+import { HttpError, isAdminLogin, isAdminUserId, requireUser } from '../lib/auth.js';
 import {
   NATIVE_APP_JOIN,
   NATIVE_RETENTION_MS,
@@ -42,12 +43,36 @@ const appRow = (db: D1Database, appId: string) =>
 
 nativeRoutes.get('/native/me', async (c) => {
   const device = await nativeDevice(c);
-  const user = await c.env.DB.prepare(
-    'SELECT id, github_login, display_name FROM users WHERE id = ?',
-  )
-    .bind(device.user_id)
-    .first<{ id: string; github_login: string; display_name: string | null }>();
+  // The device owner's own profile only (#829): read-only, nothing new stored. Roles as computeRoles
+  // derives them, without its sign-in write: creator and admin by GitHub login only for GitHub accounts.
+  const [users, owned] = (await c.env.DB.batch([
+    c.env.DB.prepare(
+      'SELECT id, github_login, display_name, avatar_url, email, provider FROM users WHERE id = ?',
+    ).bind(device.user_id),
+    c.env.DB.prepare(`SELECT COUNT(*) AS n FROM apps WHERE owner_id = ? AND ${FAS_APP_ROWS}`).bind(
+      device.user_id,
+    ),
+  ])) as [
+    D1Result<{
+      id: string;
+      github_login: string;
+      display_name: string | null;
+      avatar_url: string | null;
+      email: string | null;
+      provider: string | null;
+    }>,
+    D1Result<{ n: number }>,
+  ];
+  const user = users.results?.[0];
   if (!user) throw new HttpError(401, 'Account no longer exists.');
+  const provider = user.provider ?? 'github';
+  const github = provider === 'github';
+  const appCount = github ? (owned.results?.[0]?.n ?? 0) : 0;
+  const roles = ['user'];
+  if (appCount > 0) roles.push('creator');
+  if ((github && isAdminLogin(user.github_login, c.env)) || isAdminUserId(user.id, c.env)) {
+    roles.push('admin');
+  }
   const grants = await nativeGrants(c.env.DB, device.id);
   const apps = [];
   for (const a of await nativeCatalog()) {
@@ -56,8 +81,22 @@ nativeRoutes.get('/native/me', async (c) => {
     }
   }
   return c.json({
-    user: { id: user.id, name: user.display_name || user.github_login },
-    device: { id: device.id, label: device.label, expiresAt: device.expires_at },
+    user: {
+      id: user.id,
+      name: user.display_name || user.github_login,
+      login: github ? user.github_login : null,
+      provider,
+      avatarUrl: user.avatar_url,
+      email: user.email,
+      roles,
+      appCount,
+    },
+    device: {
+      id: device.id,
+      label: device.label,
+      createdAt: device.created_at,
+      expiresAt: device.expires_at,
+    },
     apps,
   });
 });

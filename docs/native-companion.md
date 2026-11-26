@@ -21,7 +21,7 @@ Device side, `Authorization: Bearer ndev_…`:
 |---|---|---|
 | `POST /native/auth/start` | `{ challenge: sha256hex(verifier), label }` | `{ id, authorizationUrl, expiresIn }` |
 | `POST /native/auth/complete` | `{ id, verifier }` | `202 { pending }` or `{ token, deviceId }` |
-| `GET /native/me` | — | `{ user, device, apps: [{ id, name, purpose, disclosure, version, grant }] }` |
+| `GET /native/me` | — | `{ user: { id, name, login, provider, avatarUrl, email, roles, appCount }, device: { id, label, createdAt, expiresAt }, apps: [{ id, name, purpose, disclosure, version, grant }] }` |
 | `PUT /native/apps/:appId/location` | `{ enabled: true, version }` | `{ grant }` |
 | `DELETE /native/apps/:appId/location` | — | `{ revoked: true }` |
 | `POST /native/locations` | `{ points: [{ id, at, lat, lng, accuracy, grants }] }` (1–100) | `{ acknowledged: [id] }` |

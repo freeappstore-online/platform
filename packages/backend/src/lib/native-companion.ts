@@ -31,6 +31,7 @@ interface NativeDevice {
   id: string;
   user_id: string;
   label: string;
+  created_at: number;
   expires_at: number;
 }
 export interface NativeGrant {
@@ -117,7 +118,7 @@ export async function nativeDevice(c: Context<{ Bindings: Env }>): Promise<Nativ
     throw new HttpError(401, 'Connect this device to FreeAppStore.');
   }
   const row = await c.env.DB.prepare(
-    'SELECT id, user_id, label, expires_at FROM native_devices WHERE token_hash = ? AND expires_at > ?',
+    'SELECT id, user_id, label, created_at, expires_at FROM native_devices WHERE token_hash = ? AND expires_at > ?',
   )
     .bind(await nativeHash(token), Date.now())
     .first<NativeDevice>();

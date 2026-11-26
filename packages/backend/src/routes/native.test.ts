@@ -187,11 +187,51 @@ describe.skipIf(!hasSqlite)('FAS native companion', () => {
       (await request('/native/auth/complete', 'POST', { id: p.id, verifier: p.verifier })).status,
     ).toBe(403);
     const me = (await (await request('/native/me', 'GET', undefined, result.token)).json()) as {
-      user: { id: string; name: string };
+      user: Record<string, unknown>;
+      device: Record<string, unknown>;
       apps: { id: string; grant: unknown }[];
     };
-    expect(me.user).toEqual({ id: 'gh:1', name: 'alice' });
+    expect(me.user).toEqual({
+      id: 'gh:1',
+      name: 'alice',
+      login: 'alice',
+      provider: 'github',
+      avatarUrl: null,
+      email: null,
+      roles: ['user', 'creator'],
+      appCount: 1,
+    });
+    expect(me.device).toMatchObject({ label: 'iPhone (iOS 18.0)' });
+    expect(me.device.createdAt).toBeGreaterThan(0);
+    expect(me.device.expiresAt).toBeGreaterThan(me.device.createdAt as number);
     expect(me.apps.map((a) => [a.id, a.grant])).toEqual([['run', null]]);
+  });
+
+  it("shows only the device owner's own profile, read-only (#829)", async () => {
+    db.exec(`INSERT INTO users (id, github_id, github_login, avatar_url, created_at, provider, provider_id, email, display_name)
+      VALUES ('google:9', 0, 'user-ab12', 'https://lh3.example/a.png', 0, 'google', '9', 'g@example.com', 'Gail');
+      INSERT INTO apps (id, owner_login, owner_id, created_at) VALUES ('gail-app', 'user-ab12', 'google:9', 0);`);
+    env = { ...env, ADMIN_USER_IDS: 'google:9' } as typeof env;
+    const { token } = await device('google:9');
+    const before = rows('SELECT * FROM apps ORDER BY id');
+    const me = (await (await request('/native/me', 'GET', undefined, token)).json()) as {
+      user: Record<string, unknown>;
+    };
+    // No GitHub login for a Google account, and its email-style login never earns creator.
+    expect(me.user).toEqual({
+      id: 'google:9',
+      name: 'Gail',
+      login: null,
+      provider: 'google',
+      avatarUrl: 'https://lh3.example/a.png',
+      email: 'g@example.com',
+      roles: ['user', 'admin'],
+      appCount: 0,
+    });
+    expect(rows('SELECT * FROM apps ORDER BY id')).toEqual(before);
+    // A FAS session is not a device credential.
+    const session = await signSession('google:9', KEY, { aud: 'console' });
+    expect((await request('/native/me', 'GET', undefined, session)).status).toBe(401);
   });
 
   it('rejects missing browser binding, a code for another verifier, foreign or null origins and malformed starts', async () => {
