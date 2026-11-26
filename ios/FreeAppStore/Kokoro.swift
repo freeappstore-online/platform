@@ -35,8 +35,24 @@ final class KokoroModel: @unchecked Sendable {
         return (0.5...2).contains(speed) ? (Int32(sid), speed) : nil
     }
 
-    /// Whether the job's voice is a Spanish one (`ef_…`, `em_…`), so its text is split into sentences the Spanish way.
-    static func spanish(_ params: [String: Any]) -> Bool { (params["voice"] as? String)?.hasPrefix("e") == true }
+    /// How a job is spoken (#812). A set naming no language goes by the voice: Mandarin for `zf_`/`zm_`, Spanish for
+    /// `ef_`/`em_`, otherwise English sentences as before. A set naming one (#810) must be English (`en`, with an
+    /// `a…`/`b…` voice), Spanish (`es`, `e…`) or Mandarin (`zh`, e.g. `zh-Hans`, `z…`); anything else is nil.
+    static func language(_ params: [String: Any], tag: String?) -> Language? {
+        guard let voice = (params["voice"] as? String)?.first else { return nil }
+        let byVoice: Language = switch voice { case "z": .mandarin; case "e": .spanish; default: .english }
+        guard let tag else { return byVoice }
+        let named: Language? = switch tag.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)[0].lowercased() {
+        case "en": voice == "a" || voice == "b" ? .english : nil
+        case "es": .spanish
+        case "zh": .mandarin
+        default: nil
+        }
+        return named == byVoice ? named : nil
+    }
+
+    /// Mandarin text normalisers in the model package: dates, phone numbers, then other numbers read as Chinese.
+    static let mandarinRules = ["date-zh.fst", "phone-zh.fst", "number-zh.fst"]
 
     static var defaultDirectory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("kokoro", isDirectory: true)
@@ -216,19 +232,24 @@ private final class Bz2Reader {
     }
 }
 
-/// Kokoro through sherpa-onnx's offline TTS C API (CPU). Loads the model on first use; `close` frees it.
+/// Kokoro through sherpa-onnx's offline TTS C API (CPU). Loads the model on first use; `close` frees it. Mandarin gets its
+/// own engine with the Mandarin number and date rules (which would read digits in English text as Chinese), loaded in
+/// place of the other one when the language changes.
 final class KokoroSynthesizer: Synthesizer {
     let model = KokoroModel.id
     private let files: KokoroModel
     private var tts: OpaquePointer?
+    private var mandarin = false
 
     init(files: KokoroModel) { self.files = files }
 
     func accepts(_ params: [String: Any]) -> Bool { KokoroModel.params(params) != nil }
 
-    func synthesize(_ text: String, params: [String: Any], keepGoing: @escaping () -> Bool) throws -> Audio? {
+    func language(_ params: [String: Any], tag: String?) -> Language? { KokoroModel.language(params, tag: tag) }
+
+    func synthesize(_ text: String, params: [String: Any], language: Language, keepGoing: @escaping () -> Bool) throws -> Audio? {
         guard let (sid, speed) = KokoroModel.params(params) else { return nil }
-        let tts = try load()
+        let tts = try load(mandarin: language == .mandarin)
         var generation = SherpaOnnxGenerationConfig()
         generation.sid = sid
         generation.speed = speed
@@ -258,8 +279,9 @@ final class KokoroSynthesizer: Synthesizer {
 
     deinit { close() }
 
-    private func load() throws -> OpaquePointer {
-        if let tts { return tts }
+    private func load(mandarin: Bool) throws -> OpaquePointer {
+        if let tts, self.mandarin == mandarin { return tts }
+        close()
         let root = files.root
         // The C strings live until the engine is created, which copies them.
         var owned: [UnsafeMutablePointer<CChar>] = []
@@ -269,15 +291,18 @@ final class KokoroSynthesizer: Synthesizer {
         config.model.kokoro.model = c(root.appendingPathComponent("model.onnx").path)
         config.model.kokoro.voices = c(root.appendingPathComponent("voices.bin").path)
         config.model.kokoro.tokens = c(root.appendingPathComponent("tokens.txt").path)
-        // No data_dir: sherpa-onnx 2.x ignores espeak-ng-data and phonemizes through the lexicons.
+        // No data_dir: sherpa-onnx 2.x ignores espeak-ng-data and phonemizes through the lexicons; Mandarin is looked up
+        // in lexicon-zh character by character, longest phrase first (`lang` and the jieba `dict_dir` are ignored too).
         config.model.kokoro.lexicon = c(["lexicon-us-en.txt", "lexicon-zh.txt"].map { root.appendingPathComponent($0).path }.joined(separator: ","))
         config.model.kokoro.length_scale = 1
         config.model.num_threads = Int32(min(max(ProcessInfo.processInfo.activeProcessorCount, 1), 4))
         config.model.provider = c("cpu")
         config.max_num_sentences = 1
         config.silence_scale = 0.2
+        if mandarin { config.rule_fsts = c(KokoroModel.mandarinRules.map { root.appendingPathComponent($0).path }.joined(separator: ",")) }
         guard let created = SherpaOnnxCreateOfflineTts(&config) else { throw CompanionError("The voice model could not be loaded. Delete it and download it again.") }
         tts = created
+        self.mandarin = mandarin
         return created
     }
 

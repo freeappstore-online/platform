@@ -141,6 +141,12 @@ claims, the same skipping, sentence timings, lease extension, upload checks and 
   app's background time running out after leaving it), the job in hand stops between sentences and is not uploaded.
   Unplugging stops a background run. A stopped job is recorded `skipped` with why: `user_stop`, `background_expired`,
   `unplugged`, `opted_out` or `lease_expired`, shown in the tab's recent results.
+- **Languages** (#812), as on Android: a set's `language` (#810) must match its voice: `en` with an `a…`/`b…` voice, `es`
+  with `e…`, `zh` (`zh-Hans`, `zh-CN`, …) with `zf_`/`zm_`; a set naming no language goes by the voice. Anything else is
+  skipped with reason `language`. Mandarin is spoken through `lexicon-zh` with the package's `date-zh`, `phone-zh` and
+  `number-zh` rules (a separate engine, so digits in English text stay English), and split into sentences at 。！？；…
+  and `!?;` or a `.` not before a digit, whatever follows, closing quotes and brackets kept. Audio shorter than 1 s is
+  padded with silence, so a two-character phrase such as 对。 stays within the server's characters-per-second band.
 - **Heat**: while the thermal state is *serious* or *critical* the run pauses between sentences (and before claiming),
   keeps extending the job's lease, and goes on once the phone is back to *fair* or *nominal*.
 - **Encoding**: each sentence and pause is written as it is synthesized into an `ExtAudioFile` (Apple's software AAC-LC

@@ -10,6 +10,7 @@ struct ModelId: Equatable {
 }
 
 /// A claimed job. `text` is the job's whole input; a job whose input is anything else has a blank `text` and is refused.
+/// `language` is its set's BCP 47 tag (#810), or nil when the set names none.
 struct GenerationJob {
     let id: String
     let setId: String
@@ -19,6 +20,7 @@ struct GenerationJob {
     let params: [String: Any]
     let formats: [String]
     let maxBytes: Int64
+    let language: String?
     let leaseToken: String
     let leaseExpiresAt: Int64
 }
@@ -54,6 +56,11 @@ struct Audio {
     let sampleRate: Int
 }
 
+/// How a job's text is split into sentences and spoken (#812).
+enum Language {
+    case english, spanish, mandarin
+}
+
 /// Where narration goes as it is synthesized: `AacEncoder` on the phone, writing to a file.
 protocol AudioSink: AnyObject {
     /// Appends mono samples in -1...1.
@@ -68,8 +75,10 @@ protocol Synthesizer: AnyObject {
     var model: ModelId { get }
     /// Whether this model can honour the job's `params` exactly.
     func accepts(_ params: [String: Any]) -> Bool
+    /// How it speaks a job with these `params` from a set naming `language`, or nil when it can't speak that (#812).
+    func language(_ params: [String: Any], tag: String?) -> Language?
     /// The audio for `text`, or nil when `keepGoing` turned false part-way.
-    func synthesize(_ text: String, params: [String: Any], keepGoing: @escaping () -> Bool) throws -> Audio?
+    func synthesize(_ text: String, params: [String: Any], language: Language, keepGoing: @escaping () -> Bool) throws -> Audio?
 }
 
 /// The contributor routes, with the device credential.
@@ -130,7 +139,7 @@ final class GenerationClient: @unchecked Sendable {
             text: input.count == 1 ? input["text"] as? String ?? "" : "",
             model: ModelId(model: model, version: version), params: j["params"] as? [String: Any] ?? [:],
             formats: j["formats"] as? [String] ?? [], maxBytes: (j["maxBytes"] as? NSNumber)?.int64Value ?? 0,
-            leaseToken: leaseToken, leaseExpiresAt: try epochMs(j["leaseExpiresAt"]))
+            language: j["language"] as? String, leaseToken: leaseToken, leaseExpiresAt: try epochMs(j["leaseExpiresAt"]))
     }
 
     /// ms epoch numbers (what the backend sends), or an ISO 8601 time.
@@ -157,6 +166,9 @@ enum GenerationPolicy {
     /// Silence after a sentence and after a paragraph, in seconds: Books' `SENTENCE_PAUSE` and `PARAGRAPH_PAUSE`.
     static let sentencePause = 0.4
     static let paragraphPause = 0.8
+    /// Audio shorter than this gets silence at the end (#812), so a two-character phrase such as 对。 is well within the
+    /// server's characters-per-second floor and Whisper hears it whole. Audio up to 3 s is never too long for its text.
+    static let minSeconds = 1.0
 
     /// Why this phone will not generate the job, or nil when it will.
     static func refusal(_ job: GenerationJob, synth: Synthesizer, handled: Bool, now: Int64) -> String? {
@@ -165,6 +177,7 @@ enum GenerationPolicy {
         if !job.formats.contains(contentType) { return "format" }
         if job.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "input" }
         if !synth.accepts(job.params) { return "params" }
+        if synth.language(job.params, tag: job.language) == nil { return "language" }
         if job.maxBytes <= 0 { return "max_bytes" }
         if job.leaseExpiresAt - leaseMarginMs <= now { return "lease_expired" }
         return nil
@@ -174,7 +187,9 @@ enum GenerationPolicy {
 /// The sentences Books narrates one at a time (#785), ported from the Android companion's `Sentences`, itself from Books'
 /// `scripts/audio/segments.py` with the `END` and `ABBREVIATION` of its English and Spanish profiles: a sentence ends at
 /// . ! ? or … (with any closing quotes or brackets) followed by space and not by a lowercase word, but not after an
-/// abbreviation such as Mr. or an initial; blank lines end paragraphs. Offsets are UTF-16 code units, like Books' timings.
+/// abbreviation such as Mr. or an initial; blank lines end paragraphs. Mandarin (#812) has no spaces: a sentence ends at
+/// 。！？；… or their ASCII forms (with any closing quotes or brackets) whatever follows, except a full stop before a digit
+/// (3.5). Offsets are UTF-16 code units, like Books' timings.
 enum Sentences {
     struct Sentence: Equatable {
         let start: Int
@@ -193,13 +208,18 @@ enum Sentences {
     private static let lower = "a-záéíóúüñ"
     private static let es = (end: regex(#"[.!?…]+[”’"')\]»]*(?=[\#(s)]+(?![\#(lower)]|[—-]+[\#(s)]?[\#(lower)]))"#),
                              abbreviation: regex(#"\#(b)(Sr|Sra|Srta|Sres|Srs|Dr|Dra|Dña|Ud|Uds|Vd|Vds|Vmd|Excmo|Excma|Ilmo|Ilma|Rvdo|Sto|Sta|Fr|Pbro|[A-ZÁÉÍÓÚÑ])$"#))
+    private static let zh = (end: regex(#"(?:[。！？；…!?;]|\.(?!\d))+[”’"')\]）」』】》]*"#), abbreviation: NSRegularExpression?.none)
 
     private static func regex(_ pattern: String, _ options: NSRegularExpression.Options = []) -> NSRegularExpression {
         try! NSRegularExpression(pattern: pattern, options: options)
     }
 
-    static func split(_ text: String, spanish: Bool) -> [Sentence] {
-        let (end, abbreviation) = spanish ? es : en
+    static func split(_ text: String, language: Language) -> [Sentence] {
+        let (end, abbreviation): (NSRegularExpression, NSRegularExpression?) = switch language {
+        case .english: en
+        case .spanish: es
+        case .mandarin: zh
+        }
         let ns = text as NSString
         var out: [Sentence] = []
         for para in paragraph.matches(in: text, range: NSRange(location: 0, length: ns.length)) {
@@ -207,7 +227,7 @@ enum Sentences {
             var start = para.range.location
             // The end matcher's bounds are opaque (it sees only this paragraph); the abbreviation's are transparent.
             for m in end.matches(in: text, range: NSRange(location: start, length: paraEnd - start)) {
-                if ns.substring(with: m.range) == "." && abbreviation.firstMatch(
+                if ns.substring(with: m.range) == ".", let abbreviation, abbreviation.firstMatch(
                     in: text, options: [.withTransparentBounds], range: NSRange(location: start, length: m.range.location - start)) != nil { continue }
                 out.append(Sentence(start: start, end: NSMaxRange(m.range), endsParagraph: false))
                 let after = NSMaxRange(m.range)
@@ -305,14 +325,15 @@ final class Contributor {
         var length = 0
         var pause = 0 // written before the next sentence, so none follows the last
         let text = job.text as NSString
-        for s in Sentences.split(job.text, spanish: KokoroModel.spanish(job.params)) {
+        guard let language = synth.language(job.params, tag: job.language) else { return nil } // refused before this
+        for s in Sentences.split(job.text, language: language) {
             while hot() && keepGoing() && lease.held {
                 try await lease.renew()
                 try await Task.sleep(for: coolDown)
             }
             try await lease.renew()
             guard let audio = try synth.synthesize(text.substring(with: NSRange(location: s.start, length: s.end - s.start)), params: job.params,
-                                                   keepGoing: { keepGoing() && lease.held }) else { return nil }
+                                                   language: language, keepGoing: { keepGoing() && lease.held }) else { return nil }
             if audio.samples.isEmpty { continue } // nothing to say, e.g. "* * *"
             let out: AudioSink
             if let sink { out = sink } else { out = try encoder(file, audio.sampleRate); sink = out; rate = audio.sampleRate }
@@ -323,6 +344,8 @@ final class Contributor {
             pause = Int((s.endsParagraph ? GenerationPolicy.paragraphPause : GenerationPolicy.sentencePause) * Double(rate))
         }
         if sink == nil { sink = try encoder(file, rate) }
+        let short = Int(GenerationPolicy.minSeconds * Double(rate)) - length
+        if short > 0 { try sink?.write([Float](repeating: 0, count: short)) }
         try sink?.finish()
         return segments
     }

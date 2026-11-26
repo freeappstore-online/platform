@@ -24,11 +24,13 @@ final class ContributeTests: XCTestCase {
     final class FakeSynth: Synthesizer {
         let model = KokoroModel.id
         var spoken: [String] = []
+        var languages: [Language] = []
         /// Replaces the default: one sample per character, nil once `keepGoing` is false.
         var say: ((String, () -> Bool) -> Audio?)?
         func accepts(_ params: [String: Any]) -> Bool { KokoroModel.params(params) != nil }
-        func synthesize(_ text: String, params: [String: Any], keepGoing: @escaping () -> Bool) -> Audio? {
-            spoken.append(text)
+        func language(_ params: [String: Any], tag: String?) -> Language? { KokoroModel.language(params, tag: tag) }
+        func synthesize(_ text: String, params: [String: Any], language: Language, keepGoing: @escaping () -> Bool) -> Audio? {
+            spoken.append(text); languages.append(language)
             if let say { return say(text, keepGoing) }
             return keepGoing() ? Audio(samples: [Float](repeating: 0, count: text.utf16.count), sampleRate: 24_000) : nil
         }
@@ -147,9 +149,10 @@ final class ContributeTests: XCTestCase {
 
     private func job(_ id: String, text: String = "It was a bright cold day in April.", model: String = "kokoro", version: String = "v1.0",
                      params: [String: Any] = ["voice": "af_heart"], formats: [String] = ["audio/mp4"], maxBytes: Int64 = 1_000_000,
-                     expires: Any? = nil, input: [String: Any]? = nil) -> [String: Any] {
+                     expires: Any? = nil, input: [String: Any]? = nil, language: String? = nil) -> [String: Any] {
         ["id": id, "setId": "set1", "key": "book/\(id)", "input": input ?? ["text": text], "model": model, "modelVersion": version,
-         "params": params, "formats": formats, "maxBytes": maxBytes, "leaseToken": "lease-\(id)", "leaseExpiresAt": expires ?? now + 15 * 60_000]
+         "params": params, "formats": formats, "maxBytes": maxBytes, "language": language ?? NSNull(), "leaseToken": "lease-\(id)",
+         "leaseExpiresAt": expires ?? now + 15 * 60_000]
     }
 
     private func segments(_ upload: Upload) -> [[Double]] {
@@ -169,7 +172,7 @@ final class ContributeTests: XCTestCase {
         XCTAssertEqual(upload.headers["X-Lease-Token"], "lease-j1")
         XCTAssertNil(upload.headers["X-Attestation"], "no attestation until #732")
         XCTAssertEqual(upload.contentType, "audio/mp4")
-        XCTAssertEqual(upload.file.count, "First chapter.".count)
+        XCTAssertEqual(upload.file.count, 24_000, "padded with silence to minSeconds")
         XCTAssertEqual(segments(upload), [[0, 14, 0, 0.001]])
         XCTAssertEqual(log.rows["j1"]?.status, "pending")
         XCTAssertEqual(log.rows["j1"]?.key, "book/j1")
@@ -280,13 +283,89 @@ final class ContributeTests: XCTestCase {
         // Expected: Books' scripts/audio/segments.py (`sentences`, then `utf16`) on the same texts, as in the Android test.
         func s(_ start: Int, _ end: Int, _ paragraph: Bool) -> Sentences.Sentence { .init(start: start, end: end, endsParagraph: paragraph) }
         let en = "Mr. Brown met L. Frank Baum.  “Oh dear!” said the Rabbit. It was I.\n\nA new paragraph… Then more?! Yes 😀 indeed. (Quite.)\n \n* * *\n\nEnd"
-        XCTAssertEqual(Sentences.split(en, spanish: false), [s(0, 28, false), s(30, 57, false), s(58, 67, true), s(69, 85, false), s(86, 97, false),
+        XCTAssertEqual(Sentences.split(en, language: .english), [s(0, 28, false), s(30, 57, false), s(58, 67, true), s(69, 85, false), s(86, 97, false),
                                                              s(98, 112, false), s(113, 121, true), s(124, 129, true), s(131, 134, true)])
         let es = "—¿Quién es? —dijo el Sr. Pérez. Nadie respondió.\n\nD. Juan llegó. —Hola —dijo. ¡Ya!"
-        XCTAssertEqual(Sentences.split(es, spanish: true), [s(0, 31, false), s(32, 48, true), s(50, 64, false), s(65, 77, false), s(78, 82, true)])
-        XCTAssertTrue(Sentences.split(" \n\n ", spanish: false).isEmpty)
-        XCTAssertTrue(KokoroModel.spanish(["voice": "ef_dora"]))
-        XCTAssertFalse(KokoroModel.spanish(["voice": "af_heart"]))
+        XCTAssertEqual(Sentences.split(es, language: .spanish), [s(0, 31, false), s(32, 48, true), s(50, 64, false), s(65, 77, false), s(78, 82, true)])
+        XCTAssertTrue(Sentences.split(" \n\n ", language: .english).isEmpty)
+    }
+
+    /// #812: Dialogue's lines (web/src/dialogue/phrases.json and scenarios); offsets are UTF-16 code units.
+    func testSplitsMandarinSentences() {
+        func s(_ start: Int, _ end: Int, _ paragraph: Bool = false) -> Sentences.Sentence { .init(start: start, end: end, endsParagraph: paragraph) }
+        func split(_ text: String) -> [Sentences.Sentence] { Sentences.split(text, language: .mandarin) }
+        XCTAssertEqual(split("对。"), [s(0, 2, true)])
+        XCTAssertEqual(split("八号线。八，八。"), [s(0, 4), s(4, 8, true)])
+        XCTAssertEqual(split("三点以后……四点半可以吗？"), [s(0, 6), s(6, 13, true)])
+        XCTAssertEqual(split("不好意思，明天上午已经约满了。下午两点可以吗？"), [s(0, 15), s(15, 23, true)])
+        XCTAssertEqual(split("二号口，出去左转。谢谢！"), [s(0, 9), s(9, 12, true)])
+        XCTAssertEqual(split("可以约的时间有三个：明天两点、明天四点半、后天十点。"), [s(0, 26, true)], "no comma or colon ends one")
+        XCTAssertEqual(split("好的；谢谢。"), [s(0, 3), s(3, 6, true)])
+        XCTAssertEqual(split("他说：“好。”好的!谢谢?3.5元。"), [s(0, 7), s(7, 10), s(10, 13), s(13, 18, true)],
+                       "closing quotes stay; ASCII marks; a decimal point")
+        XCTAssertEqual(split("你好！ 谢谢。\n\n再见。"), [s(0, 3), s(4, 7, true), s(9, 12, true)], "spaces and paragraphs")
+        XCTAssertEqual(split("𠀀好。你好！"), [s(0, 4), s(4, 7, true)], "a character outside the BMP is two code units")
+    }
+
+    func testKokoroLanguageFromTheSetOrTheVoice() throws {
+        func lang(_ voice: String, _ tag: String?) -> Language? { KokoroModel.language(["voice": voice], tag: tag) }
+        XCTAssertEqual(lang("zf_xiaobei", "zh"), .mandarin)
+        XCTAssertEqual(lang("zm_yunxi", "zh-Hans"), .mandarin)
+        XCTAssertEqual(lang("zm_yunxi", "ZH-cn"), .mandarin)
+        XCTAssertEqual(lang("zf_xiaobei", nil), .mandarin, "no language: by voice")
+        XCTAssertEqual(lang("ef_dora", nil), .spanish)
+        XCTAssertEqual(lang("em_alex", "es-MX"), .spanish)
+        XCTAssertEqual(lang("af_heart", nil), .english)
+        XCTAssertEqual(lang("bm_george", "en-GB"), .english)
+        XCTAssertEqual(lang("ff_siwis", nil), .english, "unchanged for sets naming no language")
+        for (voice, tag) in [("af_heart", "zh"), ("zf_xiaobei", "en"), ("zf_xiaobei", "yue"), ("jf_alpha", "ja"), ("ff_siwis", "fr"),
+                             ("ff_siwis", "en"), ("ef_dora", "en"), ("af_heart", "es")] {
+            XCTAssertNil(lang(voice, tag), "\(voice) \(tag)")
+        }
+        XCTAssertNil(KokoroModel.language([:], tag: nil))
+        XCTAssertEqual(try GenerationClient.parseJob(job("j1", language: "zh-Hans")).language, "zh-Hans")
+        XCTAssertNil(try GenerationClient.parseJob(job("j1")).language)
+        var absent = job("j1")
+        absent["language"] = nil
+        XCTAssertNil(try GenerationClient.parseJob(absent).language, "absent, as before #810")
+    }
+
+    func testMandarinSetsAreSpokenAMandarinSentenceAtATime() async throws {
+        server.jobs = [job("j1", text: "一号线，三站。明白了，谢谢！", params: ["voice": "zm_yunxi"], language: "zh"),
+                       job("j2", text: "请问，洗手间在哪里？", params: ["voice": "zf_xiaobei"])] // no language: the voice says
+        let submitted = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 2)
+        XCTAssertEqual(synth.spoken, ["一号线，三站。", "明白了，谢谢！", "请问，洗手间在哪里？"])
+        XCTAssertEqual(synth.languages, [.mandarin, .mandarin, .mandarin])
+        XCTAssertEqual(segments(server.uploads[0]).map { [$0[0], $0[1]] }, [[0, 7], [7, 14]])
+    }
+
+    func testSkipsSetsInALanguageItCannotSpeak() async throws {
+        let cases = [job("a", text: "你好！", language: "zh"), job("b", text: "こんにちは。", params: ["voice": "jf_alpha"], language: "ja"),
+                     job("c", text: "你好！", params: ["voice": "zf_xiaobei"], language: "yue"),
+                     job("d", text: "Hello.", params: ["voice": "zf_xiaobei"], language: "en")]
+        for j in cases {
+            server.jobs = [j]
+            let submitted = try await contributor().run("books", keepGoing: { true })
+            XCTAssertEqual(submitted, 0)
+            XCTAssertEqual(log.rows[j["id"] as! String]?.reason, "language", j["id"] as! String)
+        }
+        XCTAssertTrue(synth.spoken.isEmpty)
+        XCTAssertTrue(server.uploads.isEmpty)
+    }
+
+    func testATwoCharacterPhrasePassesTheServerDurationChecks() async throws {
+        server.jobs = [job("j1", text: "对。", params: ["voice": "zf_xiaobei"], language: "zh")]
+        synth.say = { _, _ in Audio(samples: [Float](repeating: 0, count: 6_000), sampleRate: 24_000) } // Kokoro says 对。 in about a quarter of a second
+        let submitted = try await contributor().run("books", keepGoing: { true })
+        XCTAssertEqual(submitted, 1)
+        let upload = try XCTUnwrap(server.uploads.first)
+        let seconds = Double(upload.file.count) / 24_000
+        XCTAssertEqual(seconds, 1, "the speech, then silence to a second")
+        XCTAssertEqual(sinks.first?.writes, [6_000, 18_000])
+        // generation-verify.ts: at most 9 characters a second for zh, and audio up to 3 s is never too long.
+        XCTAssertTrue(Double("对。".utf16.count) / seconds <= 9 && seconds <= 3)
+        XCTAssertEqual(segments(upload), [[0, 2, 0, 0.25]])
     }
 
     func testNarratesASentenceAtATimeAndSendsBooksTimings() async throws {
@@ -513,12 +592,20 @@ final class ContributeTests: XCTestCase {
         let synth = KokoroSynthesizer(files: model)
         defer { synth.close(); model.delete() }
         let text = "It was a bright cold day in April, and the clocks were striking thirteen."
-        let audio = try XCTUnwrap(try synth.synthesize(text, params: ["voice": "af_heart"], keepGoing: { true }))
+        let audio = try XCTUnwrap(try synth.synthesize(text, params: ["voice": "af_heart"], language: .english, keepGoing: { true }))
         XCTAssertEqual(audio.sampleRate, 24_000)
         let seconds = Double(audio.samples.count) / 24_000
         XCTAssertGreaterThan(Double(text.count) / seconds, 8) // the server's default characters-per-second band
         XCTAssertLessThan(Double(text.count) / seconds, 30)
-        XCTAssertNil(try synth.synthesize(text, params: ["voice": "af_heart"], keepGoing: { false }), "stopping returns nothing")
+        XCTAssertNil(try synth.synthesize(text, params: ["voice": "af_heart"], language: .english, keepGoing: { false }), "stopping returns nothing")
+        // #812: Mandarin with Dialogue's voices, on the Mandarin engine; a two-character phrase is real speech too.
+        for (zh, voice) in [("请问，洗手间在哪里？", "zf_xiaobei"), ("这个多少钱？", "zm_yunxi"), ("对。", "zf_xiaobei")] {
+            let spoken = try XCTUnwrap(try synth.synthesize(zh, params: ["voice": voice], language: .mandarin, keepGoing: { true }))
+            let seconds = Double(spoken.samples.count) / Double(spoken.sampleRate)
+            XCTAssertGreaterThan(seconds, 0.15, zh)
+            XCTAssertLessThan(Double(zh.count) / seconds, 9, zh) // the server's zh characters-per-second ceiling
+        }
+        XCTAssertNotNil(try synth.synthesize("Back to English.", params: ["voice": "af_heart"], language: .english, keepGoing: { true }))
         let url = dir.appendingPathComponent("kokoro.m4a")
         let encoder = try AacEncoder(url: url, sampleRate: audio.sampleRate)
         try encoder.write(audio.samples)

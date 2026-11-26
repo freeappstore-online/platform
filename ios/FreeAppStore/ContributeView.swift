@@ -23,7 +23,7 @@ enum ContributeText {
     static let reasons = [
         "user_stop": "you tapped Stop", "background_expired": "iOS ended the time it gave FreeAppStore",
         "unplugged": "the phone was unplugged", "opted_out": "the app was turned off", "lease_expired": "the job's time ran out",
-        "stopped": "stopped",
+        "stopped": "stopped", "language": "this phone can't speak the set's language in that voice",
     ]
 }
 
