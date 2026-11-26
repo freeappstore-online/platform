@@ -1,5 +1,7 @@
 package online.freeappstore.companion
 
+import org.json.JSONObject
+
 data class ConnectedApp(
     val id: String, val name: String, val purpose: String, val disclosure: String,
     val version: String, val grantId: String?, val consentAt: Long = 0,
@@ -25,6 +27,36 @@ data class ShareEvent(val id: Long, val at: Long, val appId: String?, val kind: 
 }
 
 /** The device connection's lifetime (#638). Pure, so the rules are unit-tested. */
+/** The signed-in account and this device, from `GET /native/me` (#829). Kept on the phone only. */
+data class Profile(
+    val id: String, val name: String, val login: String?, val provider: String, val avatarUrl: String?, val email: String?,
+    val roles: List<String>, val appCount: Int, val deviceLabel: String, val pairedAt: Long, val expiresAt: Long,
+) {
+    val providerName: String get() = mapOf("github" to "GitHub", "google" to "Google", "apple" to "Apple", "email" to "Email")[provider]
+        ?: provider.replaceFirstChar { it.uppercase() }
+    /** `@login` for GitHub, otherwise the provider's name. */
+    val account: String get() = login?.let { "@$it" } ?: providerName
+    val creator: Boolean get() = "creator" in roles
+    companion object {
+        const val CONSOLE_URL = "https://freeappstore.online/app/"
+        /** `{ user, device }` as `/native/me` sends them; null when there is no user. */
+        fun parse(json: String): Profile? {
+            val me = try { JSONObject(json) } catch (_: Exception) { return null }
+            val user = me.optJSONObject("user") ?: return null
+            val device = me.optJSONObject("device") ?: JSONObject()
+            fun text(o: JSONObject, key: String) = o.optString(key).takeIf { !o.isNull(key) && it.isNotBlank() }
+            val roles = user.optJSONArray("roles")
+            return Profile(
+                id = user.optString("id"), name = user.optString("name"), login = text(user, "login"),
+                provider = text(user, "provider") ?: "github", avatarUrl = text(user, "avatarUrl")?.takeIf { it.startsWith("https://") },
+                email = text(user, "email"), roles = roles?.let { r -> (0 until r.length()).map { r.getString(it) } } ?: listOf("user"),
+                appCount = user.optInt("appCount"), deviceLabel = device.optString("label"),
+                pairedAt = device.optLong("createdAt"), expiresAt = device.optLong("expiresAt"),
+            )
+        }
+    }
+}
+
 object DeviceConnection {
     /** Only a 401 means the credential expired or was revoked. Network errors, 429 and 5xx never do. */
     fun expired(e: Throwable): Boolean = e is ApiFailure && e.status == 401

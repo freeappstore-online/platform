@@ -70,6 +70,10 @@ class LocalStore(private val context: Context) : SQLiteOpenHelper(context, "fas-
     var userName: String
         get() = prefs.getString("userName", "") ?: ""
         set(value) { prefs.edit().putString("userName", value).apply() }
+    /** `{ user, device }` from the last `/native/me` (#829), "" until known. */
+    var profile: String
+        get() = prefs.getString("profile", "") ?: ""
+        set(value) { prefs.edit().putString("profile", value).apply() }
     /** The last seen location permission, so only a change is logged. Empty until first seen. */
     var permissionState: String
         get() = prefs.getString("permission", "") ?: ""

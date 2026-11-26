@@ -62,6 +62,7 @@ class CompanionRepository(val local: LocalStore, private val secure: SecureStore
         check(me.getJSONObject("user").getString("id") == secure.read().getString("userId")) { "Account changed. Reconnect this device." }
         local.userName = me.getJSONObject("user").getString("name")
         local.deviceExpiresAt = me.optJSONObject("device")?.optLong("expiresAt") ?: 0
+        local.profile = JSONObject().put("user", me.getJSONObject("user")).put("device", me.optJSONObject("device") ?: JSONObject()).toString()
         local.saveApps(me.getJSONArray("apps"))
     }
     suspend fun enable(app: ConnectedApp) = withContext(Dispatchers.IO) { operations.withLock {

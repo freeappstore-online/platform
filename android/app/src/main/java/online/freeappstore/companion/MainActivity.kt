@@ -61,6 +61,8 @@ data class CompanionState(
     val contributions: List<Contribution> = emptyList(), val contributedToday: Map<String, Int> = emptyMap(),
     /** Why Contribute is paused (#820): plugged in (`EXTRA_PLUGGED`) and on an unmetered network. */
     val plugged: Boolean = true, val unmetered: Boolean = true,
+    /** The signed-in account and this phone's connection (#829), null until `/native/me` answered. */
+    val profile: Profile? = null,
 )
 
 data class CatalogueState(val apps: List<CatalogueApp> = emptyList(), val stale: Boolean = false, val loading: Boolean = false)
@@ -247,7 +249,8 @@ class MainActivity : ComponentActivity() {
             contributing = ContributeWorker.status, modelDownloaded = ContributeWorker.downloaded, contributions = local.contributions(),
             contributedToday = local.contributeApps().associateWith { local.contributedSince(it, SharingTimeline.today().first) },
             plugged = (registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0,
-            unmetered = network?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true)
+            unmetered = network?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true,
+            profile = Profile.parse(local.profile))
         if (state.expired && LocationService.running) stopService(Intent(this, LocationService::class.java))
     }
     /** Foreground only: no background budget is spent on the catalogue. */
@@ -344,7 +347,7 @@ internal fun FasScreen(
     }) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when (tab) {
-                Tab.STORE -> StoreScreen(state, catalogue, actions, askConsent)
+                Tab.STORE -> StoreScreen(state, catalogue, actions, askConsent) { tab = Tab.SETTINGS }
                 Tab.SHARING -> when (val page = sharingPage) {
                     SharingPage.Dashboard -> {
                         val tracks = rememberTracks(granted, state, SharingTimeline.today(state.now), actions.loadTracks)
@@ -391,7 +394,7 @@ internal fun StatusMessages(state: CompanionState) {
 
 internal const val DELETE_ACCOUNT_URL = "https://freeappstore.online/app/settings?delete-account=1"
 
-/** Account, permissions, history and About. */
+/** Profile, permissions, history and About. Sign out revokes this phone's device credential. */
 @Composable
 private fun SettingsScreen(
     state: CompanionState, connect: () -> Unit, permissions: () -> Unit, disconnect: () -> Unit, privacy: () -> Unit, account: () -> Unit,
@@ -405,7 +408,7 @@ private fun SettingsScreen(
         StatusMessages(state)
         if (state.expired) ExpiredCard(state, reconnect)
         if (state.signedIn || state.expired) {
-            Text(state.name, style = MaterialTheme.typography.titleMedium)
+            state.profile?.let { ProfileCard(it, openUrl) } ?: Text(state.name, style = MaterialTheme.typography.titleMedium)
             state.expiresInDays?.let { days ->
                 Text("Connection renews when you reconnect — expires in $days day${if (days == 1) "" else "s"}", style = MaterialTheme.typography.bodySmall)
                 TextButton(onClick = reconnect, enabled = !state.busy) { Text("Reconnect") }
@@ -421,7 +424,7 @@ private fun SettingsScreen(
             // Play account deletion (#653): the console's delete flow, after sign-in on the web.
             TextButton(onClick = { openUrl(DELETE_ACCOUNT_URL) }) { Text("Delete account", color = MaterialTheme.colorScheme.error) }
             TextButton(onClick = { clearPrompt = true }) { Text("Clear sharing history") }
-            TextButton(onClick = { disconnectPrompt = true }, enabled = !state.busy) { Text("Disconnect this phone") }
+            TextButton(onClick = { disconnectPrompt = true }, enabled = !state.busy) { Text("Sign out") }
         } else Button(onClick = connect, enabled = !state.busy) { Text("Sign in to FreeAppStore") }
         Text("About", style = MaterialTheme.typography.titleLarge)
         Card(Modifier.fillMaxWidth()) {
@@ -435,9 +438,9 @@ private fun SettingsScreen(
         Spacer(Modifier.height(24.dp))
     }
     if (disconnectPrompt) AlertDialog(onDismissRequest = { disconnectPrompt = false },
-        title = { Text("Disconnect this phone?") },
+        title = { Text("Sign out of this phone?") },
         text = { Text("Stops location sharing and deletes this phone’s pending updates, its sharing history and platform location copies. Saved runs in your apps are separate. An internet connection is needed to finish.") },
-        confirmButton = { TextButton(onClick = { disconnectPrompt = false; disconnect() }) { Text("Disconnect") } },
+        confirmButton = { TextButton(onClick = { disconnectPrompt = false; disconnect() }) { Text("Sign out") } },
         dismissButton = { TextButton(onClick = { disconnectPrompt = false }) { Text("Cancel") } })
     if (clearPrompt) AlertDialog(onDismissRequest = { clearPrompt = false },
         title = { Text("Clear sharing history?") },

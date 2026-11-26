@@ -343,9 +343,25 @@ class CompanionTest {
     @Test fun settingsOffersDeleteAccountBesideDisconnect() {
         val opened = mutableListOf<String>()
         screen(CompanionState(signedIn = true, name = "Alex"), CompanionActions(open = { opened += it }), tab = Tab.SETTINGS)
-        compose.onNodeWithText("Disconnect this phone").assertExists()
+        compose.onNodeWithText("Sign out").assertExists()
         compose.onNodeWithText("Delete account").performScrollTo().performClick()
         assertEquals(listOf("https://freeappstore.online/app/settings?delete-account=1"), opened)
+    }
+    // The signed-in profile (#829).
+    @Test fun settingsShowTheProfileAndTheStoreItsSummary() {
+        val opened = mutableListOf<String>()
+        val profile = Profile("gh:1", "Alex", "alex", "github", null, "a@example.com", listOf("user", "creator"), 3, "Google Pixel 8", 1L, 2L)
+        screen(CompanionState(signedIn = true, name = "Alex", profile = profile), CompanionActions(open = { opened += it }), tab = Tab.SETTINGS)
+        compose.onNodeWithText("@alex").assertExists()
+        compose.onNodeWithText("gh:1").assertExists()
+        compose.onNodeWithText("a@example.com").assertExists()
+        compose.onNodeWithText("user, creator").assertExists()
+        compose.onNodeWithText("Google Pixel 8").performScrollTo().assertExists()
+        compose.onNodeWithText("Open the console").performScrollTo().performClick()
+        assertEquals(listOf("https://freeappstore.online/app/"), opened)
+        compose.onNodeWithText("Store").performClick()
+        compose.onNodeWithTag("profile-summary").assertIsDisplayed().performClick()
+        compose.onNodeWithText("gh:1").assertExists()
     }
     @Test fun permissionCopyUsesTheSystemsOptionLabel() {
         screen(CompanionState(signedIn = true, permission = "always", backgroundOption = "Allow always"), tab = Tab.SETTINGS)

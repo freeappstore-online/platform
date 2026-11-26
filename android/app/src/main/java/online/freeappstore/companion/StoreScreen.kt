@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
  * Browse only, no WebView: Open hands `<appUrl>?install=1` to the browser, where the host offers Install (#621).
  */
 @Composable
-internal fun StoreScreen(state: CompanionState, catalogue: CatalogueState, actions: CompanionActions, askConsent: (ConnectedApp) -> Unit) {
+internal fun StoreScreen(state: CompanionState, catalogue: CatalogueState, actions: CompanionActions, askConsent: (ConnectedApp) -> Unit, showProfile: () -> Unit = {}) {
     var query by rememberSaveable { mutableStateOf("") }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     val openApp = { app: CatalogueApp -> actions.open(Catalogue.installUrl(app.appUrl)) }
@@ -45,7 +45,10 @@ internal fun StoreScreen(state: CompanionState, catalogue: CatalogueState, actio
     LazyColumn(Modifier.fillMaxSize().testTag("store"), contentPadding = PaddingValues(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Store", style = MaterialTheme.typography.headlineLarge)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Store", Modifier.weight(1f), style = MaterialTheme.typography.headlineLarge)
+                    state.profile?.takeIf { state.signedIn }?.let { ProfileSummary(it, showProfile) }
+                }
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth(), label = { Text("Search apps") }, singleLine = true)
             }
         }
