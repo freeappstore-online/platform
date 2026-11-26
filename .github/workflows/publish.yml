@@ -2,8 +2,9 @@ name: Publish to npm
 
 # Triggers on any push to main that touches the publishable packages.
 # Auto-bumps patch version when changes exist but no manual bump was made.
-# Manual bumps (minor/major) are respected — auto-bump only kicks in
-# when local version == npm version and the package has changes in this push.
+# Manual bumps (minor/major) are respected — auto-bump only kicks in when the
+# local version is not ahead of npm and the package source differs from the
+# commit npm's version was published from (scripts/release-changes.sh).
 #
 # Auth: OIDC trusted publishing — no stored NPM_TOKEN needed.
 # Each @freeappstore/* package is linked to this repo on npmjs.com.
@@ -21,6 +22,7 @@ on:
       - 'scripts/template-release.mjs'
       - 'scripts/accept-starter-release.sh'
       - 'scripts/prepare-sdk-release.sh'
+      - 'scripts/release-changes.sh'
   workflow_dispatch: # manual trigger — publishes all packages, unless accept_only
     inputs:
       accept_only:
@@ -89,6 +91,7 @@ jobs:
           fi
           BUMPED=""
           FAILED=""
+          source scripts/release-changes.sh
 
           # Keep in-source version constants in lockstep with package.json so
           # version.test.ts can't drift on release (the SDK telemetry version in
@@ -123,33 +126,16 @@ jobs:
               fi
               echo "::endgroup::"
 
-            elif [ "$LOCAL_VER" != "$NPM_VER" ] && [ "$IS_AHEAD" = "false" ]; then
-              # Local is behind npm (missed bump commit) — heal by syncing local to npm
-              echo "$PKG_NAME: healing $LOCAL_VER → $NPM_VER (syncing to npm)"
-              node -e "
-                const fs = require('fs');
-                const pkg = JSON.parse(fs.readFileSync('./packages/$PKG/package.json', 'utf8'));
-                pkg.version = '$NPM_VER';
-                fs.writeFileSync('./packages/$PKG/package.json', JSON.stringify(pkg, null, 2) + '\n');
-              "
-              sync_source_version "$PKG" "$NPM_VER"
-              BUMPED="$BUMPED $PKG_NAME@$NPM_VER"
-
             else
-              # Version matches npm — auto-bump only if this package changed since
-              # its version last changed (auto-bump, manual bump or heal), i.e. since
-              # it was last published. Not since this push's `before`: a queued run
-              # cancelled by the concurrency group would drop its changes (#778).
-              HAS_CHANGES=true
-              LAST_RELEASE=$(git log -G'"version"' -1 --format=%H -- "packages/$PKG/package.json")
-              if [ -n "$LAST_RELEASE" ] && git diff --quiet "$LAST_RELEASE" HEAD -- "packages/$PKG/"; then
-                HAS_CHANGES=false
-              fi
-
-              if [ "$HAS_CHANGES" = "true" ]; then
-                IFS='.' read -r MAJOR MINOR PATCH <<< "$LOCAL_VER"
+              # Version is at (or behind) npm. Release whenever the package source
+              # differs from the commit npm's current version was packed from (its
+              # provenance), never from where bump commits sit on main: a version
+              # sync or a bump rebased over newer changes is not a release (#780, #803).
+              PUBLISHED_SRC=$(published_source_sha "$PKG_NAME" "$NPM_VER")
+              if changed_since_published "packages/$PKG" "$PUBLISHED_SRC"; then
+                IFS='.' read -r MAJOR MINOR PATCH <<< "$NPM_VER"
                 NEW_VER="$MAJOR.$MINOR.$((PATCH + 1))"
-                echo "::group::$PKG_NAME: auto-bump $LOCAL_VER → $NEW_VER"
+                echo "::group::$PKG_NAME: auto-bump $NPM_VER → $NEW_VER (changed since ${PUBLISHED_SRC:-unknown source})"
                 node -e "
                   const fs = require('fs');
                   const pkg = JSON.parse(fs.readFileSync('./packages/$PKG/package.json', 'utf8'));
@@ -164,8 +150,19 @@ jobs:
                   FAILED="$FAILED $PKG_NAME"
                 fi
                 echo "::endgroup::"
+              elif [ "$LOCAL_VER" != "$NPM_VER" ]; then
+                # Local is behind npm but npm already has this source: sync the number only
+                echo "$PKG_NAME: healing $LOCAL_VER → $NPM_VER (npm already has this source)"
+                node -e "
+                  const fs = require('fs');
+                  const pkg = JSON.parse(fs.readFileSync('./packages/$PKG/package.json', 'utf8'));
+                  pkg.version = '$NPM_VER';
+                  fs.writeFileSync('./packages/$PKG/package.json', JSON.stringify(pkg, null, 2) + '\n');
+                "
+                sync_source_version "$PKG" "$NPM_VER"
+                BUMPED="$BUMPED $PKG_NAME@$NPM_VER"
               else
-                echo "$PKG_NAME: no changes, skipping"
+                echo "$PKG_NAME: no changes since $PUBLISHED_SRC, skipping"
               fi
             fi
           done
