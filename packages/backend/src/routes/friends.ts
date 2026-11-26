@@ -351,9 +351,13 @@ friendsRoutes.patch('/friends/:userId', async (c) => {
     if (!row || row.status !== 'pending') throw new HttpError(404, 'no pending request');
     if (row.initiator === me.id) throw new HttpError(400, 'use DELETE to cancel your own request');
 
-    await c.env.DB.prepare('DELETE FROM friendships WHERE user_a = ? AND user_b = ?')
+    // Only the pending row: a block made since the read must survive (#773).
+    const del = await c.env.DB.prepare(
+      "DELETE FROM friendships WHERE user_a = ? AND user_b = ? AND status = 'pending'",
+    )
       .bind(a, b)
       .run();
+    if (!del.meta.changes) throw new HttpError(409, 'friendship changed, try again');
     // Set cooldown so the declined user can't immediately re-request
     const declinedUser = row.initiator;
     requestCooldownMap.set(`${declinedUser}:${me.id}`, now + REQUEST_COOLDOWN_MS);
@@ -425,9 +429,10 @@ friendsRoutes.delete('/friends/:userId', async (c) => {
     .first<{ status: string; initiator: string; blocker: string | null }>();
   if (!row) throw new HttpError(404, 'no friendship found');
 
-  // Blocked — only the blocker can unblock (delete)
-  if (row.status === 'blocked') {
-    if (row.blocker !== me.id) throw new HttpError(403, 'only the blocker can unblock');
+  // Blocked — only the blocker can unblock (delete). The blocked party gets
+  // the same answer as no row, as /check and /search hide the block (#773).
+  if (row.status === 'blocked' && row.blocker !== me.id) {
+    throw new HttpError(404, 'no friendship found');
   }
 
   // Pending — only the initiator can cancel
@@ -435,9 +440,13 @@ friendsRoutes.delete('/friends/:userId', async (c) => {
     throw new HttpError(400, 'use PATCH with decline to reject an incoming request');
   }
 
-  await c.env.DB.prepare('DELETE FROM friendships WHERE user_a = ? AND user_b = ?')
-    .bind(a, b)
+  // Only the status read above: a concurrent block must not be erased (#773).
+  const del = await c.env.DB.prepare(
+    'DELETE FROM friendships WHERE user_a = ? AND user_b = ? AND status = ?',
+  )
+    .bind(a, b, row.status)
     .run();
+  if (!del.meta.changes) throw new HttpError(409, 'friendship changed, try again');
 
   if (row.status === 'accepted') {
     c.executionCtx.waitUntil(

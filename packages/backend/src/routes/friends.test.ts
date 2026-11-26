@@ -763,7 +763,7 @@ describe('friends routes', () => {
     expect(res.status).toBe(200);
   });
 
-  it('DELETE /v1/friends/:userId returns 403 when non-blocker tries to unblock', async () => {
+  it('DELETE /v1/friends/:userId answers 404 to the blocked party, like no row (#773)', async () => {
     const db = {
       prepare: (sql: string) => {
         const trimmed = sql.replace(/\s+/g, ' ').trim();
@@ -789,7 +789,8 @@ describe('friends routes', () => {
       },
       env(db),
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'no friendship found' });
   });
 
   it('DELETE /v1/friends/:userId returns 404 when no friendship exists', async () => {
@@ -1161,5 +1162,70 @@ describe.skipIf(!hasSqlite)('friend webhooks do not hold the request (#764)', ()
     release();
     await Promise.all(background);
     expect(db.prepare('SELECT status FROM webhook_deliveries').get()).toEqual({ status: 200 });
+  });
+});
+
+describe.skipIf(!hasSqlite)('decline/remove keep a block made after the read (#773)', () => {
+  afterEach(() => mutationRateMap.clear());
+
+  // The other party blocks right after the route reads the row.
+  function setup(status: 'pending' | 'accepted') {
+    const { db, d1 } = sqliteD1();
+    for (const [id, githubId, login] of [
+      ['gh:1', 1, 'alice'],
+      ['gh:2', 2, 'bob'],
+    ] as const)
+      db.prepare(
+        'INSERT INTO users (id, github_id, github_login, avatar_url, created_at) VALUES (?, ?, ?, NULL, 0)',
+      ).run(id, githubId, login);
+    const now = Date.now();
+    db.prepare(
+      "INSERT INTO friendships (user_a, user_b, status, initiator, created_at, updated_at) VALUES ('gh:1', 'gh:2', ?, 'gh:1', ?, ?)",
+    ).run(status, now, now);
+    const racing = {
+      prepare(sql: string) {
+        if (!sql.startsWith('SELECT status, initiator')) return d1.prepare(sql);
+        return {
+          bind: (...args: unknown[]) => ({
+            first: async () => {
+              const read = await d1
+                .prepare(sql)
+                .bind(...args)
+                .first();
+              db.prepare("UPDATE friendships SET status = 'blocked', blocker = 'gh:1'").run();
+              return read;
+            },
+          }),
+        };
+      },
+    } as unknown as D1Database;
+    const headers = async () => ({
+      Authorization: `Bearer ${await signSession('gh:2', SIGNING_KEY, { aud: 'console' })}`,
+      'Content-Type': 'application/json',
+    });
+    const row = () => db.prepare('SELECT status, blocker FROM friendships').get();
+    return { env: { DB: racing, SESSION_SIGNING_KEY: SIGNING_KEY }, headers, row };
+  }
+
+  it('decline answers 409 and the block stays', async () => {
+    const { env, headers, row } = setup('pending');
+    const res = await request(
+      '/v1/friends/gh:1',
+      { method: 'PATCH', headers: await headers(), body: JSON.stringify({ action: 'decline' }) },
+      env,
+    );
+    expect(res.status).toBe(409);
+    expect(row()).toEqual({ status: 'blocked', blocker: 'gh:1' });
+  });
+
+  it('remove answers 409 and the block stays', async () => {
+    const { env, headers, row } = setup('accepted');
+    const res = await request(
+      '/v1/friends/gh:1',
+      { method: 'DELETE', headers: await headers() },
+      env,
+    );
+    expect(res.status).toBe(409);
+    expect(row()).toEqual({ status: 'blocked', blocker: 'gh:1' });
   });
 });
