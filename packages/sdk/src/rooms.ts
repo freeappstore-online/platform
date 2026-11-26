@@ -199,9 +199,21 @@ export class Room {
             : { body: JSON.stringify({ private: this.markPrivate }) }),
         },
       );
+      if (this.explicitlyClosed) return;
+      if (res.status === 401) {
+        // The session is dead: drop it (so the UI signs out) and stop (#743).
+        this.auth.handleUnauthorized(token);
+        this.setState('closed');
+        return;
+      }
       if (res.status === 403) {
         // A refusal does not change by retrying.
         this._denied = true;
+        this.setState('error');
+        return;
+      }
+      if (res.status === 400 || res.status === 404) {
+        // A bad room id or an unknown app: retrying cannot fix it (#743).
         this.setState('error');
         return;
       }

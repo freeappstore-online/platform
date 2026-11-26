@@ -449,6 +449,42 @@ describe('private rooms (#468)', () => {
     expect(room.isReconnecting).toBe(false);
   });
 
+  it('a 401 drops the session and stops, without retrying (#743)', async () => {
+    vi.useFakeTimers();
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async () => ({ ok: false, status: 401 }));
+    const handleUnauthorized = vi.fn();
+    const auth = { token: 'tok', handleUnauthorized } as unknown as Auth;
+    const room = new Rooms('demo', 'https://api.example', auth).join('lobby');
+    await flush();
+    expect(handleUnauthorized).toHaveBeenCalledWith('tok');
+    expect(room.state).toBe('closed');
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([400, 404])('a %i ticket answer is final (#743)', async (status) => {
+    vi.useFakeTimers();
+    (globalThis as Record<string, unknown>).fetch = vi.fn(async () => ({ ok: false, status }));
+    const room = await newRoom();
+    expect(room.state).toBe('error');
+    expect(room.isReconnecting).toBe(false);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('a 403 that lands after close() leaves the room closed (#743)', async () => {
+    let answer: (v: unknown) => void = () => {};
+    (globalThis as Record<string, unknown>).fetch = vi.fn(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const room = await newRoom();
+    room.close();
+    answer({ ok: false, status: 403 });
+    await flush();
+    expect(room.state).toBe('closed');
+    expect(room.denied).toBe(false);
+  });
+
   it('other ticket failures still retry', async () => {
     vi.useFakeTimers();
     (globalThis as Record<string, unknown>).fetch = vi.fn(async () => ({
