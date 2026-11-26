@@ -534,10 +534,9 @@ class ContributeTest {
     }
     /** #806: Run now or a settings change while a run is working never replaces or reschedules it. */
     @Test fun aRunningContributionIsNeverReplaced() {
-        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.KEEP to androidx.work.ExistingWorkPolicy.KEEP, ContributeWorker.policies(now = true, running = true))
-        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.KEEP to androidx.work.ExistingWorkPolicy.KEEP, ContributeWorker.policies(now = false, running = true))
-        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.UPDATE to androidx.work.ExistingWorkPolicy.REPLACE, ContributeWorker.policies(now = true, running = false))
-        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.KEEP, ContributeWorker.policies(now = false, running = false).first)
+        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.KEEP to androidx.work.ExistingWorkPolicy.KEEP, ContributeWorker.policies(running = true))
+        // #828: otherwise the hourly work takes the current constraints, so an update's network constraint applies.
+        assertEquals(androidx.work.ExistingPeriodicWorkPolicy.UPDATE to androidx.work.ExistingWorkPolicy.REPLACE, ContributeWorker.policies(running = false))
     }
     /** #806: the network is checked before each claim, not as a WorkManager constraint that stops a job part-way. */
     @Test fun networkIsCheckedBeforeEachClaimOnly() {
@@ -553,6 +552,21 @@ class ContributeTest {
         val n = Contributor(GenerationClient(api) { "ndev_test" }, log, dropsDuringTheJob, encoder, dir, now = { now }).run(books, { true }, mayClaim = { online })
         assertEquals("the job in hand finishes and uploads; no second claim", 1, n)
         assertEquals(1, api.claims.size)
+    }
+    /** #828: a run Android kept out of the foreground stops claiming well before a plain job's ten minutes are up. */
+    @Test fun aPlainJobClaimsOnlyEarlyInTheRun() {
+        assertTrue(ContributeWorker.withinBudget(foreground = false, elapsedMs = 0))
+        assertFalse(ContributeWorker.withinBudget(foreground = false, elapsedMs = ContributeWorker.PLAIN_CLAIM_MS))
+        assertTrue("foreground", ContributeWorker.withinBudget(foreground = true, elapsedMs = 60 * 60_000L))
+    }
+    /** #828: the daily limit's 429 (no Retry-After) at the claim ends the run without generating anything. */
+    @Test fun theDailyLimitAtTheClaimEndsTheRun() {
+        api.jobs += job("j1")
+        api.claimFailures += ApiFailure(429, "daily contribution limit reached; try tomorrow")
+        val failure = runCatching { contributor().run(books, { true }) }.exceptionOrNull()
+        assertEquals(429, (failure as ApiFailure).status)
+        assertTrue("not retried", sleeps.isEmpty())
+        assertTrue(synth.spoken.isEmpty()); assertEquals(0, api.uploadAttempts)
     }
     @Test fun downloadProgressShowsBytesAndPercent() {
         assertEquals("0 of 349 MB (0%)", KokoroModel.progress(0))
