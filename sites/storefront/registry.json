@@ -3498,8 +3498,7 @@
       "developer": "FreeAppStore",
       "discoveryStatus": "live",
       "discoveryRequestedAt": "2026-11-26T02:06:38.478Z",
-      "creatorGithub": "serge-ivo",
-      "discoveryDeliveryPending": "6d576bc5-b180-4d92-b921-cbe878a069e0"
+      "creatorGithub": "serge-ivo"
     },
     {
       "id": "payback",
