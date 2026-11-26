@@ -21,6 +21,9 @@ export function WebhooksManager({ appId, getToken }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showAdd, setShowAdd] = useState(false)
+  // Held here, not in the form: the one-time secret must survive the list
+  // reload and the form closing (#756).
+  const [newSecret, setNewSecret] = useState('')
   const [testing, setTesting] = useState<string | null>(null)
   const [testResult, setTestResult] = useState<{ id: string; status: number } | null>(null)
 
@@ -103,12 +106,14 @@ export function WebhooksManager({ appId, getToken }: Props) {
         Receive HTTP POST when events fire. Each delivery is signed with HMAC-SHA256 (X-FAS-Signature header).
       </p>
 
+      {newSecret && <NewWebhookSecret secret={newSecret} onDone={() => setNewSecret('')} />}
+
       {showAdd && (
         <AddWebhookForm
           appId={appId}
           events={supportedEvents}
           headers={headers}
-          onDone={() => { setShowAdd(false); load() }}
+          onCreated={(secret) => { setShowAdd(false); setNewSecret(secret); load() }}
           onError={setError}
         />
       )}
@@ -157,17 +162,34 @@ export function WebhooksManager({ appId, getToken }: Props) {
   )
 }
 
-function AddWebhookForm({ appId, events, headers, onDone, onError }: {
+export function NewWebhookSecret({ secret, onDone }: { secret: string; onDone: () => void }) {
+  return (
+    <div className="mb-3 p-3 rounded-xl border border-[var(--success)] bg-[color-mix(in_srgb,var(--success)_5%,transparent)]">
+      <p className="text-sm text-[var(--ink)] font-semibold mb-1">Webhook created!</p>
+      <p className="text-xs text-[var(--muted)] mb-2">Save this signing secret. It won't be shown again.</p>
+      <code className="block text-xs font-mono bg-[var(--paper)] border border-[var(--line)] rounded p-2 break-all select-all">
+        {secret}
+      </code>
+      <button
+        onClick={onDone}
+        className="mt-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white min-h-[44px]"
+      >
+        Done
+      </button>
+    </div>
+  )
+}
+
+function AddWebhookForm({ appId, events, headers, onCreated, onError }: {
   appId: string
   events: string[]
   headers: () => Record<string, string>
-  onDone: () => void
+  onCreated: (secret: string) => void
   onError: (msg: string) => void
 }) {
   const [event, setEvent] = useState(events[0] ?? '')
   const [url, setUrl] = useState('https://')
   const [saving, setSaving] = useState(false)
-  const [secret, setSecret] = useState('')
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -181,7 +203,7 @@ function AddWebhookForm({ appId, events, headers, onDone, onError }: {
       })
       const data = await res.json() as { id?: string; secret?: string; ok?: boolean; error?: string }
       if (data.secret) {
-        setSecret(data.secret)
+        onCreated(data.secret)
       } else {
         onError(data.error ?? `Failed (${res.status})`)
       }
@@ -190,24 +212,6 @@ function AddWebhookForm({ appId, events, headers, onDone, onError }: {
     } finally {
       setSaving(false)
     }
-  }
-
-  if (secret) {
-    return (
-      <div className="mb-3 p-3 rounded-xl border border-[var(--success)] bg-[color-mix(in_srgb,var(--success)_5%,transparent)]">
-        <p className="text-sm text-[var(--ink)] font-semibold mb-1">Webhook created!</p>
-        <p className="text-xs text-[var(--muted)] mb-2">Save this signing secret. It won't be shown again.</p>
-        <code className="block text-xs font-mono bg-[var(--paper)] border border-[var(--line)] rounded p-2 break-all select-all">
-          {secret}
-        </code>
-        <button
-          onClick={() => { setSecret(''); onDone() }}
-          className="mt-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white min-h-[44px]"
-        >
-          Done
-        </button>
-      </div>
-    )
   }
 
   return (
