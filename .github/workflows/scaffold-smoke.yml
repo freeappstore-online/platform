@@ -193,9 +193,18 @@ jobs:
           node "$GITHUB_WORKSPACE/packages/${{ matrix.cli }}/dist/index.js" check
 
       - name: Install browser
-        timeout-minutes: 10
-        # A stalled apt/CDN mirror must fail visibly; rerun this job on a fresh runner.
-        run: pnpm --filter @freeappstore/e2e exec playwright install --with-deps chromium webkit
+        timeout-minutes: 20
+        # A stalled apt/CDN mirror must fail visibly (#415), but a slow one gets a second
+        # bounded attempt that resumes from apt's download cache (#781).
+        run: |
+          for attempt in 1 2; do
+            if timeout 9m pnpm --filter @freeappstore/e2e exec playwright install --with-deps chromium webkit; then exit 0; fi
+            echo "::warning::Browser install attempt $attempt did not finish"
+            # timeout signals only pnpm; stop an orphaned apt-get so the retry can take the lock.
+            sudo pkill -x apt-get || true
+            sudo dpkg --configure -a || true
+          done
+          exit 1
 
       - name: Validate deployment artifact and identity
         working-directory: /tmp/scaffold-smoke
