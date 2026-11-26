@@ -133,6 +133,7 @@
 
     // Expose so category filter and search can re-trigger sort after reordering.
     window.__fasActiveSort = function () { return activeSort; };
+    window.__fasApplySort = applySort;
 
     // Apply sort on load — honour ?sort= URL param, default to newest.
     try {
@@ -243,13 +244,10 @@
           applyVoteCounts(data.votes, mutationSnapshot);
           applyVoteStates(data.voted, mutationSnapshot);
           // If the current sort is 'popular', re-apply so counts are reflected.
+          // Call the sort directly: a synthetic click would also reach the
+          // pinned-toolbar handler and scroll the list back to the top (#770).
           if (typeof window.__fasActiveSort === 'function' && window.__fasActiveSort() === 'popular') {
-            // Trigger a re-sort by simulating the sort button click sequence.
-            var sortBar = document.getElementById('sortBar');
-            if (sortBar) {
-              var btn = sortBar.querySelector('[data-sort="popular"]');
-              if (btn) btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-            }
+            window.__fasApplySort('popular');
           }
         })
         .catch(function () {
