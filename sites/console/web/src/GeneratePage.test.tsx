@@ -2,8 +2,9 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import type { FreeAppStore, GenerationOpenApp } from '@freeappstore/sdk'
+import { GenerationError, type FreeAppStore, type GenerationOpenApp } from '@freeappstore/sdk'
 import * as kokoro from '@freeappstore/sdk/generation-kokoro'
+import { endReason } from './generate'
 import { GeneratePage } from './GeneratePage'
 
 const load = vi.fn(async (onLoading?: (p: number) => void) => { onLoading?.(0.5) })
@@ -164,6 +165,50 @@ it('generates for the opted-in apps’ runnable sets, shows progress, stops, and
   const runs = JSON.parse(localStorage.getItem('fas:generate-runs')!)
   expect(runs).toMatchObject([{ appId: 'books', jobId: 'j3', key: 'alice/3', outcome: 'stopped', text: 'Once upon a time.' }])
   finish()
+})
+
+it('records what each attempt measured, sends it, and shows it in Activity (#827)', async () => {
+  localStorage.setItem('fas:generate-apps', JSON.stringify(['books']))
+  localStorage.setItem('fas:generate-model', '1')
+  vi.mocked(kokoro.isKokoroDownloaded).mockResolvedValue(true)
+  submissions = []
+  vi.mocked(kokoro.contributeKokoroApps).mockImplementation(async (opts) => {
+    const job = { id: 'j4', setId: 's1', key: 'alice/4', input: { text: 'Hello there.' } } as never
+    opts.onEvent?.({ type: 'claimed', job }, 'books')
+    const file = new Blob([new Uint8Array(2048)], { type: 'audio/mp4' })
+    const result = { file, meta: { segments: [[0, 12, 0, 2]] as [number, number, number, number][] }, timing: { loadMs: 800, synthMs: 1000, encodeMs: 30 } }
+    opts.onEvent?.({ type: 'generated', job, result }, 'books')
+    opts.onEvent?.({ type: 'submitted', job, submitted: 1 }, 'books')
+    return { submitted: 1, stopped: 'no-work' }
+  })
+  await render()
+  await click(button('Start')!)
+  const [run] = JSON.parse(localStorage.getItem('fas:generate-runs')!)
+  expect(run.record).toMatchObject({
+    runner: 'browser', reason: 'submitted', loadMs: 800, synthMs: 1000, encodeMs: 30, bytes: 2048, durationMs: 2000, rtf: 0.5,
+    background: false, wallMs: expect.any(Number), uploadMs: expect.any(Number),
+  })
+  const sent = vi.mocked(fetch).mock.calls.find(([url]) => url === `${api}/apps/books/generation/events`)
+  expect(JSON.parse(sent![1]!.body as string).events).toMatchObject([{ jobId: 'j4', runner: 'browser', reason: 'submitted', synthMs: 1000 }])
+
+  await tab('Activity')
+  await click(button('Uploaded')!)
+  expect(document.body.textContent).toContain('In this browser')
+  expect(document.body.textContent).toContain('load 800 ms · synthesis 1.0 s · encode 30 ms')
+  expect(document.body.textContent).toContain('0.50× real time')
+})
+
+it('maps how a job ended to the #813 reasons', () => {
+  expect(endReason('submitted', null)).toBe('submitted')
+  expect(endReason('skipped', 'audio exceeds maxBytes')).toBe('too_large')
+  expect(endReason('skipped', 'too slow to finish within the lease')).toBe('lease_cap')
+  expect(endReason('skipped', 'unknown voice zz')).toBe('unsupported')
+  expect(endReason('stopped', 'the lease ran out before it finished')).toBe('lease_cap')
+  expect(endReason('stopped', 'stopped before it finished')).toBe('user_stop')
+  expect(endReason('failed', 'x', new GenerationError('gone', 403))).toBe('lease_403')
+  expect(endReason('failed', 'x', new GenerationError('down', 503))).toBe('server_5xx')
+  expect(endReason('failed', 'Failed to fetch', new TypeError('Failed to fetch'))).toBe('network')
+  expect(endReason('failed', 'worker crashed')).toBe('other')
 })
 
 it('runs in one tab at a time: another tab holding the Web Lock blocks Start', async () => {

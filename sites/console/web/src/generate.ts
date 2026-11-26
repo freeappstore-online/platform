@@ -9,7 +9,15 @@
  * counts against freezing the tab (docs/community-generation.md#running-in-the-background).
  */
 import { useSyncExternalStore } from 'react'
-import { Generation, type FreeAppStore, type GenerationJob, type GenerationOpenApp } from '@freeappstore/sdk'
+import {
+  Generation,
+  GenerationError,
+  type FreeAppStore,
+  type GenerationAttemptRecord,
+  type GenerationEndReason,
+  type GenerationJob,
+  type GenerationOpenApp,
+} from '@freeappstore/sdk'
 import {
   contributeKokoroApps,
   deleteKokoroModel,
@@ -17,6 +25,7 @@ import {
   KokoroRunner,
   type KokoroDevice,
   type KokoroProgress,
+  type KokoroResult,
 } from '@freeappstore/sdk/generation-kokoro'
 import { API_URL, authHeaders } from './builder/lib/api'
 
@@ -77,6 +86,8 @@ export interface RunRecord {
   /** The input, cut at RUN_TEXT_CHARS; `chars` is its whole length. */
   text: string
   chars: number
+  /** What this browser measured (#827), as sent to the server; absent on records from before. */
+  record?: GenerationAttemptRecord
 }
 
 function loadRuns(): RunRecord[] {
@@ -138,11 +149,111 @@ function getRunner(encoder: AudioEncoderConfig, device: KokoroDevice): KokoroRun
   return runner
 }
 
-function record(appId: string, job: GenerationJob, at: number, outcome: RunRecord['outcome'], reason: string | null) {
-  const run: RunRecord = {
-    appId, setId: job.setId, jobId: job.id, key: job.key, at, outcome, reason, ms: Date.now() - at,
-    text: job.input.text.slice(0, RUN_TEXT_CHARS), chars: job.input.text.length,
+/** The job in hand: when it was claimed and what has been measured so far (#827). */
+interface Pending {
+  appId: string
+  generation: Generation
+  job: GenerationJob
+  at: number
+  start: Power
+  background: boolean
+  result: KokoroResult | null
+  /** When the audio was ready, so the rest until `submitted` is the upload. */
+  generatedAt: number | null
+}
+
+/** Battery where the browser tells it (Chromium's Battery Status API). */
+interface Power { battery?: number; charging?: boolean }
+async function power(): Promise<Power> {
+  const nav = navigator as Navigator & { getBattery?: () => Promise<{ level: number; charging: boolean }> }
+  const b = await nav.getBattery?.().catch(() => null)
+  return b ? { battery: Math.round(b.level * 100), charging: b.charging } : {}
+}
+
+/** The browser and OS this runs in, and the network type where the browser tells it. */
+function context(): Pick<GenerationAttemptRecord, 'os' | 'device' | 'network'> {
+  const nav = navigator as Navigator & {
+    userAgentData?: { platform: string; brands: { brand: string; version: string }[] }
+    connection?: { effectiveType?: string; type?: string }
   }
+  const brand = nav.userAgentData?.brands.find(b => !/not.?a.?brand|chromium/i.test(b.brand))
+  const network = nav.connection?.type ?? nav.connection?.effectiveType
+  return {
+    os: (nav.userAgentData?.platform || navigator.platform || '').slice(0, 300) || undefined,
+    device: (brand ? `${brand.brand} ${brand.version}` : navigator.userAgent).slice(0, 300),
+    ...(network && { network }),
+  }
+}
+
+/** The #813 reason for how a job ended here. */
+export function endReason(outcome: RunRecord['outcome'], reason: string | null, err?: unknown): GenerationEndReason {
+  if (outcome === 'submitted') return 'submitted'
+  if (err instanceof GenerationError)
+    return err.status === 403 ? 'lease_403' : err.status >= 500 ? 'server_5xx' : 'server_4xx'
+  if (err instanceof TypeError) return 'network'
+  const text = reason ?? ''
+  if (outcome === 'skipped') return /exceed/.test(text) ? 'too_large' : /lease/.test(text) ? 'lease_cap' : 'unsupported'
+  if (outcome === 'stopped') return /lease/.test(text) ? 'lease_cap' : 'user_stop'
+  return /network|fetch/i.test(text) ? 'network' : 'other'
+}
+
+const OUTPUTS = 'fas-generate-outputs'
+/** Generated audio (with its segments) this browser keeps for Activity, newest. */
+const KEEP_OUTPUTS = 20
+const outputUrl = (appId: string, jobId: string) => `https://outputs.invalid/${appId}/${jobId}`
+
+/** Keep the audio and segments for Activity's playback; the oldest beyond KEEP_OUTPUTS go. */
+async function keepOutput(appId: string, jobId: string, result: KokoroResult) {
+  try {
+    const cache = await caches.open(OUTPUTS)
+    await cache.put(outputUrl(appId, jobId), new Response(result.file, { headers: { 'Content-Type': result.file.type } }))
+    await cache.put(`${outputUrl(appId, jobId)}/meta`, new Response(JSON.stringify(result.meta)))
+    const keys = await cache.keys()
+    await Promise.all(keys.slice(0, Math.max(0, keys.length - 2 * KEEP_OUTPUTS)).map(k => cache.delete(k)))
+  } catch (e) {
+    console.warn('generation: output not kept', e)
+  }
+}
+
+/** A kept output as object URLs for `ArtifactPlayer` (revoke them when done), or null once pruned. */
+export async function keptOutput(appId: string, jobId: string): Promise<{ url: string; metaUrl: string } | null> {
+  try {
+    const cache = await caches.open(OUTPUTS)
+    const [audio, meta] = await Promise.all([cache.match(outputUrl(appId, jobId)), cache.match(`${outputUrl(appId, jobId)}/meta`)])
+    if (!audio || !meta) return null
+    return { url: URL.createObjectURL(await audio.blob()), metaUrl: URL.createObjectURL(await meta.blob()) }
+  } catch { return null }
+}
+
+function record(p: Pending, outcome: RunRecord['outcome'], reason: string | null, err?: unknown) {
+  const { appId, job, at, result } = p
+  const now = Date.now()
+  const segments = result?.meta.segments
+  const durationMs = segments?.length ? Math.round(segments.at(-1)![3] * 1000) : undefined
+  const attempt: GenerationAttemptRecord = {
+    runner: 'browser',
+    reason: endReason(outcome, reason, err),
+    ...(outcome !== 'submitted' && reason && { error: reason.slice(0, 300) }),
+    ...context(),
+    background: p.background || document.visibilityState === 'hidden',
+    ...(p.start.battery !== undefined && { batteryStart: p.start.battery, chargingStart: p.start.charging }),
+    startedAt: at,
+    wallMs: now - at,
+    ...result?.timing,
+    ...(outcome === 'submitted' && p.generatedAt && { uploadMs: now - p.generatedAt }),
+    ...(result && { bytes: result.file.size }),
+    ...(durationMs && { durationMs }),
+    ...(durationMs && result?.timing && { rtf: Math.round((result.timing.synthMs / durationMs) * 1000) / 1000 }),
+  }
+  const run: RunRecord = {
+    appId, setId: job.setId, jobId: job.id, key: job.key, at, outcome, reason, ms: now - at,
+    text: job.input.text.slice(0, RUN_TEXT_CHARS), chars: job.input.text.length, record: attempt,
+  }
+  // Battery at the end, then the server's copy: numbers only, best effort (#827)
+  void power().then(end => {
+    if (end.battery !== undefined) Object.assign(attempt, { batteryEnd: end.battery, chargingEnd: end.charging })
+    return p.generation.recordAttempts([{ jobId: job.id, ...attempt }])
+  }).catch(e => console.warn('generation: attempt record not sent', e))
   const runs = [run, ...state.runs].slice(0, MAX_RUNS)
   write(RUNS_KEY, JSON.stringify(runs))
   set({ runs })
@@ -226,10 +337,22 @@ async function run(
   const release = keepAwake()
   const work = getRunner(encoder, device)
   // The job in hand, recorded when it ends however it ends
-  let pending: { appId: string; job: GenerationJob; at: number } | null = null
-  const finish = (outcome: RunRecord['outcome'], reason: string | null) => {
-    if (pending) record(pending.appId, pending.job, pending.at, outcome, reason)
+  let pending: Pending | null = null
+  const finish = (outcome: RunRecord['outcome'], reason: string | null, err?: unknown) => {
+    if (pending) record(pending, outcome, reason, err)
     pending = null
+  }
+  const onHidden = () => { if (pending && document.visibilityState === 'hidden') pending.background = true }
+  document.addEventListener('visibilitychange', onHidden)
+  let battery: Power = await power()
+  const claimed = (appId: string, job: GenerationJob): Pending => {
+    const p: Pending = {
+      appId, generation: kokoroApps.find(a => a.appId === appId)!.generation, job, at: Date.now(), start: battery,
+      background: document.visibilityState === 'hidden', result: null, generatedAt: null,
+    }
+    // For the next claim: read now, so a claim's battery is never waited for
+    void power().then(p => { battery = p })
+    return p
   }
   const kokoroApps = apps.map(app => ({
     appId: app.appId,
@@ -247,15 +370,22 @@ async function run(
         else if (e.type === 'claimed') {
           // A job still in hand at the next claim was abandoned when its lease ran out
           finish('stopped', 'the lease ran out before it finished')
-          pending = { appId, job: e.job, at: Date.now() }
+          pending = claimed(appId, e.job)
           set({ loading: null, current: { appId, key: e.job.key, progress: null } })
         } else if (e.type === 'progress') set({ current: { appId, key: e.job.key, progress: e.progress } })
+        else if (e.type === 'generated') {
+          const p = pending
+          if (p?.job.id !== e.job.id) return
+          p.result = e.result
+          p.generatedAt = Date.now()
+          void keepOutput(appId, e.job.id, e.result)
+        }
         else if (e.type === 'submitted') {
           finish('submitted', null)
           set({ submitted: state.submitted + 1, current: null })
           onSubmitted(appId)
         } else {
-          if (pending?.job.id !== e.job.id) pending = { appId, job: e.job, at: Date.now() }
+          if (pending?.job.id !== e.job.id) pending = claimed(appId, e.job)
           finish(e.type, e.reason)
           set(e.type === 'skipped' ? { skipped: state.skipped + 1, current: null } : { current: null })
         }
@@ -265,9 +395,10 @@ async function run(
     set({ message: signal.aborted ? 'Stopped.' : 'No more work for now.' })
   } catch (err) {
     if (signal.aborted) finish('stopped', 'stopped before it finished')
-    else finish('failed', errorText(err))
+    else finish('failed', errorText(err), err)
     set({ message: signal.aborted ? 'Stopped.' : `Stopped on an error: ${errorText(err)}` })
   } finally {
+    document.removeEventListener('visibilitychange', onHidden)
     release()
     controller = null
     set({ running: false, loading: null, current: null })

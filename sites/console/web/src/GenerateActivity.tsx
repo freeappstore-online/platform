@@ -1,8 +1,9 @@
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { GenerationSubmission } from '@freeappstore/sdk'
 import { formatTimeAgo } from './deploy-status'
+import { attemptRows } from './attempt'
 import { ArtifactPlayer } from './GenerationManager'
-import type { RunRecord } from './generate'
+import { keptOutput, type RunRecord } from './generate'
 import { useModalDialog } from './useModalDialog'
 
 /** One of this account's submissions, with the app it went to. */
@@ -194,6 +195,22 @@ function ActivityDetail({ item, oneliner, onClose }: {
   const dialogRef = useModalDialog<HTMLDivElement>(onClose)
   const titleId = useId()
   const { run, artifact } = item
+  // This browser's own audio of the job, while it is among the kept ones (#827)
+  const [local, setLocal] = useState<{ url: string; metaUrl: string } | null>(null)
+  useEffect(() => {
+    if (!run) return
+    let urls: { url: string; metaUrl: string } | null = null
+    let live = true
+    keptOutput(item.appId, item.jobId).then(kept => {
+      urls = kept
+      if (live) setLocal(kept)
+      else if (kept) { URL.revokeObjectURL(kept.url); URL.revokeObjectURL(kept.metaUrl) }
+    })
+    return () => {
+      live = false
+      if (urls) { URL.revokeObjectURL(urls.url); URL.revokeObjectURL(urls.metaUrl) }
+    }
+  }, [run, item.appId, item.jobId])
   const rows: [string, string][] = [
     ['App', oneliner ? `${item.appId} · ${oneliner}` : item.appId],
     ['Job', item.key],
@@ -233,7 +250,30 @@ function ActivityDetail({ item, oneliner, onClose }: {
             </div>
           ))}
         </dl>
-        {artifact ? (
+        {run?.record && (
+          <div className="mt-4">
+            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">In this browser</h4>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              {attemptRows(run.record).map(([name, value]) => (
+                <div key={name} className="contents">
+                  <dt className="text-muted">{name}</dt>
+                  <dd className="text-ink break-words min-w-0">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+        {local ? (
+          <div className="mt-4">
+            <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">Play what this browser generated</h4>
+            <ArtifactPlayer
+              url={local.url}
+              metaUrl={local.metaUrl}
+              preview={item.text}
+              loadText={() => (whole ? Promise.resolve(item.text) : Promise.reject(new Error('not kept')))}
+            />
+          </div>
+        ) : artifact ? (
           <div className="mt-4">
             <h4 className="text-xs font-semibold text-muted uppercase tracking-wide mb-2">
               {item.bucket === 'accepted' ? 'Play' : 'Play the accepted audio (another contributor’s)'}

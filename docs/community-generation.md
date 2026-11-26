@@ -43,6 +43,16 @@ filter by status and app, grouped by day; a row opens its detail with the verdic
 duration, and Play with sentence highlighting for accepted ones, from the set's public manifest) and
 **Settings** (apps with open work and the per-app opt-in, the model download/delete, storage used).
 
+Every runner keeps a record of each attempt on the device (#827) and sends its numbers to
+`…/generation/events` (below): runner, app version, OS and device, network, foreground or background,
+how it ended, wall time per stage (model load, synthesis, encode, upload), process CPU time, speed,
+peak memory, battery and thermal state at start and end, where the platform exposes them. Each
+runner's history shows it with the server's verdict and plays the device's own audio with sentence
+highlighting, for the 20 latest attempts it kept (rejected ones too): the console's Activity detail
+(audio in Cache Storage; no CPU time, memory or thermal state in a browser), the Android and iOS
+Activity job detail. The owner sees each upload's record, and attempts that never uploaded, in the
+Generation tab's jobs.
+
 ## API (base `https://api.freeappstore.online/v1`)
 
 Owner: the app owner's session (the app's own or a console session), or a GitHub Actions OIDC token
