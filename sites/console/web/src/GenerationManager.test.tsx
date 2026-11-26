@@ -2,7 +2,8 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { ArtifactPlayer, GenerationManager, metaUrlOf, type GenerationJob, type GenerationSet } from './GenerationManager'
+import type { GenerationJobSummary, GenerationSetSummary } from '@freeappstore/sdk'
+import { ArtifactPlayer, GenerationManager, metaUrlOf } from './GenerationManager'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 let root: Root
@@ -27,13 +28,13 @@ const button = (text: string) =>
   [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === text)
 const json = (body: unknown) => new Response(JSON.stringify(body))
 
-const set: GenerationSet = {
+const set: GenerationSetSummary = {
   id: 'set1', kind: 'tts', model: 'kokoro', modelVersion: '1.0', replicas: 1, requireAttestation: false,
-  createdAt: Date.now(),
+  params: { voice: 'af_heart' }, formats: ['audio/mp4'], maxBytes: 1_000_000, createdAt: Date.now(),
   counts: { jobs: 4, open: 2, accepted: 2, leased: 1, pending: 1, rejected: 3, withdrawn: 0 },
 }
 const contributor = { id: 'u1', login: 'alice' }
-const job = (key: string): GenerationJob => ({
+const job = (key: string): GenerationJobSummary => ({
   id: `j-${key}`, key, status: 'accepted', inputPreview: 'Hello there. General Kenobi.', inputChars: 28,
   createdAt: 0,
   artifact: { url: `${api}/artifacts/j-${key}?v=abc`, durationMs: 2500, bytes: 4096, contributor, acceptedAt: Date.now() },
@@ -115,15 +116,18 @@ it('blocks a contributor after confirming', async () => {
   expect(fetchMock).toHaveBeenCalledWith(`${api}/contributors/u1/block`, expect.objectContaining({ method: 'POST' }))
 })
 
-it('highlights the sentence being played from the meta segments', async () => {
+it('highlights the sentence being played in the whole text, from the meta segments', async () => {
   const url = `${api}/artifacts/j1?v=abc`
-  const fetchMock = vi.fn(async () => json({ segments: [[0, 12, 0, 1], [13, 28, 1, 2], [29, 400, 2, 9]] }))
+  const long = `Hello there. General Kenobi. ${'x'.repeat(300)}.`
+  const fetchMock = vi.fn(async () => json({ segments: [[0, 12, 0, 1], [13, 28, 1, 2], [29, 330, 2, 9]] }))
   vi.stubGlobal('fetch', fetchMock)
-  await act(async () => root.render(<ArtifactPlayer url={url} preview="Hello there. General Kenobi." />))
+  const loadText = vi.fn(async () => long)
+  await act(async () => root.render(<ArtifactPlayer url={url} preview={long.slice(0, 200)} loadText={loadText} />))
   const audio = container.querySelector('audio')!
   await act(async () => { audio.dispatchEvent(new Event('play')) })
   await flush()
   expect(fetchMock).toHaveBeenCalledWith(`${api}/artifacts/j1/meta?v=abc`)
+  expect(loadText).toHaveBeenCalledOnce()
 
   const at = async (t: number) => {
     Object.defineProperty(audio, 'currentTime', { value: t, configurable: true })
@@ -131,9 +135,39 @@ it('highlights the sentence being played from the meta segments', async () => {
   }
   await at(1.5)
   expect(container.querySelector('mark')!.textContent).toBe('General Kenobi.')
+  // Past the 200-character preview, from the whole text
   await at(3)
+  expect(container.querySelector('mark')!.textContent).toBe(long.slice(29))
+})
+
+it('falls back to the preview and the sentence number when the whole text cannot load', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => json({ segments: [[0, 12, 0, 1], [13, 28, 1, 2], [29, 400, 2, 9]] })))
+  const loadText = vi.fn(async () => { throw new Error('HTTP 500') })
+  await act(async () => root.render(<ArtifactPlayer url={`${api}/artifacts/j1`} preview="Hello there. General Kenobi." loadText={loadText} />))
+  const audio = container.querySelector('audio')!
+  await act(async () => { audio.dispatchEvent(new Event('play')) })
+  await flush()
+  Object.defineProperty(audio, 'currentTime', { value: 3, configurable: true })
+  await act(async () => { audio.dispatchEvent(new Event('timeupdate')) })
   expect(container.querySelector('mark')).toBeNull()
   expect(container.textContent).toContain('Sentence 3 of 3')
+})
+
+it('loads the whole text of a listed job from the owner endpoint', async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.endsWith('/generation/sets')) return json({ sets: [set] })
+    if (url.endsWith('/jobs/j-a')) return json({ job: { ...job('a'), input: { text: 'Hello there. General Kenobi.' } } })
+    if (url.includes('/meta')) return json({ segments: [[0, 12, 0, 1]] })
+    return json({ jobs: [job('a')], nextCursor: null })
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  await act(async () => root.render(<GenerationManager appId="demo" getToken={getToken} />))
+  await flush()
+  act(() => button('Jobs')!.click())
+  await flush()
+  await act(async () => { container.querySelector('audio')!.dispatchEvent(new Event('play')) })
+  await flush()
+  expect(fetchMock).toHaveBeenCalledWith(`${api}/sets/set1/jobs/j-a`, expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token' }) }))
 })
 
 it('derives the meta URL beside the artifact', () => {

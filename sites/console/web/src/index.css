@@ -16,9 +16,31 @@
   --color-panel: var(--panel);
   --color-panel-alt: var(--panel-alt);
   --color-ink-strong: var(--ink-strong);
+  /* SDK dialogs, toasts and badges (docs/ui.md#styling) */
+  --color-accent-soft: var(--accent-soft);
+  --color-success-soft: var(--success-soft);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger-soft: var(--danger-soft);
+  --color-popover: var(--popover);
+  --color-scrim: var(--scrim);
   --radius-control-sm: var(--radius-sm);
   --radius-control: var(--radius);
   --shadow-control: var(--shadow);
+}
+
+@theme {
+  --animate-sdk-fade-in: sdk-fade-in 150ms ease-out;
+  --animate-sdk-slide-up: sdk-slide-up 200ms ease-out;
+  --animate-sdk-drawer: sdk-drawer 200ms ease-out;
+  @keyframes sdk-fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes sdk-slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes sdk-drawer {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
 }
 
 @layer base {
@@ -47,6 +69,11 @@
   --success: #2f8f57;
   --warning: #c6862a;
   --danger: #c74f43;
+  --success-soft: #e3f3e9;
+  --warning-soft: #fbf0dc;
+  --danger-soft: #fbe6e3;
+  --popover: var(--paper);
+  --scrim: rgba(0, 0, 0, 0.4);
   --accent-gradient: linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(255, 255, 255, 0.9));
   --warm-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(237, 233, 254, 0.24));
   --cool-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(198, 230, 242, 0.28));
@@ -104,6 +131,11 @@
   --success: #74d49a;
   --warning: #f0bd6e;
   --danger: #ff7a72;
+  --success-soft: #13281a;
+  --warning-soft: #33260f;
+  --danger-soft: #3a1714;
+  --popover: #141414;
+  --scrim: rgba(0, 0, 0, 0.6);
   --accent-gradient: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(18, 18, 18, 0.95));
   --warm-gradient: linear-gradient(180deg, rgba(14, 14, 14, 0.96), rgba(30, 58, 138, 0.34));
   --cool-gradient: linear-gradient(180deg, rgba(14, 14, 14, 0.96), rgba(18, 38, 50, 0.3));

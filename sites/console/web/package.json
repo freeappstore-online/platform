@@ -11,7 +11,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@freeappstore/sdk": "^0.14.35",
+    "@freeappstore/sdk": "^0.21.6",
+    "@huggingface/transformers": "3.8.1",
+    "kokoro-js": "1.2.1",
+    "mp4-muxer": "5.2.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4"

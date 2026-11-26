@@ -13,6 +13,7 @@ import {
 } from './deploy-status'
 import { API_URL, authHeaders } from './builder/lib/api'
 import { PublishForm } from './PublishForm'
+import { GeneratePage } from './GeneratePage'
 import { BASE, SiteNav, go } from './SiteNav'
 
 // Lazy — the builder is a large react-router island; keep it out of the console's
@@ -21,7 +22,7 @@ const BuilderApp = lazy(() => import('./builder/BuilderApp'))
 
 const fas = initApp({ appId: 'console' })
 
-type View = 'dashboard' | 'app-detail' | 'publish' | 'ui-library' | 'builder'
+type View = 'dashboard' | 'app-detail' | 'publish' | 'generate' | 'ui-library' | 'builder'
 
 interface AppEntry {
   id: string
@@ -85,6 +86,7 @@ function parseRoute(): { view: View; appId: string | null } {
   const appMatch = path.match(/^\/apps\/([a-z0-9-]+)(?:\/(.+))?$/)
   if (appMatch) return { view: 'app-detail', appId: appMatch[1] }
   if (path === '/publish') return { view: 'publish', appId: null }
+  if (path === '/generate') return { view: 'generate', appId: null }
   if (path === '/ui-library') return { view: 'ui-library', appId: null }
   return { view: 'dashboard', appId: null }
 }
@@ -96,6 +98,7 @@ function navigate(view: View, appId?: string) {
   let path = '/'
   if (view === 'app-detail' && appId) path = `/apps/${appId}`
   else if (view === 'publish') path = '/publish'
+  else if (view === 'generate') path = '/generate'
   else if (view === 'ui-library') path = '/ui-library'
   else if (view === 'builder') path = '/build'
   history.pushState(null, '', BASE + path)
@@ -200,6 +203,7 @@ export default function App() {
           />
         )}
         {view === 'publish' && <PublishView getToken={() => fas.auth.token} />}
+        {view === 'generate' && <GeneratePage fas={fas} />}
         {view === 'ui-library' && <UILibraryView />}
       </main>
     </div>

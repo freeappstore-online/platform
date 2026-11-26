@@ -1,65 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type { GenerationJobDetail, GenerationJobSummary, GenerationSetSummary } from '@freeappstore/sdk'
 import { ConfirmDialog, ProgressBar } from '@freeappstore/sdk/ui'
 import { API_URL, authHeaders } from './builder/lib/api'
 import { formatTimeAgo } from './deploy-status'
-
-// Response shapes of the owner generation endpoints (#794,
-// packages/backend/src/routes/generation.ts). The console pins an SDK release
-// that predates its Generation types, so they are declared here.
-
-interface Contributor {
-  id: string
-  login: string | null
-}
-
-export interface GenerationSet {
-  id: string
-  kind: string
-  model: string
-  modelVersion: string
-  replicas: number
-  requireAttestation: boolean
-  createdAt: number
-  counts: {
-    jobs: number
-    open: number
-    accepted: number
-    leased: number
-    pending: number
-    rejected: number
-    withdrawn: number
-  }
-}
-
-interface Submission {
-  id: string
-  contributor: Contributor | null
-  deviceKind: string
-  attestation: string
-  status: string
-  reason: string | null
-  wer: number | null
-  durationMs: number | null
-  createdAt: number
-  decidedAt: number | null
-}
-
-export interface GenerationJob {
-  id: string
-  key: string
-  status: 'open' | 'accepted'
-  inputPreview: string
-  inputChars: number
-  createdAt: number
-  artifact: {
-    url: string
-    durationMs: number | null
-    bytes: number
-    contributor: Contributor | null
-    acceptedAt: number
-  } | null
-  submissions: Submission[]
-}
 
 /** Books-style sentence timings: [charStart, charEnd, startSec, endSec]. */
 type Segment = [number, number, number, number]
@@ -77,7 +20,7 @@ interface Props {
 
 /** Owner view of the app's community generation: sets, jobs, artifacts, submissions (#795). */
 export function GenerationManager({ appId, getToken }: Props) {
-  const [sets, setSets] = useState<GenerationSet[] | null>(null)
+  const [sets, setSets] = useState<GenerationSetSummary[] | null>(null)
   const [error, setError] = useState('')
   const [openSet, setOpenSet] = useState<string | null>(null)
 
@@ -88,7 +31,7 @@ export function GenerationManager({ appId, getToken }: Props) {
         headers: authHeaders(getToken()),
       })
       if (!res.ok) { setError(`Couldn't load generation sets (HTTP ${res.status}).`); return }
-      setSets(((await res.json()) as { sets: GenerationSet[] }).sets ?? [])
+      setSets(((await res.json()) as { sets: GenerationSetSummary[] }).sets ?? [])
     } catch {
       setError("Couldn't load generation sets.")
     }
@@ -137,7 +80,7 @@ export function GenerationManager({ appId, getToken }: Props) {
 
 function SetCard({ appId, set, getToken, open, onToggle, onChanged }: {
   appId: string
-  set: GenerationSet
+  set: GenerationSetSummary
   getToken: () => string | null
   open: boolean
   onToggle: () => void
@@ -189,7 +132,7 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
   onChanged: () => void
 }) {
   const [status, setStatus] = useState<'' | 'open' | 'accepted'>('')
-  const [jobs, setJobs] = useState<GenerationJob[]>([])
+  const [jobs, setJobs] = useState<GenerationJobSummary[]>([])
   const [cursor, setCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -208,7 +151,7 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
         headers: authHeaders(getToken()),
       })
       if (!res.ok) { setError(`Couldn't load jobs (HTTP ${res.status}).`); return }
-      const data = (await res.json()) as { jobs: GenerationJob[]; nextCursor: string | null }
+      const data = (await res.json()) as { jobs: GenerationJobSummary[]; nextCursor: string | null }
       setJobs(prev => (after ? [...prev, ...data.jobs] : data.jobs))
       setCursor(data.nextCursor)
     } catch {
@@ -219,6 +162,15 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
   }, [base, setId, status, getToken])
 
   useEffect(() => { fetchPage(null) }, [fetchPage])
+
+  /** The job's whole input: the list carries only a 200-character preview. */
+  const loadText = async (jobId: string) => {
+    const res = await fetch(`${base}/sets/${encodeURIComponent(setId)}/jobs/${encodeURIComponent(jobId)}`, {
+      headers: authHeaders(getToken()),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return ((await res.json()) as { job: GenerationJobDetail }).job.input.text
+  }
 
   const confirm = async () => {
     if (!pending) return
@@ -254,7 +206,9 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
       {error && <p className="text-sm text-danger mb-3">{error}</p>}
       {!loading && jobs.length === 0 && !error && <p className="text-sm text-muted">No jobs.</p>}
       <div className="space-y-3">
-        {jobs.map(job => <JobRow key={job.id} job={job} onAction={setPending} />)}
+        {jobs.map(job => (
+          <JobRow key={job.id} job={job} onAction={setPending} loadText={() => loadText(job.id)} />
+        ))}
       </div>
       {loading && <p className="mt-2 text-sm text-muted">Loading…</p>}
       {!loading && cursor && (
@@ -282,7 +236,11 @@ function SetJobs({ appId, setId, getToken, onChanged }: {
 const percent = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)}%`)
 const seconds = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)}s`)
 
-function JobRow({ job, onAction }: { job: GenerationJob; onAction: (p: Pending) => void }) {
+function JobRow({ job, onAction, loadText }: {
+  job: GenerationJobSummary
+  onAction: (p: Pending) => void
+  loadText: () => Promise<string>
+}) {
   const a = job.artifact
   return (
     <div className="rounded-lg border border-line p-3">
@@ -295,7 +253,7 @@ function JobRow({ job, onAction }: { job: GenerationJob; onAction: (p: Pending) 
       </div>
       {a ? (
         <div className="mt-2">
-          <ArtifactPlayer url={a.url} preview={job.inputPreview} />
+          <ArtifactPlayer url={a.url} preview={job.inputPreview} loadText={loadText} />
           <div className="mt-1 flex items-center gap-2 flex-wrap text-xs text-muted">
             <span>{seconds(a.durationMs)} · {Math.round(a.bytes / 1024)} KB · by {a.contributor?.login ?? 'deleted account'} · {formatTimeAgo(new Date(a.acceptedAt))}</span>
             <button
@@ -361,14 +319,21 @@ export const metaUrlOf = (url: string) => url.replace(/(\?|$)/, '/meta$1')
 
 /**
  * Plays an accepted artifact and highlights the sentence being read, from the
- * meta's `segments`. Only the first 200 characters of the input are available
- * here, so a sentence beyond the preview is shown by number instead.
+ * meta's `segments`. On play it loads the meta and the job's whole text; until
+ * the text is there (or if it can't load) it shows the 200-character preview and
+ * a sentence beyond it by number.
  */
-export function ArtifactPlayer({ url, preview }: { url: string; preview: string }) {
+export function ArtifactPlayer({ url, preview, loadText }: {
+  url: string
+  preview: string
+  loadText: () => Promise<string>
+}) {
   const [segments, setSegments] = useState<Segment[] | null>(null)
+  const [text, setText] = useState<string | null>(null)
   const [time, setTime] = useState(-1)
+  const markRef = useRef<HTMLElement>(null)
 
-  const loadMeta = () => {
+  const load = () => {
     if (segments) return
     setSegments([])
     fetch(metaUrlOf(url))
@@ -377,10 +342,16 @@ export function ArtifactPlayer({ url, preview }: { url: string; preview: string 
         if (Array.isArray(meta?.segments)) setSegments(meta.segments as Segment[])
       })
       .catch(() => {})
+    loadText().then(setText, () => {})
   }
 
   const index = segments ? segments.findIndex(([, , start, end]) => time >= start && time < end) : -1
   const current = index >= 0 ? segments![index] : null
+  const shown = text ?? preview
+  const marked = current && current[1] <= shown.length ? current : null
+
+  // Keep the sentence being read in view in the scrolling text
+  useEffect(() => { markRef.current?.scrollIntoView({ block: 'nearest' }) }, [marked?.[0]])
 
   return (
     <div>
@@ -388,20 +359,20 @@ export function ArtifactPlayer({ url, preview }: { url: string; preview: string 
         controls
         preload="none"
         src={url}
-        onPlay={loadMeta}
+        onPlay={load}
         onTimeUpdate={e => setTime(e.currentTarget.currentTime)}
         className="w-full"
       />
-      <p className="mt-1 text-sm text-muted break-words">
-        {current && current[1] <= preview.length ? (
+      <p className={`mt-1 text-sm text-muted break-words whitespace-pre-line ${text ? 'max-h-48 overflow-y-auto' : ''}`}>
+        {marked ? (
           <>
-            {preview.slice(0, current[0])}
-            <mark className="bg-accent/20 text-ink rounded">{preview.slice(current[0], current[1])}</mark>
-            {preview.slice(current[1])}
+            {shown.slice(0, marked[0])}
+            <mark ref={markRef} className="bg-accent/20 text-ink rounded">{shown.slice(marked[0], marked[1])}</mark>
+            {shown.slice(marked[1])}
           </>
-        ) : preview}
+        ) : shown}
       </p>
-      {current && current[1] > preview.length && (
+      {current && !marked && (
         <p className="mt-1 text-xs text-accent font-semibold">Sentence {index + 1} of {segments!.length} (beyond the preview)</p>
       )}
     </div>

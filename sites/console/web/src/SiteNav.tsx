@@ -19,6 +19,7 @@ const SECTIONS = [
   { path: '/', label: 'Apps' },
   { path: '/build', label: 'Build' },
   { path: '/publish', label: 'Publish' },
+  { path: '/generate', label: 'Generate' },
 ]
 
 function currentSection(): string | null {
@@ -26,6 +27,7 @@ function currentSection(): string | null {
   if (path === '/' || path.startsWith('/apps/')) return '/'
   if (path === '/build' || path === '/build/' || path.startsWith('/build/app/')) return '/build'
   if (path === '/publish') return '/publish'
+  if (path === '/generate') return '/generate'
   return null
 }
 
