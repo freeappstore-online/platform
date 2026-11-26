@@ -2,6 +2,8 @@
 
 Server-enforced quotas for the free tier. These are deliberately conservative -- easier to loosen than to tighten.
 
+FAS stores no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)). App data stays on the user's device (`@freeappstore/sdk/persist`); multi-user or server-backed data belongs on [ProAppStore](https://proappstore.online). The KV, collections, data-room and photo limits below apply only to existing apps that still use those deprecated APIs.
+
 ## Auth
 
 | Limit | Value |
@@ -10,6 +12,8 @@ Server-enforced quotas for the free tier. These are deliberately conservative --
 | Session lifetime | 30 days (HMAC-signed bearer token) |
 
 ## Per-user KV (`fas.kv`)
+
+Deprecated for app data (ADR-004); existing apps only.
 
 | Limit | Value | On breach |
 |-------|-------|-----------|
@@ -26,6 +30,8 @@ Server-enforced quotas for the free tier. These are deliberately conservative --
 | Counter key | 128 characters (`400`) |
 
 ## Collections (`fas.collections`)
+
+Deprecated for app data (ADR-004); existing apps only.
 
 | Limit | Value |
 |-------|-------|
@@ -82,6 +88,8 @@ AI provider hosts are blocked from app secrets -- use the user key vault.
 
 ## Data rooms
 
+Deprecated for app data (ADR-004); existing apps only.
+
 | Limit | Value |
 |-------|-------|
 | Rooms owned per user per app | 100 |
@@ -116,7 +124,7 @@ AI provider hosts are blocked from app secrets -- use the user key vault.
 
 ## Shared infrastructure
 
-KV and document data share the platform D1 database. Its capacity is not a dedicated 10 GB allocation for each app. The routes enforce the value, key, document, and collection limits above; they do not implement a separate 100-active-users/day or 1,000-KV-operations/minute allowance. Operational fair-use controls may still apply.
+KV and document data (both deprecated for app data, ADR-004) share the platform D1 database. Its capacity is not a dedicated 10 GB allocation for each app. The routes enforce the value, key, document, and collection limits above; they do not implement a separate 100-active-users/day or 1,000-KV-operations/minute allowance. Operational fair-use controls may still apply.
 
 ## Email (`fas.email`)
 
@@ -169,7 +177,8 @@ imports (`<link rel="modulepreload">` and ESM `import`). `import()`, `new Worker
 
 These features are not exposed by the FreeAppStore SDK. For a separate paid platform, see [ProAppStore](https://proappstore.online); its current plans and limits are defined there:
 
-- General-purpose file uploads (small temporary photos are supported; see [Photo uploads](photo-uploads.md))
+- Server-side app data: documents, records, files and multi-user collaboration ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)). Keep app data on the device
+- General-purpose file uploads (the small temporary photo uploads in [Photo uploads](photo-uploads.md) are deprecated for app data)
 - Server-side AI (Workers AI)
 - Arbitrary server-side cron / scheduled tasks (scheduled user push reminders are supported above)
 - Custom domains
@@ -203,7 +212,7 @@ Browser APIs are a separate concern: see [Browser Capabilities](capabilities.md)
 
 ## Temporary photo uploads
 
-See [Photo uploads](photo-uploads.md): 640 px maximum edge, 200,000 bytes, JPEG/WebP only, 90-day retention, private by default.
+Deprecated for app data (ADR-004); existing apps only. See [Photo uploads](photo-uploads.md): 640 px maximum edge, 200,000 bytes, JPEG/WebP only, 90-day retention, private by default.
 
 ## Community generation
 

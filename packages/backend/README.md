@@ -61,7 +61,9 @@ Worker; never `wrangler secret put` it directly, or `secrets.enc.yaml` goes stal
 
 ## Durable authorized data
 
-See [data rooms](../../docs/data-rooms.md) for authenticated room membership and
+FAS stores no application data on the server ([ADR-004](../../docs/adr/004-no-server-app-data.md)). The KV,
+collection, data-room and photo routes are deprecated for app data and kept only for existing apps
+until #802 retires them; do not add routes that store app content. See [data rooms](../../docs/data-rooms.md) for authenticated room membership and
 durable collection endpoints. Public collections and WebSocket rooms have separate
 access semantics.
 

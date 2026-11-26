@@ -102,13 +102,13 @@ guidance: [the Shell](ui.md#shell-the-standard-app-frame).
 
 ```bash
 fas init my-app                          # default: standalone (device-local, no sign-in gate)
-fas init my-app --template connected     # uses platform backend (KV, rooms, etc.)
+fas init my-app --template connected     # uses platform services (auth, rooms, proxy)
 ```
 
 | Template | Use case |
 |----------|----------|
 | `standalone` | Device-local by default, with no sign-in gate. Add IndexedDB or optional account capabilities as needed. Starts inside `Shell` with Home and About screens. |
-| `connected` | Apps using platform account services through the SDK (auth, KV, collections, rooms, proxy). The generated private draft uses the race-safe hook from #350 and gates only its own data. Public screens and Profile stay reachable while signed out. |
+| `connected` | Apps using platform account services through the SDK (auth, rooms, proxy). App data stays on the device: FAS stores no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)), and KV and collections are deprecated for app data. The generated private draft (still on `fas.kv` until #802) uses the race-safe hook from #350 and gates only its own data. Public screens and Profile stay reachable while signed out. |
 
 Both names are presets generated from one canonical platform foundation. The
 external template repositories are release mirrors updated from that source;

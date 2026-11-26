@@ -35,7 +35,7 @@ Streamable HTTP transport at `https://mcp.freeappstore.online/mcp`
 |------|------|-------------|
 | `deploy_status` | None | Check last 5 GitHub Actions runs for a public app repo (server-side GitHub auth; reports rate limits vs permission errors) |
 | `app_info` | None | Live URL, repo, store listing, up/down status |
-| `sdk_reference` | None | SDK docs. Start with `shell` (the standard app frame), then `components` (every UI component); also auth, KV, counters, collections, rooms, proxy, keys, push, hooks |
+| `sdk_reference` | None | SDK docs. Start with `shell` (the standard app frame), then `components` (every UI component); also auth, persistence and backup (where app data lives), counters, rooms, proxy, keys, push, hooks. KV and collections are marked deprecated for app data (ADR-004) |
 | `platform_guide` | None | Fetch full SKILLS.md, followed by the current app-building rules |
 | `list_apps` | FAS token | List your published apps |
 | `app_logs` | Owner | Recent errors, warnings, SDK calls, build info |
@@ -47,26 +47,11 @@ Streamable HTTP transport at `https://mcp.freeappstore.online/mcp`
 | `agent_status` | Own session | Poll an `agent_build` session for progress and live URL |
 | `agent_activity` | Own session | Read your conversation with the build agent for a session |
 | `mcp_audit_log` | FAS token | Your recent MCP audit events (writes, dry-runs, denials), newest first |
-| `app_guide` | None | An app's `mcp.json`: instructions + the collections it exposes, with JSON Schemas |
-| `app_data_list` | FAS token | Your documents in a collection the app's `mcp.json` declares |
-| `app_data_get` | FAS token | One of your documents in a declared collection |
-| `app_data_save` | FAS token | Create (no id) or shallow-merge update (id) one of your documents; the result is validated against the declared schema first |
-| `app_data_delete` | FAS token + `destructive` scope | Delete one of your documents in a declared collection |
 
-`MCP_READ_ONLY=1` refuses every non-read tool server-wide. `create_app`, `update_files`,
-`agent_build`, `app_data_save` and `app_data_delete` record redacted audit events per user in `OAUTH_KV` (90-day TTL, `src/safety.ts`),
+`MCP_READ_ONLY=1` refuses every non-read tool server-wide. `create_app`, `update_files` and
+`agent_build` record redacted audit events per user in `OAUTH_KV` (90-day TTL, `src/safety.ts`),
 read back with `mcp_audit_log`. The write tools and authenticated GitHub reads need the
 `GITHUB_TOKEN` secret.
-
-### App data: `mcp.json` (#734)
-
-An app opts in by shipping `web/public/mcp.json` (`https://<id>.freeappstore.online/mcp.json`):
-`{ "version": 1, "instructions": "…", "collections": { "<name>": { "description": "…", "schema": { …JSON Schema… } } } }`.
-`src/app-data.ts` fetches it (64 KB cap), checks its shape, and validates documents with
-`@cfworker/json-schema` (draft 2020-12); an update validates the merged document. The `app_data_*`
-tools then call the backend collections API (`/v1/apps/:id/db/:collection`) with the user's
-console-audience session, so its owner-only rules apply. Undeclared collections are refused.
-Format and opt-in steps: `docs/mcp.md`.
 
 ### Building apps: the Shell comes first
 

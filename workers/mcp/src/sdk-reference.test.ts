@@ -199,6 +199,16 @@ describe("sdk_reference", () => {
     }
   });
 
+  it("marks server-side app data APIs deprecated and points app data at the device (ADR-004)", () => {
+    for (const feature of ["kv", "collections", "connected-data"]) {
+      expect(getSdkReference(feature), feature).toContain("Deprecated for app data (ADR-004)");
+      expect(getSdkReference(feature), feature).toContain("ProAppStore");
+    }
+    const persistence = getSdkReference("persistence");
+    expect(persistence).toContain("stores no application data on the server (ADR-004)");
+    expect(getSdkReference("collections")).not.toContain("belongs in per-user KV");
+  });
+
   it("an unknown feature says so", () => {
     expect(getSdkReference("nope")).toContain("Unknown feature: nope");
   });

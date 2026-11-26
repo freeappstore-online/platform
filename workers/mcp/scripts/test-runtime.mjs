@@ -29,9 +29,8 @@ try {
   await client.connect(new StreamableHTTPClientTransport(url));
   const tools = await client.listTools();
   assert(tools.tools.some((tool) => tool.name === 'sdk_reference'));
-  for (const name of ['app_guide', 'app_data_list', 'app_data_get', 'app_data_save', 'app_data_delete']) {
-    assert(tools.tools.some((tool) => tool.name === name), `${name}: not registered`);
-  }
+  // FAS stores no app data on the server (ADR-004): the #734 app-data tools stay removed.
+  assert(!tools.tools.some((tool) => tool.name === 'app_guide' || tool.name.startsWith('app_data_')), 'app data tools must not be registered');
   // AI directories (Claude Connectors, ChatGPT Apps) reject tools without a title
   // and explicit read-only / destructive / open-world hints (#539).
   for (const tool of tools.tools) {

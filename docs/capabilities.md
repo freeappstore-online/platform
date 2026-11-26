@@ -128,7 +128,7 @@ a git push alone does not update it.
 
 ## Platform services
 
-The SDK's server-side limits (KV, collections, rooms, proxy, email, push) are in [Limits](platform-limits.md).
+The SDK's server-side limits (KV, collections, rooms, proxy, email, push) are in [Limits](platform-limits.md). FAS stores no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)): app data stays in the browser's own storage (`@freeappstore/sdk/persist` over localStorage and IndexedDB), and KV, collections, data rooms and photo uploads are deprecated for app data. Multi-user or server-backed data belongs on [ProAppStore](https://proappstore.online).
 
 `fas check` **bundle-size** measures the **initial load** only: the HTML entry chunk plus its static
 imports (from the Vite manifest, or from `<script>` / `modulepreload` and static `import` statements).

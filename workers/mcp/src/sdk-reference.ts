@@ -195,6 +195,7 @@ an SDK result failure must cause onSave to throw. This is an editable example, n
 \`\`\`tsx
 ${FORM_EXAMPLE}\`\`\``,
   "connected-data": `## Private account data in a public app
+Deprecated for app data (ADR-004): FreeAppStore stores no application data on the server. Kept only for existing apps; new apps use feature "persistence" (device-local), and multi-user or server-backed data belongs on ProAppStore (proappstore.online).
 This complete component is the connected starter's actual example. Place it at
 web/src/components/ConnectedDraft.tsx; it uses the starter's existing PWA controller.
 Custom frames can adapt that import to their own controller. Account state, stale loads,
@@ -212,6 +213,7 @@ const fas = initApp({ appId: 'my-app' })
 // fas.auth.user      — current user ({ id, login, avatarUrl } | null)
 \`\`\``,
   kv: `## Per-user KV Storage
+Deprecated for app data (ADR-004): FreeAppStore stores no application data on the server. Kept only for existing apps; new apps use feature "persistence" (device-local), and multi-user or server-backed data belongs on ProAppStore (proappstore.online).
 The following are API call fragments: fas is an initialized app. Call them inside an
 authenticated feature handler and handle rejection; public screens stay reachable.
 For a complete account-switch-safe component, request feature "connected-data".
@@ -226,7 +228,7 @@ const many = await fas.kv.getMany(['k1', 'k2']) // batch read
 Limits: 1 MiB/user/app, 100 keys/user/app, 64 KiB/value. The KV routes do not enforce separate daily-active-user or per-minute KV caps.`,
   persistence: `## Device-local persistence
 
-Data stays on this device and origin. Account data uses \`fas.kv\`. Check every result.ok before accessing result.value or reporting a successful save. A missing record is different from a failed read; never silently reset unreadable data.
+This is where FreeAppStore app data lives: the platform stores no application data on the server (ADR-004). Data stays on this device and origin; it is not \`fas.kv\` (deprecated for app data). Use feature "backup" to move it between devices; multi-user or server-backed data belongs on ProAppStore. Check every result.ok before accessing result.value or reporting a successful save. A missing record is different from a failed read; never silently reset unreadable data.
 
 \`\`\`ts
 ${PERSISTENCE_EXAMPLE}\`\`\`
@@ -253,6 +255,7 @@ const filtered = await fas.counters.list({ prefix: 'vote:' })
 \`\`\`
 Not user-scoped. Atomic. Use for votes, views, leaderboards.`,
   collections: `## Collections (Document Database)
+Deprecated for app data (ADR-004): FreeAppStore stores no application data on the server. Kept only for existing apps; new apps use feature "persistence" (device-local), and multi-user or server-backed data belongs on ProAppStore (proappstore.online).
 \`\`\`tsx
 const posts = fas.collections.collection('posts', { visibility: 'public-read' })
 const doc = await posts.create({ title: 'Hello', body: '...' })
@@ -266,8 +269,7 @@ Queryable JSON documents with ownership. A collection is private to each documen
 by default (you read only your own; \`owner\` can only be your own id; \`_owner\` is hidden
 from others). Other users can read it only after the app owner runs \`fas db share posts\`;
 shared data is public: a client-side owner filter or hidden UI is not confidentiality.
-Private account data belongs in per-user KV; room access rules require a separately
-authorized backend.`,
+Room access rules require a separately authorized backend.`,
   rooms: `## Real-time Rooms (WebSocket)
 \`\`\`tsx
 const room = fas.rooms.join('my-room')

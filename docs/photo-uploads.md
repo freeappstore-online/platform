@@ -1,5 +1,7 @@
 # Small, temporary photos
 
+> **Deprecated for app data ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)).** FAS stores no application data on the server. This reference remains only for existing apps; new apps keep photos on the device with `@freeappstore/sdk/persist` (`openFileStore`, `putFile`). Server-backed media belongs on [ProAppStore](https://proappstore.online).
+
 `fas.photos` stores user photos in one private R2 Standard bucket, `fas-uploads`.
 The bucket is separate from application assets and backups. All reads go through
 the platform; never enable public bucket access or expose storage credentials.

@@ -7,8 +7,10 @@ that an app opens, saves data or accepts typing.
 
 ## Before implementation
 
-Choose the feature's data boundary: this browser, private account, public shared data,
-or an authorized room. Decide what offline means for that feature. Signing in does not
+Choose the feature's data boundary. FAS stores no application data on the server
+([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)): new features keep data in this browser, with backups for moving it.
+Private account, public shared data and authorized rooms are deprecated for app data
+and apply only to existing apps; multi-user data belongs on ProAppStore. Decide what offline means for that feature. Signing in does not
 automatically synchronize IndexedDB. Choose optional capabilities up front or later
 with the same preview/apply workflow; read the installed integration guides.
 

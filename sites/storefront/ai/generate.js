@@ -271,12 +271,11 @@ ${setupSteps}
       </li>
     </ol>
 
-    <h2 class="ai-guide-heading">Add user accounts &amp; cloud storage</h2>
-    <p>Standalone apps use localStorage. If you need platform sign-in, per-user cloud storage, realtime rooms, or a secret-injecting API proxy:</p>
+    <h2 class="ai-guide-heading">Add user accounts &amp; realtime</h2>
+    <p>App data stays on the user's device (<code>@freeappstore/sdk/persist</code> or localStorage): FreeAppStore stores no application data on the server. Multi-user or server-backed data belongs on <a href="https://proappstore.online">ProAppStore</a>. If you need platform sign-in, realtime rooms, or a secret-injecting API proxy:</p>
     ${copyCommand('cd web && pnpm add @freeappstore/sdk')}
     <ul>
       <li><strong>Auth</strong> — GitHub, Google, Apple, or email (when configured). <code>fas.auth.signIn()</code></li>
-      <li><strong>KV</strong> — Per-user storage. <code>fas.kv.set('key', value)</code></li>
       <li><strong>Rooms</strong> — Realtime WebSocket. <code>fas.rooms.join('lobby')</code></li>
       <li><strong>Proxy</strong> — Server-side API keys. <code>fas.proxy.fetch('api.example.com/data')</code></li>
     </ul>

@@ -41,27 +41,29 @@
       ]
     },
     "user-storage": {
-      "status": "yes",
-      "limits": "1 MiB per user per app, 100 keys, 64 KiB per value",
-      "note": "Requires sign-in; private to the signed-in user within the app.",
+      "status": "no",
+      "limits": null,
+      "note": "FAS stores no application data on the server (ADR-004): app data stays on the device. fas.kv is deprecated for app data and kept only for existing apps; synced data belongs on ProAppStore.",
       "evidence": [
         "packages/sdk/src/kv.ts:26",
         "packages/backend/src/lib/quota.ts:46",
         "packages/backend/src/routes/kv.ts:71",
-        "docs/platform-limits.md:12"
+        "docs/platform-limits.md:12",
+        "docs/adr/004-no-server-app-data.md"
       ]
     },
     "shared-data": {
-      "status": "limited",
-      "limits": "10,000 documents per collection, 64 KiB each, 100 per query page",
-      "note": "A collection is owner-only by default and publicly readable once the app owner shares it; only a document's creator can edit or delete it; queries filter only by owner or geo box and sort by created/updated time.",
+      "status": "no",
+      "limits": null,
+      "note": "FAS stores no application data on the server (ADR-004). fas.collections is deprecated for app data and kept only for existing apps; data shared between users belongs on ProAppStore.",
       "evidence": [
         "packages/sdk/src/db.ts:42",
         "packages/backend/src/routes/db.ts:19",
         "packages/backend/src/routes/db.ts:149",
         "packages/backend/src/routes/db.ts:151",
         "packages/backend/src/routes/db.ts:236",
-        "docs/platform-limits.md:27"
+        "docs/platform-limits.md:27",
+        "docs/adr/004-no-server-app-data.md"
       ]
     },
     "counters": {
@@ -88,14 +90,15 @@
       ]
     },
     "file-storage": {
-      "status": "limited",
-      "limits": "JPEG/WebP photos only; 200,000 bytes; 640 px longest edge; 90-day expiry; 100 live photos/user/app; 20 uploads/user/day across apps; 10,000 live photos/app",
-      "note": "fas.photos compresses photos in the browser. The API validates format, dimensions and bytes and strips metadata; uploads are private by default with explicit public opt-in. No general-purpose file storage.",
+      "status": "no",
+      "limits": null,
+      "note": "FAS stores no application data on the server (ADR-004). fas.photos is deprecated for app data and kept only for existing apps; keep files on the device (IndexedDB).",
       "evidence": [
         "packages/sdk/src/photos.ts",
         "packages/backend/src/routes/photos.ts",
         "packages/backend/src/lib/photo-image.ts",
-        "packages/backend/config/uploads-lifecycle.json"
+        "packages/backend/config/uploads-lifecycle.json",
+        "docs/adr/004-no-server-app-data.md"
       ]
     },
     "email": {

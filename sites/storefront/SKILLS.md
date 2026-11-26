@@ -94,7 +94,7 @@ Anyone can publish. Provisioning is self-service; there is no application or app
 | **Store repo** | freeappstore-online/platform (`sites/storefront`) | freegamestore-online/platform (`sites/freegamestore`) |
 | **Registry file** | `sites/storefront/registry.json` in platform repo | `sites/freegamestore/registry.json` in platform repo |
 | **Templates** | template-standalone, template-connected | template-game-{canvas, 3d, grid, cards, phaser, kaplay, pixi, babylon, excalibur, littlejs} |
-| **SDK (connected apps)** | `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice) | — |
+| **SDK (connected apps)** | `@freeappstore/sdk` (auth, device-local persistence and backup, counters, rooms, roles, friends, proxy, keys, email, voice) | — |
 | **Accent color** | Blue (#2563eb) | Emerald (#10b981) |
 | **Logo** | Free **Apps** | Free **Games** |
 | **Admin** | admin.freeappstore.online | admin.freegamestore.online |
@@ -172,7 +172,8 @@ No further API calls or manual steps needed. Ever.
 
 - ONE environment: production only. Push to `main` = deploy. Fix forward.
 - Static hosting on Cloudflare R2 (served by the host Worker). No server-side code in apps.
-- Backend (if needed): `@freeappstore/sdk` (auth, KV, counters, collections, rooms, roles, friends, proxy, keys, email, voice). `npm i @freeappstore/sdk`.
+- **No application data on the server** ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)). The FAS backend relays, identifies and holds metadata and keys; it never stores app content (documents, notes, records, photos). App data stays on the user's device (`@freeappstore/sdk/persist`, with `@freeappstore/sdk/backup` for export/import). Anything multi-user or server-backed belongs on ProAppStore (https://proappstore.online).
+- Backend (if needed): `@freeappstore/sdk` (auth, counters, rooms, roles, friends, proxy, keys, email, voice). `npm i @freeappstore/sdk`. `fas.kv`, `fas.collections`, data rooms and `fas.photos` are deprecated for app data.
 - No ads. FreeAppStore apps never show ads or load ad networks. `fas check` fails on ad network scripts, SDKs and packages: Google AdSense, Ad Manager (GPT), IMA and H5 Games Ads/AdMob, Amazon Publisher Services, Prebid, Media.net, Carbon Ads, BuySellAds, EthicalAds, Ezoic, PropellerAds, Adsterra, Taboola, Outbrain and web-game portal ad SDKs (Poki, CrazyGames, GameDistribution, GameMonetize).
 - Free means free forever. No monetization in the free version: no payments of any kind. The host blocks the Payment Request API (`payment=()`) and `fas check` fails on Payment Request, Apple Pay, Stripe/PayPal/Paddle/Lemon Squeezy/Gumroad/Google Pay SDKs or checkout links, and payment manifest members. Paid apps go on ProAppStore.
 - Browser capabilities are open on your app's own origin: microphone, camera, location, motion sensors, MIDI, USB/serial/HID/Bluetooth, screen capture, clipboard, wake lock, Web Workers (including `blob:` workers) and WebAssembly all work. The browser asks the user, so handle `NotAllowedError` and missing hardware; the storefront preview delegates the same features to your app, so they work there too. Not available: payments (see the rule above) and the Topics API. `SharedArrayBuffer` and threaded wasm need cross-origin isolation: set `"crossOriginIsolated": true` in `fas.json` and run `fas publish`. That sends COOP/COEP for your app only; third-party embeds/images need CORS/CORP and popups lose `window.opener`. Full matrix: https://docs.freeappstore.online/capabilities/
@@ -265,9 +266,9 @@ import { initApp } from '@freeappstore/sdk'
 
 const fas = initApp({ appId: 'my-app' })
 // fas.auth     — GitHub OAuth sign-in/out
-// fas.kv       — per-user key-value storage
+// fas.kv       — deprecated for app data (ADR-004); existing apps only
 // fas.counters — shared atomic counters
-// fas.collections — document database
+// fas.collections — deprecated for app data (ADR-004); existing apps only
 // fas.rooms    — real-time WebSocket rooms
 // fas.friends  — platform-level friend relationships
 // fas.proxy    — secret-injecting API proxy
@@ -304,9 +305,22 @@ When building a sign-in screen, always render both buttons:
 <button onClick={() => signIn('google')}>Sign in with Google</button>
 ```
 
-### Per-user KV Storage
+### App data: device-local
 
-Scoped per user per app. The user must be signed in.
+FreeAppStore stores no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)). Keep an app's data on the device with `@freeappstore/sdk/persist`, and offer `@freeappstore/sdk/backup` export/import for moving it between devices. Check every result before reporting a save.
+
+```tsx
+import { setPreference } from '@freeappstore/sdk/persist'
+
+const saved = setPreference('notes', 'draft', { text: 'hello' }, isDraft)
+if (!saved.ok) showUnsaved(saved.reason) // never claim a save that failed
+```
+
+Full API: `sdk_reference` features `persistence` and `backup`, or https://docs.freeappstore.online/sdk/. Multi-user or server-backed data (shared documents, collaboration, sync) belongs on ProAppStore (https://proappstore.online).
+
+### Per-user KV Storage (deprecated)
+
+**Deprecated for app data (ADR-004).** Kept only for existing apps; do not use it in new code. Scoped per user per app. The user must be signed in.
 
 ```tsx
 await fas.kv.set('preferences', { theme: 'dark', fontSize: 16 })
@@ -334,9 +348,9 @@ const votes = await fas.counters.list({ prefix: 'vote:' })
 
 Use for: vote tallies, view counts, leaderboards, any shared numeric state.
 
-### Collections (Document Database)
+### Collections (Document Database) (deprecated)
 
-Queryable JSON documents with owner-only writes. A collection is private to each document's owner by default (you list and read only your own, `owner` can only be your own id, `_owner` is hidden from everyone else). The app owner marks a collection shared once with `fas db share <collection>`; a shared collection is readable by anyone, so an owner filter there is not a privacy boundary.
+**Deprecated for app data (ADR-004).** Kept only for existing apps; do not use it in new code. Queryable JSON documents with owner-only writes. A collection is private to each document's owner by default (you list and read only your own, `owner` can only be your own id, `_owner` is hidden from everyone else). The app owner marks a collection shared once with `fas db share <collection>`; a shared collection is readable by anyone, so an owner filter there is not a privacy boundary.
 
 ```tsx
 const col = fas.collections.collection('posts', { visibility: 'public-read' })
@@ -582,7 +596,7 @@ FreeAppStore exposes the shared SDK services described here, not a dedicated ser
 
 - Static hosting and SDK services are free. There are no app payments or subscription gates.
 - User-owned API keys can incur third-party charges. User-key proxy calls are limited to 1,000/day per user across apps.
-- KV, public collections, counters, rooms, email, friendships, roles, and push reminders are supported with service-specific limits.
+- Counters, rooms, email, friendships, roles, and push reminders are supported with service-specific limits. No application data is stored on the server (ADR-004): KV, collections, data rooms and photo uploads are deprecated for app data.
 - Scheduled user push reminders are supported; arbitrary app cron jobs and per-app server compute are not exposed.
 - Browser maps, local file pickers, IndexedDB, camera access, workers, and wasm are browser capabilities, not paid platform features.
 - There is no direct SQL API, hosted file-upload API, or custom-domain management API in this SDK.
@@ -938,7 +952,7 @@ The auditor tests 12 viewports. Mobile phones are weighted highest:
 ## Privacy Rules
 
 - ZERO analytics, tracking, cookies
-- All user data in localStorage (standalone) or `@freeappstore/sdk` KV (connected)
+- All app data stays on the user's device (`@freeappstore/sdk/persist`); none on the server (ADR-004)
 - No third-party scripts except Google Fonts CDN
 
 ## Compliance Checks (automated on push)
@@ -1007,7 +1021,7 @@ npm i -g @freeappstore/cli
 | `fas build-target` | Validate the app entry, identity and build/deploy target from `fas.json` |
 | `fas secret set\|list\|rm` | Manage server-side encrypted API keys. Pass the value with `--from-env VAR`, stdin, or the hidden prompt — never as an argument |
 | `fas proxy allow\|list\|deny` | Manage the proxy URL allowlist |
-| `fas db share\|unshare\|list` | Choose which collections other users can read |
+| `fas db share\|unshare\|list` | Choose which collections other users can read (collections are deprecated for app data, ADR-004) |
 | `fas quality [id]` | Quality report for an app |
 | `fas migrate tailwind-tokens` | Codemod long-hand Tailwind CSS-variable utilities to token utilities (dry-run unless `--write`) |
 
@@ -1081,38 +1095,7 @@ The MCP supports both "I write the code" and "the platform writes the code":
 | `deploy_status` | `(app_id)` | Latest deploy state. |
 | `app_logs` | `(app_id, level?, limit?)` | Recent app logs. |
 | `platform_guide` | `()` | Returns this guide. |
-| `sdk_reference` | `(feature?)` | SDK docs, optionally scoped to one feature (`auth`, `kv`, `rooms`, …). |
-
-**App data (auth required; only apps that ship `mcp.json`):**
-
-| Tool | Signature | What it does |
-|---|---|---|
-| `app_guide` | `(app_id)` | The app's instructions and collection schemas from its `mcp.json`. |
-| `app_data_list` | `(app_id, collection, limit?, offset?)` | Your documents in a declared collection. |
-| `app_data_get` | `(app_id, collection, id)` | One of your documents. |
-| `app_data_save` | `(app_id, collection, document, id?)` | Create (no id) or shallow-merge update (id). Validated against the schema; errors come back to fix and retry. |
-| `app_data_delete` | `(app_id, collection, id)` | Delete one of your documents (needs the `destructive` scope). |
-
-### Let AI work on users' data in your app (`mcp.json`)
-
-Ship `web/public/mcp.json` (served at `https://<id>.freeappstore.online/mcp.json`, max 64 KB) and an AI connected to the MCP can read and write the signed-in user's own documents in the collections it declares:
-
-```json
-{
-  "version": 1,
-  "instructions": "Markdown for the AI: what the app is, how its data is used, how to make good content.",
-  "collections": {
-    "decks": {
-      "description": "One document per presentation.",
-      "schema": { "type": "object", "required": ["title", "slides"], "properties": { "title": { "type": "string" } } }
-    }
-  }
-}
-```
-
-- `schema` is JSON Schema (draft 2020-12); every write is validated against it.
-- Each declared collection is a normal `fas.collections` collection: when the user is signed in, the app must load and save that data through `fas.collections.collection('decks')` (not only localStorage), or what the AI writes never shows up.
-- Undeclared collections stay unreachable over MCP. No `mcp.json`, no data access.
+| `sdk_reference` | `(feature?)` | SDK docs, optionally scoped to one feature (`auth`, `persistence`, `backup`, `rooms`, …). |
 
 ### Examples (one prompt per mode)
 
@@ -1168,9 +1151,9 @@ Embed the badge in your README:
 ![Code Quality](https://api.freeappstore.online/v1/apps/YOUR_APP_ID/quality/badge)
 ```
 
-## Small temporary photo uploads
+## Small temporary photo uploads (deprecated)
 
-Use `fas.photos.upload(file, { visibility: 'public' })` for listing photos.
+**Deprecated for app data (ADR-004).** Kept only for existing apps; new apps keep photos on the device (`openFileStore` / `putFile` from `@freeappstore/sdk/persist`). Use `fas.photos.upload(file, { visibility: 'public' })` for listing photos.
 Default visibility is private; use `download(id)` for authenticated private reads.
 The SDK resizes/re-encodes; the API caps JPEG/WebP at 640 px and 200,000 bytes,
 strips metadata and expires uploads after 90 days. Use the returned `expiresAt`

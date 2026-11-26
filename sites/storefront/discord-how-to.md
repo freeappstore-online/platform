@@ -57,6 +57,6 @@ No CLI needed. Go to [console.freeappstore.online/create](https://freeappstore.o
 
 **After publishing:** every `git push` to main auto-deploys. Your app is live at `my-app.freeappstore.online`.
 
-**Need accounts or cloud storage?** Add `@freeappstore/sdk` — gives you GitHub auth, per-user KV, realtime rooms, and a secret-injecting API proxy. [SDK docs](https://github.com/freeappstore-online/platform/tree/main/packages/sdk#readme)
+**Need accounts or realtime?** Add `@freeappstore/sdk` — gives you GitHub auth, realtime rooms, and a secret-injecting API proxy. App data stays on the device (`@freeappstore/sdk/persist`): FreeAppStore stores no app data on the server. [SDK docs](https://github.com/freeappstore-online/platform/tree/main/packages/sdk#readme)
 
 **Questions?** Ask in this channel or open an issue at [github.com/freeappstore-online/submissions](https://github.com/freeappstore-online/submissions/issues).

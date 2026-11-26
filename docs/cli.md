@@ -30,7 +30,7 @@ Fresh app scaffolds include the versioned `pwa` capability. Existing apps can us
 | `fas logs <id>` | Show recent deploy runs (GitHub Actions) |
 | `fas secret set\|list\|rm` | Manage app API keys |
 | `fas proxy allow\|list\|deny` | Manage proxy URL allowlist |
-| `fas db share\|unshare\|list` | Choose which `fas.collections` collections other users can read |
+| `fas db share\|unshare\|list` | Choose which `fas.collections` collections other users can read (collections are deprecated for app data, ADR-004) |
 | `fas screencheck` | Responsive layout test across viewports |
 | `fas quality [id]` | VCQA code quality report |
 | `fas migrate tailwind-tokens` | Rewrite long-hand Tailwind CSS-variable utilities to token utilities; dry-run unless `--write` |
@@ -208,7 +208,7 @@ Injection modes: `query:<name>`, `header:<name>`, `bearer`, `oauth2_cc`. Use `--
 
 ## `fas db`
 
-Collections are private to each document's owner by default. Share one with every user of the app, or make it private again:
+`fas.collections` is deprecated for app data ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)); these commands remain for existing apps. Collections are private to each document's owner by default. Share one with every user of the app, or make it private again:
 
 ```bash
 fas db share posts      # other users can now read documents in `posts` (owners still write)

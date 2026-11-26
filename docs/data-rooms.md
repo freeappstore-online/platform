@@ -1,5 +1,7 @@
 # Durable authorized data rooms
 
+> **Deprecated for app data ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)).** FAS stores no application data on the server. This reference remains only for existing apps; new apps must not use data rooms. Multi-user or server-backed data belongs on [ProAppStore](https://proappstore.online); live, unpersisted exchange can use `fas.rooms`.
+
 These HTTP endpoints require a session bearer token, including reads. They are
 separate from `fas.collections` (owner-only unless shared) and ephemeral `fas.rooms` WebSocket
 fan-out. Joining a WebSocket room never grants durable data access; messages sent

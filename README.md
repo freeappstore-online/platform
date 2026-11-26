@@ -31,7 +31,7 @@ Full guide: <https://freeappstore.online/contribute.html>
 | Package | npm | Purpose |
 |---|---|---|
 | [`packages/cli`](./packages/cli) | `@freeappstore/cli` | The `fas` binary — `login`, `init`, `check`, `publish`, `list`, `doctor`, `logs` |
-| [`packages/sdk`](./packages/sdk) | `@freeappstore/sdk` | Browser SDK — auth, KV, collections, counters, rooms, roles, friends, proxy, keys, email, push, hooks, and UI |
+| [`packages/sdk`](./packages/sdk) | `@freeappstore/sdk` | Browser SDK — auth, device-local persistence and backup, counters, rooms, roles, friends, proxy, keys, email, push, hooks, and UI. FAS stores no app data on the server ([ADR-004](./docs/adr/004-no-server-app-data.md)); KV, collections, data rooms and photos are deprecated for app data |
 | [`packages/compliance`](./packages/compliance) | `@freeappstore/compliance` | Compliance checks (no-tracking, brand fonts, manifest, bundle size). Runs in `fas check` and in storefront CI. |
 | [`packages/backend`](./packages/backend) | _internal_ | The Cloudflare Worker that powers the SDK (Workers + D1 + Durable Objects) |
 

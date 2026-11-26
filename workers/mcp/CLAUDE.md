@@ -31,10 +31,6 @@ Remote MCP server for AI agents to interact with the FreeAppStore platform.
 Note: `create_app`/`update_files` need no AI key (the client model is the author);
 `agent_build` needs a funded key in your FreeAppStore vault for the chosen provider.
 
-**App data — the user's own documents in apps that ship `mcp.json` (#734, `src/app-data.ts`):**
-`app_guide`, `app_data_list`, `app_data_get`, `app_data_save` (schema-validated), `app_data_delete` (destructive scope).
-Only collections declared in the app's `mcp.json` are reachable; calls go through the backend collections API as the user.
-
 **Info / inspect:**
 
 | Tool | Auth | Description |
@@ -44,7 +40,7 @@ Only collections declared in the app's `mcp.json` are reachable; calls go throug
 | `deploy_status` | None | Check GitHub Actions deploy status |
 | `app_info` | None | Get app URLs, repo, status |
 | `platform_guide` | None | Fetch SKILLS.md (full platform guide), then the current build rules |
-| `sdk_reference` | None | SDK reference: `shell` and `components` first, then auth, kv, counters, collections, rooms, proxy, keys, push, hooks, ui, free-apis |
+| `sdk_reference` | None | SDK reference: `shell` and `components` first, then auth, persistence, backup, counters, rooms, proxy, keys, push, hooks, ui, free-apis; kv and collections are marked deprecated for app data (ADR-004) |
 
 **SDK Shell is the supported default (#91).** For a new default scaffold, the output
 teaches wrapping the app in `<Shell app={fas} nav={NAV}>` from `@freeappstore/sdk/ui` with a nav

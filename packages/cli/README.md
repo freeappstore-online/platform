@@ -43,7 +43,7 @@ After the first successful code push and deploy, live at `https://my-app.freeapp
 | `fas logs <app-id>` | Show recent deployment runs and links for an app (GitHub Actions). |
 | `fas secret set\|list\|rm` | Manage server-side encrypted API keys for an app. |
 | `fas proxy allow\|list\|deny` | Manage the URL allowlist for the per-app secret-injecting proxy. |
-| `fas db share\|unshare\|list` | Choose which `fas.collections` collections every user of the app can read. |
+| `fas db share\|unshare\|list` | Choose which `fas.collections` collections every user of the app can read. Collections are deprecated for app data (ADR-004); existing apps only. |
 | `fas screencheck` | Build the app and run a browser at the manifest-declared minimum width in portrait and landscape to verify the layout fits without scrolling. |
 | `fas quality [app-id]` | Show the VCQA code quality report (score + grade) for an app. |
 | `fas migrate tailwind-tokens` | Rewrite long-hand Tailwind CSS-variable utilities to token utilities ([below](#migrate-an-existing-app-to-token-utilities)). Dry-run unless `--write`. |

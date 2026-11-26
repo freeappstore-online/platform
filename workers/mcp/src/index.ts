@@ -4,7 +4,6 @@ import { McpAgent } from "agents/mcp";
 import { z } from "zod";
 import { VALID_CATEGORIES } from "../../../packages/backend/src/lib/apps";
 import { formatAgentActivity, formatAgentStatus } from "./agent-observability.js";
-import { type AppCollection, declaredCollection, fetchManifest, formatGuide, isDocId, stripMeta, validateDocument } from "./app-data.js";
 import { AuthHandler } from "./auth-handler.js";
 import { getDeployStatus } from "./deploy-status.js";
 import { isFilePath, isPublicRepo, isRepoName, listRepoFiles, pushFiles, readRepoBytes, readRepoFile, textToB64 } from "./github.js";
@@ -15,7 +14,7 @@ import { ownershipGateText, ownsApp } from "./ownership.js";
 import { createAppProblems, preflightUpdate } from "./preflight.js";
 import { type RateLimiter, withRateLimit } from "./ratelimit.js";
 import { MAX_TOOL_INPUT_ELEMENTS, withBoundedBody } from "./request-limits.js";
-import { audit, listAuditEvents, MCP_SCOPES, type McpScope, requirePermission, type SafetyContext } from "./safety.js";
+import { audit, listAuditEvents, MCP_SCOPES, requirePermission, type SafetyContext } from "./safety.js";
 import { scaffoldRepo } from "./scaffold.js";
 import { BUILD_HANDOFF_BLOCK, getSdkReference, SDK_REFERENCE_FEATURES, withBuildHandoff } from "./sdk-reference.js";
 
@@ -314,7 +313,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
       {
         title: "Look up the SDK reference",
         description:
-          "Return reference documentation for @freeappstore/sdk, for one feature or all of them: shell (app frame and navigation), components (every UI component and its props), auth, KV, counters, collections, rooms, proxy, keys, push reminders, hooks and free APIs.",
+          "Return reference documentation for @freeappstore/sdk, for one feature or all of them: shell (app frame and navigation), components (every UI component and its props), auth, persistence (where app data lives), backup, counters, rooms, proxy, keys, push reminders, hooks and free APIs. KV and collections are deprecated for app data: FreeAppStore stores no application data on the server (ADR-004).",
         annotations: READ,
         inputSchema: {
           feature: z
@@ -768,169 +767,7 @@ export class FasMcpAgent extends McpAgent<Env, unknown, McpProps> {
         }
       },
     );
-
-    // ── App data: the user's own documents inside an app that ships mcp.json (#734) ──
-    const appIdArg = z.string().describe("App ID (e.g. 'slides' for slides.freeappstore.online)");
-    const collectionArg = z.string().describe("Collection name declared in the app's mcp.json (see app_guide)");
-    const docIdArg = z.string().describe("Document id (from app_data_list or app_data_save)");
-
-    this.server.registerTool(
-      "app_guide",
-      {
-        title: "Read an app's data guide",
-        description:
-          "Return an app's mcp.json guide: what the app is, how its data is used, and the collections of your own documents it exposes over MCP, each with its JSON Schema. Apps without mcp.json expose no data.",
-        annotations: READ,
-        inputSchema: { app_id: appIdArg },
-      },
-      async ({ app_id }) => {
-        if (!isRepoName(app_id)) return badAppId(app_id);
-        const loaded = await fetchManifest(app_id);
-        if ("error" in loaded) return toolError(loaded.error);
-        return txt(formatGuide(app_id, loaded.manifest));
-      },
-    );
-
-    this.server.registerTool(
-      "app_data_list",
-      {
-        title: "List my documents in an app",
-        description:
-          "List your own documents in one of an app's MCP collections (declared in its mcp.json), newest first, with the total count.",
-        annotations: READ,
-        inputSchema: {
-          app_id: appIdArg,
-          collection: collectionArg,
-          limit: z.number().int().min(1).max(100).optional().describe("Max documents to return (default 20, max 100)"),
-          offset: z.number().int().min(0).optional().describe("Documents to skip, for paging (default 0)"),
-        },
-      },
-      async ({ app_id, collection, limit, offset }) => {
-        const target = await this.appDataTarget("read", "app_data_list", app_id, collection);
-        if ("result" in target) return target.result;
-        const params = new URLSearchParams({ limit: String(limit ?? 20), offset: String(offset ?? 0) });
-        const data = await fasRequest(this.env.API_BASE, "GET", `${target.path}?${params}`, target.token);
-        if (data.error) return toolError(`Could not list ${collection} in ${app_id}: ${apiErrorText(data)}`);
-        return txt(JSON.stringify({ total: data.total ?? 0, offset: offset ?? 0, documents: data.documents ?? [] }, null, 2));
-      },
-    );
-
-    this.server.registerTool(
-      "app_data_get",
-      {
-        title: "Read one of my documents in an app",
-        description: "Read one of your own documents from an app's MCP collection (declared in its mcp.json).",
-        annotations: READ,
-        inputSchema: { app_id: appIdArg, collection: collectionArg, id: docIdArg },
-      },
-      async ({ app_id, collection, id }) => {
-        const target = await this.appDataTarget("read", "app_data_get", app_id, collection, id);
-        if ("result" in target) return target.result;
-        const data = await fasRequest(this.env.API_BASE, "GET", target.path, target.token);
-        if (data.status === 404) return toolError(`No document ${id} of yours in ${app_id}/${collection}. Use app_data_list for ids.`);
-        if (data.error) return toolError(`Could not read ${id} from ${app_id}/${collection}: ${apiErrorText(data)}`);
-        return txt(JSON.stringify(data, null, 2));
-      },
-    );
-
-    this.server.registerTool(
-      "app_data_save",
-      {
-        title: "Save a document in an app",
-        description:
-          "Create one of your documents in an app's MCP collection (no id), or update one of yours (with id: the given fields replace those fields, others are kept). The resulting document is validated against the collection's JSON Schema from mcp.json first; nothing is written if it does not match, and the errors are returned. The app shows the change when you are signed in.",
-        annotations: OVERWRITE,
-        inputSchema: {
-          app_id: appIdArg,
-          collection: collectionArg,
-          document: z
-            .record(z.string(), z.unknown())
-            .describe("The document (create) or the fields to change (update), as a JSON object matching the collection's schema"),
-          id: docIdArg.optional().describe("Id of your existing document to update; omit to create a new one"),
-        },
-      },
-      async ({ app_id, collection, document, id }) => {
-        const target = await this.appDataTarget("write", "app_data_save", app_id, collection, id);
-        if ("result" in target) return target.result;
-        const fields = stripMeta(document);
-        let full = fields;
-        if (id) {
-          const existing = await fasRequest(this.env.API_BASE, "GET", target.path, target.token);
-          if (existing.status === 404) return toolError(`No document ${id} of yours in ${app_id}/${collection}. Omit id to create one.`);
-          if (existing.error) return toolError(`Could not read ${id} from ${app_id}/${collection}: ${apiErrorText(existing)}`);
-          full = { ...stripMeta(existing), ...fields };
-        }
-        const problems = validateDocument(target.schema, full);
-        const auditInput = { app_id, collection, id: id ?? null, fieldCount: Object.keys(fields).length };
-        if (problems.length) {
-          await audit(this.safety(), { tool: "app_data_save", action: "denied", reason: "schema", input: auditInput });
-          return toolError(
-            `Not saved: the ${id ? "updated " : ""}document does not match the ${collection} schema in ${app_id}'s mcp.json.\n${problems.map((p) => `- ${p}`).join("\n")}\nFix these and call app_data_save again (app_guide shows the schema).`,
-          );
-        }
-        auditLog("app_data_save", this.props.userId, auditInput);
-        const saved = await fasRequest(this.env.API_BASE, id ? "PUT" : "POST", target.path, target.token, fields);
-        if (saved.error) {
-          await audit(this.safety(), { tool: "app_data_save", action: "error", input: auditInput, result: { status: saved.status } });
-          return toolError(`Could not save to ${app_id}/${collection}: ${apiErrorText(saved)}`);
-        }
-        await audit(this.safety(), { tool: "app_data_save", action: "success", input: auditInput, result: { id: saved.id } });
-        return txt(`${id ? "Updated" : "Created"} ${collection} document ${saved.id} in ${app_id}.\n\n${JSON.stringify(saved, null, 2)}`);
-      },
-    );
-
-    this.server.registerTool(
-      "app_data_delete",
-      {
-        title: "Delete a document in an app",
-        description: "Permanently delete one of your own documents from an app's MCP collection (declared in its mcp.json).",
-        annotations: OVERWRITE,
-        inputSchema: { app_id: appIdArg, collection: collectionArg, id: docIdArg },
-      },
-      async ({ app_id, collection, id }) => {
-        const target = await this.appDataTarget("destructive", "app_data_delete", app_id, collection, id);
-        if ("result" in target) return target.result;
-        const auditInput = { app_id, collection, id };
-        auditLog("app_data_delete", this.props.userId, auditInput);
-        const res = await fasRequest(this.env.API_BASE, "DELETE", target.path, target.token);
-        if (res.status === 404) return toolError(`No document ${id} of yours in ${app_id}/${collection}.`);
-        if (res.error) {
-          await audit(this.safety(), { tool: "app_data_delete", action: "error", input: auditInput, result: { status: res.status } });
-          return toolError(`Could not delete ${id} from ${app_id}/${collection}: ${apiErrorText(res)}`);
-        }
-        await audit(this.safety(), { tool: "app_data_delete", action: "success", input: auditInput });
-        return txt(`Deleted ${collection} document ${id} from ${app_id}.`);
-      },
-    );
   }
-
-  /** Shared checks for the app_data_* tools: signed in, scope, valid ids, and a collection the app's mcp.json declares. */
-  private async appDataTarget(
-    scope: McpScope,
-    tool: string,
-    appId: string,
-    collection: string,
-    id?: string,
-  ): Promise<{ result: ReturnType<typeof toolError> } | { token: string; path: string; schema: AppCollection["schema"] }> {
-    const token = this.props.token;
-    if (!token) return { result: toolError(NOT_SIGNED_IN) };
-    const denied = await requirePermission(this.safety(), scope, tool, { app_id: appId, collection, id });
-    if (denied) return { result: { ...denied, isError: true } };
-    if (!isRepoName(appId)) return { result: badAppId(appId) };
-    if (id !== undefined && !isDocId(id)) return { result: toolError(`Invalid document id "${id}". Use an id from app_data_list.`) };
-    const loaded = await fetchManifest(appId);
-    if ("error" in loaded) return { result: toolError(loaded.error) };
-    const declared = declaredCollection(appId, loaded.manifest, collection);
-    if ("error" in declared) return { result: toolError(declared.error) };
-    const path = `/v1/apps/${appId}/db/${collection}${id ? `/${id}` : ""}`;
-    return { token, path, schema: declared.collection.schema };
-  }
-}
-
-/** A backend error from fasRequest as one line. */
-function apiErrorText(r: { error: string; detail?: unknown }): string {
-  if (!r.detail) return r.error;
-  return `${r.error} — ${(typeof r.detail === "string" ? r.detail : JSON.stringify(r.detail)).slice(0, 300)}`;
 }
 
 // ── Auth middleware ─────────────────────────────────────────────

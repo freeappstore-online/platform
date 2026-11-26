@@ -6,8 +6,11 @@ PWA lifecycle APIs live at `@freeappstore/sdk/pwa`, with Vite options at
 `@freeappstore/sdk/pwa-config`. See [safe updates and offline capabilities](https://github.com/freeappstore-online/platform/blob/main/docs/pwa-lifecycle.md).
 
 Device-local preferences, IndexedDB, and large-file metadata live at
-`@freeappstore/sdk/persist`. That data is not the signed-in account. Account
-keys remain `fas.kv`. A failed save returns a status instead of throwing a
+`@freeappstore/sdk/persist`. This is where app data lives: FreeAppStore stores
+no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)).
+`fas.kv`, `fas.collections`, data rooms and `fas.photos` are deprecated for app
+data and kept only for existing apps; multi-user or server-backed data belongs on
+[ProAppStore](https://proappstore.online). A failed save returns a status instead of throwing a
 success path, and corrupt values are left in place. See
 [device-local persistence](https://github.com/freeappstore-online/platform/blob/main/docs/sdk.md#device-local-persistence-freeappstoresdkpersist).
 
@@ -65,15 +68,15 @@ await fas.auth.init();     // capture callback, must be called once
 | Model | Service | Guarantee |
 | --- | --- | --- |
 | Device-local | `@freeappstore/sdk/persist` | This browser profile and origin only; not account sync. |
-| Private per-account | `fas.kv` | Server-side `(appId, userId)` isolation; authentication required. |
-| Shared documents | `fas.collections` | Owner-only until the app owner shares the collection (`fas db share`); then public reads, owner-only writes. A shared collection is public even when a query filters by owner. |
-| Room-restricted | Backend data-room HTTP API | Authenticated endpoints enforce room membership. They are separate from public collections and realtime room broadcasts; the SDK does not yet provide a wrapper. See the [data-room API](../../docs/data-rooms.md). |
+| Private per-account (deprecated, ADR-004) | `fas.kv` | Server-side `(appId, userId)` isolation; authentication required. |
+| Shared documents (deprecated, ADR-004) | `fas.collections` | Owner-only until the app owner shares the collection (`fas db share`); then public reads, owner-only writes. A shared collection is public even when a query filters by owner. |
+| Room-restricted (deprecated, ADR-004) | Backend data-room HTTP API | Authenticated endpoints enforce room membership. They are separate from public collections and realtime room broadcasts; the SDK does not yet provide a wrapper. See the [data-room API](../../docs/data-rooms.md). |
 
 A collection is `'private'` (owner-only) by default. `fas.collections.collection(name, { visibility: 'public-read' })` declares in code that the collection is shared; the server enforces what the app owner set with `fas db share`. Any other visibility is rejected by the SDK type and runtime.
 
 ### Per-user KV
 
-Private per-account cloud storage scoped to `(appId, userId)` server-side. Use it for data that follows a signed-in user across devices. Requests require the account; do not gate unrelated public screens behind sign-in.
+**Deprecated for app data (ADR-004); existing apps only.** Private per-account cloud storage scoped to `(appId, userId)` server-side. Use it for data that follows a signed-in user across devices. Requests require the account; do not gate unrelated public screens behind sign-in.
 
 ```ts
 await fas.kv.set('theme', { color: 'plum' });
@@ -129,7 +132,7 @@ Rooms provide ephemeral realtime broadcast, not durable storage. Rooms are open 
 
 ### Collections (document database)
 
-Document store for queryable data. Documents are private to their owner by default; `fas db share <collection>` lets everyone read a collection (authenticated owners still write only their own). `owner` can only be your own id, and `_owner` is hidden from other users. No SQL required — just JSON in, JSON out.
+**Deprecated for app data (ADR-004); existing apps only.** Document store for queryable data. Documents are private to their owner by default; `fas db share <collection>` lets everyone read a collection (authenticated owners still write only their own). `owner` can only be your own id, and `_owner` is hidden from other users. No SQL required — just JSON in, JSON out.
 
 ```ts
 const posts = fas.collections.collection('posts', { visibility: 'public-read' });
@@ -331,6 +334,8 @@ Both official templates include the complete setup. Floating UI uses opaque
 The connected draft hook and example are a supported SDK recipe. The canonical generated connected template is not wired to this feature in #350; carry starter wiring and adoption into #352 rather than claiming existing generated templates changed.
 
 ## Temporary photos (`fas.photos`)
+
+**Deprecated for app data (ADR-004); existing apps only.** Keep new photos on the device (`openFileStore` / `putFile`).
 
 ```ts
 const photo = await fas.photos.upload(file, { visibility: 'public' });

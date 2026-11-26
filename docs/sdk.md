@@ -6,6 +6,8 @@
 npm i @freeappstore/sdk
 ```
 
+**App data stays on the device.** FAS stores no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)): the backend relays, identifies and holds metadata and keys, never app content. Keep an app's data with [device-local persistence](#device-local-persistence-freeappstoresdkpersist) and [backups](#backup-and-file-export-freeappstoresdkbackup). Anything multi-user or server-backed belongs on [ProAppStore](https://proappstore.online). `fas.kv`, `fas.collections`, data rooms and photo uploads are **deprecated for app data**; their sections below remain only for apps that already use them.
+
 ## Initialization
 
 ```ts
@@ -40,6 +42,8 @@ A magic link opened in the browser that asked for it signs in directly. Opened a
 
 ## Per-user KV (`fas.kv`)
 
+> **Deprecated for app data ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)).** Kept for existing apps only; do not use it in new code. Use [device-local persistence](#device-local-persistence-freeappstoresdkpersist).
+
 Per-user, per-app key-value store. Scoped to `(appId, userId)` server-side.
 
 ```ts
@@ -61,8 +65,8 @@ This data stays on this origin on this device. Clearing site data removes it. It
 | Class | API | Where it lives |
 | --- | --- | --- |
 | Device-local | `@freeappstore/sdk/persist` | This browser profile only |
-| Private account | `fas.kv` | The signed-in user's keys on the server |
-| Shared documents | `fas.collections` | Private to the owner by default; other users read it only once the app owner shares the collection (`fas db share`). Owner writes |
+| Private account (deprecated, ADR-004) | `fas.kv` | The signed-in user's keys on the server. Existing apps only |
+| Shared documents (deprecated, ADR-004) | `fas.collections` | Server documents, owner-only unless the app owner shares the collection. Existing apps only; multi-user data belongs on ProAppStore |
 | Room fan-out | `fas.rooms` | Ephemeral broadcast, not an access list |
 
 A save reports `{ ok: true, value }` only after `localStorage` accepts the write or the IndexedDB transaction commits. Do not show a success toast before that. `{ ok: false, reason }` is `unavailable` (storage blocked), `corrupt` (unreadable bytes, left in place), `quota`, `validation`, `aborted`, `conflict`, or `not-installed`. Nothing in this module deletes corrupt data or resets it to a default.
@@ -149,6 +153,8 @@ await fas.counters.increment('lives', -1);                 // decrement — owne
 **Limits:** 1000 counters per app, increment range -1000 to +1000 per call.
 
 ## Collections (`fas.collections`)
+
+> **Deprecated for app data ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)).** Kept for existing apps only; do not use it in new code. Multi-user or server-backed data belongs on [ProAppStore](https://proappstore.online).
 
 Simple document store for queryable data. **A collection is private to the user who wrote each document by default**: a read lists and returns only your own documents, a signed-out read gets 401, another user's document id answers 404, and `owner` can only be your own id (anything else is 403). `_owner` is shown only on your own documents.
 
@@ -381,11 +387,13 @@ Record and file operations resolve transaction-start failures through `StorageRe
 
 ## Connected data example
 
+> **Deprecated ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)).** This example syncs a draft through `fas.kv`. New apps keep drafts on the device with `@freeappstore/sdk/persist`.
+
 For race-safe private per-account editing, see the `ConnectedDraft` component that `fas init <app-id> --template connected` generates (`web/src/components/ConnectedDraft.tsx`; the MCP `sdk_reference` feature `connected-data` returns the same component) and `useConnectedKvDraft` from `@freeappstore/sdk/hooks`. It guards initial loading, preserves dirty edits, supports retry/save status, and isolates requests on app, record, account, and sign-out changes. Gate only the private-data feature; leave public browsing available. If an app owns its profile route, render `AccountSection` so GitHub and Google choices remain available.
 
 #350 ships the SDK hook and standalone example. The canonical generated connected template remains unchanged; carry its wiring and adoption into #352. Planning Poker's app-owned remediation is tracked in [Planning Poker #1](https://github.com/freeappstore-online/planning-poker/issues/1). No room or user data was read or changed.
 
-Durable room-restricted records use the backend's authenticated data-room endpoints documented in [data rooms](https://github.com/freeappstore-online/platform/blob/main/docs/data-rooms.md); the SDK does not yet wrap those endpoints. These private endpoints are separate from public collections and realtime room broadcasts. Membership is enforced by the backend for each request.
+Data rooms are deprecated for app data (ADR-004); they remain only for existing apps. Durable room-restricted records use the backend's authenticated data-room endpoints documented in [data rooms](https://github.com/freeappstore-online/platform/blob/main/docs/data-rooms.md); the SDK does not yet wrap those endpoints. These private endpoints are separate from public collections and realtime room broadcasts. Membership is enforced by the backend for each request.
 
 ## Phone companion locations (`fas.native`)
 
@@ -408,6 +416,8 @@ while (more) {
 The cursor orders by recording time, not arrival. The phone uploads when it has signal, so a point can land behind a cursor you already read past: to cover a time window, re-read it from its start and dedupe by `id`. Other apps get `available: false`; a console or other-app session gets 403.
 
 ## Temporary photos
+
+> **Deprecated for app data ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)).** Kept for existing apps only. New apps keep photos on the device (`openFileStore` / `putFile`).
 
 Use `fas.photos.upload(file)` for private photos, or explicitly pass
 `{ visibility: 'public' }` for listing photos. The SDK resizes and compresses;

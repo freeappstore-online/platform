@@ -85,12 +85,14 @@ This keeps query parameters and fragments in browser history while route selecti
 
 ## Choose data by access and durability
 
+FAS stores no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)). New apps keep data on the device; anything multi-user or server-backed belongs on [ProAppStore](https://proappstore.online). The `fas.kv`, collections and data-room rows are deprecated for app data and describe existing apps only.
+
 | Need | Use | Limits to communicate |
 | --- | --- | --- |
 | This device and origin only | `@freeappstore/sdk/persist` | No sync or backup. Surface a failed write as unsaved. |
-| A signed-in user's private values | `fas.kv` | Private per account for this app; sign-out/account switch must clear account-scoped UI and stale responses. |
-| Shared documents | `fas.collections` | Owner-only until the app owner shares the collection (`fas db share`); once shared, public read and owner write. A query filter or hidden UI is not privacy. |
-| Durable shared room records | Authenticated data-room endpoints | Owners and members have equal CRUD access to room documents. Members can see and change every room record; votes are not hidden from other members. |
+| A signed-in user's private values (deprecated) | `fas.kv` | Private per account for this app; sign-out/account switch must clear account-scoped UI and stale responses. |
+| Shared documents (deprecated) | `fas.collections` | Owner-only until the app owner shares the collection (`fas db share`); once shared, public read and owner write. A query filter or hidden UI is not privacy. |
+| Durable shared room records (deprecated) | Authenticated data-room endpoints | Owners and members have equal CRUD access to room documents. Members can see and change every room record; votes are not hidden from other members. |
 | Ephemeral realtime messages | `fas.rooms` | Broadcast only; not durable storage or a privacy/access-control boundary. |
 
 For device-local backup, validate and preview the incoming data before writes and require an explicit merge or replace choice. The SDK calls the app's apply callback, then attempts the app-supplied snapshot restore if apply fails. If restore succeeds, the result reports a failed import with the previous data restored. If restore fails, the result is `{ ok: false, reason: 'rollback' }` and stored data may be partial. Surface that failure and offer recovery; do not report success or claim the previous bytes are intact. Backups are user-managed files, not account sync or cloud backup. For connected requests, use one SDK/auth instance, gate private data at its boundary, and ignore responses that arrive after the active account changes.

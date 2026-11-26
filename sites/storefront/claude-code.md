@@ -104,13 +104,13 @@ my-app/
 
 1. Edit `web/src/App.tsx` and add components in `web/src/components/`
 2. Use the Shell component as root layout
-3. Store data in `localStorage` with a namespaced key (e.g. `myapp_data`)
+3. Keep app data on the device (`@freeappstore/sdk/persist`, or `localStorage` with a namespaced key). FreeAppStore stores no application data on the server (ADR-004); multi-user or server-backed data belongs on ProAppStore (https://proappstore.online)
 4. Keep bundle small — do not add npm dependencies unless absolutely necessary
 5. Make it responsive (mobile-first) and handle empty states
 
-## SDK — for apps that need accounts, cloud storage, or realtime
+## SDK — for apps that need accounts, realtime, or third-party APIs
 
-If the app needs user sign-in, per-user cloud storage, realtime collaboration, or third-party API calls, install the SDK:
+If the app needs user sign-in, live realtime rooms, or third-party API calls, install the SDK:
 
 ```bash
 cd web && pnpm add @freeappstore/sdk
@@ -129,12 +129,6 @@ fas.auth.signIn();                    // redirects to GitHub OAuth
 fas.auth.signOut();                   // clears local session
 fas.auth.user;                        // { id, login, avatarUrl } | null
 fas.auth.onChange((user) => { ... }); // subscribe to auth changes
-
-// Per-user KV (scoped to appId + userId, server-enforced)
-await fas.kv.set('theme', { dark: true });
-const theme = await fas.kv.get<{ dark: boolean }>('theme');
-await fas.kv.delete('theme');
-// Limits: 1MB/user, 100 keys/user, 64KB/value
 
 // Realtime rooms (WebSocket, ephemeral)
 const room = fas.rooms.join('lobby');

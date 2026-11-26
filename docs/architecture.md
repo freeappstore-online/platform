@@ -95,20 +95,22 @@ Apps deploy to R2 via GitHub Actions, not CF Pages. The full flow is in
 
 ## Data model
 
-All data lives in a single D1 database (`fas`):
+FAS stores no application data on the server ([ADR-004](https://github.com/freeappstore-online/platform/blob/main/docs/adr/004-no-server-app-data.md)). The backend relays, identifies and holds metadata and keys; app content stays on the user's device. The tables marked *deprecated* below hold app data for existing apps only and are retired in #802.
+
+All platform data lives in a single D1 database (`fas`):
 
 Tables, from `packages/backend/migrations/` (and `workers/host/migrations/` for `routes`):
 
 - `users` -- identity + session (GitHub, Google, Apple, Email)
 - `auth_codes` -- one-time codes for `response_mode=code` session delivery
 - `consumed_tokens` -- magic link replay prevention
-- `kv` -- per-user, per-app key-value pairs
+- `kv` -- per-user, per-app key-value pairs (*deprecated*)
 - `counters` -- app-wide atomic counters
-- `documents` -- document store (collections)
-- `collection_settings` -- which collections are shared beyond their document owners
-- `data_rooms`, `data_room_members`, `data_room_documents` -- authorized shared data rooms
+- `documents` -- document store (collections) (*deprecated*)
+- `collection_settings` -- which collections are shared beyond their document owners (*deprecated*)
+- `data_rooms`, `data_room_members`, `data_room_documents` -- authorized shared data rooms (*deprecated*)
 - `app_rooms` -- live realtime rooms per app, for the rooms-per-app cap
-- `photos` -- photo uploads (R2 objects, quota accounting)
+- `photos` -- photo uploads (R2 objects, quota accounting) (*deprecated*)
 - `apps` -- app registry + ownership
 - `app_owner_transfers` -- admin ownership-transfer audit trail
 - `unpublished_apps` -- previous owner of an unpublished app whose id is still blocked

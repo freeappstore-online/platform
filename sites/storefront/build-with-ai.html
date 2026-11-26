@@ -133,7 +133,8 @@ Save progress in localStorage.
 <span class="comment"># Or with the SDK for connected features:</span>
 
 Build a flashcard app. Let users create decks and
-cards. Use app.kv to save cards per user. Add a
+cards, saved on the device with
+@freeappstore/sdk/persist. Add a
 shared counter with app.counters to track total
 cards created across all users. Use useAuth for
 sign-in.</div>
@@ -277,10 +278,9 @@ await app.auth.init()
 app.auth.signIn()
 app.auth.onChange(user => console.log(user))
 
-<span class="comment">// Per-user storage (each user gets their own data)</span>
-await app.kv.set('notes', ['Buy milk', 'Walk dog'])
-const notes = await app.kv.get('notes')
-await app.kv.delete('notes')
+<span class="comment">// App data stays on the device (no app data on the server)</span>
+import { setPreference } from '@freeappstore/sdk/persist'
+setPreference('notes', 'list', ['Buy milk', 'Walk dog'], Array.isArray)
 
 <span class="comment">// Shared counters (visible to all users)</span>
 await app.counters.increment('page-views')
@@ -301,7 +301,7 @@ room.onPeers(peers => console.log(peers.length, 'online'))</div>
       </div>
       <div class="ai-pane is-accent">
         <h3 class="is-accent">Connected</h3>
-        <p>Uses <code>@freeappstore/sdk</code> for sign-in, per-user cloud storage, shared counters, and real-time rooms. Messenger, social apps, collaborative tools.</p>
+        <p>Uses <code>@freeappstore/sdk</code> for sign-in, shared counters, and real-time rooms. App data still stays on the device: FreeAppStore stores no application data on the server.</p>
       </div>
     </div>
 
@@ -334,7 +334,7 @@ npx mcp-remote https://mcp.freeappstore.online/mcp</div>
       </div>
       <div class="ai-pane is-pro">
         <h3 class="is-pro">Need a database?</h3>
-        <p>Free apps can use local device storage and the platform SDK for auth, cloud storage, rooms, email, and push reminders. Maps and local files are browser features. For a separate platform with paid apps and other server-side services, check <a href="https://proappstore.online/build-with-ai" class="ai-pane-pro-link">ProAppStore</a>.</p>
+        <p>Free apps keep their data on the user's device; FreeAppStore stores no application data on the server. The platform SDK adds auth, rooms, email, and push reminders. For server-side app data, multi-user collaboration and other server-side services, check <a href="https://proappstore.online/build-with-ai" class="ai-pane-pro-link">ProAppStore</a>.</p>
       </div>
     </div>
 
