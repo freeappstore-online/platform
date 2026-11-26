@@ -293,12 +293,10 @@ export class AgentSession implements DurableObject {
   private async load(): Promise<SessionState> {
     if (this.session) return this.session;
     const stored = await this.state.storage.get<SessionState>("session");
-    if (stored) {
-      this.session = stored;
-    } else {
-      this.session = this.freshSession();
-      await this.save();
-    }
+    // A fresh session stays in memory until something saves it (binding its
+    // owner does). Persisting it here let any unauthenticated request create a
+    // stored session for any id (#741).
+    this.session = stored ?? this.freshSession();
     // Migrate old sessions
     if (!this.session.errors) this.session.errors = [];
     if (!this.session.deployLog) this.session.deployLog = [];
@@ -404,10 +402,8 @@ export class AgentSession implements DurableObject {
       return new Response(null, { status: 204, headers: corsHeaders(request, this.config.domain) });
     }
 
-    await this.captureSessionMetadata(request, url);
-
     try {
-      return await this.routeRequest(request, path);
+      return await this.routeRequest(request, path, url);
     } catch (err) {
       console.error("Session error:", err);
       return json({ error: "Internal server error" }, 500, request, this.config.domain);
@@ -431,10 +427,12 @@ export class AgentSession implements DurableObject {
     }
   }
 
-  private async routeRequest(request: Request, path: string): Promise<Response> {
+  private async routeRequest(request: Request, path: string, url: URL): Promise<Response> {
     // Every endpoint exposes session data, /status included (#475).
     const auth = await this.validateAuth(request, true);
     if (auth.error) return auth.error;
+    // Only an authenticated owner may choose the starter (#741).
+    await this.captureSessionMetadata(request, url);
 
     const route = `${request.method} ${path}`;
     switch (route) {

@@ -3,6 +3,7 @@
 // SQLite-backed AgentSession Durable Object, and sync to real D1. The backend
 // and GitHub are stand-ins (vitest.runtime.ts).
 
+import { runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -39,6 +40,36 @@ describe("worker entry → Durable Object", () => {
     const theirs = await call("/session/s-owner/history", { headers: BOB });
     expect(theirs.status).toBe(403);
     expect(await theirs.json()).toEqual({ error: "Session belongs to another user" });
+  });
+});
+
+describe("unauthenticated requests (#741)", () => {
+  const stored = (sessionId: string) =>
+    runInDurableObject(env.SESSION.get(env.SESSION.idFromName(sessionId)), (_i, state) =>
+      state.storage.get<{ preset?: string; ownerId?: string | null }>("session"),
+    );
+
+  it.each([
+    ["no Authorization header", {}],
+    ["a token the platform rejects", { Authorization: "Bearer forged" }],
+  ])("store nothing for an unknown session id with %s", async (_label, headers) => {
+    const id = `s-anon-${crypto.randomUUID().slice(0, 8)}`;
+    const res = await call(`/session/${id}/status`, { headers: { ...headers, "X-App-Preset": "connected" } });
+    expect(res.status).toBe(401);
+    expect(await stored(id)).toBeUndefined();
+  });
+
+  it("cannot re-template someone's pristine session", async () => {
+    expect((await call("/session/s-pristine/status", { headers: ALICE })).status).toBe(200);
+    expect((await stored("s-pristine"))?.preset).toBe("standalone");
+
+    const res = await call("/session/s-pristine/status", { headers: { "X-App-Preset": "connected" } });
+    expect(res.status).toBe(401);
+    expect((await stored("s-pristine"))?.preset).toBe("standalone");
+
+    // The owner still can.
+    await call("/session/s-pristine/status", { headers: { ...ALICE, "X-App-Preset": "connected" } });
+    expect((await stored("s-pristine"))?.preset).toBe("connected");
   });
 });
 
