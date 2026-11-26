@@ -32,17 +32,22 @@ export function RolesManager({ appId, getToken }: Props) {
   const [useCustom, setUseCustom] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [revoking, setRevoking] = useState<string | null>(null)
+  // The API returns role rows in pages (#765); null once the last page is loaded.
+  const [nextOffset, setNextOffset] = useState<number | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
 
-  const fetchRoles = useCallback(async () => {
+  /** Loads the first page (offset 0) or appends the page at `offset`. */
+  const fetchRoles = useCallback(async (offset = 0) => {
     const token = getToken()
     if (!token) { setLoading(false); return }
     try {
-      const res = await fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/roles`, {
+      const res = await fetch(`${API_URL}/v1/apps/${encodeURIComponent(appId)}/roles${offset ? `?offset=${offset}` : ''}`, {
         headers: authHeaders(token),
       })
       if (!res.ok) throw new Error(`Failed to load roles (${res.status})`)
-      const data = (await res.json()) as { roles: RoleAssignment[] }
-      setRoles(data.roles ?? [])
+      const data = (await res.json()) as { roles: RoleAssignment[]; nextOffset?: number | null }
+      setRoles((prev) => (offset ? [...prev, ...(data.roles ?? [])] : data.roles ?? []))
+      setNextOffset(data.nextOffset ?? null)
       setError(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load roles')
@@ -50,6 +55,13 @@ export function RolesManager({ appId, getToken }: Props) {
       setLoading(false)
     }
   }, [appId, getToken])
+
+  const loadMore = async () => {
+    if (nextOffset === null) return
+    setLoadingMore(true)
+    await fetchRoles(nextOffset)
+    setLoadingMore(false)
+  }
 
   useEffect(() => { fetchRoles() }, [fetchRoles])
 
@@ -164,6 +176,16 @@ export function RolesManager({ appId, getToken }: Props) {
               </div>
             )
           })}
+          {nextOffset !== null && (
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="w-full rounded-lg border border-[var(--line-strong)] px-3 py-2 text-sm font-medium text-[var(--ink)] hover:border-[var(--accent)] disabled:opacity-50 min-h-[40px]"
+            >
+              {loadingMore ? 'Loading...' : 'Show more'}
+            </button>
+          )}
         </div>
       )}
 
