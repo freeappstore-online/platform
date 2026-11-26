@@ -36,6 +36,7 @@ import { escapeLike, likePrefix } from '../lib/like.js';
 import { queryLimit, queryOffset } from '../lib/paging.js';
 import type { Env } from '../types.js';
 import { limitsFor, setDeployLimits } from './deploy.js';
+import { toBytes } from './kv.js';
 
 export const contentAdminRoutes = new Hono<{ Bindings: Env }>();
 
@@ -107,7 +108,7 @@ contentAdminRoutes.get('/admin/kv/value', async (c) => {
     'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
   )
     .bind(appId, userId, key)
-    .first<{ value: string }>();
+    .first<{ value: unknown }>();
 
   if (!row) return c.json({ error: 'not found' }, 404);
   return c.json({ value: parseJsonValue(row.value) });
@@ -502,10 +503,12 @@ function maxNumber(...values: Array<number | null>): number | null {
   return numbers.length ? Math.max(...numbers) : null;
 }
 
+/** A kv value as JSON, or null. kv.value is a BLOB, which D1 returns as bytes (#736). */
 function parseJsonValue(value: unknown): unknown {
-  if (!value || typeof value !== 'string') return null;
+  const text = typeof value === 'string' ? value : new TextDecoder().decode(toBytes(value));
+  if (!text) return null;
   try {
-    return JSON.parse(value) as unknown;
+    return JSON.parse(text) as unknown;
   } catch {
     return null;
   }
@@ -844,7 +847,7 @@ contentAdminRoutes.get('/internal/admin/kv/value', async (c) => {
     'SELECT value FROM kv WHERE app_id = ? AND user_id = ? AND key = ?',
   )
     .bind(appId, userId, key)
-    .first<{ value: string }>();
+    .first<{ value: unknown }>();
 
   if (!row) return c.json({ error: 'not found' }, 404);
   return c.json({ value: parseJsonValue(row.value) });

@@ -986,3 +986,34 @@ describe.skipIf(!hasSqlite)(
     });
   },
 );
+
+describe.skipIf(!hasSqlite)('kv value viewers decode the stored BLOB (#736)', () => {
+  it('returns the JSON a kv PUT stored, on the admin and internal routes', async () => {
+    const { db, d1 } = sqliteD1();
+    const bytes = new TextEncoder().encode('{"color":"blue"}');
+    db.prepare(
+      'INSERT INTO kv (app_id, user_id, key, value, value_size_bytes, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    ).run('timer', 'gh:1', 'theme', bytes, bytes.byteLength, Date.now());
+    db.prepare('INSERT INTO users (id, github_login, created_at) VALUES (?, ?, ?)').run(
+      'admin-1',
+      'admin',
+      Date.now(),
+    );
+    const e = env(d1, { ADMIN_PROVISION_TOKEN: 'tok' });
+
+    const res = await app.request(
+      '/v1/admin/kv/value?app=timer&user=gh:1&key=theme',
+      { headers: { Authorization: await adminHeader() } },
+      e,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ value: { color: 'blue' } });
+
+    const internal = await app.request(
+      'https://backend/v1/internal/admin/kv/value?app=timer&user=gh:1&key=theme',
+      { headers: { 'X-Internal-Token': 'tok' } },
+      e,
+    );
+    expect(await internal.json()).toEqual({ value: { color: 'blue' } });
+  });
+});
