@@ -7,6 +7,7 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
+  nativeTheme,
   net,
   shell,
   type WebContents,
@@ -23,6 +24,21 @@ const dev = !app.isPackaged;
 // Dev builds can load every app from a local dev server (e.g. http://localhost:5173).
 const devOrigin = dev ? process.env.FAS_DEV_APP_ORIGIN : undefined;
 const REGISTRY = 'https://freeappstore.online/registry.json';
+
+// Windows start hidden on the theme's paper colour (DESIGN-SYSTEM tokens) and show on first
+// paint, so a dark Mac never sees Electron's default white window (#814).
+const windowLook = () => ({
+  show: false,
+  backgroundColor: nativeTheme.shouldUseDarkColors ? '#0f172a' : '#f8fafc',
+});
+const showWhenPainted = (win: BrowserWindow) => {
+  const show = () => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show();
+  };
+  win.once('ready-to-show', show);
+  // A slow or failing network load still gets a window, on the dark/light paper colour.
+  setTimeout(show, 3000);
+};
 
 const preload = (name: string) => fileURLToPath(new URL(`../preload/${name}.cjs`, import.meta.url));
 const hub = new Hub();
@@ -71,6 +87,7 @@ function openAppWindow(appId: string): void {
     width: 1200,
     height: 820,
     title: appId,
+    ...windowLook(),
     webPreferences: {
       preload: preload('app'),
       contextIsolation: true,
@@ -80,6 +97,7 @@ function openAppWindow(appId: string): void {
       partition: 'persist:fas-apps',
     },
   });
+  showWhenPainted(win);
   appWindows.set(appId, win);
   const contents = win.webContents;
   const peerId = `desktop:${contents.id}`;
@@ -143,6 +161,7 @@ function createHome(): void {
     minWidth: 420,
     minHeight: 480,
     title: 'FreeAppStore',
+    ...windowLook(),
     webPreferences: {
       preload: preload('home'),
       contextIsolation: true,
@@ -150,6 +169,7 @@ function createHome(): void {
       sandbox: true,
     },
   });
+  showWhenPainted(home);
   const contents = home.webContents;
   contents.setWindowOpenHandler(({ url }) => {
     openExternal(url);
