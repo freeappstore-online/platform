@@ -14,6 +14,10 @@ contextBridge.exposeInMainWorld('fasDesktop', {
   clients: () => ipcRenderer.invoke('home:clients'),
   setConnected: (id: string, connect: boolean) => ipcRenderer.invoke('home:connect', id, connect),
   registry: () => ipcRenderer.invoke('home:registry'),
+  setFavorite: (appId: string, on: boolean) => ipcRenderer.invoke('home:set-favorite', appId, on),
+  update: (action: 'check' | 'apply') => ipcRenderer.invoke('home:update', action),
+  setAutoUpdate: (on: boolean) => ipcRenderer.invoke('home:set-auto-update', on),
+  releaseNotes: (version: string) => ipcRenderer.invoke('home:release-notes', version),
   contribute: {
     connect: () => ipcRenderer.invoke('home:contribute-connect'),
     cancel: () => ipcRenderer.invoke('home:contribute-cancel'),

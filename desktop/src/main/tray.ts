@@ -9,12 +9,16 @@ export interface TrayState {
   contribute: { status: string; paused: boolean } | null;
   /** The signed-in account (#829): its name and a 16 px avatar, once loaded. */
   account?: { name: string; icon: NativeImage | null } | null;
+  /** A newer version (#839): downloaded and ready to install, or (macOS) to download by hand. */
+  update?: { version: string; ready: boolean } | null;
 }
 
 export interface TrayActions {
   open(): void;
   setPaused(paused: boolean): void;
   setContributePaused(paused: boolean): void;
+  /** Restart to update, or open the download (macOS). */
+  update(): void;
   quit(): void;
 }
 
@@ -28,12 +32,23 @@ export function trayStatus({ paused, openApps, serverError }: TrayState): string
 
 /**
  * The menu-bar (tray) menu (#815): status, Open, Pause / Resume, then Contribute's status and
- * Pause / Resume while this computer is connected (#826), the signed-in account (#829), Quit.
+ * Pause / Resume while this computer is connected (#826), the signed-in account (#829), Quit. An available
+ * update (#839) comes right after the status.
  */
 export function trayMenu(state: TrayState, actions: TrayActions): MenuItemConstructorOptions[] {
-  const { contribute } = state;
+  const { contribute, update } = state;
   return [
     { label: trayStatus(state), enabled: false },
+    ...(update
+      ? [
+          {
+            label: update.ready
+              ? `Update available: restart to update to ${update.version}`
+              : `Update available: download version ${update.version}`,
+            click: actions.update,
+          },
+        ]
+      : []),
     { type: 'separator' },
     { label: 'Open FreeAppStore', click: actions.open },
     state.paused

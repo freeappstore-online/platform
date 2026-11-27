@@ -29,7 +29,10 @@ pnpm --dir desktop dev        # builds main, preloads and UI, then starts Electr
 The home screen leads with the status (**Pause AI access** / **Resume**, **Open at login**) and the **Connect**
 buttons for Claude Code and Claude Desktop, then the connected apps and their tools, and a collapsed **Manual
 setup** with the HTTP command and token for other AI apps. **Store** opens apps from `registry.json` in desktop
-windows, sorted Newest (default), Most popular, A–Z or by Category, with the choice remembered (#834); **Contribute** generates community jobs ([below](#contribute)); **Activity** logs every AI call. The tray
+windows, sorted Newest (default), Most popular, A–Z or by Category, with the choice remembered (#834), with category
+chips, a **Recent** row of apps opened on this computer and starred favourites pinned first (#840; both in userData
+`settings.json`, never on the server). **Vote** opens the app on freeappstore.online, since voting needs a storefront
+sign-in and the device credential isn't one; **Contribute** generates community jobs ([below](#contribute)); **Activity** logs every AI call. The tray
 menu shows the status and offers Open, Pause / Resume and Quit, plus Contribute's status and Pause / Resume
 contributing while this computer is connected.
 
@@ -191,7 +194,18 @@ Each run publishes the release `desktop-v<version>` and refreshes
 (also `-mac-arm64.dmg`, `-mac-{x64,arm64}.zip`, `-win-x64.exe`, `-linux-x86_64.AppImage`).
 
 The builds are not signed with a certificate or notarized, so macOS Gatekeeper and Windows SmartScreen warn on
-first launch. Signing, notarization and auto-update are #799.
+first launch. Signing and notarization are #799.
+
+### Updates
+
+Installed builds look for a newer version when they start and once a day (#839, `src/main/updates.ts`, electron-updater),
+unless **Check for updates automatically** is off (Account > About, which also has **Check now**). The feed is
+`desktop-latest` (electron-builder.yml `publish`): the release workflow uploads `latest.yml`, `latest-linux.yml` and
+`latest-mac.yml` there after the installers. Windows and Linux (AppImage) download the update in the background and offer
+**Restart to update** (otherwise it installs on quit). Unsigned macOS builds can't install themselves, so the Mac app says
+which version is available and **Download** opens that version's dmg for this Mac. A banner and the tray menu show an
+available update. **What's new** shows the GitHub release notes of the new and the current version: the desktop's commits
+since the previous desktop tag. Dev builds never check.
 
 ## Layout
 
@@ -203,7 +217,8 @@ first launch. Signing, notarization and auto-update are #799.
 | `src/main/hub.ts`                  | Connected apps, call routing, timeouts, activity log                                   |
 | `src/main/security.ts`, `token.ts` | Origin rules, token check and storage                                                  |
 | `src/main/integrations.ts`         | Connect / Disconnect for Claude Code and Claude Desktop                                |
-| `src/main/settings.ts`, `tray.ts`  | Pause, open-at-login and Contribute settings; the tray menu                            |
+| `src/main/settings.ts`, `tray.ts`  | Pause, open-at-login, Contribute, update and Store settings; the tray menu             |
+| `src/main/updates.ts`              | Update checks, download and install (electron-updater)                                 |
 | `src/main/contribute.ts`           | Contribute's loop and state, `RelayWorker` to the hidden window's model worker         |
 | `src/main/device.ts`               | Device pairing (`ndev_` credential), its storage, the account from `/native/me`        |
 | `src/stdio/`                       | The stdio MCP entry (`main.mjs`) and its proxy                                         |

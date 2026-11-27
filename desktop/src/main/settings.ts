@@ -12,6 +12,11 @@ export interface Settings {
   contributePaused: boolean;
   /** The user agreed to the voice model's download and it completed. */
   contributeModel: boolean;
+  /** Look for a new version on start and daily (#839). On by default. */
+  autoUpdate: boolean;
+  /** Store (#840): apps opened on this computer, most recent first, and the starred ones. */
+  recentApps: string[];
+  favoriteApps: string[];
 }
 
 const FILE = 'settings.json';
@@ -21,8 +26,13 @@ const DEFAULTS: Settings = {
   contributeApps: [],
   contributePaused: false,
   contributeModel: false,
+  autoUpdate: true,
+  recentApps: [],
+  favoriteApps: [],
 };
 const bool = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback);
+const strings = (value: unknown) =>
+  Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
 
 /** The saved settings, plus whether this is the first run (no settings file yet). */
 export function loadSettings(dir: string): { settings: Settings; firstRun: boolean } {
@@ -38,11 +48,12 @@ export function loadSettings(dir: string): { settings: Settings; firstRun: boole
     settings: {
       paused: bool(saved.paused, DEFAULTS.paused),
       openAtLogin: bool(saved.openAtLogin, DEFAULTS.openAtLogin),
-      contributeApps: Array.isArray(saved.contributeApps)
-        ? saved.contributeApps.filter((id): id is string => typeof id === 'string')
-        : [],
+      contributeApps: strings(saved.contributeApps),
       contributePaused: bool(saved.contributePaused, DEFAULTS.contributePaused),
       contributeModel: bool(saved.contributeModel, DEFAULTS.contributeModel),
+      autoUpdate: bool(saved.autoUpdate, DEFAULTS.autoUpdate),
+      recentApps: strings(saved.recentApps),
+      favoriteApps: strings(saved.favoriteApps),
     },
     firstRun: false,
   };

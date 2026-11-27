@@ -19,6 +19,7 @@ import {
   Tray,
   type WebContents,
 } from 'electron';
+import electronUpdater from 'electron-updater';
 import { Contribute, contributeStatus, type Engine, RelayWorker } from './contribute.js';
 import {
   API_ORIGIN,
@@ -38,6 +39,7 @@ import { startServer } from './server.js';
 import { loadSettings, type Settings, saveSettings } from './settings.js';
 import { loadToken, regenerateToken } from './token.js';
 import { trayMenu, trayStatus } from './tray.js';
+import { Updates } from './updates.js';
 import { loadBuildInfo, releaseNotesUrl, versionLabel } from './version.js';
 
 // Tests and side-by-side dev runs use their own profile and port.
@@ -54,6 +56,7 @@ const devOrigin = dev ? process.env.FAS_DEV_APP_ORIGIN : undefined;
 const apiOrigin = (dev && process.env.FAS_DEV_API_ORIGIN) || API_ORIGIN;
 const REGISTRY = 'https://freeappstore.online/registry.json';
 const VOTES = 'https://api.freeappstore.online/v1/store/votes';
+const RELEASES = 'freeappstore-online/platform/releases';
 // "0.3.0 (57, abc1234)": package.json's version with the build number and commit (#832).
 const version = versionLabel(
   app.getVersion(),
@@ -126,6 +129,8 @@ function state() {
     openAtLogin: settings.openAtLogin,
     version,
     releaseNotes: releaseNotesUrl(app.getVersion()),
+    updates: { ...updates.state, auto: settings.autoUpdate, supported: app.isPackaged },
+    store: { recent: settings.recentApps, favorites: settings.favoriteApps },
     openApps: hub.openApps(),
     log: hub.log,
   };
@@ -146,6 +151,10 @@ function openExternal(url: string) {
 // ── App windows ─────────────────────────────────────────────────
 
 function openAppWindow(appId: string): void {
+  // The Store's Recent row (#840): the latest dozen, kept on this computer only.
+  settings.recentApps = [appId, ...settings.recentApps.filter((id) => id !== appId)].slice(0, 12);
+  saveSettings(app.getPath('userData'), settings);
+  pushState();
   const existing = appWindows.get(appId);
   if (existing && !existing.isDestroyed()) {
     if (existing.isMinimized()) existing.restore();
@@ -306,6 +315,11 @@ function trayState() {
       ? { status: contributeStatus(contribute.state), paused: settings.contributePaused }
       : null,
     account: profile ? { name: profile.user.name, icon: avatarIcon } : null,
+    update:
+      updates.state.version &&
+      (updates.state.status === 'ready' || updates.state.status === 'manual')
+        ? { version: updates.state.version, ready: updates.state.status === 'ready' }
+        : null,
   };
 }
 
@@ -331,6 +345,7 @@ function updateTray(): void {
         open: showHome,
         setPaused,
         setContributePaused,
+        update: applyUpdate,
         quit: () => app.quit(),
       }),
     ),
@@ -391,6 +406,58 @@ ipcMain.handle('home:registry', async (event) => {
   if (!response.ok) throw new Error(`registry.json: ${response.status}`);
   const { apps } = (await response.json()) as { apps: unknown[] };
   return { apps, votes };
+});
+
+ipcMain.handle('home:set-favorite', (event, appId: unknown, on: unknown) => {
+  if (!fromHome(event) || typeof appId !== 'string' || !APP_ID.test(appId)) return;
+  const favorites = settings.favoriteApps.filter((id) => id !== appId);
+  settings.favoriteApps = on === true ? [...favorites, appId] : favorites;
+  saveSettings(app.getPath('userData'), settings);
+  pushState();
+});
+
+// ── Updates (#839) ──────────────────────────────────────────────
+
+const updates = new Updates(electronUpdater.autoUpdater, {
+  canInstall: process.platform !== 'darwin',
+  enabled: () => settings.autoUpdate && app.isPackaged,
+  changed: () => pushState(),
+});
+
+/** Restart to update, or on macOS open the new version's installer for this Mac in the browser. */
+function applyUpdate() {
+  const { status, version } = updates.state;
+  if (status === 'ready') updates.install();
+  else if (status === 'manual' && version)
+    openExternal(
+      `https://github.com/${RELEASES}/download/desktop-v${version}/FreeAppStore-mac-${process.arch}.dmg`,
+    );
+}
+
+ipcMain.handle('home:update', (event, action: unknown) => {
+  if (!fromHome(event)) return;
+  if (action === 'check' && app.isPackaged) updates.check();
+  else if (action === 'apply') applyUpdate();
+});
+ipcMain.handle('home:set-auto-update', (event, on: unknown) => {
+  if (!fromHome(event) || typeof on !== 'boolean') return;
+  settings.autoUpdate = on;
+  saveSettings(app.getPath('userData'), settings);
+  if (on) updates.start();
+  pushState();
+});
+/** A desktop release's notes (the GitHub release body), or null when there is no such release. */
+ipcMain.handle('home:release-notes', async (event, version: unknown) => {
+  if (!fromHome(event) || typeof version !== 'string' || !/^\d+\.\d+\.\d+$/.test(version))
+    return null;
+  const response = await net.fetch(
+    `https://api.github.com/repos/${RELEASES}/tags/desktop-v${version}`,
+    { headers: { accept: 'application/vnd.github+json' } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`GitHub: ${response.status}`);
+  const release = (await response.json()) as { body?: string; published_at?: string };
+  return { version, body: release.body ?? '', published: release.published_at ?? null };
 });
 
 function pushState() {
@@ -724,6 +791,7 @@ if (!app.requestSingleInstanceLock()) {
           : `The local MCP server could not start (${code ?? 'unknown error'}).`;
     }
     createTray();
+    updates.start();
     if (deviceToken) {
       contribute.wake();
       void refreshProfile();

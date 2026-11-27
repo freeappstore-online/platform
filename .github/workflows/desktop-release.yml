@@ -1,7 +1,12 @@
 name: Desktop release
 
 # Unsigned installers for the desktop app (desktop/, #805): macOS dmg + zip (x64, arm64; ad-hoc signed),
-# Windows NSIS exe, Linux AppImage. Signing, notarization and auto-update need credentials: #799.
+# Windows NSIS exe, Linux AppImage. Signing and notarization need credentials: #799.
+#
+# Updates (#839): each build also writes its update file (latest.yml, latest-linux.yml, latest-mac.yml), and the
+# installed apps look for them on desktop-latest (desktop/electron-builder.yml `publish`). They are uploaded there
+# after the installers, so an app never reads a version whose installer isn't up yet. The release notes, which the
+# app's What's new page shows, are the desktop's commits since the previous desktop tag (scripts/app-release.sh).
 #
 # The version is desktop/package.json (#832, docs/versioning.md). Run this workflow with a version: it writes that
 # version to desktop/package.json on main (scripts/app-release.sh cut), tags the commit desktop-v<version> and builds
@@ -102,7 +107,7 @@ jobs:
       - name: Collect installers
         run: |
           mkdir -p ../out
-          for f in release/FreeAppStore-*.{dmg,zip,exe,AppImage}; do [ -e "$f" ] && cp "$f" ../out/; done
+          for f in release/FreeAppStore-*.{dmg,zip,exe,AppImage} release/latest*.yml; do [ -e "$f" ] && cp "$f" ../out/; done
           ls -l ../out
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -133,7 +138,7 @@ jobs:
         run: |
           ls -l out
           for f in FreeAppStore-mac-x64.dmg FreeAppStore-mac-arm64.dmg FreeAppStore-mac-x64.zip FreeAppStore-mac-arm64.zip \
-                   FreeAppStore-win-x64.exe FreeAppStore-linux-x86_64.AppImage; do
+                   FreeAppStore-win-x64.exe FreeAppStore-linux-x86_64.AppImage latest.yml latest-linux.yml latest-mac.yml; do
             [ -s "out/$f" ] || { echo "::error::Missing $f"; exit 1; }
           done
       - name: Publish desktop-v${{ needs.tag.outputs.version }}
@@ -149,8 +154,10 @@ jobs:
         run: |
           notes="Always the newest FreeAppStore desktop build (currently $VERSION, from $TAG). Unsigned preview: see https://freeappstore.online/download for first-launch steps."
           if gh release view desktop-latest >/dev/null 2>&1; then
-            gh release upload desktop-latest out/* --clobber
+            gh release upload desktop-latest out/FreeAppStore-* --clobber
             gh release edit desktop-latest --notes "$notes" --latest=false
           else
-            gh release create desktop-latest out/* --target "$GITHUB_SHA" --title "FreeAppStore desktop (latest)" --notes "$notes" --latest=false
+            gh release create desktop-latest out/FreeAppStore-* --target "$GITHUB_SHA" --title "FreeAppStore desktop (latest)" --notes "$notes" --latest=false
           fi
+          # Last: the update files that point installed apps at the installers above.
+          gh release upload desktop-latest out/latest*.yml --clobber

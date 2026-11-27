@@ -1,5 +1,5 @@
-# Unsigned builds (#805), published by .github/workflows/desktop-release.yml. Signing, notarization and
-# auto-update: #799. Asset names carry no version so the download page can link to them stably.
+# Unsigned builds (#805), published by .github/workflows/desktop-release.yml. Signing and notarization: #799.
+# Asset names carry no version so the download page can link to them stably.
 appId: online.freeappstore.desktop
 productName: FreeAppStore
 directories:
@@ -39,4 +39,9 @@ linux:
   target:
     - target: AppImage
       arch: [x64]
-publish: null
+# Updates (#839): electron-updater reads this from app-update.yml in the app and looks for latest.yml (Windows),
+# latest-linux.yml and latest-mac.yml there. desktop-latest always holds the newest build, and the release workflow
+# uploads those files to it after the installers they describe. Builds use --publish never: the workflow publishes.
+publish:
+  provider: generic
+  url: https://github.com/freeappstore-online/platform/releases/download/desktop-latest

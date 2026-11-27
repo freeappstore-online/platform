@@ -260,7 +260,14 @@ describe('Integrations', () => {
 });
 
 describe('settings', () => {
-  const contribute = { contributeApps: [], contributePaused: false, contributeModel: false };
+  const contribute = {
+    contributeApps: [],
+    contributePaused: false,
+    contributeModel: false,
+    autoUpdate: true,
+    recentApps: [],
+    favoriteApps: [],
+  };
   it('defaults to on and open at login on first run, and persists changes', () => {
     expect(loadSettings(tmp)).toEqual({
       settings: { paused: false, openAtLogin: true, ...contribute },
@@ -272,6 +279,9 @@ describe('settings', () => {
       contributeApps: ['books'],
       contributePaused: true,
       contributeModel: true,
+      autoUpdate: false,
+      recentApps: ['notes', 'books'],
+      favoriteApps: ['books'],
     };
     saveSettings(tmp, changed);
     expect(loadSettings(tmp)).toEqual({ settings: changed, firstRun: false });

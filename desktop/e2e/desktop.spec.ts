@@ -311,6 +311,80 @@ test('the Store tab lists apps from registry.json (needs the network)', async ()
   await home.getByRole('button', { name: 'Home', exact: true }).click();
 });
 
+test('the Store filters by category, pins favourites and lists recent apps (#840, needs the network)', async () => {
+  await home.getByRole('button', { name: 'Store', exact: true }).click();
+  const cards = home.getByTestId('store-app');
+  await expect(cards.first()).toBeVisible({ timeout: 15_000 });
+
+  // A category chip shows only that category's apps; All brings the rest back.
+  const chips = home.getByRole('group', { name: 'Category' }).getByRole('button');
+  await expect(chips.first()).toHaveAttribute('aria-pressed', 'true');
+  const all = await cards.count();
+  const category = (await chips.nth(1).textContent())!;
+  await chips.nth(1).click();
+  await expect(chips.nth(1)).toHaveAttribute('aria-pressed', 'true');
+  const categories = await cards.locator('div.text-xs').allTextContents();
+  expect(categories.length).toBeLessThan(all);
+  expect(new Set(categories)).toEqual(new Set([category]));
+  await chips.first().click();
+  await expect(cards).toHaveCount(all);
+
+  // The star pins an app to the top, kept by the main process.
+  const last = cards.last();
+  const name = (await last.locator('.font-bold').textContent())!;
+  await last.getByRole('button', { name: `Favourite ${name}` }).click();
+  await expect(cards.first().locator('.font-bold')).toHaveText(name);
+  await expect(cards.first().getByRole('button', { name: `Favourite ${name}` })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect(
+    JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8')).favoriteApps,
+  ).toHaveLength(1);
+  // Voting opens the app on the storefront, where the user is signed in.
+  await expect(cards.first().getByRole('link', { name: /^Vote for / })).toHaveAttribute(
+    'href',
+    /^https:\/\/freeappstore\.online\/\?app=/,
+  );
+
+  // Opening it puts it in Recent.
+  const recent = home.getByRole('region', { name: 'Recent' });
+  await expect(recent).toHaveCount(0);
+  await cards.first().getByRole('button', { name: 'Open' }).click();
+  await expect(recent.getByRole('button', { name })).toBeVisible();
+  await home.screenshot({ path: join(SHOTS, 'store-extras-dark.png') });
+  await expect.poll(() => electron.windows().length).toBe(2);
+  await electron
+    .windows()
+    .find((w) => w !== home)!
+    .close();
+  await expect.poll(openApps).toEqual([]);
+
+  await cards
+    .first()
+    .getByRole('button', { name: `Favourite ${name}` })
+    .click();
+  await expect(cards.first().locator('.font-bold')).not.toHaveText(name);
+  await home.getByRole('button', { name: 'Home', exact: true }).click();
+});
+
+test('What’s new shows this version’s release notes (#839, needs the network)', async () => {
+  const { version } = JSON.parse(readFileSync(new URL('../package.json', here), 'utf8'));
+  await home.getByTestId('profile-summary').click();
+  await expect(
+    home.getByText('Development build: installed builds check for updates.'),
+  ).toBeVisible();
+  await home.getByRole('button', { name: "What's new" }).click();
+  const notes = home.getByRole('region', { name: `Version ${version}` });
+  await expect(notes.getByTestId('release-notes')).toContainText(
+    `FreeAppStore desktop ${version}`,
+    {
+      timeout: 15_000,
+    },
+  );
+  await home.getByRole('button', { name: 'Home', exact: true }).click();
+});
+
 test('the token file is private to the user', async () => {
   const { statSync } = await import('node:fs');
   expect(statSync(join(userData, 'mcp-token')).mode & 0o777).toBe(0o600);

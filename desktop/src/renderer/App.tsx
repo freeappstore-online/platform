@@ -18,7 +18,7 @@ import type {
   RegistryApp,
 } from './desktop.js';
 
-type Page = 'home' | 'store' | 'contribute' | 'activity' | 'account';
+type Page = 'home' | 'store' | 'contribute' | 'activity' | 'account' | 'whats-new';
 const PAGES: { id: Page; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'store', label: 'Store' },
@@ -95,16 +95,21 @@ export function App() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-8">
+        {state && page !== 'whats-new' && (
+          <UpdateBanner state={state} openWhatsNew={() => setPage('whats-new')} />
+        )}
         {!state ? null : page === 'home' ? (
           <Home state={state} openStore={() => setPage('store')} />
         ) : page === 'store' ? (
-          <Store />
+          <Store store={state.store} />
+        ) : page === 'whats-new' ? (
+          <WhatsNew state={state} />
         ) : page === 'contribute' ? (
           <Contribute state={state.contribute} />
         ) : page === 'account' ? (
           <>
             <Account state={state} />
-            <About state={state} />
+            <About state={state} openWhatsNew={() => setPage('whats-new')} />
           </>
         ) : (
           <Activity state={state} />
@@ -408,7 +413,28 @@ function sortApps(apps: RegistryApp[], sort: Sort, votes: Record<string, number>
   return [...apps].sort((a, b) => compare[sort](a, b) || byName(a, b));
 }
 
-function Store() {
+const CATEGORY_KEY = 'fas-desktop-store-category';
+/** Voting needs a storefront sign-in, which the desktop's device credential isn't (#840): vote in the browser. */
+const voteUrl = (id: string) => `https://freeappstore.online/?app=${encodeURIComponent(id)}`;
+
+function AppIcon({ app }: { app: RegistryApp }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-xl"
+      // Dynamic: each app's own icon colour from the registry.
+      style={{ backgroundColor: app.iconBg }}
+    >
+      {decodeIcon(app.icon)}
+    </span>
+  );
+}
+
+/**
+ * Apps from registry.json (#834), with category chips, a Recent row of apps opened on this computer and
+ * starred favourites first (#840). Recent and favourites live in the main process's settings, on this computer.
+ */
+function Store({ store }: { store: DesktopState['store'] }) {
   const [apps, setApps] = useState<RegistryApp[] | null>(null);
   const [votes, setVotes] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
@@ -417,6 +443,7 @@ function Store() {
     const saved = localStorage.getItem(SORT_KEY);
     return isSort(saved) ? saved : 'newest';
   });
+  const [category, setCategory] = useState(() => localStorage.getItem(CATEGORY_KEY) ?? '');
 
   useEffect(() => {
     desktop
@@ -433,16 +460,41 @@ function Store() {
     setSort(value);
     localStorage.setItem(SORT_KEY, value);
   };
+  const chooseCategory = (value: string) => {
+    setCategory(value);
+    localStorage.setItem(CATEGORY_KEY, value);
+  };
 
+  const categories = [...new Set((apps ?? []).flatMap((app) => app.category ?? []))].sort();
+  const active = categories.includes(category) ? category : '';
+  const favorites = new Set(store.favorites);
   const q = query.trim().toLowerCase();
   const shown = sortApps(
     (apps ?? []).filter(
       (app) =>
-        !q ||
-        `${app.name} ${app.category ?? ''} ${app.description ?? ''}`.toLowerCase().includes(q),
+        (!active || app.category === active) &&
+        (!q ||
+          `${app.name} ${app.category ?? ''} ${app.description ?? ''}`.toLowerCase().includes(q)),
     ),
     sort,
     votes,
+  ).sort((a, b) => Number(favorites.has(b.id)) - Number(favorites.has(a.id)));
+  const byId = new Map((apps ?? []).map((app) => [app.id, app]));
+  const recent = store.recent.flatMap((id) => byId.get(id) ?? []).slice(0, 6);
+  const chip = (value: string, label: string) => (
+    <button
+      key={value}
+      type="button"
+      aria-pressed={active === value}
+      onClick={() => chooseCategory(value)}
+      className={`rounded-full border px-3 py-1 text-sm font-semibold cursor-pointer ${
+        active === value
+          ? 'border-accent bg-accent-soft text-accent'
+          : 'border-line bg-panel text-muted hover:text-ink'
+      }`}
+    >
+      {label}
+    </button>
   );
 
   return (
@@ -470,29 +522,80 @@ function Store() {
     >
       {error && <p className="text-danger">{error}</p>}
       {!apps && !error && <p className="text-muted">Loading…</p>}
+      {recent.length > 0 && !q && (
+        <section aria-label="Recent" className="mb-6">
+          <h3 className="mt-0 mb-2 text-sm font-semibold text-muted">Recent</h3>
+          <ul className="m-0 p-0 list-none flex flex-wrap gap-2">
+            {recent.map((app) => (
+              <li key={app.id}>
+                <button
+                  type="button"
+                  onClick={() => desktop.openApp(app.id)}
+                  className={`${card} flex items-center gap-2 py-1.5 pl-1.5 pr-3 text-sm font-semibold text-ink cursor-pointer hover:border-line-strong`}
+                >
+                  <AppIcon app={app} />
+                  {app.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {categories.length > 0 && (
+        <fieldset className="m-0 mb-4 border-0 p-0 flex flex-wrap gap-2">
+          <legend className="sr-only">Category</legend>
+          {chip('', 'All')}
+          {categories.map((name) => chip(name, name))}
+        </fieldset>
+      )}
       <ul className="m-0 p-0 list-none grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {shown.map((app) => (
-          <li key={app.id} className={`${card} p-4 flex flex-col gap-3`}>
-            <div className="flex items-center gap-3">
-              <span
-                aria-hidden="true"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-control text-xl"
-                // Dynamic: each app's own icon colour from the registry.
-                style={{ backgroundColor: app.iconBg }}
-              >
-                {decodeIcon(app.icon)}
-              </span>
-              <div className="min-w-0">
-                <div className="font-bold text-ink-strong truncate">{app.name}</div>
-                {app.category && <div className="text-xs text-muted">{app.category}</div>}
+        {shown.map((app) => {
+          const favorite = favorites.has(app.id);
+          const count = votes[app.id] ?? 0;
+          return (
+            <li key={app.id} data-testid="store-app" className={`${card} p-4 flex flex-col gap-3`}>
+              <div className="flex items-center gap-3">
+                <AppIcon app={app} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-ink-strong truncate">{app.name}</div>
+                  {app.category && <div className="text-xs text-muted">{app.category}</div>}
+                </div>
+                <button
+                  type="button"
+                  aria-pressed={favorite}
+                  aria-label={`Favourite ${app.name}`}
+                  title={favorite ? 'Unpin from the top' : 'Pin to the top'}
+                  onClick={() => desktop.setFavorite(app.id, !favorite)}
+                  className={`shrink-0 bg-transparent border-0 p-1 text-xl leading-none cursor-pointer ${
+                    favorite ? 'text-warning' : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {favorite ? '★' : '☆'}
+                </button>
               </div>
-            </div>
-            <p className="m-0 text-sm text-muted flex-1">{app.description}</p>
-            <button type="button" className={secondary} onClick={() => desktop.openApp(app.id)}>
-              Open
-            </button>
-          </li>
-        ))}
+              <p className="m-0 text-sm text-muted flex-1">{app.description}</p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`${secondary} flex-1`}
+                  onClick={() => desktop.openApp(app.id)}
+                >
+                  Open
+                </button>
+                <a
+                  href={voteUrl(app.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Vote for ${app.name} on freeappstore.online (${count} vote${count === 1 ? '' : 's'})`}
+                  title="Vote on freeappstore.online"
+                  className={`${secondary} no-underline`}
+                >
+                  <span aria-hidden="true">♥</span> {count}
+                </a>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </Section>
   );
@@ -1166,25 +1269,177 @@ function Account({ state }: { state: DesktopState }) {
   );
 }
 
-/** This build's version, build number and commit, and its release notes (#832). */
-function About({ state }: { state: DesktopState }) {
+/** This build's version, build number and commit, its release notes (#832), and updates (#839). */
+function About({ state, openWhatsNew }: { state: DesktopState; openWhatsNew: () => void }) {
+  const { updates } = state;
+  const checked = updates.checkedAt
+    ? `Last checked ${new Date(updates.checkedAt).toLocaleString()}.`
+    : '';
   return (
     <Section title="About">
       <section className={`${card} p-5`} aria-label="About">
         <dl className="m-0 divide-y divide-line">
           <Row label="Version" value={<span data-testid="app-version">{state.version}</span>} />
         </dl>
+        {updates.supported ? (
+          <div className="mt-4 pt-4 border-t border-line">
+            <label className="flex items-center gap-3 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[var(--accent)] cursor-pointer"
+                checked={updates.auto}
+                onChange={(event) => desktop.setAutoUpdate(event.target.checked)}
+              />
+              <span>
+                <span className="font-semibold text-ink">Check for updates automatically</span>
+                <span className="text-muted"> — when FreeAppStore starts and once a day</span>
+              </span>
+            </label>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className={secondary}
+                disabled={updates.status === 'checking' || updates.status === 'downloading'}
+                onClick={() => desktop.update('check')}
+              >
+                {updates.status === 'checking' ? 'Checking…' : 'Check now'}
+              </button>
+              <span className="text-xs text-muted">
+                {updates.status === 'error'
+                  ? `Couldn't check for updates (${updates.error}).`
+                  : updates.version
+                    ? `Version ${updates.version} is available.`
+                    : `${checked} This is the newest version.`.trim()}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 mb-0 text-xs text-muted">
+            Development build: installed builds check for updates.
+          </p>
+        )}
       </section>
       <div className="mt-4 text-sm">
-        <a
-          href={state.releaseNotes}
-          target="_blank"
-          rel="noreferrer"
-          className="text-accent font-semibold hover:underline"
+        <button
+          type="button"
+          onClick={openWhatsNew}
+          className="bg-transparent border-0 p-0 text-accent font-semibold hover:underline cursor-pointer"
         >
           What's new
-        </a>
+        </button>
       </div>
     </Section>
+  );
+}
+
+/** A newer version (#839): Restart to update when downloaded, or (macOS) download it. */
+function UpdateBanner({ state, openWhatsNew }: { state: DesktopState; openWhatsNew: () => void }) {
+  const { status, version, percent } = state.updates;
+  if (!version || (status !== 'ready' && status !== 'manual' && status !== 'downloading'))
+    return null;
+  return (
+    <section
+      aria-label="Update"
+      className={`${card} mb-6 p-4 flex flex-wrap items-center gap-3 border-accent`}
+    >
+      <div className="min-w-0 flex-1 text-sm">
+        <span className="font-bold text-ink-strong">
+          {status === 'ready'
+            ? `FreeAppStore ${version} is ready to install.`
+            : `FreeAppStore ${version} is available.`}
+        </span>{' '}
+        <span className="text-muted">
+          {status === 'downloading'
+            ? `Downloading… ${percent ?? 0}%`
+            : status === 'manual'
+              ? 'Download it and replace the app in Applications.'
+              : 'Restarting takes a few seconds.'}
+        </span>
+      </div>
+      <button type="button" className={secondary} onClick={openWhatsNew}>
+        What's new
+      </button>
+      {status !== 'downloading' && (
+        <button type="button" className={primary} onClick={() => desktop.update('apply')}>
+          {status === 'ready' ? 'Restart to update' : 'Download'}
+        </button>
+      )}
+    </section>
+  );
+}
+
+type ReleaseNotes = Awaited<ReturnType<typeof desktop.releaseNotes>>;
+
+/** Release notes (the GitHub release body) of the newer version, if any, and of this one (#839). */
+function WhatsNew({ state }: { state: DesktopState }) {
+  const current = state.version.split(' ')[0]!;
+  const versions = [state.updates.version, current].filter(
+    (v, i, all): v is string => !!v && all.indexOf(v) === i,
+  );
+  return (
+    <Section title="What's new">
+      {versions.map((version) => (
+        <ReleaseNotesCard key={version} version={version} current={version === current} />
+      ))}
+      <a
+        href="https://github.com/freeappstore-online/platform/releases?q=desktop-v&expanded=true"
+        target="_blank"
+        rel="noreferrer"
+        className="text-sm text-accent font-semibold hover:underline"
+      >
+        All desktop releases
+      </a>
+    </Section>
+  );
+}
+
+function ReleaseNotesCard({ version, current }: { version: string; current: boolean }) {
+  const [notes, setNotes] = useState<ReleaseNotes | undefined>();
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    desktop
+      .releaseNotes(version)
+      .then(setNotes)
+      .catch(() => setError(true));
+  }, [version]);
+  const lines = (notes?.body ?? '').split(/\r?\n/).filter((line) => line.trim());
+  return (
+    <section className={`${card} mb-6 p-5`} aria-label={`Version ${version}`}>
+      <div className="mb-3 flex flex-wrap items-baseline gap-3">
+        <h3 className="m-0 text-base font-bold">Version {version}</h3>
+        <Badge variant={current ? 'default' : 'accent'}>{current ? 'This version' : 'New'}</Badge>
+        {notes?.published && (
+          <span className="text-xs text-muted">
+            {new Date(notes.published).toLocaleDateString(undefined, { dateStyle: 'long' })}
+          </span>
+        )}
+      </div>
+      {error ? (
+        <p className="m-0 text-sm text-muted">
+          Couldn't load the release notes. Check your connection.
+        </p>
+      ) : notes === undefined ? (
+        <p className="m-0 text-sm text-muted">Loading…</p>
+      ) : notes === null ? (
+        <p className="m-0 text-sm text-muted">This version has no release notes.</p>
+      ) : (
+        <div data-testid="release-notes" className="text-sm">
+          {lines
+            .filter((line) => !line.startsWith('- '))
+            .map((line) => (
+              <p key={line} className="mt-0 mb-2">
+                {line}
+              </p>
+            ))}
+          <ul className="m-0 pl-5 list-disc">
+            {lines
+              .filter((line) => line.startsWith('- '))
+              .map((line) => (
+                <li key={line}>{line.slice(2)}</li>
+              ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }

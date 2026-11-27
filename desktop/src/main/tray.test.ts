@@ -7,6 +7,7 @@ describe('tray menu', () => {
       open: vi.fn(),
       setPaused: vi.fn(),
       setContributePaused: vi.fn(),
+      update: vi.fn(),
       quit: vi.fn(),
     };
     const on = trayMenu(
@@ -48,6 +49,7 @@ describe('tray menu', () => {
       open: vi.fn(),
       setPaused: vi.fn(),
       setContributePaused: vi.fn(),
+      update: vi.fn(),
       quit: vi.fn(),
     };
     const base = { paused: false, openApps: 0, serverError: null };
@@ -76,6 +78,7 @@ describe('tray menu', () => {
       open: vi.fn(),
       setPaused: vi.fn(),
       setContributePaused: vi.fn(),
+      update: vi.fn(),
       quit: vi.fn(),
     };
     const menu = trayMenu(
@@ -96,5 +99,22 @@ describe('tray menu', () => {
     ]);
     menu.at(-3)!.click!(undefined as never, undefined, undefined as never);
     expect(actions.open).toHaveBeenCalled();
+  });
+
+  it('shows an available update after the status (#839)', () => {
+    const actions = {
+      open: vi.fn(),
+      setPaused: vi.fn(),
+      setContributePaused: vi.fn(),
+      update: vi.fn(),
+      quit: vi.fn(),
+    };
+    const base = { paused: false, openApps: 0, serverError: null, contribute: null };
+    const ready = trayMenu({ ...base, update: { version: '0.4.0', ready: true } }, actions);
+    expect(ready[1]!.label).toBe('Update available: restart to update to 0.4.0');
+    ready[1]!.click!(undefined as never, undefined, undefined as never);
+    expect(actions.update).toHaveBeenCalled();
+    const manual = trayMenu({ ...base, update: { version: '0.4.0', ready: false } }, actions);
+    expect(manual[1]!.label).toBe('Update available: download version 0.4.0');
   });
 });

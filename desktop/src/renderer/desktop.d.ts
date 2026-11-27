@@ -4,6 +4,7 @@ import type { Profile } from '../main/device.js';
 import type { HistoryItem } from '../main/history.js';
 import type { LogEntry, OpenApp } from '../main/hub.js';
 import type { ClientId, ClientStatus } from '../main/integrations.js';
+import type { UpdateState } from '../main/updates.js';
 
 export type { ClientId, ClientStatus, HistoryItem, LogEntry, OpenApp };
 
@@ -29,6 +30,10 @@ export interface DesktopState {
   version: string;
   /** The GitHub release notes for this version. */
   releaseNotes: string;
+  /** A newer version (#839); `auto`: automatic checks are on; `supported`: an installed build, which can update. */
+  updates: UpdateState & { auto: boolean; supported: boolean };
+  /** The Store's apps opened on this computer, most recent first, and the starred ones (#840). */
+  store: { recent: string[]; favorites: string[] };
   openApps: OpenApp[];
   log: LogEntry[];
   /** The signed-in account (#829); `avatar` is a data: URL. Null until loaded or when not connected. */
@@ -72,6 +77,14 @@ declare global {
       /** Connect (true) or disconnect (false) a client; resolves with every client's new status. */
       setConnected(id: ClientId, connect: boolean): Promise<ClientStatus[]>;
       registry(): Promise<{ apps: RegistryApp[]; votes: Record<string, number> }>;
+      setFavorite(appId: string, on: boolean): Promise<void>;
+      /** Look for a new version now, or apply the one found (Restart to update; the download on macOS). */
+      update(action: 'check' | 'apply'): Promise<void>;
+      setAutoUpdate(on: boolean): Promise<void>;
+      /** A desktop release's notes, or null when that version has no release. */
+      releaseNotes(
+        version: string,
+      ): Promise<{ version: string; body: string; published: string | null } | null>;
       contribute: {
         connect(): Promise<void>;
         cancel(): Promise<void>;
