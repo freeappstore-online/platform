@@ -9,6 +9,7 @@ import {
 } from '@freeappstore/sdk/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { encode } from 'uqr';
+import { CATEGORIES } from '../main/categories.js';
 import type { PairCode } from '../main/device.js';
 import type {
   ClientId,
@@ -18,14 +19,18 @@ import type {
   DesktopContribute,
   DesktopState,
   HistoryItem,
+  MyApp,
   OpenApp,
+  Project,
+  PublishState,
   RegistryApp,
 } from './desktop.js';
 
-type Page = 'home' | 'store' | 'contribute' | 'activity' | 'account' | 'whats-new';
+type Page = 'home' | 'store' | 'publish' | 'contribute' | 'activity' | 'account' | 'whats-new';
 const PAGES: { id: Page; label: string }[] = [
   { id: 'home', label: 'Home' },
   { id: 'store', label: 'Store' },
+  { id: 'publish', label: 'Publish' },
   { id: 'contribute', label: 'Contribute' },
   { id: 'activity', label: 'Activity' },
 ];
@@ -106,6 +111,8 @@ export function App() {
           <Home state={state} openStore={() => setPage('store')} />
         ) : page === 'store' ? (
           <Store store={state.store} />
+        ) : page === 'publish' ? (
+          <Publish state={state.publish} />
         ) : page === 'whats-new' ? (
           <WhatsNew state={state} />
         ) : page === 'contribute' ? (
@@ -1356,6 +1363,457 @@ function ReportForm({ item }: { item: HistoryItem }) {
         </span>
       </div>
     </fieldset>
+  );
+}
+
+// ── Publish (#800) ──────────────────────────────────────────────
+
+const SITE = 'https://freeappstore.online';
+const link = 'text-accent font-semibold hover:underline';
+const folderName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+
+/** Create, check, publish and push apps: a GUI over the bundled `fas` CLI and git. */
+function Publish({ state }: { state: PublishState }) {
+  useEffect(() => {
+    void desktop.publish.refresh();
+  }, []);
+  const busy = state.task?.running === true;
+  return (
+    <>
+      <h1 className="mt-0 mb-2 text-3xl font-extrabold">Publish your apps</h1>
+      <p className="mt-0 mb-8 text-muted max-w-2xl">
+        Create an app on this computer from the FreeAppStore starter, check it, publish it and push
+        your changes. Every push to main deploys it to its own address.
+      </p>
+      <PublishAccount state={state} busy={busy} />
+      {state.task && <TaskOutput task={state.task} />}
+      <Projects state={state} busy={busy} />
+      {state.account && !state.account.expired && <MyApps apps={state.apps} busy={busy} />}
+    </>
+  );
+}
+
+function PublishAccount({ state, busy }: { state: PublishState; busy: boolean }) {
+  const api = desktop.publish;
+  const { account, signIn } = state;
+  return (
+    <section className={`${card} mb-8 p-5`} aria-label="Publishing account">
+      {signIn ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <div className="text-sm text-muted">Enter this code on GitHub</div>
+            <div data-testid="device-code" className="font-code text-3xl font-bold text-ink-strong">
+              {signIn.code}
+            </div>
+          </div>
+          <button
+            type="button"
+            className={secondary}
+            onClick={() => navigator.clipboard.writeText(signIn.code)}
+          >
+            Copy code
+          </button>
+          <a href={signIn.url} target="_blank" rel="noreferrer" className={link}>
+            Open GitHub
+          </a>
+          <button type="button" className={secondary} onClick={() => api.cancel()}>
+            Cancel
+          </button>
+        </div>
+      ) : account ? (
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-1 min-w-0">
+            <div data-testid="publish-account" className="font-semibold text-ink-strong">
+              Signed in as @{account.login}
+            </div>
+            {account.expired ? (
+              <p className="m-0 text-sm text-danger">Your sign-in expired. Sign in again.</p>
+            ) : (
+              <p className="m-0 text-sm text-muted">
+                The same sign-in as the fas command-line tool on this computer.
+              </p>
+            )}
+          </div>
+          {account.expired && (
+            <button type="button" className={primary} disabled={busy} onClick={() => api.signIn()}>
+              Sign in again
+            </button>
+          )}
+          <button type="button" className={secondary} disabled={busy} onClick={() => api.signOut()}>
+            Sign out
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-4">
+          <p className="m-0 flex-1 min-w-60 text-sm">
+            Publishing needs a GitHub account: each app gets its own repository. This is the sign-in
+            of the fas command-line tool, so signing in here signs it in too.
+          </p>
+          <button type="button" className={primary} disabled={busy} onClick={() => api.signIn()}>
+            Sign in with GitHub
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TaskOutput({ task }: { task: NonNullable<PublishState['task']> }) {
+  const end = useRef<HTMLPreElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: follow new output
+  useEffect(() => {
+    end.current?.scrollTo({ top: end.current.scrollHeight });
+  }, [task.output.length]);
+  return (
+    <section className={`${card} mb-8 p-5`} aria-label="Output">
+      <div className="mb-3 flex items-center gap-3">
+        <h2 className="m-0 text-base font-bold">{task.label}</h2>
+        <span data-testid="task-status">
+          {task.running ? (
+            <Badge variant="accent">running</Badge>
+          ) : task.ok ? (
+            <Badge variant="success">done</Badge>
+          ) : (
+            <Badge variant="danger">failed</Badge>
+          )}
+        </span>
+        {task.running && (
+          <button
+            type="button"
+            className={`${secondary} ml-auto`}
+            onClick={() => desktop.publish.cancel()}
+          >
+            Stop
+          </button>
+        )}
+      </div>
+      <pre
+        ref={end}
+        data-testid="task-output"
+        className="m-0 max-h-64 overflow-auto rounded-control bg-paper p-3 text-xs font-code whitespace-pre-wrap"
+      >
+        {task.output.join('\n')}
+      </pre>
+    </section>
+  );
+}
+
+function Projects({ state, busy }: { state: PublishState; busy: boolean }) {
+  const api = desktop.publish;
+  const [creating, setCreating] = useState(false);
+  const [appId, setAppId] = useState('');
+  return (
+    <Section
+      title="On this computer"
+      aside={
+        <div className="flex gap-2">
+          <button
+            type="button"
+            className={primary}
+            disabled={busy}
+            onClick={() => setCreating(true)}
+          >
+            New app
+          </button>
+          <button type="button" className={secondary} disabled={busy} onClick={() => api.add()}>
+            Add folder
+          </button>
+        </div>
+      }
+    >
+      {creating && (
+        <form
+          className={`${card} mb-4 p-5 flex flex-wrap items-end gap-3`}
+          onSubmit={(event) => {
+            event.preventDefault();
+            void api.create(appId.trim()).then((ok) => {
+              if (ok) {
+                setCreating(false);
+                setAppId('');
+              }
+            });
+          }}
+        >
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">App id</span>
+            <input
+              name="app-id"
+              value={appId}
+              onChange={(e) => setAppId(e.target.value.toLowerCase())}
+              placeholder="moon-tides"
+              className={field}
+              required
+            />
+          </label>
+          <span className="text-xs text-muted flex-1 min-w-48">
+            Its address will be {appId || '<id>'}.freeappstore.online. Next, choose the folder to
+            create it in.
+          </span>
+          <button type="submit" className={primary} disabled={busy || !appId.trim()}>
+            Create
+          </button>
+          <button type="button" className={secondary} onClick={() => setCreating(false)}>
+            Cancel
+          </button>
+        </form>
+      )}
+      {state.projects.length === 0 ? (
+        <div className={card}>
+          <EmptyState
+            title="No apps on this computer yet"
+            message="Create one from the starter, or add a folder you made with fas init."
+          />
+        </div>
+      ) : (
+        <ul className="m-0 p-0 list-none grid gap-3">
+          {state.projects.map((project) => (
+            <ProjectCard
+              key={project.path}
+              project={project}
+              published={state.apps?.find((a) => a.id === project.appId) ?? null}
+              signedIn={!!state.account && !state.account.expired}
+              busy={busy}
+            />
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+function ProjectCard({
+  project,
+  published,
+  signedIn,
+  busy,
+}: {
+  project: Project;
+  published: MyApp | null;
+  signedIn: boolean;
+  busy: boolean;
+}) {
+  const api = desktop.publish;
+  const [publishing, setPublishing] = useState(false);
+  const [category, setCategory] = useState('');
+  const [oneliner, setOneliner] = useState('');
+  const [message, setMessage] = useState('');
+  const { path, appId, changes, checks } = project;
+  const failed = checks?.filter((c) => c.status === 'fail') ?? [];
+  const warned = checks?.filter((c) => c.status === 'warn') ?? [];
+  return (
+    <li className={`${card} p-5`} data-testid={`project-${appId ?? folderName(path)}`}>
+      <div className="flex flex-wrap items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-ink-strong">{folderName(path)}</span>
+            {published ? <Badge variant="success">published</Badge> : <Badge>not published</Badge>}
+          </div>
+          <div className="text-xs text-muted font-code truncate">{path}</div>
+          <div className="text-sm text-muted">
+            {appId ? `${appId}.freeappstore.online` : 'No app id in fas.json'}
+            {changes ? ` · ${changes} changed file${changes === 1 ? '' : 's'}` : ''}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={secondary}
+            disabled={busy}
+            onClick={() => api.check(path)}
+          >
+            Check
+          </button>
+          {!published && (
+            <button
+              type="button"
+              className={primary}
+              disabled={busy || !signedIn || !appId}
+              title={signedIn ? undefined : 'Sign in to publish'}
+              onClick={() => setPublishing(true)}
+            >
+              Publish…
+            </button>
+          )}
+          <button type="button" className={secondary} onClick={() => api.show(path)}>
+            Show folder
+          </button>
+          <button
+            type="button"
+            className={secondary}
+            disabled={busy}
+            onClick={() => api.remove(path)}
+            title="Removes it from this list; the folder stays"
+          >
+            Remove
+          </button>
+        </div>
+      </div>
+      {checks && (
+        <div className="mt-3 text-sm" data-testid="check-summary">
+          {failed.length === 0 ? (
+            <span className="text-success font-semibold">
+              Ready to publish: {checks.length - warned.length} passed
+              {warned.length ? `, ${warned.length} warning${warned.length === 1 ? '' : 's'}` : ''}
+            </span>
+          ) : (
+            <span className="text-danger font-semibold">
+              {failed.length} check{failed.length === 1 ? '' : 's'} failed
+            </span>
+          )}
+          <ul className="mt-1 mb-0 pl-5">
+            {[...failed, ...warned].map((c) => (
+              <li key={c.name} className={c.status === 'fail' ? 'text-danger' : 'text-muted'}>
+                <span className="font-semibold">{c.name}</span>: {c.detail}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {publishing && !published && (
+        <form
+          className="mt-4 pt-4 border-t border-line grid gap-3 md:grid-cols-[auto_1fr_auto]"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void api.publish(path, { category, oneliner }).then((ok) => {
+              if (ok) setPublishing(false);
+            });
+          }}
+        >
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">Category</span>
+            <select
+              name="category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className={`${field} cursor-pointer`}
+              required
+            >
+              <option value="">Choose…</option>
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-semibold">One-line description</span>
+            <input
+              name="oneliner"
+              value={oneliner}
+              onChange={(e) => setOneliner(e.target.value)}
+              maxLength={200}
+              placeholder="What it does, in one line"
+              className={field}
+              required
+            />
+          </label>
+          <div className="flex items-end gap-2">
+            <button type="submit" className={primary} disabled={busy}>
+              Publish
+            </button>
+            <button type="button" className={secondary} onClick={() => setPublishing(false)}>
+              Cancel
+            </button>
+          </div>
+          <p className="m-0 text-xs text-muted md:col-span-3">
+            Publishing checks the app, creates its repository in the freeappstore-online
+            organisation and its address. It goes live after you push.
+          </p>
+        </form>
+      )}
+      {published && (
+        <form
+          className="mt-4 pt-4 border-t border-line flex flex-wrap items-end gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void api.push(path, message).then((ok) => {
+              if (ok) setMessage('');
+            });
+          }}
+        >
+          {changes ? (
+            <label className="flex flex-col gap-1 text-sm flex-1 min-w-60">
+              <span className="font-semibold">What changed</span>
+              <input
+                name="message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Add a dark mode"
+                className={field}
+                required
+              />
+            </label>
+          ) : (
+            <span className="text-sm text-muted flex-1 min-w-60">
+              Pushes main to {published.repoUrl.replace(/^https:\/\//, '')}, which deploys it.
+            </span>
+          )}
+          <button type="submit" className={primary} disabled={busy}>
+            {changes ? 'Commit and push' : 'Push'}
+          </button>
+          <a href={published.appUrl} target="_blank" rel="noreferrer" className={link}>
+            Open {appId}.freeappstore.online
+          </a>
+        </form>
+      )}
+    </li>
+  );
+}
+
+function MyApps({ apps, busy }: { apps: MyApp[] | null; busy: boolean }) {
+  return (
+    <Section
+      title="Your published apps"
+      aside={
+        <button
+          type="button"
+          className={secondary}
+          disabled={busy}
+          onClick={() => desktop.publish.refresh()}
+        >
+          Refresh
+        </button>
+      }
+    >
+      {!apps ? (
+        <p className="text-muted">Loading…</p>
+      ) : apps.length === 0 ? (
+        <div className={card}>
+          <EmptyState title="No published apps yet" message="Publish one from this computer." />
+        </div>
+      ) : (
+        <ul className="m-0 p-0 list-none grid gap-3" data-testid="my-apps">
+          {apps.map((app) => (
+            <li key={app.id} className={`${card} p-4 flex flex-wrap items-center gap-3`}>
+              <div className="flex-1 min-w-0">
+                <div className="font-bold text-ink-strong">{app.id}</div>
+                {app.oneliner && <div className="text-sm text-muted truncate">{app.oneliner}</div>}
+              </div>
+              <button type="button" className={secondary} onClick={() => desktop.openApp(app.id)}>
+                Open
+              </button>
+              <a
+                href={`${SITE}/app/build/app/${app.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className={link}
+              >
+                Edit with VibeCode
+              </a>
+              <a
+                href={`${SITE}/app/apps/${app.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className={link}
+              >
+                Console
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
   );
 }
 

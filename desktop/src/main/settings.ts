@@ -29,6 +29,8 @@ export interface Settings {
   /** Store (#840): apps opened on this computer, most recent first, and the starred ones. */
   recentApps: string[];
   favoriteApps: string[];
+  /** Publish (#800): the app folders on this computer, as the user picked them. */
+  publishProjects: string[];
 }
 
 const FILE = 'settings.json';
@@ -42,6 +44,7 @@ const DEFAULTS: Settings = {
   autoUpdate: true,
   recentApps: [],
   favoriteApps: [],
+  publishProjects: [],
 };
 const bool = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback);
 const strings = (value: unknown) =>
@@ -75,6 +78,7 @@ export function loadSettings(dir: string): { settings: Settings; firstRun: boole
       autoUpdate: bool(saved.autoUpdate, DEFAULTS.autoUpdate),
       recentApps: strings(saved.recentApps),
       favoriteApps: strings(saved.favoriteApps),
+      publishProjects: strings(saved.publishProjects),
     },
     firstRun: false,
   };

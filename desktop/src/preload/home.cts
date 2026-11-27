@@ -19,6 +19,20 @@ contextBridge.exposeInMainWorld('fasDesktop', {
   setAutoUpdate: (on: boolean) => ipcRenderer.invoke('home:set-auto-update', on),
   releaseNotes: (version: string) => ipcRenderer.invoke('home:release-notes', version),
   pairCode: () => ipcRenderer.invoke('home:pair-code'),
+  publish: {
+    refresh: () => ipcRenderer.invoke('home:publish-refresh'),
+    signIn: () => ipcRenderer.invoke('home:publish-sign-in'),
+    signOut: () => ipcRenderer.invoke('home:publish-sign-out'),
+    cancel: () => ipcRenderer.invoke('home:publish-cancel'),
+    create: (appId: string) => ipcRenderer.invoke('home:publish-new', appId),
+    add: () => ipcRenderer.invoke('home:publish-add'),
+    remove: (path: string) => ipcRenderer.invoke('home:publish-remove', path),
+    show: (path: string) => ipcRenderer.invoke('home:publish-show', path),
+    check: (path: string) => ipcRenderer.invoke('home:publish-check', path),
+    publish: (path: string, input: { category: string; oneliner: string }) =>
+      ipcRenderer.invoke('home:publish-publish', path, input),
+    push: (path: string, message: string) => ipcRenderer.invoke('home:publish-push', path, message),
+  },
   contribute: {
     connect: () => ipcRenderer.invoke('home:contribute-connect'),
     cancel: () => ipcRenderer.invoke('home:contribute-cancel'),

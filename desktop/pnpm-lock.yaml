@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@freeappstore/cli':
+        specifier: 0.4.123
+        version: 0.4.123
       '@freeappstore/sdk':
         specifier: ^0.21.22
         version: 0.21.22(kokoro-js@1.2.1)(mp4-muxer@5.2.2)(react@19.3.1)
@@ -220,6 +223,19 @@ packages:
 
   '@emnapi/wasi-threads@2.2.0':
     resolution: {integrity: sha512-JP7OYH38Q7+pyTAe14raZHLQIK7BDKbdwji+Xi3pcd/6QkJYQH3SX4wu6EplGrGJWRepoNzedfm0G3B9Z4e9Rw==}
+
+  '@freeappstore/cli@0.4.123':
+    resolution: {integrity: sha512-FmTrIqs+4mNxf6ngMakgkxhlHsKt6A1eEoyBgLIo+ak0nPuSd1YLFn1RASXKqXiQDI/eby463C2nVbpkMHOXDg==}
+    engines: {node: '>=22'}
+    hasBin: true
+
+  '@freeappstore/compliance@0.7.35':
+    resolution: {integrity: sha512-H5420AeTbuUTE1WEjhhpXUsn++3Pb2iklQbLyXBJ65Ag2dJLGGN4wz9R8nwiHfELtVk7kGoJFWwxlAlJwsLkxQ==}
+    engines: {node: '>=22'}
+
+  '@freeappstore/quality@0.1.7':
+    resolution: {integrity: sha512-tRCpcHd0ExNzKwZ4mIVLJtDcRsOD8tBaEEZZ26ZOkuey6Y6mDQHWDV1cd1/bg++KjayeO4Mou/48Qdh1oF+JXg==}
+    engines: {node: '>=22'}
 
   '@freeappstore/sdk@0.21.22':
     resolution: {integrity: sha512-SFI5SOdBuRzSua2I4wo+KDZUx+fD35Ed2qhQyE3dTMkekCMF0e1mkXFYeJxnMEcGxgQ8WeiONYmrZGgcoHf4sw==}
@@ -991,6 +1007,10 @@ packages:
     resolution: {integrity: sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==}
     engines: {node: '>= 0.8'}
 
+  commander@12.1.0:
+    resolution: {integrity: sha512-Vw8qHK3bZM9y/P10u3Vib8o/DdkvA2OtPtZvD871QKjy74Wj1WSKFILMPRPSdUSx5RFK1arlJzEtA4PkFgnbuA==}
+    engines: {node: '>=18'}
+
   commander@5.1.0:
     resolution: {integrity: sha512-P0CysNDQ7rtVw4QIQtm+MRxV66vKFSvlsQvGYXZWR3qFU0jlMKHZZZgw8e+8DSah4UDKMqnknRDQz+xuQXQ/Zg==}
     engines: {node: '>= 6'}
@@ -1481,6 +1501,10 @@ packages:
   keyv@4.5.4:
     resolution: {integrity: sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==}
 
+  kleur@3.0.3:
+    resolution: {integrity: sha512-eTIzlVOSUR+JxdDFepEYcBMtZ9Qqdef+rnzWdRZuMbOywu5tO2w2N7rqjoANZ5k9vywhL6Br1VRjUIgTQx4E8w==}
+    engines: {node: '>=6'}
+
   kokoro-js@1.2.1:
     resolution: {integrity: sha512-oq0HZJWis3t8lERkMJh84WLU86dpYD0EuBPtqYnLlQzyFP1OkyBRDcweAqCfhNOpltyN9j/azp1H6uuC47gShw==}
 
@@ -1825,6 +1849,10 @@ packages:
     resolution: {integrity: sha512-y+WKFlBR8BGXnsNlIHFGPZmyDf3DFMoLhaflAnyZgV6rG6xu+JwesTo2Q9R6XwYmtmwAFCkAk3e35jEdoeh/3g==}
     engines: {node: '>=10'}
 
+  prompts@2.4.2:
+    resolution: {integrity: sha512-NxNv/kLguCA7p3jE8oL2aEBsrJWgAakBpgmgK6lpPWV+WuOmY6r2/zbAVnP+T8bQlA0nzHXSJSJW0Hq7ylaD2Q==}
+    engines: {node: '>= 6'}
+
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
 
@@ -2042,6 +2070,9 @@ packages:
   simple-update-notifier@2.0.0:
     resolution: {integrity: sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==}
     engines: {node: '>=10'}
+
+  sisteransi@1.0.5:
+    resolution: {integrity: sha512-bLGGlR1QxBcynn2d5YmDX4MGjlZvy2MRBDRNHLJ8VI6l6+9FUiyTFNJ0IveOSP0bcXgVDPRcfGqA0pjaqUpfVg==}
 
   source-map-js@1.2.4:
     resolution: {integrity: sha512-J7ZjMvHd9O1fcT/5V09QWaaSl2BbWx3F6O08spde82Namf9UB0GxRVIPiNbVsdKkoizHiSpTodo3vp2bAy91MA==}
@@ -2521,6 +2552,21 @@ snapshots:
     dependencies:
       tslib: 2.9.1
     optional: true
+
+  '@freeappstore/cli@0.4.123':
+    dependencies:
+      '@freeappstore/compliance': 0.7.35
+      '@freeappstore/quality': 0.1.7
+      commander: 12.1.0
+      prompts: 2.4.2
+      semver: 7.8.6
+      typescript: 5.9.3
+
+  '@freeappstore/compliance@0.7.35':
+    dependencies:
+      postcss: 8.5.33
+
+  '@freeappstore/quality@0.1.7': {}
 
   '@freeappstore/sdk@0.21.22(kokoro-js@1.2.1)(mp4-muxer@5.2.2)(react@19.3.1)':
     dependencies:
@@ -3222,6 +3268,8 @@ snapshots:
     dependencies:
       delayed-stream: 1.0.0
 
+  commander@12.1.0: {}
+
   commander@5.1.0: {}
 
   commander@9.5.0:
@@ -3782,6 +3830,8 @@ snapshots:
     dependencies:
       json-buffer: 3.0.1
 
+  kleur@3.0.3: {}
+
   kokoro-js@1.2.1:
     dependencies:
       '@huggingface/transformers': 3.8.1
@@ -4073,6 +4123,11 @@ snapshots:
     dependencies:
       err-code: 2.0.3
       retry: 0.12.0
+
+  prompts@2.4.2:
+    dependencies:
+      kleur: 3.0.3
+      sisteransi: 1.0.5
 
   proper-lockfile@4.1.2:
     dependencies:
@@ -4369,6 +4424,8 @@ snapshots:
   simple-update-notifier@2.0.0:
     dependencies:
       semver: 7.8.6
+
+  sisteransi@1.0.5: {}
 
   source-map-js@1.2.4: {}
 

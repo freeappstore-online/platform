@@ -50,6 +50,7 @@ import { Hub, type Peer } from './hub.js';
 import { type ClientId, Integrations, type StdioEntry } from './integrations.js';
 import { NativeRunner } from './kokoro.js';
 import { modelInstalled } from './model.js';
+import { Publisher } from './publish.js';
 import { APP_ID, appOrigin, DEFAULT_PORT, HOST } from './security.js';
 import { startServer } from './server.js';
 import { loadSettings, type Settings, saveSettings } from './settings.js';
@@ -149,6 +150,7 @@ function state() {
     releaseNotes: releaseNotesUrl(app.getVersion()),
     updates: { ...updates.state, auto: settings.autoUpdate, supported: app.isPackaged },
     store: { recent: settings.recentApps, favorites: settings.favoriteApps },
+    publish: publisher.state,
     openApps: hub.openApps(),
     log: hub.log,
   };
@@ -432,6 +434,108 @@ ipcMain.handle('home:set-favorite', (event, appId: unknown, on: unknown) => {
   settings.favoriteApps = on === true ? [...favorites, appId] : favorites;
   saveSettings(app.getPath('userData'), settings);
   pushState();
+});
+
+// ── Publish (#800) ──────────────────────────────────────────────
+
+/**
+ * The environment of the bundled `fas` CLI and of git. Packaged builds always publish through the real API; dev
+ * builds follow FAS_DEV_API_ORIGIN (the e2e stand-in) and FAS_DESKTOP_CLI_HOME (a home directory holding the
+ * CLI's sign-in, so tests never touch ~/.fas).
+ */
+function publishEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  delete env.FAS_API_BASE;
+  if (dev && process.env.FAS_DEV_API_ORIGIN) env.FAS_API_BASE = apiOrigin;
+  const home = dev ? process.env.FAS_DESKTOP_CLI_HOME : undefined;
+  if (home) {
+    env.HOME = home;
+    env.USERPROFILE = home;
+  }
+  return env;
+}
+const cliEnv = publishEnv();
+const publisher = new Publisher({
+  // Like the stdio entry: this app's binary in node mode. The CLI holds the sign-in; this process never reads it.
+  fas: {
+    command: process.execPath,
+    args: [fileURLToPath(new URL('../cli/fas.mjs', import.meta.url))],
+    env: { ...cliEnv, ELECTRON_RUN_AS_NODE: '1' },
+  },
+  git: { command: 'git', args: [], env: cliEnv },
+  dev,
+  projects: () => settings.publishProjects,
+  saveProjects: (paths) => {
+    settings.publishProjects = paths;
+    saveSettings(app.getPath('userData'), settings);
+  },
+  open: openExternal,
+  changed: () => pushState(),
+});
+
+/** Only folders the user picked in a folder dialog: the page names a project, never an arbitrary path. */
+const isProject = (path: unknown): path is string =>
+  typeof path === 'string' && settings.publishProjects.includes(path);
+
+async function pickFolder(title: string, buttonLabel: string): Promise<string | null> {
+  if (!home) return null;
+  const { canceled, filePaths } = await dialog.showOpenDialog(home, {
+    title,
+    buttonLabel,
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return canceled ? null : (filePaths[0] ?? null);
+}
+
+ipcMain.handle('home:publish-refresh', (event) => {
+  if (fromHome(event)) return publisher.refresh();
+});
+ipcMain.handle('home:publish-sign-in', (event) => {
+  if (fromHome(event)) return publisher.signIn();
+});
+ipcMain.handle('home:publish-sign-out', (event) => {
+  if (fromHome(event)) return publisher.signOut();
+});
+ipcMain.handle('home:publish-cancel', (event) => {
+  if (fromHome(event)) publisher.cancel();
+});
+ipcMain.handle('home:publish-new', async (event, appId: unknown) => {
+  if (!fromHome(event) || typeof appId !== 'string' || publisher.busy) return false;
+  const parent = await pickFolder('Where to create the app', 'Create here');
+  return parent ? publisher.create(parent, appId) : false;
+});
+ipcMain.handle('home:publish-add', async (event) => {
+  if (!fromHome(event) || !home) return false;
+  const path = await pickFolder('Add an app folder', 'Add');
+  if (!path) return false;
+  if (await publisher.add(path)) return true;
+  await dialog.showMessageBox(home, {
+    type: 'warning',
+    message: "That folder isn't a FreeAppStore app.",
+    detail: 'Choose the folder with fas.json in it, or create a new app.',
+  });
+  return false;
+});
+ipcMain.handle('home:publish-remove', (event, path: unknown) => {
+  if (fromHome(event) && isProject(path)) return publisher.remove(path);
+});
+ipcMain.handle('home:publish-show', (event, path: unknown) => {
+  if (fromHome(event) && isProject(path)) void shell.openPath(path);
+});
+ipcMain.handle('home:publish-check', (event, path: unknown) => {
+  if (fromHome(event) && isProject(path)) return publisher.check(path);
+});
+ipcMain.handle('home:publish-publish', (event, path: unknown, input: unknown) => {
+  if (!fromHome(event) || !isProject(path) || !input || typeof input !== 'object') return false;
+  const { category, oneliner } = input as Record<string, unknown>;
+  if (typeof category !== 'string' || typeof oneliner !== 'string') return false;
+  return publisher.publish(path, { category, oneliner });
+});
+ipcMain.handle('home:publish-push', (event, path: unknown, message: unknown) => {
+  if (fromHome(event) && isProject(path) && typeof message === 'string')
+    return publisher.push(path, message);
+  return false;
 });
 
 // ── Updates (#839) ──────────────────────────────────────────────
@@ -876,6 +980,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true;
     contribute.stop();
+    publisher.cancel();
   });
 
   app.whenReady().then(async () => {

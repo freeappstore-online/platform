@@ -5,9 +5,21 @@ import type { PairCode, Profile } from '../main/device.js';
 import type { HistoryItem } from '../main/history.js';
 import type { LogEntry, OpenApp } from '../main/hub.js';
 import type { ClientId, ClientStatus } from '../main/integrations.js';
+import type { CheckResult, MyApp, Project, PublishState } from '../main/publish.js';
 import type { UpdateState } from '../main/updates.js';
 
-export type { ClientId, ClientStatus, ContributeWhen, HistoryItem, LogEntry, OpenApp };
+export type {
+  CheckResult,
+  ClientId,
+  ClientStatus,
+  ContributeWhen,
+  HistoryItem,
+  LogEntry,
+  MyApp,
+  OpenApp,
+  Project,
+  PublishState,
+};
 
 /** Auto, Run now (one run that ignores the conditions) or Off (#830). */
 export type ContributeMode = 'auto' | 'run-now' | 'off';
@@ -40,6 +52,8 @@ export interface DesktopState {
   updates: UpdateState & { auto: boolean; supported: boolean };
   /** The Store's apps opened on this computer, most recent first, and the starred ones (#840). */
   store: { recent: string[]; favorites: string[] };
+  /** Publish (#800): the CLI's sign-in, this account's apps, the app folders here and the last command. */
+  publish: PublishState;
   openApps: OpenApp[];
   log: LogEntry[];
   /** The signed-in account (#829); `avatar` is a data: URL. Null until loaded or when not connected. */
@@ -91,6 +105,24 @@ declare global {
       ): Promise<{ version: string; body: string; published: string | null } | null>;
       /** A 5-minute, single-use code for a phone to scan and join this account (#845). */
       pairCode(): Promise<PairCode | null>;
+      /** Publish (#800), each a run of the bundled `fas` CLI or git; `path` is a project's. */
+      publish: {
+        refresh(): Promise<void>;
+        signIn(): Promise<void>;
+        signOut(): Promise<void>;
+        /** Stops the command running (a sign-in waiting for GitHub). */
+        cancel(): Promise<void>;
+        /** `fas init <appId>` in a folder the user picks; false when canceled or it failed. */
+        create(appId: string): Promise<boolean>;
+        /** Adds an app folder the user picks. */
+        add(): Promise<boolean>;
+        remove(path: string): Promise<void>;
+        show(path: string): Promise<void>;
+        check(path: string): Promise<void>;
+        publish(path: string, input: { category: string; oneliner: string }): Promise<boolean>;
+        /** Commits every change with `message`, then pushes main: push to main deploys. */
+        push(path: string, message: string): Promise<boolean>;
+      };
       contribute: {
         connect(): Promise<void>;
         cancel(): Promise<void>;

@@ -269,6 +269,7 @@ describe('settings', () => {
     autoUpdate: true,
     recentApps: [],
     favoriteApps: [],
+    publishProjects: [],
   };
   it('defaults to on and open at login on first run, and persists changes', () => {
     expect(loadSettings(tmp)).toEqual({
@@ -285,6 +286,7 @@ describe('settings', () => {
       autoUpdate: false,
       recentApps: ['notes', 'books'],
       favoriteApps: ['books'],
+      publishProjects: ['/Users/me/apps/moon-tides'],
     };
     saveSettings(tmp, changed);
     expect(loadSettings(tmp)).toEqual({ settings: changed, firstRun: false });

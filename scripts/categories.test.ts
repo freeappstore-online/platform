@@ -12,6 +12,7 @@ const COPIES = [
   'packages/cli/src/commands/publish.ts',
   'sites/console/web/src/PublishForm.tsx',
   'sites/console/web/src/builder/components/studio/PublishModal.tsx',
+  'desktop/src/main/categories.ts',
 ];
 
 describe('publish categories', () => {

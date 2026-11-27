@@ -105,6 +105,39 @@ the server stays up, so clients stay connected.
 
 How an app offers tools (`exposeTools` from `@freeappstore/sdk/bridge`): [docs/mcp.md](../docs/mcp.md#local-ai-access-to-app-data-freeappstore-desktop).
 
+## Publish
+
+**Publish** (#800) creates, checks, publishes and pushes apps from this computer. It is a GUI over the `fas` CLI
+(`@freeappstore/cli`, a pinned dependency), so init, compliance, the deploy workflow and `/v1/publish` are the CLI's own
+code. The page runs the bundled CLI the way Connect runs the stdio proxy: this app's binary in node mode
+(`ELECTRON_RUN_AS_NODE=1`) on `dist/cli/fas.mjs` (`src/cli/fas.mts`), with an argument list and no shell.
+
+- **Sign in with GitHub** runs `fas login`: the page shows GitHub's device code and opens `github.com/login/device`;
+  the CLI exchanges the GitHub token at `/v1/auth/exchange` for a 30-day console session and keeps it in
+  `~/.fas/config.json` (mode `0600`). It is **the CLI's sign-in**: signing in or out here does the same for `fas`
+  in a terminal, and the reverse. **Sign out** runs `fas logout`, which deletes that file.
+- **Your published apps** come from `GET /v1/apps/mine`, fetched by the wrapper (`fas.mjs --my-apps`) with the
+  CLI's own config code: `fas list --json` would also call GitHub's API once per app. Each has **Open** (a desktop
+  window), **Edit with VibeCode** (`freeappstore.online/app/build/app/<id>`) and **Console**.
+- **On this computer**: **New app** runs `fas init <id>` in a folder you choose (the standalone starter, with a first
+  commit); **Add folder** adds a folder with a `fas.json` app id. The list is userData `settings.json`
+  `publishProjects`; **Remove** takes a folder off it and leaves the folder. Each project has **Check**
+  (`fas check --json`), **Publish…** (a category and a one-line description, then
+  `fas publish --yes --name <id> --category … --type standalone --oneliner …`), and once published **Push**
+  (**Commit and push** with a message while files have changed: `git add -A`, `git commit`, then
+  `git push <repo>.git main`). Push uses your own git credentials and goes only to
+  `https://github.com/freeappstore-online/<id>` as `/v1/apps/mine` reports it. Push to main deploys.
+- The output of the command running (or last run) shows on the page; **Stop** ends it. One command runs at a time.
+
+Security: the main process and the page never read the console session; only the CLI does, as in a terminal. The
+`ndev_` device credential (Contribute, Account) is not used for publishing and can't be exchanged for a console
+session: it is a long-lived credential for the native routes, and `/v1/publish` also needs a GitHub identity. The
+page names projects; the main process accepts only folders the user picked in a folder dialog. Packaged builds remove
+`FAS_API_BASE` from the CLI's environment, so they always publish through `api.freeappstore.online`.
+
+Dev builds only: `FAS_DEV_API_ORIGIN` also reaches the CLI (as `FAS_API_BASE`), `FAS_DESKTOP_CLI_HOME` is the home
+directory of the CLI and git (so tests never touch `~/.fas`), and Push takes any repository URL the API reports.
+
 ## Contribute
 
 Contribute (#826) lends this computer to community generation ([docs/community-generation.md](../docs/community-generation.md)):
@@ -214,6 +247,9 @@ in MP4 whose length matches its sentence timings and is not silent (`ffprobe`/`f
 pnpm --dir desktop build && FAS_E2E_MODEL=1 pnpm --dir desktop exec playwright test e2e/contribute.spec.ts
 ```
 
+`e2e/publish.spec.ts` runs New app, Check, Publish and Push with the real bundled CLI against a stand-in API (never
+the real `/v1/publish`), the CLI's sign-in in a temporary home and a local bare repository as the app's repository.
+
 `e2e/account.spec.ts` checks the header summary and the Account page against a stand-in `/native/me`, and that Sign
 out revokes the credential (`DELETE /v1/native/device`).
 
@@ -269,6 +305,8 @@ since the previous desktop tag. Dev builds never check.
 | `src/main/kokoro.ts`, `model.ts`   | The phones' Kokoro rules and `NativeRunner`; the model package's install                |
 | `src/main/tts.ts`, `engine.ts`     | The TTS utility process (sherpa-onnx); its client and the hidden window's encoder relay |
 | `src/main/device.ts`               | Device pairing (`ndev_` credential), its storage, the account from `/native/me`         |
+| `src/main/publish.ts`              | Publish: runs the bundled `fas` CLI and git, reads their output                         |
+| `src/cli/`                         | The bundled `fas` CLI's entry (`fas.mjs`), run in node mode                             |
 | `src/stdio/`                       | The stdio MCP entry (`main.mjs`) and its proxy                                          |
 | `assets/`                          | Tray icons: `trayTemplate*.png` (macOS, from `brand/assets/mark-mono.svg`), `tray.png`  |
 | `src/preload/`                     | `app.cts` (app windows: bridge only), `home.cts` (home UI), `contribute.cts`            |
